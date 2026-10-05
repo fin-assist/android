@@ -9,6 +9,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -27,19 +32,19 @@ jobs:
 
       # Module graph rules run at configuration time: a violation fails here, before any compilation.
       - name: Check module rules
-        run: ./gradlew help --no-daemon
+        run: ./gradlew help --no-daemon 2>&1 | tee -a build.log
 
       - name: Check flags registry matches docs/flags.md
-        run: ./scripts/check-flags.sh
+        run: ./scripts/check-flags.sh 2>&1 | tee -a build.log
 
       - name: Unit tests
-        run: ./gradlew testMockDebugUnitTest testDebugUnitTest --continue --no-daemon
+        run: set -o pipefail; ./gradlew testMockDebugUnitTest testDebugUnitTest --continue --no-daemon 2>&1 | tee -a build.log
 
       - name: Lint
-        run: ./gradlew lintMockDebug --no-daemon
+        run: set -o pipefail; ./gradlew lintMockDebug --no-daemon 2>&1 | tee -a build.log
 
       - name: Assemble mock debug
-        run: ./gradlew assembleMockDebug --no-daemon
+        run: set -o pipefail; ./gradlew assembleMockDebug --no-daemon 2>&1 | tee -a build.log
 
       - uses: actions/upload-artifact@v4
         if: success()
@@ -47,3 +52,22 @@ jobs:
           name: app-mock-debug
           path: app/build/outputs/apk/mock/debug/*.apk
           retention-days: 14
+
+      # Raw job logs are not reachable from every environment; on failure, post the relevant excerpt on the PR.
+      - name: Report failure on the PR
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### CI failed (run ${{ github.run_id }}, \`${GITHUB_SHA::7}\`)"
+            echo '```'
+            grep -nE "^e: |error:|FAILED|What went wrong|Exception|> Task .* FAILED|tests completed|Execution failed" build.log | head -80
+            echo '--- tail ---'
+            tail -n 60 build.log
+            echo '```'
+            for f in $(find . -path "*/test-results/*" -name "*.xml" 2>/dev/null); do
+              if grep -q "<failure" "$f"; then echo "#### $f"; echo '```'; grep -A12 "<failure" "$f" | head -60; echo '```'; fi
+            done
+          } > comment.md
+          gh pr comment ${{ github.event.pull_request.number }} --body-file comment.md
