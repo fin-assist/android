@@ -306,7 +306,7 @@ class AnalyticsEngine(private val ledger: Ledger, private val zone: ZoneId, priv
 
         // Small frequent: expenses ≤ 500 ₽, grouped by category, ≥ 6 a month.
         val small = if (history.isEmpty()) MetricDto(status = "locked", lock = MetricLockDto("need_full_months", 1, 0)) else {
-            val groups = lines.filter { it.isExpense && it.signedAmount in 1..50_000 }.groupBy { it.categoryId }.filter { it.value.size >= 6 && it.key != null }
+            val groups = lines.filter { it.isExpense && it.signedAmount in 1..50_000 }.groupBy { it.categoryId }.filter { it.value.size > 8 && it.key != null }
             val items = groups.map { (catId, g) ->
                 val sum = g.sumOf { it.signedAmount }
                 MetricItemDto(title = Categories.byId(catId!!)?.name ?: "Без категории", count = g.size, averageAmount = sum / g.size, monthlyAmount = sum, yearlyAmount = sum * 12,

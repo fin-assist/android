@@ -25,14 +25,14 @@ import ru.finassist.pf.core.network.dto.*
 interface PfApi {
 
     // ---- 1. auth
-    @Headers("${AuthHeaderInterceptor.NO_AUTH}: 1")
+    @Headers(AuthHeaderInterceptor.NO_AUTH_HEADER)
     @POST("v1/auth/phone")
     suspend fun startPhoneVerification(
         @Header("Idempotency-Key") idempotencyKey: String,
         @Body body: StartPhoneVerificationRequestDto,
     ): PhoneVerificationDto
 
-    @Headers("${AuthHeaderInterceptor.NO_AUTH}: 1")
+    @Headers(AuthHeaderInterceptor.NO_AUTH_HEADER)
     @POST("v1/auth/register")
     suspend fun register(@Header("Idempotency-Key") idempotencyKey: String, @Body body: RegisterRequestDto): RegisterResponseDto
 

@@ -4,7 +4,7 @@ import okhttp3.Interceptor
 import okhttp3.Response
 import java.util.UUID
 
-/** Adds `Authorization: Bearer` to every request that did not opt out via [NO_AUTH] header. */
+/** Adds `Authorization: Bearer` to every request that did not opt out via the [NO_AUTH] header. */
 class AuthHeaderInterceptor(private val tokens: SessionTokens) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
@@ -16,8 +16,10 @@ class AuthHeaderInterceptor(private val tokens: SessionTokens) : Interceptor {
     }
 
     companion object {
-        /** Marker header for `/v1/auth/*` and `/v1/consents/personal_data`; stripped before sending. */
+        /** Marker header for the auth endpoints and `/v1/consents/personal_data`; stripped before sending. */
         const val NO_AUTH = "X-Pf-No-Auth"
+        /** Retrofit `@Headers` needs a literal: same marker as [NO_AUTH] with its value. */
+        const val NO_AUTH_HEADER = "X-Pf-No-Auth: 1"
     }
 }
 
