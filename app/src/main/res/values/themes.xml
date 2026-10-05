@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Splash theme; the real theme is Compose-only (core:designsystem). -->
+    <style name="Theme.Pf.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#F5F6F8</item>
+        <item name="postSplashScreenTheme">@style/Theme.Pf</item>
+    </style>
+    <style name="Theme.Pf" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

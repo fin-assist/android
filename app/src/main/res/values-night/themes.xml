@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Pf.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#0E111B</item>
+        <item name="postSplashScreenTheme">@style/Theme.Pf</item>
+    </style>
+    <style name="Theme.Pf" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>
