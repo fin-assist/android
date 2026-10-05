@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.pf.feature.impl)
+    id("pf.feature.impl")
 }
 
 dependencies {

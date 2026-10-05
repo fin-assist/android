@@ -107,11 +107,3 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 
-# Convention plugins from build-logic
-pf-android-application = { id = "pf.android.application", version = "unspecified" }
-pf-android-library = { id = "pf.android.library", version = "unspecified" }
-pf-android-library-compose = { id = "pf.android.library.compose", version = "unspecified" }
-pf-jvm-library = { id = "pf.jvm.library", version = "unspecified" }
-pf-hilt = { id = "pf.hilt", version = "unspecified" }
-pf-feature-api = { id = "pf.feature.api", version = "unspecified" }
-pf-feature-impl = { id = "pf.feature.impl", version = "unspecified" }
