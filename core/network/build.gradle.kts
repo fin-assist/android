@@ -1,7 +1,7 @@
 plugins {
-    alias(libs.plugins.pf.android.library)
+    id("pf.android.library")
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.pf.hilt)
+    id("pf.hilt")
 }
 
 dependencies {

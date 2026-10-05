@@ -1,6 +1,6 @@
 // Analytics events and crash reporting interfaces. Providers live in :providers:tracking-*.
 plugins {
-    alias(libs.plugins.pf.jvm.library)
+    id("pf.jvm.library")
 }
 
 dependencies {

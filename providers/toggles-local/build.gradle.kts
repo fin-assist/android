@@ -1,8 +1,8 @@
 // Flags from a JSON asset / debug overrides. Used by the `mock` flavor and for local testing of toggles.
 plugins {
-    alias(libs.plugins.pf.android.library)
+    id("pf.android.library")
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.pf.hilt)
+    id("pf.hilt")
 }
 
 dependencies {

@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.pf.android.library.compose)
+    id("pf.android.library.compose")
     alias(libs.plugins.kotlin.serialization)
 }
 

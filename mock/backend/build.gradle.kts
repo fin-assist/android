@@ -2,9 +2,9 @@
 // a real T-Bank OFX statement: parsing, dedup, own-transfer pairs, refunds, aggregates, thresholds,
 // streaming via Flow, daily assistant limit, idempotency keys.
 plugins {
-    alias(libs.plugins.pf.android.library)
+    id("pf.android.library")
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.pf.hilt)
+    id("pf.hilt")
 }
 
 dependencies {
