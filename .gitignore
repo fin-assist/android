@@ -1,0 +1,28 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Signing
+*.jks
+*.keystore
+keystore.properties
+
+# Private data: real bank statements for the mock flavor are never committed.
+# Put your OFX at app/src/mock/assets/private/statement.ofx (see README).
+app/src/mock/assets/private/
+*.ofx
+!mock/backend/src/main/assets/statements/fixture.ofx
+
+# SDK keys for the prod flavor
+sdk-keys.properties

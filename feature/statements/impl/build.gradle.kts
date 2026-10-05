@@ -1,0 +1,8 @@
+plugins {
+    alias(libs.plugins.pf.feature.impl)
+}
+
+dependencies {
+    implementation(projects.feature.operations.api)
+    implementation(projects.feature.analytics.api)
+}

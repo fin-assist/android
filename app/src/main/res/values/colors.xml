@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Design-system token `bg` (light) -->
+    <color name="pf_window_bg">#F5F6F8</color>
+    <!-- Design-system token `accent` (light) -->
+    <color name="pf_launcher_bg">#3B5BDB</color>
+</resources>
