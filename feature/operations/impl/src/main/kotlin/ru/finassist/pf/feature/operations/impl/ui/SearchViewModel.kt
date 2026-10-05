@@ -60,7 +60,7 @@ class SearchViewModel @Inject constructor(
         val hasFilters: Boolean get() = filter.categoryId != null || filter.amountFrom != null || filter.amountTo != null || filter.kind != null || filter.selection != null || filter.transferMode != null || periodChoice != PeriodChoice.Last12
     }
 
-    private val initial = savedState.toRoute<OperationsRoutes.Search>().filter
+    private val initial = savedState.toRoute<OperationsRoutes.Search>(OperationsRoutes.Search.typeMap).filter
     private val _state = MutableStateFlow(
         UiState(
             filter = initial,

@@ -29,7 +29,7 @@ class OperationsEntry @Inject constructor() : FeatureEntry {
                 onRetry = vm::load,
             )
         }
-        composable<OperationsRoutes.Search> {
+        composable<OperationsRoutes.Search>(typeMap = OperationsRoutes.Search.typeMap) {
             val vm: SearchViewModel = hiltViewModel()
             val state by vm.state.collectAsStateWithLifecycle()
             SearchScreen(state = state, vm = vm, onBack = { navigator.back() }, onDetail = { id -> navigator.navigate(OperationsRoutes.Detail(id)) })

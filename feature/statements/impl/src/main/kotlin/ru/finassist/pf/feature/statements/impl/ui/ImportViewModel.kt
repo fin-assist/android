@@ -106,7 +106,7 @@ class ImportViewModel @Inject constructor(
         viewModelScope.launch { upload(uri, name, key = pending.read()?.key ?: UUID.randomUUID().toString()) }
     }
 
-    private fun upload(uri: Uri, name: String, key: String) = viewModelScope.launch {
+    private fun upload(uri: Uri, name: String, key: String): Job = viewModelScope.launch {
         _state.update { it.copy(phase = Phase.Uploading(name), uploadOffline = false) }
         pending.start(key, name)
         val max = _state.value.config?.maxFileSizeBytes ?: (10L * 1024 * 1024)
