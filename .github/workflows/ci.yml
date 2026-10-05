@@ -61,7 +61,10 @@ jobs:
             echo "CI failed on \`${{ github.workflow }}\` — last lines of the build log:"
             echo
             echo '```'
-            grep -v "^$" build.log | grep -E "^(e: |w: |> Task .* FAILED|FAILURE|\* What went wrong|\* Where|Caused by|Script|Execution failed|> |  at |Build file|Line:|Could not|error:|Error:|Exception|Unresolved|Unexpected)|Test.*FAILED|tests completed|\.kt:" | tail -n 150
+            # Compiler errors and failed tests first (these are what matters), then the Gradle failure summary.
+            grep -E "^e: |error:|Unresolved reference|Test.*FAILED|tests completed|FAILED$" build.log | head -n 120
+            echo "--- summary ---"
+            grep -E "^(> Task .* FAILED|FAILURE|\* What went wrong|\* Where|Caused by|Execution failed|Could not|Build file|Line:)" build.log | tail -n 40
             echo '```'
           } > comment.md
           gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$(cat comment.md)" >/dev/null
