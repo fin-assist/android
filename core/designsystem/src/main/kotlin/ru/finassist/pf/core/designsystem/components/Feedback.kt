@@ -112,26 +112,32 @@ enum class HeroTone { POSITIVE, WARNING, INFO }
 /** Large status icon (64) with title and subtitle: import result, import error. */
 @Composable
 fun PfStatusHero(
-    title: String,
     modifier: Modifier = Modifier,
     tone: HeroTone = HeroTone.POSITIVE,
+    icon: String? = null,
+    title: String? = null,
     subtitle: String? = null,
+    centered: Boolean = true,
 ) {
     val c = PfTheme.colors
-    val (bg, fg, icon) = when (tone) {
+    val (bg, fg, defaultIcon) = when (tone) {
         HeroTone.POSITIVE -> Triple(c.positiveSoft, c.positive, PfIcons.CHECK_CIRCLE)
         HeroTone.WARNING -> Triple(c.warningSoft, c.warningText, PfIcons.ALERT)
         HeroTone.INFO -> Triple(c.accentSoft, c.accent, PfIcons.INFO)
     }
-    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+    val align = if (centered) Alignment.CenterHorizontally else Alignment.Start
+    val textAlign = if (centered) TextAlign.Center else TextAlign.Start
+    Column(modifier.fillMaxWidth(), horizontalAlignment = align) {
         Box(Modifier.size(PfTheme.dimens.status).background(bg, RoundedCornerShape(PfTheme.dimens.radiusXl)), contentAlignment = Alignment.Center) {
-            PfIcon(icon, contentDescription = null, size = 32.dp, tint = fg)
+            PfIcon(icon ?: defaultIcon, contentDescription = null, size = 32.dp, tint = fg)
         }
-        Spacer(Modifier.height(PfTheme.dimens.space4))
-        Text(title, style = PfTheme.type.title1, color = c.text, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
+        if (title != null) {
+            Spacer(Modifier.height(PfTheme.dimens.space4))
+            Text(title, style = PfTheme.type.title1, color = c.text, textAlign = textAlign, modifier = Modifier.semantics { heading() })
+        }
         if (subtitle != null) {
             Spacer(Modifier.height(PfTheme.dimens.space2))
-            Text(subtitle, style = PfTheme.type.lead, color = c.textMuted, textAlign = TextAlign.Center)
+            Text(subtitle, style = PfTheme.type.lead, color = c.textMuted, textAlign = textAlign)
         }
     }
 }

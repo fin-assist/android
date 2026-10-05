@@ -27,6 +27,7 @@ class FeatureImplConventionPlugin : Plugin<Project> {
             add("implementation", project(":core:storage"))
 
             add("implementation", libs.findLibrary("androidx.core.ktx").get())
+            add("implementation", libs.findLibrary("androidx.activity.compose").get())
             add("implementation", libs.findLibrary("androidx.lifecycle.runtime.compose").get())
             add("implementation", libs.findLibrary("androidx.lifecycle.viewmodel.compose").get())
             add("implementation", libs.findLibrary("androidx.navigation.compose").get())
