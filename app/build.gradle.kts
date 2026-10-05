@@ -56,6 +56,7 @@ dependencies {
     implementation(projects.core.navigation)
     implementation(projects.core.toggles)
     implementation(projects.core.tracking)
+    implementation(projects.core.storage)
 
     // Features: the app is the only module that sees :impl modules and binds them to their :api.
     listOf("auth", "applock", "operations", "statements", "analytics", "assistant", "profile").forEach { feature ->

@@ -5,6 +5,7 @@ plugins {
 
 dependencies {
     implementation(projects.core.common)
+    implementation(projects.core.api)
     api(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
 }

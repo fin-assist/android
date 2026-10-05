@@ -43,6 +43,7 @@ include(":core:designsystem")
 include(":core:navigation")
 include(":core:toggles")
 include(":core:tracking")
+include(":core:storage")
 
 // Providers: implementations of core:toggles / core:tracking interfaces. Only :app depends on them.
 include(":providers:toggles-local")

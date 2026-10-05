@@ -24,6 +24,7 @@ class FeatureImplConventionPlugin : Plugin<Project> {
             add("implementation", project(":core:navigation"))
             add("implementation", project(":core:toggles"))
             add("implementation", project(":core:tracking"))
+            add("implementation", project(":core:storage"))
 
             add("implementation", libs.findLibrary("androidx.core.ktx").get())
             add("implementation", libs.findLibrary("androidx.lifecycle.runtime.compose").get())
