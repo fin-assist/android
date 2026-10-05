@@ -98,7 +98,8 @@ class AuthViewModel @Inject constructor(
     }
 
     /** Re-open the status stream (also used when the app returns from background). */
-    fun observe(v: Verification = _state.value.verification ?: return) {
+    fun observe(verification: Verification? = _state.value.verification) {
+        val v = verification ?: return
         streamJob?.cancel()
         streamJob = viewModelScope.launch {
             repo.observeVerification(v, _state.value.phoneE164).collect { event ->

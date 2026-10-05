@@ -5,3 +5,4 @@ dependencies {
     implementation(project(":feature:statements:api"))
     implementation(project(":feature:assistant:api"))
 }
+dependencies { implementation(libs.androidx.datastore.preferences) }
