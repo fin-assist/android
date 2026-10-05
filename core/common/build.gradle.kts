@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.pf.jvm.library)
+    id("pf.jvm.library")
     alias(libs.plugins.kotlin.serialization)
 }
 
