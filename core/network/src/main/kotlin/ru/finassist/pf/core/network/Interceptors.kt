@@ -18,7 +18,7 @@ internal class RequestIdInterceptor : Interceptor {
 
 /**
  * Adds `Authorization: Bearer` from the [TokenStore] to every request that is not marked [NoAuth].
- * Endpoints under `/v1/auth/*` (except logout) and `GET /v1/consents/personal_data` are called without a
+ * Endpoints under `/v1/auth/…` (except logout) and `GET /v1/consents/personal_data` are called without a
  * session; services tag them with the [NoAuth] header which is stripped here.
  */
 internal class AuthInterceptor(private val tokenStore: TokenStore) : Interceptor {
