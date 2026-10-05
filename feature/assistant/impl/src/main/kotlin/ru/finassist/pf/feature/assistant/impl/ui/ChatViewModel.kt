@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -60,6 +61,8 @@ class ChatViewModel @Inject constructor(
 
     /** Key of the question being sent — kept across retries of the same action (api.md «Идемпотентность»). */
     private var askKey: String? = null
+    /** Same for «Повторить»: one key per failed answer until the retry gets a final response. */
+    private var retryKeys = mutableMapOf<String, String>()
     private var pendingText: String? = null
     private var streamJob: Job? = null
 
@@ -129,13 +132,20 @@ class ChatViewModel @Inject constructor(
                 _state.update { it.copy(messages = it.messages + question + answer, input = "", sending = false, remaining = r.remainingLimit, offline = false) }
                 observe(r.answerId)
             } catch (e: AppError) {
+                // The key survives retryable failures (offline, 5xx, 429, in progress): the next attempt is the same action.
                 when (e) {
                     is AppError.ConsentRequired -> { pendingText = text; _state.update { it.copy(sending = false, needsConsent = true) } }
                     is AppError.LimitExceeded -> { askKey = null; _state.update { it.copy(sending = false, remaining = 0, resetsAt = e.resetsAt?.toString() ?: it.resetsAt) } }
                     is AppError.Offline -> _state.update { it.copy(sending = false, offline = true) }
-                    is AppError.IdempotencyConflict -> { askKey = null; send(text) }
+                    is AppError.RequestInProgress -> {
+                        delay((e.retryAfterSeconds ?: 2).coerceIn(1, 10) * 1000L)
+                        _state.update { it.copy(sending = false) }
+                        send(text)
+                    }
+                    is AppError.IdempotencyConflict -> { askKey = null; _state.update { it.copy(sending = false) }; send(text) }
                     is AppError.Validation -> { askKey = null; _state.update { it.copy(sending = false, sendError = "Вопрос должен быть от 1 до 2000 символов") } }
-                    else -> { askKey = null; _state.update { it.copy(sending = false, sendError = "Не получилось отправить вопрос. Повторите позже") } }
+                    is AppError.RateLimited -> _state.update { it.copy(sending = false, sendError = "Слишком много запросов. Повторите через минуту") }
+                    else -> { if (!e.isRetryable) askKey = null; _state.update { it.copy(sending = false, sendError = "Не получилось отправить вопрос. Повторите позже") } }
                 }
             }
         }
@@ -145,7 +155,8 @@ class ChatViewModel @Inject constructor(
     fun retry(answerId: String) = viewModelScope.launch {
         if (_state.value.generatingId != null) return@launch
         try {
-            val r = repo.retry(answerId, UUID.randomUUID().toString())
+            val r = repo.retry(answerId, retryKeys.getOrPut(answerId) { UUID.randomUUID().toString() })
+            retryKeys.remove(answerId)
             _state.update { s ->
                 s.copy(
                     remaining = r.remainingLimit,
@@ -159,8 +170,8 @@ class ChatViewModel @Inject constructor(
                 is AppError.ConsentRequired -> _state.update { it.copy(needsConsent = true) }
                 is AppError.LimitExceeded -> _state.update { it.copy(remaining = 0, resetsAt = e.resetsAt?.toString() ?: it.resetsAt) }
                 is AppError.Offline -> _state.update { it.copy(offline = true) }
-                is AppError.RetryNotAllowed, is AppError.NotFound -> loadHistory()
-                else -> _state.update { it.copy(sendError = "Не получилось повторить. Попробуйте позже") }
+                is AppError.RetryNotAllowed, is AppError.NotFound -> { retryKeys.remove(answerId); loadHistory() }
+                else -> { if (!e.isRetryable) retryKeys.remove(answerId); _state.update { it.copy(sendError = "Не получилось повторить. Попробуйте позже") } }
             }
         }
     }

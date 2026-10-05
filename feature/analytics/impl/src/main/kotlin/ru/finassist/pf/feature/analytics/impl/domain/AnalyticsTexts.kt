@@ -11,6 +11,7 @@ import ru.finassist.pf.core.navigation.OperationsFilter
 import ru.finassist.pf.core.network.codes.Coverage
 import ru.finassist.pf.core.network.codes.LockReason
 import ru.finassist.pf.core.network.codes.MetricStatus
+import ru.finassist.pf.core.network.codes.TransferMode
 import ru.finassist.pf.core.network.dto.AnalyticsDto
 import ru.finassist.pf.core.network.dto.AnalyticsPeriodItemDto
 import ru.finassist.pf.core.network.dto.AnalyticsStateDto
@@ -45,7 +46,8 @@ fun String.toLocalDate(): LocalDate = OffsetDateTime.parse(this).toLocalDate()
 
 fun OperationsFilterDto.toNav(): OperationsFilter = OperationsFilter(
     from = from, to = to, q = q, categoryId = categoryId, kind = kind?.name, amountFrom = amountFrom, amountTo = amountTo,
-    transferMode = transferMode, selection = selection, selectionName = selectionName,
+    // An unknown mode from the server is normalised to `with` before it is sent back in a request (api.md «analytics_params»).
+    transferMode = transferMode?.let { TransferMode.fromWireOrWith(it).wire }, selection = selection, selectionName = selectionName,
 )
 
 /** Genitive period for «за сентябрь», «за III квартал», «за 2026 год». */
@@ -114,9 +116,12 @@ fun periodItemLabel(item: AnalyticsPeriodItemDto): String = when (val k = Period
     is PeriodKey.Unknown -> k.wire
 }
 
-/** Lock text (review-states: «Нужно 3 полных месяца, есть 1»; at zero — «… — пока есть только 1–25 сентября»). */
-fun lockText(lock: MetricLockDto?, state: AnalyticsStateDto?, unit: PeriodType = PeriodType.Month): String {
-    if (lock == null) return "Пока не считаем"
+/**
+ * Lock text (review-states: «Нужно 3 полных месяца, есть 1»; at zero — «… — пока есть только 1–25 сентября»).
+ * [status] is the wire status: an unknown one is shown as locked without details (api.md «Состояние метрики»).
+ */
+fun lockText(lock: MetricLockDto?, state: AnalyticsStateDto?, status: String? = "locked"): String {
+    if (lock == null || status != MetricStatus.Locked.wire) return "Пока не считаем"
     return when (LockReason.fromWire(lock.reason)) {
         LockReason.NeedFullMonths -> {
             val need = lock.required ?: return "Пока мало данных"
@@ -142,12 +147,14 @@ fun comparisonText(current: Long?, previous: MetricDto?, key: PeriodKey, dataTo:
     val prev = previous.value ?: return null
     val prevName = previous.range?.let { r -> periodName(PeriodKey.parse(keyOf(r, key))) } ?: "прошлый период"
     val day = dataTo?.let { runCatching { it.toLocalDate().dayOfMonth }.getOrNull() }
-    val curName = periodName(key).replaceFirstChar { it.uppercase() }
+    val curNameLower = periodName(key)
+    val curName = curNameLower.replaceFirstChar { it.uppercase() }
     val head = if (key is PeriodKey.Month && day != null) "$curName к $day-му — ${expenseMoney(cur)}" else "$curName — ${expenseMoney(cur)}"
     val tail = when {
-        prev == 0L -> "в $prevName расходов не было"
+        prev <= 0L -> "в $prevName расходов не было"
+        cur <= 0L -> "в $curNameLower расходов нет"
         else -> {
-            val pct = (((abs(cur).toDouble() - abs(prev)) / abs(prev)) * 100).roundToInt()
+            val pct = (((cur - prev).toDouble() / prev) * 100).roundToInt()
             val suffix = if (key is PeriodKey.Month) " к этому дню" else ""
             when {
                 pct > 0 -> "на $pct% больше, чем $prevName$suffix"
@@ -242,7 +249,7 @@ fun savingsShare(p: MonthlyPointDto): Double? {
     val inc = p.income ?: return null
     val exp = p.expense ?: return null
     if (inc <= 0) return null
-    return (inc - abs(exp)).toDouble() / inc
+    return (inc - exp).toDouble() / inc
 }
 
 /** «В 2,3 раза больше обычного — обычно около 3 100 ₽ (апрель — август)». */

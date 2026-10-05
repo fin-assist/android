@@ -50,7 +50,8 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    private val id = savedState.toRoute<OperationsRoutes.Detail>().id
+    /** Changes when the record is replaced by a pair (or a pair by operations) after a category edit. */
+    private var id = savedState.toRoute<OperationsRoutes.Detail>().id
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state
 
@@ -83,8 +84,10 @@ class DetailViewModel @Inject constructor(
             try {
                 val r = repo.changeCategory(id, target)
                 tracker.track("operations.category.changed")
-                val same = r.items.firstOrNull { it.id == id }
-                _state.update { it.copy(saving = false, pickerOpen = false, operation = same ?: it.operation, replaced = r.replacedId == id && same == null) }
+                // The record may have been replaced (pair split or joined, api.md 4.3): show the first new record instead.
+                val shown = r.items.firstOrNull { it.id == id } ?: r.items.firstOrNull().takeIf { r.replacedId == id }
+                shown?.let { id = it.id }
+                _state.update { it.copy(saving = false, pickerOpen = false, operation = shown ?: it.operation, replaced = r.replacedId == id && shown == null) }
             } catch (e: AppError) {
                 _state.update { it.copy(saving = false, saveError = e) }
             }

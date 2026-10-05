@@ -46,10 +46,17 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun okHttpClient(
+    fun tokenAuthenticator(
         tokens: SessionTokens,
         @Named("apiBaseUrl") baseUrl: String,
         @Named("refreshClient") refreshClient: OkHttpClient,
+    ): TokenAuthenticator = TokenAuthenticator(tokens, baseUrl, refreshClient)
+
+    @Provides
+    @Singleton
+    fun okHttpClient(
+        tokens: SessionTokens,
+        authenticator: TokenAuthenticator,
         @BackendInterceptor backend: Set<@JvmSuppressWildcards Interceptor>,
     ): OkHttpClient =
         OkHttpClient.Builder()
@@ -57,10 +64,11 @@ object NetworkModule {
             // SSE streams idle between heartbeats (15 s); the read timeout must exceed that with margin.
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
-            .apply { backend.forEach(::addInterceptor) }
             .addInterceptor(AuthHeaderInterceptor(tokens))
+            // An in-process backend (mock flavour) sits after the auth header so it sees the same request a server would.
+            .apply { backend.forEach(::addInterceptor) }
             .addNetworkInterceptor(RequestIdInterceptor())
-            .authenticator(TokenAuthenticator(tokens, baseUrl, refreshClient))
+            .authenticator(authenticator)
             .build()
 
     @Provides

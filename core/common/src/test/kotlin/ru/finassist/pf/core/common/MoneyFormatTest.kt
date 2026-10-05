@@ -25,6 +25,9 @@ class MoneyFormatTest {
     @Test fun kopecksShownOnlyWhenPresent() =
         assertEquals("1${nb}520,50${nb}₽", MoneyFormat.rub(Money(152_050)))
 
+    @Test fun negativeExpenseIsARefund() =
+        assertEquals("+1${nb}200${nb}₽", MoneyFormat.rub(Money(-120_000), SignStyle.Expense))
+
     @Test fun zeroExpenseHasNoSign() =
         assertEquals("0${nb}₽", MoneyFormat.rub(Money.ZERO, SignStyle.Expense))
 }

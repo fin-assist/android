@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.common.time.PeriodType
 import ru.finassist.pf.core.navigation.AnalyticsParams
 import ru.finassist.pf.core.network.codes.TransferMode
@@ -27,6 +28,7 @@ import ru.finassist.pf.feature.analytics.impl.data.AnalyticsRepository
 import ru.finassist.pf.feature.assistant.api.AssistantLimitRepository
 import ru.finassist.pf.feature.operations.api.CategoriesRepository
 import ru.finassist.pf.feature.statements.api.StatementsRepository
+import java.time.OffsetDateTime
 import javax.inject.Inject
 
 @HiltViewModel
@@ -133,6 +135,7 @@ class AnalyticsViewModel @Inject constructor(
             try {
                 val dto = repo.analytics(s.periodType.wire, requestedDate, s.transferMode.wire)
                 requestedDate = dto.params?.date
+                if (dto.state?.recalculating != true) recalcPolls = 0
                 _state.update { it.copy(loading = false, data = dto, error = null) }
                 prefs.dismissed(HINT_CATEGORIES).first().let { d -> _state.update { it.copy(hintCategories = !d && dto.hasData) } }
                 // Numbers may still change on the server (category edit, deletion) — poll a few times.
@@ -143,8 +146,13 @@ class AnalyticsViewModel @Inject constructor(
         }
     }
 
+    private var recalcPolls = 0
+
+    /** Bounded polling while the server recalculates; a long recalculation is picked up on the next visit. */
     private fun scheduleRecalcReload() {
         recalcJob?.cancel()
+        if (recalcPolls >= MAX_RECALC_POLLS) return
+        recalcPolls++
         recalcJob = viewModelScope.launch { delay(3000); load() }
     }
 
@@ -155,9 +163,29 @@ class AnalyticsViewModel @Inject constructor(
     fun onPeriodType(type: PeriodType) {
         if (type == _state.value.periodType) return
         tracker.track("analytics.period_type", mapOf("type" to type.wire))
-        // Keep the date: the server picks the quarter/year that contains it (api.md 6.1 `date`).
+        // `date` may be finer than `period` but not coarser (api.md 6.1): going from a year or quarter to a month we
+        // pass the month where the shown data ends; going coarser the current key is already fine.
+        requestedDate = dateForType(type)
         _state.update { it.copy(periodType = type) }
         load()
+    }
+
+    private fun dateForType(type: PeriodType): String? {
+        val current = requestedDate ?: return null
+        val key = PeriodKey.parse(current)
+        val finer = when (type) {
+            PeriodType.Month -> key is PeriodKey.Quarter || key is PeriodKey.Year
+            PeriodType.Quarter -> key is PeriodKey.Year
+            PeriodType.Year -> false
+        }
+        if (!finer) return current
+        val period = _state.value.data?.period ?: return null
+        val anchor = (period.dataTo ?: period.range.from).let { runCatching { OffsetDateTime.parse(it).toLocalDate() }.getOrNull() } ?: return null
+        return when (type) {
+            PeriodType.Month -> "%04d-%02d".format(anchor.year, anchor.monthValue)
+            PeriodType.Quarter -> "${anchor.year}-Q${(anchor.monthValue - 1) / 3 + 1}"
+            PeriodType.Year -> anchor.year.toString()
+        }
     }
 
     fun onPrevious() = _state.value.data?.navigation?.previous?.let { go(it) }
@@ -207,6 +235,7 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     companion object {
+        private const val MAX_RECALC_POLLS = 5
         const val HINT_CATEGORIES = "hint_categories"
         const val HINT_ASK = "hint_ask"
     }

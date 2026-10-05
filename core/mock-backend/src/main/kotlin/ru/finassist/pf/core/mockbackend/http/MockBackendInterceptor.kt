@@ -1,6 +1,7 @@
 package ru.finassist.pf.core.mockbackend.http
 
 import kotlinx.serialization.KSerializer
+import okhttp3.Authenticator
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Protocol
@@ -29,6 +30,8 @@ import kotlin.concurrent.thread
  */
 class MockBackendInterceptor(
     private val server: MockServer,
+    /** OkHttp's authenticator never runs for a response produced by an application interceptor — call it here. */
+    private val authenticator: Authenticator? = null,
     /** Simulated latency per request. */
     private val latencyMillis: Long = 250,
     /** When true every request fails like a dead network — for offline states. */
@@ -41,12 +44,19 @@ class MockBackendInterceptor(
         val request = chain.request()
         if (offline) throw IOException("mock: offline")
         if (latencyMillis > 0) Thread.sleep(latencyMillis)
-        return try {
-            route(request)
-        } catch (f: ApiFailure) {
-            error(request, f)
+        val response = serve(request)
+        // 401 with a bearer → refresh and retry once, exactly like RetryAndFollowUpInterceptor would for a real server.
+        if (response.code == 401 && request.header("Authorization") != null && authenticator != null) {
+            val retried = authenticator.authenticate(null, response)
+            if (retried != null) {
+                response.close()
+                return serve(retried).newBuilder().priorResponse(response.newBuilder().body(null).build()).build()
+            }
         }
+        return response
     }
+
+    private fun serve(request: Request): Response = try { route(request) } catch (f: ApiFailure) { error(request, f) }
 
     // ---- routing -------------------------------------------------------------------------------------------------
 
@@ -125,9 +135,12 @@ class MockBackendInterceptor(
 
             rest == listOf("statements", "config") && method == "GET" -> json(request, 200, ImportConfigDto.serializer(), statements.config(now))
             rest == listOf("statements") && method == "GET" -> json(request, 200, StatementsListDto.serializer(), statements.list(now))
-            rest == listOf("statements") && method == "POST" -> idempotent(request, scope = u.id) {
+            rest == listOf("statements") && method == "POST" -> {
+                // The body hash must cover the file, not the multipart envelope (its boundary differs per attempt).
                 val (name, bytes) = multipartFile(request)
-                server.startUpload(u, name, bytes).fold({ json(request, 202, UploadAcceptedDto.serializer(), it) }, { throw it })
+                idempotent(request, scope = u.id, hash = bytes.contentHashCode()) {
+                    server.startUpload(u, name, bytes).fold({ json(request, 202, UploadAcceptedDto.serializer(), it) }, { throw it })
+                }
             }
             rest == listOf("statements", "unread-lines") && method == "GET" -> {
                 val uploadId = q.queryParameter("upload_id"); val from = q.queryParameter("from"); val to = q.queryParameter("to")
@@ -143,7 +156,7 @@ class MockBackendInterceptor(
                     while (true) {
                         val events = process.events
                         // First event is the current state: the latest progress, or the terminal event straight away.
-                        if (sent == 0 && events.isNotEmpty() && !process.done) {
+                        if (sent == 0 && events.isNotEmpty()) {
                             val last = events.last(); emit(last.first, last.second); sent = events.size
                         }
                         while (sent < events.size) { val e = events[sent]; emit(e.first, e.second); sent++ }
@@ -277,10 +290,10 @@ class MockBackendInterceptor(
     }
 
     /** Idempotency per api.md: same key+body → stored response; same key, other body → 409; missing key → 400. */
-    private fun idempotent(request: Request, scope: String, ttlSeconds: Long = 24 * 3600, handler: () -> Response): Response {
+    private fun idempotent(request: Request, scope: String, ttlSeconds: Long = 24 * 3600, hash: Int? = null, handler: () -> Response): Response {
         val key = request.header("Idempotency-Key") ?: throw ApiFailure(400, "VALIDATION_ERROR", "Idempotency-Key required", listOf(ErrorDetailDto("Idempotency-Key", "REQUIRED", "header is required")))
         val endpoint = request.method + " " + request.url.encodedPath
-        val hash = bodyBytes(request).contentHashCode()
+        val hash = hash ?: bodyBytes(request).contentHashCode()
         server.idempotencyLookup(scope, endpoint, key, hash, ttlSeconds)?.let { stored ->
             return response(request, stored.status, stored.body.toResponseBody(jsonType))
         }

@@ -56,11 +56,12 @@ class SecureTokenStore @Inject constructor(@ApplicationContext private val conte
 
     override fun update(pair: TokenPairDto) = synchronized(lock) {
         cached = pair; loaded = true
-        prefs.edit().putString("a", encrypt(pair.accessToken)).putString("r", encrypt(pair.refreshToken)).apply()
+        // Synchronous write: a rotated refresh token that is lost with the process would count as reuse on the next start.
+        prefs.edit().putString("a", encrypt(pair.accessToken)).putString("r", encrypt(pair.refreshToken)).commit()
     }
 
     override fun clear() {
-        synchronized(lock) { cached = null; loaded = true; prefs.edit().clear().apply() }
+        synchronized(lock) { cached = null; loaded = true; prefs.edit().clear().commit() }
         onCleared?.invoke()
     }
 

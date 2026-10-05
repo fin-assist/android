@@ -43,11 +43,11 @@ object ApiErrorMapper {
         "SELECTION_NOT_FOUND" -> AppError.SelectionNotFound
         "CATEGORY_NOT_ASSIGNABLE" -> AppError.CategoryNotAssignable
         "RETRY_NOT_ALLOWED" -> AppError.RetryNotAllowed
-        "RATE_LIMITED" -> AppError.RateLimited(error.retryAt?.let(::parseTime))
+        "RATE_LIMITED" -> AppError.RateLimited(error.retryAt?.let(::parseTime) ?: retryAfter?.toLongOrNull()?.let { OffsetDateTime.now().plusSeconds(it) })
         else -> when (status) {
             401 -> AppError.Unauthorized
             404 -> AppError.NotFound
-            429 -> AppError.RateLimited(null)
+            429 -> AppError.RateLimited(retryAfter?.toLongOrNull()?.let { OffsetDateTime.now().plusSeconds(it) })
             else -> AppError.Http(status, error?.code, error?.message)
         }
     }

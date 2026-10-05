@@ -33,9 +33,11 @@ object MoneyFormat {
         val frac = abs % 100
         val digits = groupThousands(whole)
         val body = if (frac == 0L) digits else "$digits,${frac.toString().padStart(2, '0')}"
+        // Analytics amounts are signed: a negative expense total (refunds exceeded spending) is shown as "+".
         val sign = when {
-            style == SignStyle.Expense && money.kopecks != 0L -> MINUS.toString()
-            style == SignStyle.Income && money.kopecks != 0L -> "+"
+            money.kopecks == 0L -> ""
+            style == SignStyle.Expense -> if (money.isNegative) "+" else MINUS.toString()
+            style == SignStyle.Income -> if (money.isNegative) MINUS.toString() else "+"
             money.isNegative -> MINUS.toString()
             else -> ""
         }

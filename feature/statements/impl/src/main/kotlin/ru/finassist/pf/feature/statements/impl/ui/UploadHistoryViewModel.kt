@@ -3,6 +3,7 @@ package ru.finassist.pf.feature.statements.impl.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,11 +49,14 @@ class UploadHistoryViewModel @Inject constructor(
 
     fun refreshFlags() = _state.update { it.copy(uploadEnabled = flags.isEnabled(Flags.statementsUpload)) }
 
-    fun load() = viewModelScope.launch {
+    fun load(): Job = viewModelScope.launch {
         _state.update { it.copy(loading = it.rows.isEmpty()) }
         try {
             val list = repo.list()
-            _state.update { it.copy(loading = false, rows = list.uploads.map(::row), error = null) }
+            val rows = list.uploads.map(::row)
+            _state.update { it.copy(loading = false, rows = rows, error = null) }
+            // A row still parsing (api.md 3.4 `processing`): poll until it is done or gone.
+            if (rows.any { it.processing }) { delay(3000); load() }
         } catch (e: AppError) { _state.update { it.copy(loading = false, error = e) } }
     }
 

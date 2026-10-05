@@ -76,7 +76,7 @@ import ru.finassist.pf.feature.analytics.impl.domain.toNav
 import ru.finassist.pf.feature.analytics.impl.domain.typicalText
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.money.MoneyFormat
-import kotlin.math.abs
+import ru.finassist.pf.core.common.money.SignStyle
 import kotlin.math.roundToInt
 
 /** «Аналитика» tab: empty / early / stale / regular states (mockups Analytics*). */
@@ -196,8 +196,8 @@ private fun Content(
             Column(verticalArrangement = Arrangement.spacedBy(PfSpace.s2)) {
                 SectionTitle("Расходы по месяцам")
                 PfCard {
-                    val bars = points.map { p -> chartPoint(p, p.expense?.let { abs(it) }) { v -> expenseMoney(v) } }
-                    BarChart(bars = bars.map { Bar(it.label, it.spoken, it.value, it.display, it.partialFill, it.partialNote) }, introId = "analytics.expense.$suffix", formatValue = { MoneyFormat.rub(Money(it.toLong())) })
+                    val bars = points.map { p -> chartPoint(p, p.expense) { v -> expenseMoney(v) } }
+                    BarChart(bars = bars.map { Bar(it.label, it.spoken, it.value, it.display, it.partialFill, it.partialNote) }, introId = "analytics.expense.$suffix", formatValue = { MoneyFormat.rub(Money(it.toLong()), SignStyle.Expense) })
                     val compare = if (state.periodType == PeriodType.Month) comparisonText(tiles?.expense?.value, tiles?.expense?.comparison, key, period?.dataTo) else peakText(points)
                     val avg = typicalText(tiles?.expense?.typical)
                     val missing = points.filter { it.expense == null }
@@ -220,7 +220,7 @@ private fun Content(
                 }
             }
         } else if (MetricStatus.fromWire(chart.status) == MetricStatus.Locked) {
-            InsightCard(icon = "bar-chart", title = "Расходы по месяцам", state = InsightState.Locked, lockedText = lockText(chart.lock, st))
+            InsightCard(icon = "bar-chart", title = "Расходы по месяцам", state = InsightState.Locked, lockedText = lockText(chart.lock, st, chart.status))
         }
     }
 
@@ -303,7 +303,7 @@ private fun Metric(m: MetricDto, label: String, st: ru.finassist.pf.core.network
     when (MetricStatus.fromWire(m.status)) {
         MetricStatus.Ready, MetricStatus.Tentative -> StatTile(label = label, value = format(m.value), modifier = modifier, note = note, introId = introId)
         MetricStatus.None -> StatTile(label = label, value = "—", modifier = modifier, note = note, introId = introId)
-        MetricStatus.Locked -> StatTile(label = label, value = null, modifier = modifier, lockedText = lockText(m.lock, st))
+        MetricStatus.Locked -> StatTile(label = label, value = null, modifier = modifier, lockedText = lockText(m.lock, st, m.status))
     }
 }
 
@@ -318,7 +318,7 @@ private fun Insights(ins: ru.finassist.pf.core.network.dto.InsightsDto, data: An
         SectionTitle("Регулярные платежи и заметные траты")
         if (b.regularPayments) ins.regularPayments.let { m ->
             when (val s = MetricStatus.fromWire(m.status)) {
-                MetricStatus.Locked -> InsightCard(icon = "repeat", title = "Подписки и регулярные платежи", state = InsightState.Locked, lockedText = lockText(m.lock, st))
+                MetricStatus.Locked -> InsightCard(icon = "repeat", title = "Подписки и регулярные платежи", state = InsightState.Locked, lockedText = lockText(m.lock, st, m.status))
                 MetricStatus.None -> InsightCard(icon = "repeat", title = "Подписки и регулярные платежи", state = InsightState.Empty, description = "Регулярных платежей не нашли")
                 else -> {
                     val items = m.items.orEmpty()
@@ -346,7 +346,7 @@ private fun Insights(ins: ru.finassist.pf.core.network.dto.InsightsDto, data: An
         }
         if (b.notableSpending) ins.notableSpending.let { m ->
             when (MetricStatus.fromWire(m.status)) {
-                MetricStatus.Locked -> InsightCard(icon = "trending-up", title = "Заметные траты", state = InsightState.Locked, lockedText = lockText(m.lock, st))
+                MetricStatus.Locked -> InsightCard(icon = "trending-up", title = "Заметные траты", state = InsightState.Locked, lockedText = lockText(m.lock, st, m.status))
                 MetricStatus.None -> InsightCard(icon = "trending-up", title = "Заметные траты", state = InsightState.Empty, description = "Ничего необычного ${periodGenitive(key)}")
                 else -> m.items.orEmpty().forEach { item ->
                     InsightCard(
@@ -359,7 +359,7 @@ private fun Insights(ins: ru.finassist.pf.core.network.dto.InsightsDto, data: An
         }
         if (b.bankFees) ins.bankFees.let { m ->
             when (MetricStatus.fromWire(m.status)) {
-                MetricStatus.Locked -> InsightCard(icon = "percent", title = "Комиссии и проценты банку", state = InsightState.Locked, lockedText = lockText(m.lock, st))
+                MetricStatus.Locked -> InsightCard(icon = "percent", title = "Комиссии и проценты банку", state = InsightState.Locked, lockedText = lockText(m.lock, st, m.status))
                 MetricStatus.None -> InsightCard(icon = "percent", title = "Комиссии и проценты банку", state = InsightState.Empty, description = "Комиссий ${periodGenitive(key)} не было")
                 else -> InsightCard(
                     icon = "percent", title = "Комиссии и проценты банку", amount = expenseMoney(m.value),
@@ -370,7 +370,7 @@ private fun Insights(ins: ru.finassist.pf.core.network.dto.InsightsDto, data: An
         }
         if (b.smallFrequent) ins.smallFrequent.let { m ->
             when (MetricStatus.fromWire(m.status)) {
-                MetricStatus.Locked -> InsightCard(icon = "coffee", title = "Мелкие частые траты", state = InsightState.Locked, lockedText = lockText(m.lock, st))
+                MetricStatus.Locked -> InsightCard(icon = "coffee", title = "Мелкие частые траты", state = InsightState.Locked, lockedText = lockText(m.lock, st, m.status))
                 MetricStatus.None -> InsightCard(icon = "coffee", title = "Мелкие частые траты", state = InsightState.Empty, description = "Мелких частых трат не нашли")
                 else -> InsightCard(
                     icon = "coffee", title = "Мелкие частые траты", amount = m.value?.let { "≈${money(it)}" },

@@ -72,8 +72,9 @@ class ImportResultTexts(val r: ImportResultDto) {
     val totalsPeriod: String? get() {
         val t = r.totals ?: return null
         val range = dayRangeWithYear(r.firstOperationAt, r.lastOperationAt, withYear = false)
-        val scope = if (t.scope == "all") "Все операции" else "Новые операции"
-        return if (range != null) "$scope · $range" else scope
+        // Unknown scope → label without the qualifier (api.md 3.3 `totals.scope`).
+        val scope = when (t.scope) { "all" -> "Все операции"; "new" -> "Новые операции"; else -> null }
+        return listOfNotNull(scope, range).joinToString(" · ").ifEmpty { "Итого" }
     }
     val expenseText: String? get() = r.totals?.let { MoneyFormat.rub(Money(it.expense), SignStyle.Expense) }
     val incomeText: String? get() = r.totals?.let { MoneyFormat.rub(Money(it.income), SignStyle.Income) }
@@ -98,10 +99,23 @@ class ImportResultTexts(val r: ImportResultDto) {
         val locked = listOf(ImportFeature.Comparison, ImportFeature.RegularPayments).mapNotNull { f -> features[f]?.takeIf { !it.open }?.let { f to it } }
         val inProgress = c.incompleteMonths.firstOrNull { it.inProgress }
         val parts = mutableListOf<String>()
-        if (inProgress != null) {
-            val ym = runCatching { YearMonth.parse(inProgress.month) }.getOrNull()
-            val to = runCatching { OffsetDateTime.parse(inProgress.dataTo).toLocalDate() }.getOrNull()
-            if (ym != null && to != null) parts += "${RussianDates.monthTitle(ym, withYear = false)} ещё не закончился — выписка по ${RussianDates.dayMonth(to)}."
+        // Reasons in facts from the statement (review-states ux-7): in progress, starts late, ends early, gaps.
+        val reasons = c.incompleteMonths.mapNotNull { m ->
+            val ym = runCatching { YearMonth.parse(m.month) }.getOrNull() ?: return@mapNotNull null
+            val from = runCatching { OffsetDateTime.parse(m.dataFrom).toLocalDate() }.getOrNull()
+            val to = runCatching { OffsetDateTime.parse(m.dataTo).toLocalDate() }.getOrNull()
+            val title = RussianDates.monthTitle(ym, withYear = false)
+            when {
+                m.inProgress && to != null -> "$title ещё не закончился — выписка по ${RussianDates.dayMonth(to)}"
+                m.gaps.isNotEmpty() -> "$title — неполный: нет данных за ${m.gaps.joinToString(" и ") { g -> RussianDates.dayRange(OffsetDateTime.parse(g.from).toLocalDate(), OffsetDateTime.parse(g.to).toLocalDate()) }}"
+                from != null && from.dayOfMonth > 1 -> "$title — неполный: выписка начинается с ${RussianDates.dayMonth(from)}"
+                to != null && to != ym.atEndOfMonth() -> "$title — неполный: выписка заканчивается ${RussianDates.dayMonth(to)}"
+                else -> null
+            }
+        }
+        if (reasons.isNotEmpty()) {
+            val shown = reasons.take(2).joinToString(". ")
+            parts += if (reasons.size > 2) "$shown и ещё ${reasons.size - 2} — подробнее в истории загрузок." else "$shown."
         }
         if (opened.isNotEmpty()) parts += "На «Аналитике» ${if (opened.size == 1) "открылось" else "открылись"} ${joinAnd(opened)}."
         val currentMonth = inProgress?.let { runCatching { YearMonth.parse(it.month) }.getOrNull() }
@@ -128,6 +142,7 @@ class ImportResultTexts(val r: ImportResultDto) {
         ImportFeature.NotableSpending -> "заметные траты"
         ImportFeature.Typical -> "типичный месяц"
         ImportFeature.YearForecast -> "прогноз на год"
+        ImportFeature.SmallFrequent -> "мелкие частые траты"
         else -> null
     }
 }

@@ -98,7 +98,11 @@ class SearchViewModel @Inject constructor(
                 _state.update { it.copy(loading = false, result = r) }
                 tracker.track("search.performed", mapOf("count" to r.totalCount.toString()))
             } catch (e: AppError) {
-                _state.update { it.copy(loading = false, error = e) }
+                // A stale `selection` (payment or merchant gone): open the same search without it (api.md 4.1).
+                if (e is AppError.SelectionNotFound && s.filter.selection != null) {
+                    _state.update { it.copy(filter = it.filter.copy(selection = null, selectionName = null), presetName = if (it.filter.transferMode != null) "Как на «Аналитике»" else null) }
+                    search()
+                } else _state.update { it.copy(loading = false, error = e) }
             }
         }
     }

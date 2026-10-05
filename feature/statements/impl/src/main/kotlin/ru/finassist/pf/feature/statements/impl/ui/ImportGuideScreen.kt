@@ -99,6 +99,9 @@ fun ImportGuideScreen(
                     Notice("Не получилось загрузить ссылки на кабинет банка", tone = NoticeTone.Warning, action = { PfLink("Повторить", onClick = vm::loadConfig, inline = true) })
                 }
                 FileDrop(onPick = pick, busy = uploading != null, fileName = uploading?.fileName, progress = uploading?.percent ?: 0)
+                if (state.cancelError) {
+                    Notice("Не получилось прервать разбор — нет сети. Разбор продолжается, прервать можно в истории загрузок", tone = NoticeTone.Warning, alert = true)
+                }
                 if (state.uploadOffline) {
                     Notice("Нет связи с интернетом — файл не загружен", tone = NoticeTone.Warning, alert = true, action = { PfLink("Повторить", onClick = vm::retryUpload, inline = true) })
                 }

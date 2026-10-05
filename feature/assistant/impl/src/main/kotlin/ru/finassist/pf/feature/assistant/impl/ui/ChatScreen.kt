@@ -59,6 +59,7 @@ import ru.finassist.pf.core.network.codes.AnswerStatus
 import ru.finassist.pf.core.network.codes.BlockType
 import ru.finassist.pf.core.network.codes.ChipScreen
 import ru.finassist.pf.core.network.codes.Coverage
+import ru.finassist.pf.core.network.codes.TransferMode
 import ru.finassist.pf.core.network.dto.BlockDto
 import ru.finassist.pf.core.network.dto.ChipDto
 import ru.finassist.pf.feature.assistant.impl.domain.ChatMessage
@@ -202,7 +203,7 @@ private fun Chip(chip: ChipDto, onOperations: (OperationsFilter) -> Unit, onAnal
     when (ChipScreen.fromWire(chip.screen)) {
         ChipScreen.Operations -> chip.filters?.let { f ->
             PfChip(chip.label, link = true, onClick = {
-                onOperations(OperationsFilter(f.from, f.to, f.q, f.categoryId, f.kind?.name, f.amountFrom, f.amountTo, f.transferMode, f.selection, f.selectionName))
+                onOperations(OperationsFilter(f.from, f.to, f.q, f.categoryId, f.kind?.name, f.amountFrom, f.amountTo, f.transferMode?.let { TransferMode.fromWireOrWith(it).wire }, f.selection, f.selectionName))
             })
         }
         ChipScreen.Analytics -> chip.params?.let { p -> PfChip(chip.label, link = true, onClick = { onAnalytics(AnalyticsParams(p.period, p.date, p.transferMode)) }) }
@@ -226,7 +227,7 @@ private fun Block(b: BlockDto, introId: String) {
                 val bars = points.map { p ->
                     val partial = Coverage.fromWire(p.coverage) == Coverage.Partial && p.value != null
                     val to = dayOfMonth(p.dataTo)
-                    val value = p.value?.let { if (percent) it * 100 else kotlin.math.abs(it) }
+                    val value = p.value?.let { if (percent) it * 100 else it }
                     Bar(
                         label = axisLabel(p.range.from), spokenName = axisSpoken(p.range.from) + (if (partial && to != null) ", по $to-е" else ""),
                         value = value,
@@ -235,7 +236,7 @@ private fun Block(b: BlockDto, introId: String) {
                         partialNote = if (partial && to != null) "по $to-е" else null,
                     )
                 }
-                BarChart(bars = bars, introId = "chat.$introId", highlight = b.highlightIndex ?: bars.lastIndex, height = 100.dp, formatValue = { v -> if (percent) "${v.roundToInt()}%" else MoneyFormat.rub(Money(v.toLong())) })
+                BarChart(bars = bars, introId = "chat.$introId", highlight = b.highlightIndex ?: -1, height = 100.dp, formatValue = { v -> if (percent) "${v.roundToInt()}%" else MoneyFormat.rub(Money(v.toLong())) })
             }
         }
         BlockType.Rows -> PfCard {

@@ -1,15 +1,18 @@
 package ru.finassist.pf.core.mockbackend.di
 
 import android.content.Context
+import dagger.Lazy
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
+import okhttp3.Authenticator
 import okhttp3.Interceptor
 import ru.finassist.pf.core.mockbackend.engine.MockServer
 import ru.finassist.pf.core.mockbackend.http.MockBackendInterceptor
+import ru.finassist.pf.core.network.client.TokenAuthenticator
 import ru.finassist.pf.core.network.di.BackendInterceptor
 import javax.inject.Singleton
 
@@ -35,7 +38,9 @@ object MockBackendModule {
 
     @Provides
     @Singleton
-    fun mockInterceptor(server: MockServer): MockBackendInterceptor = MockBackendInterceptor(server)
+    // Lazy breaks the cycle mock → authenticator → refresh client → backend interceptors → mock.
+    fun mockInterceptor(server: MockServer, authenticator: Lazy<TokenAuthenticator>): MockBackendInterceptor =
+        MockBackendInterceptor(server, Authenticator { route, response -> authenticator.get().authenticate(route, response) })
 
     @Provides
     @IntoSet

@@ -19,8 +19,8 @@ import java.util.UUID
  * (a second refresh with the old refresh token would revoke the whole session — api.md 1.4).
  *
  * The refresh call itself bypasses this authenticator (it is sent with [refreshClient], which has none) and carries
- * an `Idempotency-Key`; one transport retry with the same key is allowed because the server keeps the response
- * for 60 s and does not treat the repeat as token reuse.
+ * an `Idempotency-Key` that is reused for the same refresh token within 60 s, so a repeat after a dropped
+ * connection returns the stored pair and is not treated as token reuse.
  */
 class TokenAuthenticator(
     private val tokens: SessionTokens,
@@ -29,11 +29,14 @@ class TokenAuthenticator(
 ) : Authenticator {
     private val lock = Any()
 
+    /** Idempotency key of the refresh in flight, bound to the refresh token it was issued for (api.md 1.4: 60 s). */
+    private var refreshKey: Triple<String, String, Long>? = null
+
     override fun authenticate(route: Route?, response: Response): Request? {
         val request = response.request
-        if (request.header(AuthHeaderInterceptor.NO_AUTH) != null || request.url.encodedPath.startsWith("/v1/auth/")) return null
+        // No bearer was sent (auth endpoints, public consent document) — refreshing cannot help.
+        val failedToken = request.header("Authorization")?.removePrefix("Bearer ") ?: return null
         if (responseCount(response) >= 2) return null
-        val failedToken = request.header("Authorization")?.removePrefix("Bearer ")
 
         val fresh = synchronized(lock) {
             val current = tokens.accessToken()
@@ -45,29 +48,38 @@ class TokenAuthenticator(
     /** Returns the new access token or null when the session is lost (tokens are cleared then). */
     private fun refresh(): String? {
         val refreshToken = tokens.refreshToken() ?: run { tokens.clear(); return null }
-        val key = UUID.randomUUID().toString()
+        // Same token within 60 s → same key: a repeat after a dropped connection returns the stored pair instead of
+        // counting as token reuse (which would revoke the whole session).
+        val now = System.currentTimeMillis()
+        val key = refreshKey?.takeIf { it.first == refreshToken && now - it.third < KEY_TTL_MS }?.second
+            ?: UUID.randomUUID().toString().also { refreshKey = Triple(refreshToken, it, now) }
         val body = PfJson.encodeToString(RefreshTokenRequestDto(refreshToken))
         val call = Request.Builder()
             .url(baseUrl.trimEnd('/') + "/v1/auth/token")
             .header("Idempotency-Key", key)
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
-        repeat(2) { attempt ->
+        var attempt = 0
+        while (attempt < MAX_ATTEMPTS) {
+            attempt++
             try {
                 refreshClient.newCall(call).execute().use { r ->
                     when {
                         r.isSuccessful -> {
                             val pair = PfJson.decodeFromString(TokenPairDto.serializer(), r.body.string())
                             tokens.update(pair)
+                            refreshKey = null
                             return pair.accessToken
                         }
-                        r.code == 401 -> { tokens.clear(); return null }
-                        // 409 REQUEST_IN_PROGRESS / 5xx: do not drop the session; the caller gets the original 401
+                        r.code == 401 -> { tokens.clear(); refreshKey = null; return null }
+                        // The first attempt with this key is still running on the server: wait and ask again, same key.
+                        r.code == 409 -> Thread.sleep(((r.header("Retry-After")?.toLongOrNull() ?: 1L).coerceIn(1L, 5L)) * 1000)
+                        // 5xx: do not drop the session; the caller gets the original 401 and the key stays for the next try.
                         else -> return null
                     }
                 }
             } catch (e: IOException) {
-                if (attempt == 1) return null
+                if (attempt >= MAX_ATTEMPTS) return null
             }
         }
         return null
@@ -78,5 +90,10 @@ class TokenAuthenticator(
         var n = 0
         while (r != null) { n++; r = r.priorResponse }
         return n
+    }
+
+    private companion object {
+        const val KEY_TTL_MS = 60_000L
+        const val MAX_ATTEMPTS = 3
     }
 }

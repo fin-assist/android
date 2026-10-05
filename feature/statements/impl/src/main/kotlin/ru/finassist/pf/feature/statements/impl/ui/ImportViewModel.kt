@@ -55,6 +55,8 @@ class ImportViewModel @Inject constructor(
         /** Offline during the upload itself — «Нет связи с интернетом — файл не загружен» + «Повторить». */
         val uploadOffline: Boolean = false,
         val uploadEnabled: Boolean = true,
+        /** «Прервать» failed (offline): parsing continues on the server. */
+        val cancelError: Boolean = false,
         val showFallbackSteps: Boolean = false,
         val showPrivacy: Boolean = false,
     )
@@ -64,6 +66,7 @@ class ImportViewModel @Inject constructor(
 
     private var lastFile: Pair<Uri, String>? = null
     private var progressJob: Job? = null
+    private var uploadJob: Job? = null
 
     init {
         refreshFlags()
@@ -83,10 +86,12 @@ class ImportViewModel @Inject constructor(
     /** Re-attach to an upload that was in flight when the process died. */
     private fun resumePending() = viewModelScope.launch {
         val p = pending.read() ?: return@launch
+        // With an upload id the stream is re-attached; without one the POST never got its 202 and the key is kept
+        // so that picking the same file again repeats the same action (api.md «Идемпотентность»).
         if (p.uploadId != null) {
             _state.update { it.copy(phase = Phase.Uploading(p.fileName, uploadId = p.uploadId)) }
             observe(p.uploadId, p.fileName)
-        } else pending.clear() // the POST never got a 202 — the user picks the file again
+        }
     }
 
     fun onFallbackSteps(show: Boolean) = _state.update { it.copy(showFallbackSteps = show) }
@@ -94,21 +99,26 @@ class ImportViewModel @Inject constructor(
 
     /** File chosen in the system picker. */
     fun onFilePicked(uri: Uri) {
-        val name = queryName(uri)
+        val (name, size) = queryNameAndSize(uri)
         lastFile = uri to name
         tracker.track("import.file_picked")
-        upload(uri, name, key = UUID.randomUUID().toString())
+        viewModelScope.launch {
+            val previous = pending.read()
+            val key = previous?.takeIf { it.uploadId == null && it.fileName == name && it.fileSize == size }?.key ?: UUID.randomUUID().toString()
+            upload(uri, name, size, key)
+        }
     }
 
     /** «Повторить» after an offline failure of the POST: same file, same key — the server dedups the retry. */
     fun retryUpload() {
         val (uri, name) = lastFile ?: return
-        viewModelScope.launch { upload(uri, name, key = pending.read()?.key ?: UUID.randomUUID().toString()) }
+        viewModelScope.launch { val p = pending.read(); upload(uri, name, p?.fileSize ?: -1L, p?.key ?: UUID.randomUUID().toString()) }
     }
 
-    private fun upload(uri: Uri, name: String, key: String): Job = viewModelScope.launch {
-        _state.update { it.copy(phase = Phase.Uploading(name), uploadOffline = false) }
-        pending.start(key, name)
+    private fun upload(uri: Uri, name: String, size: Long, key: String): Job = viewModelScope.launch {
+        uploadJob = coroutineContext[Job]
+        _state.update { it.copy(phase = Phase.Uploading(name), uploadOffline = false, cancelError = false) }
+        pending.start(key, name, size)
         val max = _state.value.config?.maxFileSizeBytes ?: (10L * 1024 * 1024)
         val bytes = try {
             withContext(Dispatchers.IO) { readFile(uri, max) }
@@ -126,7 +136,7 @@ class ImportViewModel @Inject constructor(
             when (e) {
                 is AppError.Offline -> _state.update { it.copy(phase = Phase.Guide, uploadOffline = true) }
                 is AppError.RequestInProgress -> { kotlinx.coroutines.delay((e.retryAfterSeconds ?: 2) * 1000L); retryUpload() }
-                is AppError.IdempotencyConflict -> upload(uri, name, UUID.randomUUID().toString())
+                is AppError.IdempotencyConflict -> upload(uri, name, size, UUID.randomUUID().toString())
                 else -> { pending.clear(); fail(ImportFailure.fromError(e, name), name) }
             }
         }
@@ -168,11 +178,20 @@ class ImportViewModel @Inject constructor(
     /** «Прервать»: DELETE on the upload; the stream then ends with CANCELLED → back to the guide. */
     fun cancelUpload() = viewModelScope.launch {
         val u = _state.value.phase as? Phase.Uploading ?: return@launch
-        progressJob?.cancel()
-        pending.clear()
-        u.uploadId?.let { runCatching { repo.delete(it) } }
-        tracker.track("import.cancelled")
-        _state.update { it.copy(phase = Phase.Guide) }
+        val uploadId = u.uploadId
+        if (uploadId == null) {
+            // Nothing accepted yet: the POST is cancelled with its coroutine.
+            uploadJob?.cancel(); progressJob?.cancel(); pending.clear(); _state.update { it.copy(phase = Phase.Guide) }; return@launch
+        }
+        try {
+            repo.delete(uploadId)
+            tracker.track("import.cancelled")
+            // The stream ends with CANCELLED and returns the screen to the guide; close the dialog meanwhile.
+            _state.update { it.copy(phase = u.copy(askCancel = false)) }
+        } catch (e: AppError) {
+            // Parsing may still be running on the server — say so instead of pretending it stopped.
+            _state.update { it.copy(phase = u.copy(askCancel = false), cancelError = true) }
+        }
     }
 
     /** «Выбрать другой файл» from the error screen. */
@@ -197,12 +216,12 @@ class ImportViewModel @Inject constructor(
         } ?: throw IllegalStateException("cannot open $uri")
     }
 
-    private fun queryName(uri: Uri): String {
+    private fun queryNameAndSize(uri: Uri): Pair<String, Long> {
         runCatching {
-            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-                if (c.moveToFirst()) return c.getString(0) ?: "statement.ofx"
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { c ->
+                if (c.moveToFirst()) return (c.getString(0) ?: "statement.ofx") to (if (c.isNull(1)) -1L else c.getLong(1))
             }
         }
-        return uri.lastPathSegment?.substringAfterLast('/') ?: "statement.ofx"
+        return (uri.lastPathSegment?.substringAfterLast('/') ?: "statement.ofx") to -1L
     }
 }
