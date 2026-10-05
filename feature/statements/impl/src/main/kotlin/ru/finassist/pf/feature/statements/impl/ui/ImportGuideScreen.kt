@@ -132,7 +132,7 @@ fun ImportGuideScreen(
         PrivacyPoints()
     }
 
-    if (uploading?.askCancel == true) PfDialog(
+    if (uploading != null && uploading.askCancel) PfDialog(
         title = "Прервать разбор?",
         description = "Операции из файла ${uploading.fileName} не сохранятся. Файл останется на телефоне — его можно загрузить снова.",
         onDismiss = { vm.onAskCancel(false) },

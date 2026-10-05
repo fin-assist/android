@@ -4,5 +4,7 @@ plugins {
 }
 dependencies {
     implementation(project(":core:toggles"))
-    // RuStore Remote Config SDK is added in stage 8 (artifactory-external.vkpartner.ru).
+    implementation(project(":core:tracking"))
+    implementation(platform(libs.rustore.bom))
+    implementation(libs.rustore.remoteconfig)
 }

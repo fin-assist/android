@@ -13,6 +13,7 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         // RuStore SDK (Remote Config). Only needed by :core:toggles-rustore.
+        maven("https://nexus-external.rustore.ru/repository/maven-rustore-exposed")
         maven("https://artifactory-external.vkpartner.ru/artifactory/maven")
     }
 }

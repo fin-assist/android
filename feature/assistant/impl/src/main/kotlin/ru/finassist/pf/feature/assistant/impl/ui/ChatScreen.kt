@@ -239,15 +239,17 @@ private fun Block(b: BlockDto, introId: String) {
             }
         }
         BlockType.Rows -> PfCard {
-            b.rows.orEmpty().forEachIndexed { i, r ->
-                val value = when {
-                    r.amount != null -> MoneyFormat.rub(Money(r.amount))
-                    r.count != null -> r.count.toString()
-                    r.percent != null -> "${(r.percent * 100).roundToInt()}%"
-                    r.text != null -> r.text
+            val rows = b.rows.orEmpty()
+            rows.forEachIndexed { i, r ->
+                val amount = r.amount; val count = r.count; val percent = r.percent; val text = r.text
+                val value: String = when {
+                    amount != null -> MoneyFormat.rub(Money(amount))
+                    count != null -> count.toString()
+                    percent != null -> "${(percent * 100).roundToInt()}%"
+                    text != null -> text
                     else -> return@forEachIndexed
                 }
-                DataRow(label = r.label, sublabel = r.sublabel, value = value, divider = i < b.rows!!.lastIndex)
+                DataRow(label = r.label, sublabel = r.sublabel, value = value, divider = i < rows.lastIndex)
             }
         }
         BlockType.Unknown -> Text(b.altText ?: "", style = PfTheme.type.body, color = c.text)

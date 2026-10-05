@@ -26,6 +26,11 @@ android {
         create("prod") {
             dimension = "backend"
             buildConfigField("String", "API_BASE_URL", "\"https://api.example.ru/\"") // TODO: real host before release
+            // SDK keys come from gradle.properties / -P (never committed); empty = SDK disabled.
+            fun secret(name: String) = "\"${providers.gradleProperty(name).orNull.orEmpty()}\""
+            buildConfigField("String", "RUSTORE_APP_ID", secret("pf.rustoreAppId"))
+            buildConfigField("String", "MYTRACKER_ID", secret("pf.myTrackerId"))
+            buildConfigField("String", "APPMETRICA_KEY", secret("pf.appMetricaKey"))
         }
     }
     buildTypes {

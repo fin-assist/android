@@ -4,5 +4,6 @@ plugins {
 }
 dependencies {
     implementation(project(":core:tracking"))
-    // MyTracker SDK is added in stage 8 (mavenCentral: com.my.tracker:mytracker-sdk).
+    implementation(libs.mytracker.sdk)
+    implementation(libs.appmetrica.analytics)
 }
