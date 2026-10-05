@@ -1,0 +1,21 @@
+# Gradle / build
+.gradle/
+build/
+**/build/
+.kotlin/
+local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Secrets and private data
+*.keystore
+*.jks
+# Real bank statement for the mock backend (never committed)
+/app/src/mock/assets/private/
+secrets.properties
