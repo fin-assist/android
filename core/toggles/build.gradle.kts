@@ -1,6 +1,6 @@
 // Feature-toggle interface + registry with code defaults. Providers live in :providers:toggles-*.
 plugins {
-    alias(libs.plugins.pf.jvm.library)
+    id("pf.jvm.library")
 }
 
 dependencies {

@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.pf.feature.api)
+    id("pf.feature.api")
 }
 
 dependencies {
