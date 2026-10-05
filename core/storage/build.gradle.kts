@@ -1,8 +1,8 @@
 // On-device storage shared by both flavors: DataStore preferences and the refresh-token store
 // encrypted with Tink under an Android Keystore master key.
 plugins {
-    alias(libs.plugins.pf.android.library)
-    alias(libs.plugins.pf.hilt)
+    id("pf.android.library")
+    id("pf.hilt")
 }
 
 dependencies {
