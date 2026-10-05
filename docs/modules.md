@@ -60,7 +60,7 @@ impl/src/main/kotlin/ru/finassist/pf/feature/<name>/impl/
 ## Adding a feature
 
 1. Add `include(":feature:<name>:api")` / `:impl` to `settings.gradle.kts` (the `listOf(...)` there).
-2. Create `feature/<name>/api/build.gradle.kts` with `alias(libs.plugins.pf.feature.api)` and
-   `feature/<name>/impl/build.gradle.kts` with `alias(libs.plugins.pf.feature.impl)`.
+2. Create `feature/<name>/api/build.gradle.kts` with `id("pf.feature.api")` and
+   `feature/<name>/impl/build.gradle.kts` with `id("pf.feature.impl")`.
 3. Add `implementation(project(":feature:<name>:api"))` + `:impl` to `app/build.gradle.kts`.
 4. Register the `FeatureEntry` in the feature's Hilt module.
