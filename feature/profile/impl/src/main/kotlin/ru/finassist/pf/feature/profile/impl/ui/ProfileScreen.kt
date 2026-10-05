@@ -52,6 +52,7 @@ fun ProfileScreen(
     onDelete: () -> Unit,
     onDeleteDismiss: () -> Unit,
     onDeleteConfirm: () -> Unit,
+    onDebug: (() -> Unit)? = null,
 ) {
     val c = PfTheme.colors
     val context = LocalContext.current
@@ -90,6 +91,7 @@ fun ProfileScreen(
                     ListRow(icon = "life-buoy", title = "Написать в поддержку", onClick = {
                         context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${Support.EMAIL}")).apply { putExtra(Intent.EXTRA_SUBJECT, "Понятные финансы · ${state.profile?.userId ?: ""}") })
                     })
+                    if (onDebug != null) ListRow(icon = "sliders", title = "Флаги (mock)", description = "Переключатели функций для ручной проверки", onClick = onDebug)
                     ListRow(icon = "log-out", title = "Выйти", accentTitle = true, onClick = onLogout, divider = false)
                 }
                 if (state.deleteEnabled) PfLink("Удалить аккаунт и все данные", onClick = onDelete)

@@ -2,7 +2,7 @@
 
 Source of truth for flag keys: `core/toggles/.../Flags.kt`. This table must list the same keys (CI: `scripts/check-flags.sh`).
 
-Provider: RuStore Remote Config in `prod` (`:core:toggles-rustore`), a local JSON/DataStore provider in `mock` (`:core:toggles-local`, editable from the debug menu). Defaults are in code and mean "everything on"; a provider can only turn things off or back on.
+Provider: RuStore Remote Config in `prod` (`:core:toggles-rustore`), a local DataStore provider in `mock` (`:core:toggles-local`, editable on device: Профиль → «Флаги (mock)»). Defaults are in code and mean "everything on"; a provider can only turn things off or back on.
 
 Identity: before login the provider gets the device id, after login — our `user_id` (then the config is re-fetched). New values apply at screen boundaries (next screen open), never mid-screen.
 

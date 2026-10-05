@@ -8,15 +8,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
+import ru.finassist.pf.core.navigation.DebugMenu
 import ru.finassist.pf.core.navigation.FeatureEntry
 import ru.finassist.pf.core.navigation.Navigator
 import ru.finassist.pf.feature.applock.api.AppLockRoutes
 import ru.finassist.pf.feature.assistant.api.AssistantRoutes
 import ru.finassist.pf.feature.profile.api.ProfileRoutes
 import ru.finassist.pf.feature.statements.api.StatementsRoutes
+import java.util.Optional
 import javax.inject.Inject
 
-class ProfileEntry @Inject constructor() : FeatureEntry {
+class ProfileEntry @Inject constructor(private val debugMenu: Optional<DebugMenu>) : FeatureEntry {
     override fun NavGraphBuilder.install(navigator: Navigator, navController: NavController) {
         composable<ProfileRoutes.Profile> {
             val vm: ProfileViewModel = hiltViewModel()
@@ -35,6 +37,7 @@ class ProfileEntry @Inject constructor() : FeatureEntry {
                 onDelete = { navigator.navigate(AppLockRoutes.Confirm(ProfileViewModel.CONFIRM_DELETE, "Удаление аккаунта")) },
                 onDeleteDismiss = vm::onDeleteDismiss,
                 onDeleteConfirm = vm::deleteAccount,
+                onDebug = debugMenu.orElse(null)?.let { menu -> { navigator.navigate(menu.route()) } },
             )
         }
     }
