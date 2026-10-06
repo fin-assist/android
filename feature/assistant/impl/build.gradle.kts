@@ -5,4 +5,5 @@ plugins {
 dependencies {
     implementation(projects.feature.operations.api)
     implementation(projects.feature.analytics.api)
+    implementation(libs.androidx.browser)
 }
