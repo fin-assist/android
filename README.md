@@ -47,6 +47,15 @@ mock/backend/src/main/assets/statements/fixture.ofx   # обезличенная
 Вход в `mock`: единственный «существующий» номер — из `mock/backend` (`MockConfig.existingPhone`);
 любой другой номер — новый пользователь (регистрация, если флаг `auth.registration` включён).
 
+### JDK для Gradle
+
+Gradle 8.11 не запускается на JDK 25, а Android Studio 2026.x по умолчанию берёт встроенный JBR 25 —
+сборка падает с единственной строкой `25.0.3`. Нужен JDK 21 (как в CI): `brew install --cask temurin@21`,
+затем Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JDK → 21.
+Файл `gradle/gradle-daemon-jvm.properties` фиксирует JDK 21 для демона Gradle и при запуске из консоли.
+Байткод при этом остаётся Java 17 — это предел для Android с AGP 8.x. Переход на Gradle 9 / AGP 9
+(сборка на встроенном JBR 25) — отдельная задача.
+
 ### Flavor `prod`
 
 Настоящий HTTP-клиент, флаги из RuStore Remote Config, события в MyTracker, крэши и ANR в AppMetrica.
@@ -56,8 +65,10 @@ mock/backend/src/main/assets/statements/fixture.ofx   # обезличенная
 | Свойство | Переменная окружения | Что это |
 |---|---|---|
 | `pf.rustoreRemoteConfigAppId` | `PF_RUSTORE_REMOTE_CONFIG_APP_ID` | ID приложения в RuStore Remote Config |
-| `pf.mytrackerSdkKey` | `PF_MYTRACKER_SDK_KEY` | SDK key MyTracker |
-| `pf.appmetricaApiKey` | `PF_APPMETRICA_API_KEY` | API key AppMetrica |
+| `pf.mytrackerSdkKey` | `PF_MYTRACKER_SDK_KEY` | SDK key MyTracker — выдаётся только опубликованному приложению; до публикации пусто |
+| `pf.appmetricaApiKey` | `PF_APPMETRICA_API_KEY` | API key AppMetrica — пока не задаём (SDK выключен); крэши и ANR переедут в Tracer |
+
+Пока ключи MyTracker и AppMetrica пусты, события пишутся никуда, а крэши и ANR в `prod` не собираются.
 
 Ключи флагов в консоли RuStore — как в `docs/flags.md` (булевы значения). Таргетинг и AB — по `account`
 (наш `user_id` после входа).

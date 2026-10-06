@@ -12,6 +12,8 @@ import ru.finassist.pf.core.navigation.Navigator
 import ru.finassist.pf.feature.applock.api.AppLock
 import ru.finassist.pf.feature.applock.api.AppLockRoutes
 import ru.finassist.pf.feature.applock.impl.data.AppLockImpl
+import ru.finassist.pf.feature.applock.impl.data.KeystorePasscodeCrypto
+import ru.finassist.pf.feature.applock.impl.data.PasscodeCrypto
 import ru.finassist.pf.feature.applock.impl.ui.AppLockScreens
 import ru.finassist.pf.feature.applock.impl.ui.AppLockScreensImpl
 import ru.finassist.pf.feature.applock.impl.ui.ChangePasscodeScreen
@@ -46,6 +48,8 @@ internal abstract class AppLockModule {
     @Binds abstract fun appLock(impl: AppLockImpl): AppLock
 
     @Binds abstract fun screens(impl: AppLockScreensImpl): AppLockScreens
+
+    @Binds abstract fun passcodeCrypto(impl: KeystorePasscodeCrypto): PasscodeCrypto
 
     @Binds @IntoSet
     abstract fun entry(impl: AppLockEntry): FeatureEntry
