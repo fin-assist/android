@@ -109,7 +109,6 @@ class CallViewModel @Inject constructor(
             _state.update { it.copy(phase = if (e is AppError.Offline) CallPhase.OFFLINE else CallPhase.EXPIRED) }
             return
         }
-        flow.reset()
         _events.value = CallEvent.SignedIn
     }
 

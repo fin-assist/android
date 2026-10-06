@@ -13,7 +13,12 @@ interface TokenStore {
     val session: Flow<Session?>
     suspend fun current(): Session?
     suspend fun save(session: Session)
-    suspend fun updateTokens(tokens: TokenPair)
+    /**
+     * Replaces the pair only if the stored session still holds [expectedRefreshToken] — atomically, so a
+     * refresh finishing after a sign-out or a new sign-in can neither resurrect the old session nor overwrite
+     * the new one. Returns false when the session has changed meanwhile.
+     */
+    suspend fun updateTokens(expectedRefreshToken: String, tokens: TokenPair): Boolean
     suspend fun clear()
 
     data class Session(val userId: String, val tokens: TokenPair)

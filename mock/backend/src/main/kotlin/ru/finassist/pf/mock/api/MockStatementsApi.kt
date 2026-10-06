@@ -161,7 +161,8 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     private fun buildResult(
         upload: MockBackend.Upload, doc: OfxDocument, added: List<Operation>, duplicates: Int, isFirst: Boolean, before: Coverage,
     ): ImportResult {
-        val after = backend.coverage()
+        // The upload is not marked done yet: include it explicitly, or «after» would equal «before».
+        val after = backend.coverage(including = upload)
         val scope = backend.operationScope
         val newVisible = added.filter { it.pairId == null }
         val uncategorized = added.filter { it.isRefund && it.refundTarget == null }
@@ -244,7 +245,8 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         backend.simulateNetwork()
         backend.requireSession()
         val done = backend.uploads.filter { it.isDone }
-        val summary = if (done.isEmpty()) null else StatementsSummary(
+        // A completed empty statement leaves the ledger empty: no summary then (api.md 3.4 `summary?`).
+        val summary = if (done.isEmpty() || backend.ledger.all.isEmpty()) null else StatementsSummary(
             uploadCount = done.size,
             operationCount = backend.ledger.all.size,
             firstOperationAt = backend.ledger.all.minOf { it.occurredAt },

@@ -4,6 +4,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import okhttp3.Dispatcher
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -63,7 +64,8 @@ internal object NetworkModule {
     fun plainClient(@Named("httpLogging") logging: Boolean): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
-        .addInterceptor(RequestIdInterceptor())
+        // Network interceptor: runs per attempt (auth retry, redirect), so every attempt gets a fresh X-Request-Id.
+        .addNetworkInterceptor(RequestIdInterceptor())
         .apply { if (logging) addInterceptor(HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BASIC)) }
         .build()
 
@@ -74,14 +76,19 @@ internal object NetworkModule {
         baseUrl: HttpUrl,
         tokenStore: TokenStore,
     ): OkHttpClient {
-        val refreshApi = HttpAuthApi(retrofit(plain, baseUrl).create(AuthService::class.java), SseRequests(baseUrl, plain))
+        // The refresh call gets its own Dispatcher: requests waiting in TokenAuthenticator hold slots of the
+        // main dispatcher (5 per host), and a refresh queued behind them would never start.
+        // The total-time limit belongs here: a stuck refresh blocks every request waiting in the authenticator.
+        // The main client has none — a 10 MB statement on a slow mobile link legitimately takes minutes.
+        val refreshClient = plain.newBuilder().dispatcher(Dispatcher()).callTimeout(30, TimeUnit.SECONDS).build()
+        val refreshApi = HttpAuthApi(retrofit(refreshClient, baseUrl).create(AuthService::class.java), SseRequests(baseUrl, refreshClient))
         return plain.newBuilder()
             .addInterceptor(AuthInterceptor(tokenStore))
             .authenticator(TokenAuthenticator(tokenStore) { key, refresh -> refreshApi.refreshTokens(key, refresh) })
             .build()
     }
 
-    /** Same pipeline, no read timeout: SSE streams idle between heartbeats. */
+    /** Same pipeline, no read timeout: SSE streams idle between heartbeats and live for minutes. */
     @Provides
     @Singleton
     @Sse

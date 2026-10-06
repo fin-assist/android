@@ -245,11 +245,13 @@ fun ChangePasscodeScreen(onBack: () -> Unit, onDone: () -> Unit, vm: PasscodeEnt
     )
 }
 
-/** Confirms the code before a dangerous action; the caller gets the result through the navigator. */
+/** Confirms the code (or biometrics, when enabled) before a dangerous action; the caller gets the result through the navigator. */
 @Composable
 fun ConfirmPasscodeScreen(onBack: () -> Unit, onConfirmed: () -> Unit, vm: ConfirmPasscodeViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val prompt = rememberBiometricPrompt(title = "Подтвердите удаление", onSuccess = vm::onBiometricSuccess)
     LaunchedEffect(state.confirmed) { if (state.confirmed) onConfirmed() }
+    LaunchedEffect(Unit) { if (state.biometricEnabled) prompt() }
     PasscodePad(
         header = { PfPageHeader(title = "Подтверждение", onBack = onBack) },
         title = "Введите код-пароль",
@@ -258,5 +260,7 @@ fun ConfirmPasscodeScreen(onBack: () -> Unit, onConfirmed: () -> Unit, vm: Confi
         error = state.error,
         onDigit = vm::digit,
         onDelete = vm::delete,
+        biometric = if (state.biometricEnabled) state.biometric.toKind() else BiometricKind.NONE,
+        onBiometric = prompt,
     )
 }

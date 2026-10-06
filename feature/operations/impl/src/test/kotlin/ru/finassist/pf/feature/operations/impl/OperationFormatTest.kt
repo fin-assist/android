@@ -55,6 +55,12 @@ class OperationFormatTest {
     }
 
     @Test
+    fun `foreign currency keeps its symbol`() {
+        assertEquals("−2 340 $", OperationFormat.money(-Money(234000), "USD", Money.Sign.AUTO).plain())
+        assertEquals("2 340 ₽", OperationFormat.money(Money(234000), "RUB", Money.Sign.AUTO).plain())
+    }
+
+    @Test
     fun `pending operations are marked as hold`() {
         assertEquals("Супермаркеты · холд", OperationFormat.row(item(status = OperationStatus.PENDING)).subtitle.plain())
     }

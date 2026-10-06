@@ -39,6 +39,7 @@ import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.RussianDates
 import ru.finassist.pf.core.common.time.countWithNoun
+import ru.finassist.pf.core.designsystem.components.LocalSuppressPopups
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.NoticeTone
 import ru.finassist.pf.core.designsystem.components.PfBottomSheet
@@ -75,18 +76,22 @@ fun SearchScreen(onBack: () -> Unit, onOpenOperation: (String) -> Unit, vm: Sear
             PfSearchField(f.q.orEmpty(), vm::setQuery, placeholder = "Описание, категория, сумма", modifier = Modifier.weight(1f))
         }
         PfChipRow(Modifier.padding(horizontal = d.space5, vertical = d.space2)) {
-            if (state.chips.period || f.from != null || f.to != null || state.allTime) {
-                PfChip(periodLabel(f, state.allTime), onClick = { vm.openSheet(SearchSheet.PERIOD) }, selected = f.from != null || f.to != null || state.allTime, dropdown = true)
+            // A filter switched off by `search.filter.*` but preset by Analytics or a chip is shown as a fixed,
+            // non-editable chip (docs/flags.md); «Сбросить» still removes it.
+            val period = f.from != null || f.to != null || state.allTime
+            if (state.chips.period || period) {
+                PfChip(periodLabel(f, state.allTime), onClick = { vm.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period)
             }
             if (state.chips.category || f.categoryId != null) {
                 val name = state.categories.firstOrNull { it.id == f.categoryId }?.name
-                PfChip(name ?: "Категория", onClick = { vm.openSheet(SearchSheet.CATEGORY) }, selected = f.categoryId != null, dropdown = true)
+                PfChip(name ?: "Категория", onClick = { vm.openSheet(SearchSheet.CATEGORY) }, selected = f.categoryId != null, dropdown = state.chips.category, enabled = state.chips.category)
             }
-            if (state.chips.amount || f.amountFrom != null || f.amountTo != null) {
-                PfChip(amountLabel(f), onClick = { vm.openSheet(SearchSheet.AMOUNT) }, selected = f.amountFrom != null || f.amountTo != null, dropdown = true)
+            val amount = f.amountFrom != null || f.amountTo != null
+            if (state.chips.amount || amount) {
+                PfChip(amountLabel(f), onClick = { vm.openSheet(SearchSheet.AMOUNT) }, selected = amount, dropdown = state.chips.amount, enabled = state.chips.amount)
             }
             if (state.chips.kind || f.kind != null) {
-                PfChip(if (f.kind == OperationKindFilter.INCOME) "Только доходы" else "Только расходы", onClick = vm::toggleKind, selected = f.kind != null)
+                PfChip(if (f.kind == OperationKindFilter.INCOME) "Только доходы" else "Только расходы", onClick = vm::toggleKind, selected = f.kind != null, enabled = state.chips.kind)
             }
             // Filters without their own chip (api.md: one chip, removed by tap or «Сбросить»).
             if (f.selection != null || f.transferMode != null) {
@@ -220,7 +225,9 @@ private fun PeriodSheet(
             initialSelectedStartDateMillis = f.from?.toLocalDate()?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
             initialSelectedEndDateMillis = f.to?.toLocalDate()?.minusDays(1)?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
         )
-        DatePickerDialog(
+        // A raw Material dialog: not covered by PfDialog's suppression, so hidden here while the app is locked
+        // (it would otherwise draw above the unlock overlay and take input). The picker state survives.
+        if (!LocalSuppressPopups.current) DatePickerDialog(
             onDismissRequest = { pickDates = false },
             confirmButton = {
                 TextButton(

@@ -64,8 +64,10 @@ internal interface AuthService {
     @POST("v1/auth/token")
     suspend fun refreshTokens(@Header(HEADER_IDEMPOTENCY_KEY) key: String, @Body body: RefreshTokenRequest): Response<TokenPair>
 
+    /** Authorization is passed explicitly (the local session is already gone); NoAuth keeps the interceptor out. */
+    @Headers(NO_AUTH)
     @POST("v1/auth/logout")
-    suspend fun logout(@Body body: RefreshTokenRequest): Response<Unit>
+    suspend fun logout(@Header("Authorization") authorization: String, @Body body: RefreshTokenRequest): Response<Unit>
 
     /** `personal_data` is public; `assistant` needs the session — the server ignores an extra bearer. */
     @GET("v1/consents/{type}")

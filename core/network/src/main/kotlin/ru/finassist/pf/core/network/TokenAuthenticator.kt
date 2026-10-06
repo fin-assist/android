@@ -29,10 +29,18 @@ internal class TokenAuthenticator(
 
     private val mutex = Mutex()
 
+    /**
+     * Key of the refresh attempt for the current refresh token. A retry after a lost response must reuse it,
+     * otherwise the server sees the old refresh token again and revokes the whole session (api.md 1.4).
+     * Guarded by [mutex].
+     */
+    private var pendingKey: Pair<String, IdempotencyKey>? = null
+
     override fun authenticate(route: Route?, response: Response): Request? {
-        // Session-less endpoints (the NoAuth marker is stripped by the interceptor, so check the path).
-        val path = response.request.url.encodedPath
-        if (path.startsWith("/v1/auth/") && !path.endsWith("/logout")) return null
+        // Auth endpoints are never retried here: most are session-less, and `/logout` carries the tokens of a
+        // session already cleared locally (the store may hold a newer one by now) — the session repository
+        // handles its 401 itself.
+        if (response.request.url.encodedPath.startsWith("/v1/auth/")) return null
         if (responseCount(response) >= 2) return null
 
         val failedAccess = response.request.header("Authorization")?.removePrefix("Bearer ")
@@ -43,18 +51,28 @@ internal class TokenAuthenticator(
                     // Someone else already refreshed while we waited.
                     return@withLock session.tokens.accessToken
                 }
+                val refreshToken = session.tokens.refreshToken
+                val key = pendingKey?.takeIf { it.first == refreshToken }?.second
+                    ?: IdempotencyKey.random().also { pendingKey = refreshToken to it }
                 try {
-                    val pair = refresh(IdempotencyKey.random(), session.tokens.refreshToken)
-                    tokenStore.updateTokens(pair)
+                    val pair = refresh(key, refreshToken)
+                    // The key is retired only once the new pair is stored: if saving fails, the next attempt
+                    // repeats the same refresh with the same key and gets the same pair back.
+                    if (!tokenStore.updateTokens(refreshToken, pair)) return@withLock null
+                    pendingKey = null
                     pair.accessToken
-                } catch (e: AppError.Unauthorized) {
-                    tokenStore.clear()
-                    null
-                } catch (e: AppError.Api) {
-                    if (e.httpStatus == 401) tokenStore.clear()
-                    null
                 } catch (e: AppError) {
-                    null // offline / server error: give up on this request, keep the session
+                    when {
+                        // The session is gone: clear it, the app shows the phone screen.
+                        e is AppError.Unauthorized ||
+                            (e is AppError.Api && e.httpStatus in 400..499 && e.httpStatus != 409 && e.httpStatus != 429) -> {
+                            pendingKey = null
+                            tokenStore.clear()
+                        }
+                        // Offline / 5xx / in progress: keep the session and the key for the next attempt.
+                        else -> Unit
+                    }
+                    null
                 }
             }
         } ?: return null

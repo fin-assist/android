@@ -54,17 +54,15 @@ class ProfileViewModel @Inject constructor(
     private val preferences: AppPreferences,
     private val session: SessionRepository,
     statementsRepository: StatementsRepository,
-    flags: FeatureFlags,
+    private val featureFlags: FeatureFlags,
     private val tracker: Tracker,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(
-        ProfileUiState(
-            flags = ProfileFlags(
-                assistant = flags.isEnabled(Flag.ASSISTANT),
-                deleteAccount = flags.isEnabled(Flag.PROFILE_DELETE_ACCOUNT),
-                upload = flags.isEnabled(Flag.STATEMENTS_UPLOAD),
-            ),
-        ),
+    private val _state = MutableStateFlow(ProfileUiState(flags = readFlags()))
+
+    private fun readFlags() = ProfileFlags(
+        assistant = featureFlags.isEnabled(Flag.ASSISTANT),
+        deleteAccount = featureFlags.isEnabled(Flag.PROFILE_DELETE_ACCOUNT),
+        upload = featureFlags.isEnabled(Flag.STATEMENTS_UPLOAD),
     )
     val state: StateFlow<ProfileUiState> = _state
 
@@ -73,6 +71,7 @@ class ProfileViewModel @Inject constructor(
             preferences.theme.collect { code -> _state.update { it.copy(theme = Theme.entries.firstOrNull { t -> t.name.equals(code, true) } ?: Theme.SYSTEM) } }
         }
         viewModelScope.launch { statementsRepository.events.collect { loadStatements() } }
+        viewModelScope.launch { featureFlags.changes.collect { _state.update { it.copy(flags = readFlags()) } } }
     }
 
     /** Called on every resume: the consent switch and the limit may have changed on other screens. */

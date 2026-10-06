@@ -4,7 +4,6 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import kotlinx.coroutines.flow.first
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -18,14 +17,20 @@ import javax.inject.Singleton
 @Singleton
 class IdempotencyKeys @Inject constructor(private val dataStore: DataStore<Preferences>) {
 
+    /** Read-or-create inside one DataStore transaction: concurrent callers for one action get the same key. */
     suspend fun keyFor(action: String): IdempotencyKey {
         val prefKey = stringPreferencesKey(PREFIX + action)
-        val now = System.currentTimeMillis()
-        val stored = dataStore.data.first()[prefKey]?.let(::parse)
-        if (stored != null && now - stored.second < TTL_MS) return IdempotencyKey(stored.first)
-        val fresh = IdempotencyKey.random()
-        dataStore.edit { it[prefKey] = "${fresh.value}|$now" }
-        return fresh
+        var result: String? = null
+        dataStore.edit { prefs ->
+            val now = System.currentTimeMillis()
+            val stored = prefs[prefKey]?.let(::parse)
+            result = if (stored != null && now - stored.second < TTL_MS) {
+                stored.first
+            } else {
+                IdempotencyKey.random().value.also { prefs[prefKey] = "$it|$now" }
+            }
+        }
+        return IdempotencyKey(checkNotNull(result))
     }
 
     suspend fun complete(action: String) {

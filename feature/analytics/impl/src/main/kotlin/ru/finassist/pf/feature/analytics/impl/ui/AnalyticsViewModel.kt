@@ -45,6 +45,9 @@ data class AnalyticsBlocks(
 
 enum class AnalyticsSheet { PERIODS, TRANSFERS }
 
+/** Contextual hints after the first import, shown one after another. */
+enum class AnalyticsHint { CATEGORIES, ASK }
+
 data class AnalyticsUiState(
     val loading: Boolean = true,
     val offline: Boolean = false,
@@ -55,6 +58,8 @@ data class AnalyticsUiState(
     val limit: AssistantLimit? = null,
     val allExpenseCategories: Boolean = false,
     val snackbar: String? = null,
+    val hint: AnalyticsHint? = null,
+    val periodsFailed: Boolean = false,
 )
 
 /**
@@ -65,9 +70,9 @@ data class AnalyticsUiState(
 class AnalyticsViewModel @Inject constructor(
     private val api: AnalyticsApi,
     private val assistantApi: AssistantApi,
-    statements: StatementsRepository,
+    private val statements: StatementsRepository,
     operations: OperationsRepository,
-    flags: FeatureFlags,
+    private val flags: FeatureFlags,
     private val tracker: Tracker,
 ) : ViewModel() {
     private var period: PeriodTypeCode = PeriodTypeCode.MONTH
@@ -75,9 +80,11 @@ class AnalyticsViewModel @Inject constructor(
     private var transferMode: TransferMode = TransferMode.WITH
     private var loadJob: Job? = null
 
-    private val _state = MutableStateFlow(
-        AnalyticsUiState(
-            blocks = AnalyticsBlocks(
+    private val _state = MutableStateFlow(AnalyticsUiState(blocks = readBlocks(flags)))
+    val state: StateFlow<AnalyticsUiState> = _state
+    private var periodsJob: Job? = null
+
+    private fun readBlocks(flags: FeatureFlags) = AnalyticsBlocks(
                 tiles = flags.isEnabled(Flag.ANALYTICS_BLOCK_TILES),
                 expenseCategories = flags.isEnabled(Flag.ANALYTICS_BLOCK_EXPENSE_CATEGORIES),
                 incomeCategories = flags.isEnabled(Flag.ANALYTICS_BLOCK_INCOME_CATEGORIES),
@@ -89,10 +96,7 @@ class AnalyticsViewModel @Inject constructor(
                 transfersFilter = flags.isEnabled(Flag.ANALYTICS_FILTER_TRANSFERS),
                 assistant = flags.isEnabled(Flag.ASSISTANT),
                 upload = flags.isEnabled(Flag.STATEMENTS_UPLOAD),
-            ),
-        ),
-    )
-    val state: StateFlow<AnalyticsUiState> = _state
+            )
 
     /** Set by the `Period` route (assistant chip); the tab root starts with the server's default period. */
     fun init(params: AnalyticsParams?) {
@@ -100,7 +104,7 @@ class AnalyticsViewModel @Inject constructor(
         if (params != null) {
             period = params.period
             date = params.date
-            transferMode = params.transferMode.effective
+            transferMode = allowedMode(params.transferMode)
         }
         tracker.track(Events.ANALYTICS_OPENED)
         load()
@@ -108,6 +112,17 @@ class AnalyticsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { merge(statements.events, operations.categoryChanges).collect { load(quiet = true) } }
+        // Remote config can land after the screen opened (first launch, background sync): re-read the blocks.
+        viewModelScope.launch {
+            flags.changes.collect {
+                _state.update { it.copy(blocks = readBlocks(flags)) }
+                // The transfers filter was switched off remotely: from now on requests use `with` (docs/flags.md).
+                if (!_state.value.blocks.transfersFilter && transferMode != TransferMode.WITH) {
+                    transferMode = TransferMode.WITH
+                    if (_state.value.data != null) load(quiet = true)
+                }
+            }
+        }
     }
 
     fun load(quiet: Boolean = false) {
@@ -119,9 +134,12 @@ class AnalyticsViewModel @Inject constructor(
                 a.params?.let { p ->
                     period = p.period
                     date = p.date
-                    transferMode = p.transferMode.effective
+                    transferMode = allowedMode(p.transferMode)
                 }
                 _state.update { it.copy(loading = false, offline = false, data = a) }
+                if (a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
+                    _state.update { it.copy(hint = AnalyticsHint.CATEGORIES) }
+                }
                 if (_state.value.blocks.assistant) refreshLimit()
                 // The server is still recalculating after an edit: ask again shortly (api.md 6.1 `recalculating`).
                 if (a.state?.recalculating == true) {
@@ -129,7 +147,21 @@ class AnalyticsViewModel @Inject constructor(
                     load(quiet = true)
                 }
             } catch (e: AppError) {
-                _state.update { it.copy(loading = false, offline = it.data == null) }
+                // The screen keeps showing the previous data: return the parameters to what it shows, or the
+                // segment, the chip and the transfers sheet would describe a request that never succeeded.
+                _state.value.data?.params?.let { p ->
+                    period = p.period
+                    date = p.date
+                    transferMode = allowedMode(p.transferMode)
+                }
+                _state.update {
+                    it.copy(
+                        loading = false,
+                        offline = it.data == null,
+                        snackbar = if (quiet || it.data == null) it.snackbar
+                        else if (e is AppError.Offline) "Нет сети — показываем прежний период" else "Не получилось обновить. Попробуйте ещё раз",
+                    )
+                }
             }
         }
     }
@@ -163,12 +195,29 @@ class AnalyticsViewModel @Inject constructor(
 
     fun currentTransferMode(): TransferMode = transferMode
 
+    /** With `analytics.filter.transfers` off every request uses `with` (docs/flags.md), whatever a chip says. */
+    private fun allowedMode(mode: TransferMode): TransferMode =
+        if (_state.value.blocks.transfersFilter) mode.effective else TransferMode.WITH
+
+    /** Next hint, or none: «Не показывать» skips the rest too. */
+    fun nextHint(stop: Boolean) = _state.update {
+        it.copy(hint = if (stop || it.hint == AnalyticsHint.ASK || !it.blocks.assistant) null else AnalyticsHint.ASK)
+    }
+
     fun openSheet(sheet: AnalyticsSheet?) {
-        _state.update { it.copy(sheet = sheet, periods = if (sheet == AnalyticsSheet.PERIODS) null else it.periods) }
+        _state.update { it.copy(sheet = sheet, periods = if (sheet == AnalyticsSheet.PERIODS) null else it.periods, periodsFailed = false) }
+        periodsJob?.cancel()
         if (sheet == AnalyticsSheet.PERIODS) {
-            // The list is requested when the sheet opens, not in advance (api.md 6.2).
-            viewModelScope.launch {
-                runCatching { api.listPeriods(period) }.onSuccess { list -> _state.update { it.copy(periods = list.periods) } }
+            // The list is requested when the sheet opens, not in advance (api.md 6.2); an older request for another
+            // period type is cancelled so its answer cannot land in this sheet.
+            val type = period
+            periodsJob = viewModelScope.launch {
+                try {
+                    val list = api.listPeriods(type)
+                    _state.update { it.copy(periods = list.periods) }
+                } catch (e: AppError) {
+                    _state.update { it.copy(periodsFailed = true) }
+                }
             }
         }
     }

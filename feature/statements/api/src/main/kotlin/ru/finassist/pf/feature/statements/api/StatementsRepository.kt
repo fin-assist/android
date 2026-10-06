@@ -15,4 +15,10 @@ interface StatementsRepository {
 
     /** Result of an import finished in this process, for the result screen; `null` after process death. */
     fun lastResult(uploadId: String): ImportResult?
+
+    /**
+     * True once after the user's first import (persisted): Analytics then shows its contextual hints
+     * (mvp-scope «контекстные подсказки после первого импорта»).
+     */
+    suspend fun consumeFirstImportHints(): Boolean
 }

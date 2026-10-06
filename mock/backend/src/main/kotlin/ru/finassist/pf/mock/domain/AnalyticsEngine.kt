@@ -345,11 +345,22 @@ class AnalyticsEngine(
         if (base.size < 2) {
             return RegularPaymentsCard(status = MetricStatus.LOCKED, lock = MetricLock(LockReason.NEED_FULL_MONTHS, 2, base.size))
         }
+        val items = regularItems(mode, visible, base, periodRange)
+        val status = if (base.size >= 3) MetricStatus.READY else MetricStatus.TENTATIVE
+        if (items.isEmpty()) return RegularPaymentsCard(status = MetricStatus.NONE, basis = basis)
+        return RegularPaymentsCard(
+            status = status, basis = basis, value = Money(items.sumOf { it.monthlyAmount.minor }), count = items.size, items = items,
+            filters = OperationsFilter(from = periodRange.from, to = periodRange.to, transferMode = mode, selection = regularAllSelection(base.first(), mode), selectionName = "Регулярные платежи"),
+        )
+    }
+
+    /** Regular payments over the last (up to 3) full months of [base]; [base] is newest first, at least 2 months. */
+    private fun regularItems(mode: TransferMode, visible: List<Operation>, base: List<YearMonth>, periodRange: DateRange): List<RegularPayment> {
         val window = base.take(3)
         val debits = window.flatMap { m -> scope.inDays(visible, m.atDay(1), m.plusMonths(1).atDay(1)) }
             .filter { it.isDebit && !it.isOwnTransferCategory && it.category.id != catalog.transfers.id }
         val dismissed = dismissedPayments()
-        val items = debits.groupBy { it.name }.mapNotNull { (name, list) ->
+        return debits.groupBy { it.name }.mapNotNull { (name, list) ->
             val perMonth = list.groupBy { YearMonth.from(scope.dayOf(it)) }
             if (perMonth.size < window.size || perMonth.values.any { it.size > 2 }) return@mapNotNull null
             val amounts = list.map { it.amountMinor }.sorted()
@@ -364,13 +375,25 @@ class AnalyticsEngine(
                 filters = OperationsFilter(from = periodRange.from, to = periodRange.to, transferMode = mode, selection = "s_regular_$id", selectionName = name),
             )
         }.sortedByDescending { it.monthlyAmount.minor }
-        val status = if (base.size >= 3) MetricStatus.READY else MetricStatus.TENTATIVE
-        if (items.isEmpty()) return RegularPaymentsCard(status = MetricStatus.NONE, basis = basis)
-        return RegularPaymentsCard(
-            status = status, basis = basis, value = Money(items.sumOf { it.monthlyAmount.minor }), count = items.size, items = items,
-            filters = OperationsFilter(from = periodRange.from, to = periodRange.to, transferMode = mode, selection = SELECTION_REGULAR_ALL, selectionName = "Регулярные платежи"),
-        )
     }
+
+    /**
+     * `s_regular_all` carries the card it came from (`s_regular_all_<base month>_<mode>`): a selection is valid
+     * indefinitely (api.md 4.1), so the merchant set is recomputed from it rather than taken from whichever card
+     * was computed last. Null for a malformed selection.
+     */
+    fun regularNames(selection: String): Set<String>? {
+        val (month, modeCode) = selection.removePrefix(SELECTION_REGULAR_ALL + "_").split("_", limit = 2)
+            .takeIf { it.size == 2 } ?: return null
+        val m = runCatching { YearMonth.parse(month) }.getOrNull() ?: return null
+        val mode = TransferMode.entries.firstOrNull { it.code == modeCode && it != TransferMode.UNKNOWN } ?: return null
+        val base = coverage().fullMonths.filter { !it.isAfter(m) }.sortedDescending().take(6)
+        if (base.firstOrNull() != m || base.size < 2) return emptySet()
+        val range = range(m.atDay(1), m.plusMonths(1).atDay(1))
+        return regularItems(mode, scope.visible(mode), base, range).map { it.title }.toSet()
+    }
+
+    private fun regularAllSelection(baseMonth: YearMonth, mode: TransferMode) = "${SELECTION_REGULAR_ALL}_${baseMonth}_${mode.code}"
 
     /** Which operations a `s_regular_*` selection means: debits with that merchant name. */
     fun regularPaymentName(selection: String): String? {

@@ -9,7 +9,7 @@ Naming: `<feature>.<object>[.<detail>]`, lowercase, dot-separated. Same prefix i
 
 | Flag | Default | What `false` does |
 |---|---|---|
-| `auth.registration` | `true` | New phone number after the call: instead of the consent screen, "Регистрация пока закрыта". Existing users still sign in. In `mock` the only "existing" number is the one in the mock config. |
+| `auth.registration` | `true` | New phone number after the call: instead of the consent screen, "Регистрация пока закрыта". Existing users still sign in. In `mock` the only "existing" number is the one in the mock config, and `app/src/mock/assets/flags.json` sets this flag to `false` (only that number signs in). |
 | `analytics.block.tiles` | `true` | Hides the tiles row (expense, income, balance, daily expense, forecast) |
 | `analytics.block.expense_categories` | `true` | Hides "Расходы по категориям" and the "Все категории" screen for expenses |
 | `analytics.block.income_categories` | `true` | Hides "Доходы по категориям" |
@@ -36,3 +36,13 @@ their own chip.
 1. Add a constant to `FlagRegistry` in `core/toggles` with its default.
 2. Add a row here.
 3. Read it with `FeatureFlags.isEnabled(Flag.X)` at the screen boundary (view model init or `FeatureEntry`).
+
+## Known limitation: account switch and RuStore cache
+
+RuStore Remote Config serves its persisted config and syncs in the background (default interval 15 minutes).
+After sign-in, sign-out or an account switch the provider asks for the config with the new `account`, but the
+SDK may still answer from the cache fetched for the previous identity until its next sync. Toggles keyed by
+user cohort can therefore lag up to one sync interval after an account change. If that matters for an
+experiment, switch the client to `UpdateBehaviour.Actual` (every request goes to the server; cold start then
+uses code defaults until the first answer).
+

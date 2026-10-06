@@ -13,6 +13,7 @@ import ru.finassist.pf.buildlogic.libs
  */
 class JvmLibraryConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) = with(target) {
+        pluginManager.apply("java-library")
         pluginManager.apply("org.jetbrains.kotlin.jvm")
 
         extensions.configure<JavaPluginExtension> {

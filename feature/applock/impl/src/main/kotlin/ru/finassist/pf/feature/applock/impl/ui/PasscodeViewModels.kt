@@ -166,13 +166,25 @@ class UnlockViewModel @Inject constructor(private val appLock: AppLock) : ViewMo
     }
 }
 
-data class ConfirmUiState(val entered: String = "", val error: String? = null, val busy: Boolean = false, val confirmed: Boolean = false)
+data class ConfirmUiState(
+    val entered: String = "",
+    val error: String? = null,
+    val busy: Boolean = false,
+    val confirmed: Boolean = false,
+    val biometric: BiometricAvailability = BiometricAvailability.NONE,
+    val biometricEnabled: Boolean = false,
+)
 
 /** Confirms the current code before a dangerous action; no attempt counting — the user is already unlocked. */
 @HiltViewModel
 class ConfirmPasscodeViewModel @Inject constructor(private val appLock: AppLock) : ViewModel() {
-    private val _state = MutableStateFlow(ConfirmUiState())
+    private val _state = MutableStateFlow(
+        ConfirmUiState(biometric = appLock.biometricAvailability(), biometricEnabled = appLock.biometricEnabled.value),
+    )
     val state: StateFlow<ConfirmUiState> = _state
+
+    /** mvp-scope: account deletion is confirmed «код-паролем или биометрией». */
+    fun onBiometricSuccess() = _state.update { it.copy(confirmed = true) }
 
     fun digit(d: Int) {
         val s = _state.value

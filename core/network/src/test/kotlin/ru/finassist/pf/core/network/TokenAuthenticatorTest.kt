@@ -16,6 +16,7 @@ import org.junit.Before
 import org.junit.Test
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.TokenPair
+import ru.finassist.pf.core.common.error.AppError
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -112,5 +113,36 @@ class TokenAuthenticatorTest {
 
         assertEquals(401, response.code)
         assertEquals(0, refreshCalls.get())
+    }
+
+    @Test
+    fun `refresh retried after a lost response reuses the same idempotency key`() {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse =
+                if (request.getHeader("Authorization") == "Bearer new-access") {
+                    MockResponse().setBody("ok")
+                } else {
+                    MockResponse().setResponseCode(401).setBody("""{"error":{"code":"INVALID_TOKEN","message":"x"}}""")
+                }
+        }
+        val keys = mutableListOf<String>()
+        var attempt = 0
+        val client = OkHttpClient.Builder()
+            .addInterceptor(AuthInterceptor(store))
+            .authenticator(
+                TokenAuthenticator(store) { key, _ ->
+                    keys += key.value
+                    // First attempt: the server rotated the pair but the response was lost.
+                    if (attempt++ == 0) throw AppError.Offline() else TokenPair("new-access", "new-refresh")
+                },
+            )
+            .build()
+
+        val first = client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute()
+        assertEquals(401, first.code)
+        val second = client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute()
+        assertEquals(200, second.code)
+        assertEquals(2, keys.size)
+        assertEquals(keys[0], keys[1])
     }
 }

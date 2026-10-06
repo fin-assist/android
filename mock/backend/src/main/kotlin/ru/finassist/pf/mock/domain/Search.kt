@@ -45,7 +45,7 @@ class Search(private val ledger: Ledger, private val catalog: Catalog, private v
         f.amountFrom?.let { min -> result = result.filter { it.amountMinor >= min.minor } }
         f.amountTo?.let { max -> result = result.filter { it.amountMinor <= max.minor } }
         f.q?.trim()?.takeIf { it.isNotEmpty() }?.let { q -> result = result.filter { matchesQuery(it, q) } }
-        f.selection?.let { sel -> result = result.filter { matchesSelection(it, sel) } }
+        f.selection?.let { sel -> val matches = selectionPredicate(sel); result = result.filter(matches) }
         return result
     }
 
@@ -65,26 +65,36 @@ class Search(private val ledger: Ledger, private val catalog: Catalog, private v
         }
     }
 
-    private fun matchesSelection(r: Record, selection: String): Boolean {
-        val op = (r as? Record.Single)?.op ?: return false
-        return when {
-            selection == AnalyticsEngine.SELECTION_UNCATEGORIZED -> op.isRefund && op.refundTarget == null
-            selection == AnalyticsEngine.SELECTION_BANK_FEES -> op.isDebit && op.category.id == catalog.bankFees.id
-            selection == AnalyticsEngine.SELECTION_REGULAR_ALL -> op.isDebit
-            selection.startsWith("s_regular_") -> op.isDebit && op.name == (analytics.regularPaymentName(selection) ?: throw UnknownSelection(selection))
+    /**
+     * Which operations a selection means, resolved once per request (the regular-payments set is recomputed
+     * from the selection itself). Throws [UnknownSelection] for a selection the mock does not know.
+     */
+    private fun selectionPredicate(selection: String): (Record) -> Boolean {
+        val test: (Operation) -> Boolean = when {
+            selection == AnalyticsEngine.SELECTION_UNCATEGORIZED -> { op -> op.isRefund && op.refundTarget == null }
+            selection == AnalyticsEngine.SELECTION_BANK_FEES -> { op -> op.isDebit && op.category.id == catalog.bankFees.id }
+            selection.startsWith(AnalyticsEngine.SELECTION_REGULAR_ALL) -> {
+                val names = analytics.regularNames(selection) ?: throw UnknownSelection(selection)
+                ({ op -> op.isDebit && op.name in names })
+            }
+            selection.startsWith("s_regular_") -> {
+                val name = analytics.regularPaymentName(selection) ?: throw UnknownSelection(selection)
+                ({ op -> op.isDebit && op.name == name })
+            }
             selection.startsWith("s_merchant_") -> {
                 val slug = selection.removePrefix("s_merchant_")
                 val name = ledger.all.map { it.name }.distinct().firstOrNull { Catalog.slugOf(it).take(40) == slug } ?: throw UnknownSelection(selection)
-                op.name == name
+                ({ op -> op.name == name })
             }
             else -> throw UnknownSelection(selection)
         }
+        return { r -> (r as? Record.Single)?.op?.let(test) ?: false }
     }
 
     /** Validates a selection up front so an unknown one fails the whole request, not per record. */
     fun validateSelection(selection: String) {
         if (ledger.all.isEmpty()) return
-        matchesSelection(Record.Single(ledger.all.first()), selection)
+        selectionPredicate(selection)
     }
 
 }

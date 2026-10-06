@@ -48,7 +48,7 @@ class FeedViewModel @Inject constructor(
     private val api: OperationsApi,
     statements: StatementsRepository,
     operations: OperationsRepositoryImpl,
-    flags: FeatureFlags,
+    private val flags: FeatureFlags,
     private val tracker: Tracker,
 ) : ViewModel() {
     private val _state = MutableStateFlow(FeedUiState(uploadEnabled = flags.isEnabled(Flag.STATEMENTS_UPLOAD)))
@@ -60,6 +60,7 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             merge(statements.events, operations.categoryChanges).collect { refresh() }
         }
+        viewModelScope.launch { flags.changes.collect { _state.update { it.copy(uploadEnabled = flags.isEnabled(Flag.STATEMENTS_UPLOAD)) } } }
     }
 
     fun load() {

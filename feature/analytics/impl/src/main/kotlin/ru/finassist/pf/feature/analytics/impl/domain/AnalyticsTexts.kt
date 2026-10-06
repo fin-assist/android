@@ -139,4 +139,12 @@ object AnalyticsTexts {
             else -> null
         }
     }
+
+    /** Share of income left after expenses for a month; null without data or without income. */
+    fun balanceShare(p: MonthlyPoint): Double? {
+        val income = p.income ?: return null
+        val expense = p.expense ?: return null
+        if (income.minor <= 0) return null
+        return (income.minor - expense.minor).toDouble() / income.minor
+    }
 }

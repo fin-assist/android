@@ -11,13 +11,14 @@ import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.model.ConsentDocument
 import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.ErrorCodes
-import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.RegisterRequest
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.storage.IdempotencyKeys
 import ru.finassist.pf.feature.auth.impl.data.SessionRepositoryImpl
 import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
 import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
+import java.security.MessageDigest
 import java.util.TimeZone
 import javax.inject.Inject
 
@@ -37,12 +38,12 @@ class ConsentViewModel @Inject constructor(
     private val authApi: AuthApi,
     private val flow: SignInFlow,
     private val session: SessionRepositoryImpl,
+    private val keys: IdempotencyKeys,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ConsentUiState(phoneDisplay = PhoneFormat.display(PhoneFormat.digits(flow.phone))))
     val state: StateFlow<ConsentUiState> = _state
     private val _registered = MutableStateFlow(false)
     val registered: StateFlow<Boolean> = _registered
-    private var registerKey: IdempotencyKey = IdempotencyKey.random()
 
     init {
         viewModelScope.launch {
@@ -50,6 +51,9 @@ class ConsentViewModel @Inject constructor(
                 .onSuccess { doc -> _state.update { it.copy(document = doc) } }
         }
     }
+
+    private fun sha256(text: String): String =
+        MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
 
     fun setAccepted(value: Boolean) = _state.update { it.copy(accepted = value, error = null) }
 
@@ -64,19 +68,23 @@ class ConsentViewModel @Inject constructor(
             _state.update { it.copy(busy = true, formError = null) }
             try {
                 val version = s.document?.version ?: authApi.getConsentDocument(ConsentType.PERSONAL_DATA).version
+                // The registration token is one-time: a repeat after a lost 201 (even after process death) must
+                // carry the same key, or the user would have to call again (api.md 1.3).
+                val action = "auth.register:" + sha256("$token|$version")
                 val response = authApi.register(
-                    registerKey,
+                    keys.keyFor(action),
                     RegisterRequest(registrationToken = token, pdConsentAccepted = true, pdConsentVersion = version, timezone = TimeZone.getDefault().id),
                 )
+                keys.complete(action)
                 session.start(response.userId, TokenPair(response.accessToken, response.refreshToken), registered = true)
-                flow.reset()
                 _registered.value = true
             } catch (e: AppError) {
                 when {
                     e is AppError.Api && e.code == ErrorCodes.CONSENT_OUTDATED -> {
-                        // Document moved on while the screen was open: reload it and ask again with a new key.
-                        registerKey = IdempotencyKey.random()
-                        runCatching { authApi.getConsentDocument(ConsentType.PERSONAL_DATA) }.onSuccess { doc -> _state.update { it.copy(document = doc) } }
+                        // Document moved on while the screen was open: reload it; the new version means a new key.
+                        // A new version needs a new, affirmative tick: the old one does not carry over.
+                        runCatching { authApi.getConsentDocument(ConsentType.PERSONAL_DATA) }.onSuccess { doc -> _state.update { it.copy(document = doc, accepted = false) } }
+                        _state.update { it.copy(accepted = false) }
                         _state.update { it.copy(formError = "Текст согласия обновился — прочитайте его ещё раз и подтвердите") }
                     }
                     e is AppError.Unauthorized || (e is AppError.Api && e.httpStatus == 401) -> _state.update { it.copy(expired = true) }

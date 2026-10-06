@@ -50,6 +50,7 @@ import ru.finassist.pf.core.designsystem.components.PfCard
 import ru.finassist.pf.core.designsystem.components.PfCategoryBar
 import ru.finassist.pf.core.designsystem.components.PfChip
 import ru.finassist.pf.core.designsystem.components.PfChipRow
+import ru.finassist.pf.core.designsystem.components.PfCoachmark
 import ru.finassist.pf.core.designsystem.components.PfDataRow
 import ru.finassist.pf.core.designsystem.components.PfEmptyState
 import ru.finassist.pf.core.designsystem.components.PfInsightCard
@@ -67,6 +68,7 @@ import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.analytics.impl.domain.AnalyticsTexts
 import java.time.YearMonth
+import kotlin.math.roundToInt
 
 /** Navigation callbacks of the Analytics screen. */
 class AnalyticsActions(
@@ -167,6 +169,13 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
 
     if (blocks.tiles && a.tiles != null) Tiles(a, vm, actions)
 
+    if (state.hint == AnalyticsHint.ASK) {
+        PfCoachmark(
+            "Спросите помощника о своих расходах — он посчитает по вашим операциям. 5 вопросов в день",
+            onClose = { vm.nextHint(stop = false) },
+            onNever = { vm.nextHint(stop = true) },
+        )
+    }
     if (blocks.assistant) {
         val limit = state.limit
         PfAskCard(
@@ -177,6 +186,14 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         )
     }
 
+    if (state.hint == AnalyticsHint.CATEGORIES) {
+        PfCoachmark(
+            "Нажмите на категорию или любую цифру — откроются операции, из которых она сложилась. Категорию операции можно поменять",
+            title = "Выписка разобрана",
+            onClose = { vm.nextHint(stop = false) },
+            onNever = { vm.nextHint(stop = true) },
+        )
+    }
     if (blocks.expenseCategories) a.expenseCategories?.let { b ->
         Breakdown("Расходы по категориям", "analytics.expense.categories", b, a.tiles?.expense?.value, periodCaption(period), state.allExpenseCategories, vm::toggleAllCategories, actions.openSearch, "Расходов за период нет")
     }
@@ -189,7 +206,8 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
             PfInsightCard(PfIcons.BAR_CHART, "График по месяцам", state = InsightState.LOCKED, lockedText = AnalyticsTexts.lock(chart.lock, a.state))
         } else {
             val points = chart.points!!
-            val maxValue = points.mapNotNull { it.expense?.minor }.maxOrNull()?.coerceAtLeast(1) ?: 1
+            // Expenses are signed (refunds can exceed purchases): scale by the largest magnitude, keep the sign.
+            val maxValue = points.mapNotNull { it.expense?.minor?.let { m -> kotlin.math.abs(m) } }.maxOrNull()?.coerceAtLeast(1) ?: 1
             // Month mode highlights the selected month; quarter and year — the last month of the period.
             val selected = points.indexOfFirst { it.month == params.date.value }
             PfCard {
@@ -202,7 +220,7 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
                             key = p.month,
                             label = RussianDates.monthShort(ym.month),
                             spokenLabel = RussianDates.monthTitle(ym) + (note?.let { ", $it" } ?: ""),
-                            value = p.expense?.minor?.toFloat()?.div(maxValue)?.coerceAtLeast(0f),
+                            value = p.expense?.minor?.toFloat()?.div(maxValue),
                             display = p.expense?.format() ?: "нет данных",
                             partial = p.coverage.effective == Coverage.PARTIAL,
                             note = note,
@@ -216,6 +234,34 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
                     expense?.value?.let { AnalyticsTexts.comparison(it, expense.comparison, params.period) },
                     AnalyticsTexts.typical(expense?.typical),
                 ).forEach { Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = d.space2)) }
+            }
+            // «Доходы минус расходы по месяцам» as a share of income (api.md 6.1); a month where more was spent than
+            // earned goes below the baseline.
+            PfSectionTitle("Доходы минус расходы по месяцам")
+            PfCard {
+                val shares = points.map { AnalyticsTexts.balanceShare(it) }
+                val maxShare = shares.filterNotNull().maxOfOrNull { kotlin.math.abs(it) }?.takeIf { it > 0 } ?: 1.0
+                PfBarChart(
+                    chartId = "analytics.balance.monthly",
+                    points = points.mapIndexed { i, p ->
+                        val ym = YearMonth.parse(p.month)
+                        val share = shares[i]
+                        val display = share?.let { "${if (it < 0) Money.MINUS else ""}${kotlin.math.abs((it * 100).roundToInt())}%" } ?: "нет данных"
+                        BarPoint(
+                            key = p.month,
+                            label = RussianDates.monthShort(ym.month),
+                            spokenLabel = RussianDates.monthTitle(ym),
+                            value = share?.let { (it / maxShare).toFloat() },
+                            display = display,
+                            partial = p.coverage.effective == Coverage.PARTIAL,
+                            note = AnalyticsTexts.barNote(p),
+                        )
+                    },
+                    highlight = if (selected >= 0) selected else points.lastIndex,
+                    height = 120.dp,
+                    showValues = true,
+                )
+                Text("Доля дохода, которая осталась после расходов", style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = d.space2))
             }
         }
     }
@@ -428,7 +474,12 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsViewModel) {
         AnalyticsSheet.PERIODS -> PfBottomSheet("Период", onDismiss = { vm.openSheet(null) }) {
             val current = state.data?.params?.date
             val periods = state.periods
-            if (periods == null) {
+            if (state.periodsFailed) {
+                Column(Modifier.padding(PfTheme.dimens.space5)) {
+                    Text("Не получилось загрузить периоды", style = PfTheme.type.body, color = PfTheme.colors.textMuted)
+                    PfLink("Повторить", onClick = { vm.openSheet(AnalyticsSheet.PERIODS) })
+                }
+            } else if (periods == null) {
                 Text("Загружаем…", style = PfTheme.type.body, color = PfTheme.colors.textMuted, modifier = Modifier.padding(PfTheme.dimens.space5))
             } else {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {

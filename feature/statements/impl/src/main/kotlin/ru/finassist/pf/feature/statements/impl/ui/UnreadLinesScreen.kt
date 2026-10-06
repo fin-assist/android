@@ -121,8 +121,10 @@ fun UnreadLinesScreen(onBack: () -> Unit, vm: UnreadLinesViewModel = hiltViewMod
                             style = PfTheme.type.body, color = PfTheme.colors.textMuted,
                         )
                     }
-                    state.lines.groupBy { it.fileName }.forEach { (file, lines) ->
-                        item(key = file) {
+                    // By upload, not by file name: T-Bank names every export the same way.
+                    state.lines.groupBy { it.uploadId }.forEach { (uploadId, lines) ->
+                        val file = lines.first().fileName
+                        item(key = uploadId) {
                             PfCard {
                                 Text(file, style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
                                 lines.forEachIndexed { i, l ->

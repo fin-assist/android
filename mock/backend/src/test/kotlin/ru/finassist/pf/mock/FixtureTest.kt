@@ -121,4 +121,18 @@ class FixtureTest {
         val expensesOnly = api.listOperations(OperationsQuery(filter = OperationsFilter(kind = OperationKindFilter.EXPENSE, transferMode = TransferMode.WITH)))
         assertTrue(expensesOnly.items.none { it.kind.code == "own_transfer" })
     }
+
+    @Test
+    fun `regular payments selection does not depend on the last computed card`() = runBlocking {
+        val (backend, _) = backend()
+        val api = MockOperationsApi(backend)
+        val card = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH).insights!!.regularPayments
+        val filter = assertNotNull(card.filters)
+        val titles = card.items.orEmpty().map { it.title }.toSet()
+        // Another month recomputes the card; the September selection must still mean September's merchants.
+        backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-05"), TransferMode.WITHOUT)
+        val found = api.listOperations(OperationsQuery(filter = filter))
+        assertTrue(found.items.isNotEmpty())
+        assertTrue(found.items.all { it.title in titles }, "unexpected ${found.items.map { it.title }.toSet() - titles}")
+    }
 }

@@ -39,6 +39,8 @@ import ru.finassist.pf.core.designsystem.components.PfNotice
 import ru.finassist.pf.core.designsystem.components.PfStatTile
 import ru.finassist.pf.core.designsystem.components.PfStatusHero
 import ru.finassist.pf.core.designsystem.theme.PfTheme
+import ru.finassist.pf.core.toggles.FeatureFlags
+import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.feature.statements.api.StatementsRepository
 import ru.finassist.pf.feature.statements.api.StatementsRoutes
 import ru.finassist.pf.feature.statements.impl.domain.ResultTexts
@@ -48,7 +50,10 @@ import javax.inject.Inject
 class ResultViewModel @Inject constructor(
     savedState: SavedStateHandle,
     repository: StatementsRepository,
+    flags: FeatureFlags,
 ) : ViewModel() {
+    val uploadEnabled: Boolean = flags.isEnabled(Flag.STATEMENTS_UPLOAD)
+
     val uploadId: String = savedState.toRoute<StatementsRoutes.Result>().uploadId
 
     /** Null after process death: the screen then shows a short «loaded» state without numbers. */
@@ -148,7 +153,7 @@ fun ResultScreen(
             }
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4), verticalArrangement = Arrangement.spacedBy(d.space2)) {
-            if (r != null && (r.operationCount == 0 || r.newCount == 0)) {
+            if (r != null && (r.operationCount == 0 || r.newCount == 0) && vm.uploadEnabled) {
                 PfButton("Загрузить другой файл", onClick = onUploadAnother, variant = ButtonVariant.PRIMARY, block = true)
                 PfButton("Готово", onClick = onDone, variant = ButtonVariant.GHOST, block = true)
             } else {

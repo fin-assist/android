@@ -24,7 +24,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.model.StatementsList
 import ru.finassist.pf.core.api.model.Upload
@@ -79,10 +82,47 @@ class HistoryViewModel @Inject constructor(
             try {
                 val list = api.listStatements()
                 _state.update { it.copy(loading = false, list = list) }
+                list.uploads.filter { it.status == UploadStatus.PROCESSING }.forEach { watch(it.uploadId) }
             } catch (e: AppError) {
                 _state.update { it.copy(loading = false, offline = it.list == null) }
             }
         }
+    }
+
+    private val watching = HashMap<String, Job>()
+
+    /**
+     * api.md 3.4: a `processing` upload → open its progress stream; reload the list once it reports the end.
+     * A drop (network, 5xx, stream closed without `complete` / `error`) is re-opened with backoff; any other
+     * error ends watching until the next resume. Streams live only while the screen is started ([pause]).
+     */
+    private fun watch(uploadId: String) {
+        if (watching[uploadId]?.isActive == true) return
+        watching[uploadId] = viewModelScope.launch {
+            var backoff = 1_000L
+            while (true) {
+                var terminal = false
+                try {
+                    api.streamProgress(uploadId).collect { event ->
+                        backoff = 1_000L
+                        if (event is ImportEvent.Complete) repository.importCompleted(uploadId, event.result)
+                        if (event !is ImportEvent.Progress) terminal = true
+                    }
+                } catch (e: AppError) {
+                    if (e !is AppError.Offline && e !is AppError.Server) return@launch
+                }
+                if (terminal) break
+                delay(backoff)
+                backoff = (backoff * 2).coerceAtMost(15_000L)
+            }
+            watching.remove(uploadId)
+            load()
+        }
+    }
+
+    fun pause() {
+        watching.values.forEach { it.cancel() }
+        watching.clear()
     }
 
     fun askDelete(upload: Upload?) = _state.update { it.copy(confirmDelete = upload) }
@@ -121,7 +161,7 @@ fun HistoryScreen(
     val c = PfTheme.colors
     LifecycleResumeEffect(Unit) {
         vm.load()
-        onPauseOrDispose { }
+        onPauseOrDispose { vm.pause() }
     }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars)) {
         PfPageHeader("История загрузок", onBack = onBack)

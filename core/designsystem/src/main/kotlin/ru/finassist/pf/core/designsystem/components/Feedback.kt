@@ -1,6 +1,8 @@
 package ru.finassist.pf.core.designsystem.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +24,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,6 +39,12 @@ import androidx.compose.ui.window.DialogProperties
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
+
+/**
+ * `true` while the app is covered by the unlock screen: dialogs and sheets are separate windows that would
+ * draw above it, so they are not shown until the app is unlocked (their own open/closed state is kept).
+ */
+val LocalSuppressPopups = compositionLocalOf { false }
 
 enum class NoticeTone { INFO, WARNING, POSITIVE, LIMIT }
 
@@ -204,6 +213,7 @@ fun PfDialog(
     cancelText: String = "Отмена",
     content: @Composable ColumnScope.() -> Unit = {},
 ) {
+    if (LocalSuppressPopups.current) return
     val c = PfTheme.colors
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(dismissOnClickOutside = !busy)) {
         Column(
@@ -237,6 +247,7 @@ fun PfBottomSheet(
     footer: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (LocalSuppressPopups.current) return
     val c = PfTheme.colors
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -257,7 +268,14 @@ fun PfBottomSheet(
             Text(title, style = PfTheme.type.title2, color = c.text, modifier = Modifier.weight(1f).semantics { heading() })
             PfIconButton(PfIcons.X, contentDescription = "Закрыть", onClick = onDismiss, tint = c.textMuted)
         }
-        Column(Modifier.fillMaxWidth().padding(bottom = PfTheme.dimens.space4)) { content() }
+        // Content scrolls between the header and the footer; the footer stays reachable on long lists.
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = PfTheme.dimens.space4),
+        ) { content() }
         if (footer != null) {
             Column(Modifier.fillMaxWidth().padding(horizontal = PfTheme.dimens.space5)) { footer() }
         }
