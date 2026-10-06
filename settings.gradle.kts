@@ -24,8 +24,13 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
-        // RuStore SDK (Remote Config), MyTracker — stage 8
-        maven("https://artifactory-external.vkpartner.ru/artifactory/maven")
+        // RuStore SDK (Remote Config)
+        maven("https://nexus-external.rustore.ru/repository/maven-rustore-exposed") {
+            content { includeGroupByRegex("ru\\.rustore.*") }
+        }
+        maven("https://artifactory-external.vkpartner.ru/artifactory/maven") {
+            content { includeGroupByRegex("ru\\.rustore.*") }
+        }
     }
 }
 
@@ -48,6 +53,9 @@ include(":core:storage")
 // Providers: implementations of core:toggles / core:tracking interfaces. Only :app depends on them.
 include(":providers:toggles-local")
 include(":providers:tracking-log")
+include(":providers:toggles-rustore")
+include(":providers:tracking-mytracker")
+include(":providers:crash-appmetrica")
 
 // In-process fake backend for the `mock` flavor (implements :core:api).
 include(":mock:backend")

@@ -47,6 +47,21 @@ mock/backend/src/main/assets/statements/fixture.ofx   # обезличенная
 Вход в `mock`: единственный «существующий» номер — из `mock/backend` (`MockConfig.existingPhone`);
 любой другой номер — новый пользователь (регистрация, если флаг `auth.registration` включён).
 
+### Flavor `prod`
+
+Настоящий HTTP-клиент, флаги из RuStore Remote Config, события в MyTracker, крэши и ANR в AppMetrica.
+Ключи SDK не хранятся в репозитории: Gradle-свойства в `~/.gradle/gradle.properties` или переменные
+окружения в CI. Без ключа соответствующий SDK не включается (флаги — значения по умолчанию из `Flag`).
+
+| Свойство | Переменная окружения | Что это |
+|---|---|---|
+| `pf.rustoreRemoteConfigAppId` | `PF_RUSTORE_REMOTE_CONFIG_APP_ID` | ID приложения в RuStore Remote Config |
+| `pf.mytrackerSdkKey` | `PF_MYTRACKER_SDK_KEY` | SDK key MyTracker |
+| `pf.appmetricaApiKey` | `PF_APPMETRICA_API_KEY` | API key AppMetrica |
+
+Ключи флагов в консоли RuStore — как в `docs/flags.md` (булевы значения). Таргетинг и AB — по `account`
+(наш `user_id` после входа).
+
 ## Документирование
 
 Комментарии — там, где логика неочевидна (правила учёта, идемпотентность, анимация), а не на каждом

@@ -26,6 +26,10 @@ android {
         create("prod") {
             dimension = "backend"
             buildConfigField("String", "API_BASE_URL", "\"https://api.example.ru/\"")
+            // SDK keys come from ~/.gradle/gradle.properties or CI env; empty → the SDK stays off.
+            buildConfigField("String", "RUSTORE_REMOTE_CONFIG_APP_ID", "\"${secret("pf.rustoreRemoteConfigAppId")}\"")
+            buildConfigField("String", "MYTRACKER_SDK_KEY", "\"${secret("pf.mytrackerSdkKey")}\"")
+            buildConfigField("String", "APPMETRICA_API_KEY", "\"${secret("pf.appmetricaApiKey")}\"")
         }
     }
 
@@ -69,7 +73,9 @@ dependencies {
     "mockImplementation"(projects.providers.trackingLog)
 
     "prodImplementation"(projects.core.network)
-    // stage 8: prodImplementation(projects.providers.togglesRustore), trackingMytracker, crashAppmetrica
+    "prodImplementation"(projects.providers.togglesRustore)
+    "prodImplementation"(projects.providers.trackingMytracker)
+    "prodImplementation"(projects.providers.crashAppmetrica)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -85,3 +91,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
 }
+
+/** Gradle property or environment variable (`pf.mytrackerSdkKey` → `PF_MYTRACKER_SDK_KEY`); empty when absent. */
+fun secret(name: String): String =
+    (findProperty(name) as String?)
+        ?: System.getenv(name.replace(".", "_").replace(Regex("([a-z])([A-Z])"), "$1_$2").uppercase())
+        ?: ""

@@ -27,6 +27,11 @@ serialization = "1.8.0"
 okhttp = "4.12.0"
 retrofit = "2.11.0"
 
+# Prod SDKs (stage 8)
+rustoreRemoteConfig = "10.5.1"
+mytracker = "3.2.0"
+appmetrica = "8.6.0"
+
 # Security
 tink = "1.16.0"
 
@@ -55,6 +60,9 @@ androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navig
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
+rustore-remoteconfig = { group = "ru.rustore.sdk", name = "remoteconfig", version.ref = "rustoreRemoteConfig" }
+mytracker-sdk = { group = "com.my.tracker", name = "mytracker-sdk", version.ref = "mytracker" }
+appmetrica-analytics = { group = "io.appmetrica.analytics", name = "analytics", version.ref = "appmetrica" }
 androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
 
 # Compose (versions come from the BOM)
