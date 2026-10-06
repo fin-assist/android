@@ -14,8 +14,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hasRoute
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -125,15 +123,8 @@ private fun MainLayer(entries: Set<FeatureEntry>, session: SessionRepository, us
             PfTabBar(
                 items = tabs,
                 active = activeTab,
-                onSelect = { index -> if (index != activeTab) controller.switchTab(tabRoutes[index]) },
+                onSelect = { index -> if (index != activeTab) navigator.openTab(tabRoutes[index]) },
             )
         }
     }
-}
-
-/** Standard bottom-tab switch: one back stack per tab, state saved and restored, «back» returns to the feed. */
-private fun NavHostController.switchTab(route: Any) = navigate(route) {
-    popUpTo(graph.findStartDestination().id) { saveState = true }
-    launchSingleTop = true
-    restoreState = true
 }

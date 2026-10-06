@@ -1,5 +1,6 @@
 package ru.finassist.pf.core.navigation
 
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavOptionsBuilder
@@ -22,6 +23,9 @@ interface Navigator {
     fun popUpTo(route: Any, inclusive: Boolean)
     /** Returns a value to the previous screen (e.g. a chosen category) and pops. */
     fun returnResult(key: String, value: String)
+
+    /** Switches to a bottom tab root ([route] is a tab root), clearing what is on top like a tab tap does. */
+    fun openTab(route: Any)
 }
 
 class NavControllerNavigator(private val controller: NavHostController) : Navigator {
@@ -36,5 +40,13 @@ class NavControllerNavigator(private val controller: NavHostController) : Naviga
     override fun returnResult(key: String, value: String) {
         controller.previousBackStackEntry?.savedStateHandle?.set(key, value)
         controller.popBackStack()
+    }
+
+    override fun openTab(route: Any) {
+        controller.navigate(route) {
+            popUpTo(controller.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
     }
 }
