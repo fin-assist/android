@@ -27,11 +27,18 @@ import javax.inject.Singleton
  *   offline against a copied file; the 5-attempt limit is the only way in.
  * - The attempt counter is inside the sealed record: editing or resetting it breaks the tag. A record that
  *   no longer opens counts as exhausted attempts, so the next wrong code signs the user out.
+ * - A missing record while the MAC key still exists in the Keystore (outside the app's files) means the
+ *   record was removed, not that no code was ever set: the lock stays configured with exhausted attempts, so
+ *   deleting the file leads to sign-out, never to «set a new code».
  * - The biometric switch stays plain: turning it on only offers the system prompt, which needs the owner's
- *   enrolled biometrics anyway.
+ *   enrolled biometrics anyway. It is honoured only with a sealed record.
  *
- * Installs from before the sealed record keep a salted SHA-256 hash; it is accepted once and replaced by a
- * sealed record on the first successful unlock.
+ * Installs from before the sealed record keep a salted SHA-256 hash; biometric unlock is off for them, so the
+ * code is entered once, accepted and replaced by a sealed record.
+ *
+ * Out of scope: an attacker who can write the app's private files on the device (root) can replay an older
+ * record to reset the counter, or use the Keystore keys directly. The limit holds against everything short of
+ * that; a tamper-proof counter needs server-side state.
  */
 @Singleton
 internal class PasscodeStore @Inject constructor(
@@ -40,11 +47,17 @@ internal class PasscodeStore @Inject constructor(
 ) {
     private class Record(val salt: String, val mac: String, val attempts: Int)
 
-    val isConfigured: Flow<Boolean> = dataStore.data.map { it[KEY_RECORD] != null || it[LEGACY_HASH] != null }
-    val biometricEnabled: Flow<Boolean> = dataStore.data.map { it[KEY_BIOMETRIC] ?: false }
+    val isConfigured: Flow<Boolean> = dataStore.data.map {
+        it[KEY_RECORD] != null || it[LEGACY_HASH] != null || crypto.hasKey()
+    }.flowOn(Dispatchers.IO)
+
+    val biometricEnabled: Flow<Boolean> = dataStore.data.map { (it[KEY_BIOMETRIC] ?: false) && it[KEY_RECORD] != null }
 
     val wrongAttempts: Flow<Int> = dataStore.data.map { prefs ->
-        val sealed = prefs[KEY_RECORD] ?: return@map prefs[LEGACY_ATTEMPTS] ?: 0
+        val sealed = prefs[KEY_RECORD] ?: return@map when {
+            prefs[LEGACY_HASH] != null -> prefs[LEGACY_ATTEMPTS] ?: 0
+            else -> EXHAUSTED // record removed behind our back (see class doc)
+        }
         open(sealed)?.attempts ?: EXHAUSTED
     }.flowOn(Dispatchers.IO)
 
@@ -84,13 +97,14 @@ internal class PasscodeStore @Inject constructor(
         dataStore.edit { it[KEY_BIOMETRIC] = enabled }
     }
 
+    /** Key first: once the record is gone, a surviving key would read as a removed record (see class doc). */
     suspend fun clear() {
+        withContext(Dispatchers.IO) { crypto.reset() }
         dataStore.edit {
             it.remove(KEY_RECORD)
             it.remove(KEY_BIOMETRIC)
             it.removeLegacy()
         }
-        withContext(Dispatchers.IO) { crypto.reset() }
     }
 
     private suspend fun matchesLegacy(prefs: Preferences, code: String): Boolean {

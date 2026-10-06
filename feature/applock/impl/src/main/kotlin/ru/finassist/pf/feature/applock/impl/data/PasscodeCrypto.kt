@@ -34,6 +34,9 @@ internal interface PasscodeCrypto {
     /** @throws GeneralSecurityException when the record was tampered with or its key is gone. */
     fun open(sealed: ByteArray): ByteArray
 
+    /** Whether the MAC key exists, i.e. a passcode was set and not cleared since. */
+    fun hasKey(): Boolean
+
     /** Drops the MAC key: the next passcode gets a fresh one. */
     fun reset()
 }
@@ -74,6 +77,9 @@ internal class KeystorePasscodeCrypto @Inject constructor(
     override fun seal(plain: ByteArray): ByteArray = aead.encrypt(plain, AAD)
 
     override fun open(sealed: ByteArray): ByteArray = aead.decrypt(sealed, AAD)
+
+    @Synchronized
+    override fun hasKey(): Boolean = runCatching { keyStore.containsAlias(MAC_ALIAS) }.getOrDefault(false)
 
     @Synchronized
     override fun reset() {

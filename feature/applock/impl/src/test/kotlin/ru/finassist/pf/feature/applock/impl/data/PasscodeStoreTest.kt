@@ -33,9 +33,14 @@ class PasscodeStoreTest {
         var macKey = ByteArray(32) { 1 }
         val aesKey = SecretKeySpec(ByteArray(32) { 2 }, "AES")
         var resets = 0
+        var keyExists = false
 
-        override fun mac(data: ByteArray): ByteArray =
-            Mac.getInstance("HmacSHA256").run { init(SecretKeySpec(macKey, "HmacSHA256")); doFinal(data) }
+        override fun mac(data: ByteArray): ByteArray {
+            keyExists = true
+            return Mac.getInstance("HmacSHA256").run { init(SecretKeySpec(macKey, "HmacSHA256")); doFinal(data) }
+        }
+
+        override fun hasKey() = keyExists
 
         override fun seal(plain: ByteArray): ByteArray {
             val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
@@ -53,6 +58,7 @@ class PasscodeStoreTest {
 
         override fun reset() {
             resets++
+            keyExists = false
             macKey = ByteArray(32) { 3 }
         }
     }
@@ -135,6 +141,31 @@ class PasscodeStoreTest {
         assertFalse(store.biometricEnabled.first())
         assertEquals(1, crypto.resets)
         assertFalse(store.matches("1234"))
+    }
+
+    @Test
+    fun `removed record keeps the lock configured with exhausted attempts`() = runBlocking {
+        store.save("1234")
+        store.setBiometricEnabled(true)
+        dataStore.edit { it.remove(RECORD) }
+        assertTrue(store.isConfigured.first())
+        assertTrue(store.wrongAttempts.first() >= 5)
+        assertFalse(store.biometricEnabled.first())
+        assertFalse(store.matches("1234"))
+    }
+
+    @Test
+    fun `legacy install has no biometric unlock until the code is entered`() = runBlocking {
+        val salt = "abcd"
+        val hash = MessageDigest.getInstance("SHA-256").digest("$salt:1234".toByteArray()).joinToString("") { "%02x".format(it) }
+        dataStore.edit {
+            it[stringPreferencesKey("applock.salt")] = salt
+            it[stringPreferencesKey("applock.hash")] = hash
+            it[androidx.datastore.preferences.core.booleanPreferencesKey("applock.biometric")] = true
+        }
+        assertFalse(store.biometricEnabled.first())
+        assertTrue(store.matches("1234"))
+        assertTrue(store.biometricEnabled.first())
     }
 
     private companion object {
