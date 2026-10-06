@@ -4,11 +4,8 @@ plugins {
 
 group = "ru.finassist.pf.buildlogic"
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
-}
+// No toolchain: the plugins run inside the Gradle daemon, so they are compiled for whatever JDK runs it
+// (pinned to 21 by gradle/gradle-daemon-jvm.properties). A toolchain here would demand a separate JDK install.
 
 dependencies {
     compileOnly(libs.android.gradlePlugin)

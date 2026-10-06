@@ -1,7 +1,7 @@
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.plugins.JavaPluginExtension
-import org.gradle.jvm.toolchain.JavaLanguageVersion
+import org.gradle.api.JavaVersion
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.dependencies
 import ru.finassist.pf.buildlogic.configureKotlin
@@ -16,8 +16,10 @@ class JvmLibraryConventionPlugin : Plugin<Project> {
         pluginManager.apply("java-library")
         pluginManager.apply("org.jetbrains.kotlin.jvm")
 
+        // Bytecode 17 like the Android modules, compiled by whatever JDK runs Gradle (no separate JDK 17 needed).
         extensions.configure<JavaPluginExtension> {
-            toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+            sourceCompatibility = JavaVersion.VERSION_17
+            targetCompatibility = JavaVersion.VERSION_17
         }
         configureKotlin()
 
