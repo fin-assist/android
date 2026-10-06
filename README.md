@@ -56,8 +56,10 @@ mock/backend/src/main/assets/statements/fixture.ofx   # обезличенная
 | Свойство | Переменная окружения | Что это |
 |---|---|---|
 | `pf.rustoreRemoteConfigAppId` | `PF_RUSTORE_REMOTE_CONFIG_APP_ID` | ID приложения в RuStore Remote Config |
-| `pf.mytrackerSdkKey` | `PF_MYTRACKER_SDK_KEY` | SDK key MyTracker |
-| `pf.appmetricaApiKey` | `PF_APPMETRICA_API_KEY` | API key AppMetrica |
+| `pf.mytrackerSdkKey` | `PF_MYTRACKER_SDK_KEY` | SDK key MyTracker — выдаётся только опубликованному приложению; до публикации пусто |
+| `pf.appmetricaApiKey` | `PF_APPMETRICA_API_KEY` | API key AppMetrica — пока не задаём (SDK выключен); крэши и ANR переедут в Tracer |
+
+Пока ключи MyTracker и AppMetrica пусты, события пишутся никуда, а крэши и ANR в `prod` не собираются.
 
 Ключи флагов в консоли RuStore — как в `docs/flags.md` (булевы значения). Таргетинг и AB — по `account`
 (наш `user_id` после входа).
