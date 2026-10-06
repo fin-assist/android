@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -130,7 +131,7 @@ fun UploadScreen(
 }
 
 @Composable
-private fun Guide(
+private fun ColumnScope.Guide(
     config: ImportConfig,
     firstRun: Boolean,
     fallbackOpen: Boolean,
@@ -201,7 +202,7 @@ private fun Guide(
 }
 
 @Composable
-private fun BusyBlock(phase: UploadPhase.Busy, onCancel: () -> Unit) {
+private fun ColumnScope.BusyBlock(phase: UploadPhase.Busy, onCancel: () -> Unit) {
     val d = PfTheme.dimens
     Text("Разбираем выписку", style = PfTheme.type.title1, color = PfTheme.colors.text)
     Spacer(Modifier.height(d.space2))
@@ -213,7 +214,7 @@ private fun BusyBlock(phase: UploadPhase.Busy, onCancel: () -> Unit) {
 }
 
 @Composable
-private fun ErrorBlock(phase: UploadPhase.Error, onPickAnother: () -> Unit, onBack: () -> Unit) {
+private fun ColumnScope.ErrorBlock(phase: UploadPhase.Error, onPickAnother: () -> Unit, onBack: () -> Unit) {
     val d = PfTheme.dimens
     val (title, text) = when (phase.code) {
         ErrorCodes.CSV_NOT_ACCEPTED -> "Это CSV, а нужен OFX" to "В Т-Банке при выгрузке выберите формат OFX — в нём есть всё, что нужно для разбора. CSV мы не принимаем"
