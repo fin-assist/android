@@ -78,22 +78,22 @@ internal object NetworkModule {
     ): OkHttpClient {
         // The refresh call gets its own Dispatcher: requests waiting in TokenAuthenticator hold slots of the
         // main dispatcher (5 per host), and a refresh queued behind them would never start.
-        val refreshClient = plain.newBuilder().dispatcher(Dispatcher()).build()
+        // The total-time limit belongs here: a stuck refresh blocks every request waiting in the authenticator.
+        // The main client has none — a 10 MB statement on a slow mobile link legitimately takes minutes.
+        val refreshClient = plain.newBuilder().dispatcher(Dispatcher()).callTimeout(30, TimeUnit.SECONDS).build()
         val refreshApi = HttpAuthApi(retrofit(refreshClient, baseUrl).create(AuthService::class.java), SseRequests(baseUrl, refreshClient))
         return plain.newBuilder()
-            .callTimeout(60, TimeUnit.SECONDS)
             .addInterceptor(AuthInterceptor(tokenStore))
             .authenticator(TokenAuthenticator(tokenStore) { key, refresh -> refreshApi.refreshTokens(key, refresh) })
             .build()
     }
 
-    /** Same pipeline, no read or call timeout: SSE streams idle between heartbeats and live for minutes. */
+    /** Same pipeline, no read timeout: SSE streams idle between heartbeats and live for minutes. */
     @Provides
     @Singleton
     @Sse
     fun sseClient(client: OkHttpClient): OkHttpClient = client.newBuilder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
-        .callTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
     @Provides

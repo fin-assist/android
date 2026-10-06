@@ -113,7 +113,16 @@ class AnalyticsViewModel @Inject constructor(
     init {
         viewModelScope.launch { merge(statements.events, operations.categoryChanges).collect { load(quiet = true) } }
         // Remote config can land after the screen opened (first launch, background sync): re-read the blocks.
-        viewModelScope.launch { flags.changes.collect { _state.update { it.copy(blocks = readBlocks(flags)) } } }
+        viewModelScope.launch {
+            flags.changes.collect {
+                _state.update { it.copy(blocks = readBlocks(flags)) }
+                // The transfers filter was switched off remotely: from now on requests use `with` (docs/flags.md).
+                if (!_state.value.blocks.transfersFilter && transferMode != TransferMode.WITH) {
+                    transferMode = TransferMode.WITH
+                    if (_state.value.data != null) load(quiet = true)
+                }
+            }
+        }
     }
 
     fun load(quiet: Boolean = false) {
