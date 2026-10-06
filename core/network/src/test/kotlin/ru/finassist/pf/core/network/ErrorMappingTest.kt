@@ -24,8 +24,8 @@ class ErrorMappingTest {
     fun `rate limited carries retry_at`() {
         val body = """{"error":{"code":"RATE_LIMITED","message":"slow down","retry_at":"2026-10-04T22:27:00+03:00"}}"""
         val error = assertIs<AppError.RateLimited>(mapHttpError(429, body, "600"))
-        assertNotNull(error.retryAt)
-        assertEquals(27, error.retryAt.minute)
+        val retryAt = assertNotNull(error.retryAt)
+        assertEquals(27, retryAt.minute)
     }
 
     @Test
