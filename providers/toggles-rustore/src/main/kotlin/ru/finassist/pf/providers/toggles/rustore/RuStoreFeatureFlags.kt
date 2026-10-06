@@ -26,7 +26,6 @@ import ru.rustore.sdk.remoteconfig.RemoteConfigClient
 import ru.rustore.sdk.remoteconfig.RemoteConfigClientBuilder
 import ru.rustore.sdk.remoteconfig.RemoteConfigClientEventListener
 import ru.rustore.sdk.remoteconfig.RemoteConfigException
-import ru.rustore.sdk.remoteconfig.UpdateBehaviour
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Named
@@ -37,7 +36,7 @@ import kotlin.coroutines.resume
  * Flags from RuStore Remote Config. Targeting/AB is configured in the RuStore console by `account` (our
  * `user_id` after sign-in, nothing before it — the SDK then keys by its own device id).
  *
- * `UpdateBehaviour.Default`: the SDK serves the persisted config immediately and syncs in the background, so a
+ * The SDK's default update behaviour (persisted config, background sync every 15 minutes) serves the persisted config immediately and syncs in the background, so a
  * cold start never waits for the network; [changes] fires when a fresher config lands. Values are snapshotted
  * into a map on every update, so [isEnabled] is a cheap synchronous read. A blank app id (local builds
  * without keys) disables the SDK — code defaults apply.
@@ -57,7 +56,6 @@ class RuStoreFeatureFlags @Inject constructor(
     private val client: RemoteConfigClient? = appId.takeIf { it.isNotBlank() }?.let { id ->
         runCatching {
             RemoteConfigClientBuilder(appId = AppId(id), context = context)
-                .setUpdateBehaviour(UpdateBehaviour.Default)
                 .setConfigRequestParameterProvider(
                     object : ConfigRequestParameterProvider {
                         override fun getConfigRequestParameter(): ConfigRequestParameter = ConfigRequestParameter(
