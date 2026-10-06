@@ -50,9 +50,11 @@ mock/backend/src/main/assets/statements/fixture.ofx   # обезличенная
 ### JDK для Gradle
 
 Gradle 8.11 не запускается на JDK 25, а Android Studio 2026.x по умолчанию берёт встроенный JBR 25 —
-сборка падает с единственной строкой `25.0.3`. Нужен JDK 17 (как в CI): `brew install --cask temurin@17`,
-затем Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JDK → 17.
-Файл `gradle/gradle-daemon-jvm.properties` фиксирует JDK 17 для демона Gradle и при запуске из консоли.
+сборка падает с единственной строкой `25.0.3`. Нужен JDK 21 (как в CI): `brew install --cask temurin@21`,
+затем Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JDK → 21.
+Файл `gradle/gradle-daemon-jvm.properties` фиксирует JDK 21 для демона Gradle и при запуске из консоли.
+Байткод при этом остаётся Java 17 — это предел для Android с AGP 8.x. Переход на Gradle 9 / AGP 9
+(сборка на встроенном JBR 25) — отдельная задача.
 
 ### Flavor `prod`
 
