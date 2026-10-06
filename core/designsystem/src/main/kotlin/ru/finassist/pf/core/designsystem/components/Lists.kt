@@ -69,6 +69,8 @@ fun PfListRow(
     switchChecked: Boolean? = null,
     onSwitch: ((Boolean) -> Unit)? = null,
     divider: Boolean = true,
+    /** Custom trailing control (e.g. a delete icon button); replaces the chevron. */
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val c = PfTheme.colors
     val isSwitch = switchChecked != null
@@ -101,7 +103,9 @@ fun PfListRow(
                 Spacer(Modifier.width(PfTheme.dimens.space2))
                 Text(value, style = PfTheme.type.caption, color = if (valueAccent) c.accent else c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (isSwitch) {
+            if (trailing != null) {
+                trailing()
+            } else if (isSwitch) {
                 Spacer(Modifier.width(PfTheme.dimens.space3))
                 PfSwitch(checked = switchChecked!!, onCheckedChange = null)
             } else if (chevron) {

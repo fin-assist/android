@@ -14,6 +14,9 @@ val API_DATE_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T
 
 fun OffsetDateTime.toApiString(): String = format(API_DATE_TIME)
 
+/** Inverse of [toApiString]; accepts any ISO-8601 offset date-time. */
+fun parseApiDateTime(value: String): OffsetDateTime = OffsetDateTime.parse(value)
+
 fun String.toApiDateTime(): OffsetDateTime = OffsetDateTime.parse(this, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
 
 /** ISO 8601 with offset, as the API sends moments: `2026-09-15T14:30:00+03:00`. */

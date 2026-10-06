@@ -87,6 +87,10 @@ object PfIcons {
     const val TRENDING_UP = "trending-up"
     const val TRANSFER = "transfer"
     const val TAG = "tag"
+    const val DOWNLOAD = "download"
+    const val MAIL = "mail"
+    const val SLIDERS = "sliders"
+    const val PENCIL = "pencil"
 }
 
 /** Draws an icon by key with the current content colour (or [tint]). Stroke is thicker below 14 dp per the DS. */
