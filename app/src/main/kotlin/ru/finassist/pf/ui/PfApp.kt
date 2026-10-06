@@ -12,6 +12,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import ru.finassist.pf.core.designsystem.components.LocalSuppressPopups
+import ru.finassist.pf.core.toggles.FeatureFlags
+import ru.finassist.pf.core.toggles.Flag
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.NavHost
@@ -50,6 +57,7 @@ fun PfApp(
     appLock: AppLock,
     appLockScreens: AppLockScreens,
     preferences: AppPreferences,
+    flags: FeatureFlags,
 ) {
     val theme by preferences.theme.collectAsStateWithLifecycle(initialValue = null)
     val dark = when (theme) {
@@ -61,18 +69,34 @@ fun PfApp(
         val sessionState by session.state.collectAsStateWithLifecycle(initialValue = SessionState.Unknown)
         val lockState by appLock.state.collectAsStateWithLifecycle()
         // Setup stays on screen until its own flow (code + biometric offer) says it is done, even though the
-        // lock state flips to Unlocked as soon as the code is saved.
-        var settingUp by remember { mutableStateOf(false) }
+        // lock state flips to Unlocked as soon as the code is saved. Saveable: survives rotation on the offer.
+        var settingUp by rememberSaveable { mutableStateOf(false) }
         LaunchedEffect(lockState) { if (lockState == LockState.NotConfigured) settingUp = true }
         Box(Modifier.fillMaxSize().background(PfTheme.colors.bg)) {
             when (val s = sessionState) {
                 SessionState.Unknown -> Unit
-                SessionState.SignedOut -> AuthLayer(entries, session)
+                SessionState.SignedOut -> LayerScope("auth") { AuthLayer(entries, session) }
                 is SessionState.SignedIn -> when {
-                    settingUp || lockState == LockState.NotConfigured -> appLockScreens.Setup(onDone = { settingUp = false })
+                    settingUp || lockState == LockState.NotConfigured ->
+                        LayerScope("setup-${s.userId}") { appLockScreens.Setup(onDone = { settingUp = false }) }
                     else -> {
-                        MainLayer(entries, session, userId = s.userId)
-                        if (lockState == LockState.Locked) appLockScreens.Unlock()
+                        val locked = lockState == LockState.Locked
+                        // Main stays composed under the lock so the back stack survives; while locked it is
+                        // hidden from TalkBack and its dialogs and sheets are not shown.
+                        CompositionLocalProvider(LocalSuppressPopups provides locked) {
+                            LayerScope("main-${s.userId}") {
+                                MainLayer(
+                                    entries, session, flags, userId = s.userId,
+                                    modifier = if (locked) Modifier.clearAndSetSemantics { } else Modifier,
+                                )
+                            }
+                        }
+                        if (locked) {
+                            // A pointer handler on the overlay root makes it the hit target: taps never reach the app below.
+                            Box(Modifier.fillMaxSize().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
+                                LayerScope("unlock") { appLockScreens.Unlock() }
+                            }
+                        }
                     }
                 }
             }
@@ -99,12 +123,21 @@ private val tabs = listOf(
 private val tabRoutes: List<Any> = listOf(OperationsRoutes.Feed, AnalyticsRoutes.Home, ProfileRoutes.Home)
 
 @Composable
-private fun MainLayer(entries: Set<FeatureEntry>, session: SessionRepository, userId: String) {
+private fun MainLayer(
+    entries: Set<FeatureEntry>,
+    session: SessionRepository,
+    flags: FeatureFlags,
+    userId: String,
+    modifier: Modifier = Modifier,
+) {
     val controller = rememberNavController()
     val navigator = remember(controller) { NavControllerNavigator(controller) }
-    // Right after registration the first run continues with the statement upload (step 4 of 4).
+    // Right after registration the first run continues with the statement upload (step 4 of 4) — unless the
+    // upload screen is switched off by `statements.upload`.
     LaunchedEffect(userId) {
-        if (session.consumeJustRegistered()) controller.navigate(StatementsRoutes.Upload(firstRun = true))
+        if (session.consumeJustRegistered() && flags.isEnabled(Flag.STATEMENTS_UPLOAD)) {
+            controller.navigate(StatementsRoutes.Upload(firstRun = true))
+        }
     }
     val backStack by controller.currentBackStackEntryAsState()
     val destination = backStack?.destination
@@ -115,7 +148,7 @@ private fun MainLayer(entries: Set<FeatureEntry>, session: SessionRepository, us
         destination.hasRoute<ProfileRoutes.Home>() -> 2
         else -> -1
     }
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
         NavHost(controller, startDestination = OperationsRoutes.Feed, modifier = Modifier.weight(1f)) {
             entries.forEach { entry -> with(entry) { install(navigator) } }
         }

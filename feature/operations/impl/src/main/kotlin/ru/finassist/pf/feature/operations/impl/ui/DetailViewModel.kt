@@ -49,13 +49,14 @@ data class DetailUiState(
 /** Operation details + manual category change (api.md 4.2, 4.3). */
 @HiltViewModel
 class DetailViewModel @Inject constructor(
-    savedState: SavedStateHandle,
+    private val savedState: SavedStateHandle,
     private val api: OperationsApi,
     private val categories: CategoriesRepository,
     private val operations: OperationsRepositoryImpl,
     private val tracker: Tracker,
 ) : ViewModel() {
-    private var id: String = savedState.toRoute<OperationsRoutes.Detail>().id
+    /** After a split/merge the record id changes; kept in the saved state so process death reopens the new one. */
+    private var id: String = savedState.get<String>(KEY_ID) ?: savedState.toRoute<OperationsRoutes.Detail>().id
     private val _state = MutableStateFlow(DetailUiState())
     val state: StateFlow<DetailUiState> = _state
 
@@ -99,6 +100,7 @@ class DetailViewModel @Inject constructor(
                 // A pair split in two or a debit that became a pair: keep showing the record that carries the choice.
                 val shown = response.items.firstOrNull { it.categoryId == target } ?: response.items.firstOrNull() ?: op
                 id = shown.id
+                savedState[KEY_ID] = shown.id
                 val message = when {
                     response.replacedId != null && response.items.size > 1 -> "Перевод разделили на две операции"
                     response.replacedId != null && shown.kind == OperationKind.OWN_TRANSFER -> "Нашли вторую сторону — это перевод между своими счетами"
@@ -119,4 +121,8 @@ class DetailViewModel @Inject constructor(
     }
 
     fun consumeSnackbar() = _state.update { it.copy(snackbar = null) }
+
+    private companion object {
+        const val KEY_ID = "detail.current_id"
+    }
 }

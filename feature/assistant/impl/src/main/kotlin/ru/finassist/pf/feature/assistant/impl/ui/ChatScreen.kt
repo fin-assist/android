@@ -1,10 +1,5 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
-import android.app.Activity
-import android.content.Intent
-import android.speech.RecognizerIntent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -54,6 +49,8 @@ import ru.finassist.pf.core.designsystem.components.PfChipRow
 import ru.finassist.pf.core.designsystem.components.PfDataRow
 import ru.finassist.pf.core.designsystem.components.PfEmptyState
 import ru.finassist.pf.core.designsystem.components.PfLink
+import ru.finassist.pf.core.designsystem.components.PfNotice
+import ru.finassist.pf.core.designsystem.components.NoticeTone
 import ru.finassist.pf.core.designsystem.components.PfPageHeader
 import ru.finassist.pf.core.designsystem.components.PfUserMessage
 import ru.finassist.pf.core.designsystem.icons.PfIcons
@@ -102,11 +99,7 @@ fun ChatScreen(
     LaunchedEffect(state.items.size, (state.items.lastOrNull() as? ChatItem.Answer)?.blocks?.size) {
         if (state.items.isNotEmpty()) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1)
     }
-    val voice = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { vm.send(voiceText = it) }
-        }
-    }
+    val voice = rememberVoiceInput(onResult = { vm.send(voiceText = it) })
 
     Column(Modifier.fillMaxSize().imePadding()) {
         val limit = state.limit
@@ -159,22 +152,26 @@ fun ChatScreen(
                 }
             }
         }
+        if (voice.listening) {
+            Text("Слушаю…", style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(horizontal = d.space5, vertical = d.space1))
+        }
+        if (state.offline || state.sendFailed) {
+            PfNotice(
+                if (state.offline) "Нет сети — помощнику нужен интернет. Операции и аналитика доступны" else "Не получилось отправить вопрос",
+                tone = NoticeTone.WARNING,
+                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2),
+                action = { PfLink("Повторить", onClick = vm::retryAfterFailure, inline = true) },
+            )
+        }
         PfChatComposer(
             value = state.draft,
             onValueChange = vm::setDraft,
             onSend = { vm.send() },
-            onVoice = {
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                    .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-                    // Recognition on the device: no audio leaves the phone (mvp-scope «Помощник»).
-                    .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-                runCatching { voice.launch(intent) }
-            },
+            onVoice = voice.start,
+            // Offline is shown as a notice with «Повторить» above the composer, so the user is never stuck.
             state = when {
                 state.limitExhausted -> ComposerState.LIMIT
-                state.offline -> ComposerState.OFFLINE
-                state.sending || state.generating -> ComposerState.BUSY
+                state.sending || state.generating || voice.listening -> ComposerState.BUSY
                 else -> ComposerState.IDLE
             },
             limitText = limit?.let { "Вопросы на сегодня закончились. Новые — в ${resetTime(it.resetsAt, zone)}" } ?: "Вопросы на сегодня закончились. Новые — в 00:00 по Москве",

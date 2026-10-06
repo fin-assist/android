@@ -4,6 +4,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import okhttp3.Dispatcher
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -74,19 +75,24 @@ internal object NetworkModule {
         baseUrl: HttpUrl,
         tokenStore: TokenStore,
     ): OkHttpClient {
-        val refreshApi = HttpAuthApi(retrofit(plain, baseUrl).create(AuthService::class.java), SseRequests(baseUrl, plain))
+        // The refresh call gets its own Dispatcher: requests waiting in TokenAuthenticator hold slots of the
+        // main dispatcher (5 per host), and a refresh queued behind them would never start.
+        val refreshClient = plain.newBuilder().dispatcher(Dispatcher()).build()
+        val refreshApi = HttpAuthApi(retrofit(refreshClient, baseUrl).create(AuthService::class.java), SseRequests(baseUrl, refreshClient))
         return plain.newBuilder()
+            .callTimeout(60, TimeUnit.SECONDS)
             .addInterceptor(AuthInterceptor(tokenStore))
             .authenticator(TokenAuthenticator(tokenStore) { key, refresh -> refreshApi.refreshTokens(key, refresh) })
             .build()
     }
 
-    /** Same pipeline, no read timeout: SSE streams idle between heartbeats. */
+    /** Same pipeline, no read or call timeout: SSE streams idle between heartbeats and live for minutes. */
     @Provides
     @Singleton
     @Sse
     fun sseClient(client: OkHttpClient): OkHttpClient = client.newBuilder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
+        .callTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
     @Provides

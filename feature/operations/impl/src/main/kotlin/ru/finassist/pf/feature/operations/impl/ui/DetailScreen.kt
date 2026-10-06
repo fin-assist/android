@@ -42,6 +42,7 @@ import ru.finassist.pf.core.designsystem.components.PfPageHeader
 import ru.finassist.pf.core.designsystem.components.PfSnackbar
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
+import ru.finassist.pf.feature.operations.impl.domain.OperationFormat
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -147,9 +148,9 @@ fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
 private fun Hero(op: OperationDetails) {
     val c = PfTheme.colors
     val amount = when (op.kind) {
-        OperationKind.EXPENSE -> (-op.amount).format()
-        OperationKind.INCOME -> op.amount.format(Money.Sign.ALWAYS)
-        else -> op.amount.format(Money.Sign.NONE)
+        OperationKind.EXPENSE -> OperationFormat.money(-op.amount, op.currency, Money.Sign.AUTO)
+        OperationKind.INCOME -> OperationFormat.money(op.amount, op.currency, Money.Sign.ALWAYS)
+        else -> OperationFormat.money(op.amount, op.currency, Money.Sign.NONE)
     }
     Column {
         PfIconTile(op.categoryIcon)

@@ -22,6 +22,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,6 +37,12 @@ import androidx.compose.ui.window.DialogProperties
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
+
+/**
+ * `true` while the app is covered by the unlock screen: dialogs and sheets are separate windows that would
+ * draw above it, so they are not shown until the app is unlocked (their own open/closed state is kept).
+ */
+val LocalSuppressPopups = compositionLocalOf { false }
 
 enum class NoticeTone { INFO, WARNING, POSITIVE, LIMIT }
 
@@ -204,6 +211,7 @@ fun PfDialog(
     cancelText: String = "Отмена",
     content: @Composable ColumnScope.() -> Unit = {},
 ) {
+    if (LocalSuppressPopups.current) return
     val c = PfTheme.colors
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(dismissOnClickOutside = !busy)) {
         Column(
@@ -237,6 +245,7 @@ fun PfBottomSheet(
     footer: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (LocalSuppressPopups.current) return
     val c = PfTheme.colors
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(

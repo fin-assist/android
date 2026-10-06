@@ -29,6 +29,13 @@ internal class TokenAuthenticator(
 
     private val mutex = Mutex()
 
+    /**
+     * Key of the refresh attempt for the current refresh token. A retry after a lost response must reuse it,
+     * otherwise the server sees the old refresh token again and revokes the whole session (api.md 1.4).
+     * Guarded by [mutex].
+     */
+    private var pendingKey: Pair<String, IdempotencyKey>? = null
+
     override fun authenticate(route: Route?, response: Response): Request? {
         // Session-less endpoints (the NoAuth marker is stripped by the interceptor, so check the path).
         val path = response.request.url.encodedPath
@@ -43,18 +50,26 @@ internal class TokenAuthenticator(
                     // Someone else already refreshed while we waited.
                     return@withLock session.tokens.accessToken
                 }
+                val refreshToken = session.tokens.refreshToken
+                val key = pendingKey?.takeIf { it.first == refreshToken }?.second
+                    ?: IdempotencyKey.random().also { pendingKey = refreshToken to it }
                 try {
-                    val pair = refresh(IdempotencyKey.random(), session.tokens.refreshToken)
+                    val pair = refresh(key, refreshToken)
+                    pendingKey = null
                     tokenStore.updateTokens(pair)
                     pair.accessToken
-                } catch (e: AppError.Unauthorized) {
-                    tokenStore.clear()
-                    null
-                } catch (e: AppError.Api) {
-                    if (e.httpStatus == 401) tokenStore.clear()
-                    null
                 } catch (e: AppError) {
-                    null // offline / server error: give up on this request, keep the session
+                    when {
+                        // The session is gone: clear it, the app shows the phone screen.
+                        e is AppError.Unauthorized ||
+                            (e is AppError.Api && e.httpStatus in 400..499 && e.httpStatus != 409 && e.httpStatus != 429) -> {
+                            pendingKey = null
+                            tokenStore.clear()
+                        }
+                        // Offline / 5xx / in progress: keep the session and the key for the next attempt.
+                        else -> Unit
+                    }
+                    null
                 }
             }
         } ?: return null

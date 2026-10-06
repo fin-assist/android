@@ -27,15 +27,25 @@ object OperationFormat {
     fun account(a: Account?): String? = a?.let { listOfNotNull(it.typeName, it.mask).joinToString(" ") }
 
     /**
+     * Money in the operation's currency (api.md: `currency`, ISO 4217). Rubles keep the design-system «₽»;
+     * other currencies get their symbol or code.
+     */
+    fun money(amount: Money, currency: String, sign: Money.Sign): String {
+        val text = amount.format(sign)
+        if (currency == "RUB") return text
+        val symbol = runCatching { java.util.Currency.getInstance(currency).getSymbol(java.util.Locale("ru")) }.getOrDefault(currency)
+        return text.removeSuffix("₽").trimEnd() + Money.NBSP + symbol
+    }
+
+    /**
      * Row: expense `−2 340 ₽`, income `+15 000 ₽` (positive colour), own transfer without sign and muted, unknown
      * kind — no sign, no colour (api.md 4.1). Pending holds get «холд» in the subtitle.
      */
     fun row(item: OperationItem): RowModel {
-        val money = item.amount
         val amount = when (item.kind) {
-            OperationKind.EXPENSE -> (-money).format()
-            OperationKind.INCOME -> money.format(Money.Sign.ALWAYS)
-            OperationKind.OWN_TRANSFER, OperationKind.UNKNOWN -> money.format(Money.Sign.NONE)
+            OperationKind.EXPENSE -> money(-item.amount, item.currency, Money.Sign.AUTO)
+            OperationKind.INCOME -> money(item.amount, item.currency, Money.Sign.ALWAYS)
+            OperationKind.OWN_TRANSFER, OperationKind.UNKNOWN -> money(item.amount, item.currency, Money.Sign.NONE)
         }
         val subtitleParts = buildList {
             add(item.categoryName)

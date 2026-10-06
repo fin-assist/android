@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.model.StatementsList
 import ru.finassist.pf.core.api.model.Upload
@@ -79,9 +80,29 @@ class HistoryViewModel @Inject constructor(
             try {
                 val list = api.listStatements()
                 _state.update { it.copy(loading = false, list = list) }
+                list.uploads.filter { it.status == UploadStatus.PROCESSING }.forEach { watch(it.uploadId) }
             } catch (e: AppError) {
                 _state.update { it.copy(loading = false, offline = it.list == null) }
             }
+        }
+    }
+
+    private val watching = HashSet<String>()
+
+    /** api.md 3.4: a `processing` upload → open its progress stream; reload the list when it ends. */
+    private fun watch(uploadId: String) {
+        if (!watching.add(uploadId)) return
+        viewModelScope.launch {
+            try {
+                api.streamProgress(uploadId).collect { event ->
+                    if (event is ImportEvent.Complete) repository.importCompleted(uploadId, event.result)
+                }
+            } catch (e: AppError) {
+                // Dropped stream: the list is reloaded on the next resume anyway.
+            } finally {
+                watching.remove(uploadId)
+            }
+            load()
         }
     }
 

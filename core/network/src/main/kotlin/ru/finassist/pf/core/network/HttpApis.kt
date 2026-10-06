@@ -3,7 +3,9 @@ package ru.finassist.pf.core.network
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.transform
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.DeserializationStrategy
+import kotlinx.serialization.SerializationException
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -77,6 +79,9 @@ import java.time.OffsetDateTime
 internal suspend fun <T> call(block: suspend () -> Response<T>): T {
     val response = try {
         block()
+    } catch (e: CancellationException) {
+        // Cancellation is control flow, not an error: screens must not show «Нет сети» for a cancelled load.
+        throw e
     } catch (e: Throwable) {
         throw e.toNetworkError()
     }
@@ -87,8 +92,14 @@ internal suspend fun <T> call(block: suspend () -> Response<T>): T {
     throw mapHttpError(response.code(), response.errorBody()?.string(), response.headers()["Retry-After"])
 }
 
-private inline fun <reified T> decode(strategy: DeserializationStrategy<T>, data: String): T =
+/** A malformed event payload is a server error, not a crash in the collecting view model. */
+private fun <T> decode(strategy: DeserializationStrategy<T>, data: String): T = try {
     ApiJson.decodeFromString(strategy, data)
+} catch (e: SerializationException) {
+    throw AppError.Server(200, e)
+} catch (e: IllegalArgumentException) {
+    throw AppError.Server(200, e)
+}
 
 /** Builds an SSE request to [path] against the base URL with the standard headers. */
 internal class SseRequests(private val baseUrl: HttpUrl, private val client: OkHttpClient) {
@@ -193,7 +204,8 @@ internal class HttpOperationsApi(private val service: OperationsService) : Opera
             kind = f.kind?.let { if (it == OperationKindFilter.EXPENSE) "expense" else "income" },
             amountFrom = f.amountFrom?.minor,
             amountTo = f.amountTo?.minor,
-            transferMode = f.transferMode?.takeIf { it != TransferMode.UNKNOWN }?.code,
+            // api.md: an unknown transfer_mode coming from a response is handled as `with`.
+            transferMode = f.transferMode?.effective?.code,
             selection = f.selection,
             before = query.before?.toApiString(),
         )

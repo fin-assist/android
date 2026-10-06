@@ -50,6 +50,7 @@ import ru.finassist.pf.core.designsystem.components.PfCard
 import ru.finassist.pf.core.designsystem.components.PfCategoryBar
 import ru.finassist.pf.core.designsystem.components.PfChip
 import ru.finassist.pf.core.designsystem.components.PfChipRow
+import ru.finassist.pf.core.designsystem.components.PfCoachmark
 import ru.finassist.pf.core.designsystem.components.PfDataRow
 import ru.finassist.pf.core.designsystem.components.PfEmptyState
 import ru.finassist.pf.core.designsystem.components.PfInsightCard
@@ -67,6 +68,7 @@ import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.analytics.impl.domain.AnalyticsTexts
 import java.time.YearMonth
+import kotlin.math.roundToInt
 
 /** Navigation callbacks of the Analytics screen. */
 class AnalyticsActions(
@@ -167,6 +169,13 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
 
     if (blocks.tiles && a.tiles != null) Tiles(a, vm, actions)
 
+    if (state.hint == AnalyticsHint.ASK) {
+        PfCoachmark(
+            "Спросите помощника о своих расходах — он посчитает по вашим операциям. 5 вопросов в день",
+            onClose = { vm.nextHint(stop = false) },
+            onNever = { vm.nextHint(stop = true) },
+        )
+    }
     if (blocks.assistant) {
         val limit = state.limit
         PfAskCard(
@@ -177,6 +186,14 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         )
     }
 
+    if (state.hint == AnalyticsHint.CATEGORIES) {
+        PfCoachmark(
+            "Нажмите на категорию или любую цифру — откроются операции, из которых она сложилась. Категорию операции можно поменять",
+            title = "Выписка разобрана",
+            onClose = { vm.nextHint(stop = false) },
+            onNever = { vm.nextHint(stop = true) },
+        )
+    }
     if (blocks.expenseCategories) a.expenseCategories?.let { b ->
         Breakdown("Расходы по категориям", "analytics.expense.categories", b, a.tiles?.expense?.value, periodCaption(period), state.allExpenseCategories, vm::toggleAllCategories, actions.openSearch, "Расходов за период нет")
     }
@@ -216,6 +233,34 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
                     expense?.value?.let { AnalyticsTexts.comparison(it, expense.comparison, params.period) },
                     AnalyticsTexts.typical(expense?.typical),
                 ).forEach { Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = d.space2)) }
+            }
+            // «Доходы минус расходы по месяцам» as a share of income (api.md 6.1). Bars grow only for positive
+            // shares; a month where more was spent than earned shows its negative value with an empty bar.
+            PfSectionTitle("Доходы минус расходы по месяцам")
+            PfCard {
+                val shares = points.map { AnalyticsTexts.balanceShare(it) }
+                val maxShare = shares.filterNotNull().maxOrNull()?.takeIf { it > 0 } ?: 1.0
+                PfBarChart(
+                    chartId = "analytics.balance.monthly",
+                    points = points.mapIndexed { i, p ->
+                        val ym = YearMonth.parse(p.month)
+                        val share = shares[i]
+                        val display = share?.let { "${if (it < 0) Money.MINUS else ""}${kotlin.math.abs((it * 100).roundToInt())}%" } ?: "нет данных"
+                        BarPoint(
+                            key = p.month,
+                            label = RussianDates.monthShort(ym.month),
+                            spokenLabel = RussianDates.monthTitle(ym),
+                            value = share?.let { (it / maxShare).toFloat().coerceAtLeast(0f) },
+                            display = display,
+                            partial = p.coverage.effective == Coverage.PARTIAL,
+                            note = AnalyticsTexts.barNote(p),
+                        )
+                    },
+                    highlight = if (selected >= 0) selected else points.lastIndex,
+                    height = 120.dp,
+                    showValues = true,
+                )
+                Text("Доля дохода, которая осталась после расходов", style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = d.space2))
             }
         }
     }

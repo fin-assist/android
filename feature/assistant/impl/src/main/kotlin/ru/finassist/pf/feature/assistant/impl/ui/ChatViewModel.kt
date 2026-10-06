@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -26,9 +27,11 @@ import ru.finassist.pf.core.api.model.Message
 import ru.finassist.pf.core.api.model.MessageRole
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.storage.IdempotencyKeys
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.assistant.api.AssistantRoutes
+import java.security.MessageDigest
 import java.time.OffsetDateTime
 import javax.inject.Inject
 
@@ -62,6 +65,8 @@ data class ChatUiState(
     val sending: Boolean = false,
     val limit: AssistantLimit? = null,
     val offline: Boolean = false,
+    /** Last send/retry failed for a reason other than the network (shown with «Повторить»). */
+    val sendFailed: Boolean = false,
     val event: ChatEvent? = null,
 ) {
     val generating: Boolean get() = items.any { it is ChatItem.Answer && it.status == AnswerStatus.GENERATING }
@@ -78,6 +83,7 @@ class ChatViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val api: AssistantApi,
     private val tracker: Tracker,
+    private val keys: IdempotencyKeys,
 ) : ViewModel() {
     private val transferMode: TransferMode =
         TransferMode.entries.firstOrNull { it.code == savedState.toRoute<AssistantRoutes.Chat>().transferMode } ?: TransferMode.WITH
@@ -85,6 +91,7 @@ class ChatViewModel @Inject constructor(
     private val _state = MutableStateFlow(ChatUiState())
     val state: StateFlow<ChatUiState> = _state
     private val streams = HashMap<String, Job>()
+    private val retryKeys = HashMap<String, IdempotencyKey>()
 
     /** Text + key of the question being sent; reused on retry after a network failure or consent. */
     private var pending: Pair<String, IdempotencyKey>? = null
@@ -143,12 +150,16 @@ class ChatViewModel @Inject constructor(
     fun send(voiceText: String? = null) {
         val text = (voiceText ?: _state.value.draft).trim()
         if (text.isEmpty() || _state.value.sending || _state.value.generating) return
-        val key = pending?.takeIf { it.first == text }?.second ?: IdempotencyKey.random()
-        pending = text to key
+        // «Задать этот вопрос» is one logical action: the key is persisted until a final response, so a repeat
+        // after a dropped connection or process death never creates a second question or spends a second try.
+        val action = "assistant.ask:" + sha256(text + "|" + transferMode.code)
         viewModelScope.launch {
-            _state.update { it.copy(sending = true, draft = text) }
+            val key = keys.keyFor(action)
+            pending = text to key
+            _state.update { it.copy(sending = true, draft = text, sendFailed = false) }
             try {
-                val r = api.ask(key, AskRequest(text = text, transferMode = transferMode))
+                val r = askWithRetry(key, AskRequest(text = text, transferMode = transferMode))
+                keys.complete(action)
                 pending = null
                 tracker.track(Events.ASSISTANT_QUESTION_SENT)
                 val question = ChatItem.Question(r.question.id, r.question.createdAt, r.question.text ?: text)
@@ -166,14 +177,39 @@ class ChatViewModel @Inject constructor(
                 when {
                     e is AppError.Api && e.code == ErrorCodes.CONSENT_REQUIRED -> _state.update { it.copy(event = ChatEvent.OPEN_CONSENT) }
                     e is AppError.Api && e.code == ErrorCodes.LIMIT_EXCEEDED -> {
+                        // Not stored by the server (api.md 7.1): tomorrow the same key would pass, but it is a new day.
+                        keys.complete(action)
                         pending = null
                         _state.update { it.copy(limit = it.limit?.copy(remaining = 0) ?: AssistantLimit(0, 5, e.resetsAt ?: OffsetDateTime.now())) }
                     }
                     e is AppError.Offline -> _state.update { it.copy(offline = true) }
-                    else -> Unit
+                    else -> _state.update { it.copy(sendFailed = true) }
                 }
             }
         }
+    }
+
+    /** 409 REQUEST_IN_PROGRESS: the first request with this key is still running — wait and repeat it. */
+    private suspend fun askWithRetry(key: IdempotencyKey, request: AskRequest): ru.finassist.pf.core.api.model.AskResponse {
+        repeat(IN_PROGRESS_RETRIES) {
+            try {
+                return api.ask(key, request)
+            } catch (e: AppError.InProgress) {
+                delay((e.retryAfterSeconds ?: 2).coerceIn(1, 30) * 1000L)
+            }
+        }
+        return api.ask(key, request)
+    }
+
+    /**
+     * «Повторить» under the offline / failure notice: re-sends the waiting question with its key, re-opens
+     * streams and reloads the thread if it never loaded.
+     */
+    fun retryAfterFailure() {
+        _state.update { it.copy(offline = false, sendFailed = false) }
+        if (_state.value.items.isEmpty() && !_state.value.loading) load()
+        resumeStreams()
+        pending?.first?.let { send(it) }
     }
 
     /** Consent granted on the consent screen: send the waiting question with the same key. */
@@ -186,9 +222,12 @@ class ChatViewModel @Inject constructor(
 
     /** «Повторить» after MODEL_ERROR: a new answer replaces the failed one (api.md 7.4). */
     fun retry(answerId: String) {
+        // One logical action per failed answer: the same key until a final response (a lost 201 is replayed).
+        val key = retryKeys.getOrPut(answerId) { IdempotencyKey.random() }
         viewModelScope.launch {
             try {
-                val r = api.retry(IdempotencyKey.random(), answerId)
+                val r = api.retry(key, answerId)
+                retryKeys.remove(answerId)
                 _state.update { s ->
                     s.copy(
                         items = s.items.map { item ->
@@ -202,8 +241,13 @@ class ChatViewModel @Inject constructor(
                 when {
                     e is AppError.Api && e.code == ErrorCodes.LIMIT_EXCEEDED -> _state.update { it.copy(limit = it.limit?.copy(remaining = 0)) }
                     e is AppError.Api && e.code == ErrorCodes.CONSENT_REQUIRED -> _state.update { it.copy(event = ChatEvent.OPEN_CONSENT) }
+                    // Already replaced (e.g. the first 201 was lost after all): the history has the truth.
+                    e is AppError.Api && e.code == ErrorCodes.RETRY_NOT_ALLOWED -> {
+                        retryKeys.remove(answerId)
+                        load()
+                    }
                     e is AppError.Offline -> _state.update { it.copy(offline = true) }
-                    else -> Unit
+                    else -> _state.update { it.copy(sendFailed = true) }
                 }
             }
         }
@@ -212,12 +256,24 @@ class ChatViewModel @Inject constructor(
     private fun watch(answerId: String) {
         if (streams[answerId]?.isActive == true) return
         streams[answerId] = viewModelScope.launch {
+            // The answer keeps generating on the server; a dropped stream is simply re-opened (the first event is a
+            // full snapshot) with backoff, until a terminal event or the screen stops.
+            var backoff = 1_000L
             try {
-                api.streamAnswer(answerId).collect { event -> applyEvent(answerId, event) }
-                _state.update { it.copy(offline = false) }
-            } catch (e: AppError) {
-                // Dropped connection: the answer keeps generating on the server; re-opened on resume or retry tap.
-                if (e is AppError.Offline) _state.update { it.copy(offline = true) }
+                while (true) {
+                    try {
+                        api.streamAnswer(answerId).collect { event ->
+                            backoff = 1_000L
+                            applyEvent(answerId, event)
+                        }
+                        _state.update { it.copy(offline = false) }
+                        break
+                    } catch (e: AppError) {
+                        if (e !is AppError.Offline && e !is AppError.Server) break
+                    }
+                    delay(backoff)
+                    backoff = (backoff * 2).coerceAtMost(15_000L)
+                }
             } finally {
                 if (streams[answerId] === coroutineContext[Job]) streams.remove(answerId)
             }
@@ -263,8 +319,12 @@ class ChatViewModel @Inject constructor(
         MessageRole.UNKNOWN -> null
     }
 
+    private fun sha256(text: String): String =
+        MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
+
     companion object {
         private const val PAGE = 20
+        private const val IN_PROGRESS_RETRIES = 3
         private const val MAX_LENGTH = 2000
 
         /**

@@ -28,6 +28,7 @@ import ru.finassist.pf.feature.applock.api.BiometricAvailability
 import ru.finassist.pf.feature.applock.api.LockState
 import ru.finassist.pf.feature.applock.api.MAX_WRONG_ATTEMPTS
 import ru.finassist.pf.feature.applock.api.VerifyResult
+import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import ru.finassist.pf.feature.auth.api.SessionState
 import javax.inject.Inject
@@ -132,9 +133,10 @@ internal class AppLockImpl @Inject constructor(
         unlocked.value = false
     }
 
+    /** Session first (cleared locally at once), then the passcode — never a «set a new code» window while signed in. */
     override suspend fun forgetAndSignOut() {
+        session.signOut(reason = AuthRoutes.Phone.REASON_LOGGED_OUT)
         reset()
-        session.signOut(reason = "logged_out")
     }
 
     override suspend fun reset() {

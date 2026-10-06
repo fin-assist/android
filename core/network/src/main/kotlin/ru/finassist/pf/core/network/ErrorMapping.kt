@@ -47,6 +47,7 @@ internal fun Response.toAppError(): AppError {
 /** Any throwable from an HTTP call → [AppError]. */
 internal fun Throwable.toNetworkError(): AppError = when (this) {
     is AppError -> this
+    is kotlinx.coroutines.CancellationException -> throw this
     is IOException -> AppError.Offline(this)
     is SerializationException -> AppError.Server(200, this)
     else -> AppError.Unknown(this)

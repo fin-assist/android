@@ -45,6 +45,9 @@ data class AnalyticsBlocks(
 
 enum class AnalyticsSheet { PERIODS, TRANSFERS }
 
+/** Contextual hints after the first import, shown one after another. */
+enum class AnalyticsHint { CATEGORIES, ASK }
+
 data class AnalyticsUiState(
     val loading: Boolean = true,
     val offline: Boolean = false,
@@ -55,6 +58,7 @@ data class AnalyticsUiState(
     val limit: AssistantLimit? = null,
     val allExpenseCategories: Boolean = false,
     val snackbar: String? = null,
+    val hint: AnalyticsHint? = null,
 )
 
 /**
@@ -65,7 +69,7 @@ data class AnalyticsUiState(
 class AnalyticsViewModel @Inject constructor(
     private val api: AnalyticsApi,
     private val assistantApi: AssistantApi,
-    statements: StatementsRepository,
+    private val statements: StatementsRepository,
     operations: OperationsRepository,
     flags: FeatureFlags,
     private val tracker: Tracker,
@@ -100,7 +104,7 @@ class AnalyticsViewModel @Inject constructor(
         if (params != null) {
             period = params.period
             date = params.date
-            transferMode = params.transferMode.effective
+            transferMode = allowedMode(params.transferMode)
         }
         tracker.track(Events.ANALYTICS_OPENED)
         load()
@@ -119,9 +123,12 @@ class AnalyticsViewModel @Inject constructor(
                 a.params?.let { p ->
                     period = p.period
                     date = p.date
-                    transferMode = p.transferMode.effective
+                    transferMode = allowedMode(p.transferMode)
                 }
                 _state.update { it.copy(loading = false, offline = false, data = a) }
+                if (a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
+                    _state.update { it.copy(hint = AnalyticsHint.CATEGORIES) }
+                }
                 if (_state.value.blocks.assistant) refreshLimit()
                 // The server is still recalculating after an edit: ask again shortly (api.md 6.1 `recalculating`).
                 if (a.state?.recalculating == true) {
@@ -162,6 +169,15 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     fun currentTransferMode(): TransferMode = transferMode
+
+    /** With `analytics.filter.transfers` off every request uses `with` (docs/flags.md), whatever a chip says. */
+    private fun allowedMode(mode: TransferMode): TransferMode =
+        if (_state.value.blocks.transfersFilter) mode.effective else TransferMode.WITH
+
+    /** Next hint, or none: «Не показывать» skips the rest too. */
+    fun nextHint(stop: Boolean) = _state.update {
+        it.copy(hint = if (stop || it.hint == AnalyticsHint.ASK || !it.blocks.assistant) null else AnalyticsHint.ASK)
+    }
 
     fun openSheet(sheet: AnalyticsSheet?) {
         _state.update { it.copy(sheet = sheet, periods = if (sheet == AnalyticsSheet.PERIODS) null else it.periods) }

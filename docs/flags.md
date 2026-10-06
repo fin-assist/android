@@ -9,7 +9,7 @@ Naming: `<feature>.<object>[.<detail>]`, lowercase, dot-separated. Same prefix i
 
 | Flag | Default | What `false` does |
 |---|---|---|
-| `auth.registration` | `true` | New phone number after the call: instead of the consent screen, "Регистрация пока закрыта". Existing users still sign in. In `mock` the only "existing" number is the one in the mock config. |
+| `auth.registration` | `true` | New phone number after the call: instead of the consent screen, "Регистрация пока закрыта". Existing users still sign in. In `mock` the only "existing" number is the one in the mock config, and `app/src/mock/assets/flags.json` sets this flag to `false` (only that number signs in). |
 | `analytics.block.tiles` | `true` | Hides the tiles row (expense, income, balance, daily expense, forecast) |
 | `analytics.block.expense_categories` | `true` | Hides "Расходы по категориям" and the "Все категории" screen for expenses |
 | `analytics.block.income_categories` | `true` | Hides "Доходы по категориям" |

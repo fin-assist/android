@@ -11,12 +11,17 @@ import com.google.crypto.tink.KeyTemplates
 import com.google.crypto.tink.aead.AeadConfig
 import com.google.crypto.tink.integration.android.AndroidKeysetManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.TokenPair
+import ru.finassist.pf.core.common.error.AppError
+import java.security.GeneralSecurityException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,24 +37,41 @@ class EncryptedTokenStore @Inject constructor(
     private val dataStore: DataStore<Preferences>,
 ) : TokenStore {
 
+    /**
+     * A keyset that can no longer be opened (Keystore key lost, data restored on another device) is dropped and
+     * recreated: the stored session becomes undecryptable, i.e. «signed out», instead of crashing every start.
+     */
     private val aead: Aead by lazy {
         AeadConfig.register()
-        AndroidKeysetManager.Builder()
-            .withSharedPref(context, KEYSET_NAME, KEYSET_PREFS)
-            .withKeyTemplate(KeyTemplates.get("AES256_GCM"))
-            .withMasterKeyUri(MASTER_KEY_URI)
-            .build()
-            .keysetHandle
-            .getPrimitive(Aead::class.java)
+        runCatching { buildAead() }.getOrElse {
+            context.getSharedPreferences(KEYSET_PREFS, Context.MODE_PRIVATE).edit().clear().commit()
+            buildAead()
+        }
     }
 
+    private fun buildAead(): Aead = AndroidKeysetManager.Builder()
+        .withSharedPref(context, KEYSET_NAME, KEYSET_PREFS)
+        .withKeyTemplate(KeyTemplates.get("AES256_GCM"))
+        .withMasterKeyUri(MASTER_KEY_URI)
+        .build()
+        .keysetHandle
+        .getPrimitive(Aead::class.java)
+
+    // Keystore + AES work stays off the main thread (PfApp collects this flow from composition).
     override val session: Flow<TokenStore.Session?> =
-        dataStore.data.map { prefs -> prefs[KEY_BLOB]?.let(::decode) }.distinctUntilChanged()
+        dataStore.data.map { prefs -> prefs[KEY_BLOB]?.let(::decode) }.distinctUntilChanged().flowOn(Dispatchers.IO)
 
     override suspend fun current(): TokenStore.Session? = session.first()
 
+    /** Encryption failures surface as [AppError.Unknown], which every sign-in screen already handles. */
     override suspend fun save(session: TokenStore.Session) {
-        val blob = encode(session)
+        val blob = withContext(Dispatchers.IO) {
+            try {
+                encode(session)
+            } catch (e: GeneralSecurityException) {
+                throw AppError.Unknown(e)
+            }
+        }
         dataStore.edit { it[KEY_BLOB] = blob }
     }
 

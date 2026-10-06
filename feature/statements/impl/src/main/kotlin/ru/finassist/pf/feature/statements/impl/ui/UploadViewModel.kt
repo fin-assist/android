@@ -7,7 +7,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -19,11 +23,15 @@ import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.ImportConfig
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.storage.IdempotencyKeys
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.statements.impl.data.StatementsRepositoryImpl
+import java.io.IOException
+import java.io.InputStream
+import java.security.MessageDigest
 import javax.inject.Inject
 
 /** What the upload screen shows. */
@@ -61,11 +69,12 @@ class UploadViewModel @Inject constructor(
     private val repository: StatementsRepositoryImpl,
     private val flags: FeatureFlags,
     private val tracker: Tracker,
+    private val keys: IdempotencyKeys,
 ) : ViewModel() {
     private val _state = MutableStateFlow(UploadUiState())
     val state: StateFlow<UploadUiState> = _state
     private var config: ImportConfig? = null
-    private var pickedKey: Pair<Uri, IdempotencyKey>? = null
+    private var uploadJob: Job? = null
     private var progressJob: Job? = null
 
     init {
@@ -103,62 +112,110 @@ class UploadViewModel @Inject constructor(
     fun toggleFallback() = _state.update { it.copy(fallbackOpen = !it.fallbackOpen) }
 
     fun onFilePicked(uri: Uri) {
-        val (name, size) = describe(uri)
-        // One logical action = one key; picking the same file again after a failure reuses it (api.md «Идемпотентность»).
-        val key = pickedKey?.takeIf { it.first == uri }?.second ?: IdempotencyKey.random().also { pickedKey = uri to it }
-        val max = config?.maxFileSizeBytes ?: (10L * 1024 * 1024)
-        if (size > max) {
-            _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.FILE_TOO_LARGE, name, config)) }
-            return
-        }
-        tracker.track(Events.STATEMENTS_UPLOAD_STARTED)
-        _state.update { it.copy(phase = UploadPhase.Busy(name, 0f, uploadId = null)) }
-        viewModelScope.launch {
+        if (uploadJob?.isActive == true) return
+        uploadJob = viewModelScope.launch {
+            val max = config?.maxFileSizeBytes ?: (10L * 1024 * 1024)
+            // One pass off the main thread: real size (providers may not report it) and a content hash for the key.
+            val file = try {
+                withContext(Dispatchers.IO) { inspect(uri, max) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Unreadable document (revoked permission, provider error): nothing was sent.
+                _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, uri.lastPathSegment ?: "файл", config)) }
+                return@launch
+            }
+            if (file.size > max) {
+                _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.FILE_TOO_LARGE, file.name, config)) }
+                return@launch
+            }
+            // api.md: the key belongs to «загрузить этот файл» — same content → same key until a final response
+            // (survives process death); another file → another key.
+            val action = "statements.upload:${file.sha256}"
+            val key = keys.keyFor(action)
+            tracker.track(Events.STATEMENTS_UPLOAD_STARTED)
+            _state.update { it.copy(phase = UploadPhase.Busy(file.name, 0f, uploadId = null)) }
             try {
-                val accepted = api.uploadStatement(
-                    key,
-                    UploadFile(name = name, size = size, open = { context.contentResolver.openInputStream(uri) ?: error("cannot open $uri") }),
-                )
+                val accepted = uploadWithRetry(key, file, uri)
+                // 202 is the final response of this action: re-picking the same file later is a new upload.
+                keys.complete(action)
                 _state.update { it.copy(phase = UploadPhase.Busy(accepted.fileName, 0.05f, accepted.uploadId)) }
                 watch()
             } catch (e: AppError) {
-                fail(e, name)
+                // 4xx answers are final as well (stored by the server); network failures keep the key for a retry.
+                if (e is AppError.Api) keys.complete(action)
+                fail(e, file.name)
             }
         }
     }
 
-    /** Opens (or re-opens on resume) the progress stream; the first event is the current state (api.md SSE). */
+    /** 409 REQUEST_IN_PROGRESS: the first request with this key is still running — wait and repeat it. */
+    private suspend fun uploadWithRetry(key: IdempotencyKey, file: PickedFile, uri: Uri): ru.finassist.pf.core.api.model.UploadAccepted {
+        repeat(IN_PROGRESS_RETRIES) {
+            try {
+                return api.uploadStatement(key, UploadFile(name = file.name, size = file.size, open = { open(uri) }))
+            } catch (e: AppError.InProgress) {
+                delay((e.retryAfterSeconds ?: 2).coerceIn(1, 30) * 1000L)
+            }
+        }
+        return api.uploadStatement(key, UploadFile(name = file.name, size = file.size, open = { open(uri) }))
+    }
+
+    private fun open(uri: Uri): InputStream = try {
+        context.contentResolver.openInputStream(uri) ?: throw IOException("cannot open $uri")
+    } catch (e: SecurityException) {
+        // Permission to the document was revoked: an I/O failure for OkHttp, not a crash on its thread.
+        throw IOException(e)
+    }
+
+    /**
+     * Opens (or re-opens) the progress stream; the first event is the current state (api.md SSE). A dropped
+     * connection is retried with backoff while the screen is started — [stopWatching] ends it.
+     */
     fun watch() {
         val busy = _state.value.phase as? UploadPhase.Busy ?: return
         val uploadId = busy.uploadId ?: return
         if (progressJob?.isActive == true) return
         progressJob = viewModelScope.launch {
-            try {
-                api.streamProgress(uploadId).collect { event ->
-                    when (event) {
-                        is ImportEvent.Progress -> _state.update { s ->
-                            val b = s.phase as? UploadPhase.Busy ?: return@update s
-                            s.copy(phase = b.copy(progress = (event.progress.percent / 100f).coerceIn(0.05f, 1f)))
-                        }
-                        is ImportEvent.Complete -> {
-                            repository.importCompleted(uploadId, event.result)
-                            tracker.track(Events.STATEMENTS_UPLOAD_COMPLETED, mapOf("new_count" to event.result.newCount.toString()))
-                            _state.update { it.copy(doneUploadId = uploadId, askCancel = false) }
-                        }
-                        is ImportEvent.Error -> {
-                            if (event.code == ErrorCodes.CANCELLED) {
-                                tracker.track(Events.STATEMENTS_UPLOAD_CANCELLED)
-                                _state.update { it.copy(phase = UploadPhase.Guide(fallbackConfig()), askCancel = false) }
-                            } else {
-                                tracker.track(Events.STATEMENTS_UPLOAD_FAILED, mapOf("code" to event.code))
-                                _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, busy.fileName, config), askCancel = false) }
-                            }
-                        }
+            var backoff = 1_000L
+            while (true) {
+                try {
+                    api.streamProgress(uploadId).collect { event ->
+                        backoff = 1_000L
+                        handle(uploadId, busy.fileName, event)
+                    }
+                    return@launch
+                } catch (e: AppError) {
+                    if (e !is AppError.Offline && e !is AppError.Server) {
+                        fail(e, busy.fileName)
+                        return@launch
                     }
                 }
-            } catch (e: AppError) {
-                // Dropped stream: keep the busy state, the screen re-calls watch() on resume; other errors end the import.
-                if (e !is AppError.Offline) fail(e, busy.fileName)
+                delay(backoff)
+                backoff = (backoff * 2).coerceAtMost(15_000L)
+            }
+        }
+    }
+
+    private fun handle(uploadId: String, fileName: String, event: ImportEvent) {
+        when (event) {
+            is ImportEvent.Progress -> _state.update { s ->
+                val b = s.phase as? UploadPhase.Busy ?: return@update s
+                s.copy(phase = b.copy(progress = (event.progress.percent / 100f).coerceIn(0.05f, 1f)))
+            }
+            is ImportEvent.Complete -> {
+                repository.importCompleted(uploadId, event.result)
+                tracker.track(Events.STATEMENTS_UPLOAD_COMPLETED, mapOf("new_count" to event.result.newCount.toString()))
+                _state.update { it.copy(doneUploadId = uploadId, askCancel = false) }
+            }
+            is ImportEvent.Error -> {
+                if (event.code == ErrorCodes.CANCELLED) {
+                    tracker.track(Events.STATEMENTS_UPLOAD_CANCELLED)
+                    _state.update { it.copy(phase = UploadPhase.Guide(fallbackConfig()), askCancel = false) }
+                } else {
+                    tracker.track(Events.STATEMENTS_UPLOAD_FAILED, mapOf("code" to event.code))
+                    _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, fileName, config), askCancel = false) }
+                }
             }
         }
     }
@@ -175,23 +232,34 @@ class UploadViewModel @Inject constructor(
             else -> ErrorCodes.PROCESSING_FAILED
         }
         tracker.track(Events.STATEMENTS_UPLOAD_FAILED, mapOf("code" to code))
-        _state.update { it.copy(phase = UploadPhase.Error(code, fileName, config)) }
+        _state.update { it.copy(phase = UploadPhase.Error(code, fileName, config), askCancel = false) }
     }
 
     fun askCancel(show: Boolean) = _state.update { it.copy(askCancel = show) }
 
-    /** «Прервать разбор»: DELETE of a processing upload; the stream then ends with `CANCELLED`. */
+    /**
+     * «Прервать разбор». Before the 202 the request itself is cancelled (the key is kept: if the server got the
+     * file, a retry of the same file returns that upload). After it — DELETE, and the stream ends with CANCELLED.
+     */
     fun cancelImport() {
         val busy = _state.value.phase as? UploadPhase.Busy ?: return
         val id = busy.uploadId
         if (id == null) {
+            uploadJob?.cancel()
             _state.update { it.copy(phase = UploadPhase.Guide(fallbackConfig()), askCancel = false) }
             return
         }
         _state.update { it.copy(phase = busy.copy(cancelling = true)) }
         viewModelScope.launch {
-            runCatching { api.deleteStatement(id) }
-            // If the server had already finished, the stream will report `complete` and the result screen opens.
+            try {
+                api.deleteStatement(id)
+                // If the server had already finished, the stream reports `complete` and the result screen opens.
+            } catch (e: AppError) {
+                _state.update { s ->
+                    val b = s.phase as? UploadPhase.Busy
+                    if (b == null) s else s.copy(phase = b.copy(cancelling = false), askCancel = false)
+                }
+            }
         }
     }
 
@@ -200,18 +268,33 @@ class UploadViewModel @Inject constructor(
 
     fun consumeDone() = _state.update { it.copy(doneUploadId = null) }
 
-    private fun describe(uri: Uri): Pair<String, Long> {
+    private class PickedFile(val name: String, val size: Long, val sha256: String)
+
+    /** Reads the file once: display name, real byte count (stops counting past [max]) and SHA-256. */
+    private fun inspect(uri: Uri, max: Long): PickedFile {
         var name = uri.lastPathSegment ?: "statement.ofx"
-        var size = -1L
-        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { c ->
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
             if (c.moveToFirst()) {
                 val n = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                val s = c.getColumnIndex(OpenableColumns.SIZE)
                 if (n >= 0 && !c.isNull(n)) name = c.getString(n)
-                if (s >= 0 && !c.isNull(s)) size = c.getLong(s)
             }
         }
-        if (size < 0) size = runCatching { context.contentResolver.openInputStream(uri)?.use { it.available().toLong() } ?: 0L }.getOrDefault(0L)
-        return name to size
+        val digest = MessageDigest.getInstance("SHA-256")
+        var size = 0L
+        open(uri).use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                size += read
+                if (size > max) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return PickedFile(name, size, digest.digest().joinToString("") { "%02x".format(it) })
+    }
+
+    private companion object {
+        const val IN_PROGRESS_RETRIES = 3
     }
 }

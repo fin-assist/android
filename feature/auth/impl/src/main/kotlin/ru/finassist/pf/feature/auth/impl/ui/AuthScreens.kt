@@ -74,6 +74,7 @@ fun PhoneScreen(reason: String?, onNext: () -> Unit, vm: PhoneViewModel = hiltVi
         vm.setNotice(
             when (reason) {
                 AuthRoutes.Phone.REASON_LOGGED_OUT -> "Вы вышли из аккаунта. Войдите по номеру телефона"
+                AuthRoutes.Phone.REASON_EXPIRED -> "Сессия закончилась — войдите снова по номеру телефона"
                 else -> null
             },
         )
