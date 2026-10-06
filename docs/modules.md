@@ -15,6 +15,7 @@ core/designsystem         tokens, theme, components, chart animation (Compose)
 core/navigation           FeatureEntry, Navigator, shared route arguments
 core/toggles              FeatureFlags interface + flag registry with code defaults (JVM)
 core/tracking             Tracker / CrashReporter interfaces, event naming (JVM)
+core/storage              DataStore preferences + Tink-encrypted TokenStore (both flavors)
 providers/toggles-local   flags from a JSON asset + debug overrides (mock flavor)
 providers/tracking-log    logcat tracker (mock flavor)
 providers/toggles-rustore RuStore Remote Config (prod, stage 8)
@@ -59,7 +60,7 @@ impl/src/main/kotlin/ru/finassist/pf/feature/<name>/impl/
 ## Adding a feature
 
 1. Add `include(":feature:<name>:api")` / `:impl` to `settings.gradle.kts` (the `listOf(...)` there).
-2. Create `feature/<name>/api/build.gradle.kts` with `alias(libs.plugins.pf.feature.api)` and
-   `feature/<name>/impl/build.gradle.kts` with `alias(libs.plugins.pf.feature.impl)`.
+2. Create `feature/<name>/api/build.gradle.kts` with `id("pf.feature.api")` and
+   `feature/<name>/impl/build.gradle.kts` with `id("pf.feature.impl")`.
 3. Add `implementation(project(":feature:<name>:api"))` + `:impl` to `app/build.gradle.kts`.
 4. Register the `FeatureEntry` in the feature's Hilt module.
