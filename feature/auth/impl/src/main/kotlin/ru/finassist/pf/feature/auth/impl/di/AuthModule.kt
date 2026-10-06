@@ -36,11 +36,12 @@ class AuthEntry @Inject constructor() : FeatureEntry {
         composable<AuthRoutes.Consent> {
             ConsentScreen(
                 onBack = { navigator.back() },
-                onExpired = { navigator.navigate(AuthRoutes.Phone()) { popUpTo(0) } },
+                // Back to a fresh phone screen with nothing behind it (the expired call/consent are dropped).
+                onExpired = { navigator.navigate(AuthRoutes.Phone()) { popUpTo<AuthRoutes.Phone> { inclusive = true } } },
             )
         }
         composable<AuthRoutes.RegistrationClosed> {
-            RegistrationClosedScreen(onBack = { navigator.navigate(AuthRoutes.Phone()) { popUpTo(0) } })
+            RegistrationClosedScreen(onBack = { navigator.navigate(AuthRoutes.Phone()) { popUpTo<AuthRoutes.Phone> { inclusive = true } } })
         }
     }
 }

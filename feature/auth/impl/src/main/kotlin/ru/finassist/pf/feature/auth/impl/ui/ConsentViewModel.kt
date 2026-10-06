@@ -83,7 +83,9 @@ class ConsentViewModel @Inject constructor(
                 when {
                     e is AppError.Api && e.code == ErrorCodes.CONSENT_OUTDATED -> {
                         // Document moved on while the screen was open: reload it; the new version means a new key.
-                        runCatching { authApi.getConsentDocument(ConsentType.PERSONAL_DATA) }.onSuccess { doc -> _state.update { it.copy(document = doc) } }
+                        // A new version needs a new, affirmative tick: the old one does not carry over.
+                        runCatching { authApi.getConsentDocument(ConsentType.PERSONAL_DATA) }.onSuccess { doc -> _state.update { it.copy(document = doc, accepted = false) } }
+                        _state.update { it.copy(accepted = false) }
                         _state.update { it.copy(formError = "Текст согласия обновился — прочитайте его ещё раз и подтвердите") }
                     }
                     e is AppError.Unauthorized || (e is AppError.Api && e.httpStatus == 401) -> _state.update { it.copy(expired = true) }
