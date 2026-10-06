@@ -34,10 +34,15 @@ internal interface PasscodeCrypto {
     /** @throws GeneralSecurityException when the record was tampered with or its key is gone. */
     fun open(sealed: ByteArray): ByteArray
 
-    /** Whether the MAC key exists, i.e. a passcode was set and not cleared since. */
-    fun hasKey(): Boolean
+    /**
+     * Marker outside the app's files, set only after the record is committed: a passcode was set and not
+     * cleared since. The MAC key cannot serve as one — it appears before the record is written.
+     */
+    fun isCommitted(): Boolean
 
-    /** Drops the MAC key: the next passcode gets a fresh one. */
+    fun markCommitted()
+
+    /** Drops the marker and the MAC key: the next passcode gets a fresh key. */
     fun reset()
 }
 
@@ -79,10 +84,22 @@ internal class KeystorePasscodeCrypto @Inject constructor(
     override fun open(sealed: ByteArray): ByteArray = aead.decrypt(sealed, AAD)
 
     @Synchronized
-    override fun hasKey(): Boolean = runCatching { keyStore.containsAlias(MAC_ALIAS) }.getOrDefault(false)
+    override fun isCommitted(): Boolean = runCatching { keyStore.containsAlias(MARKER_ALIAS) }.getOrDefault(false)
 
+    /** A tiny AES key whose only meaning is its existence; never used for crypto. */
+    @Synchronized
+    override fun markCommitted() {
+        if (isCommitted()) return
+        KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE).run {
+            init(KeyGenParameterSpec.Builder(MARKER_ALIAS, KeyProperties.PURPOSE_ENCRYPT).setKeySize(128).build())
+            generateKey()
+        }
+    }
+
+    /** Marker first: a crash in between leaves «not configured», never «configured without a record». */
     @Synchronized
     override fun reset() {
+        runCatching { keyStore.deleteEntry(MARKER_ALIAS) }
         runCatching { keyStore.deleteEntry(MAC_ALIAS) }
     }
 
@@ -109,6 +126,7 @@ internal class KeystorePasscodeCrypto @Inject constructor(
     private companion object {
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
         const val MAC_ALIAS = "pf_passcode_mac"
+        const val MARKER_ALIAS = "pf_passcode_committed"
         const val KEYSET_NAME = "pf_applock_keyset"
         const val KEYSET_PREFS = "pf_applock_keyset_prefs"
         const val MASTER_KEY_URI = "android-keystore://pf_applock_master_key"

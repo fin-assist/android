@@ -33,14 +33,17 @@ class PasscodeStoreTest {
         var macKey = ByteArray(32) { 1 }
         val aesKey = SecretKeySpec(ByteArray(32) { 2 }, "AES")
         var resets = 0
-        var keyExists = false
+        var committed = false
 
         override fun mac(data: ByteArray): ByteArray {
-            keyExists = true
             return Mac.getInstance("HmacSHA256").run { init(SecretKeySpec(macKey, "HmacSHA256")); doFinal(data) }
         }
 
-        override fun hasKey() = keyExists
+        override fun isCommitted() = committed
+
+        override fun markCommitted() {
+            committed = true
+        }
 
         override fun seal(plain: ByteArray): ByteArray {
             val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
@@ -58,7 +61,7 @@ class PasscodeStoreTest {
 
         override fun reset() {
             resets++
-            keyExists = false
+            committed = false
             macKey = ByteArray(32) { 3 }
         }
     }
@@ -166,6 +169,13 @@ class PasscodeStoreTest {
         assertFalse(store.biometricEnabled.first())
         assertTrue(store.matches("1234"))
         assertTrue(store.biometricEnabled.first())
+    }
+
+    @Test
+    fun `a crash before the record is written leaves a fresh setup`() = runBlocking {
+        // The MAC key exists (mac() ran) but neither the record nor the commit marker made it.
+        crypto.mac(ByteArray(1))
+        assertFalse(store.isConfigured.first())
     }
 
     private companion object {

@@ -27,8 +27,8 @@ import javax.inject.Singleton
  *   offline against a copied file; the 5-attempt limit is the only way in.
  * - The attempt counter is inside the sealed record: editing or resetting it breaks the tag. A record that
  *   no longer opens counts as exhausted attempts, so the next wrong code signs the user out.
- * - A missing record while the MAC key still exists in the Keystore (outside the app's files) means the
- *   record was removed, not that no code was ever set: the lock stays configured with exhausted attempts, so
+ * - A missing record while the commit marker still exists in the Keystore (outside the app's files) means
+ *   the record was removed, not that no code was ever set: the lock stays configured with exhausted attempts, so
  *   deleting the file leads to sign-out, never to «set a new code».
  * - The biometric switch stays plain: turning it on only offers the system prompt, which needs the owner's
  *   enrolled biometrics anyway. It is honoured only with a sealed record.
@@ -48,7 +48,7 @@ internal class PasscodeStore @Inject constructor(
     private class Record(val salt: String, val mac: String, val attempts: Int)
 
     val isConfigured: Flow<Boolean> = dataStore.data.map {
-        it[KEY_RECORD] != null || it[LEGACY_HASH] != null || crypto.hasKey()
+        it[KEY_RECORD] != null || it[LEGACY_HASH] != null || crypto.isCommitted()
     }.flowOn(Dispatchers.IO)
 
     val biometricEnabled: Flow<Boolean> = dataStore.data.map { (it[KEY_BIOMETRIC] ?: false) && it[KEY_RECORD] != null }
@@ -68,6 +68,8 @@ internal class PasscodeStore @Inject constructor(
             it[KEY_RECORD] = sealed
             it.removeLegacy()
         }
+        // Only after the record is on disk: a crash before this point leaves a fresh setup, not a dead lock.
+        withContext(Dispatchers.IO) { crypto.markCommitted() }
     }
 
     suspend fun matches(code: String): Boolean {
@@ -97,7 +99,7 @@ internal class PasscodeStore @Inject constructor(
         dataStore.edit { it[KEY_BIOMETRIC] = enabled }
     }
 
-    /** Key first: once the record is gone, a surviving key would read as a removed record (see class doc). */
+    /** Marker first: once the record is gone, a surviving marker would read as a removed record (see class doc). */
     suspend fun clear() {
         withContext(Dispatchers.IO) { crypto.reset() }
         dataStore.edit {
