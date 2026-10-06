@@ -47,6 +47,13 @@ mock/backend/src/main/assets/statements/fixture.ofx   # обезличенная
 Вход в `mock`: единственный «существующий» номер — из `mock/backend` (`MockConfig.existingPhone`);
 любой другой номер — новый пользователь (регистрация, если флаг `auth.registration` включён).
 
+### JDK для Gradle
+
+Gradle 8.11 не запускается на JDK 25, а Android Studio 2026.x по умолчанию берёт встроенный JBR 25 —
+сборка падает с единственной строкой `25.0.3`. Нужен JDK 17 (как в CI): `brew install --cask temurin@17`,
+затем Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JDK → 17.
+Файл `gradle/gradle-daemon-jvm.properties` фиксирует JDK 17 для демона Gradle и при запуске из консоли.
+
 ### Flavor `prod`
 
 Настоящий HTTP-клиент, флаги из RuStore Remote Config, события в MyTracker, крэши и ANR в AppMetrica.
