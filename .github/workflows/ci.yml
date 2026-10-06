@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'stage-*/**']
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, test, lint (mock flavor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # Module dependency rules are checked during configuration: a violation fails the first step.
+      - name: Configure
+        run: ./gradlew help --no-daemon --stacktrace 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      - name: Unit tests
+        run: ./gradlew testMockDebugUnitTest testDebugUnitTest test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      - name: Lint
+        run: ./gradlew lintMockDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      - name: Assemble
+        run: ./gradlew assembleMockDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: app-mock-debug
+          path: app/build/outputs/apk/mock/debug/*.apk
+          retention-days: 14
+
+      # Raw logs are not reachable through the API from every environment; the tail of a failed build is posted
+      # as a commit comment so it can be read via REST.
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "CI failed on \`${{ github.workflow }}\` — last lines of the build log:"
+            echo
+            echo '```'
+            # Compiler errors and failed tests first (these are what matters), then the Gradle failure summary.
+            grep -E "^e: |error:|Unresolved reference|Test.*FAILED|tests completed|FAILED$" build.log | head -n 120
+            echo "--- summary ---"
+            grep -E "^(> Task .* FAILED|FAILURE|\* What went wrong|\* Where|Caused by|Execution failed|Could not|Build file|Line:)" build.log | tail -n 40
+            echo '```'
+          } > comment.md
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$(cat comment.md)" >/dev/null
