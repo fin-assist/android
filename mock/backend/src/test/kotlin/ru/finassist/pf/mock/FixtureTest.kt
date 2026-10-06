@@ -64,9 +64,9 @@ class FixtureTest {
         val (backend, statements) = backend()
         val ledger = backend.ledger
         assertEquals(1969, ledger.all.size)
-        assertTrue("pairs: ${ledger.pairCount}", ledger.pairCount >= 60)
+        assertTrue(ledger.pairCount >= 60, "pairs: ${ledger.pairCount}")
         val refunds = ledger.all.filter { it.isRefund }
-        assertTrue("refunds: ${refunds.size}", refunds.size in 5..30)
+        assertTrue(refunds.size in 5..30, "refunds: ${refunds.size}")
         assertTrue(refunds.any { it.refundTarget != null })
 
         val result = runBlocking {
@@ -115,7 +115,7 @@ class FixtureTest {
         assertTrue(second.items.all { it.occurredAt < first.range!!.from })
 
         val search = api.listOperations(OperationsQuery(filter = OperationsFilter(q = "Самокат")))
-        assertTrue("found ${search.totalCount}", (search.totalCount ?: 0) >= 50)
+        assertTrue((search.totalCount ?: 0) >= 50, "found ${search.totalCount}")
         assertTrue(search.items.all { it.title.contains("Самокат") })
 
         val expensesOnly = api.listOperations(OperationsQuery(filter = OperationsFilter(kind = OperationKindFilter.EXPENSE, transferMode = TransferMode.WITH)))
