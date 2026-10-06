@@ -71,13 +71,21 @@ fun PfApp(
         // Setup stays on screen until its own flow (code + biometric offer) says it is done, even though the
         // lock state flips to Unlocked as soon as the code is saved. Saveable: survives rotation on the offer.
         var settingUp by rememberSaveable { mutableStateOf(false) }
-        LaunchedEffect(lockState) { if (lockState == LockState.NotConfigured) settingUp = true }
+        // A configured code that is locked ends setup: after process death on the biometric offer the restored
+        // flag must not reopen «Придумайте код-пароль» — that would let anyone replace the code without unlocking.
+        LaunchedEffect(lockState) {
+            when (lockState) {
+                LockState.NotConfigured -> settingUp = true
+                LockState.Locked -> settingUp = false
+                else -> Unit
+            }
+        }
         Box(Modifier.fillMaxSize().background(PfTheme.colors.bg)) {
             when (val s = sessionState) {
                 SessionState.Unknown -> Unit
                 SessionState.SignedOut -> LayerScope("auth") { AuthLayer(entries, session) }
                 is SessionState.SignedIn -> when {
-                    settingUp || lockState == LockState.NotConfigured ->
+                    (settingUp && lockState != LockState.Locked) || lockState == LockState.NotConfigured ->
                         LayerScope("setup-${s.userId}") { appLockScreens.Setup(onDone = { settingUp = false }) }
                     else -> {
                         val locked = lockState == LockState.Locked

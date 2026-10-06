@@ -77,6 +77,12 @@ class UploadViewModel @Inject constructor(
     private var uploadJob: Job? = null
     private var progressJob: Job? = null
 
+    /**
+     * `complete` that arrived while «Прервать» was in flight. DELETE of a finished upload removes its
+     * operations (api.md 3.5), so the result screen must not open until DELETE is known to have failed.
+     */
+    private var heldComplete: Pair<String, ImportEvent.Complete>? = null
+
     init {
         load()
     }
@@ -179,12 +185,15 @@ class UploadViewModel @Inject constructor(
         progressJob = viewModelScope.launch {
             var backoff = 1_000L
             while (true) {
+                var terminal = false
                 try {
                     api.streamProgress(uploadId).collect { event ->
                         backoff = 1_000L
+                        if (event !is ImportEvent.Progress) terminal = true
                         handle(uploadId, busy.fileName, event)
                     }
-                    return@launch
+                    // A stream closed without `complete` / `error` (server restart) is a drop, not the end.
+                    if (terminal) return@launch
                 } catch (e: AppError) {
                     if (e !is AppError.Offline && e !is AppError.Server) {
                         fail(e, busy.fileName)
@@ -204,9 +213,8 @@ class UploadViewModel @Inject constructor(
                 s.copy(phase = b.copy(progress = (event.progress.percent / 100f).coerceIn(0.05f, 1f)))
             }
             is ImportEvent.Complete -> {
-                repository.importCompleted(uploadId, event.result)
-                tracker.track(Events.STATEMENTS_UPLOAD_COMPLETED, mapOf("new_count" to event.result.newCount.toString()))
-                _state.update { it.copy(doneUploadId = uploadId, askCancel = false) }
+                if ((_state.value.phase as? UploadPhase.Busy)?.cancelling == true) heldComplete = uploadId to event
+                else finish(uploadId, event)
             }
             is ImportEvent.Error -> {
                 if (event.code == ErrorCodes.CANCELLED) {
@@ -218,6 +226,12 @@ class UploadViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun finish(uploadId: String, event: ImportEvent.Complete) {
+        repository.importCompleted(uploadId, event.result)
+        tracker.track(Events.STATEMENTS_UPLOAD_COMPLETED, mapOf("new_count" to event.result.newCount.toString()))
+        _state.update { it.copy(doneUploadId = uploadId, askCancel = false) }
     }
 
     fun stopWatching() {
@@ -239,7 +253,10 @@ class UploadViewModel @Inject constructor(
 
     /**
      * «Прервать разбор». Before the 202 the request itself is cancelled (the key is kept: if the server got the
-     * file, a retry of the same file returns that upload). After it — DELETE, and the stream ends with CANCELLED.
+     * file, a retry of the same file returns that upload). After it — DELETE. A successful DELETE always means
+     * «nothing saved», as the dialog promises: either parsing stopped (the stream ends with CANCELLED) or the
+     * upload had already finished and its operations were deleted — then a `complete` that raced the DELETE is
+     * dropped and the screen returns to the guide instead of opening the result.
      */
     fun cancelImport() {
         val busy = _state.value.phase as? UploadPhase.Busy ?: return
@@ -249,16 +266,27 @@ class UploadViewModel @Inject constructor(
             _state.update { it.copy(phase = UploadPhase.Guide(fallbackConfig()), askCancel = false) }
             return
         }
+        heldComplete = null
         _state.update { it.copy(phase = busy.copy(cancelling = true)) }
         viewModelScope.launch {
             try {
                 api.deleteStatement(id)
-                // If the server had already finished, the stream reports `complete` and the result screen opens.
             } catch (e: AppError) {
                 _state.update { s ->
                     val b = s.phase as? UploadPhase.Busy
                     if (b == null) s else s.copy(phase = b.copy(cancelling = false), askCancel = false)
                 }
+                // DELETE failed but parsing had finished meanwhile: the import stands, show its result.
+                heldComplete?.let { (uploadId, event) -> heldComplete = null; finish(uploadId, event) }
+                return@launch
+            }
+            heldComplete = null
+            stopWatching()
+            // Harmless if parsing was merely stopped; required if a finished import was just deleted.
+            repository.uploadDeleted(id)
+            if (_state.value.phase is UploadPhase.Busy) {
+                tracker.track(Events.STATEMENTS_UPLOAD_CANCELLED)
+                _state.update { it.copy(phase = UploadPhase.Guide(fallbackConfig()), askCancel = false) }
             }
         }
     }

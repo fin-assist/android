@@ -33,12 +33,25 @@ class VoiceInput(val start: () -> Unit, private val listeningState: MutableState
  * Android 13+ with an on-device model: `SpeechRecognizer.createOnDeviceSpeechRecognizer` — audio never leaves
  * the phone (needs RECORD_AUDIO). Otherwise the system recognizer activity with `EXTRA_PREFER_OFFLINE`: the
  * best available; whether it stays offline is up to the device's recognizer.
+ *
+ * `isOnDeviceRecognitionAvailable` only says the service exists, not that a ru-RU model is installed: when the
+ * on-device recognizer fails for such a reason, this attempt and the following ones go to the system activity.
  */
 @Composable
 fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
     val context = LocalContext.current
     val result by rememberUpdatedState(onResult)
     val listening = remember { mutableStateOf(false) }
+    val onDeviceFailed = remember { mutableStateOf(false) }
+    fun intent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+        .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+    val systemActivity = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        if (r.resultCode == Activity.RESULT_OK) {
+            r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.takeIf { it.isNotBlank() }?.let(result)
+        }
+    }
     val recognizer = remember(context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
             SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
@@ -52,7 +65,16 @@ fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
                 listening.value = false
                 results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.takeIf { it.isNotBlank() }?.let(result)
             }
-            override fun onError(error: Int) { listening.value = false }
+            override fun onError(error: Int) {
+                listening.value = false
+                // Silence or an unrecognised phrase is the user's turn to retry; anything else is the recognizer.
+                if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT &&
+                    error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS
+                ) {
+                    onDeviceFailed.value = true
+                    runCatching { systemActivity.launch(intent()) }
+                }
+            }
             override fun onReadyForSpeech(params: Bundle?) = Unit
             override fun onBeginningOfSpeech() = Unit
             override fun onRmsChanged(rmsdB: Float) = Unit
@@ -63,15 +85,6 @@ fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
         })
         onDispose { recognizer?.destroy() }
     }
-    val systemActivity = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
-        if (r.resultCode == Activity.RESULT_OK) {
-            r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.takeIf { it.isNotBlank() }?.let(result)
-        }
-    }
-    fun intent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-        .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
     fun listenOnDevice() {
         listening.value = true
         recognizer?.startListening(intent())
@@ -83,7 +96,7 @@ fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
         VoiceInput(
             start = {
                 when {
-                    recognizer == null -> runCatching { systemActivity.launch(intent()) }
+                    recognizer == null || onDeviceFailed.value -> runCatching { systemActivity.launch(intent()) }
                     hasMic(context) -> listenOnDevice()
                     else -> permission.launch(Manifest.permission.RECORD_AUDIO)
                 }

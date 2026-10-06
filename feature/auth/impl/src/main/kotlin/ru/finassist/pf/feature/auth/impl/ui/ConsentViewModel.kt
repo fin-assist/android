@@ -77,7 +77,6 @@ class ConsentViewModel @Inject constructor(
                 )
                 keys.complete(action)
                 session.start(response.userId, TokenPair(response.accessToken, response.refreshToken), registered = true)
-                flow.reset()
                 _registered.value = true
             } catch (e: AppError) {
                 when {

@@ -37,9 +37,10 @@ internal class TokenAuthenticator(
     private var pendingKey: Pair<String, IdempotencyKey>? = null
 
     override fun authenticate(route: Route?, response: Response): Request? {
-        // Session-less endpoints (the NoAuth marker is stripped by the interceptor, so check the path).
-        val path = response.request.url.encodedPath
-        if (path.startsWith("/v1/auth/") && !path.endsWith("/logout")) return null
+        // Auth endpoints are never retried here: most are session-less, and `/logout` carries the tokens of a
+        // session already cleared locally (the store may hold a newer one by now) — the session repository
+        // handles its 401 itself.
+        if (response.request.url.encodedPath.startsWith("/v1/auth/")) return null
         if (responseCount(response) >= 2) return null
 
         val failedAccess = response.request.header("Authorization")?.removePrefix("Bearer ")

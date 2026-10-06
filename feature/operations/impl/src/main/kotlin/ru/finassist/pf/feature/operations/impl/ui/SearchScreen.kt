@@ -39,6 +39,7 @@ import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.RussianDates
 import ru.finassist.pf.core.common.time.countWithNoun
+import ru.finassist.pf.core.designsystem.components.LocalSuppressPopups
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.NoticeTone
 import ru.finassist.pf.core.designsystem.components.PfBottomSheet
@@ -224,7 +225,9 @@ private fun PeriodSheet(
             initialSelectedStartDateMillis = f.from?.toLocalDate()?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
             initialSelectedEndDateMillis = f.to?.toLocalDate()?.minusDays(1)?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
         )
-        DatePickerDialog(
+        // A raw Material dialog: not covered by PfDialog's suppression, so hidden here while the app is locked
+        // (it would otherwise draw above the unlock overlay and take input). The picker state survives.
+        if (!LocalSuppressPopups.current) DatePickerDialog(
             onDismissRequest = { pickDates = false },
             confirmButton = {
                 TextButton(

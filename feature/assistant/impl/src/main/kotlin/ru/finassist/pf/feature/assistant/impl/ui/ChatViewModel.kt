@@ -27,11 +27,9 @@ import ru.finassist.pf.core.api.model.Message
 import ru.finassist.pf.core.api.model.MessageRole
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
-import ru.finassist.pf.core.storage.IdempotencyKeys
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.assistant.api.AssistantRoutes
-import java.security.MessageDigest
 import java.time.OffsetDateTime
 import javax.inject.Inject
 
@@ -80,10 +78,9 @@ data class ChatUiState(
  */
 @HiltViewModel
 class ChatViewModel @Inject constructor(
-    savedState: SavedStateHandle,
+    private val savedState: SavedStateHandle,
     private val api: AssistantApi,
     private val tracker: Tracker,
-    private val keys: IdempotencyKeys,
 ) : ViewModel() {
     private val transferMode: TransferMode =
         TransferMode.entries.firstOrNull { it.code == savedState.toRoute<AssistantRoutes.Chat>().transferMode } ?: TransferMode.WITH
@@ -93,11 +90,26 @@ class ChatViewModel @Inject constructor(
     private val streams = HashMap<String, Job>()
     private val retryKeys = HashMap<String, IdempotencyKey>()
 
-    /** Text + key of the question being sent; reused on retry after a network failure or consent. */
-    private var pending: Pair<String, IdempotencyKey>? = null
+    /**
+     * Text + key of the question being sent, until a final response. «Задать этот вопрос» is one action per
+     * send, not per text: a retry after a dropped connection, consent or process death (kept in [savedState])
+     * reuses the key, while the same text asked again later gets a new key and a new answer.
+     */
+    private var pending: Pair<String, IdempotencyKey>?
+        get() {
+            val text = savedState.get<String>(KEY_PENDING_TEXT) ?: return null
+            val key = savedState.get<String>(KEY_PENDING_KEY) ?: return null
+            return text to IdempotencyKey(key)
+        }
+        set(value) {
+            savedState[KEY_PENDING_TEXT] = value?.first
+            savedState[KEY_PENDING_KEY] = value?.second?.value
+        }
 
     init {
         tracker.track(Events.ASSISTANT_OPENED)
+        // Restored after process death: the unsent question is back in the composer, «Отправить» repeats it.
+        pending?.let { (text, _) -> _state.update { it.copy(draft = text) } }
         load()
     }
 
@@ -106,7 +118,7 @@ class ChatViewModel @Inject constructor(
             _state.update { it.copy(loading = it.items.isEmpty(), loadFailed = false) }
             try {
                 val list = api.listMessages(limit = PAGE)
-                _state.update { it.copy(loading = false, items = list.messages.mapNotNull(::toItem), hasOlder = list.hasOlder, offline = false) }
+                _state.update { it.copy(loading = false, items = list.messages.mapNotNull(::toItem).distinctById(), hasOlder = list.hasOlder, offline = false) }
                 refreshLimit()
                 resumeStreams()
             } catch (e: AppError) {
@@ -123,7 +135,7 @@ class ChatViewModel @Inject constructor(
             _state.update { it.copy(loadingOlder = true) }
             try {
                 val list = api.listMessages(limit = PAGE, beforeId = first.id)
-                _state.update { st -> st.copy(loadingOlder = false, items = list.messages.mapNotNull(::toItem) + st.items, hasOlder = list.hasOlder) }
+                _state.update { st -> st.copy(loadingOlder = false, items = (list.messages.mapNotNull(::toItem) + st.items).distinctById(), hasOlder = list.hasOlder) }
             } catch (e: AppError) {
                 _state.update { it.copy(loadingOlder = false) }
             }
@@ -150,16 +162,13 @@ class ChatViewModel @Inject constructor(
     fun send(voiceText: String? = null) {
         val text = (voiceText ?: _state.value.draft).trim()
         if (text.isEmpty() || _state.value.sending || _state.value.generating) return
-        // «Задать этот вопрос» is one logical action: the key is persisted until a final response, so a repeat
-        // after a dropped connection or process death never creates a second question or spends a second try.
-        val action = "assistant.ask:" + sha256(text + "|" + transferMode.code)
+        val key = pending?.takeIf { it.first == text }?.second ?: IdempotencyKey.random()
+        pending = text to key
+        // Set before the coroutine starts: a double tap must not launch a second send.
+        _state.update { it.copy(sending = true, draft = text, sendFailed = false) }
         viewModelScope.launch {
-            val key = keys.keyFor(action)
-            pending = text to key
-            _state.update { it.copy(sending = true, draft = text, sendFailed = false) }
             try {
                 val r = askWithRetry(key, AskRequest(text = text, transferMode = transferMode))
-                keys.complete(action)
                 pending = null
                 tracker.track(Events.ASSISTANT_QUESTION_SENT)
                 val question = ChatItem.Question(r.question.id, r.question.createdAt, r.question.text ?: text)
@@ -167,7 +176,8 @@ class ChatViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         sending = false, draft = "", offline = false,
-                        items = it.items + question + answer,
+                        // A replayed 201 carries ids the reloaded history may already hold: keep those.
+                        items = (it.items + question + answer).distinctById(),
                         limit = it.limit?.copy(remaining = r.remainingLimit),
                     )
                 }
@@ -178,7 +188,6 @@ class ChatViewModel @Inject constructor(
                     e is AppError.Api && e.code == ErrorCodes.CONSENT_REQUIRED -> _state.update { it.copy(event = ChatEvent.OPEN_CONSENT) }
                     e is AppError.Api && e.code == ErrorCodes.LIMIT_EXCEEDED -> {
                         // Not stored by the server (api.md 7.1): tomorrow the same key would pass, but it is a new day.
-                        keys.complete(action)
                         pending = null
                         _state.update { it.copy(limit = it.limit?.copy(remaining = 0) ?: AssistantLimit(0, 5, e.resetsAt ?: OffsetDateTime.now())) }
                     }
@@ -232,7 +241,7 @@ class ChatViewModel @Inject constructor(
                     s.copy(
                         items = s.items.map { item ->
                             if (item.id == answerId && item is ChatItem.Answer) ChatItem.Answer(r.answerId, item.createdAt, AnswerStatus.GENERATING) else item
-                        },
+                        }.distinctById(),
                         limit = s.limit?.copy(remaining = r.remainingLimit),
                     )
                 }
@@ -261,13 +270,16 @@ class ChatViewModel @Inject constructor(
             var backoff = 1_000L
             try {
                 while (true) {
+                    var terminal = false
                     try {
                         api.streamAnswer(answerId).collect { event ->
                             backoff = 1_000L
+                            if (isTerminal(event)) terminal = true
                             applyEvent(answerId, event)
                         }
                         _state.update { it.copy(offline = false) }
-                        break
+                        // Closed without `done` / `error` (server restart): the answer is still generating.
+                        if (terminal) break
                     } catch (e: AppError) {
                         if (e !is AppError.Offline && e !is AppError.Server) break
                     }
@@ -278,6 +290,12 @@ class ChatViewModel @Inject constructor(
                 if (streams[answerId] === coroutineContext[Job]) streams.remove(answerId)
             }
         }
+    }
+
+    private fun isTerminal(event: AnswerEvent): Boolean = when (event) {
+        is AnswerEvent.Done, is AnswerEvent.Error -> true
+        is AnswerEvent.Snapshot -> event.event.status.effective != AnswerStatus.GENERATING
+        else -> false
     }
 
     private fun applyEvent(answerId: String, event: AnswerEvent) = _state.update { s ->
@@ -319,13 +337,15 @@ class ChatViewModel @Inject constructor(
         MessageRole.UNKNOWN -> null
     }
 
-    private fun sha256(text: String): String =
-        MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
+    /** `LazyColumn` keys by id: a duplicate crashes the list, so the first occurrence wins. */
+    private fun List<ChatItem>.distinctById(): List<ChatItem> = distinctBy { it.id }
 
     companion object {
         private const val PAGE = 20
         private const val IN_PROGRESS_RETRIES = 3
         private const val MAX_LENGTH = 2000
+        private const val KEY_PENDING_TEXT = "chat.pending.text"
+        private const val KEY_PENDING_KEY = "chat.pending.key"
 
         /**
          * `chunk` rule: index equal to the number of blocks starts a new text block; a smaller one appends to

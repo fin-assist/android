@@ -48,10 +48,14 @@ interface SessionRepository {
      */
     suspend fun consumeJustRegistered(): Boolean
 
-    /** Ends the session on the server (best effort) and locally; the app returns to the phone screen. */
+    /**
+     * Ends the session on the server (best effort) and locally; the app returns to the phone screen.
+     * Safe to call from a screen's `viewModelScope`: the work completes even though that scope is cancelled
+     * as soon as the session is gone.
+     */
     suspend fun signOut(reason: String? = null)
 
-    /** Clears the session locally only (account deleted on the server, tokens revoked). */
+    /** Clears the session locally only (account deleted on the server, tokens revoked). Cancellation-safe, as [signOut]. */
     suspend fun clearLocal(reason: String? = null)
 
     /** Why the last sign-out happened — for the notice on the phone screen; consumed on read. */

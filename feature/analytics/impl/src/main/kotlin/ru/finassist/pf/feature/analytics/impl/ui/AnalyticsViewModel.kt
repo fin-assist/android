@@ -147,7 +147,21 @@ class AnalyticsViewModel @Inject constructor(
                     load(quiet = true)
                 }
             } catch (e: AppError) {
-                _state.update { it.copy(loading = false, offline = it.data == null) }
+                // The screen keeps showing the previous data: return the parameters to what it shows, or the
+                // segment, the chip and the transfers sheet would describe a request that never succeeded.
+                _state.value.data?.params?.let { p ->
+                    period = p.period
+                    date = p.date
+                    transferMode = allowedMode(p.transferMode)
+                }
+                _state.update {
+                    it.copy(
+                        loading = false,
+                        offline = it.data == null,
+                        snackbar = if (quiet || it.data == null) it.snackbar
+                        else if (e is AppError.Offline) "Нет сети — показываем прежний период" else "Не получилось обновить. Попробуйте ещё раз",
+                    )
+                }
             }
         }
     }
