@@ -360,7 +360,7 @@ class AnalyticsEngine(
         val debits = window.flatMap { m -> scope.inDays(visible, m.atDay(1), m.plusMonths(1).atDay(1)) }
             .filter { it.isDebit && !it.isOwnTransferCategory && it.category.id != catalog.transfers.id }
         val dismissed = dismissedPayments()
-        val items = debits.groupBy { it.name }.mapNotNull { (name, list) ->
+        return debits.groupBy { it.name }.mapNotNull { (name, list) ->
             val perMonth = list.groupBy { YearMonth.from(scope.dayOf(it)) }
             if (perMonth.size < window.size || perMonth.values.any { it.size > 2 }) return@mapNotNull null
             val amounts = list.map { it.amountMinor }.sorted()
