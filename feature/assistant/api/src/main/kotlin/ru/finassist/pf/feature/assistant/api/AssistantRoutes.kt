@@ -12,7 +12,12 @@ object AssistantRoutes {
     @Serializable
     data class Chat(val transferMode: String? = null)
 
-    /** Consent to pass data to the assistant (from the chat or the profile switch). */
+    /**
+     * Consent to pass data to the assistant (from the chat or the profile switch). On success the previous
+     * screen receives [CONSENT_RESULT] = "true" through the navigator's result mechanism.
+     */
     @Serializable
     data object Consent
+
+    const val CONSENT_RESULT = "assistant.consent"
 }
