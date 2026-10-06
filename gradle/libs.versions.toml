@@ -17,6 +17,7 @@ composeBom = "2025.03.01"
 datastore = "1.1.4"
 biometric = "1.1.0"
 browser = "1.8.0"
+fragment = "1.8.6"
 
 # Kotlin libraries
 coroutines = "1.10.1"
@@ -54,6 +55,7 @@ androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navig
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
+androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
 
 # Compose (versions come from the BOM)
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
