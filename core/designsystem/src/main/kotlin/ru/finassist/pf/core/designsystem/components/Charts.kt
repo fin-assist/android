@@ -87,11 +87,15 @@ fun PfBarChart(
     // Per-bar progress 0..1: intro animates from 0, value changes animate the target height.
     val targets = points.map { (it.value ?: 0f) / maxAbs }
     val anims = remember(chartId, points.size) { points.map { Animatable(if (playIntro) 0f else (it.value ?: 0f) / maxAbs) } }
+    // The intro runs on the first targets only; later changes (even through zero) are 250 ms transitions.
+    val introPending = remember(chartId) { booleanArrayOf(playIntro) }
     LaunchedEffect(targets) {
+        val intro = introPending[0]
+        introPending[0] = false
         anims.forEachIndexed { i, anim ->
             if (i >= targets.size) return@forEachIndexed
             launch {
-                if (playIntro && anim.value == 0f && targets[i] != 0f) {
+                if (intro && targets[i] != 0f) {
                     delay(i * PfMotion.INTRO_STAGGER_MS.toLong())
                     anim.animateTo(targets[i], tween(PfMotion.INTRO_DURATION_MS, easing = PfMotion.EmphasizedDecelerate))
                 } else if (reduced) {
@@ -140,7 +144,8 @@ fun PfBarChart(
                             drawRoundRect(color, topLeft = Offset(stroke / 2, top + stroke / 2), size = Size(size.width - stroke, max(barHeight - stroke, 0f)), cornerRadius = radius, style = Stroke(stroke))
                             val fill = p.partialFill.coerceIn(0.25f, 0.75f).let { (it * 4).roundToInt() / 4f }
                             val fillHeight = barHeight * fill
-                            drawRoundRect(color, topLeft = Offset(0f, baselineY - fillHeight), size = Size(size.width, fillHeight), cornerRadius = radius)
+                            val fillTop = if (progress >= 0f) baselineY - fillHeight else baselineY
+                            drawRoundRect(color, topLeft = Offset(0f, fillTop), size = Size(size.width, fillHeight), cornerRadius = radius)
                         } else {
                             drawRoundRect(color, topLeft = Offset(0f, top), size = Size(size.width, barHeight), cornerRadius = radius)
                         }

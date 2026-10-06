@@ -84,8 +84,9 @@ class MockBackend(
 
     fun now(): OffsetDateTime = clock.now()
 
-    fun coverage(): Coverage = Coverage(
-        uploads.filter { it.isDone }.map { it.coverageFrom to it.coverageTo },
+    /** [including] — an upload whose import is finishing right now (not yet marked done). */
+    fun coverage(including: Upload? = null): Coverage = Coverage(
+        uploads.filter { it.isDone || it === including }.map { it.coverageFrom to it.coverageTo },
         Clock.MOSCOW,
         now().atZoneSameInstant(Clock.MOSCOW).toLocalDate(),
     )

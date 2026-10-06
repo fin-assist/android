@@ -134,8 +134,8 @@ internal class HttpAuthApi(private val service: AuthService, private val sse: Ss
     override suspend fun refreshTokens(key: IdempotencyKey, refreshToken: String): TokenPair =
         call { service.refreshTokens(key.value, RefreshTokenRequest(refreshToken)) }
 
-    override suspend fun logout(refreshToken: String) {
-        call { service.logout(RefreshTokenRequest(refreshToken)) }
+    override suspend fun logout(accessToken: String, refreshToken: String) {
+        call { service.logout("Bearer $accessToken", RefreshTokenRequest(refreshToken)) }
     }
 
     override suspend fun getConsentDocument(type: ConsentType): ConsentDocument =

@@ -95,8 +95,9 @@ fun ChatScreen(
             vm.onConsentGranted()
         }
     }
-    // Keep the newest message in view as the thread grows or an answer streams in.
-    LaunchedEffect(state.items.size, (state.items.lastOrNull() as? ChatItem.Answer)?.blocks?.size) {
+    // Keep the newest message in view as the thread grows at the bottom or an answer streams in. Keyed by the
+    // last item, not the count: «Показать раньше» prepends history and must keep the reader where they are.
+    LaunchedEffect(state.items.lastOrNull()?.id, (state.items.lastOrNull() as? ChatItem.Answer)?.blocks?.size) {
         if (state.items.isNotEmpty()) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1)
     }
     val voice = rememberVoiceInput(onResult = { vm.send(voiceText = it) })
@@ -257,7 +258,8 @@ private fun BlockView(block: Block, chartId: String) {
                                 key = p.range.from.toString(),
                                 label = RussianDates.monthShort(ym.month),
                                 spokenLabel = RussianDates.monthTitle(ym),
-                                value = p.value?.let { (it / max).toFloat().coerceAtLeast(0f) },
+                                // Signed: refunds can make a period negative; the chart draws a centred baseline then.
+                                value = p.value?.let { (it / max).toFloat() },
                                 display = display,
                                 partial = p.coverage.effective == Coverage.PARTIAL,
                                 note = p.dataTo?.takeIf { p.coverage.effective == Coverage.PARTIAL }?.let { "по ${it.dayOfMonth}-е" },

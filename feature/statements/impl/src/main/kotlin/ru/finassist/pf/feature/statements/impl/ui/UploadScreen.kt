@@ -97,9 +97,13 @@ fun UploadScreen(
         ) {
             when (val phase = state.phase) {
                 UploadPhase.Loading -> Unit
-                UploadPhase.Disabled -> PfEmptyState(PfIcons.FILE_TEXT, "Загрузка выписки временно недоступна", "Попробуйте позже — операции и аналитика работают как обычно")
+                // First run has no back arrow: these states must offer a way on.
+                UploadPhase.Disabled -> PfEmptyState(PfIcons.FILE_TEXT, "Загрузка выписки временно недоступна", "Попробуйте позже — операции и аналитика работают как обычно") {
+                    if (firstRun) PfButton("Продолжить", onClick = onLater, variant = ButtonVariant.PRIMARY)
+                }
                 UploadPhase.Offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
                     PfButton("Повторить", onClick = vm::load, variant = ButtonVariant.PRIMARY)
+                    if (firstRun) PfLink("Загружу позже", onClick = onLater)
                 }
                 is UploadPhase.Guide -> Guide(
                     config = phase.config,

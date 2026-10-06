@@ -365,12 +365,20 @@ class AnalyticsEngine(
             )
         }.sortedByDescending { it.monthlyAmount.minor }
         val status = if (base.size >= 3) MetricStatus.READY else MetricStatus.TENTATIVE
+        regularNames = items.map { it.title }.toSet()
         if (items.isEmpty()) return RegularPaymentsCard(status = MetricStatus.NONE, basis = basis)
         return RegularPaymentsCard(
             status = status, basis = basis, value = Money(items.sumOf { it.monthlyAmount.minor }), count = items.size, items = items,
             filters = OperationsFilter(from = periodRange.from, to = periodRange.to, transferMode = mode, selection = SELECTION_REGULAR_ALL, selectionName = "Регулярные платежи"),
         )
     }
+
+    /**
+     * Merchants of the last computed «Подписки и регулярные платежи» card: `s_regular_all` means exactly these,
+     * so the search matches the card's count and total.
+     */
+    @Volatile var regularNames: Set<String> = emptySet()
+        private set
 
     /** Which operations a `s_regular_*` selection means: debits with that merchant name. */
     fun regularPaymentName(selection: String): String? {

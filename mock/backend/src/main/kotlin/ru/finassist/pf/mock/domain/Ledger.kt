@@ -99,7 +99,8 @@ class Ledger(private val catalog: Catalog) {
         gone.forEach { op ->
             operations.remove(op.key)
             byId.remove(op.id)
-            op.pairId?.let { pairs.remove(it) }
+            // The surviving side of a pair (kept by another upload) must not point at the removed pair.
+            op.pairId?.let { id -> pairs.remove(id)?.let { p -> p.debit.pairId = null; p.credit.pairId = null } }
         }
         applyRules()
     }

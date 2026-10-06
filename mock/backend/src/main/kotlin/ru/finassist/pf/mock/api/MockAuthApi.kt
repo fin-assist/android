@@ -124,7 +124,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         }
     }
 
-    override suspend fun logout(refreshToken: String) {
+    override suspend fun logout(accessToken: String, refreshToken: String) {
         backend.simulateNetwork()
         backend.mutex.withLock { refreshTokens.remove(refreshToken) }
     }

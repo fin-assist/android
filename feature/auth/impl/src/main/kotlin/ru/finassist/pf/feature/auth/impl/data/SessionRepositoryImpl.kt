@@ -61,7 +61,11 @@ class SessionRepositoryImpl @Inject constructor(
                     signOutReason.compareAndSet(null, AuthRoutes.Phone.REASON_EXPIRED)
                     resetIdentity()
                 }
-                if (!wasSignedIn && signedIn) syncTimeZone()
+                if (!wasSignedIn && signedIn) {
+                    // Also on a cold start with a restored session: flags targeting and analytics need the user.
+                    applyIdentity(s!!.userId)
+                    syncTimeZone()
+                }
                 wasSignedIn = signedIn
             }
         }
@@ -86,9 +90,7 @@ class SessionRepositoryImpl @Inject constructor(
         // Persisted: the first-run upload step must survive process death between registration and passcode.
         if (registered) dataStore.edit { it[KEY_PENDING_FIRST_UPLOAD] = true }
         tokenStore.save(TokenStore.Session(id, tokens))
-        flags.setUser(id)
-        tracker.setUserId(id)
-        crashReporter.setUserId(id)
+        applyIdentity(id)
         tracker.track(if (registered) Events.AUTH_REGISTERED else Events.AUTH_VERIFIED)
     }
 
@@ -103,10 +105,10 @@ class SessionRepositoryImpl @Inject constructor(
      * saved refresh token, best effort (a slow network must not keep a locked-out user inside the app).
      */
     override suspend fun signOut(reason: String?) {
-        val refresh = tokenStore.current()?.tokens?.refreshToken
+        val tokens = tokenStore.current()?.tokens
         clearLocal(reason)
         tracker.track(Events.AUTH_LOGGED_OUT)
-        if (refresh != null) scope.launch { runCatching { authApi.logout(refresh) } }
+        if (tokens != null) scope.launch { runCatching { authApi.logout(tokens.accessToken, tokens.refreshToken) } }
     }
 
     override suspend fun clearLocal(reason: String?) {
@@ -119,6 +121,12 @@ class SessionRepositoryImpl @Inject constructor(
         } finally {
             signingOut = false
         }
+    }
+
+    private suspend fun applyIdentity(userId: String) {
+        flags.setUser(userId)
+        tracker.setUserId(userId)
+        crashReporter.setUserId(userId)
     }
 
     private suspend fun resetIdentity() {

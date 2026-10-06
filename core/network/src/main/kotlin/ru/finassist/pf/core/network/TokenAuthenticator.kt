@@ -55,8 +55,10 @@ internal class TokenAuthenticator(
                     ?: IdempotencyKey.random().also { pendingKey = refreshToken to it }
                 try {
                     val pair = refresh(key, refreshToken)
+                    // The key is retired only once the new pair is stored: if saving fails, the next attempt
+                    // repeats the same refresh with the same key and gets the same pair back.
+                    if (!tokenStore.updateTokens(refreshToken, pair)) return@withLock null
                     pendingKey = null
-                    tokenStore.updateTokens(pair)
                     pair.accessToken
                 } catch (e: AppError) {
                     when {

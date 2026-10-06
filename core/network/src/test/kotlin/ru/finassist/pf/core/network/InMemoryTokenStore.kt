@@ -10,6 +10,11 @@ internal class InMemoryTokenStore(initial: TokenStore.Session? = null) : TokenSt
     override val session: Flow<TokenStore.Session?> = state
     override suspend fun current(): TokenStore.Session? = state.value
     override suspend fun save(session: TokenStore.Session) { state.value = session }
-    override suspend fun updateTokens(tokens: TokenPair) { state.value = state.value?.copy(tokens = tokens) }
+    override suspend fun updateTokens(expectedRefreshToken: String, tokens: TokenPair): Boolean {
+        val s = state.value ?: return false
+        if (s.tokens.refreshToken != expectedRefreshToken) return false
+        state.value = s.copy(tokens = tokens)
+        return true
+    }
     override suspend fun clear() { state.value = null }
 }

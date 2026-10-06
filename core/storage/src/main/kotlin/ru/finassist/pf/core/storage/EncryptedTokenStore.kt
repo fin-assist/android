@@ -75,9 +75,20 @@ class EncryptedTokenStore @Inject constructor(
         dataStore.edit { it[KEY_BLOB] = blob }
     }
 
-    override suspend fun updateTokens(tokens: TokenPair) {
-        val existing = current() ?: return
-        save(existing.copy(tokens = tokens))
+    override suspend fun updateTokens(expectedRefreshToken: String, tokens: TokenPair): Boolean {
+        var updated = false
+        // One DataStore transaction: read, check, write — serialized with save() and clear().
+        dataStore.edit { prefs ->
+            val existing = prefs[KEY_BLOB]?.let(::decode) ?: return@edit
+            if (existing.tokens.refreshToken != expectedRefreshToken) return@edit
+            prefs[KEY_BLOB] = try {
+                encode(existing.copy(tokens = tokens))
+            } catch (e: GeneralSecurityException) {
+                throw AppError.Unknown(e)
+            }
+            updated = true
+        }
+        return updated
     }
 
     override suspend fun clear() {

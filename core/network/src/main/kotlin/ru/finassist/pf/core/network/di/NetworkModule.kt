@@ -64,7 +64,8 @@ internal object NetworkModule {
     fun plainClient(@Named("httpLogging") logging: Boolean): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
-        .addInterceptor(RequestIdInterceptor())
+        // Network interceptor: runs per attempt (auth retry, redirect), so every attempt gets a fresh X-Request-Id.
+        .addNetworkInterceptor(RequestIdInterceptor())
         .apply { if (logging) addInterceptor(HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BASIC)) }
         .build()
 

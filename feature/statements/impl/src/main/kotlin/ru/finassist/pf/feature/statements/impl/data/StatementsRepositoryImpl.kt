@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.ImportResult
 import ru.finassist.pf.feature.statements.api.StatementsEvent
 import ru.finassist.pf.feature.statements.api.StatementsRepository
@@ -21,6 +22,7 @@ import javax.inject.Singleton
 @Singleton
 class StatementsRepositoryImpl @Inject constructor(
     private val dataStore: DataStore<Preferences>,
+    private val tokenStore: TokenStore,
 ) : StatementsRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _events = MutableSharedFlow<StatementsEvent>(extraBufferCapacity = 8)
@@ -29,15 +31,22 @@ class StatementsRepositoryImpl @Inject constructor(
 
     override fun lastResult(uploadId: String): ImportResult? = results[uploadId]
 
+    /** Keyed by user: hints of one account must never show up for another one signing in on this phone. */
     override suspend fun consumeFirstImportHints(): Boolean {
-        val pending = dataStore.data.first()[KEY_HINTS] == true
-        if (pending) dataStore.edit { it.remove(KEY_HINTS) }
+        val key = hintsKey() ?: return false
+        val pending = dataStore.data.first()[key] == true
+        if (pending) dataStore.edit { it.remove(key) }
         return pending
     }
 
+    private suspend fun hintsKey() = tokenStore.current()?.userId?.takeIf { it.isNotEmpty() }
+        ?.let { booleanPreferencesKey("statements.first_import_hints.$it") }
+
     fun importCompleted(uploadId: String, result: ImportResult) {
         results[uploadId] = result
-        if (result.isFirstImport && result.newCount > 0) scope.launch { dataStore.edit { it[KEY_HINTS] = true } }
+        if (result.isFirstImport && result.newCount > 0) {
+            scope.launch { hintsKey()?.let { key -> dataStore.edit { it[key] = true } } }
+        }
         _events.tryEmit(StatementsEvent.ImportCompleted(uploadId, result))
     }
 
@@ -46,7 +55,4 @@ class StatementsRepositoryImpl @Inject constructor(
         _events.tryEmit(StatementsEvent.UploadDeleted(uploadId))
     }
 
-    private companion object {
-        val KEY_HINTS = booleanPreferencesKey("statements.first_import_hints")
-    }
 }

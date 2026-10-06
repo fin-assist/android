@@ -1,6 +1,8 @@
 package ru.finassist.pf.core.designsystem.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -266,7 +268,14 @@ fun PfBottomSheet(
             Text(title, style = PfTheme.type.title2, color = c.text, modifier = Modifier.weight(1f).semantics { heading() })
             PfIconButton(PfIcons.X, contentDescription = "Закрыть", onClick = onDismiss, tint = c.textMuted)
         }
-        Column(Modifier.fillMaxWidth().padding(bottom = PfTheme.dimens.space4)) { content() }
+        // Content scrolls between the header and the footer; the footer stays reachable on long lists.
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = PfTheme.dimens.space4),
+        ) { content() }
         if (footer != null) {
             Column(Modifier.fillMaxWidth().padding(horizontal = PfTheme.dimens.space5)) { footer() }
         }

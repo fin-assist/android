@@ -206,7 +206,8 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
             PfInsightCard(PfIcons.BAR_CHART, "График по месяцам", state = InsightState.LOCKED, lockedText = AnalyticsTexts.lock(chart.lock, a.state))
         } else {
             val points = chart.points!!
-            val maxValue = points.mapNotNull { it.expense?.minor }.maxOrNull()?.coerceAtLeast(1) ?: 1
+            // Expenses are signed (refunds can exceed purchases): scale by the largest magnitude, keep the sign.
+            val maxValue = points.mapNotNull { it.expense?.minor?.let { m -> kotlin.math.abs(m) } }.maxOrNull()?.coerceAtLeast(1) ?: 1
             // Month mode highlights the selected month; quarter and year — the last month of the period.
             val selected = points.indexOfFirst { it.month == params.date.value }
             PfCard {
@@ -219,7 +220,7 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
                             key = p.month,
                             label = RussianDates.monthShort(ym.month),
                             spokenLabel = RussianDates.monthTitle(ym) + (note?.let { ", $it" } ?: ""),
-                            value = p.expense?.minor?.toFloat()?.div(maxValue)?.coerceAtLeast(0f),
+                            value = p.expense?.minor?.toFloat()?.div(maxValue),
                             display = p.expense?.format() ?: "нет данных",
                             partial = p.coverage.effective == Coverage.PARTIAL,
                             note = note,
@@ -234,12 +235,12 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
                     AnalyticsTexts.typical(expense?.typical),
                 ).forEach { Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = d.space2)) }
             }
-            // «Доходы минус расходы по месяцам» as a share of income (api.md 6.1). Bars grow only for positive
-            // shares; a month where more was spent than earned shows its negative value with an empty bar.
+            // «Доходы минус расходы по месяцам» as a share of income (api.md 6.1); a month where more was spent than
+            // earned goes below the baseline.
             PfSectionTitle("Доходы минус расходы по месяцам")
             PfCard {
                 val shares = points.map { AnalyticsTexts.balanceShare(it) }
-                val maxShare = shares.filterNotNull().maxOrNull()?.takeIf { it > 0 } ?: 1.0
+                val maxShare = shares.filterNotNull().maxOfOrNull { kotlin.math.abs(it) }?.takeIf { it > 0 } ?: 1.0
                 PfBarChart(
                     chartId = "analytics.balance.monthly",
                     points = points.mapIndexed { i, p ->
@@ -250,7 +251,7 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
                             key = p.month,
                             label = RussianDates.monthShort(ym.month),
                             spokenLabel = RussianDates.monthTitle(ym),
-                            value = share?.let { (it / maxShare).toFloat().coerceAtLeast(0f) },
+                            value = share?.let { (it / maxShare).toFloat() },
                             display = display,
                             partial = p.coverage.effective == Coverage.PARTIAL,
                             note = AnalyticsTexts.barNote(p),
@@ -473,7 +474,12 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsViewModel) {
         AnalyticsSheet.PERIODS -> PfBottomSheet("Период", onDismiss = { vm.openSheet(null) }) {
             val current = state.data?.params?.date
             val periods = state.periods
-            if (periods == null) {
+            if (state.periodsFailed) {
+                Column(Modifier.padding(PfTheme.dimens.space5)) {
+                    Text("Не получилось загрузить периоды", style = PfTheme.type.body, color = PfTheme.colors.textMuted)
+                    PfLink("Повторить", onClick = { vm.openSheet(AnalyticsSheet.PERIODS) })
+                }
+            } else if (periods == null) {
                 Text("Загружаем…", style = PfTheme.type.body, color = PfTheme.colors.textMuted, modifier = Modifier.padding(PfTheme.dimens.space5))
             } else {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {

@@ -70,7 +70,7 @@ class Search(private val ledger: Ledger, private val catalog: Catalog, private v
         return when {
             selection == AnalyticsEngine.SELECTION_UNCATEGORIZED -> op.isRefund && op.refundTarget == null
             selection == AnalyticsEngine.SELECTION_BANK_FEES -> op.isDebit && op.category.id == catalog.bankFees.id
-            selection == AnalyticsEngine.SELECTION_REGULAR_ALL -> op.isDebit
+            selection == AnalyticsEngine.SELECTION_REGULAR_ALL -> op.isDebit && op.name in analytics.regularNames
             selection.startsWith("s_regular_") -> op.isDebit && op.name == (analytics.regularPaymentName(selection) ?: throw UnknownSelection(selection))
             selection.startsWith("s_merchant_") -> {
                 val slug = selection.removePrefix("s_merchant_")

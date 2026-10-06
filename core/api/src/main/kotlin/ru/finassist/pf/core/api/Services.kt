@@ -55,7 +55,11 @@ interface AuthApi {
 
     suspend fun refreshTokens(key: IdempotencyKey, refreshToken: String): TokenPair
 
-    suspend fun logout(refreshToken: String)
+    /**
+     * `POST /v1/auth/logout` with the session being ended. Both tokens are passed explicitly: the app clears
+     * the local session first and sends logout afterwards, when the store no longer has them.
+     */
+    suspend fun logout(accessToken: String, refreshToken: String)
 
     suspend fun getConsentDocument(type: ConsentType): ConsentDocument
 }

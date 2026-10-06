@@ -36,3 +36,13 @@ their own chip.
 1. Add a constant to `FlagRegistry` in `core/toggles` with its default.
 2. Add a row here.
 3. Read it with `FeatureFlags.isEnabled(Flag.X)` at the screen boundary (view model init or `FeatureEntry`).
+
+## Known limitation: account switch and RuStore cache
+
+RuStore Remote Config serves its persisted config and syncs in the background (default interval 15 minutes).
+After sign-in, sign-out or an account switch the provider asks for the config with the new `account`, but the
+SDK may still answer from the cache fetched for the previous identity until its next sync. Toggles keyed by
+user cohort can therefore lag up to one sync interval after an account change. If that matters for an
+experiment, switch the client to `UpdateBehaviour.Actual` (every request goes to the server; cold start then
+uses code defaults until the first answer).
+
