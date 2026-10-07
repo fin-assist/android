@@ -1,12 +1,11 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -51,7 +50,7 @@ import java.time.ZoneId
 fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars)) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
         PfPageHeader("Операция", onBack = onBack)
         val op = state.operation
         when {

@@ -25,8 +25,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ru.finassist.pf.core.designsystem.components.PfTabBar
-import ru.finassist.pf.core.designsystem.components.TabItem
-import ru.finassist.pf.core.designsystem.icons.PfIcons
+import ru.finassist.pf.core.designsystem.components.PfMainTabs
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.core.navigation.FeatureEntry
 import ru.finassist.pf.core.navigation.NavControllerNavigator
@@ -122,12 +121,7 @@ private fun AuthLayer(entries: Set<FeatureEntry>, session: SessionRepository) {
     }
 }
 
-private val tabs = listOf(
-    TabItem(PfIcons.LIST, "Операции"),
-    TabItem(PfIcons.BAR_CHART, "Аналитика"),
-    TabItem(PfIcons.USER, "Профиль"),
-)
-
+/** Routes of [PfMainTabs], by index. */
 private val tabRoutes: List<Any> = listOf(OperationsRoutes.Feed, AnalyticsRoutes.Home, ProfileRoutes.Home)
 
 @Composable
@@ -162,7 +156,7 @@ private fun MainLayer(
         }
         if (activeTab >= 0) {
             PfTabBar(
-                items = tabs,
+                items = PfMainTabs,
                 active = activeTab,
                 onSelect = { index -> if (index != activeTab) navigator.openTab(tabRoutes[index]) },
             )

@@ -1,12 +1,11 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -163,7 +162,7 @@ fun HistoryScreen(
         vm.load()
         onPauseOrDispose { vm.pause() }
     }
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars)) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
         PfPageHeader("История загрузок", onBack = onBack)
         val list = state.list
         when {

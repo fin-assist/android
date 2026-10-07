@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -8,10 +9,8 @@ import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -101,7 +100,7 @@ fun UnreadLinesScreen(onBack: () -> Unit, vm: UnreadLinesViewModel = hiltViewMod
     val context = LocalContext.current
     val d = PfTheme.dimens
     var copied by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars)) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
         PfPageHeader("Непрочитанные строки", onBack = onBack)
         when {
             state.loading -> Unit

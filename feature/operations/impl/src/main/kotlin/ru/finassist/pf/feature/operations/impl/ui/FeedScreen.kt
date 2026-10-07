@@ -54,12 +54,31 @@ fun FeedScreen(
     vm: FeedViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val d = PfTheme.dimens
     val zone = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zone) }
     val listState = rememberLazyListState()
     LoadMoreEffect(listState, cursor = state.nextBefore, onLoadMore = vm::loadMore)
+    FeedContent(
+        state = state, today = today, zone = zone, listState = listState,
+        onOpenSearch = onOpenSearch, onOpenOperation = onOpenOperation, onUpload = onUpload,
+        onRetry = vm::load, onLoadMore = vm::loadMore,
+    )
+}
 
+/** The feed drawn from a ready state: no ViewModel, so design-check snapshots render it with mockup data. */
+@Composable
+internal fun FeedContent(
+    state: FeedUiState,
+    today: LocalDate,
+    zone: ZoneId,
+    onOpenSearch: () -> Unit,
+    onOpenOperation: (id: String) -> Unit,
+    onUpload: () -> Unit,
+    onRetry: () -> Unit,
+    onLoadMore: () -> Unit,
+    listState: LazyListState = rememberLazyListState(),
+) {
+    val d = PfTheme.dimens
     Column(Modifier.fillMaxSize()) {
         PfTabHeader("Операции") {
             PfIconButton(PfIcons.SEARCH, contentDescription = "Поиск операций", onClick = onOpenSearch)
@@ -67,7 +86,7 @@ fun FeedScreen(
         when {
             state.loading -> Unit
             state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
-                PfButton("Повторить", onClick = vm::load, variant = ButtonVariant.PRIMARY)
+                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
             }
             state.isEmpty -> PfEmptyState(
                 PfIcons.LIST,
@@ -107,7 +126,7 @@ fun FeedScreen(
                     } else if (state.moreFailed) {
                         item(key = "more-failed") {
                             Box(Modifier.fillMaxWidth().padding(vertical = d.space3), contentAlignment = Alignment.Center) {
-                                PfLink("Не загрузилось — повторить", onClick = vm::loadMore)
+                                PfLink("Не загрузилось — повторить", onClick = onLoadMore)
                             }
                         }
                     } else if (state.nextBefore == null && state.items.isNotEmpty()) {

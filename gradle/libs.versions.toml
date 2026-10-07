@@ -37,6 +37,8 @@ tink = "1.16.0"
 
 # Test
 junit4 = "4.13.2"
+robolectric = "4.14.1"
+roborazzi = "1.43.1"
 turbine = "1.2.0"
 androidxTestExt = "1.2.1"
 espresso = "3.6.1"
@@ -102,6 +104,9 @@ tink-android = { group = "com.google.crypto.tink", name = "tink-android", versio
 
 # Test
 junit4 = { group = "junit", name = "junit", version.ref = "junit4" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+roborazzi = { group = "io.github.takahirom.roborazzi", name = "roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { group = "io.github.takahirom.roborazzi", name = "roborazzi-compose", version.ref = "roborazzi" }
 kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.ref = "kotlin" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExt" }

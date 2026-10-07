@@ -1,18 +1,17 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.DatePickerDialog
@@ -70,7 +69,7 @@ fun SearchScreen(onBack: () -> Unit, onOpenOperation: (String) -> Unit, vm: Sear
     val zone = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zone) }
 
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars).imePadding()) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.statusBars).imePadding()) {
         Row(Modifier.fillMaxWidth().padding(start = d.space2, end = d.space5, top = d.space2), verticalAlignment = Alignment.CenterVertically) {
             PfIconButton(PfIcons.ARROW_LEFT, contentDescription = "Назад", onClick = onBack)
             PfSearchField(f.q.orEmpty(), vm::setQuery, placeholder = "Описание, категория, сумма", modifier = Modifier.weight(1f))

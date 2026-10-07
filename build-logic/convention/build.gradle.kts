@@ -45,6 +45,10 @@ gradlePlugin {
             id = "pf.feature.impl"
             implementationClass = "FeatureImplConventionPlugin"
         }
+        register("screenshots") {
+            id = "pf.screenshots"
+            implementationClass = "ScreenshotsConventionPlugin"
+        }
         register("moduleRules") {
             id = "pf.module.rules"
             implementationClass = "ModuleRulesPlugin"

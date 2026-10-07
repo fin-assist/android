@@ -16,6 +16,7 @@ core/navigation           FeatureEntry, Navigator, shared route arguments
 core/toggles              FeatureFlags interface + flag registry with code defaults (JVM)
 core/tracking             Tracker / CrashReporter interfaces, event naming (JVM)
 core/storage              DataStore preferences + Tink-encrypted TokenStore (both flavors)
+core/screenshot-testing   design-check snapshot harness (Robolectric + Roborazzi); test-only dependency via `pf.screenshots`
 providers/toggles-local   flags from a JSON asset + debug overrides (mock flavor)
 providers/tracking-log    logcat tracker (mock flavor)
 providers/toggles-rustore RuStore Remote Config (prod, stage 8)

@@ -74,7 +74,7 @@ class AnalyticsViewModel @Inject constructor(
     operations: OperationsRepository,
     private val flags: FeatureFlags,
     private val tracker: Tracker,
-) : ViewModel() {
+) : ViewModel(), AnalyticsHandlers {
     private var period: PeriodTypeCode = PeriodTypeCode.MONTH
     private var date: PeriodKey? = null
     private var transferMode: TransferMode = TransferMode.WITH
@@ -125,7 +125,7 @@ class AnalyticsViewModel @Inject constructor(
         }
     }
 
-    fun load(quiet: Boolean = false) {
+    override fun load(quiet: Boolean) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             if (!quiet) _state.update { it.copy(loading = it.data == null, offline = false) }
@@ -171,21 +171,21 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     /** Segmented control: keeps the current date so «Месяц → Квартал» opens the quarter containing it. */
-    fun setPeriodType(type: PeriodTypeCode) {
+    override fun setPeriodType(type: PeriodTypeCode) {
         if (type == period) return
         period = type
         tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to type.code))
         load()
     }
 
-    fun goTo(key: PeriodKey) {
+    override fun goTo(key: PeriodKey) {
         date = key
         _state.update { it.copy(sheet = null) }
         tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to period.code))
         load()
     }
 
-    fun setTransferMode(mode: TransferMode) {
+    override fun setTransferMode(mode: TransferMode) {
         _state.update { it.copy(sheet = null) }
         if (mode == transferMode) return
         transferMode = mode
@@ -193,18 +193,18 @@ class AnalyticsViewModel @Inject constructor(
         load()
     }
 
-    fun currentTransferMode(): TransferMode = transferMode
+    override fun currentTransferMode(): TransferMode = transferMode
 
     /** With `analytics.filter.transfers` off every request uses `with` (docs/flags.md), whatever a chip says. */
     private fun allowedMode(mode: TransferMode): TransferMode =
         if (_state.value.blocks.transfersFilter) mode.effective else TransferMode.WITH
 
     /** Next hint, or none: «Не показывать» skips the rest too. */
-    fun nextHint(stop: Boolean) = _state.update {
+    override fun nextHint(stop: Boolean) = _state.update {
         it.copy(hint = if (stop || it.hint == AnalyticsHint.ASK || !it.blocks.assistant) null else AnalyticsHint.ASK)
     }
 
-    fun openSheet(sheet: AnalyticsSheet?) {
+    override fun openSheet(sheet: AnalyticsSheet?) {
         _state.update { it.copy(sheet = sheet, periods = if (sheet == AnalyticsSheet.PERIODS) null else it.periods, periodsFailed = false) }
         periodsJob?.cancel()
         if (sheet == AnalyticsSheet.PERIODS) {
@@ -222,10 +222,10 @@ class AnalyticsViewModel @Inject constructor(
         }
     }
 
-    fun toggleAllCategories() = _state.update { it.copy(allExpenseCategories = !it.allExpenseCategories) }
+    override fun toggleAllCategories() = _state.update { it.copy(allExpenseCategories = !it.allExpenseCategories) }
 
     /** «Не подписка» (api.md 6.3): the payment disappears and the total is recalculated. */
-    fun dismissRegular(id: String) {
+    override fun dismissRegular(id: String) {
         viewModelScope.launch {
             try {
                 api.dismissRegularPayment(id)
@@ -238,9 +238,9 @@ class AnalyticsViewModel @Inject constructor(
         }
     }
 
-    fun consumeSnackbar() = _state.update { it.copy(snackbar = null) }
+    override fun consumeSnackbar() = _state.update { it.copy(snackbar = null) }
 
-    fun onTileOpened(tile: String) = tracker.track(Events.ANALYTICS_TILE_OPENED, mapOf("tile" to tile))
+    override fun onTileOpened(tile: String) = tracker.track(Events.ANALYTICS_TILE_OPENED, mapOf("tile" to tile))
 
     private companion object {
         const val RECALC_POLL_MS = 3_000L

@@ -1,19 +1,17 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -57,8 +55,8 @@ private fun AuthScaffold(content: @Composable androidx.compose.foundation.layout
     Column(
         Modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .windowInsetsPadding(WindowInsets.navigationBars)
+            .windowInsetsPadding(PfInsets.statusBars)
+            .windowInsetsPadding(PfInsets.navigationBars)
             .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(start = PfTheme.dimens.space5, end = PfTheme.dimens.space5, top = PfTheme.dimens.space6, bottom = PfTheme.dimens.space4),
@@ -258,7 +256,7 @@ fun ConsentScreen(onBack: () -> Unit, onExpired: () -> Unit, vm: ConsentViewMode
                 "Нажимая «Создать аккаунт», вы принимаете условия использования и политику конфиденциальности",
                 style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space3),
             )
-            Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars))
+            Spacer(Modifier.windowInsetsPadding(PfInsets.navigationBars))
         }
     }
 }
