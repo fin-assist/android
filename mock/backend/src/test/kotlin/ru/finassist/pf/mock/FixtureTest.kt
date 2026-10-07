@@ -2,6 +2,7 @@ package ru.finassist.pf.mock
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
+import ru.finassist.pf.core.api.model.LockReason
 import ru.finassist.pf.core.api.model.MetricStatus
 import ru.finassist.pf.core.api.model.OperationKindFilter
 import ru.finassist.pf.core.api.model.OperationsFilter
@@ -101,6 +102,31 @@ class FixtureTest {
         val year = backend.analytics.analytics(PeriodTypeCode.YEAR, PeriodKey("2026"), TransferMode.WITH)
         assertEquals(12, year.monthlyChart?.points?.size)
         assertEquals(null, year.insights)
+    }
+
+    @Test
+    fun `quarter and year forecasts open only with enough full months`() {
+        val (backend, _) = backend()
+        for ((type, key, required) in listOf(
+            Triple(PeriodTypeCode.QUARTER, PeriodKey("2026-Q4"), 3),
+            Triple(PeriodTypeCode.YEAR, PeriodKey("2026"), 12),
+        )) {
+            val a = backend.analytics.analytics(type, key, TransferMode.WITH)
+            val forecast = assertNotNull(a.tiles?.forecast, "$key is current")
+            val full = a.state!!.fullMonths
+            if (full >= required) {
+                assertEquals(MetricStatus.READY, forecast.status, "$key")
+                assertTrue(forecast.value!!.minor >= a.tiles!!.expense.value!!.minor, "$key: forecast below the fact")
+                assertEquals(required, forecast.basis?.fullMonths)
+            } else {
+                assertEquals(MetricStatus.LOCKED, forecast.status, "$key")
+                assertEquals(LockReason.NEED_FULL_MONTHS, forecast.lock?.reason)
+                assertEquals(required, forecast.lock?.required)
+                assertEquals(full, forecast.lock?.available)
+            }
+        }
+        // FIN-28: a past year has no forecast at all.
+        assertEquals(null, backend.analytics.analytics(PeriodTypeCode.YEAR, PeriodKey("2025"), TransferMode.WITH).tiles?.forecast)
     }
 
     @Test

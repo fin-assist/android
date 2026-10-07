@@ -23,13 +23,28 @@ class SignInFlow @Inject constructor() {
     }
 }
 
-/** +7 XXX XXX-XX-XX formatting of a Russian number while typing; digits only are kept in state. */
+/**
+ * +7 XXX XXX-XX-XX formatting of a Russian number while typing. The field keeps digits only and shows the mask
+ * through a visual transformation, so the cursor is tracked on digits and never jumps when the mask inserts
+ * `+7 `, spaces or dashes (FIN-25).
+ */
 object PhoneFormat {
     /** Keeps at most 10 significant digits after the country code. */
-    fun digits(raw: String): String {
+    fun digits(raw: String): String = edit(raw, raw.length).first
+
+    /**
+     * Normalizes raw field text and the cursor position in it: keeps digits, drops a leading `7`/`8` country
+     * prefix (typed or pasted), keeps at most 10 digits. Returns the digits and the cursor in digit units.
+     */
+    fun edit(raw: String, cursor: Int): Pair<String, Int> {
         var d = raw.filter { it.isDigit() }
-        if (d.startsWith("7") || d.startsWith("8")) d = d.drop(1)
-        return d.take(10)
+        var c = raw.take(cursor.coerceIn(0, raw.length)).count { it.isDigit() }
+        if (d.startsWith("7") || d.startsWith("8")) {
+            d = d.drop(1)
+            c = (c - 1).coerceAtLeast(0)
+        }
+        d = d.take(10)
+        return d to c.coerceAtMost(d.length)
     }
 
     fun display(digits: String): String {
@@ -44,6 +59,27 @@ object PhoneFormat {
             sb.append(ch)
         }
         return sb.toString()
+    }
+
+    /** Cursor in [digits] → cursor in [display]: right before the digit, or at the end after the last one. */
+    fun digitToDisplay(digits: String, offset: Int): Int {
+        if (digits.isEmpty()) return 0
+        val shown = display(digits)
+        if (offset >= digits.length) return shown.length
+        var seen = 0
+        shown.forEachIndexed { i, ch ->
+            if (i >= 2 && ch.isDigit()) {
+                if (seen == offset) return i
+                seen++
+            }
+        }
+        return shown.length
+    }
+
+    /** Cursor in [display] → cursor in [digits]: the number of digits to the left of it (the `7` of `+7` excluded). */
+    fun displayToDigit(digits: String, offset: Int): Int {
+        val shown = display(digits)
+        return shown.take(offset.coerceIn(0, shown.length)).drop(2).count { it.isDigit() }
     }
 
     fun toE164(digits: String): String = "+7$digits"

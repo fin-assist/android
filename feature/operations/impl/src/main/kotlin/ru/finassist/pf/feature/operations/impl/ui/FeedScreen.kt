@@ -3,6 +3,8 @@ package ru.finassist.pf.feature.operations.impl.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -100,24 +102,36 @@ internal fun FeedContent(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(start = d.space5, end = d.space5, bottom = d.space6),
+                    contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space2, bottom = d.space6),
                 ) {
                     val feedState = state.state
-                    if (feedState?.stale == true && feedState.lastOperationAt != null) {
+                    val lastOperation = feedState?.lastOperationAt?.toLocalDate()
+                    state.summary.firstOrNull()?.let { s -> item(key = "summary") { SummaryCard(s, today) } }
+                    if (feedState?.stale == true && lastOperation != null) {
                         item(key = "stale") {
                             PfNotice(
-                                "Операции в приложении по ${RussianDates.day(feedState.lastOperationAt!!.toLocalDate(), today.year)} — с тех пор прошло больше двух недель",
-                                tone = NoticeTone.WARNING,
-                                modifier = Modifier.padding(bottom = d.space3),
-                                action = if (state.uploadEnabled) ({ PfLink("Загрузить выписку", onClick = onUpload, inline = true) }) else null,
+                                "Операции в приложении по ${RussianDates.day(lastOperation, today.year)} — с тех пор прошло больше двух недель",
+                                tone = NoticeTone.INFO,
+                                modifier = Modifier.padding(top = d.space3),
+                                action = if (state.uploadEnabled) ({ PfLink("Загрузить новую выписку", onClick = onUpload, inline = true) }) else null,
                             )
                         }
+                    } else if (lastOperation != null) {
+                        // «Операции по 25 сентября · Загрузить новую выписку» under the summary (mockup `Main`).
+                        item(key = "fresh") {
+                            Row(Modifier.defaultMinSize(minHeight = d.touch), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Операции по ${RussianDates.day(lastOperation, today.year)}" + if (state.uploadEnabled) " · " else "",
+                                    style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+                                )
+                                if (state.uploadEnabled) PfLink("Загрузить новую выписку", onClick = onUpload, inline = true)
+                            }
+                        }
                     }
-                    state.summary.firstOrNull()?.let { s -> item(key = "summary") { SummaryCard(s, today) } }
                     groups.forEach { (label, ops) ->
                         item(key = "day-$label-${ops.first().id}") {
                             PfTransactionGroup(label) {
-                                ops.forEach { op -> OperationRow(op, onClick = { onOpenOperation(op.id) }) }
+                                ops.forEach { op -> OperationRow(op, onClick = { onOpenOperation(op.id) }, divider = true) }
                             }
                         }
                     }
@@ -145,15 +159,18 @@ internal fun FeedContent(
 }
 
 @Composable
-internal fun OperationRow(op: OperationItem, onClick: () -> Unit) {
+internal fun OperationRow(op: OperationItem, onClick: () -> Unit, divider: Boolean = false) {
     val row = remember(op) { OperationFormat.row(op) }
     PfTransactionRow(
         icon = row.icon, title = row.title, subtitle = row.subtitle, amount = row.amount,
-        income = row.income, muted = row.muted, note = row.note, onClick = onClick,
+        income = row.income, muted = row.muted, note = row.note, onClick = onClick, divider = divider,
     )
 }
 
-/** «Сентябрь · по 25 сентября», «Доходы минус расходы», income / expense / share of income (api.md 4.1 summary). */
+/**
+ * «Сентябрь · по 25 сентября»: expenses as the main amount, then income and «Доходы минус расходы · 46% дохода»
+ * (mockup `Main`, api.md 4.1 summary).
+ */
 @Composable
 private fun SummaryCard(s: MonthSummary, today: LocalDate) {
     val month = runCatching { YearMonth.parse(s.month) }.getOrNull()
@@ -163,14 +180,13 @@ private fun SummaryCard(s: MonthSummary, today: LocalDate) {
     val share = if (s.income.minor > 0) (balance.minor * 100.0 / s.income.minor).roundToInt() else null
     PfMonthSummary(
         title = title,
-        amountLabel = "Доходы минус расходы",
-        amount = balance.format(Money.Sign.ALWAYS),
-        items = listOfNotNull(
-            SummaryItem("Доходы", s.income.format(), positive = true),
-            SummaryItem("Расходы", s.expense.format()),
-            share?.let { SummaryItem("Доля дохода", "$it%") },
+        amountLabel = "Расходы",
+        // Expenses are positive in the summary; shown as an outflow «−84 320 ₽».
+        amount = (Money.ZERO - s.expense).format(),
+        items = listOf(
+            SummaryItem("Доходы", s.income.format(Money.Sign.ALWAYS), positive = true),
+            SummaryItem("Доходы минус расходы" + (share?.let { " · $it% дохода" } ?: ""), balance.format()),
         ),
-        modifier = Modifier.padding(bottom = PfTheme.dimens.space2),
     )
 }
 

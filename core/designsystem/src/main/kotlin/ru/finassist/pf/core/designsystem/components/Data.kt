@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -18,26 +20,35 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
@@ -82,7 +93,7 @@ fun PfStatTile(
             .then(if (locked) Modifier.dashedBorder(c.borderStrong, PfTheme.dimens.radiusXl) else Modifier.border(1.dp, c.border, shape))
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .defaultMinSize(minHeight = 96.dp)
-            .padding(PfTheme.dimens.space4)
+            .padding(PfTheme.dimens.space3)
             .semantics(mergeDescendants = true) { contentDescription = spoken },
     ) {
         Text(label, style = PfTheme.type.caption, color = c.textMuted)
@@ -94,16 +105,54 @@ fun PfStatTile(
                 Text(lockedText ?: "Пока не считаем", style = PfTheme.type.caption, color = c.textMuted)
             }
         } else {
-            Text(value ?: "—", style = PfTheme.type.amountMd, color = c.text)
-            if (note != null) Text(note, style = PfTheme.type.caption, color = c.textMuted)
+            PfAmountText(value ?: "—", style = PfTheme.type.amountMd, color = c.text)
+            if (note != null) {
+                Spacer(Modifier.height(PfTheme.dimens.space1))
+                Text(note, style = PfTheme.type.hint, color = c.textMuted)
+            }
         }
     }
+}
+
+/**
+ * One-line amount that never wraps (FIN-26): when the text does not fit, the font shrinks step by step down to
+ * [minFontSize] and only then the end is clipped. Amounts already keep a no-break space before `₽`
+ * (`Money.format`). Hand-rolled because `BasicText(autoSize = …)` needs Compose foundation 1.8.
+ */
+@Composable
+fun PfAmountText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+    minFontSize: TextUnit = 14.sp,
+) {
+    var fontSize by remember(text, style) { mutableStateOf(style.fontSize) }
+    var fitted by remember(text, style) { mutableStateOf(false) }
+    Text(
+        text,
+        style = style.copy(fontSize = fontSize, lineHeight = style.lineHeight),
+        color = color,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+        onTextLayout = { layout ->
+            if (layout.hasVisualOverflow && fontSize > minFontSize) {
+                fontSize = maxOf(minFontSize.value, fontSize.value * 0.9f).sp
+            } else {
+                fitted = true
+            }
+        },
+        // Hidden until the size settles, so a too-wide first frame is never drawn.
+        modifier = modifier.drawWithContent { if (fitted) drawContent() },
+    )
 }
 
 data class SummaryItem(val label: String, val value: String, val positive: Boolean = false)
 
 /** Month summary card on top of Operations: caption title, hero amount, a row of items and a footer. */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun PfMonthSummary(
     title: String,
     amountLabel: String,
@@ -115,15 +164,19 @@ fun PfMonthSummary(
     val c = PfTheme.colors
     PfCard(modifier) {
         Text(title, style = PfTheme.type.caption, color = c.textMuted, modifier = Modifier.semantics { heading() })
-        Spacer(Modifier.height(PfTheme.dimens.space2))
-        Text(amountLabel, style = PfTheme.type.caption, color = c.textMuted)
-        Text(amount, style = PfTheme.type.amountHero, color = c.text, maxLines = 1)
         Spacer(Modifier.height(PfTheme.dimens.space3))
-        Row(horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4)) {
+        Text(amountLabel, style = PfTheme.type.caption, color = c.textMuted)
+        PfAmountText(amount, style = PfTheme.type.amountHero, color = c.text)
+        Spacer(Modifier.height(PfTheme.dimens.space3))
+        // Wraps like the mockup's flex-wrap row: a long label («Доходы минус расходы · 46% дохода») moves down.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space6),
+            verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2),
+        ) {
             items.forEach { item ->
-                Column(Modifier.weight(1f, fill = false)) {
-                    Text(item.label, style = PfTheme.type.hint, color = c.textMuted)
-                    Text(item.value, style = PfTheme.type.bodyStrong, color = if (item.positive) c.positive else c.text, maxLines = 1)
+                Column {
+                    Text(item.label, style = PfTheme.type.caption, color = c.textMuted)
+                    Text(item.value, style = PfTheme.type.bodyStrong, color = if (item.positive) c.positive else c.text, maxLines = 1, softWrap = false)
                 }
             }
         }

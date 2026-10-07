@@ -83,7 +83,7 @@ class SearchViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(
         SearchUiState(
-            filter = preset ?: OperationsFilter(),
+            filter = preset,
             chips = SearchChips(
                 period = flags.isEnabled(Flag.SEARCH_FILTER_PERIOD),
                 category = flags.isEnabled(Flag.SEARCH_FILTER_CATEGORY),
@@ -96,7 +96,7 @@ class SearchViewModel @Inject constructor(
     private var searchJob: Job? = null
 
     init {
-        if (preset != null && !preset.isEmpty) search(debounce = false)
+        if (!preset.isEmpty) search(debounce = false)
         viewModelScope.launch { runCatching { categoriesRepository.categories() }.onSuccess { c -> _state.update { it.copy(categories = c) } } }
         // A category changed in the detail screen: refresh the visible result so the row moves out/in.
         viewModelScope.launch { operations.categoryChanges.collect { if (_state.value.hasFilters) search(debounce = false) } }

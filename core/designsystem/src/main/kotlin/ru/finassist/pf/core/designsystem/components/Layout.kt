@@ -1,6 +1,5 @@
 package ru.finassist.pf.core.designsystem.components
 
-import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,6 +10,8 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -28,6 +29,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 
 /** Card: `surface` with a 1 dp `border`, `radius-xl`; `flush` removes the inner padding for list rows. */
@@ -54,7 +56,8 @@ fun PfCard(
 fun PfSectionTitle(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        style = PfTheme.type.bodyStrong,
+        // Mockup `.pf-sectitle-text`: 13/20, semibold.
+        style = PfTheme.type.caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
         color = PfTheme.colors.textMuted,
         modifier = modifier.semantics { heading() },
     )
@@ -71,7 +74,9 @@ fun PfTabHeader(
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(PfInsets.statusBars)
-            .padding(start = PfTheme.dimens.screenMargin, end = PfTheme.dimens.space3, top = PfTheme.dimens.space4, bottom = PfTheme.dimens.space2),
+            // Mockup `.pf-tabhead`: 8 dp under the status bar, a 48 dp row, the title centered in it (FIN-32).
+            .padding(start = PfTheme.dimens.screenMargin, end = PfTheme.dimens.space2, top = PfTheme.dimens.space2)
+            .defaultMinSize(minHeight = PfTheme.dimens.touch),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, style = PfTheme.type.title1, modifier = Modifier.weight(1f).semantics { heading() })
@@ -141,7 +146,9 @@ fun PfTabBar(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth()
+                        // Full height: Row aligns children to the top by default, so a wrap-content item
+                        // stuck to the top border (FIN-27). Also makes the whole 56 dp the touch target.
+                        .fillMaxHeight()
                         .clickable(role = Role.Tab) { onSelect(index) }
                         .semantics { this.selected = selected },
                     horizontalAlignment = Alignment.CenterHorizontally,

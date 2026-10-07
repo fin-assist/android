@@ -31,6 +31,7 @@ class ProfileDesignCheckTest {
         statementsLoaded = true,
         limit = AssistantLimit(remaining = 3, dailyMax = 5, resetsAt = now.plusHours(12)),
         theme = Theme.SYSTEM,
+        biometric = true,
         flags = ProfileFlags(assistant = true, deleteAccount = true, upload = true),
     )
 
@@ -41,7 +42,7 @@ class ProfileDesignCheckTest {
     private fun capture(name: String, dark: Boolean) = DesignCheck.capture(name, dark = dark, heightDp = 984, tab = 2) {
         ProfileContent(
             state, actions, onRetry = {}, onRevokeConsent = {}, onThemeSheet = {}, onTheme = {}, onSupport = {},
-            onAskLogout = {}, onLogout = {}, onSnackbarShown = {},
+            onAskLogout = {}, onLogout = {}, onSnackbarShown = {}, versionName = "0.1.0",
         )
     }
 

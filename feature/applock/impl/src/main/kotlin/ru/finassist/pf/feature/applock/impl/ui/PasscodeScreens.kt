@@ -1,6 +1,5 @@
 package ru.finassist.pf.feature.applock.impl.ui
 
-import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -37,6 +36,7 @@ import ru.finassist.pf.core.designsystem.components.PfPageHeader
 import ru.finassist.pf.core.designsystem.components.PfPasscodeDots
 import ru.finassist.pf.core.designsystem.components.PfStatusHero
 import ru.finassist.pf.core.designsystem.icons.PfIcons
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.applock.api.BiometricAvailability
 import ru.finassist.pf.feature.applock.api.PASSCODE_LENGTH
@@ -74,11 +74,12 @@ private fun PasscodePad(
         Column(
             Modifier.weight(1f).fillMaxWidth().padding(horizontal = d.space5),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+            // With the mark (unlock) the block sits right under the status bar, as on `PasscodeLogin` (FIN-32).
+            verticalArrangement = if (mark) Arrangement.Top else Arrangement.Center,
         ) {
             if (mark) {
                 PfMark(size = d.mark)
-                Spacer(Modifier.height(d.space6))
+                Spacer(Modifier.height(d.space5))
             }
             Text(title, style = PfTheme.type.title1, color = PfTheme.colors.text, textAlign = TextAlign.Center)
             if (subtitle != null) {

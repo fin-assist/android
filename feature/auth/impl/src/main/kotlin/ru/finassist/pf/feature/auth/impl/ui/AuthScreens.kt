@@ -1,6 +1,5 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
-import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -26,8 +25,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -46,8 +49,10 @@ import ru.finassist.pf.core.designsystem.components.PfStatusHero
 import ru.finassist.pf.core.designsystem.components.PfTextField
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.auth.api.AuthRoutes
+import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
 
 /** Screen padding of the sign-in screens: status bar + space-6 on top, gesture bar + space-4 at the bottom. */
 @Composable
@@ -95,10 +100,11 @@ fun PhoneScreen(reason: String?, onNext: () -> Unit, vm: PhoneViewModel = hiltVi
         Column(verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4)) {
             state.notice?.let { PfNotice(it, tone = NoticeTone.INFO, alert = true) }
             PfTextField(
-                value = state.display,
+                value = state.input,
                 onValueChange = vm::onInput,
                 label = "Номер телефона",
                 placeholder = "+7 900 000-00-00",
+                visualTransformation = PhoneMaskTransformation,
                 hint = "Для подтверждения позвоните нам с этого номера — бесплатно",
                 error = state.error,
                 keyboardType = KeyboardType.Phone,
@@ -173,7 +179,7 @@ fun CallScreen(onBack: () -> Unit, onNewUser: () -> Unit, onRegistrationClosed: 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         PfIcon(PfIcons.CLOCK, contentDescription = null, size = 16.dp, tint = PfTheme.colors.textMuted)
                         Spacer(Modifier.width(PfTheme.dimens.space2))
-                        Text("Ждём звонок 3 минуты — после него вход продолжится сам", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
+                        Text("Как только дозвонитесь, вход продолжится сам. Ждём звонок 3 минуты", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
                     }
                     Text(
                         "Не проходит? Проверьте, что звоните с ${state.phoneDisplay} и не скрываете свой номер в настройках звонков",
@@ -274,5 +280,19 @@ fun RegistrationClosedScreen(onBack: () -> Unit) {
             )
         }
         PfButton("Вернуться ко входу", onClick = onBack, variant = ButtonVariant.PRIMARY, block = true)
+    }
+}
+
+/** Draws `+7 XXX XXX-XX-XX` over digits-only text; the offset mapping keeps the cursor next to the typed digit. */
+private object PhoneMaskTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val digits = text.text
+        return TransformedText(
+            AnnotatedString(PhoneFormat.display(digits)),
+            object : OffsetMapping {
+                override fun originalToTransformed(offset: Int) = PhoneFormat.digitToDisplay(digits, offset)
+                override fun transformedToOriginal(offset: Int) = PhoneFormat.displayToDigit(digits, offset)
+            },
+        )
     }
 }

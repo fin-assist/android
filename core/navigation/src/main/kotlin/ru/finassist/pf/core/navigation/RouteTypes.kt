@@ -14,9 +14,12 @@ import kotlin.reflect.typeOf
 /**
  * Typed-route support for complex arguments: Navigation Compose serializes route classes itself, but a nested
  * object property needs a custom [NavType]. Objects are carried as URL-encoded JSON.
+ *
+ * Only non-null route properties are supported: for a `null` value Navigation calls [serializeAsValue] with
+ * `null`, which breaks the non-null contract (FIN-31). Give such a property a non-null default instead.
  */
 class JsonNavType<T : Any>(private val serializer: KSerializer<T>, private val json: Json = ApiJson) :
-    NavType<T>(isNullableAllowed = true) {
+    NavType<T>(isNullableAllowed = false) {
 
     override fun get(bundle: Bundle, key: String): T? = bundle.getString(key)?.let { parseValue(it) }
 
@@ -35,9 +38,9 @@ object PfNavTypes {
     val analyticsParams = JsonNavType(AnalyticsParams.serializer())
 
     val MAP: Map<KType, NavType<*>> = mapOf(
+        // Nullable types are deliberately not registered: a nullable route property then fails when the
+        // graph is built instead of crashing on navigation.
         typeOf<OperationsFilter>() to operationsFilter,
-        typeOf<OperationsFilter?>() to operationsFilter,
         typeOf<AnalyticsParams>() to analyticsParams,
-        typeOf<AnalyticsParams?>() to analyticsParams,
     )
 }

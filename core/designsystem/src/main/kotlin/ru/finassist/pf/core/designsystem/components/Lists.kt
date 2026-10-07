@@ -174,7 +174,7 @@ fun PfTransactionGroup(label: String, modifier: Modifier = Modifier, content: @C
             label.uppercase(),
             style = PfTheme.type.overline,
             color = PfTheme.colors.textFaint,
-            modifier = Modifier.padding(top = PfTheme.dimens.space4, bottom = PfTheme.dimens.space2).semantics { heading() },
+            modifier = Modifier.padding(top = PfTheme.dimens.space4).semantics { heading() },
         )
         content()
     }
@@ -195,10 +195,28 @@ fun PfTransactionRow(
     muted: Boolean = false,
     note: String? = null,
     onClick: (() -> Unit)? = null,
+    divider: Boolean = false,
+) {
+    Column(modifier.fillMaxWidth()) {
+        TransactionRowBody(icon, title, subtitle, amount, income, muted, note, onClick)
+        if (divider) PfDivider()
+    }
+}
+
+@Composable
+private fun TransactionRowBody(
+    icon: String,
+    title: String,
+    subtitle: String,
+    amount: String,
+    income: Boolean,
+    muted: Boolean,
+    note: String?,
+    onClick: (() -> Unit)?,
 ) {
     val c = PfTheme.colors
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(PfTheme.dimens.radiusMd))
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)

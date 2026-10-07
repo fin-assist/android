@@ -1,9 +1,11 @@
 package ru.finassist.pf.feature.analytics.impl
 
+import ru.finassist.pf.core.api.model.AnalyticsPeriodInfo
 import ru.finassist.pf.core.api.model.AnalyticsState
 import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.api.model.LockReason
 import ru.finassist.pf.core.api.model.Metric
+import ru.finassist.pf.core.api.model.MetricBasis
 import ru.finassist.pf.core.api.model.MetricLock
 import ru.finassist.pf.core.api.model.MetricStatus
 import ru.finassist.pf.core.api.model.MonthlyPoint
@@ -53,6 +55,44 @@ class AnalyticsTextsTest {
         assertEquals("На 17% больше, чем август к этому дню", AnalyticsTexts.comparison(Money(8_432_000), prev, PeriodTypeCode.MONTH))
         assertEquals("На 50% меньше, чем август к этому дню", AnalyticsTexts.comparison(Money(3_600_000), prev, PeriodTypeCode.MONTH))
         assertNull(AnalyticsTexts.comparison(Money(1), Metric(status = MetricStatus.LOCKED), PeriodTypeCode.MONTH))
+        assertEquals(
+            "Сентябрь к 25-му — 84 320 ₽, на 17% больше, чем август к этому дню",
+            AnalyticsTexts.comparison(Money(8_432_000), prev, PeriodTypeCode.MONTH, PeriodKey("2026-09"))!!.plain(),
+        )
+    }
+
+    @Test
+    fun `tile notes as on the mockup`() {
+        assertEquals("на сентябрь", AnalyticsTexts.forecastNote(PeriodKey("2026-09")))
+        assertEquals("на III квартал", AnalyticsTexts.forecastNote(PeriodKey("2026-Q3")))
+        assertEquals("на 2026 год", AnalyticsTexts.forecastNote(PeriodKey("2026")))
+        val aug = DateRange(t("2026-08-01T00:00:00+03:00"), t("2026-09-01T00:00:00+03:00"))
+        assertEquals("в августе — 2 890 ₽", AnalyticsTexts.dailyComparison(Metric(MetricStatus.READY, value = Money(289_000), range = aug))!!.plain())
+        val basis = MetricBasis(DateRange(t("2026-04-01T00:00:00+03:00"), t("2026-09-01T00:00:00+03:00")), 5)
+        assertEquals("Среднее за апрель — август — 88 900 ₽", AnalyticsTexts.typical(Metric(MetricStatus.READY, basis = basis, value = Money(8_890_000)))!!.plain())
+    }
+
+    @Test
+    fun `insight descriptions`() {
+        val basis = DateRange(t("2026-04-01T00:00:00+03:00"), t("2026-09-01T00:00:00+03:00"))
+        assertEquals(
+            "В 2,3 раза больше обычного — обычно около 3 100 ₽ (апрель — август)",
+            AnalyticsTexts.notable(Money(720_000), Money(310_000), basis).plain(),
+        )
+        assertEquals(
+            "в месяц · кофе и перекусы: 23 раза по 280 ₽ — около 77 000 ₽ в год",
+            AnalyticsTexts.smallFrequent("Кофе и перекусы", 23, Money(28_000), Money(7_700_000)).plain(),
+        )
+    }
+
+    @Test
+    fun `incomplete year caption`() {
+        val year = AnalyticsPeriodInfo(
+            range = DateRange(t("2026-01-01T00:00:00+03:00"), t("2027-01-01T00:00:00+03:00")), isCurrent = true,
+            coverage = Coverage.PARTIAL, dataFrom = t("2026-04-01T00:00:00+03:00"), dataTo = t("2026-09-25T21:40:00+03:00"), gaps = emptyList(),
+        )
+        assertEquals("Апрель — сентябрь 2026 · год неполный", AnalyticsTexts.partialPeriod(year, PeriodTypeCode.YEAR)!!.plain())
+        assertNull(AnalyticsTexts.partialPeriod(year, PeriodTypeCode.MONTH))
     }
 
     @Test

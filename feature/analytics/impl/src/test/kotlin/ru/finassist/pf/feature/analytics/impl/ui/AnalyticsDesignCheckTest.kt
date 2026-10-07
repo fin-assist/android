@@ -65,10 +65,10 @@ class AnalyticsDesignCheckTest {
         period = AnalyticsPeriodInfo(range = sep, isCurrent = true, coverage = Coverage.PARTIAL, dataFrom = day(9, 1), dataTo = day(9, 25), gaps = emptyList()),
         navigation = AnalyticsNavigation(previous = PeriodKey("2026-08")),
         tiles = AnalyticsTiles(
-            expense = ready(84_320, comparison = ready(72_060)),
+            expense = ready(84_320, comparison = Metric(MetricStatus.READY, value = rub(72_060), range = DateRange(day(8, 1), day(8, 26))), typical = ready(88_900)),
             income = ready(156_900),
             balance = ready(72_580, share = 0.46),
-            dailyExpense = ready(3_370, typical = ready(2_890)),
+            dailyExpense = ready(3_370, comparison = Metric(MetricStatus.READY, value = rub(2_890), range = month(8))),
             forecast = ready(101_200),
         ),
         expenseCategories = CategoryBreakdown(
@@ -104,12 +104,15 @@ class AnalyticsDesignCheckTest {
         ),
         insights = Insights(
             regularPayments = RegularPaymentsCard(
-                MetricStatus.READY, basis = basis, filters = f, value = rub(4_200), count = 4,
+                MetricStatus.READY, basis = basis, filters = f, value = rub(4_200), count = 7,
                 items = listOf(
                     RegularPayment("r1", "Спортзал", rub(2_900), rub(2_900), "1-го числа", "c_sport", f),
                     RegularPayment("r2", "Яндекс Плюс", rub(399), rub(399), "12-го числа", "c_subs", f),
                     RegularPayment("r3", "Облачное хранилище", rub(299), rub(299), "3-го числа", "c_subs", f),
-                    RegularPayment("r4", "Мобильная связь", rub(602), rub(602), "20-го числа", "c_phone", f),
+                    RegularPayment("r4", "Мобильная связь", rub(350), rub(350), "20-го числа", "c_phone", f),
+                    RegularPayment("r5", "Кинотеатр онлайн", rub(149), rub(149), "5-го числа", "c_subs", f),
+                    RegularPayment("r6", "Музыка", rub(69), rub(69), "8-го числа", "c_subs", f),
+                    RegularPayment("r7", "Антивирус", rub(34), rub(34), "15-го числа", "c_subs", f),
                 ),
             ),
             notableSpending = NotableSpendingCard(

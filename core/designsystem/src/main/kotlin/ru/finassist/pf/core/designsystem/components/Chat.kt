@@ -1,6 +1,6 @@
 package ru.finassist.pf.core.designsystem.components
 
-import ru.finassist.pf.core.designsystem.theme.PfInsets
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,7 +24,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 
 /** Day separator in the chat («Сегодня»). */
@@ -69,10 +72,14 @@ fun PfUserMessage(text: String, modifier: Modifier = Modifier) {
 fun PfMark(modifier: Modifier = Modifier, size: Dp = 32.dp) {
     val c = PfTheme.colors
     Box(modifier.size(size).background(c.accent, RoundedCornerShape(size / 4)), contentAlignment = Alignment.Center) {
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(size / 12)) {
-            Box(Modifier.width(size / 7).height(size / 4).background(c.onAccent, RoundedCornerShape(1.dp)))
-            Box(Modifier.width(size / 7).height(size / 2.4f).background(c.onAccent, RoundedCornerShape(1.dp)))
-            Box(Modifier.width(size / 7).height(size / 1.7f).background(c.onAccent, RoundedCornerShape(1.dp)))
+        // Three thin round-capped bars of the mockup's 24-unit glyph (x 7/12/17, tops 13/7/10, bottom 17),
+        // drawn at 32/56 of the tile.
+        Canvas(Modifier.size(size * 32f / 56f)) {
+            val u = this.size.width / 24f
+            val stroke = 2.25f * u
+            listOf(7f to 13f, 12f to 7f, 17f to 10f).forEach { (x, top) ->
+                drawLine(c.onAccent, Offset(x * u, top * u), Offset(x * u, 17f * u), strokeWidth = stroke, cap = StrokeCap.Round)
+            }
         }
     }
 }

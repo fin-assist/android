@@ -2,7 +2,6 @@ package ru.finassist.pf.feature.profile.impl.domain
 
 import ru.finassist.pf.core.api.model.StatementsSummary
 import ru.finassist.pf.core.api.model.Theme
-import ru.finassist.pf.core.common.time.RussianDates
 import ru.finassist.pf.core.common.time.countWithNoun
 
 object ProfileTexts {
@@ -19,8 +18,21 @@ object ProfileTexts {
         Theme.DARK -> "Тёмная"
     }
 
-    /** «1 апреля — 25 сентября · 1 086 операций» or «Не загружена». */
+    /** «3 файла · 1 086 операций» or «Не загружена» (review ux-11). */
     fun statement(s: StatementsSummary?): String =
         if (s == null) "Не загружена"
-        else "${RussianDates.dayRange(s.firstOperationAt.toLocalDate(), s.lastOperationAt.toLocalDate())} · ${countWithNoun(s.operationCount, "операция", "операции", "операций")}"
+        else "${countWithNoun(s.uploadCount, "файл", "файла", "файлов")} · ${countWithNoun(s.operationCount, "операция", "операции", "операций")}"
+
+    /** Value of «Код-пароль и биометрия»; null when the device has no biometrics. */
+    fun biometric(enabled: Boolean?): String? = when (enabled) {
+        null -> null
+        true -> "Биометрия включена"
+        false -> "Биометрия выключена"
+    }
+
+    /** «Версия 0.1 · Данные хранятся в России»: build suffixes and a trailing `.0` patch are dropped. */
+    fun footer(versionName: String?): String {
+        val v = versionName?.substringBefore('-')?.removeSuffix(".0")?.takeIf { it.isNotBlank() }
+        return listOfNotNull(v?.let { "Версия $it" }, "Данные хранятся в России").joinToString(" · ")
+    }
 }

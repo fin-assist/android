@@ -9,6 +9,7 @@ import ru.finassist.pf.core.api.model.MetricLock
 import ru.finassist.pf.core.api.model.MonthlyPoint
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.common.money.Money
+import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.common.time.RussianDates
 import ru.finassist.pf.core.common.time.countWithNoun
@@ -82,18 +83,26 @@ object AnalyticsTexts {
         }
     }
 
-    /** «на 17% больше, чем август к этому дню»; «столько же, сколько …». */
-    fun comparison(current: Money, cmp: Metric?, periodType: PeriodTypeCode): String? {
+    /**
+     * Line under the expense chart. Month: «Сентябрь к 25-му — 84 320 ₽, на 17% больше, чем август к этому дню»;
+     * quarter and year keep the short form «На 17% больше, чем прошлый год к этому дню».
+     */
+    fun comparison(current: Money, cmp: Metric?, periodType: PeriodTypeCode, key: PeriodKey? = null): String? {
         val prev = cmp?.takeIf { it.isReady }?.value ?: return null
         val range = cmp.range
         val prevName = range?.let { prevName(YearMonth.from(it.from), periodType) } ?: "прошлый период"
         if (prev.minor == 0L) return "В прошлом периоде к этому дню расходов не было"
         val pct = ((current.minor - prev.minor) * 100.0 / abs(prev.minor)).roundToInt()
-        return when {
-            pct == 0 -> "Столько же, сколько $prevName к этому дню"
-            pct > 0 -> "На $pct% больше, чем $prevName к этому дню"
-            else -> "На ${-pct}% меньше, чем $prevName к этому дню"
+        val diff = when {
+            pct == 0 -> "столько же, сколько $prevName к этому дню"
+            pct > 0 -> "на $pct% больше, чем $prevName к этому дню"
+            else -> "на ${-pct}% меньше, чем $prevName к этому дню"
         }
+        val month = key?.value?.takeIf { Regex("""^\d{4}-\d{2}$""").matches(it) }?.let(YearMonth::parse)
+        val day = range?.let { RussianDates.lastDayOf(it).dayOfMonth }
+        if (periodType != PeriodTypeCode.MONTH || month == null || day == null) return diff.replaceFirstChar { it.uppercase() }
+        val name = RussianDates.monthNominative(month.month).replaceFirstChar { it.uppercase() }
+        return "$name к $day-му ${RussianDates.EM_DASH} ${current.format()}, $diff"
     }
 
     private fun prevName(month: YearMonth, periodType: PeriodTypeCode): String = when (periodType) {
@@ -102,18 +111,80 @@ object AnalyticsTexts {
         PeriodTypeCode.YEAR -> "прошлый год"
     }
 
-    /** «Обычно 88 900 ₽ · апрель — август». */
+    /** «Среднее за апрель — август — 88 900 ₽». */
     fun typical(t: Metric?): String? {
         val v = t?.takeIf { it.isReady }?.value ?: return null
-        val basis = t.basis?.range?.let { r -> " · " + RussianDates.monthRange(YearMonth.from(r.from), YearMonth.from(r.to.minusDays(1))) }.orEmpty()
-        return "Обычно ${v.format()}$basis"
+        val r = t.basis?.range ?: return "Обычно ${v.format()}"
+        val months = RussianDates.monthRange(YearMonth.from(r.from), YearMonth.from(r.to.minusDays(1)))
+        return "Среднее за $months ${RussianDates.EM_DASH} ${v.format()}"
     }
 
-    /** «в августе — 2 890 ₽». */
+    /** «в августе — 2 890 ₽» under «Расходы в день». */
     fun dailyComparison(cmp: Metric?): String? {
         val v = cmp?.takeIf { it.isReady }?.value ?: return null
-        val month = cmp.range?.let { YearMonth.from(it.from) } ?: return "Раньше — ${v.format()}"
-        return "${RussianDates.monthPrepositional(month.month).replaceFirstChar { it.uppercase() }} — ${v.format()}"
+        val month = cmp.range?.let { YearMonth.from(it.from) } ?: return "раньше ${RussianDates.EM_DASH} ${v.format()}"
+        return "в ${RussianDates.monthPrepositional(month.month)} ${RussianDates.EM_DASH} ${v.format()}"
+    }
+
+    /** «в среднем за апрель — сентябрь» under «Расходы в день» for a quarter or a year. */
+    fun dailyAverageOver(p: AnalyticsPeriodInfo): String? {
+        val from = p.dataFrom ?: return null
+        val to = p.dataTo ?: return null
+        return "в среднем за ${RussianDates.monthRange(YearMonth.from(from), YearMonth.from(to.minusSeconds(1)))}"
+    }
+
+    /** Note of the forecast tile, label is always «Прогноз расходов»: «на сентябрь», «на III квартал», «на 2026 год». */
+    fun forecastNote(key: PeriodKey): String {
+        val v = key.value
+        return when {
+            Regex("""^\d{4}-Q[1-4]$""").matches(v) -> "на ${QUARTERS[v.last().digitToInt() - 1]} квартал"
+            Regex("""^\d{4}-\d{2}$""").matches(v) -> "на ${RussianDates.monthNominative(YearMonth.parse(v).month)}"
+            else -> "на $v год"
+        }
+    }
+
+    /** Caption above the tiles of an incomplete quarter or year: «Апрель — сентябрь 2026 · год неполный». */
+    fun partialPeriod(p: AnalyticsPeriodInfo, period: PeriodTypeCode): String? {
+        if (period == PeriodTypeCode.MONTH || p.coverage.effective == Coverage.COMPLETE) return null
+        if (p.coverage.effective == Coverage.NO_DATA) return "За этот период данных нет"
+        val from = p.dataFrom?.let(YearMonth::from) ?: return null
+        val to = p.dataTo?.let { YearMonth.from(it.minusSeconds(1)) } ?: return null
+        val months = RussianDates.monthRange(from, to).replaceFirstChar { it.uppercase() }
+        val year = if (from.year == to.year) " ${to.year}" else ""
+        val unit = if (period == PeriodTypeCode.QUARTER) "квартал неполный" else "год неполный"
+        return "$months$year · $unit"
+    }
+
+    /** Text under the «Доходы минус расходы» amount at the end of the screen. */
+    fun balanceExplained(balance: Metric, withChart: Boolean): String {
+        val share = balance.shareOfIncome ?: return "Доходов за период нет"
+        val pct = (share * 100).roundToInt()
+        val head = if (pct < 0) "${-pct}% дохода: на столько расходы по выписке больше доходов"
+        else "$pct% дохода: на столько доходы по выписке больше расходов"
+        val tail = if (withChart) "На графике ${RussianDates.EM_DASH} та же доля по месяцам"
+        else "График по месяцам появится, когда в выписке будет хотя бы один полный месяц"
+        return "$head. $tail"
+    }
+
+    /** «В 2,3 раза больше обычного — обычно около 3 100 ₽ (апрель — август)». */
+    fun notable(amount: Money, typical: Money, basis: DateRange?): String {
+        val months = basis?.let { " (${RussianDates.monthRange(YearMonth.from(it.from), YearMonth.from(it.to.minusDays(1)))})" }.orEmpty()
+        val usual = "обычно около ${typical.format()}$months"
+        if (typical.minor <= 0) return usual.replaceFirstChar { it.uppercase() }
+        val ratio = "%.1f".format(amount.minor.toDouble() / typical.minor).replace('.', ',')
+        return "В $ratio раза больше обычного ${RussianDates.EM_DASH} $usual"
+    }
+
+    /** «в месяц · кофе и перекусы: 23 раза по 280 ₽ — около 77 000 ₽ в год». */
+    fun smallFrequent(title: String, count: Int, average: Money, yearly: Money): String =
+        "в месяц · ${title.replaceFirstChar { it.lowercase() }}: ${countWithNoun(count, "раз", "раза", "раз")} по ${average.format()} " +
+            "${RussianDates.EM_DASH} около ${yearly.format()} в год"
+
+    /** «Больше всего — в июле: 96 300 ₽» under the chart of a quarter or a year. */
+    fun peakMonth(points: List<MonthlyPoint>): String? {
+        val top = points.filter { it.expense != null }.maxByOrNull { it.expense!!.minor } ?: return null
+        val month = YearMonth.parse(top.month).month
+        return "Больше всего ${RussianDates.EM_DASH} в ${RussianDates.monthPrepositional(month)}: ${top.expense!!.format()}"
     }
 
     /** «46% дохода» / «−12% · потратили больше, чем получили» / «Доходов за период нет». */
