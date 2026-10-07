@@ -56,6 +56,12 @@ Gradle 8.11 не запускается на JDK 25, а Android Studio 2026.x п
 Байткод при этом остаётся Java 17 — это предел для Android с AGP 8.x. Переход на Gradle 9 / AGP 9
 (сборка на встроенном JBR 25) — отдельная задача.
 
+### Сборка в контейнере агента
+
+В чистом Linux-контейнере (облачная сессия агента) `scripts/agent-setup.sh` ставит Android SDK под версии из
+`gradle/libs.versions.toml`, пишет `local.properties` и подключает зеркало Maven Central (облачные адреса
+получают 429 от `repo.maven.apache.org`). Повторный запуск ничего не переустанавливает.
+
 ### Flavor `prod`
 
 Настоящий HTTP-клиент, флаги из RuStore Remote Config, события в MyTracker, крэши и ANR в AppMetrica.
