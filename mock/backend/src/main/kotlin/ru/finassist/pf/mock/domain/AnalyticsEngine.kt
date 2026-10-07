@@ -212,7 +212,9 @@ class AnalyticsEngine(
                     val base = full.take(required)
                     val baseExpense = base.sumOf { m -> scope.expenseTotal(scope.inDays(visible, m.atDay(1), m.plusMonths(1).atDay(1))) }
                     val baseDays = base.sumOf { it.lengthOfMonth() }
-                    val remainingDays = ChronoUnit.DAYS.between(lastDataDay.plusDays(1), toExcl).coerceAtLeast(0)
+                    // No data inside the period yet (statement ends before it): every day of it is still ahead.
+                    val remainingFrom = bounds?.second?.plusDays(1) ?: from
+                    val remainingDays = ChronoUnit.DAYS.between(remainingFrom, toExcl).coerceAtLeast(0)
                     Metric(
                         status = MetricStatus.READY,
                         value = Money(expense + (baseExpense.toDouble() / baseDays * remainingDays).roundToLong()),

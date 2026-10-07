@@ -146,6 +146,22 @@ class FixtureTest {
     }
 
     @Test
+    fun `quarter forecast counts every day when the statement ends before the quarter`() {
+        // Statement through 30 September, «today» 6 October: no data in Q4 yet, all 92 days are ahead.
+        val end = OffsetDateTime.parse("2026-10-01T00:00:00+03:00")
+        // The mock counts DTEND's day as covered, so the statement must end within 30 September.
+        val doc = OfxParser.parse(fixture).let { d ->
+            d.copy(coverageTo = end.minusSeconds(1), transactions = d.transactions.filter { it.postedAt.isBefore(end) })
+        }
+        val (b, _) = backend(doc = doc)
+        val q4 = assertNotNull(b.analytics.analytics(PeriodTypeCode.QUARTER, PeriodKey("2026-Q4"), TransferMode.WITH).tiles?.forecast)
+        assertEquals(MetricStatus.READY, q4.status)
+        // Base: July — September, 92 days, the same length as Q4, so the forecast equals the Q3 expense.
+        val q3 = b.analytics.analytics(PeriodTypeCode.QUARTER, PeriodKey("2026-Q3"), TransferMode.WITH).tiles!!.expense.value!!
+        assertEquals(q3.minor, q4.value!!.minor)
+    }
+
+    @Test
     fun `stale statement locks every forecast`() {
         // Last operation on 30 September, «today» more than two weeks later.
         val (stale, _) = backend(now = "2026-10-20T12:00:00+03:00")

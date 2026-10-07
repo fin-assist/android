@@ -630,7 +630,8 @@ private fun Insights(
                 state = stateOf(s),
                 lockedText = AnalyticsTexts.lock(s.lock, a.state),
                 chartId = "analytics.insight.small",
-                onClick = first?.takeIf { groups.size == 1 }?.let { g -> { actions.openSearch(g.filters) } },
+                // The card shows the first group, so it opens that group; the other groups have their own rows.
+                onClick = first?.let { g -> { actions.openSearch(g.filters) } },
             ) {
                 // The first group is the description; any further groups stay as rows.
                 groups.drop(1).forEach { g ->
