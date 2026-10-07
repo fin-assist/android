@@ -91,8 +91,8 @@ python3 design-check/compare.py build/design-check/mockups build/design-check/ap
 
 ## Где расхождения
 
-Баги — в YouTrack, проект FIN, тег `design-check`. Открытые задачи с этим тегом — известные расхождения;
-routine не заводит их повторно. Правки — отдельными PR со ссылкой на задачу; в PR — листы сравнения
+Баги — в YouTrack, проект FIN, в названии «Design check». Открытые задачи с таким названием — известные
+расхождения; routine не заводит их повторно. Правки — отдельными PR со ссылкой на задачу; в PR — листы сравнения
 после правки.
 
 ## Routine «Design check на мерж в main»
@@ -129,16 +129,16 @@ at main. Write the report, the YouTrack issue and the PR comment in Russian.
    layout, content, colour, states — where, mockup vs app, the file to change. Skip differences in data the
    fixture does not control. The mockup is right by default; if the app follows api.md and the mockup
    contradicts it, say so.
-8. In YouTrack project FIN, read the open issues tagged design-check. Drop every difference they already
-   describe.
+8. In YouTrack project FIN, read the open issues with «Design check» in the summary
+   (query: project: FIN #Unresolved "design check"). Drop every difference they already describe.
 9. Push the comparison images to the branch design-check/reports (create it as an orphan branch if it does
    not exist; never touch main), under <merge commit short sha>/.
 10. If new differences remain, create one YouTrack issue in FIN: summary «[Android] Design check <short sha>:
-    расхождения с макетами», Type Bug, Priority Normal, Subsystem android, Stage Backlog, tag design-check;
+    расхождения с макетами», Type Bug, Priority Normal, Subsystem android, Stage Backlog;
     description: the merged pull request, the screens checked with SSIM, the new differences as a checklist
     per screen, links to the images on the design-check/reports branch.
 11. Comment on the merged pull request: screens checked, SSIM, and either the new YouTrack issue or «новых
-    расхождений нет» with the open design-check issues that still apply.
+    расхождений нет» with the open «Design check» issues that still apply.
 Do not change application code.
 ```
 
