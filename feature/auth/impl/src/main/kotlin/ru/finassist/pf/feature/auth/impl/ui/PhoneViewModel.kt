@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,12 +20,13 @@ import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
 import javax.inject.Inject
 
 data class PhoneUiState(
-    val digits: String = "",
+    /** Digits only (no `+7`) with the cursor; the mask is drawn by [PhoneMaskTransformation]. */
+    val input: TextFieldValue = TextFieldValue(""),
     val error: String? = null,
     val busy: Boolean = false,
     val notice: String? = null,
 ) {
-    val display: String get() = PhoneFormat.display(digits)
+    val digits: String get() = input.text
 }
 
 sealed interface PhoneEvent {
@@ -36,15 +39,21 @@ class PhoneViewModel @Inject constructor(
     private val flow: SignInFlow,
     private val tracker: Tracker,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(PhoneUiState(digits = PhoneFormat.digits(flow.phone)))
+    private val _state = MutableStateFlow(
+        PhoneFormat.digits(flow.phone).let { PhoneUiState(input = TextFieldValue(it, TextRange(it.length))) },
+    )
     val state: StateFlow<PhoneUiState> = _state
     private val _events = MutableStateFlow<PhoneEvent?>(null)
     val events: StateFlow<PhoneEvent?> = _events
 
     fun setNotice(text: String?) = _state.update { it.copy(notice = text) }
 
-    fun onInput(raw: String) {
-        _state.update { it.copy(digits = PhoneFormat.digits(raw), error = null) }
+    fun onInput(value: TextFieldValue) {
+        val e = PhoneFormat.edit(value.text, value.selection.start, value.selection.end)
+        _state.update {
+            // Selection-only changes keep the error; any text change clears it.
+            it.copy(input = TextFieldValue(e.digits, TextRange(e.start, e.end)), error = if (e.digits == it.digits) it.error else null)
+        }
     }
 
     fun submit() {

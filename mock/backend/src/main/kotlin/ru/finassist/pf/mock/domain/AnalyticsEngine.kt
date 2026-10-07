@@ -189,9 +189,10 @@ class AnalyticsEngine(
             Metric(status = MetricStatus.READY, value = Money(scope.expenseTotal(prevOps) / days), range = range(prev.start(), prev.endExclusive()))
         } ?: locked(LockReason.NEED_FULL_MONTHS, required = 1, available = 0)
 
-        val forecast = if (!isCurrent) null else when (type) {
+        // A stale statement blocks every forecast, not only the month one: extrapolating from a long-gone last
+        // operation would look reliable while it is not (the client shows the fact instead).
+        val forecast = if (!isCurrent) null else if (stale) locked(LockReason.STALE_DATA) else when (type) {
             PeriodType.MONTH -> when {
-                stale -> locked(LockReason.STALE_DATA)
                 today().dayOfMonth < FORECAST_FROM_DAY -> locked(LockReason.TOO_EARLY_IN_MONTH, availableFrom = from.withDayOfMonth(FORECAST_FROM_DAY).at())
                 else -> {
                     val elapsed = ChronoUnit.DAYS.between(from, minOf(lastDataDay, today())) + 1
@@ -200,13 +201,25 @@ class AnalyticsEngine(
                 }
             }
             else -> {
-                val monthsInPeriod = generateSequence(YearMonth.from(from)) { it.plusMonths(1) }.takeWhile { it.atDay(1).isBefore(toExcl) }.toList()
-                val full = monthsInPeriod.filter { cov.isFullMonth(it) }
-                if (full.isEmpty()) {
-                    locked(LockReason.NEED_FULL_MONTHS, required = monthsInPeriod.size, available = 0)
+                // Quarter and year: by full months of the whole history — a quarter needs 3, a year 12 (FIN-28,
+                // api.md `tiles.forecast`: «Нужно 12 полных месяцев, есть 5»). Fact so far plus the average day
+                // of the latest full months for the days left in the period.
+                val required = monthsIn(key)
+                val full = cov.fullMonths.sortedDescending()
+                if (full.size < required) {
+                    locked(LockReason.NEED_FULL_MONTHS, required = required, available = full.size)
                 } else {
-                    val perMonth = full.map { m -> scope.expenseTotal(scope.inDays(visible, m.atDay(1), m.plusMonths(1).atDay(1))) }.average()
-                    Metric(status = MetricStatus.READY, value = Money((perMonth * monthsInPeriod.size).roundToLong()))
+                    val base = full.take(required)
+                    val baseExpense = base.sumOf { m -> scope.expenseTotal(scope.inDays(visible, m.atDay(1), m.plusMonths(1).atDay(1))) }
+                    val baseDays = base.sumOf { it.lengthOfMonth() }
+                    // No data inside the period yet (statement ends before it): every day of it is still ahead.
+                    val remainingFrom = bounds?.second?.plusDays(1) ?: from
+                    val remainingDays = ChronoUnit.DAYS.between(remainingFrom, toExcl).coerceAtLeast(0)
+                    Metric(
+                        status = MetricStatus.READY,
+                        value = Money(expense + (baseExpense.toDouble() / baseDays * remainingDays).roundToLong()),
+                        basis = MetricBasis(range(base.last().atDay(1), base.first().plusMonths(1).atDay(1)), base.size),
+                    )
                 }
             }
         }

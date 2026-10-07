@@ -6,6 +6,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import com.google.crypto.tink.Aead
 import com.google.crypto.tink.KeyTemplates
+import com.google.crypto.tink.RegistryConfiguration
 import com.google.crypto.tink.aead.AeadConfig
 import com.google.crypto.tink.integration.android.AndroidKeysetManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -68,7 +69,9 @@ internal class KeystorePasscodeCrypto @Inject constructor(
         .withMasterKeyUri(MASTER_KEY_URI)
         .build()
         .keysetHandle
-        .getPrimitive(Aead::class.java)
+        // Explicit configuration (Tink 1.12+): the Class-only overload is deprecated. RegistryConfiguration
+        // reads the same global registry that AeadConfig.register() fills, so existing keysets keep working.
+        .getPrimitive(RegistryConfiguration.get(), Aead::class.java)
 
     @Synchronized
     override fun mac(data: ByteArray): ByteArray {

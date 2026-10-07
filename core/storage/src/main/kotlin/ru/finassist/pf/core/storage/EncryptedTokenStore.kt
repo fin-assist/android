@@ -8,16 +8,17 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.google.crypto.tink.Aead
 import com.google.crypto.tink.KeyTemplates
+import com.google.crypto.tink.RegistryConfiguration
 import com.google.crypto.tink.aead.AeadConfig
 import com.google.crypto.tink.integration.android.AndroidKeysetManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.common.error.AppError
@@ -55,7 +56,9 @@ class EncryptedTokenStore @Inject constructor(
         .withMasterKeyUri(MASTER_KEY_URI)
         .build()
         .keysetHandle
-        .getPrimitive(Aead::class.java)
+        // Explicit configuration (Tink 1.12+): the Class-only overload is deprecated. RegistryConfiguration
+        // reads the same global registry that AeadConfig.register() fills, so existing keysets keep working.
+        .getPrimitive(RegistryConfiguration.get(), Aead::class.java)
 
     // Keystore + AES work stays off the main thread (PfApp collects this flow from composition).
     override val session: Flow<TokenStore.Session?> =

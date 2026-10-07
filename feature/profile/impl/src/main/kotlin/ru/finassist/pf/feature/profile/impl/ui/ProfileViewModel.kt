@@ -22,6 +22,8 @@ import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
+import ru.finassist.pf.feature.applock.api.AppLock
+import ru.finassist.pf.feature.applock.api.BiometricAvailability
 import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import ru.finassist.pf.feature.statements.api.StatementsRepository
@@ -43,6 +45,8 @@ data class ProfileUiState(
     val loggingOut: Boolean = false,
     val consentBusy: Boolean = false,
     val snackbar: String? = null,
+    /** Biometric unlock on/off; null when the device has no biometrics. */
+    val biometric: Boolean? = null,
     val flags: ProfileFlags,
 )
 
@@ -56,6 +60,7 @@ class ProfileViewModel @Inject constructor(
     statementsRepository: StatementsRepository,
     private val featureFlags: FeatureFlags,
     private val tracker: Tracker,
+    appLock: AppLock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ProfileUiState(flags = readFlags()))
 
@@ -72,6 +77,9 @@ class ProfileViewModel @Inject constructor(
         }
         viewModelScope.launch { statementsRepository.events.collect { loadStatements() } }
         viewModelScope.launch { featureFlags.changes.collect { _state.update { it.copy(flags = readFlags()) } } }
+        if (appLock.biometricAvailability() != BiometricAvailability.NONE) {
+            viewModelScope.launch { appLock.biometricEnabled.collect { on -> _state.update { it.copy(biometric = on) } } }
+        }
     }
 
     /** Called on every resume: the consent switch and the limit may have changed on other screens. */

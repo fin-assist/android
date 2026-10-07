@@ -2,6 +2,8 @@ package ru.finassist.pf.mock
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
+import ru.finassist.pf.core.api.model.LockReason
+import ru.finassist.pf.core.api.model.MetricLock
 import ru.finassist.pf.core.api.model.MetricStatus
 import ru.finassist.pf.core.api.model.OperationKindFilter
 import ru.finassist.pf.core.api.model.OperationsFilter
@@ -13,6 +15,7 @@ import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.mock.api.MockOperationsApi
 import ru.finassist.pf.mock.api.MockStatementsApi
 import ru.finassist.pf.mock.ofx.OfxCheck
+import ru.finassist.pf.mock.ofx.OfxDocument
 import ru.finassist.pf.mock.ofx.OfxParser
 import java.io.File
 import java.time.OffsetDateTime
@@ -30,13 +33,23 @@ class FixtureTest {
         override val zone: ZoneId = Clock.MOSCOW
     }
 
-    private fun backend(): Pair<MockBackend, MockStatementsApi> {
-        val backend = MockBackend(MockConfig(networkDelayMs = 0), FixedClock(OffsetDateTime.parse("2026-10-06T12:00:00+03:00")))
+    private fun backend(
+        now: String = "2026-10-06T12:00:00+03:00",
+        doc: OfxDocument = OfxParser.parse(fixture),
+    ): Pair<MockBackend, MockStatementsApi> {
+        val backend = MockBackend(MockConfig(networkDelayMs = 0), FixedClock(OffsetDateTime.parse(now)))
         backend.ready.complete(Unit)
         backend.profile = backend.emptyProfile("+79161234567", "u1")
         val statements = MockStatementsApi(backend)
-        runBlocking { statements.startUpload("fixture.ofx", OfxParser.parse(fixture), backend.now().minusDays(1), instant = true) }
+        runBlocking { statements.startUpload("fixture.ofx", doc, backend.now().minusDays(1), instant = true) }
         return backend to statements
+    }
+
+    /** The fixture cut to start on [from]: fewer full months of history. */
+    private fun fixtureFrom(from: String): OfxDocument {
+        val start = OffsetDateTime.parse(from)
+        val doc = OfxParser.parse(fixture)
+        return doc.copy(coverageFrom = start, transactions = doc.transactions.filter { !it.postedAt.isBefore(start) })
     }
 
     @Test
@@ -101,6 +114,61 @@ class FixtureTest {
         val year = backend.analytics.analytics(PeriodTypeCode.YEAR, PeriodKey("2026"), TransferMode.WITH)
         assertEquals(12, year.monthlyChart?.points?.size)
         assertEquals(null, year.insights)
+    }
+
+    @Test
+    fun `quarter and year forecasts open with 3 and 12 full months`() {
+        // Full fixture: October 2025 — September 2026, 12 full months.
+        val (full, _) = backend()
+        val year = full.analytics.analytics(PeriodTypeCode.YEAR, PeriodKey("2026"), TransferMode.WITH)
+        assertEquals(12, year.state!!.fullMonths)
+        val yearForecast = assertNotNull(year.tiles?.forecast)
+        assertEquals(MetricStatus.READY, yearForecast.status)
+        assertEquals(12, yearForecast.basis?.fullMonths)
+        assertTrue(yearForecast.value!!.minor >= year.tiles!!.expense.value!!.minor, "forecast below the fact")
+        // FIN-28: a past year has no forecast at all.
+        assertEquals(null, full.analytics.analytics(PeriodTypeCode.YEAR, PeriodKey("2025"), TransferMode.WITH).tiles?.forecast)
+    }
+
+    @Test
+    fun `year forecast is locked with 9 full months, quarter is open`() {
+        // FIN-28 scenario: data from 1 January, 9 full months.
+        val (cut, _) = backend(doc = fixtureFrom("2026-01-01T00:00:00+03:00"))
+        val year = cut.analytics.analytics(PeriodTypeCode.YEAR, PeriodKey("2026"), TransferMode.WITH)
+        assertEquals(9, year.state!!.fullMonths)
+        val locked = assertNotNull(year.tiles?.forecast)
+        assertEquals(MetricStatus.LOCKED, locked.status)
+        assertEquals(MetricLock(LockReason.NEED_FULL_MONTHS, required = 12, available = 9), locked.lock)
+
+        val quarter = cut.analytics.analytics(PeriodTypeCode.QUARTER, PeriodKey("2026-Q4"), TransferMode.WITH)
+        assertEquals(MetricStatus.READY, quarter.tiles?.forecast?.status)
+        assertEquals(3, quarter.tiles?.forecast?.basis?.fullMonths)
+    }
+
+    @Test
+    fun `quarter forecast counts every day when the statement ends before the quarter`() {
+        // Statement through 30 September, «today» 6 October: no data in Q4 yet, all 92 days are ahead.
+        val end = OffsetDateTime.parse("2026-10-01T00:00:00+03:00")
+        // The mock counts DTEND's day as covered, so the statement must end within 30 September.
+        val doc = OfxParser.parse(fixture).let { d ->
+            d.copy(coverageTo = end.minusSeconds(1), transactions = d.transactions.filter { it.postedAt.isBefore(end) })
+        }
+        val (b, _) = backend(doc = doc)
+        val q4 = assertNotNull(b.analytics.analytics(PeriodTypeCode.QUARTER, PeriodKey("2026-Q4"), TransferMode.WITH).tiles?.forecast)
+        assertEquals(MetricStatus.READY, q4.status)
+        // Base: July — September, 92 days, the same length as Q4, so the forecast equals the Q3 expense.
+        val q3 = b.analytics.analytics(PeriodTypeCode.QUARTER, PeriodKey("2026-Q3"), TransferMode.WITH).tiles!!.expense.value!!
+        assertEquals(q3.minor, q4.value!!.minor)
+    }
+
+    @Test
+    fun `stale statement locks every forecast`() {
+        // Last operation on 30 September, «today» more than two weeks later.
+        val (stale, _) = backend(now = "2026-10-20T12:00:00+03:00")
+        for ((type, key) in listOf(PeriodTypeCode.MONTH to "2026-10", PeriodTypeCode.QUARTER to "2026-Q4", PeriodTypeCode.YEAR to "2026")) {
+            val f = stale.analytics.analytics(type, PeriodKey(key), TransferMode.WITH).tiles?.forecast
+            assertEquals(LockReason.STALE_DATA, f?.lock?.reason, key)
+        }
     }
 
     @Test

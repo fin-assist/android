@@ -13,8 +13,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -27,8 +30,10 @@ import ru.finassist.pf.core.designsystem.components.PfButton
 import ru.finassist.pf.core.designsystem.components.PfCard
 import ru.finassist.pf.core.designsystem.components.PfDialog
 import ru.finassist.pf.core.designsystem.components.PfEmptyState
+import ru.finassist.pf.core.designsystem.components.PfLink
 import ru.finassist.pf.core.designsystem.components.PfListRow
 import ru.finassist.pf.core.designsystem.components.PfOptionRow
+import ru.finassist.pf.core.designsystem.components.PfSectionTitle
 import ru.finassist.pf.core.designsystem.components.PfSnackbar
 import ru.finassist.pf.core.designsystem.components.PfTabHeader
 import ru.finassist.pf.core.designsystem.components.RowTone
@@ -59,7 +64,19 @@ fun ProfileScreen(actions: ProfileActions, vm: ProfileViewModel = hiltViewModel(
         onRetry = vm::load, onRevokeConsent = vm::revokeConsent, onThemeSheet = vm::openThemeSheet, onTheme = vm::setTheme,
         onSupport = { userId -> writeSupport(context, userId) }, onAskLogout = vm::askLogout, onLogout = vm::logout,
         onSnackbarShown = vm::consumeSnackbar,
+        versionName = remember { appVersion(context) },
     )
+}
+
+private fun appVersion(context: Context): String? =
+    runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+
+@Composable
+private fun Section(title: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2)) {
+        PfSectionTitle(title)
+        content()
+    }
 }
 
 /** The profile drawn from a ready state (design-check snapshots render it without a ViewModel). */
@@ -75,6 +92,7 @@ internal fun ProfileContent(
     onAskLogout: (Boolean) -> Unit,
     onLogout: () -> Unit,
     onSnackbarShown: () -> Unit,
+    versionName: String? = null,
 ) {
     val d = PfTheme.dimens
     Column(Modifier.fillMaxSize()) {
@@ -86,50 +104,62 @@ internal fun ProfileContent(
                 PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
             }
             else -> Column(
-                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(bottom = d.space8),
-                verticalArrangement = Arrangement.spacedBy(d.space4),
+                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(top = d.space4, bottom = d.space6),
+                verticalArrangement = Arrangement.spacedBy(d.space6),
             ) {
-                PfCard(flush = true) {
-                    PfListRow("Телефон", icon = PfIcons.PHONE, value = ProfileTexts.phone(p.phone), divider = false)
+                PfCard {
+                    Text("Номер телефона", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
+                    Text(ProfileTexts.phone(p.phone), style = PfTheme.type.title2, color = PfTheme.colors.text, maxLines = 1, modifier = Modifier.padding(top = d.space1))
                 }
-                PfCard(flush = true) {
-                    PfListRow(
-                        "Выписка",
-                        icon = PfIcons.FILE_TEXT,
-                        description = if (state.statementsLoaded) ProfileTexts.statement(state.statements) else null,
-                        onClick = if (state.statements == null && state.flags.upload) actions.openUpload else actions.openHistory,
-                        divider = false,
-                    )
-                }
-                if (state.flags.assistant) {
+                Section("Источник данных") {
                     PfCard(flush = true) {
-                        val limit = state.limit
                         PfListRow(
-                            "Помощник",
-                            icon = PfIcons.MESSAGE,
-                            value = limit?.let { if (it.remaining == it.dailyMax) "${it.dailyMax} вопросов в день" else "осталось ${it.remaining} из ${it.dailyMax}" },
-                            onClick = actions.openChat,
-                        )
-                        val granted = p.assistantConsent.granted && !p.assistantConsent.needsRenewal
-                        PfListRow(
-                            "Передавать данные помощнику",
-                            description = "Без согласия помощник не отвечает. История ответов сохранится",
-                            switchChecked = granted,
-                            onSwitch = { on -> if (state.consentBusy) Unit else if (on) actions.openConsent() else onRevokeConsent() },
+                            "Выписка",
+                            icon = PfIcons.LANDMARK,
+                            description = if (state.statementsLoaded) ProfileTexts.statement(state.statements) else null,
+                            onClick = if (state.statements == null && state.flags.upload) actions.openUpload else actions.openHistory,
                             divider = false,
                         )
                     }
                 }
-                PfCard(flush = true) {
-                    PfListRow("Тема", icon = if (state.theme == Theme.DARK) PfIcons.MOON else PfIcons.SUN, value = ProfileTexts.theme(state.theme), onClick = { onThemeSheet(true) })
-                    PfListRow("Код-пароль и биометрия", icon = PfIcons.LOCK, onClick = actions.openSecurity)
-                    PfListRow("Написать в поддержку", icon = PfIcons.LIFE_BUOY, onClick = { onSupport(p.userId) }, divider = false)
-                }
-                PfCard(flush = true) {
-                    PfListRow("Выйти из аккаунта", icon = PfIcons.LOG_OUT, tone = RowTone.ACCENT, onClick = { onAskLogout(true) }, divider = state.flags.deleteAccount)
-                    if (state.flags.deleteAccount) {
-                        PfListRow("Удалить аккаунт", icon = PfIcons.TRASH, tone = RowTone.ACCENT, onClick = actions.openDeleteAccount, divider = false)
+                if (state.flags.assistant) {
+                    Section("Помощник") {
+                        PfCard(flush = true) {
+                            val limit = state.limit
+                            PfListRow(
+                                "Помощник",
+                                icon = PfIcons.MESSAGE,
+                                value = limit?.let { if (it.remaining == it.dailyMax) "${it.dailyMax} вопросов в день" else "осталось ${it.remaining} из ${it.dailyMax}" },
+                                onClick = actions.openChat,
+                            )
+                            val granted = p.assistantConsent.granted && !p.assistantConsent.needsRenewal
+                            PfListRow(
+                                "Передавать данные помощнику",
+                                icon = PfIcons.SEND,
+                                description = "Без этого помощник не отвечает, прошлые ответы остаются",
+                                switchChecked = granted,
+                                onSwitch = { on -> if (state.consentBusy) Unit else if (on) actions.openConsent() else onRevokeConsent() },
+                                divider = false,
+                            )
+                        }
                     }
+                }
+                Section("Настройки") {
+                    PfCard(flush = true) {
+                        PfListRow("Код-пароль и биометрия", icon = PfIcons.FINGERPRINT, value = ProfileTexts.biometric(state.biometric), onClick = actions.openSecurity)
+                        PfListRow("Тема", icon = PfIcons.MOON, value = ProfileTexts.theme(state.theme), onClick = { onThemeSheet(true) }, divider = false)
+                    }
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(d.space2)) {
+                    PfCard(flush = true) {
+                        PfListRow("Написать в поддержку", icon = PfIcons.LIFE_BUOY, onClick = { onSupport(p.userId) })
+                        PfListRow("Выйти", icon = PfIcons.LOG_OUT, tone = RowTone.ACCENT, onClick = { onAskLogout(true) }, divider = false)
+                    }
+                    if (state.flags.deleteAccount) PfLink("Удалить аккаунт и все данные", onClick = actions.openDeleteAccount)
+                    Text(
+                        ProfileTexts.footer(versionName),
+                        style = PfTheme.type.hint, color = PfTheme.colors.textMuted, textAlign = TextAlign.Center,
+                    )
                 }
             }
         }

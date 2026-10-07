@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -20,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -42,6 +42,8 @@ import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ru.finassist.pf.core.designsystem.icons.PfIcon
@@ -64,6 +66,71 @@ fun PfTextField(
     singleLine: Boolean = true,
     enabled: Boolean = true,
 ) {
+    FieldFrame(label, value.isEmpty(), placeholder, hint, error, modifier) { interaction, fieldModifier, decoration ->
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = enabled,
+            singleLine = singleLine,
+            interactionSource = interaction,
+            textStyle = PfTheme.type.lead.copy(color = PfTheme.colors.text, fontSize = 16.sp),
+            cursorBrush = SolidColor(PfTheme.colors.accent),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+            keyboardActions = KeyboardActions(onAny = { onImeAction() }),
+            modifier = fieldModifier,
+            decorationBox = decoration,
+        )
+    }
+}
+
+/**
+ * [PfTextField] over [TextFieldValue] with a [visualTransformation] — for masked input (phone), where the
+ * caller owns the cursor and the shown text differs from the stored one.
+ */
+@Composable
+fun PfTextField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    hint: String? = null,
+    error: String? = null,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    imeAction: ImeAction = ImeAction.Done,
+    onImeAction: () -> Unit = {},
+    enabled: Boolean = true,
+) {
+    FieldFrame(label, value.text.isEmpty(), placeholder, hint, error, modifier) { interaction, fieldModifier, decoration ->
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = enabled,
+            singleLine = true,
+            interactionSource = interaction,
+            visualTransformation = visualTransformation,
+            textStyle = PfTheme.type.lead.copy(color = PfTheme.colors.text, fontSize = 16.sp),
+            cursorBrush = SolidColor(PfTheme.colors.accent),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+            keyboardActions = KeyboardActions(onAny = { onImeAction() }),
+            modifier = fieldModifier,
+            decorationBox = decoration,
+        )
+    }
+}
+
+/** Label, frame, placeholder and hint/error shared by both [PfTextField] overloads. */
+@Composable
+private fun FieldFrame(
+    label: String,
+    isEmpty: Boolean,
+    placeholder: String?,
+    hint: String?,
+    error: String?,
+    modifier: Modifier,
+    field: @Composable (MutableInteractionSource, Modifier, @Composable (@Composable () -> Unit) -> Unit) -> Unit,
+) {
     val c = PfTheme.colors
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -75,32 +142,23 @@ fun PfTextField(
     Column(modifier) {
         Text(label, style = PfTheme.type.caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = c.textMuted)
         Spacer(Modifier.height(PfTheme.dimens.space1))
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            enabled = enabled,
-            singleLine = singleLine,
-            interactionSource = interaction,
-            textStyle = PfTheme.type.lead.copy(color = c.text, fontSize = 16.sp),
-            cursorBrush = SolidColor(c.accent),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
-            keyboardActions = KeyboardActions(onAny = { onImeAction() }),
-            modifier = Modifier
+        field(
+            interaction,
+            Modifier
                 .fillMaxWidth()
                 .height(PfTheme.dimens.field)
                 .background(c.surface, RoundedCornerShape(PfTheme.dimens.radiusMd))
                 .border(if (error != null || focused) 2.dp else 1.dp, borderColor, RoundedCornerShape(PfTheme.dimens.radiusMd))
                 .padding(horizontal = PfTheme.dimens.space4)
                 .semantics { if (error != null) this.error(error) },
-            decorationBox = { inner ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty() && placeholder != null) {
-                        Text(placeholder, style = PfTheme.type.lead, color = c.textMuted, maxLines = 1)
-                    }
-                    inner()
+        ) { inner ->
+            Box(contentAlignment = Alignment.CenterStart) {
+                if (isEmpty && placeholder != null) {
+                    Text(placeholder, style = PfTheme.type.lead, color = c.textMuted, maxLines = 1)
                 }
-            },
-        )
+                inner()
+            }
+        }
         val below = error ?: hint
         if (below != null) {
             Spacer(Modifier.height(PfTheme.dimens.space1))
