@@ -5,6 +5,8 @@
 // <site dir> holds the canvas files as published in the artifact (`project/*`) plus the runtime
 // `artifact-type/dc-runtime.js` copied as `support.js`. Without artboard names, renders every name that has
 // an app snapshot in build/design-check/app. Output: 390 css px wide at ×3 = 1170 px, the same as the app.
+// Also writes <out dir>/coverage.json: every artboard of the canvas and whether the app has a snapshot of it
+// (the list of screens still to cover, see README «Добавить экран»).
 //
 // Font: the canvas stack is "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, …"; on Linux fontconfig
 // answers the Apple/Windows names with whatever sans it has (Inter here) before Roboto. The app is Roboto,
@@ -18,8 +20,10 @@ const [siteArg, outArg, ...names] = process.argv.slice(2);
 const site = path.resolve(siteArg);
 const out = path.resolve(outArg);
 fs.mkdirSync(out, { recursive: true });
-const wanted = names.length ? names
-  : fs.readdirSync(path.join(__dirname, '..', 'build/design-check/app')).filter(f => f.endsWith('.png')).map(f => f.slice(0, -4));
+const appDir = path.join(__dirname, '..', 'build/design-check/app');
+const snapshots = fs.existsSync(appDir)
+  ? fs.readdirSync(appDir).filter(f => f.endsWith('.png')).map(f => f.slice(0, -4)) : [];
+const wanted = names.length ? names : snapshots;
 
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
@@ -32,6 +36,12 @@ const server = http.createServer((req, res) => {
 server.listen(0, '127.0.0.1', async () => {
   const port = server.address().port;
   const canvas = JSON.parse(fs.readFileSync(path.join(site, 'canvas.json'), 'utf8'));
+  const boards = Object.entries(canvas.boards).map(([file, b]) => ({
+    name: file.replace(/\.dc\.html$/, ''), title: b.title, page: b.page, snapshot: false,
+  }));
+  boards.forEach(b => { b.snapshot = snapshots.includes(b.name); });
+  fs.writeFileSync(path.join(out, 'coverage.json'), JSON.stringify(boards, null, 2));
+  console.log(`coverage: ${boards.filter(b => b.snapshot).length} of ${boards.length} artboards have an app snapshot`);
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 });
   const page = await ctx.newPage();

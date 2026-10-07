@@ -3,7 +3,9 @@
     python3 design-check/compare.py <mockups dir> <app dir> <out dir>
 
 For every `<name>.png` present in both directories writes `<out>/<name>.png` (mockup | app | difference heat
-map) and `<out>/scores.json`, sorted worst first. The score is SSIM on grayscale (1.0 = identical); the
+map) and `<out>/scores.json`, sorted worst first. Images of different heights (a long screen the app draws
+longer or shorter than the artboard) are compared at the taller height, the shorter one padded with its
+bottom colour: missing or extra blocks show up as differences instead of being cut off. The score is SSIM on grayscale (1.0 = identical); the
 mockups and the app use the same font and size, so the score reflects layout, spacing and colour, not text
 rendering. A score is a ranking aid, not a verdict: the report says what differs and why.
 """
@@ -18,14 +20,13 @@ from skimage.metrics import structural_similarity
 LABEL_H = 64
 
 
-def load(path, size=None):
-    im = Image.open(path).convert("RGB")
-    if size and im.size != size:
-        # Same artboard, different height (app content shorter / longer): pad or crop at the bottom.
-        canvas = Image.new("RGB", size, im.getpixel((0, im.height - 1)))
-        canvas.paste(im.crop((0, 0, size[0], min(im.height, size[1]))), (0, 0))
-        im = canvas
-    return im
+def pad(im, height):
+    """Extends an image to `height` with its bottom-left colour (the screen background)."""
+    if im.height >= height:
+        return im
+    canvas = Image.new("RGB", (im.width, height), im.getpixel((0, im.height - 1)))
+    canvas.paste(im, (0, 0))
+    return canvas
 
 
 def heatmap(a, b):
@@ -59,16 +60,25 @@ def main(mock_dir, app_dir, out_dir):
         if not mock.exists():
             scores.append({"name": app.stem, "missing": "mockup"})
             continue
-        a = load(mock)
-        b = load(app, a.size)
+        a = Image.open(mock).convert("RGB")
+        b = Image.open(app).convert("RGB")
+        if a.width != b.width:
+            scores.append({"name": app.stem, "missing": f"same width (mockup {a.width}, app {b.width})"})
+            continue
+        heights = {"mockup_h": a.height, "app_h": b.height}
+        a, b = pad(a, max(a.height, b.height)), pad(b, max(a.height, b.height))
         ssim = structural_similarity(np.asarray(a.convert("L")), np.asarray(b.convert("L")), data_range=255)
         diff, changed = heatmap(a, b)
         labelled([a, b, diff], ["Макет", "Приложение", f"Отличия · SSIM {ssim:.3f}"]).save(out_dir / app.name, optimize=True)
-        scores.append({"name": app.stem, "ssim": round(float(ssim), 4), "changed": round(changed, 4)})
+        scores.append({"name": app.stem, "ssim": round(float(ssim), 4), "changed": round(changed, 4), **heights})
     scores.sort(key=lambda s: s.get("ssim", -1))
     (out_dir / "scores.json").write_text(json.dumps(scores, ensure_ascii=False, indent=2))
     for s in scores:
-        print(f"{s['name']:<28} " + (f"SSIM {s['ssim']:.3f}  changed {s['changed']:.1%}" if "ssim" in s else f"missing {s['missing']}"))
+        if "ssim" not in s:
+            print(f"{s['name']:<28} missing {s['missing']}")
+            continue
+        height = "" if s["mockup_h"] == s["app_h"] else f"  height mockup {s['mockup_h']} / app {s['app_h']} px"
+        print(f"{s['name']:<28} SSIM {s['ssim']:.3f}  changed {s['changed']:.1%}{height}")
 
 
 if __name__ == "__main__":
