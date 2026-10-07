@@ -1,0 +1,58 @@
+[
+  {
+    "name": "AnalyticsDark",
+    "ssim": 0.7832,
+    "changed": 0.1187,
+    "mockup_h": 8544,
+    "app_h": 8544
+  },
+  {
+    "name": "Analytics",
+    "ssim": 0.8124,
+    "changed": 0.112,
+    "mockup_h": 8544,
+    "app_h": 8544
+  },
+  {
+    "name": "MainDark",
+    "ssim": 0.8303,
+    "changed": 0.096,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "Main",
+    "ssim": 0.8511,
+    "changed": 0.0616,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ProfileDark",
+    "ssim": 0.8615,
+    "changed": 0.0564,
+    "mockup_h": 2952,
+    "app_h": 2952
+  },
+  {
+    "name": "Profile",
+    "ssim": 0.8668,
+    "changed": 0.0581,
+    "mockup_h": 2952,
+    "app_h": 2952
+  },
+  {
+    "name": "PasscodeLoginDark",
+    "ssim": 0.9917,
+    "changed": 0.0046,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PasscodeLogin",
+    "ssim": 0.992,
+    "changed": 0.0045,
+    "mockup_h": 2532,
+    "app_h": 2532
+  }
+]
