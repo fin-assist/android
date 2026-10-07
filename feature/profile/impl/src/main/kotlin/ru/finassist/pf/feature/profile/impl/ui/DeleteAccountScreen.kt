@@ -1,11 +1,10 @@
 package ru.finassist.pf.feature.profile.impl.ui
 
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -89,7 +88,7 @@ fun DeleteAccountScreen(
             vm.delete()
         }
     }
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars)) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
         PfPageHeader("Удаление аккаунта", onBack = if (state.deleting) null else onBack)
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5, vertical = d.space2),

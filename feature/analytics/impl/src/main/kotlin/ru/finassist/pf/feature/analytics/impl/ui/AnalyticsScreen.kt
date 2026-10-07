@@ -33,6 +33,7 @@ import ru.finassist.pf.core.api.model.MetricLike
 import ru.finassist.pf.core.api.model.MetricStatus
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.PeriodTypeCode
+import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.RussianDates
@@ -85,6 +86,29 @@ private val PERIOD_TYPES = listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, 
 fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: AnalyticsViewModel = hiltViewModel()) {
     LaunchedEffect(params) { vm.init(params) }
     val state by vm.state.collectAsStateWithLifecycle()
+    AnalyticsContent(state, actions, vm)
+}
+
+/**
+ * User actions of the analytics screen. Implemented by [AnalyticsViewModel]; design-check snapshots pass a
+ * no-op to render [AnalyticsContent] from a ready state.
+ */
+interface AnalyticsHandlers {
+    fun load(quiet: Boolean = false)
+    fun consumeSnackbar()
+    fun setPeriodType(type: PeriodTypeCode)
+    fun goTo(key: PeriodKey)
+    fun openSheet(sheet: AnalyticsSheet?)
+    fun nextHint(stop: Boolean)
+    fun onTileOpened(tile: String)
+    fun dismissRegular(id: String)
+    fun setTransferMode(mode: TransferMode)
+    fun currentTransferMode(): TransferMode
+    fun toggleAllCategories()
+}
+
+@Composable
+internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions, vm: AnalyticsHandlers) {
     val d = PfTheme.dimens
     Column(Modifier.fillMaxSize()) {
         if (actions.back != null) PfPageHeader("Аналитика", onBack = actions.back) else PfTabHeader("Аналитика")
@@ -120,7 +144,7 @@ fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: Ana
 }
 
 @Composable
-private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: AnalyticsViewModel, actions: AnalyticsActions) {
+private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers, actions: AnalyticsActions) {
     val params = a.params ?: return
     val period = a.period ?: return
     val blocks = state.blocks
@@ -269,7 +293,7 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
 }
 
 @Composable
-private fun Tiles(a: Analytics, vm: AnalyticsViewModel, actions: AnalyticsActions) {
+private fun Tiles(a: Analytics, vm: AnalyticsHandlers, actions: AnalyticsActions) {
     val tiles = a.tiles ?: return
     val params = a.params ?: return
     val d = PfTheme.dimens
@@ -369,7 +393,7 @@ private fun Insights(
     insights: ru.finassist.pf.core.api.model.Insights,
     a: Analytics,
     blocks: AnalyticsBlocks,
-    vm: AnalyticsViewModel,
+    vm: AnalyticsHandlers,
     actions: AnalyticsActions,
 ) {
     val anyOn = blocks.regularPayments || blocks.notableSpending || blocks.bankFees || blocks.smallFrequent
@@ -469,7 +493,7 @@ private fun Insights(
 }
 
 @Composable
-private fun Sheets(state: AnalyticsUiState, vm: AnalyticsViewModel) {
+private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
     when (state.sheet) {
         AnalyticsSheet.PERIODS -> PfBottomSheet("Период", onDismiss = { vm.openSheet(null) }) {
             val current = state.data?.params?.date

@@ -1,13 +1,12 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -110,7 +109,7 @@ fun AiConsentScreen(onBack: () -> Unit, onGranted: () -> Unit, vm: AiConsentView
     val context = LocalContext.current
     val d = PfTheme.dimens
     LaunchedEffect(state.granted) { if (state.granted) onGranted() }
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars)) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
         PfPageHeader("Помощник", onBack = onBack)
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5, vertical = d.space2),

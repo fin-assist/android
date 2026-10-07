@@ -50,18 +50,40 @@ class ProfileActions(
 fun ProfileScreen(actions: ProfileActions, vm: ProfileViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val d = PfTheme.dimens
     LifecycleResumeEffect(Unit) {
         vm.load()
         onPauseOrDispose { }
     }
+    ProfileContent(
+        state = state, actions = actions,
+        onRetry = vm::load, onRevokeConsent = vm::revokeConsent, onThemeSheet = vm::openThemeSheet, onTheme = vm::setTheme,
+        onSupport = { userId -> writeSupport(context, userId) }, onAskLogout = vm::askLogout, onLogout = vm::logout,
+        onSnackbarShown = vm::consumeSnackbar,
+    )
+}
+
+/** The profile drawn from a ready state (design-check snapshots render it without a ViewModel). */
+@Composable
+internal fun ProfileContent(
+    state: ProfileUiState,
+    actions: ProfileActions,
+    onRetry: () -> Unit,
+    onRevokeConsent: () -> Unit,
+    onThemeSheet: (Boolean) -> Unit,
+    onTheme: (Theme) -> Unit,
+    onSupport: (userId: String) -> Unit,
+    onAskLogout: (Boolean) -> Unit,
+    onLogout: () -> Unit,
+    onSnackbarShown: () -> Unit,
+) {
+    val d = PfTheme.dimens
     Column(Modifier.fillMaxSize()) {
         PfTabHeader("Профиль")
         val p = state.profile
         when {
             state.loading -> Unit
             state.offline || p == null -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
-                PfButton("Повторить", onClick = vm::load, variant = ButtonVariant.PRIMARY)
+                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
             }
             else -> Column(
                 Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(bottom = d.space8),
@@ -93,18 +115,18 @@ fun ProfileScreen(actions: ProfileActions, vm: ProfileViewModel = hiltViewModel(
                             "Передавать данные помощнику",
                             description = "Без согласия помощник не отвечает. История ответов сохранится",
                             switchChecked = granted,
-                            onSwitch = { on -> if (state.consentBusy) Unit else if (on) actions.openConsent() else vm.revokeConsent() },
+                            onSwitch = { on -> if (state.consentBusy) Unit else if (on) actions.openConsent() else onRevokeConsent() },
                             divider = false,
                         )
                     }
                 }
                 PfCard(flush = true) {
-                    PfListRow("Тема", icon = if (state.theme == Theme.DARK) PfIcons.MOON else PfIcons.SUN, value = ProfileTexts.theme(state.theme), onClick = { vm.openThemeSheet(true) })
+                    PfListRow("Тема", icon = if (state.theme == Theme.DARK) PfIcons.MOON else PfIcons.SUN, value = ProfileTexts.theme(state.theme), onClick = { onThemeSheet(true) })
                     PfListRow("Код-пароль и биометрия", icon = PfIcons.LOCK, onClick = actions.openSecurity)
-                    PfListRow("Написать в поддержку", icon = PfIcons.LIFE_BUOY, onClick = { writeSupport(context, p.userId) }, divider = false)
+                    PfListRow("Написать в поддержку", icon = PfIcons.LIFE_BUOY, onClick = { onSupport(p.userId) }, divider = false)
                 }
                 PfCard(flush = true) {
-                    PfListRow("Выйти из аккаунта", icon = PfIcons.LOG_OUT, tone = RowTone.ACCENT, onClick = { vm.askLogout(true) }, divider = state.flags.deleteAccount)
+                    PfListRow("Выйти из аккаунта", icon = PfIcons.LOG_OUT, tone = RowTone.ACCENT, onClick = { onAskLogout(true) }, divider = state.flags.deleteAccount)
                     if (state.flags.deleteAccount) {
                         PfListRow("Удалить аккаунт", icon = PfIcons.TRASH, tone = RowTone.ACCENT, onClick = actions.openDeleteAccount, divider = false)
                     }
@@ -114,14 +136,14 @@ fun ProfileScreen(actions: ProfileActions, vm: ProfileViewModel = hiltViewModel(
         state.snackbar?.let { text ->
             LaunchedEffect(text) {
                 delay(3000)
-                vm.consumeSnackbar()
+                onSnackbarShown()
             }
             PfSnackbar(text, Modifier.padding(d.space4))
         }
     }
     if (state.themeSheet) {
-        PfBottomSheet("Тема", onDismiss = { vm.openThemeSheet(false) }) {
-            Theme.entries.forEach { t -> PfOptionRow(ProfileTexts.theme(t), selected = t == state.theme, onClick = { vm.setTheme(t) }) }
+        PfBottomSheet("Тема", onDismiss = { onThemeSheet(false) }) {
+            Theme.entries.forEach { t -> PfOptionRow(ProfileTexts.theme(t), selected = t == state.theme, onClick = { onTheme(t) }) }
         }
     }
     if (state.askLogout) {
@@ -129,8 +151,8 @@ fun ProfileScreen(actions: ProfileActions, vm: ProfileViewModel = hiltViewModel(
             title = "Выйти из аккаунта?",
             description = "Чтобы войти снова, понадобится номер телефона и звонок. Данные останутся в аккаунте.",
             confirmText = "Выйти",
-            onConfirm = vm::logout,
-            onDismiss = { vm.askLogout(false) },
+            onConfirm = onLogout,
+            onDismiss = { onAskLogout(false) },
             busy = state.loggingOut,
             busyText = "Выходим…",
         )

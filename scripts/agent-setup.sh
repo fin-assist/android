@@ -10,6 +10,7 @@
 # Usage:
 #   scripts/agent-setup.sh                 # SDK + local.properties + Central mirror
 #   scripts/agent-setup.sh --no-mirror     # keep repo.maven.apache.org as is
+#   scripts/agent-setup.sh --design-check  # also Roboto + Python libs for design-check/ (render and compare)
 #   ANDROID_HOME=/path scripts/agent-setup.sh
 set -euo pipefail
 
@@ -17,7 +18,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}"
 CMDLINE_TOOLS_ZIP="commandlinetools-linux-11076708_latest.zip"
 USE_MIRROR=1
-[[ "${1:-}" == "--no-mirror" ]] && USE_MIRROR=0
+DESIGN_CHECK=0
+for arg in "$@"; do
+    case "$arg" in
+        --no-mirror) USE_MIRROR=0 ;;
+        --design-check) DESIGN_CHECK=1 ;;
+    esac
+done
 
 log() { printf '[agent-setup] %s\n' "$*"; }
 
@@ -81,8 +88,26 @@ beforeSettings { s ->
 }
 GRADLE
     log "Maven Central mirror: $INIT"
+    # Robolectric fetches android-all itself, outside Gradle's repositories (used by -Ppf.designcheck).
+    PROPS="${GRADLE_USER_HOME:-$HOME/.gradle}/gradle.properties"
+    touch "$PROPS"
+    grep -q '^pf.robolectric.repo=' "$PROPS" || echo 'pf.robolectric.repo=https://maven-central.storage-download.googleapis.com/maven2' >> "$PROPS"
 else
     rm -f "$INIT"
+fi
+
+# --- design check: Roboto for the mockup renderer, Python libs for the comparison -----------------------
+if (( DESIGN_CHECK )); then
+    if [[ "$(fc-match -f "%{family}" Roboto 2>/dev/null)" != *Roboto* ]]; then
+        log "installing Roboto (google/fonts, OFL) into ~/.fonts"
+        mkdir -p "$HOME/.fonts"
+        curl -sSfL -o "$HOME/.fonts/Roboto-wght.ttf" \
+            "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto%5Bwdth%2Cwght%5D.ttf"
+        fc-cache -f >/dev/null 2>&1 || true
+    fi
+    python3 -c "import PIL, skimage" 2>/dev/null || pip install -q --break-system-packages pillow scikit-image
+    node -e "require('playwright')" 2>/dev/null || NODE_PATH="$(npm root -g)" node -e "require('playwright')" \
+        || log "playwright for Node is missing: npm i -g playwright (Chromium must be installed for it)"
 fi
 
 log "ready: ANDROID_HOME=$ANDROID_HOME (android-$COMPILE_SDK, build-tools $BUILD_TOOLS)"

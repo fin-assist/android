@@ -1,5 +1,6 @@
 package ru.finassist.pf.core.designsystem.components
 
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,12 +11,9 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -72,7 +70,7 @@ fun PfTabHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.statusBars)
+            .windowInsetsPadding(PfInsets.statusBars)
             .padding(start = PfTheme.dimens.screenMargin, end = PfTheme.dimens.space3, top = PfTheme.dimens.space4, bottom = PfTheme.dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -93,7 +91,7 @@ fun PfPageHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.statusBars)
+            .windowInsetsPadding(PfInsets.statusBars)
             .padding(start = PfTheme.dimens.space3, end = PfTheme.dimens.space3, top = PfTheme.dimens.space2, bottom = PfTheme.dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -145,6 +143,6 @@ fun PfTabBar(
                 }
             }
         }
-        Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars))
+        Spacer(Modifier.windowInsetsPadding(PfInsets.navigationBars))
     }
 }

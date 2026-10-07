@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.applock.impl.ui
 
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -7,13 +8,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,8 +65,8 @@ private fun PasscodePad(
         modifier
             .fillMaxSize()
             .background(PfTheme.colors.bg)
-            .then(if (header == null) Modifier.windowInsetsPadding(WindowInsets.statusBars) else Modifier)
-            .windowInsetsPadding(WindowInsets.navigationBars),
+            .then(if (header == null) Modifier.windowInsetsPadding(PfInsets.statusBars) else Modifier)
+            .windowInsetsPadding(PfInsets.navigationBars),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // PfPageHeader pads the status bar itself.
@@ -133,7 +131,7 @@ private fun BiometricOffer(noun: String, icon: String, onEnable: () -> Unit, onS
         Modifier
             .fillMaxSize()
             .background(PfTheme.colors.bg)
-            .windowInsetsPadding(WindowInsets.navigationBars),
+            .windowInsetsPadding(PfInsets.navigationBars),
     ) {
         PfPageHeader(title = "Шаг 3 из 4", onBack = null)
         Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = d.space5), verticalArrangement = Arrangement.Center) {
@@ -162,26 +160,41 @@ fun UnlockScreen(vm: UnlockViewModel = hiltViewModel()) {
     // Biometrics first (decision auth-owner-2); the keypad stays underneath for cancel / failure.
     LaunchedEffect(state.biometricEnabled) { if (state.biometricEnabled) prompt() }
     BackHandler { activity?.finish() }
+    UnlockContent(
+        state = state, onDigit = vm::digit, onDelete = vm::delete, onBiometric = prompt,
+        onAskForgot = vm::askForgot, onForgot = vm::forgot,
+    )
+}
 
+/** The unlock overlay drawn from a ready state (design-check snapshots render it without a ViewModel). */
+@Composable
+internal fun UnlockContent(
+    state: UnlockUiState,
+    onDigit: (Int) -> Unit,
+    onDelete: () -> Unit,
+    onBiometric: () -> Unit,
+    onAskForgot: (Boolean) -> Unit,
+    onForgot: () -> Unit,
+) {
     PasscodePad(
         mark = true,
         title = "Введите код-пароль",
         subtitle = null,
         entered = state.entered.length,
         error = state.error,
-        onDigit = vm::digit,
-        onDelete = vm::delete,
+        onDigit = onDigit,
+        onDelete = onDelete,
         biometric = if (state.biometricEnabled) state.biometric.toKind() else BiometricKind.NONE,
-        onBiometric = prompt,
-        footer = { PfLink("Забыли код?", onClick = { vm.askForgot(true) }) },
+        onBiometric = onBiometric,
+        footer = { PfLink("Забыли код?", onClick = { onAskForgot(true) }) },
     )
     if (state.askForgot) {
         PfDialog(
             title = "Выйти из аккаунта?",
             description = "Сбросить код-пароль можно только новым входом: номер телефона, звонок и новый код. Данные не пропадут.",
             confirmText = "Выйти",
-            onConfirm = vm::forgot,
-            onDismiss = { vm.askForgot(false) },
+            onConfirm = onForgot,
+            onDismiss = { onAskForgot(false) },
             busy = state.busy,
         )
     }
@@ -197,7 +210,7 @@ fun SecurityScreen(onBack: () -> Unit, onChangePasscode: () -> Unit, vm: Securit
         Modifier
             .fillMaxSize()
             .background(PfTheme.colors.bg)
-            .windowInsetsPadding(WindowInsets.navigationBars),
+            .windowInsetsPadding(PfInsets.navigationBars),
     ) {
         PfPageHeader(title = "Код-пароль и биометрия", onBack = onBack)
         Column(Modifier.padding(horizontal = d.space5)) {

@@ -20,3 +20,7 @@
 - Code, KDoc and commit messages are in English; user-facing strings are in Russian.
 - Each feature is `:api` + `:impl`; an `:impl` depends on other features only through their `:api`
   (enforced by `pf.module.rules`).
+- System bar insets go through `PfInsets.statusBars` / `PfInsets.navigationBars`, never `WindowInsets.*`
+  directly: design-check snapshots replace them with the mockups' fixed bars.
+- A screen is a thin ViewModel wrapper around `…Content(state, handlers)`; design-check tests render the
+  content from mockup data (`design-check/README.md`).

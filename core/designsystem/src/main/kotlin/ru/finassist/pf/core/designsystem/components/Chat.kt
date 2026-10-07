@@ -1,5 +1,6 @@
 package ru.finassist.pf.core.designsystem.components
 
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,10 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -190,6 +189,6 @@ fun PfChatComposer(
                 style = PfTheme.type.hint, color = c.textMuted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
             )
         }
-        Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars))
+        Spacer(Modifier.windowInsetsPadding(PfInsets.navigationBars))
     }
 }
