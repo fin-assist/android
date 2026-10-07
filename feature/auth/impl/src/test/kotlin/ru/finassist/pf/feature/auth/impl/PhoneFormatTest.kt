@@ -28,10 +28,21 @@ class PhoneFormatTest {
 
     @Test
     fun editDropsCountryPrefixAndKeepsCursor() {
-        assertEquals("9161234567" to 10, PhoneFormat.edit("+7 (916) 123-45-67", 18))
-        assertEquals("916" to 3, PhoneFormat.edit("8916", 4))
-        assertEquals("9045" to 2, PhoneFormat.edit("9045", 2))
-        assertEquals("9045678901" to 10, PhoneFormat.edit("90456789012", 11))
-        assertEquals("" to 0, PhoneFormat.edit("", 0))
+        assertEquals(PhoneFormat.Edit("9161234567", 10, 10), PhoneFormat.edit("+7 (916) 123-45-67", 18, 18))
+        assertEquals(PhoneFormat.Edit("916", 3, 3), PhoneFormat.edit("8916", 4, 4))
+        assertEquals(PhoneFormat.Edit("9045", 2, 2), PhoneFormat.edit("9045", 2, 2))
+        assertEquals(PhoneFormat.Edit("9045678901", 10, 10), PhoneFormat.edit("90456789012", 11, 11))
+        assertEquals(PhoneFormat.Edit("", 0, 0), PhoneFormat.edit("", 0, 0))
+    }
+
+    @Test
+    fun selectionRangeSurvives() {
+        // «Select all» over the stored digits stays a range (review of PR #18).
+        assertEquals(PhoneFormat.Edit("9045678901", 0, 10), PhoneFormat.edit("9045678901", 0, 10))
+        assertEquals(PhoneFormat.Edit("9045678901", 3, 6), PhoneFormat.edit("9045678901", 3, 6))
+        // A reversed selection (dragging handles backwards) keeps its direction.
+        assertEquals(PhoneFormat.Edit("9045678901", 6, 3), PhoneFormat.edit("9045678901", 6, 3))
+        // A pasted number with the country code: the range shifts with the dropped prefix.
+        assertEquals(PhoneFormat.Edit("9161234567", 0, 10), PhoneFormat.edit("79161234567", 0, 11))
     }
 }

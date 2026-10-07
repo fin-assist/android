@@ -189,9 +189,10 @@ class AnalyticsEngine(
             Metric(status = MetricStatus.READY, value = Money(scope.expenseTotal(prevOps) / days), range = range(prev.start(), prev.endExclusive()))
         } ?: locked(LockReason.NEED_FULL_MONTHS, required = 1, available = 0)
 
-        val forecast = if (!isCurrent) null else when (type) {
+        // A stale statement blocks every forecast, not only the month one: extrapolating from a long-gone last
+        // operation would look reliable while it is not (the client shows the fact instead).
+        val forecast = if (!isCurrent) null else if (stale) locked(LockReason.STALE_DATA) else when (type) {
             PeriodType.MONTH -> when {
-                stale -> locked(LockReason.STALE_DATA)
                 today().dayOfMonth < FORECAST_FROM_DAY -> locked(LockReason.TOO_EARLY_IN_MONTH, availableFrom = from.withDayOfMonth(FORECAST_FROM_DAY).at())
                 else -> {
                     val elapsed = ChronoUnit.DAYS.between(from, minOf(lastDataDay, today())) + 1

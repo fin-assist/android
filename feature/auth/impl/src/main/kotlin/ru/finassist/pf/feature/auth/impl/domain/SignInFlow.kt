@@ -30,21 +30,22 @@ class SignInFlow @Inject constructor() {
  */
 object PhoneFormat {
     /** Keeps at most 10 significant digits after the country code. */
-    fun digits(raw: String): String = edit(raw, raw.length).first
+    fun digits(raw: String): String = edit(raw, raw.length, raw.length).digits
+
+    /** Normalized field text and the selection in digit units ([start] == [end] for a plain cursor). */
+    data class Edit(val digits: String, val start: Int, val end: Int)
 
     /**
-     * Normalizes raw field text and the cursor position in it: keeps digits, drops a leading `7`/`8` country
-     * prefix (typed or pasted), keeps at most 10 digits. Returns the digits and the cursor in digit units.
+     * Normalizes raw field text and the selection in it: keeps digits, drops a leading `7`/`8` country prefix
+     * (typed or pasted), keeps at most 10 digits. Both selection ends are mapped, so «select all» survives.
      */
-    fun edit(raw: String, cursor: Int): Pair<String, Int> {
-        var d = raw.filter { it.isDigit() }
-        var c = raw.take(cursor.coerceIn(0, raw.length)).count { it.isDigit() }
-        if (d.startsWith("7") || d.startsWith("8")) {
-            d = d.drop(1)
-            c = (c - 1).coerceAtLeast(0)
-        }
-        d = d.take(10)
-        return d to c.coerceAtMost(d.length)
+    fun edit(raw: String, selectionStart: Int, selectionEnd: Int): Edit {
+        val all = raw.filter { it.isDigit() }
+        val prefix = if (all.startsWith("7") || all.startsWith("8")) 1 else 0
+        val d = all.drop(prefix).take(10)
+        fun map(offset: Int) =
+            (raw.take(offset.coerceIn(0, raw.length)).count { it.isDigit() } - prefix).coerceIn(0, d.length)
+        return Edit(d, map(selectionStart), map(selectionEnd))
     }
 
     fun display(digits: String): String {

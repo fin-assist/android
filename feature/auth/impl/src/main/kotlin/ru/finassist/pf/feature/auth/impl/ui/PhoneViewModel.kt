@@ -49,10 +49,10 @@ class PhoneViewModel @Inject constructor(
     fun setNotice(text: String?) = _state.update { it.copy(notice = text) }
 
     fun onInput(value: TextFieldValue) {
-        val (digits, cursor) = PhoneFormat.edit(value.text, value.selection.end)
+        val e = PhoneFormat.edit(value.text, value.selection.start, value.selection.end)
         _state.update {
             // Selection-only changes keep the error; any text change clears it.
-            it.copy(input = TextFieldValue(digits, TextRange(cursor)), error = if (digits == it.digits) it.error else null)
+            it.copy(input = TextFieldValue(e.digits, TextRange(e.start, e.end)), error = if (e.digits == it.digits) it.error else null)
         }
     }
 
