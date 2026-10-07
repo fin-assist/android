@@ -7,6 +7,8 @@
 - Contract: `api.md` / `openapi.yaml` in the claude.ai project «Финансовый консультант»; in this repo the
   rules are mirrored in KDoc of `core/api` and `core/network`. Toggles: `docs/flags.md`. Modules: `docs/modules.md`.
 - Report only verified problems with a concrete failure scenario; skip style nits.
+- Post each finding as an inline comment on the changed line (a review conversation that can be resolved),
+  not only in a summary comment; the summary lists what was checked.
 
 ## Build in an agent container
 
