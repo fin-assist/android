@@ -72,6 +72,7 @@ echo "sdk.dir=$ANDROID_HOME" > "$ROOT/local.properties"
 # --- Maven Central mirror (user-level, outside the repo) -------------------------------------------
 # Shared cloud egress addresses get 429 from repo.maven.apache.org; Google's mirror serves the same files.
 INIT="${GRADLE_USER_HOME:-$HOME/.gradle}/init.d/central-mirror.gradle"
+PROPS="${GRADLE_USER_HOME:-$HOME/.gradle}/gradle.properties"
 if (( USE_MIRROR )); then
     mkdir -p "$(dirname "$INIT")"
     cat > "$INIT" <<'GRADLE'
@@ -89,11 +90,14 @@ beforeSettings { s ->
 GRADLE
     log "Maven Central mirror: $INIT"
     # Robolectric fetches android-all itself, outside Gradle's repositories (used by -Ppf.designcheck).
-    PROPS="${GRADLE_USER_HOME:-$HOME/.gradle}/gradle.properties"
+    mkdir -p "$(dirname "$PROPS")"
     touch "$PROPS"
     grep -q '^pf.robolectric.repo=' "$PROPS" || echo 'pf.robolectric.repo=https://maven-central.storage-download.googleapis.com/maven2' >> "$PROPS"
 else
     rm -f "$INIT"
+    # Undo an earlier run with the mirror: Robolectric would keep fetching android-all from it.
+    [[ -f "$PROPS" ]] && sed -i '/^pf.robolectric.repo=/d' "$PROPS"
+    log "Maven Central mirror: off"
 fi
 
 # --- design check: Roboto for the mockup renderer, Python libs for the comparison -----------------------

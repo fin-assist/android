@@ -26,8 +26,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import ru.finassist.pf.core.designsystem.components.PfTabBar
-import ru.finassist.pf.core.designsystem.components.TabItem
-import ru.finassist.pf.core.designsystem.icons.PfIcons
+import ru.finassist.pf.core.designsystem.components.PfMainTabs
 import ru.finassist.pf.core.designsystem.theme.LocalPfSystemBars
 import ru.finassist.pf.core.designsystem.theme.PfSystemBars
 import ru.finassist.pf.core.designsystem.theme.PfTheme
@@ -41,7 +40,8 @@ import kotlin.math.ceil
  * - 390 dp wide at xxhdpi (×3): the same 1170 px as the mockup render.
  * - System bars as in the mockups: 24 dp status bar and 24 dp gesture bar, supplied through
  *   [LocalPfSystemBars] (Robolectric does not deliver window insets to Compose).
- * - Main-graph screens get the tab bar the app draws around them (`MainLayer`), because the artboards include it.
+ * - Main-graph screens get the tab bar the app draws around them (`MainLayer`, the same [PfMainTabs]), because the
+ *   artboards include it.
  * - Long artboards (taller than a phone) show the whole screen, so the snapshot does too: the window grows until
  *   nothing scrolls vertically ([fullHeight]).
  *
@@ -53,13 +53,6 @@ object DesignCheck {
     private const val SYSTEM_BAR_DP = 24
     private const val DENSITY = 3f // xxhdpi
     private const val MAX_GROW_STEPS = 5
-
-    /** Same tabs as `MainLayer` in the app module. */
-    private val tabs = listOf(
-        TabItem(PfIcons.LIST, "Операции"),
-        TabItem(PfIcons.BAR_CHART, "Аналитика"),
-        TabItem(PfIcons.USER, "Профиль"),
-    )
 
     private val outputDir: File
         get() = File(System.getProperty("pf.designcheck.dir") ?: "build/design-check")
@@ -120,7 +113,7 @@ object DesignCheck {
                     Box(Modifier.fillMaxSize().background(PfTheme.colors.bg)) {
                         Column(Modifier.fillMaxSize()) {
                             Box(Modifier.weight(1f).fillMaxWidth()) { content() }
-                            if (tab != null) PfTabBar(items = tabs, active = tab, onSelect = {})
+                            if (tab != null) PfTabBar(items = PfMainTabs, active = tab, onSelect = {})
                         }
                     }
                 }

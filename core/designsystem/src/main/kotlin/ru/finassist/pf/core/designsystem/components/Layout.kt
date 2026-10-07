@@ -110,6 +110,16 @@ fun PfPageHeader(
 
 data class TabItem(val icon: String, val label: String)
 
+/**
+ * Tabs of the main graph, in order: «Операции», «Аналитика», «Профиль». The app's `MainLayer` (which maps them
+ * to routes by index) and the design-check harness draw the same bar from this list.
+ */
+val PfMainTabs: List<TabItem> = listOf(
+    TabItem(PfIcons.LIST, "Операции"),
+    TabItem(PfIcons.BAR_CHART, "Аналитика"),
+    TabItem(PfIcons.USER, "Профиль"),
+)
+
 /** Bottom tab bar: three sections, `nav` background, active tab `accent`, the rest `text-faint`. */
 @Composable
 fun PfTabBar(
