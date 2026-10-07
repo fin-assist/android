@@ -39,15 +39,20 @@
 которого он зависит, прямо или транзитивно (`:core:designsystem`, `:core:common`, `:feature:*:api`, …).
 Изменения сборки (`build-logic/`, `gradle/`, `*.gradle.kts`, `gradle.properties`) и `design-check/`
 запускают все снимки; пути вне модулей (`docs/`, `scripts/`) не запускают ничего. Точность — модуль: если
-изменён один экран модуля, снимаются все экраны этого модуля. Gradle пишет выбор строками
-`design check: :feature:…:impl affected / not affected, skipped`.
+изменён один экран модуля, снимаются все экраны этого модуля. Тесты незатронутых модулей Gradle помечает
+`SKIPPED`; при расчёте конфигурации (не при повторном использовании configuration cache) он ещё пишет
+строки `design check: :feature:…:impl affected / not affected, skipped`.
+
+Задачи тестов в режиме `-Ppf.designcheck` не бывают `UP-TO-DATE` и не берутся из build cache: снимки
+пишутся в общий каталог в обход выходов задачи, и пропущенный прогон оставил бы его пустым.
 
 Изменения самого холста в репозитории не видны. После правок макетов — полный прогон (без списка).
 
 ### Покрытие
 
-`render.js` пишет `build/design-check/mockups/coverage.json`: все артборды холста и есть ли у каждого
-снимок приложения. Это список экранов, которые ещё предстоит добавить.
+`render.js` пишет `build/design-check/mockups/coverage.json`: все артборды холста, есть ли тест, который
+их снимает (`covered` — имя артборда строкой в каком-нибудь `*DesignCheckTest.kt`), и снят ли артборд в
+этом прогоне (`rendered`). Артборды с `covered: false` — экраны, которые ещё предстоит добавить.
 
 ## Запуск вручную
 
@@ -57,6 +62,7 @@ scripts/agent-setup.sh --design-check
 
 # Start clean: compare.py pairs whatever PNGs are in the app dir
 rm -rf build/design-check/app build/design-check/mockups build/design-check/compare
+mkdir -p build/design-check
 
 # App snapshots -> build/design-check/app/<Artboard>.png (all screens)
 ANDROID_HOME=/opt/android-sdk ./gradlew -Ppf.designcheck testDebugUnitTest
@@ -83,7 +89,7 @@ python3 design-check/compare.py build/design-check/mockups build/design-check/ap
 
 ## Добавить экран
 
-1. Найти артборды экрана в `coverage.json` (`snapshot: false`).
+1. Найти артборды экрана в `coverage.json` (`covered: false`).
 2. Разделить экран на обёртку с ViewModel и `…Content(state, обработчики)`.
 3. В `src/test` модуля — `<Экран>DesignCheckTest` с состоянием по данным артборда (числа, тексты, даты как
    на макете) и вызовом `DesignCheck.capture` для светлого и тёмного артборда.
@@ -111,7 +117,8 @@ Design check for fin-assist/android after a pull request was merged into main. W
 at main. Write the report, the YouTrack issue and the PR comment in Russian.
 
 1. Run scripts/agent-setup.sh --design-check.
-2. List the files the merged pull request changed, one path per line, into build/design-check/changed.txt:
+2. mkdir -p build/design-check, then list the files the merged pull request changed, one path per line, into
+   build/design-check/changed.txt:
    gh api --paginate repos/fin-assist/android/pulls/<PR number>/files --jq '.[].filename'
    (if that fails: git diff --name-only <merge commit>^1 <merge commit>). With no pull request in the event
    (manual run), skip this step and the -Ppf.designcheck.changed flag below: check every screen.

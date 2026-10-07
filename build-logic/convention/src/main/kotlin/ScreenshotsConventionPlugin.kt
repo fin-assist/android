@@ -42,6 +42,10 @@ class ScreenshotsConventionPlugin : Plugin<Project> {
                 systemProperty("pf.designcheck.dir", outDir)
                 if (robolectricRepo != null) systemProperty("robolectric.dependency.repo.url", robolectricRepo)
                 maxHeapSize = "3g"
+                // The PNGs are a side effect, not declared outputs (all modules share one directory): never skip the
+                // run as up to date or restore it from the build cache, or the snapshots would not be written.
+                outputs.upToDateWhen { false }
+                outputs.cacheIf("design-check snapshots are written outside the task outputs") { false }
             }
         }
         val changedFile = providers.gradleProperty("pf.designcheck.changed").orNull
