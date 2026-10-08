@@ -99,9 +99,17 @@ python3 design-check/compare.py build/design-check/mockups build/design-check/ap
 Новый экран, новое состояние экрана, шторка или диалог подключаются к design check в том же PR, где появляются
 в коде (правило в `AGENTS.md`).
 
-1. Найти артборды экрана в `coverage.json` (`covered: false`). Если артборда на холсте ещё нет, взять имя,
-   которое он получит (`<Экран><Состояние>`, тёмный — с суффиксом `Dark`), и написать в PR, что макета нет:
-   `render.js` пропустит такой снимок (`MISSING in canvas`), `compare.py` отметит `missing: mockup`.
+1. Найти артборды экрана в `coverage.json` (`covered: false`) и снять каждый, тёмные `…Dark` тоже.
+   Если артборда на холсте ещё нет:
+   - имя — то, которое он получит, по образцу существующих: `Search`, `SearchPeriod`, `SearchDark`,
+     `DeleteAccountDialog`. Тёмный — с суффиксом `Dark`; имя уникально среди снимков и буквально совпадает с
+     аргументом `capture("…")`, иначе после появления артборда пара не найдётся;
+   - темы — базовое состояние в светлой и тёмной, остальные состояния в светлой, как на холсте;
+   - данные — реалистичные, как в фикстурах мока; высота — по умолчанию (`PHONE_HEIGHT_DP`; длинный экран
+     `fullHeight` дорастит сам). В KDoc теста — что макета нет; после появления артборда фикстура и высота
+     переводятся на его данные;
+   - в PR — что макета нет. `render.js` пропустит такой снимок (`MISSING in canvas`), `compare.py` запишет в
+     `scores.json` `"missing": "mockup"`.
 2. Разделить экран на обёртку с ViewModel и `…Content(state, обработчики)`.
 3. В `src/test` модуля — `<Экран>DesignCheckTest` с состоянием по данным артборда (числа, тексты, даты как
    на макете) и вызовом `DesignCheck.capture` для каждого артборда; имя артборда — буквальный первый
@@ -151,8 +159,9 @@ at main. Write the report, the YouTrack issue and the PR comment in Russian.
 7. Look at every pair in build/design-check/compare/ (worst SSIM first) and list the differences per screen:
    layout, content, colour, states — where, mockup vs app, the file to change. Skip differences in data the
    fixture does not control, and two snapshot artefacts of dialogs: no dim behind a dialog, dialog window width. The mockup is right by default; if the app follows api.md and the mockup
-   contradicts it, say so. Snapshots without a mockup (scores.json: missing mockup) are listed separately as
-   «нет макета на холсте», not as differences.
+   contradicts it, say so. Snapshots without a mockup (scores.json entries with "missing": "mockup") go into a
+   separate list «нет макета на холсте», not into the differences. Entries with "missing": "same width …" are a
+   real problem (the snapshot width differs from the mockup), report them as differences.
 8. In YouTrack project FIN, read the open issues with «Design check» in the summary
    (query: project: FIN #Unresolved "design check"). Drop every difference they already describe.
 9. Push the comparison images to the branch design-check/reports (create it as an orphan branch if it does

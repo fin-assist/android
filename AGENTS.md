@@ -142,9 +142,10 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   directly: design-check snapshots replace them with the mockups' fixed bars.
 - A PR that adds a screen, a new state of a screen, a bottom sheet or a dialog wires it into the design check in
   the same PR: a `…Content` the test can render, and a `*DesignCheckTest` capturing it under the artboard name
-  (light and dark; `popups = true` for a sheet or dialog). No artboard on the canvas yet — capture it under the
-  name the artboard should get and say in the PR that the mockup is missing. Steps: `design-check/README.md`,
-  «Добавить экран».
+  (`popups = true` for a sheet or dialog). Capture every artboard the canvas has for it, `…Dark` ones included;
+  without artboards, capture the base state in light and dark and other states in light, as the canvas does.
+  No artboard on the canvas yet — capture it under the name the artboard should get and say in the PR that the
+  mockup is missing. Steps: `design-check/README.md`, «Добавить экран».
 - A screen is a thin ViewModel wrapper around `…Content(state, handlers)`; design-check tests render the
   content from mockup data (`design-check/README.md`).
 - Flags are read at the screen boundary (view model init or `FeatureEntry`), never mid-screen.
