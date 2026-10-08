@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -100,22 +101,25 @@ fun ChatScreen(
         zone = zone,
         today = LocalDate.now(zone),
         voiceListening = voice.listening,
-        actions = ChatActions(
-            onBack = onBack,
-            onReload = vm::load,
-            onLoadOlder = vm::loadOlder,
-            onRetryAnswer = vm::retry,
-            onRetryAfterFailure = vm::retryAfterFailure,
-            onDraft = vm::setDraft,
-            onSend = { vm.send() },
-            onVoice = voice.start,
-            onOpenSearch = onOpenSearch,
-            onOpenAnalytics = onOpenAnalytics,
-        ),
+        actions = remember(vm, voice.start, onBack, onOpenSearch, onOpenAnalytics) {
+            ChatActions(
+                onBack = onBack,
+                onReload = vm::load,
+                onLoadOlder = vm::loadOlder,
+                onRetryAnswer = vm::retry,
+                onRetryAfterFailure = vm::retryAfterFailure,
+                onDraft = vm::setDraft,
+                onSend = { vm.send() },
+                onVoice = voice.start,
+                onOpenSearch = onOpenSearch,
+                onOpenAnalytics = onOpenAnalytics,
+            )
+        },
     )
 }
 
 /** Chat callbacks; the ViewModel-free [ChatContent] gets them from [ChatScreen] or a design-check test. */
+@Immutable
 internal class ChatActions(
     val onBack: () -> Unit,
     val onReload: () -> Unit,

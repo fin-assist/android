@@ -79,20 +79,24 @@ object DesignCheck {
     ) {
         var height = heightDp
         var controller = render(height, dark, tab, content)
-        if (fullHeight) {
-            for (step in 1..MAX_GROW_STEPS) {
-                val restPx = verticalScrollRest(controller.get())
-                if (restPx <= 0f) break
-                // Exact for verticalScroll; a lazy list reports an estimate, so it may take another step.
-                height += ceil(restPx / DENSITY).toInt()
-                dispose(controller)
-                controller = render(height, dark, tab, content)
+        // A failed capture must still dispose: a live activity would break the next capture in this JVM (see dispose).
+        try {
+            if (fullHeight) {
+                for (step in 1..MAX_GROW_STEPS) {
+                    val restPx = verticalScrollRest(controller.get())
+                    if (restPx <= 0f) break
+                    // Exact for verticalScroll; a lazy list reports an estimate, so it may take another step.
+                    height += ceil(restPx / DENSITY).toInt()
+                    dispose(controller)
+                    controller = render(height, dark, tab, content)
+                }
             }
+            val path = File(outputDir, "$name.png").path
+            val options = RoborazziOptions(recordOptions = RoborazziOptions.RecordOptions(resizeScale = 1.0))
+            if (popups) captureScreenRoboImage(path, options) else controller.get().window.decorView.captureRoboImage(path, options)
+        } finally {
+            dispose(controller)
         }
-        val path = File(outputDir, "$name.png").path
-        val options = RoborazziOptions(recordOptions = RoborazziOptions.RecordOptions(resizeScale = 1.0))
-        if (popups) captureScreenRoboImage(path, options) else controller.get().window.decorView.captureRoboImage(path, options)
-        dispose(controller)
     }
 
     /**

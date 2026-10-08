@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,16 +69,19 @@ fun SearchScreen(onBack: () -> Unit, onOpenOperation: (String) -> Unit, vm: Sear
     val today = remember { LocalDate.now(zone) }
     SearchContent(
         state = state, zone = zone, today = today, onBack = onBack, onOpenOperation = onOpenOperation,
-        actions = SearchActions(
-            setQuery = vm::setQuery, openSheet = vm::openSheet, toggleKind = vm::toggleKind,
-            clearAnalyticsScope = vm::clearAnalyticsScope, reset = vm::reset, retry = vm::retry,
-            searchAllTime = vm::searchAllTime, setPeriod = vm::setPeriod, setCategory = vm::setCategory,
-            setAmount = vm::setAmount,
-        ),
+        actions = remember(vm) {
+            SearchActions(
+                setQuery = vm::setQuery, openSheet = vm::openSheet, toggleKind = vm::toggleKind,
+                clearAnalyticsScope = vm::clearAnalyticsScope, reset = vm::reset, retry = vm::retry,
+                searchAllTime = vm::searchAllTime, setPeriod = vm::setPeriod, setCategory = vm::setCategory,
+                setAmount = vm::setAmount,
+            )
+        },
     )
 }
 
 /** Handlers of [SearchContent]; the screen binds them to [SearchViewModel]. */
+@Immutable
 internal class SearchActions(
     val setQuery: (String) -> Unit,
     val openSheet: (SearchSheet?) -> Unit,
