@@ -12,6 +12,10 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Each instrumented test starts from clean app data (no session or passcode left by a previous run).
+        testInstrumentationRunnerArguments["clearPackageData"] = "true"
+        // Empty: the real clock. The e2e build pins "now" (see below).
+        buildConfigField("String", "E2E_NOW", "\"\"")
     }
 
     // `mock`: in-process fake backend on an OFX statement, local toggles, logcat tracking — no SDK keys needed.
@@ -42,15 +46,32 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
+        // UI tests (.maestro/, docs/e2e.md): debug + test hooks from src/mockE2e; mock flavor only.
+        // "Now" is pinned to the day after the fixture statement ends, so periods and amounts never drift.
+        create("e2e") {
+            initWith(getByName("debug"))
+            matchingFallbacks += "debug"
+            applicationIdSuffix = ".e2e"
+            buildConfigField("String", "E2E_NOW", "\"2026-10-08T12:00:00+03:00\"")
+        }
     }
 
     buildFeatures {
         buildConfig = true
     }
 
+    testOptions {
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
+    }
+
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
+}
+
+// The e2e build type exists only for the fake backend: prodE2e would have no test hooks to run against.
+androidComponents {
+    beforeVariants(selector().withBuildType("e2e").withFlavor("backend" to "prod")) { it.enable = false }
 }
 
 dependencies {
@@ -89,8 +110,15 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
 
+    // Native UI tests (src/androidTestMock): what Maestro cannot drive, e.g. the system document picker.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.espresso.core)
+    androidTestImplementation(libs.androidx.test.espresso.intents)
+    androidTestUtil(libs.androidx.test.orchestrator)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
 /** Gradle property or environment variable (`pf.mytrackerSdkKey` → `PF_MYTRACKER_SDK_KEY`); empty when absent. */

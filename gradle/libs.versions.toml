@@ -42,6 +42,8 @@ roborazzi = "1.43.1"
 turbine = "1.2.0"
 androidxTestExt = "1.2.1"
 espresso = "3.6.1"
+androidxTestRunner = "1.6.2"
+androidxTestOrchestrator = "1.5.1"
 
 [libraries]
 # Gradle plugins as libraries — used by build-logic convention plugins
@@ -111,6 +113,9 @@ kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.re
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExt" }
 androidx-test-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
+androidx-test-espresso-intents = { group = "androidx.test.espresso", name = "espresso-intents", version.ref = "espresso" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+androidx-test-orchestrator = { group = "androidx.test", name = "orchestrator", version.ref = "androidxTestOrchestrator" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

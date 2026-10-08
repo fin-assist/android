@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mock e2e build only (UI tests, docs/e2e.md): test hooks merged into the app manifest. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- The upload screen opens this list of bundled files instead of the system picker (PickStatementDocument). -->
+        <meta-data
+            android:name="ru.finassist.pf.DOCUMENT_PICKER_OVERRIDE"
+            android:value="ru.finassist.pf.e2e.E2eDocumentPickerActivity" />
+
+        <activity
+            android:name="ru.finassist.pf.e2e.E2eDocumentPickerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Pf" />
+
+        <!-- pfe2e://config?flag.<key>=…&offline=… — flags and backend state from Maestro's openLink. -->
+        <activity
+            android:name="ru.finassist.pf.e2e.E2eControlActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="pfe2e" android:host="config" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.e2e.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/e2e_file_paths" />
+        </provider>
+    </application>
+
+</manifest>
