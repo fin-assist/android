@@ -63,5 +63,6 @@ impl/src/main/kotlin/ru/finassist/pf/feature/<name>/impl/
 1. Add `include(":feature:<name>:api")` / `:impl` to `settings.gradle.kts` (the `listOf(...)` there).
 2. Create `feature/<name>/api/build.gradle.kts` with `id("pf.feature.api")` and
    `feature/<name>/impl/build.gradle.kts` with `id("pf.feature.impl")`.
-3. Add `implementation(project(":feature:<name>:api"))` + `:impl` to `app/build.gradle.kts`.
+3. Add the name to the `listOf(...)` of features in `app/build.gradle.kts` (wires `:api` + `:impl`).
 4. Register the `FeatureEntry` in the feature's Hilt module.
+5. Describe the module here and run `python3 scripts/agent-docs.py --write` (CI checks both).
