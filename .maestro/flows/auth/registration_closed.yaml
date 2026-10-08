@@ -6,7 +6,9 @@ tags:
 ---
 - clearState
 - openLink: "pfe2e://config?flag.auth.registration=false"
-- launchApp
+# stopApp: false — an openLink right before this may still be writing a flag override in this process.
+- launchApp:
+    stopApp: false
 - runFlow:
     file: ../../subflows/sign_in.yaml
     env:

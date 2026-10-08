@@ -2,7 +2,9 @@
 # Does not clear the app data: the caller starts with `clearState` (and sets flags with openLink before this).
 appId: ru.finassist.pf.mock.e2e
 ---
-- launchApp
+# stopApp: false — an openLink right before this may still be writing a flag override in this process.
+- launchApp:
+    stopApp: false
 - runFlow:
     file: sign_in.yaml
     env:
