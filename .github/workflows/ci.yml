@@ -14,6 +14,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # AGENTS.md is the agents' map of the repo; stale generated blocks or registries out of sync with the code
+  # fail here, in seconds and without Gradle (scripts/agent-docs.py).
+  agent-docs:
+    name: Agent docs up to date
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check AGENTS.md and docs registries
+        run: python3 scripts/agent-docs.py --check
+
   build:
     name: Build, test, lint (mock flavor)
     runs-on: ubuntu-latest
