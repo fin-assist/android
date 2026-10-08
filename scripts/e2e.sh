@@ -54,18 +54,30 @@ adb install -r -t "$APK" >/dev/null
 mkdir -p "$OUT"
 adb logcat -c || true
 
+# A freshly booted CI emulator often shows «Pixel Launcher isn't responding». The dialog takes window focus
+# from the app under test, so every flow and the Espresso test fail. Hide system error dialogs for the run.
+adb shell settings put global hide_error_dialogs 1 || true
+adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
+
 # Preflight: cold start and dump the UI hierarchy. If test tags do not show up as resource-id here, every
 # flow would fail on its first step — the dump says why in one file instead of eighteen failures.
-adb shell am force-stop "$APP_ID"
-adb shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
-sleep 10
-adb shell uiautomator dump /sdcard/pf-ui.xml >/dev/null 2>&1 && adb pull /sdcard/pf-ui.xml "$OUT/preflight-ui.xml" >/dev/null 2>&1 || true
-adb exec-out screencap -p > "$OUT/preflight.png" 2>/dev/null || true
-if grep -q 'resource-id="auth.phone' "$OUT/preflight-ui.xml" 2>/dev/null; then
-    log "preflight: the phone screen is up, test tags are visible to UI Automator"
-else
-    log "preflight: auth.phone not found in the UI hierarchy (see $OUT/preflight-ui.xml, preflight.png, logcat.txt)"
-fi
+for attempt in 1 2 3; do
+    adb shell am force-stop "$APP_ID"
+    adb shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+    sleep 10
+    rm -f "$OUT/preflight-ui.xml"
+    adb shell uiautomator dump /sdcard/pf-ui.xml >/dev/null 2>&1 && adb pull /sdcard/pf-ui.xml "$OUT/preflight-ui.xml" >/dev/null 2>&1 || true
+    adb exec-out screencap -p > "$OUT/preflight.png" 2>/dev/null || true
+    if grep -q 'resource-id="auth.phone' "$OUT/preflight-ui.xml" 2>/dev/null \
+        && ! grep -q "isn't responding" "$OUT/preflight-ui.xml" 2>/dev/null; then
+        log "preflight: the phone screen is up, test tags are visible to UI Automator"
+        break
+    fi
+    log "preflight $attempt: app screen not clean (see $OUT/preflight-ui.xml, preflight.png); closing system dialogs"
+    adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
+    adb shell input keyevent KEYCODE_HOME || true
+    sleep 15
+done
 
 mkdir -p "$OUT/maestro" "$OUT/shots"
 maestro_args=(test "$FLOW" --format junit --output "$OUT/maestro-report.xml" --debug-output "$OUT/maestro")
