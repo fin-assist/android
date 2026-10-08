@@ -1,0 +1,898 @@
+[
+  {
+    "name": "AiConsent",
+    "title": "Согласие для помощника",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AiConsentDark",
+    "title": "Согласие для помощника · тёмная",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AiConsentError",
+    "title": "Согласие · без галочки",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Analytics",
+    "title": "Аналитика",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsDark",
+    "title": "Аналитика · тёмная",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsEarly",
+    "title": "Аналитика · мало данных (1–25 сентября)",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsEmpty",
+    "title": "Аналитика · нет выписки",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsHintAsk",
+    "title": "Аналитика · подсказка у помощника",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsHintCategories",
+    "title": "Аналитика · подсказка у категорий",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsLimit",
+    "title": "Аналитика · вопросы закончились",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsNoTransfers",
+    "title": "Аналитика · без переводов",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsPartial",
+    "title": "Аналитика · в сентябре 5 строк не прочитаны",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsStale",
+    "title": "Аналитика · выписка устарела",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsTransfers",
+    "title": "Аналитика · переводы людям",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsYear",
+    "title": "Аналитика · год (неполный, факты за апрель — сентябрь)",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Categories",
+    "title": "Категории и автозамена",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoriesAdding",
+    "title": "Категории · новая категория",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoriesAll",
+    "title": "Категории · все категории из выписки",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoriesDark",
+    "title": "Категории и автозамена · тёмная",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoriesDeleteCategory",
+    "title": "Категории · удаление своей категории",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoriesNoRules",
+    "title": "Категории · автозамен нет",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoriesRule",
+    "title": "Категории · шторка автозамены",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoryPicker",
+    "title": "Выбор категории · списание",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CategoryPickerChanged",
+    "title": "Выбор категории · категория сменена",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CategoryPickerCreateError",
+    "title": "Выбор категории · такая категория уже есть",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoryPickerCreating",
+    "title": "Выбор категории · новая категория",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoryPickerDark",
+    "title": "Выбор категории · тёмная",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CategoryPickerIncome",
+    "title": "Выбор категории · зачисление, возврат",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CategoryPickerRule",
+    "title": "Выбор категории · автозамена уже есть",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoryPickerSearch",
+    "title": "Выбор категории · поиск без результатов",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Chat",
+    "title": "Помощник · ответ",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatBusy",
+    "title": "Помощник · считает",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatDark",
+    "title": "Помощник · тёмная",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatEmpty",
+    "title": "Помощник · пустой чат",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatError",
+    "title": "Помощник · ошибка",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatErrorData",
+    "title": "Помощник · недостаточно данных",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatLimit",
+    "title": "Помощник · вопросы закончились",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatOffline",
+    "title": "Помощник · нет сети",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatStale",
+    "title": "Помощник · категории менялись",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Code",
+    "title": "Подтверждение звонком",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CodeDark",
+    "title": "Подтверждение звонком · тёмная",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CodeExpired",
+    "title": "Звонок · время вышло",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CodeLocked",
+    "title": "Звонок · много попыток",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Consent",
+    "title": "Согласие на обработку данных · новый номер",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ConsentDark",
+    "title": "Согласие на обработку данных · тёмная",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ConsentError",
+    "title": "Согласие · без галочки",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DeleteAccount",
+    "title": "Удаление · код-пароль",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DeleteAccountBusy",
+    "title": "Удаление · удаляем",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DeleteAccountCodeWrong",
+    "title": "Удаление · неверный код",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DeleteAccountDark",
+    "title": "Удаление аккаунта · тёмная",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DeleteAccountDialog",
+    "title": "Удаление · подтверждение",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DeleteAccountOffline",
+    "title": "Удаление · нет сети",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DepositForm",
+    "title": "Новый вклад",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositFormCredit",
+    "title": "Новый кредит",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositFormCreditEdit",
+    "title": "Кредит · правка, погашен досрочно",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositFormDark",
+    "title": "Вклад или кредит · тёмная",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositFormDiscard",
+    "title": "Вклад · выйти без сохранения",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositFormEdit",
+    "title": "Вклад · правка",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositFormErrors",
+    "title": "Новый вклад · ошибки",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "Deposits",
+    "title": "Вклады и кредиты",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositsChoose",
+    "title": "Вклады и кредиты · что добавить",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositsDark",
+    "title": "Вклады и кредиты · тёмная",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositsEmpty",
+    "title": "Вклады и кредиты · пусто",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositsExpired",
+    "title": "Вклады и кредиты · срок закончился, есть закрытые",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "Detail",
+    "title": "Операция",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DetailDark",
+    "title": "Операция · тёмная",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DetailHint",
+    "title": "Операция · подсказка у категории",
+    "page": "main",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DetailMassSaved",
+    "title": "Операция · категория изменена у 13 операций",
+    "page": "later",
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DetailRefund",
+    "title": "Операция · возврат",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DetailTransfer",
+    "title": "Операция · между своими счетами",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportError",
+    "title": "Ошибка импорта",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportErrorBank",
+    "title": "Ошибка импорта · другой банк",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportErrorDark",
+    "title": "Ошибка импорта · тёмная",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportErrorExcel",
+    "title": "Ошибка импорта · CSV вместо OFX",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportErrorSize",
+    "title": "Ошибка импорта · больше 10 МБ",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuide",
+    "title": "Загрузка выписки · первая",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuideBusy",
+    "title": "Загрузка выписки · разбор файла",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuideBusyCancel",
+    "title": "Загрузка выписки · прервать разбор",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuideDark",
+    "title": "Загрузка выписки · тёмная",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuideFallback",
+    "title": "Загрузка выписки · не скачивается",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuideMore",
+    "title": "Загрузка выписки · есть загрузка",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuideOffline",
+    "title": "Загрузка выписки · нет сети",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResult",
+    "title": "Итог импорта",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultDark",
+    "title": "Итог импорта · тёмная",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultEmpty",
+    "title": "Итог импорта · пустая выписка",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultNoExpenses",
+    "title": "Итог импорта · без трат",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultNothingNew",
+    "title": "Итог импорта · новых нет",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultRepeat",
+    "title": "Итог импорта · повторная, 5 строк не прочитаны",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultRepeatSheet",
+    "title": "Итог импорта · непрочитанные строки",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultShort",
+    "title": "Итог импорта · 1–25 сентября",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultUnlocked",
+    "title": "Итог импорта · открылся август",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Main",
+    "title": "Операции",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "MainDark",
+    "title": "Операции · тёмная",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "MainEmpty",
+    "title": "Операции · нет операций",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "MainStale",
+    "title": "Операции · выписка устарела",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Passcode",
+    "title": "Код-пароль · придумайте",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeBiometric",
+    "title": "Код-пароль · вход по биометрии",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeChange",
+    "title": "Код-пароль · смена из профиля",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeDark",
+    "title": "Код-пароль · тёмная",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeLogin",
+    "title": "Разблокировка · код-пароль",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeLoginDark",
+    "title": "Разблокировка · тёмная",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeLoginLast",
+    "title": "Разблокировка · последняя попытка",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeLoginWrong",
+    "title": "Разблокировка · неверный код",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeMismatch",
+    "title": "Код-пароль · не совпали",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeRepeat",
+    "title": "Код-пароль · повторите",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Phone",
+    "title": "Номер телефона",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PhoneDark",
+    "title": "Номер телефона · тёмная",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PhoneDeleted",
+    "title": "Аккаунт удалён",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PhoneFormatError",
+    "title": "Номер · ошибка формата",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PhoneLoggedOut",
+    "title": "Номер · вышли из аккаунта",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Profile",
+    "title": "Профиль",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ProfileDark",
+    "title": "Профиль · тёмная",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ProfileNoData",
+    "title": "Профиль · нет данных",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ProfileThemeSheet",
+    "title": "Профиль · выбор темы",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Search",
+    "title": "Поиск · результаты",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SearchDark",
+    "title": "Поиск · тёмная",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SearchEmpty",
+    "title": "Поиск · ничего не найдено",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SearchInitial",
+    "title": "Поиск · начало",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SearchOlder",
+    "title": "Поиск · есть операции старше 12 месяцев",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SearchPeriod",
+    "title": "Поиск · выбор периода",
+    "page": "main",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Security",
+    "title": "Код-пароль и биометрия",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SecurityBiometricOff",
+    "title": "Код-пароль · биометрия выключена",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SecurityDark",
+    "title": "Код-пароль и биометрия · тёмная",
+    "page": "edit",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistory",
+    "title": "История загрузок",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistoryConfirm",
+    "title": "История загрузок · удаление",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistoryDark",
+    "title": "История загрузок · тёмная",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistoryDeleted",
+    "title": "История загрузок · удалено",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistoryEmpty",
+    "title": "История загрузок · нет загрузок",
+    "page": "auth",
+    "covered": true,
+    "rendered": true
+  }
+]
