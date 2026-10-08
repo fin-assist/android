@@ -1,0 +1,730 @@
+[
+  {
+    "name": "ConsentDark",
+    "ssim": 0.6995,
+    "changed": 0.1893,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ImportGuideDark",
+    "ssim": 0.7095,
+    "changed": 0.267,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ImportGuideFallback",
+    "ssim": 0.7295,
+    "changed": 0.5144,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ImportGuideBusyCancel",
+    "ssim": 0.7347,
+    "changed": 0.7846,
+    "mockup_h": 2652,
+    "app_h": 2652
+  },
+  {
+    "name": "Consent",
+    "ssim": 0.7383,
+    "changed": 0.1882,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ConsentError",
+    "ssim": 0.7429,
+    "changed": 0.1501,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "UploadHistoryConfirm",
+    "ssim": 0.7524,
+    "changed": 0.7435,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "AiConsentDark",
+    "ssim": 0.7526,
+    "changed": 0.1975,
+    "mockup_h": 2796,
+    "app_h": 2796
+  },
+  {
+    "name": "ImportGuideMore",
+    "ssim": 0.7533,
+    "changed": 0.1336,
+    "mockup_h": 2652,
+    "app_h": 2652
+  },
+  {
+    "name": "ImportResultRepeatSheet",
+    "ssim": 0.7592,
+    "changed": 0.4818,
+    "mockup_h": 3084,
+    "app_h": 3084
+  },
+  {
+    "name": "ChatDark",
+    "ssim": 0.76,
+    "changed": 0.1448,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "DeleteAccountDialog",
+    "ssim": 0.7656,
+    "changed": 0.7641,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "DeleteAccountOffline",
+    "ssim": 0.78,
+    "changed": 0.6661,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ImportGuide",
+    "ssim": 0.785,
+    "changed": 0.1273,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ChatOffline",
+    "ssim": 0.7857,
+    "changed": 0.1781,
+    "mockup_h": 2544,
+    "app_h": 2544
+  },
+  {
+    "name": "ChatLimit",
+    "ssim": 0.7868,
+    "changed": 0.1453,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "DeleteAccountBusy",
+    "ssim": 0.7882,
+    "changed": 0.7243,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ChatStale",
+    "ssim": 0.7922,
+    "changed": 0.1445,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "AnalyticsEarly",
+    "ssim": 0.7929,
+    "changed": 0.0973,
+    "mockup_h": 6288,
+    "app_h": 6489
+  },
+  {
+    "name": "AnalyticsHintAsk",
+    "ssim": 0.7944,
+    "changed": 0.1466,
+    "mockup_h": 8544,
+    "app_h": 8757
+  },
+  {
+    "name": "ImportErrorDark",
+    "ssim": 0.7946,
+    "changed": 0.1698,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "Chat",
+    "ssim": 0.7961,
+    "changed": 0.1449,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "AnalyticsPartial",
+    "ssim": 0.7975,
+    "changed": 0.1538,
+    "mockup_h": 8700,
+    "app_h": 8700
+  },
+  {
+    "name": "AiConsentError",
+    "ssim": 0.8003,
+    "changed": 0.1599,
+    "mockup_h": 2904,
+    "app_h": 2904
+  },
+  {
+    "name": "AiConsent",
+    "ssim": 0.8018,
+    "changed": 0.1609,
+    "mockup_h": 2796,
+    "app_h": 2796
+  },
+  {
+    "name": "AnalyticsHintCategories",
+    "ssim": 0.8073,
+    "changed": 0.11,
+    "mockup_h": 8544,
+    "app_h": 8877
+  },
+  {
+    "name": "ImportResultDark",
+    "ssim": 0.8073,
+    "changed": 0.1049,
+    "mockup_h": 2568,
+    "app_h": 2568
+  },
+  {
+    "name": "AnalyticsDark",
+    "ssim": 0.8075,
+    "changed": 0.089,
+    "mockup_h": 8544,
+    "app_h": 8544
+  },
+  {
+    "name": "AnalyticsLimit",
+    "ssim": 0.8092,
+    "changed": 0.1023,
+    "mockup_h": 8616,
+    "app_h": 8616
+  },
+  {
+    "name": "AnalyticsStale",
+    "ssim": 0.8109,
+    "changed": 0.1192,
+    "mockup_h": 8856,
+    "app_h": 8856
+  },
+  {
+    "name": "AnalyticsTransfers",
+    "ssim": 0.8135,
+    "changed": 0.1401,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "UploadHistoryDark",
+    "ssim": 0.8177,
+    "changed": 0.0983,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ImportResultShort",
+    "ssim": 0.8198,
+    "changed": 0.0779,
+    "mockup_h": 3132,
+    "app_h": 3132
+  },
+  {
+    "name": "ImportGuideBusy",
+    "ssim": 0.821,
+    "changed": 0.0782,
+    "mockup_h": 2652,
+    "app_h": 2652
+  },
+  {
+    "name": "ImportResultRepeat",
+    "ssim": 0.8238,
+    "changed": 0.132,
+    "mockup_h": 3084,
+    "app_h": 3084
+  },
+  {
+    "name": "Analytics",
+    "ssim": 0.8241,
+    "changed": 0.088,
+    "mockup_h": 8544,
+    "app_h": 8544
+  },
+  {
+    "name": "ImportResult",
+    "ssim": 0.8261,
+    "changed": 0.1713,
+    "mockup_h": 2568,
+    "app_h": 2568
+  },
+  {
+    "name": "ImportResultUnlocked",
+    "ssim": 0.8262,
+    "changed": 0.1424,
+    "mockup_h": 3132,
+    "app_h": 3132
+  },
+  {
+    "name": "AnalyticsNoTransfers",
+    "ssim": 0.8267,
+    "changed": 0.0878,
+    "mockup_h": 8376,
+    "app_h": 8376
+  },
+  {
+    "name": "MainDark",
+    "ssim": 0.8303,
+    "changed": 0.096,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "AnalyticsYear",
+    "ssim": 0.833,
+    "changed": 0.0852,
+    "mockup_h": 5100,
+    "app_h": 5100
+  },
+  {
+    "name": "UploadHistoryDeleted",
+    "ssim": 0.8424,
+    "changed": 0.1329,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "SearchDark",
+    "ssim": 0.845,
+    "changed": 0.0998,
+    "mockup_h": 2676,
+    "app_h": 3186
+  },
+  {
+    "name": "ImportGuideOffline",
+    "ssim": 0.8472,
+    "changed": 0.0954,
+    "mockup_h": 3060,
+    "app_h": 3060
+  },
+  {
+    "name": "ImportErrorExcel",
+    "ssim": 0.8476,
+    "changed": 0.1459,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ImportError",
+    "ssim": 0.8481,
+    "changed": 0.1459,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "Main",
+    "ssim": 0.8511,
+    "changed": 0.0616,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "UploadHistory",
+    "ssim": 0.855,
+    "changed": 0.0987,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "MainStale",
+    "ssim": 0.8569,
+    "changed": 0.0603,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "SearchOlder",
+    "ssim": 0.8597,
+    "changed": 0.0585,
+    "mockup_h": 2880,
+    "app_h": 3390
+  },
+  {
+    "name": "ImportErrorBank",
+    "ssim": 0.86,
+    "changed": 0.1423,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ProfileDark",
+    "ssim": 0.8615,
+    "changed": 0.0564,
+    "mockup_h": 2952,
+    "app_h": 2952
+  },
+  {
+    "name": "ImportErrorSize",
+    "ssim": 0.8639,
+    "changed": 0.1401,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ChatErrorData",
+    "ssim": 0.8662,
+    "changed": 0.1467,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "Search",
+    "ssim": 0.8663,
+    "changed": 0.0557,
+    "mockup_h": 2676,
+    "app_h": 3186
+  },
+  {
+    "name": "Profile",
+    "ssim": 0.8668,
+    "changed": 0.0581,
+    "mockup_h": 2952,
+    "app_h": 2952
+  },
+  {
+    "name": "SearchPeriod",
+    "ssim": 0.8681,
+    "changed": 0.0601,
+    "mockup_h": 2676,
+    "app_h": 2676
+  },
+  {
+    "name": "ProfileNoData",
+    "ssim": 0.8683,
+    "changed": 0.0576,
+    "mockup_h": 2952,
+    "app_h": 2952
+  },
+  {
+    "name": "CategoryPickerIncome",
+    "ssim": 0.8737,
+    "changed": 0.1577,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ImportResultNoExpenses",
+    "ssim": 0.8743,
+    "changed": 0.2019,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "CategoryPickerDark",
+    "ssim": 0.8783,
+    "changed": 0.115,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "CategoryPickerSearch",
+    "ssim": 0.8853,
+    "changed": 0.0961,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "CategoryPicker",
+    "ssim": 0.8879,
+    "changed": 0.0918,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "DetailTransfer",
+    "ssim": 0.8883,
+    "changed": 0.0519,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ImportResultEmpty",
+    "ssim": 0.8962,
+    "changed": 0.1257,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "DetailRefund",
+    "ssim": 0.8972,
+    "changed": 0.0444,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ProfileThemeSheet",
+    "ssim": 0.8981,
+    "changed": 0.0413,
+    "mockup_h": 2952,
+    "app_h": 2952
+  },
+  {
+    "name": "MainEmpty",
+    "ssim": 0.9009,
+    "changed": 0.1028,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "AnalyticsEmpty",
+    "ssim": 0.9012,
+    "changed": 0.1032,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ChatError",
+    "ssim": 0.9048,
+    "changed": 0.0913,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "DetailDark",
+    "ssim": 0.9056,
+    "changed": 0.0354,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "CategoryPickerChanged",
+    "ssim": 0.908,
+    "changed": 0.0415,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ChatBusy",
+    "ssim": 0.9143,
+    "changed": 0.0911,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "SecurityDark",
+    "ssim": 0.9148,
+    "changed": 0.1086,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ChatEmpty",
+    "ssim": 0.9159,
+    "changed": 0.0404,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "Detail",
+    "ssim": 0.921,
+    "changed": 0.0345,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PasscodeMismatch",
+    "ssim": 0.9223,
+    "changed": 0.0412,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "UploadHistoryEmpty",
+    "ssim": 0.9225,
+    "changed": 0.092,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "ImportResultNothingNew",
+    "ssim": 0.9261,
+    "changed": 0.0324,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "CodeDark",
+    "ssim": 0.9275,
+    "changed": 0.0345,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PasscodeDark",
+    "ssim": 0.9285,
+    "changed": 0.0471,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "Code",
+    "ssim": 0.9287,
+    "changed": 0.0342,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "Passcode",
+    "ssim": 0.9338,
+    "changed": 0.0367,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "Security",
+    "ssim": 0.9357,
+    "changed": 0.0307,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "SecurityBiometricOff",
+    "ssim": 0.9361,
+    "changed": 0.0305,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "DeleteAccountCodeWrong",
+    "ssim": 0.9369,
+    "changed": 0.0356,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PasscodeBiometric",
+    "ssim": 0.9391,
+    "changed": 0.031,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "DeleteAccountDark",
+    "ssim": 0.9396,
+    "changed": 0.0323,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "CodeExpired",
+    "ssim": 0.9398,
+    "changed": 0.035,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "DeleteAccount",
+    "ssim": 0.9404,
+    "changed": 0.032,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PhoneDark",
+    "ssim": 0.9427,
+    "changed": 0.0273,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "SearchEmpty",
+    "ssim": 0.9433,
+    "changed": 0.0246,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "Phone",
+    "ssim": 0.9436,
+    "changed": 0.0271,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PhoneFormatError",
+    "ssim": 0.9447,
+    "changed": 0.0289,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "SearchInitial",
+    "ssim": 0.949,
+    "changed": 0.022,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PasscodeRepeat",
+    "ssim": 0.9527,
+    "changed": 0.0285,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PhoneLoggedOut",
+    "ssim": 0.9533,
+    "changed": 0.0216,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PasscodeChange",
+    "ssim": 0.9548,
+    "changed": 0.0246,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "CodeLocked",
+    "ssim": 0.9637,
+    "changed": 0.0187,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PasscodeLoginLast",
+    "ssim": 0.9709,
+    "changed": 0.0152,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PasscodeLoginWrong",
+    "ssim": 0.9835,
+    "changed": 0.0087,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PhoneDeleted",
+    "ssim": 0.9904,
+    "changed": 0.0067,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PasscodeLoginDark",
+    "ssim": 0.9917,
+    "changed": 0.0046,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "PasscodeLogin",
+    "ssim": 0.992,
+    "changed": 0.0045,
+    "mockup_h": 2532,
+    "app_h": 2532
+  }
+]
