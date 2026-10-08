@@ -22,8 +22,14 @@ tags:
     timeout: 15000
 
 - openLink: "pfe2e://config?offline=false"
-- tapOn:
-    id: "profile.retry"
+# Back from the control link the profile reloads on resume by itself; «Повторить» only if it is still there.
+- runFlow:
+    when:
+      visible:
+        id: "profile.retry"
+    commands:
+      - tapOn:
+          id: "profile.retry"
 - extendedWaitUntil:
     visible:
       id: "profile.phone"

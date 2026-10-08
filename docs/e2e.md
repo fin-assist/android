@@ -28,7 +28,8 @@ scripts/e2e.sh --tags smoke
 scripts/e2e.sh --no-build --flow .maestro/flows/assistant/ask_question.yaml
 ```
 
-Reports go to `build/e2e/`: JUnit XML, and screenshots plus logs of failed flows.
+Reports go to `build/e2e/`: JUnit XML, `maestro-output.tgz` (per flow: screenshot and view hierarchy of the failed
+step, commands, log), logcat, the preflight dump.
 
 In CI (`.github/workflows/e2e.yml`) the tests run after every merge to `main`, on a PR labelled `e2e`
 (add the label, push to re-run), and by hand from the Actions tab. The run summary lists the flows; reports are in the

@@ -87,6 +87,10 @@ log "maestro ${maestro_args[*]}"
 status=0
 (cd "$OUT/shots" && maestro "${maestro_args[@]}") || status=$?
 adb logcat -d > "$OUT/logcat.txt" 2>/dev/null || true
+# Per-flow folders are named after the flows («…?», quotes): CI artifacts reject such paths, so ship one archive.
+if [[ -d "$OUT/maestro" ]]; then
+    tar -czf "$OUT/maestro-output.tgz" -C "$OUT" maestro && rm -rf "$OUT/maestro"
+fi
 
 if [[ "$NATIVE" == 1 ]]; then
     log "native instrumented tests (mockDebug)"
