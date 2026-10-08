@@ -150,11 +150,15 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 
 - Branches: `<kind>/<slug>` — `fix/…`, `feature/…`, `tooling/…`, `design-check/…` (historically `stage-N/…`).
   Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
-- PR title and description in Russian: what changed and why, YouTrack issues, deviations from mockups/docs.
+- PR title and description in Russian: what changed and why, deviations from mockups/docs, how it was checked.
+  A PR for a single YouTrack issue starts its title with the issue key (`FIN-42 Краш при открытии поиска`);
+  a PR for several issues lists all of them in the description, each linked
+  (`https://finassist.youtrack.cloud/issue/FIN-<n>`). No issue — no key in the title.
 - After the PR is open and all planned changes are pushed, request a review with one PR comment in Russian
   addressed to both `@codex` and `@claude`, asking for comments in Russian. `@claude` runs from
   `.github/workflows/claude.yml` (default branch), `@codex` is the Codex GitHub integration.
-- Address review findings in follow-up commits on the same branch and reply in the conversation.
+- Address review findings in follow-up commits on the same branch, reply in the conversation and resolve it.
+  Agents never merge a PR into `main`; the owner does.
 
 ## Review guidelines
 
