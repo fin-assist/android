@@ -1,0 +1,109 @@
+appId: ru.finassist.pf.mock.e2e
+name: Загрузка новых операций, повтор той же выписки, удаление загрузки
+tags:
+  - smoke
+  - statements
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+
+# October on top of the preloaded year: three new operations.
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.new"
+
+# The same October file again: nothing new, offered to upload another file.
+- tapOn:
+    id: "statements.result.done"
+- extendedWaitUntil:
+    notVisible:
+      id: "statements.result"
+    timeout: 10000
+- runFlow:
+    when:
+      notVisible:
+        id: "statements.history"
+    commands:
+      - tapOn:
+          id: "ds.tab.profile"
+      - tapOn:
+          id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+      index: 1
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result.no_new"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.upload_another"
+- tapOn:
+    id: "statements.result.done"
+
+# Delete an upload: the dialog, then one row less.
+- runFlow:
+    when:
+      notVisible:
+        id: "statements.history"
+    commands:
+      - tapOn:
+          id: "ds.tab.profile"
+      - tapOn:
+          id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+      index: 2
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- assertVisible: "Удалить загрузку?"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    notVisible:
+      id: "statements.history.row"
+      index: 2
+    timeout: 15000

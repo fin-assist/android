@@ -41,8 +41,10 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Events / crashes | `core/tracking/…/Tracker.kt`; providers in `providers/*` (only `:app` depends on them) |
 | Tokens, preferences, idempotency keys | `core/storage` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md`, `*DesignCheckTest.kt` in feature `:impl` modules |
+| UI tests: Maestro flows, e2e build hooks, native gaps | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/` |
 
-Package root: `ru.finassist.pf`. Flavors: `mock` (default for development and CI) and `prod`.
+Package root: `ru.finassist.pf`. Flavors: `mock` (default for development and CI) and `prod`. Build type `e2e`
+(mock only): debug + UI-test hooks, pinned date (docs/e2e.md).
 
 ### Stack
 
@@ -68,7 +70,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 <!-- generated:modules:start (scripts/agent-docs.py) -->
 | Module | Convention plugins | Tests |
 |---|---|---|
-| `:app` | `pf.android.application`, `pf.hilt` | - |
+| `:app` | `pf.android.application`, `pf.hilt` | instrumented |
 | `:core:api` | `pf.jvm.library` | unit |
 | `:core:common` | `pf.jvm.library` | unit |
 | `:core:designsystem` | `pf.android.library.compose` | - |
@@ -130,6 +132,8 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   `local.properties`, a Maven Central mirror in `~/.gradle/init.d`). Needs JDK 21 and network access to
   Google Maven, Gradle and Maven Central.
 - Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug testMockDebugUnitTest` — the same checks as CI.
+- UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally, the `UI tests` workflow in CI
+  (after merge to `main`, or a PR labelled `e2e`).
 - `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
   docs check and its parser tests from CI, no Gradle needed.
 
@@ -143,6 +147,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - A screen is a thin ViewModel wrapper around `…Content(state, handlers)`; design-check tests render the
   content from mockup data (`design-check/README.md`).
 - Flags are read at the screen boundary (view model init or `FeatureEntry`), never mid-screen.
+- New or changed screens: tag the root, the controls and the checked states (`<feature>.<screen>[.<element>]`,
+  shared components `ds.*`), and add or update the Maestro flow (docs/e2e.md). Renaming a tag means updating
+  `.maestro/`.
 - Document in moderation: KDoc on public `:api` interfaces, comments where logic is non-obvious
   (accounting rules, idempotency, animation), not on every method.
 

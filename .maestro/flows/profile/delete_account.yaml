@@ -1,0 +1,51 @@
+appId: ru.finassist.pf.mock.e2e
+name: Удаление аккаунта с подтверждением код-паролем
+tags:
+  - profile
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- scrollUntilVisible:
+    element:
+      id: "profile.delete_account"
+- tapOn:
+    id: "profile.delete_account"
+- extendedWaitUntil:
+    visible:
+      id: "profile.delete"
+    timeout: 10000
+- assertVisible: "Что удалим"
+- tapOn:
+    id: "profile.delete.submit"
+- assertVisible: "Удалить аккаунт?"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "applock.confirm"
+    timeout: 10000
+# A wrong code is refused, the right one deletes.
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "9999"
+- extendedWaitUntil:
+    visible: "Неверный код"
+    timeout: 5000
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "1234"
+- extendedWaitUntil:
+    visible:
+      id: "auth.deleted"
+    timeout: 15000
+- assertVisible: "Аккаунт удалён"
+- tapOn:
+    id: "auth.deleted.done"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000

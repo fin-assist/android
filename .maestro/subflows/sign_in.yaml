@@ -1,0 +1,15 @@
+# Phone screen → number → «Продолжить». The fake backend «receives the call» by itself (1.5 s in the e2e build),
+# so the caller waits for the next screen: consent (new number) or passcode setup (existing number).
+# env: PHONE — 10 digits without +7 ("9161234567" is the only existing account in the mock).
+appId: ru.finassist.pf.mock.e2e
+---
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 20000
+- tapOn:
+    id: "auth.phone.input"
+- inputText: ${PHONE}
+- hideKeyboard
+- tapOn:
+    id: "auth.phone.submit"

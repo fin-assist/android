@@ -1,0 +1,18 @@
+# Cold start of a signed-in app: the unlock overlay, the code, back to where the app starts (the feed).
+# env: CODE ("1234").
+appId: ru.finassist.pf.mock.e2e
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "applock.unlock"
+    timeout: 20000
+- runFlow:
+    file: enter_code.yaml
+    env:
+      CODE: ${CODE}
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 20000

@@ -1,0 +1,68 @@
+appId: ru.finassist.pf.mock.e2e
+name: Помощник — согласие, вопрос, ответ, переход к операциям
+tags:
+  - smoke
+  - assistant
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+
+# Consent to pass data to the assistant (off by default).
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- tapOn:
+    id: "assistant.consent.submit"
+- assertVisible: "Отметьте согласие, чтобы задавать вопросы помощнику"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertVisible: ".*осталось 5 из 5.*"
+
+# A merchant from the fixture: the mock answers with totals, a chart and two chips; one question is spent.
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Krabsbir"
+- tapOn:
+    id: "ds.chat.send"
+- assertVisible:
+    id: "assistant.question"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 20000
+- assertVisible: ".*осталось 4 из 5.*"
+- assertVisible:
+    id: "assistant.answer.chip.operations"
+- assertVisible:
+    id: "assistant.answer.chip.analytics"
+
+# The operations chip opens search scoped to the answer.
+- tapOn:
+    id: "assistant.answer.chip.operations"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search"
+    timeout: 10000
+- assertVisible:
+    id: "operations.search.chip.scope"
+- assertVisible:
+    id: "operations.row"
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "assistant.chat"

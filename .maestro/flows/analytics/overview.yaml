@@ -1,0 +1,84 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — блоки, периоды, переводы, переход к операциям
+tags:
+  - smoke
+  - analytics
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+# "Now" is pinned to 8 October 2026; the fixture ends on 30 September — that month opens by default.
+- assertVisible: "Сентябрь.*"
+- assertVisible:
+    id: "analytics.ask"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.expense_categories"
+- assertVisible:
+    id: "analytics.expense_category"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.income_categories"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
+
+# Previous month, then quarter / year / month again.
+- tapOn:
+    id: "ds.period.prev"
+- assertVisible: "Август.*"
+- tapOn:
+    id: "ds.segment.1"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 10000
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 10000
+- tapOn:
+    id: "ds.segment.0"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 10000
+
+# «С переводами» → «Без переводов».
+- tapOn:
+    id: "analytics.transfers"
+- tapOn:
+    id: "analytics.transfers.without"
+- extendedWaitUntil:
+    visible: "Без переводов"
+    timeout: 5000
+- assertVisible:
+    id: "analytics.transfers"
+    checked: true
+
+# A category opens the operations it is made of.
+- scrollUntilVisible:
+    element:
+      id: "analytics.expense_category"
+- tapOn:
+    id: "analytics.expense_category"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "operations.search"
+    timeout: 10000
+- assertVisible:
+    id: "operations.row"
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "analytics.screen"

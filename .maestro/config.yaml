@@ -1,0 +1,4 @@
+# Maestro workspace: UI tests of the mock e2e build (ru.finassist.pf.mock.e2e). How to run: docs/e2e.md.
+# Only flows/ are tests; subflows/ are steps shared between them.
+flows:
+  - "flows/**"

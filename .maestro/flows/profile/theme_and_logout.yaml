@@ -1,0 +1,43 @@
+appId: ru.finassist.pf.mock.e2e
+name: Профиль — тема и выход из аккаунта
+tags:
+  - profile
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- scrollUntilVisible:
+    element:
+      id: "profile.theme"
+- tapOn:
+    id: "profile.theme"
+- tapOn:
+    id: "profile.theme.dark"
+- extendedWaitUntil:
+    notVisible:
+      id: "profile.theme.dark"
+    timeout: 5000
+- assertVisible: "Тёмная"
+
+# Logout: «Отмена» keeps the session, «Выйти» returns to the phone screen with a notice.
+- scrollUntilVisible:
+    element:
+      id: "profile.logout"
+- tapOn:
+    id: "profile.logout"
+- tapOn:
+    id: "ds.dialog.cancel"
+- assertVisible:
+    id: "profile.screen"
+- tapOn:
+    id: "profile.logout"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 15000
+- assertVisible:
+    id: "auth.phone.notice"
+- assertVisible: "Вы вышли из аккаунта.*"

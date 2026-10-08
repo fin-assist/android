@@ -1,0 +1,83 @@
+appId: ru.finassist.pf.mock.e2e
+name: Поиск операций и фильтры
+tags:
+  - operations
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "operations.feed.search"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.initial"
+    timeout: 10000
+
+# A merchant from the fixture statement (ASCII: Maestro types it reliably on any emulator).
+- tapOn:
+    id: "operations.search.input"
+- inputText: "Krabsbir"
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+    timeout: 10000
+- assertVisible: "Найдено.*"
+- assertVisible:
+    id: "operations.row"
+
+# «Только расходы» toggles on.
+- tapOn:
+    id: "operations.search.chip.kind"
+- assertVisible:
+    id: "operations.search.chip.kind"
+    checked: true
+
+# Amount sheet.
+- tapOn:
+    id: "operations.search.chip.amount"
+- tapOn:
+    id: "operations.search.amount.from"
+- inputText: "100"
+- tapOn:
+    id: "operations.search.amount.to"
+- inputText: "100000"
+- hideKeyboard
+- tapOn:
+    id: "operations.search.amount.apply"
+- assertVisible:
+    id: "operations.search.chip.amount"
+    checked: true
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+    timeout: 10000
+
+# «Сбросить» drops the filters but keeps the query.
+- tapOn:
+    id: "operations.search.chip.reset"
+- assertVisible:
+    id: "operations.search.chip.amount"
+    checked: false
+- assertVisible:
+    id: "operations.search.chip.kind"
+    checked: false
+
+# Period: all time.
+- tapOn:
+    id: "operations.search.chip.period"
+- tapOn:
+    id: "operations.search.period.all"
+- assertVisible: "За всё время"
+
+# A result opens its card; back returns to the results.
+- tapOn:
+    id: "operations.row"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "operations.detail"
+    timeout: 10000
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "operations.search.count"

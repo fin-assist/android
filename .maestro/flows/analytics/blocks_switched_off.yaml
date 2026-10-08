@@ -1,0 +1,35 @@
+appId: ru.finassist.pf.mock.e2e
+name: Блоки аналитики и помощник выключены флагами
+tags:
+  - analytics
+  - flags
+---
+- clearState
+- openLink: "pfe2e://config?flag.analytics.block.tiles=false&flag.analytics.block.expense_categories=false&flag.analytics.filter.transfers=false&flag.assistant=false"
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "ds.period.pick"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.block.tiles"
+- assertNotVisible:
+    id: "analytics.ask"
+- assertNotVisible:
+    id: "analytics.transfers"
+- assertNotVisible:
+    id: "analytics.block.expense_categories"
+# What is left on: income and the monthly chart.
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.income_categories"
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.phone"
+    timeout: 10000
+- assertNotVisible:
+    id: "profile.assistant"
