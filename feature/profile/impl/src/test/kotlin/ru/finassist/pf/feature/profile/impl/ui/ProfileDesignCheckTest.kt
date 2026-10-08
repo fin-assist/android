@@ -39,14 +39,30 @@ class ProfileDesignCheckTest {
         openHistory = {}, openUpload = {}, openChat = {}, openConsent = {}, openSecurity = {}, openDeleteAccount = {},
     )
 
-    private fun capture(name: String, dark: Boolean) = DesignCheck.capture(name, dark = dark, heightDp = 984, tab = 2) {
+    private fun capture(
+        name: String,
+        dark: Boolean = false,
+        state: ProfileUiState = this.state,
+        popups: Boolean = false,
+    ) = DesignCheck.capture(name, dark = dark, heightDp = 984, tab = 2, popups = popups) {
         ProfileContent(
             state, actions, onRetry = {}, onRevokeConsent = {}, onThemeSheet = {}, onTheme = {}, onSupport = {},
             onAskLogout = {}, onLogout = {}, onSnackbarShown = {}, versionName = "0.1.0",
         )
     }
 
-    @Test fun profile() = capture("Profile", dark = false)
+    @Test fun profile() = capture("Profile")
 
     @Test fun profileDark() = capture("ProfileDark", dark = true)
+
+    /** No statement uploaded: «Не загружена», the assistant row shows the full daily limit. */
+    @Test fun profileNoData() = capture(
+        "ProfileNoData",
+        state = state.copy(
+            statements = null,
+            limit = AssistantLimit(remaining = 5, dailyMax = 5, resetsAt = now.plusHours(12)),
+        ),
+    )
+
+    @Test fun profileThemeSheet() = capture("ProfileThemeSheet", state = state.copy(themeSheet = true), popups = true)
 }

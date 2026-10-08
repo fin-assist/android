@@ -16,10 +16,11 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 
-/** Artboards `Main` / `MainDark` of the canvas: the same operations and totals as drawn there. */
+/** Artboards `Main` / `MainDark` / `MainStale` / `MainEmpty`: the same operations and totals as drawn there. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class FeedDesignCheckTest {
+
     private val zone = ZoneId.of("Europe/Moscow")
     // Not the day after the last operation: the mockup labels groups by date, not «Сегодня» / «Вчера».
     private val today = LocalDate.of(2026, 9, 28)
@@ -55,11 +56,19 @@ class FeedDesignCheckTest {
         nextBefore = at(1, 0),
     )
 
-    private fun capture(name: String, dark: Boolean) = DesignCheck.capture(name, dark = dark, tab = 0) {
+    private fun capture(name: String, dark: Boolean = false, state: FeedUiState = this.state) = DesignCheck.capture(name, dark = dark, tab = 0) {
         FeedContent(state, today, zone, onOpenSearch = {}, onOpenOperation = {}, onUpload = {}, onRetry = {}, onLoadMore = {})
     }
 
     @Test fun main() = capture("Main", dark = false)
 
     @Test fun mainDark() = capture("MainDark", dark = true)
+
+    /** Last operation on 25 September, more than two weeks ago: the info notice instead of the caption. */
+    @Test fun mainStale() = capture("MainStale", state = state.copy(state = FeedState(stale = true, lastOperationAt = at(25, 18))))
+
+    @Test fun mainEmpty() = capture(
+        "MainEmpty",
+        state = FeedUiState(loading = false, items = emptyList(), state = FeedState(stale = false), nextBefore = null),
+    )
 }

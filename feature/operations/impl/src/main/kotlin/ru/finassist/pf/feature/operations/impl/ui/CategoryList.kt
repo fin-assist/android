@@ -58,8 +58,9 @@ fun CategoryList(
     onSelect: (Category) -> Unit,
     onlyAssignable: Boolean,
     modifier: Modifier = Modifier,
+    initialQuery: String = "",
 ) {
-    var query by rememberSaveable { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf(initialQuery) }
     val groups = remember(categories, kinds, query) { CategoryGrouping.group(categories, kinds, onlyAssignable, query) }
     Column(modifier) {
         PfSearchField(

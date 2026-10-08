@@ -157,19 +157,43 @@ fun HistoryScreen(
     vm: HistoryViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val d = PfTheme.dimens
-    val c = PfTheme.colors
     LifecycleResumeEffect(Unit) {
         vm.load()
         onPauseOrDispose { vm.pause() }
     }
+    HistoryContent(
+        state = state,
+        onBack = onBack,
+        onUpload = onUpload,
+        onOpenUnread = onOpenUnread,
+        onRetry = vm::load,
+        onAskDelete = vm::askDelete,
+        onDelete = vm::delete,
+        onSnackbarShown = vm::consumeSnackbar,
+    )
+}
+
+/** Stateless body of [HistoryScreen], the delete dialog and the snackbar included. */
+@Composable
+internal fun HistoryContent(
+    state: HistoryUiState,
+    onBack: () -> Unit,
+    onUpload: () -> Unit,
+    onOpenUnread: (uploadId: String) -> Unit,
+    onRetry: () -> Unit,
+    onAskDelete: (Upload?) -> Unit,
+    onDelete: () -> Unit,
+    onSnackbarShown: () -> Unit,
+) {
+    val d = PfTheme.dimens
+    val c = PfTheme.colors
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(StatementsTags.HISTORY)) {
         PfPageHeader("История загрузок", onBack = onBack)
         val list = state.list
         when {
             state.loading -> Unit
             state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
-                PfButton("Повторить", onClick = vm::load, variant = ButtonVariant.PRIMARY)
+                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
             }
             list == null || list.uploads.isEmpty() -> PfEmptyState(
                 PfIcons.FILE_TEXT, "Выписок пока нет", "Загрузите выписку Т-Банка — разберём операции и покажем аналитику",
@@ -198,7 +222,7 @@ fun HistoryScreen(
                         }
                     }
                 }
-                items(list.uploads, key = { it.uploadId }) { u -> UploadRow(u, onDelete = { vm.askDelete(u) }, onOpenUnread = { onOpenUnread(u.uploadId) }) }
+                items(list.uploads, key = { it.uploadId }) { u -> UploadRow(u, onDelete = { onAskDelete(u) }, onOpenUnread = { onOpenUnread(u.uploadId) }) }
                 if (state.uploadEnabled) {
                     item {
                         Spacer(Modifier.height(d.space2))
@@ -210,7 +234,7 @@ fun HistoryScreen(
         state.snackbar?.let { text ->
             androidx.compose.runtime.LaunchedEffect(text) {
                 kotlinx.coroutines.delay(3000)
-                vm.consumeSnackbar()
+                onSnackbarShown()
             }
             PfSnackbar(text, Modifier.padding(d.space4))
         }
@@ -220,8 +244,8 @@ fun HistoryScreen(
             title = "Удалить загрузку?",
             description = "Удалим файл «${u.fileName}» и операции, которых нет в других загрузках. Ваши правки категорий у оставшихся операций сохранятся. Аналитика пересчитается.",
             confirmText = "Удалить",
-            onConfirm = vm::delete,
-            onDismiss = { vm.askDelete(null) },
+            onConfirm = onDelete,
+            onDismiss = { onAskDelete(null) },
             busy = state.deleting,
             busyText = "Удаляем…",
         )

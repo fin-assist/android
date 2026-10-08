@@ -30,6 +30,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -92,6 +93,11 @@ fun PhoneScreen(reason: String?, onNext: () -> Unit, vm: PhoneViewModel = hiltVi
         DeletedScreen(onDone = { showDeleted = false })
         return
     }
+    PhoneContent(state, onInput = vm::onInput, onSubmit = vm::submit)
+}
+
+@Composable
+internal fun PhoneContent(state: PhoneUiState, onInput: (TextFieldValue) -> Unit, onSubmit: () -> Unit) {
     AuthScaffold(AuthTags.PHONE) {
         Column(Modifier.weight(1f).padding(vertical = PfTheme.dimens.space6), verticalArrangement = Arrangement.Center) {
             PfMark(size = PfTheme.dimens.mark)
@@ -103,7 +109,7 @@ fun PhoneScreen(reason: String?, onNext: () -> Unit, vm: PhoneViewModel = hiltVi
             state.notice?.let { PfNotice(it, tone = NoticeTone.INFO, alert = true, modifier = Modifier.testTag(AuthTags.PHONE_NOTICE)) }
             PfTextField(
                 value = state.input,
-                onValueChange = vm::onInput,
+                onValueChange = onInput,
                 label = "Номер телефона",
                 placeholder = "+7 900 000-00-00",
                 visualTransformation = PhoneMaskTransformation,
@@ -111,11 +117,11 @@ fun PhoneScreen(reason: String?, onNext: () -> Unit, vm: PhoneViewModel = hiltVi
                 error = state.error,
                 keyboardType = KeyboardType.Phone,
                 imeAction = ImeAction.Done,
-                onImeAction = vm::submit,
+                onImeAction = onSubmit,
                 testTag = AuthTags.PHONE_INPUT,
             )
             PfButton(
-                "Продолжить", onClick = vm::submit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Отправляем…",
+                "Продолжить", onClick = onSubmit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Отправляем…",
                 modifier = Modifier.testTag(AuthTags.PHONE_SUBMIT),
             )
         }
@@ -123,7 +129,7 @@ fun PhoneScreen(reason: String?, onNext: () -> Unit, vm: PhoneViewModel = hiltVi
 }
 
 @Composable
-private fun DeletedScreen(onDone: () -> Unit) {
+internal fun DeletedScreen(onDone: () -> Unit) {
     AuthScaffold(AuthTags.DELETED) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
             PfStatusHero(tone = HeroTone.POSITIVE, centered = false)
@@ -155,6 +161,26 @@ fun CallScreen(onBack: () -> Unit, onNewUser: () -> Unit, onRegistrationClosed: 
             null -> Unit
         }
     }
+    CallContent(
+        state,
+        onDial = {
+            vm.onDialOpened()
+            runCatching { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${state.callbackNumber}"))) }
+        },
+        onRequestAgain = vm::requestAgain,
+        onRetry = vm::watch,
+        onChangeNumber = onBack,
+    )
+}
+
+@Composable
+internal fun CallContent(
+    state: CallUiState,
+    onDial: () -> Unit,
+    onRequestAgain: () -> Unit,
+    onRetry: () -> Unit,
+    onChangeNumber: () -> Unit,
+) {
     AuthScaffold(AuthTags.CALL) {
         PfStatusHero(tone = HeroTone.INFO, icon = PfIcons.PHONE, centered = false)
         Spacer(Modifier.height(PfTheme.dimens.space4))
@@ -172,10 +198,7 @@ fun CallScreen(onBack: () -> Unit, onNewUser: () -> Unit, onRegistrationClosed: 
                 PfButton(
                     "Позвонить", icon = PfIcons.PHONE, variant = ButtonVariant.PRIMARY, block = true,
                     modifier = Modifier.testTag(AuthTags.CALL_DIAL),
-                    onClick = {
-                        vm.onDialOpened()
-                        runCatching { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${state.callbackNumber}"))) }
-                    },
+                    onClick = onDial,
                 )
             }
         }
@@ -199,7 +222,7 @@ fun CallScreen(onBack: () -> Unit, onNewUser: () -> Unit, onRegistrationClosed: 
                         title = "Время на звонок вышло", tone = NoticeTone.LIMIT, alert = true,
                     )
                     PfButton(
-                        "Позвонить ещё раз", onClick = vm::requestAgain, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Запрашиваем…",
+                        "Позвонить ещё раз", onClick = onRequestAgain, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Запрашиваем…",
                         modifier = Modifier.testTag(AuthTags.CALL_RETRY),
                     )
                 }
@@ -209,10 +232,10 @@ fun CallScreen(onBack: () -> Unit, onNewUser: () -> Unit, onRegistrationClosed: 
                 )
                 CallPhase.OFFLINE -> {
                     PfNotice("Нет сети — не можем дождаться звонка. Проверьте интернет", tone = NoticeTone.WARNING, alert = true)
-                    PfButton("Повторить", onClick = vm::watch, block = true)
+                    PfButton("Повторить", onClick = onRetry, block = true)
                 }
             }
-            Row { PfLink("Изменить номер", onClick = onBack, modifier = Modifier.testTag(AuthTags.CALL_CHANGE_NUMBER)) }
+            Row { PfLink("Изменить номер", onClick = onChangeNumber, modifier = Modifier.testTag(AuthTags.CALL_CHANGE_NUMBER)) }
         }
     }
 }
@@ -222,6 +245,23 @@ fun ConsentScreen(onBack: () -> Unit, onExpired: () -> Unit, vm: ConsentViewMode
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(state.expired) { if (state.expired) onExpired() }
+    ConsentContent(
+        state,
+        onBack = onBack,
+        onOpenDocument = { url -> runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } },
+        onAccepted = vm::setAccepted,
+        onSubmit = vm::submit,
+    )
+}
+
+@Composable
+internal fun ConsentContent(
+    state: ConsentUiState,
+    onBack: () -> Unit,
+    onOpenDocument: (url: String) -> Unit,
+    onAccepted: (Boolean) -> Unit,
+    onSubmit: () -> Unit,
+) {
     Column(Modifier.fillMaxSize().testTag(AuthTags.CONSENT)) {
         PfPageHeader("Регистрация", onBack = onBack)
         Column(
@@ -260,18 +300,18 @@ fun ConsentScreen(onBack: () -> Unit, onExpired: () -> Unit, vm: ConsentViewMode
             Spacer(Modifier.height(PfTheme.dimens.space1))
             Row {
                 PfLink(state.document?.title ?: "Текст согласия", onClick = {
-                    state.document?.url?.let { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } }
+                    state.document?.url?.let(onOpenDocument)
                 })
             }
             Spacer(Modifier.height(PfTheme.dimens.space4))
             PfCheckbox(
-                checked = state.accepted, onCheckedChange = vm::setAccepted, label = "Даю согласие на обработку персональных данных", error = state.error,
+                checked = state.accepted, onCheckedChange = onAccepted, label = "Даю согласие на обработку персональных данных", error = state.error,
                 modifier = Modifier.testTag(AuthTags.CONSENT_CHECKBOX),
             )
             Spacer(Modifier.height(PfTheme.dimens.space6))
             state.formError?.let { PfNotice(it, tone = NoticeTone.WARNING, alert = true); Spacer(Modifier.height(PfTheme.dimens.space3)) }
             PfButton(
-                "Создать аккаунт", onClick = vm::submit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Создаём…",
+                "Создать аккаунт", onClick = onSubmit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Создаём…",
                 modifier = Modifier.testTag(AuthTags.CONSENT_SUBMIT),
             )
             Text(
