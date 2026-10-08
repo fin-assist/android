@@ -11,6 +11,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import android.os.SystemClock
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
@@ -104,10 +106,21 @@ internal class AppLockImpl @Inject constructor(
         }
     }
 
-    override suspend fun setPasscode(code: String) {
+    /**
+     * The session is opened before the record lands. Otherwise the state passes through Locked (record saved,
+     * Keystore marker still being generated), `PfApp` ends setup on Locked and drops the setup screen, and its
+     * cancelled view model never reaches `unlocked = true`: the user sees the unlock overlay right after choosing
+     * the code (FIN-38). NonCancellable for the same reason: the caller's scope may go away mid-write.
+     */
+    override suspend fun setPasscode(code: String) = withContext(NonCancellable) {
         writes.withLock {
-            store.save(code)
             unlocked.value = true
+            try {
+                store.save(code)
+            } catch (e: Throwable) {
+                unlocked.value = false
+                throw e
+            }
         }
         tracker.track(Events.APPLOCK_PASSCODE_SET)
     }
