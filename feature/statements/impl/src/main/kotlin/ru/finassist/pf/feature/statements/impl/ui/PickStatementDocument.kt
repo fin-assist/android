@@ -19,7 +19,9 @@ internal class PickStatementDocument : ActivityResultContract<Array<String>, Uri
     private val system = ActivityResultContracts.OpenDocument()
 
     override fun createIntent(context: Context, input: Array<String>): Intent {
-        val replacement = replacementActivity(context) ?: return system.createIntent(context, input)
+        // OPENABLE: only documents the upload can read as a stream (OpenDocument does not add it).
+        val replacement = replacementActivity(context)
+            ?: return system.createIntent(context, input).addCategory(Intent.CATEGORY_OPENABLE)
         return Intent().setClassName(context, replacement).putExtra(Intent.EXTRA_MIME_TYPES, input)
     }
 

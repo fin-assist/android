@@ -79,15 +79,14 @@ for attempt in 1 2 3; do
     sleep 15
 done
 
-mkdir -p "$OUT/maestro" "$OUT/shots"
-maestro_args=(test "$FLOW" --format junit --output "$OUT/maestro-report.xml" --debug-output "$OUT/maestro")
+mkdir -p "$OUT/maestro" "$OUT/maestro-log" "$OUT/shots"
+# --test-output-dir: failure screenshots and view hierarchies per flow; --debug-output: the session log.
+maestro_args=(test "$FLOW" --format junit --output "$OUT/maestro-report.xml" --test-output-dir "$OUT/maestro" --debug-output "$OUT/maestro-log")
 [[ -n "$TAGS" ]] && maestro_args+=(--include-tags "$TAGS")
 log "maestro ${maestro_args[*]}"
 status=0
 (cd "$OUT/shots" && maestro "${maestro_args[@]}") || status=$?
 adb logcat -d > "$OUT/logcat.txt" 2>/dev/null || true
-# Screenshots and logs of failed flows land in ~/.maestro/tests when --debug-output is not honoured.
-[[ -d "$HOME/.maestro/tests" ]] && cp -r "$HOME/.maestro/tests" "$OUT/maestro-tests" 2>/dev/null || true
 
 if [[ "$NATIVE" == 1 ]]; then
     log "native instrumented tests (mockDebug)"
