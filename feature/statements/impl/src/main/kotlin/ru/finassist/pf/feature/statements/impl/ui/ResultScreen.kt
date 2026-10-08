@@ -68,10 +68,32 @@ fun ResultScreen(
     onUploadAnother: () -> Unit,
     vm: ResultViewModel = hiltViewModel(),
 ) {
+    BackHandler(onBack = onDone)
+    ResultContent(
+        result = vm.result,
+        uploadEnabled = vm.uploadEnabled,
+        onDone = onDone,
+        onOpenSearch = onOpenSearch,
+        onOpenUnread = { onOpenUnread(vm.uploadId) },
+        onOpenAnalytics = onOpenAnalytics,
+        onUploadAnother = onUploadAnother,
+    )
+}
+
+/** Stateless body of [ResultScreen]; [result] is null after process death. */
+@Composable
+internal fun ResultContent(
+    result: ImportResult?,
+    uploadEnabled: Boolean,
+    onDone: () -> Unit,
+    onOpenSearch: (OperationsFilter) -> Unit,
+    onOpenUnread: () -> Unit,
+    onOpenAnalytics: () -> Unit,
+    onUploadAnother: () -> Unit,
+) {
     val d = PfTheme.dimens
     val c = PfTheme.colors
-    val r = vm.result
-    BackHandler(onBack = onDone)
+    val r = result
     Column(
         Modifier
             .fillMaxSize()
@@ -121,7 +143,7 @@ fun ResultScreen(
                 PfNotice(
                     "Не прочитали ${countWithNoun(r.unreadCount, "строку", "строки", "строк")} — суммы могут быть неполными",
                     tone = NoticeTone.WARNING,
-                    action = { PfLink("Какие строки", onClick = { onOpenUnread(vm.uploadId) }, inline = true) },
+                    action = { PfLink("Какие строки", onClick = onOpenUnread, inline = true) },
                 )
             }
             val details = listOfNotNull(ResultTexts.duplicates(r), ResultTexts.accounts(r.accounts), ResultTexts.categories(r))
@@ -151,7 +173,7 @@ fun ResultScreen(
             }
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4), verticalArrangement = Arrangement.spacedBy(d.space2)) {
-            if (r != null && (r.operationCount == 0 || r.newCount == 0) && vm.uploadEnabled) {
+            if (r != null && (r.operationCount == 0 || r.newCount == 0) && uploadEnabled) {
                 PfButton("Загрузить другой файл", onClick = onUploadAnother, variant = ButtonVariant.PRIMARY, block = true)
                 PfButton("Готово", onClick = onDone, variant = ButtonVariant.GHOST, block = true)
             } else {

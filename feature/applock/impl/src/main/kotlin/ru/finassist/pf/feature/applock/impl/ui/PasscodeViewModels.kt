@@ -73,7 +73,7 @@ class PasscodeEntryViewModel @Inject constructor(private val appLock: AppLock) :
                 val ok = appLock.matches(code)
                 _state.update {
                     if (ok) it.copy(step = EnterStep.NEW, entered = "", busy = false)
-                    else it.copy(entered = "", error = "Неверный код", busy = false)
+                    else it.copy(entered = "", error = CONFIRM_WRONG_MESSAGE, busy = false)
                 }
             }
             EnterStep.NEW -> {
@@ -83,7 +83,7 @@ class PasscodeEntryViewModel @Inject constructor(private val appLock: AppLock) :
             EnterStep.REPEAT -> {
                 if (code != newCode) {
                     newCode = ""
-                    _state.update { it.copy(step = EnterStep.NEW, entered = "", error = "Коды не совпали — придумайте код заново") }
+                    _state.update { it.copy(step = EnterStep.NEW, entered = "", error = MISMATCH_MESSAGE) }
                     return
                 }
                 _state.update { it.copy(busy = true) }
@@ -106,6 +106,14 @@ class PasscodeEntryViewModel @Inject constructor(private val appLock: AppLock) :
 
     fun skipBiometric() = _state.update { it.copy(done = true) }
 }
+
+internal const val CONFIRM_WRONG_MESSAGE = "Неверный код"
+
+internal const val MISMATCH_MESSAGE = "Коды не совпали — придумайте код заново"
+
+internal fun wrongCodeMessage(attemptsLeft: Int): String =
+    if (attemptsLeft == 1) "Неверный код. Осталась последняя попытка — после неё придётся войти заново"
+    else "Неверный код. Осталось попыток: $attemptsLeft"
 
 data class UnlockUiState(
     val entered: String = "",
@@ -142,8 +150,7 @@ class UnlockViewModel @Inject constructor(private val appLock: AppLock) : ViewMo
                         it.copy(
                             entered = "",
                             busy = false,
-                            error = if (r.attemptsLeft == 1) "Неверный код. Осталась последняя попытка — после неё придётся войти заново"
-                            else "Неверный код. Осталось попыток: ${r.attemptsLeft}",
+                            error = wrongCodeMessage(r.attemptsLeft),
                         )
                     }
                     VerifyResult.LockedOut -> _state.update { it.copy(entered = "", busy = false) }
@@ -195,7 +202,7 @@ class ConfirmPasscodeViewModel @Inject constructor(private val appLock: AppLock)
             viewModelScope.launch {
                 _state.update { it.copy(busy = true) }
                 val ok = appLock.matches(next)
-                _state.update { if (ok) it.copy(confirmed = true, busy = false) else it.copy(entered = "", error = "Неверный код", busy = false) }
+                _state.update { if (ok) it.copy(confirmed = true, busy = false) else it.copy(entered = "", error = CONFIRM_WRONG_MESSAGE, busy = false) }
             }
         }
     }

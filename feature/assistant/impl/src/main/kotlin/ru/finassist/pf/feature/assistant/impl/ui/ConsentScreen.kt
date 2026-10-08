@@ -107,8 +107,25 @@ class AiConsentViewModel @Inject constructor(
 fun AiConsentScreen(onBack: () -> Unit, onGranted: () -> Unit, vm: AiConsentViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val d = PfTheme.dimens
     LaunchedEffect(state.granted) { if (state.granted) onGranted() }
+    AiConsentContent(
+        state = state,
+        onBack = onBack,
+        onAccepted = vm::setAccepted,
+        onOpenDocument = { doc -> runCatching { CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(doc.url)) } },
+        onGrant = vm::grant,
+    )
+}
+
+@Composable
+internal fun AiConsentContent(
+    state: AiConsentUiState,
+    onBack: () -> Unit,
+    onAccepted: (Boolean) -> Unit,
+    onOpenDocument: (ConsentDocument) -> Unit,
+    onGrant: () -> Unit,
+) {
+    val d = PfTheme.dimens
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
         PfPageHeader("Помощник", onBack = onBack)
         Column(
@@ -128,14 +145,14 @@ fun AiConsentScreen(onBack: () -> Unit, onGranted: () -> Unit, vm: AiConsentView
                 "Помощник работает на Alice AI (Яндекс). Отозвать согласие можно в профиле в любой момент — история ответов сохранится",
                 style = PfTheme.type.body, color = PfTheme.colors.textMuted,
             )
-            PfCheckbox(state.accepted, vm::setAccepted, label = "Согласен на передачу данных помощнику", error = state.error)
+            PfCheckbox(state.accepted, onAccepted, label = "Согласен на передачу данных помощнику", error = state.error)
             state.document?.let { doc ->
-                PfLink(doc.title, onClick = { runCatching { CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(doc.url)) } })
+                PfLink(doc.title, onClick = { onOpenDocument(doc) })
             }
             state.formError?.let { PfNotice(it, tone = NoticeTone.WARNING, alert = true) }
         }
         PfButton(
-            "Продолжить", onClick = vm::grant, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Сохраняем…",
+            "Продолжить", onClick = onGrant, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Сохраняем…",
             modifier = Modifier.fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4),
         )
     }

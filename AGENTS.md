@@ -89,15 +89,15 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:feature:applock:api` | `pf.feature.api` | - |
 | `:feature:applock:impl` | `pf.feature.impl`, `pf.screenshots` | unit, design-check |
 | `:feature:assistant:api` | `pf.feature.api` | - |
-| `:feature:assistant:impl` | `pf.feature.impl` | unit |
+| `:feature:assistant:impl` | `pf.feature.impl`, `pf.screenshots` | unit, design-check |
 | `:feature:auth:api` | `pf.feature.api` | - |
-| `:feature:auth:impl` | `pf.feature.impl` | unit |
+| `:feature:auth:impl` | `pf.feature.impl`, `pf.screenshots` | unit, design-check |
 | `:feature:operations:api` | `pf.feature.api` | - |
 | `:feature:operations:impl` | `pf.feature.impl`, `pf.screenshots` | unit, design-check |
 | `:feature:profile:api` | `pf.feature.api` | - |
 | `:feature:profile:impl` | `pf.feature.impl`, `pf.screenshots` | unit, design-check |
 | `:feature:statements:api` | `pf.feature.api` | - |
-| `:feature:statements:impl` | `pf.feature.impl` | unit |
+| `:feature:statements:impl` | `pf.feature.impl`, `pf.screenshots` | unit, design-check |
 <!-- generated:modules:end -->
 
 ### Flags

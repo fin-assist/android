@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -74,9 +76,7 @@ fun ChatScreen(
     vm: ChatViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val d = PfTheme.dimens
     val zone = remember { ZoneId.systemDefault() }
-    val listState = rememberLazyListState()
 
     LifecycleResumeEffect(Unit) {
         vm.resumeStreams()
@@ -95,18 +95,65 @@ fun ChatScreen(
             vm.onConsentGranted()
         }
     }
+    val voice = rememberVoiceInput(onResult = { vm.send(voiceText = it) })
+    ChatContent(
+        state = state,
+        zone = zone,
+        today = LocalDate.now(zone),
+        voiceListening = voice.listening,
+        actions = remember(vm, voice.start, onBack, onOpenSearch, onOpenAnalytics) {
+            ChatActions(
+                onBack = onBack,
+                onReload = vm::load,
+                onLoadOlder = vm::loadOlder,
+                onRetryAnswer = vm::retry,
+                onRetryAfterFailure = vm::retryAfterFailure,
+                onDraft = vm::setDraft,
+                onSend = { vm.send() },
+                onVoice = voice.start,
+                onOpenSearch = onOpenSearch,
+                onOpenAnalytics = onOpenAnalytics,
+            )
+        },
+    )
+}
+
+/** Chat callbacks; the ViewModel-free [ChatContent] gets them from [ChatScreen] or a design-check test. */
+@Immutable
+internal class ChatActions(
+    val onBack: () -> Unit,
+    val onReload: () -> Unit,
+    val onLoadOlder: () -> Unit,
+    val onRetryAnswer: (answerId: String) -> Unit,
+    val onRetryAfterFailure: () -> Unit,
+    val onDraft: (String) -> Unit,
+    val onSend: () -> Unit,
+    val onVoice: () -> Unit,
+    val onOpenSearch: (OperationsFilter) -> Unit,
+    val onOpenAnalytics: (AnalyticsParams) -> Unit,
+)
+
+@Composable
+internal fun ChatContent(
+    state: ChatUiState,
+    zone: ZoneId,
+    today: LocalDate,
+    voiceListening: Boolean,
+    actions: ChatActions,
+    listState: LazyListState = rememberLazyListState(),
+) {
+    val d = PfTheme.dimens
     // Keep the newest message in view as the thread grows at the bottom or an answer streams in. Keyed by the
     // last item, not the count: «Показать раньше» prepends history and must keep the reader where they are.
     LaunchedEffect(state.items.lastOrNull()?.id, (state.items.lastOrNull() as? ChatItem.Answer)?.blocks?.size) {
         if (state.items.isNotEmpty()) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1)
     }
-    val voice = rememberVoiceInput(onResult = { vm.send(voiceText = it) })
 
     Column(Modifier.fillMaxSize().imePadding()) {
         val limit = state.limit
         PfPageHeader(
             "Помощник",
-            onBack = onBack,
+            onBack = actions.onBack,
             subtitle = when {
                 limit == null -> "Отвечает по вашим операциям"
                 limit.remaining <= 0 -> "Вопросы на сегодня закончились"
@@ -117,7 +164,7 @@ fun ChatScreen(
             state.loading -> Column(Modifier.weight(1f)) {}
             state.loadFailed -> Column(Modifier.weight(1f)) {
                 PfEmptyState(PfIcons.ALERT, "Не получилось загрузить диалог", "Проверьте интернет и попробуйте ещё раз") {
-                    PfLink("Повторить", onClick = vm::load)
+                    PfLink("Повторить", onClick = actions.onReload)
                 }
             }
             else -> LazyColumn(
@@ -127,7 +174,7 @@ fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(d.space4),
             ) {
                 if (state.hasOlder) {
-                    item(key = "older") { PfLink(if (state.loadingOlder) "Загружаем…" else "Показать раньше", onClick = vm::loadOlder) }
+                    item(key = "older") { PfLink(if (state.loadingOlder) "Загружаем…" else "Показать раньше", onClick = actions.onLoadOlder) }
                 }
                 if (state.items.isEmpty()) {
                     item(key = "empty") {
@@ -142,18 +189,18 @@ fun ChatScreen(
                     val day = item.createdAt.atZoneSameInstant(zone).toLocalDate()
                     if (day != lastDay) {
                         lastDay = day
-                        item(key = "day-$day-${item.id}") { PfChatDay(dayLabel(day, LocalDate.now(zone))) }
+                        item(key = "day-$day-${item.id}") { PfChatDay(dayLabel(day, today)) }
                     }
                     item(key = item.id) {
                         when (item) {
                             is ChatItem.Question -> PfUserMessage(item.text)
-                            is ChatItem.Answer -> Answer(item, zone, onRetry = { vm.retry(item.id) }, onOpenSearch = onOpenSearch, onOpenAnalytics = onOpenAnalytics)
+                            is ChatItem.Answer -> Answer(item, zone, onRetry = { actions.onRetryAnswer(item.id) }, onOpenSearch = actions.onOpenSearch, onOpenAnalytics = actions.onOpenAnalytics)
                         }
                     }
                 }
             }
         }
-        if (voice.listening) {
+        if (voiceListening) {
             Text("Слушаю…", style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(horizontal = d.space5, vertical = d.space1))
         }
         if (state.offline || state.sendFailed) {
@@ -161,18 +208,18 @@ fun ChatScreen(
                 if (state.offline) "Нет сети — помощнику нужен интернет. Операции и аналитика доступны" else "Не получилось отправить вопрос",
                 tone = NoticeTone.WARNING,
                 modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2),
-                action = { PfLink("Повторить", onClick = vm::retryAfterFailure, inline = true) },
+                action = { PfLink("Повторить", onClick = actions.onRetryAfterFailure, inline = true) },
             )
         }
         PfChatComposer(
             value = state.draft,
-            onValueChange = vm::setDraft,
-            onSend = { vm.send() },
-            onVoice = voice.start,
+            onValueChange = actions.onDraft,
+            onSend = actions.onSend,
+            onVoice = actions.onVoice,
             // Offline is shown as a notice with «Повторить» above the composer, so the user is never stuck.
             state = when {
                 state.limitExhausted -> ComposerState.LIMIT
-                state.sending || state.generating || voice.listening -> ComposerState.BUSY
+                state.sending || state.generating || voiceListening -> ComposerState.BUSY
                 else -> ComposerState.IDLE
             },
             limitText = limit?.let { "Вопросы на сегодня закончились. Новые — в ${resetTime(it.resetsAt, zone)}" } ?: "Вопросы на сегодня закончились. Новые — в 00:00 по Москве",

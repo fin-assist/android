@@ -21,6 +21,13 @@
 совпадает с именем артборда — по нему находится пара. Системные панели — 24 dp сверху и снизу, как на
 макетах (`LocalPfSystemBars`); у экранов вкладок рисуется нижняя панель, как в приложении.
 
+Шторки (`PfBottomSheet`) и диалоги (`PfDialog`, выбор даты) открываются в отдельном окне, и снимок окна
+активити их не видит. Для артбордов со шторкой или диалогом — `capture(…, popups = true)`: снимаются все окна
+вместе со скримом. Состояние, в котором шторка открыта, задаётся в `…Content` так же, как в приложении.
+У диалогов два артефакта снимка, это не расхождения: нет затемнения под диалогом (Robolectric не рисует
+системный dim окна; скрим шторки рисует сама Compose, он есть) и ширина окна диалога может отличаться от
+устройства.
+
 Обычный прогон тестов (`testDebugUnitTest` в CI) эти тесты пропускает: им нужна среда Android целиком,
 и рендер всех экранов долгий.
 
@@ -92,8 +99,12 @@ python3 design-check/compare.py build/design-check/mockups build/design-check/ap
 1. Найти артборды экрана в `coverage.json` (`covered: false`).
 2. Разделить экран на обёртку с ViewModel и `…Content(state, обработчики)`.
 3. В `src/test` модуля — `<Экран>DesignCheckTest` с состоянием по данным артборда (числа, тексты, даты как
-   на макете) и вызовом `DesignCheck.capture` для светлого и тёмного артборда.
-4. В `build.gradle.kts` модуля — `id("pf.screenshots")`.
+   на макете) и вызовом `DesignCheck.capture` для каждого артборда; имя артборда — буквальный первый
+   аргумент `capture("…")`, по нему `coverage.json` считает покрытие. Даты — фиксированные, не `now()`.
+   Высота — `h` артборда из `canvas.json`.
+4. Если состояния артборда в приложении нет (экран устроен иначе), тест снимает ближайшее реальное
+   состояние того же экрана и пишет об этом в KDoc; несуществующий в приложении экран не подключается.
+5. В `build.gradle.kts` модуля — `id("pf.screenshots")`.
 
 ## Где расхождения
 
@@ -134,7 +145,7 @@ at main. Write the report, the YouTrack issue and the PR comment in Russian.
 6. python3 design-check/compare.py build/design-check/mockups build/design-check/app build/design-check/compare
 7. Look at every pair in build/design-check/compare/ (worst SSIM first) and list the differences per screen:
    layout, content, colour, states — where, mockup vs app, the file to change. Skip differences in data the
-   fixture does not control. The mockup is right by default; if the app follows api.md and the mockup
+   fixture does not control, and two snapshot artefacts of dialogs: no dim behind a dialog, dialog window width. The mockup is right by default; if the app follows api.md and the mockup
    contradicts it, say so.
 8. In YouTrack project FIN, read the open issues with «Design check» in the summary
    (query: project: FIN #Unresolved "design check"). Drop every difference they already describe.

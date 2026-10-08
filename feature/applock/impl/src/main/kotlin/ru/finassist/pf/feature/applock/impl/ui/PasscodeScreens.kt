@@ -105,12 +105,27 @@ fun PasscodeSetupScreen(onDone: () -> Unit, vm: PasscodeEntryViewModel = hiltVie
     // Back from the repeat step returns to the first entry; from the first entry it leaves the app (the code is mandatory).
     BackHandler { if (!vm.backToFirstEntry()) activity?.finish() }
 
+    PasscodeSetupContent(
+        state = state, onDigit = vm::digit, onDelete = vm::delete,
+        onEnableBiometric = vm::enableBiometric, onSkipBiometric = vm::skipBiometric,
+    )
+}
+
+/** First-run passcode steps drawn from a ready state (design-check snapshots render it without a ViewModel). */
+@Composable
+internal fun PasscodeSetupContent(
+    state: PasscodeEntryUiState,
+    onDigit: (Int) -> Unit,
+    onDelete: () -> Unit,
+    onEnableBiometric: () -> Unit,
+    onSkipBiometric: () -> Unit,
+) {
     when (state.step) {
         EnterStep.BIOMETRIC -> BiometricOffer(
             noun = state.biometric.noun(),
             icon = if (state.biometric == BiometricAvailability.FACE) PfIcons.SCAN_FACE else PfIcons.FINGERPRINT,
-            onEnable = vm::enableBiometric,
-            onSkip = vm::skipBiometric,
+            onEnable = onEnableBiometric,
+            onSkip = onSkipBiometric,
         )
         else -> PasscodePad(
             header = { PfPageHeader(title = "Шаг 3 из 4", onBack = null) },
@@ -118,8 +133,8 @@ fun PasscodeSetupScreen(onDone: () -> Unit, vm: PasscodeEntryViewModel = hiltVie
             subtitle = if (state.step == EnterStep.REPEAT) null else "4 цифры — чтобы открывать приложение на этом телефоне без звонка",
             entered = state.entered.length,
             error = state.error,
-            onDigit = vm::digit,
-            onDelete = vm::delete,
+            onDigit = onDigit,
+            onDelete = onDelete,
         )
     }
 }
@@ -205,8 +220,22 @@ internal fun UnlockContent(
 @Composable
 fun SecurityScreen(onBack: () -> Unit, onChangePasscode: () -> Unit, vm: SecurityViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val d = PfTheme.dimens
     val prompt = rememberBiometricPrompt(title = "Включить вход по биометрии", onSuccess = { vm.setBiometric(true) })
+    SecurityContent(
+        state = state, onBack = onBack, onChangePasscode = onChangePasscode,
+        onBiometricSwitch = { on -> if (on) prompt() else vm.setBiometric(false) },
+    )
+}
+
+/** Security settings drawn from a ready state (design-check snapshots render it without a ViewModel). */
+@Composable
+internal fun SecurityContent(
+    state: SecurityUiState,
+    onBack: () -> Unit,
+    onChangePasscode: () -> Unit,
+    onBiometricSwitch: (Boolean) -> Unit,
+) {
+    val d = PfTheme.dimens
     Column(
         Modifier
             .fillMaxSize()
@@ -223,7 +252,7 @@ fun SecurityScreen(onBack: () -> Unit, onChangePasscode: () -> Unit, vm: Securit
                         icon = if (state.biometric == BiometricAvailability.FACE) PfIcons.SCAN_FACE else PfIcons.FINGERPRINT,
                         description = "Код-пароль остаётся запасным способом",
                         switchChecked = state.biometricEnabled,
-                        onSwitch = { on -> if (on) prompt() else vm.setBiometric(false) },
+                        onSwitch = onBiometricSwitch,
                     )
                 }
             }
@@ -244,6 +273,17 @@ fun ChangePasscodeScreen(onBack: () -> Unit, onDone: () -> Unit, vm: PasscodeEnt
     val state by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.done) { if (state.done) onDone() }
     BackHandler { if (!vm.backToFirstEntry()) onBack() }
+    ChangePasscodeContent(state, onBack = onBack, onDigit = vm::digit, onDelete = vm::delete)
+}
+
+/** Change-passcode steps drawn from a ready state (design-check snapshots render it without a ViewModel). */
+@Composable
+internal fun ChangePasscodeContent(
+    state: PasscodeEntryUiState,
+    onBack: () -> Unit,
+    onDigit: (Int) -> Unit,
+    onDelete: () -> Unit,
+) {
     PasscodePad(
         header = { PfPageHeader(title = "Смена код-пароля", onBack = onBack) },
         title = when (state.step) {
@@ -254,8 +294,8 @@ fun ChangePasscodeScreen(onBack: () -> Unit, onDone: () -> Unit, vm: PasscodeEnt
         subtitle = null,
         entered = state.entered.length,
         error = state.error,
-        onDigit = vm::digit,
-        onDelete = vm::delete,
+        onDigit = onDigit,
+        onDelete = onDelete,
     )
 }
 
@@ -266,15 +306,26 @@ fun ConfirmPasscodeScreen(onBack: () -> Unit, onConfirmed: () -> Unit, vm: Confi
     val prompt = rememberBiometricPrompt(title = "Подтвердите удаление", onSuccess = vm::onBiometricSuccess)
     LaunchedEffect(state.confirmed) { if (state.confirmed) onConfirmed() }
     LaunchedEffect(Unit) { if (state.biometricEnabled) prompt() }
+    ConfirmPasscodeContent(state, onBack = onBack, onDigit = vm::digit, onDelete = vm::delete, onBiometric = prompt)
+}
+
+@Composable
+internal fun ConfirmPasscodeContent(
+    state: ConfirmUiState,
+    onBack: () -> Unit,
+    onDigit: (Int) -> Unit,
+    onDelete: () -> Unit,
+    onBiometric: () -> Unit,
+) {
     PasscodePad(
         header = { PfPageHeader(title = "Подтверждение", onBack = onBack) },
         title = "Введите код-пароль",
         subtitle = "Чтобы подтвердить, что это вы",
         entered = state.entered.length,
         error = state.error,
-        onDigit = vm::digit,
-        onDelete = vm::delete,
+        onDigit = onDigit,
+        onDelete = onDelete,
         biometric = if (state.biometricEnabled) state.biometric.toKind() else BiometricKind.NONE,
-        onBiometric = prompt,
+        onBiometric = onBiometric,
     )
 }
