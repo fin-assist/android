@@ -6,21 +6,13 @@ tags:
 - clearState
 - runFlow: ../../subflows/login.yaml
 - tapOn:
-    id: "ds.tab.profile"
+    id: "ds.tab.analytics"
 - extendedWaitUntil:
     visible:
-      id: "profile.assistant"
-    timeout: 10000
+      id: "analytics.ask"
+    timeout: 15000
 - tapOn:
-    id: "profile.assistant"
-- extendedWaitUntil:
-    visible:
-      id: "assistant.consent"
-    timeout: 10000
-- tapOn:
-    id: "assistant.consent.checkbox"
-- tapOn:
-    id: "assistant.consent.submit"
+    id: "analytics.ask"
 - extendedWaitUntil:
     visible:
       id: "assistant.chat"
@@ -32,6 +24,15 @@ tags:
 - inputText: "hello"
 - tapOn:
     id: "ds.chat.send"
+# The first question asks for consent; after it the question goes out by itself.
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- tapOn:
+    id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.submit"
 - extendedWaitUntil:
     visible:
       id: "assistant.answer.cannot"

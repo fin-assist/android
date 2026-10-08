@@ -12,10 +12,16 @@ tags:
     visible:
       id: "analytics.block.tiles"
     timeout: 15000
-# "Now" is pinned to 8 October 2026; the fixture ends on 30 September — that month opens by default.
-- assertVisible: "Сентябрь.*"
+# "Now" is pinned to 8 October 2026. The fixture statement period runs to 1 October, so the latest month with
+# data — October, empty so far — opens by default; September one step back holds the operations.
+- assertVisible: "Октябрь 2026"
 - assertVisible:
     id: "analytics.ask"
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible: "Сентябрь 2026"
+    timeout: 10000
 - scrollUntilVisible:
     element:
       id: "analytics.block.expense_categories"
@@ -33,7 +39,9 @@ tags:
 # Previous month, then quarter / year / month again.
 - tapOn:
     id: "ds.period.prev"
-- assertVisible: "Август.*"
+- extendedWaitUntil:
+    visible: "Август 2026"
+    timeout: 10000
 - tapOn:
     id: "ds.segment.1"
 - extendedWaitUntil:
@@ -52,6 +60,16 @@ tags:
     visible:
       id: "analytics.block.tiles"
     timeout: 10000
+# Back to a month: if the latest (empty) one opened, step to September, which has categories.
+- runFlow:
+    when:
+      visible: "Октябрь 2026"
+    commands:
+      - tapOn:
+          id: "ds.period.prev"
+      - extendedWaitUntil:
+          visible: "Сентябрь 2026"
+          timeout: 10000
 
 # «С переводами» → «Без переводов».
 - tapOn:

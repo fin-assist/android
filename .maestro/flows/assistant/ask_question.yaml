@@ -15,7 +15,19 @@ tags:
 - tapOn:
     id: "analytics.ask"
 
-# Consent to pass data to the assistant (off by default).
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertVisible: ".*осталось 5 из 5.*"
+
+# A merchant from the fixture. The first question asks for consent (off by default, the server answers
+# CONSENT_REQUIRED); after it the same question goes out by itself.
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Krabsbir"
+- tapOn:
+    id: "ds.chat.send"
 - extendedWaitUntil:
     visible:
       id: "assistant.consent"
@@ -31,16 +43,10 @@ tags:
     visible:
       id: "assistant.chat"
     timeout: 10000
-- assertVisible: ".*осталось 5 из 5.*"
-
-# A merchant from the fixture: the mock answers with totals, a chart and two chips; one question is spent.
-- tapOn:
-    id: "ds.chat.input"
-- inputText: "Krabsbir"
-- tapOn:
-    id: "ds.chat.send"
 - assertVisible:
     id: "assistant.question"
+
+# The mock answers with totals, a chart and two chips; one question is spent.
 - extendedWaitUntil:
     visible:
       id: "assistant.answer"

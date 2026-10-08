@@ -25,7 +25,11 @@ tags:
 - assertVisible:
     id: "operations.row"
 
-# «Только расходы» toggles on.
+# «Только расходы» toggles on. The chip row scrolls sideways; the last chips start off screen.
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
 - tapOn:
     id: "operations.search.chip.kind"
 - assertVisible:
@@ -53,6 +57,10 @@ tags:
     timeout: 10000
 
 # «Сбросить» drops the filters but keeps the query.
+- swipe:
+    from:
+      id: "operations.search.chip.amount"
+    direction: LEFT
 - tapOn:
     id: "operations.search.chip.reset"
 - assertVisible:
@@ -63,6 +71,10 @@ tags:
     checked: false
 
 # Period: all time.
+- swipe:
+    from:
+      id: "operations.search.chip.amount"
+    direction: RIGHT
 - tapOn:
     id: "operations.search.chip.period"
 - tapOn:
