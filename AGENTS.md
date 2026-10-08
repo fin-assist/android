@@ -140,6 +140,11 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   (enforced by `pf.module.rules`).
 - System bar insets go through `PfInsets.statusBars` / `PfInsets.navigationBars`, never `WindowInsets.*`
   directly: design-check snapshots replace them with the mockups' fixed bars.
+- A PR that adds a screen, a new state of a screen, a bottom sheet or a dialog wires it into the design check in
+  the same PR: a `…Content` the test can render, and a `*DesignCheckTest` capturing it under the artboard name
+  (light and dark; `popups = true` for a sheet or dialog). No artboard on the canvas yet — capture it under the
+  name the artboard should get and say in the PR that the mockup is missing. Steps: `design-check/README.md`,
+  «Добавить экран».
 - A screen is a thin ViewModel wrapper around `…Content(state, handlers)`; design-check tests render the
   content from mockup data (`design-check/README.md`).
 - Flags are read at the screen boundary (view model init or `FeatureEntry`), never mid-screen.
@@ -170,3 +175,4 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - Post each finding as an inline comment on the changed line (a review conversation that can be resolved),
   not only in a summary comment; the summary lists what was checked.
 - Check that the PR updates this file and `docs/` when it changes what they describe.
+- Check that a new screen, screen state, bottom sheet or dialog comes with its `*DesignCheckTest` (see Code).
