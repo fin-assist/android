@@ -23,6 +23,8 @@ keystore.properties
 app/src/mock/assets/private/
 *.ofx
 !mock/backend/src/main/assets/statements/fixture.ofx
+# Synthetic statements for UI tests (docs/e2e.md): a few made-up operations, no personal data.
+!app/src/mockE2e/assets/e2e/statements/*.ofx
 
 # SDK keys for the prod flavor
 sdk-keys.properties
