@@ -46,7 +46,7 @@ class ImportResultDesignCheckTest {
         FeatureAvailability(f, open = open, openedNow = openedNow, requiredFullMonths = full)
 
     private fun totals(scope: ImportTotalsScope, expense: Long, income: Long) =
-        ImportTotals(scope, Money(-expense * 100), Money(income * 100))
+        ImportTotals(scope, Money(expense * 100), Money(income * 100))
 
     /** 1 086 operations, 1 April — 25 September 2026. */
     private val first = ImportResult(
