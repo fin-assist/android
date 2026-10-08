@@ -98,14 +98,32 @@ class UnreadLinesViewModel @Inject constructor(
 fun UnreadLinesScreen(onBack: () -> Unit, vm: UnreadLinesViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val d = PfTheme.dimens
     var copied by remember { mutableStateOf(false) }
+    UnreadLinesContent(
+        state = state,
+        copied = copied,
+        onBack = onBack,
+        onRetry = vm::load,
+        onReport = { if (!sendReport(context, state)) copied = copyReport(context, state) },
+    )
+}
+
+/** Stateless body of [UnreadLinesScreen]; [copied] — no mail app, the report went to the clipboard. */
+@Composable
+internal fun UnreadLinesContent(
+    state: UnreadUiState,
+    copied: Boolean,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onReport: () -> Unit,
+) {
+    val d = PfTheme.dimens
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
         PfPageHeader("Непрочитанные строки", onBack = onBack)
         when {
             state.loading -> Unit
             state.error -> PfEmptyState(PfIcons.ALERT, "Не получилось загрузить", "Проверьте интернет и попробуйте ещё раз") {
-                PfButton("Повторить", onClick = vm::load, variant = ButtonVariant.PRIMARY)
+                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
             }
             state.lines.isEmpty() -> PfEmptyState(PfIcons.CHECK_CIRCLE, "Все строки прочитаны")
             else -> {
@@ -140,7 +158,7 @@ fun UnreadLinesScreen(onBack: () -> Unit, vm: UnreadLinesViewModel = hiltViewMod
                 Column(Modifier.fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4)) {
                     PfButton(
                         if (copied) "Данные скопированы" else "Сообщить нам",
-                        onClick = { if (!sendReport(context, state)) copied = copyReport(context, state) },
+                        onClick = onReport,
                         variant = ButtonVariant.PRIMARY,
                         block = true,
                         icon = PfIcons.MAIL,

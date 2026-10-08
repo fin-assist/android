@@ -81,13 +81,32 @@ fun DeleteAccountScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val confirmed by passcodeResult
-    val d = PfTheme.dimens
     LaunchedEffect(confirmed) {
         if (confirmed == "true") {
             onPasscodeResultConsumed()
             vm.delete()
         }
     }
+    DeleteAccountContent(
+        state,
+        onBack = onBack,
+        onAskConfirm = vm::askConfirm,
+        onConfirmed = {
+            vm.askConfirm(false)
+            onConfirmPasscode()
+        },
+    )
+}
+
+/** [onAskConfirm] opens (true) or dismisses (false) the confirmation dialog; [onConfirmed] goes on to the passcode. */
+@Composable
+internal fun DeleteAccountContent(
+    state: DeleteUiState,
+    onBack: () -> Unit,
+    onAskConfirm: (Boolean) -> Unit,
+    onConfirmed: () -> Unit,
+) {
+    val d = PfTheme.dimens
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
         PfPageHeader("Удаление аккаунта", onBack = if (state.deleting) null else onBack)
         Column(
@@ -111,7 +130,7 @@ fun DeleteAccountScreen(
         }
         PfButton(
             "Удалить аккаунт",
-            onClick = { vm.askConfirm(true) },
+            onClick = { onAskConfirm(true) },
             variant = ButtonVariant.SECONDARY,
             block = true,
             busy = state.deleting,
@@ -124,11 +143,8 @@ fun DeleteAccountScreen(
             title = "Удалить аккаунт?",
             description = "Удалим все данные без возможности восстановить. Подтвердите код-паролем.",
             confirmText = "Удалить",
-            onConfirm = {
-                vm.askConfirm(false)
-                onConfirmPasscode()
-            },
-            onDismiss = { vm.askConfirm(false) },
+            onConfirm = onConfirmed,
+            onDismiss = { onAskConfirm(false) },
         )
     }
 }

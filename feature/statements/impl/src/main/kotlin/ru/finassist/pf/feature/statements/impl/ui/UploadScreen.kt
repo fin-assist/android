@@ -62,7 +62,6 @@ fun UploadScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val d = PfTheme.dimens
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.onFilePicked(uri) }
 
     LaunchedEffect(state.doneUploadId) {
@@ -74,9 +73,43 @@ fun UploadScreen(
         vm.watch()
         onPauseOrDispose { vm.stopWatching() }
     }
-    val busy = state.phase as? UploadPhase.Busy
     // While parsing, «back» asks whether to interrupt instead of leaving the screen silently.
-    BackHandler(enabled = busy != null) { vm.askCancel(true) }
+    BackHandler(enabled = state.phase is UploadPhase.Busy) { vm.askCancel(true) }
+
+    UploadContent(
+        state = state,
+        firstRun = firstRun,
+        onBack = onBack,
+        onLater = onLater,
+        onRetry = vm::load,
+        onToggleFallback = vm::toggleFallback,
+        onOpenUrl = { url -> openUrl(context, url) },
+        onPick = { picker.launch(arrayOf("*/*")) },
+        onPickAnother = { vm.backToGuide(); picker.launch(arrayOf("*/*")) },
+        onBackToGuide = vm::backToGuide,
+        onAskCancel = vm::askCancel,
+        onCancelImport = vm::cancelImport,
+    )
+}
+
+/** Stateless body of [UploadScreen]: everything it draws for [state], the cancel dialog included. */
+@Composable
+internal fun UploadContent(
+    state: UploadUiState,
+    firstRun: Boolean,
+    onBack: () -> Unit,
+    onLater: () -> Unit,
+    onRetry: () -> Unit,
+    onToggleFallback: () -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onPick: () -> Unit,
+    onPickAnother: () -> Unit,
+    onBackToGuide: () -> Unit,
+    onAskCancel: (Boolean) -> Unit,
+    onCancelImport: () -> Unit,
+) {
+    val d = PfTheme.dimens
+    val busy = state.phase as? UploadPhase.Busy
 
     Column(
         Modifier
@@ -101,21 +134,21 @@ fun UploadScreen(
                     if (firstRun) PfButton("Продолжить", onClick = onLater, variant = ButtonVariant.PRIMARY)
                 }
                 UploadPhase.Offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
-                    PfButton("Повторить", onClick = vm::load, variant = ButtonVariant.PRIMARY)
+                    PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
                     if (firstRun) PfLink("Загружу позже", onClick = onLater)
                 }
                 is UploadPhase.Guide -> Guide(
                     config = phase.config,
                     firstRun = firstRun,
                     fallbackOpen = state.fallbackOpen,
-                    onToggleFallback = vm::toggleFallback,
-                    onDownload = { openUrl(context, phase.config.downloadUrl) },
-                    onLogin = { openUrl(context, phase.config.loginUrl) },
-                    onPick = { picker.launch(arrayOf("*/*")) },
+                    onToggleFallback = onToggleFallback,
+                    onDownload = { onOpenUrl(phase.config.downloadUrl) },
+                    onLogin = { onOpenUrl(phase.config.loginUrl) },
+                    onPick = onPick,
                     onLater = onLater,
                 )
-                is UploadPhase.Busy -> BusyBlock(phase, onCancel = { vm.askCancel(true) })
-                is UploadPhase.Error -> ErrorBlock(phase, onPickAnother = { vm.backToGuide(); picker.launch(arrayOf("*/*")) }, onBack = vm::backToGuide)
+                is UploadPhase.Busy -> BusyBlock(phase, onCancel = { onAskCancel(true) })
+                is UploadPhase.Error -> ErrorBlock(phase, onPickAnother = onPickAnother, onBack = onBackToGuide)
             }
         }
     }
@@ -124,8 +157,8 @@ fun UploadScreen(
             title = "Прервать разбор?",
             description = "Ничего не сохраним — данные не изменятся. Файл можно загрузить снова.",
             confirmText = "Прервать",
-            onConfirm = vm::cancelImport,
-            onDismiss = { vm.askCancel(false) },
+            onConfirm = onCancelImport,
+            onDismiss = { onAskCancel(false) },
             busy = busy?.cancelling == true,
             busyText = "Прерываем…",
             cancelText = "Продолжить разбор",

@@ -64,40 +64,75 @@ import java.time.ZoneOffset
 @Composable
 fun SearchScreen(onBack: () -> Unit, onOpenOperation: (String) -> Unit, vm: SearchViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val d = PfTheme.dimens
-    val f = state.filter
     val zone = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zone) }
+    SearchContent(
+        state = state, zone = zone, today = today, onBack = onBack, onOpenOperation = onOpenOperation,
+        actions = SearchActions(
+            setQuery = vm::setQuery, openSheet = vm::openSheet, toggleKind = vm::toggleKind,
+            clearAnalyticsScope = vm::clearAnalyticsScope, reset = vm::reset, retry = vm::retry,
+            searchAllTime = vm::searchAllTime, setPeriod = vm::setPeriod, setCategory = vm::setCategory,
+            setAmount = vm::setAmount,
+        ),
+    )
+}
+
+/** Handlers of [SearchContent]; the screen binds them to [SearchViewModel]. */
+internal class SearchActions(
+    val setQuery: (String) -> Unit,
+    val openSheet: (SearchSheet?) -> Unit,
+    val toggleKind: () -> Unit,
+    val clearAnalyticsScope: () -> Unit,
+    val reset: () -> Unit,
+    val retry: () -> Unit,
+    val searchAllTime: () -> Unit,
+    val setPeriod: (from: java.time.OffsetDateTime?, to: java.time.OffsetDateTime?, allTime: Boolean) -> Unit,
+    val setCategory: (String?) -> Unit,
+    val setAmount: (Money?, Money?) -> Unit,
+)
+
+/** Search drawn from a ready state: no ViewModel, so design-check snapshots render it with mockup data. */
+@Composable
+internal fun SearchContent(
+    state: SearchUiState,
+    zone: ZoneId,
+    today: LocalDate,
+    onBack: () -> Unit,
+    onOpenOperation: (String) -> Unit,
+    actions: SearchActions,
+) {
+    val d = PfTheme.dimens
+    val f = state.filter
 
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.statusBars).imePadding()) {
         Row(Modifier.fillMaxWidth().padding(start = d.space2, end = d.space5, top = d.space2), verticalAlignment = Alignment.CenterVertically) {
             PfIconButton(PfIcons.ARROW_LEFT, contentDescription = "Назад", onClick = onBack)
-            PfSearchField(f.q.orEmpty(), vm::setQuery, placeholder = "Описание, категория, сумма", modifier = Modifier.weight(1f))
+            PfSearchField(f.q.orEmpty(), actions.setQuery, placeholder = "Описание, категория, сумма", modifier = Modifier.weight(1f))
         }
         PfChipRow(Modifier.padding(horizontal = d.space5, vertical = d.space2)) {
             // A filter switched off by `search.filter.*` but preset by Analytics or a chip is shown as a fixed,
             // non-editable chip (docs/flags.md); «Сбросить» still removes it.
             val period = f.from != null || f.to != null || state.allTime
             if (state.chips.period || period) {
-                PfChip(periodLabel(f, state.allTime), onClick = { vm.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period)
+                PfChip(periodLabel(f, state.allTime), onClick = { actions.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period)
             }
             if (state.chips.category || f.categoryId != null) {
                 val name = state.categories.firstOrNull { it.id == f.categoryId }?.name
-                PfChip(name ?: "Категория", onClick = { vm.openSheet(SearchSheet.CATEGORY) }, selected = f.categoryId != null, dropdown = state.chips.category, enabled = state.chips.category)
+                PfChip(name ?: "Категория", onClick = { actions.openSheet(SearchSheet.CATEGORY) }, selected = f.categoryId != null, dropdown = state.chips.category, enabled = state.chips.category)
             }
             val amount = f.amountFrom != null || f.amountTo != null
             if (state.chips.amount || amount) {
-                PfChip(amountLabel(f), onClick = { vm.openSheet(SearchSheet.AMOUNT) }, selected = amount, dropdown = state.chips.amount, enabled = state.chips.amount)
+                PfChip(amountLabel(f), onClick = { actions.openSheet(SearchSheet.AMOUNT) }, selected = amount, dropdown = state.chips.amount, enabled = state.chips.amount)
             }
             if (state.chips.kind || f.kind != null) {
-                PfChip(if (f.kind == OperationKindFilter.INCOME) "Только доходы" else "Только расходы", onClick = vm::toggleKind, selected = f.kind != null, enabled = state.chips.kind)
+                PfChip(if (f.kind == OperationKindFilter.INCOME) "Только доходы" else "Только расходы", onClick = actions.toggleKind, selected = f.kind != null, enabled = state.chips.kind)
             }
             // Filters without their own chip (api.md: one chip, removed by tap or «Сбросить»).
             if (f.selection != null || f.transferMode != null) {
-                PfChip((f.selectionName ?: "Как на «Аналитике»") + "  ✕", onClick = vm::clearAnalyticsScope, selected = true)
+                PfChip((f.selectionName ?: "Как на «Аналитике»") + "  ✕", onClick = actions.clearAnalyticsScope, selected = true)
             }
             if (state.allTime || !f.copy(q = null).isEmpty) {
-                PfChip("Сбросить", onClick = vm::reset)
+                PfChip("Сбросить", onClick = actions.reset)
             }
         }
         if (state.selectionDropped) {
@@ -108,10 +143,10 @@ fun SearchScreen(onBack: () -> Unit, onOpenOperation: (String) -> Unit, vm: Sear
             SearchResult.Loading -> Unit
             SearchResult.TooMany -> PfEmptyState(PfIcons.SLIDERS, "Слишком много операций", "Выберите период покороче или добавьте фильтр")
             SearchResult.Offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
-                PfButton("Повторить", onClick = vm::retry, variant = ButtonVariant.PRIMARY)
+                PfButton("Повторить", onClick = actions.retry, variant = ButtonVariant.PRIMARY)
             }
             SearchResult.Failed -> PfEmptyState(PfIcons.ALERT, "Не получилось найти", "Попробуйте ещё раз") {
-                PfButton("Повторить", onClick = vm::retry, variant = ButtonVariant.PRIMARY)
+                PfButton("Повторить", onClick = actions.retry, variant = ButtonVariant.PRIMARY)
             }
             is SearchResult.Found -> {
                 val months = remember(r.items) { OperationFormat.groupByMonth(r.items, zone) }
@@ -147,7 +182,7 @@ fun SearchScreen(onBack: () -> Unit, onOpenOperation: (String) -> Unit, vm: Sear
                         item(key = "older") {
                             Column(Modifier.fillMaxWidth().padding(top = d.space4), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("Есть операции раньше — их не проверяли", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
-                                PfLink("Искать за всё время", onClick = vm::searchAllTime)
+                                PfLink("Искать за всё время", onClick = actions.searchAllTime)
                             }
                         }
                     }
@@ -157,10 +192,10 @@ fun SearchScreen(onBack: () -> Unit, onOpenOperation: (String) -> Unit, vm: Sear
     }
 
     when (state.sheet) {
-        SearchSheet.PERIOD -> PeriodSheet(f, state.allTime, onDismiss = { vm.openSheet(null) }, onPick = vm::setPeriod)
-        SearchSheet.CATEGORY -> PfBottomSheet("Категория", onDismiss = { vm.openSheet(null) }) {
+        SearchSheet.PERIOD -> PeriodSheet(f, state.allTime, onDismiss = { actions.openSheet(null) }, onPick = actions.setPeriod)
+        SearchSheet.CATEGORY -> PfBottomSheet("Категория", onDismiss = { actions.openSheet(null) }) {
             if (f.categoryId != null) {
-                PfOptionRow("Все категории", selected = false, onClick = { vm.setCategory(null) })
+                PfOptionRow("Все категории", selected = false, onClick = { actions.setCategory(null) })
             }
             CategoryList(
                 categories = state.categories,
@@ -170,11 +205,11 @@ fun SearchScreen(onBack: () -> Unit, onOpenOperation: (String) -> Unit, vm: Sear
                     null -> setOf(CategoryKind.EXPENSE, CategoryKind.INCOME)
                 },
                 selectedId = f.categoryId,
-                onSelect = { vm.setCategory(it.id) },
+                onSelect = { actions.setCategory(it.id) },
                 onlyAssignable = false,
             )
         }
-        SearchSheet.AMOUNT -> AmountSheet(f, onDismiss = { vm.openSheet(null) }, onApply = vm::setAmount)
+        SearchSheet.AMOUNT -> AmountSheet(f, onDismiss = { actions.openSheet(null) }, onApply = actions.setAmount)
         null -> Unit
     }
 }

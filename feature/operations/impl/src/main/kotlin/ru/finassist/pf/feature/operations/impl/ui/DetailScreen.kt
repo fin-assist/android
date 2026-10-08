@@ -49,6 +49,32 @@ import java.time.ZoneId
 @Composable
 fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val zone = ZoneId.systemDefault()
+    DetailContent(
+        state = state, zone = zone, today = LocalDate.now(zone), onBack = onBack, onRetry = vm::load,
+        onOpenPicker = vm::openPicker, onClosePicker = vm::closePicker, onChoose = vm::choose, onSave = vm::save,
+        onSnackbarShown = vm::consumeSnackbar,
+    )
+}
+
+/**
+ * Operation details drawn from a ready state: no ViewModel, so design-check snapshots render it with mockup data.
+ * [pickerQuery] is the initial text of the category search in the picker.
+ */
+@Composable
+internal fun DetailContent(
+    state: DetailUiState,
+    zone: ZoneId,
+    today: LocalDate,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onOpenPicker: () -> Unit,
+    onClosePicker: () -> Unit,
+    onChoose: (categoryId: String) -> Unit,
+    onSave: () -> Unit,
+    onSnackbarShown: () -> Unit,
+    pickerQuery: String = "",
+) {
     val d = PfTheme.dimens
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
         PfPageHeader("Операция", onBack = onBack)
@@ -57,7 +83,7 @@ fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
             state.loading -> Unit
             state.notFound -> PfEmptyState(PfIcons.FILE_TEXT, "Операции больше нет", "Возможно, удалили загрузку, в которой она была")
             state.error || op == null -> PfEmptyState(PfIcons.ALERT, "Не получилось загрузить", "Проверьте интернет и попробуйте ещё раз") {
-                PfButton("Повторить", onClick = vm::load, variant = ButtonVariant.PRIMARY)
+                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
             }
             else -> Column(
                 Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5, vertical = d.space2),
@@ -71,14 +97,13 @@ fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
                         description = op.noteDetails ?: if (op.isCategoryManual) "Вы выбрали сами" else null,
                         value = "Изменить",
                         valueAccent = true,
-                        onClick = vm::openPicker,
+                        onClick = onOpenPicker,
                         divider = false,
                     )
                 }
                 PfCard {
-                    val zone = ZoneId.systemDefault()
-                    PfDataRow("Дата и время", dateTime(op.occurredAt, zone))
-                    op.postedAt?.let { PfDataRow("Проведена банком", dateTime(it, zone)) }
+                    PfDataRow("Дата и время", dateTime(op.occurredAt, zone, today))
+                    op.postedAt?.let { PfDataRow("Проведена банком", dateTime(it, zone, today)) }
                     if (op.kind == OperationKind.OWN_TRANSFER) {
                         AccountRow("Списание", op.fromAccount)
                         AccountRow("Зачисление", op.toAccount)
@@ -98,7 +123,7 @@ fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
         state.snackbar?.let { text ->
             LaunchedEffect(text) {
                 delay(3000)
-                vm.consumeSnackbar()
+                onSnackbarShown()
             }
             PfSnackbar(text, Modifier.padding(d.space4))
         }
@@ -108,7 +133,7 @@ fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
     if (state.picker && op != null) {
         PfBottomSheet(
             "Категория",
-            onDismiss = vm::closePicker,
+            onDismiss = onClosePicker,
             footer = {
                 state.pickerError?.let {
                     PfNotice(it, tone = NoticeTone.WARNING, alert = true)
@@ -116,7 +141,7 @@ fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
                 }
                 PfButton(
                     "Сохранить",
-                    onClick = vm::save,
+                    onClick = onSave,
                     variant = ButtonVariant.PRIMARY,
                     block = true,
                     enabled = state.draftCategoryId != null && state.draftCategoryId != op.categoryId,
@@ -136,8 +161,9 @@ fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
                 categories = state.categories,
                 kinds = state.pickerKinds,
                 selectedId = state.draftCategoryId,
-                onSelect = { vm.choose(it.id) },
+                onSelect = { onChoose(it.id) },
                 onlyAssignable = true,
+                initialQuery = pickerQuery,
             )
         }
     }
@@ -170,7 +196,7 @@ private fun AccountRow(label: String, account: Account?) {
     PfDataRow(label, text, modifier = Modifier.semantics { account.spoken?.let { contentDescription = "$label: $it" } })
 }
 
-private fun dateTime(at: OffsetDateTime, zone: ZoneId): String {
+private fun dateTime(at: OffsetDateTime, zone: ZoneId, today: LocalDate): String {
     val local = at.atZoneSameInstant(zone)
-    return "${RussianDates.day(local.toLocalDate(), LocalDate.now(zone).year)}, %02d:%02d".format(local.hour, local.minute)
+    return "${RussianDates.day(local.toLocalDate(), today.year)}, %02d:%02d".format(local.hour, local.minute)
 }

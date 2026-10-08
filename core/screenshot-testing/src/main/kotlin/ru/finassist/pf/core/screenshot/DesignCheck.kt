@@ -21,6 +21,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.robolectric.Robolectric
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
@@ -64,6 +65,8 @@ object DesignCheck {
      * @param fullHeight grow the window until the content no longer scrolls, so blocks below the artboard's
      *   height are compared too (they show up as differences instead of being cut off). On by default for
      *   artboards taller than a phone: those mockups draw the whole screen, a phone-sized one draws a viewport.
+     * @param popups the artboard shows a bottom sheet or a dialog. `PfBottomSheet` and `PfDialog` open their own
+     *   windows, which a snapshot of the activity window misses; with this flag every window is composited.
      */
     fun capture(
         name: String,
@@ -71,6 +74,7 @@ object DesignCheck {
         heightDp: Int = PHONE_HEIGHT_DP,
         tab: Int? = null,
         fullHeight: Boolean = heightDp > PHONE_HEIGHT_DP,
+        popups: Boolean = false,
         content: @Composable () -> Unit,
     ) {
         var height = heightDp
@@ -81,15 +85,24 @@ object DesignCheck {
                 if (restPx <= 0f) break
                 // Exact for verticalScroll; a lazy list reports an estimate, so it may take another step.
                 height += ceil(restPx / DENSITY).toInt()
-                controller.pause().stop().destroy()
+                dispose(controller)
                 controller = render(height, dark, tab, content)
             }
         }
-        controller.get().window.decorView.captureRoboImage(
-            File(outputDir, "$name.png").path,
-            RoborazziOptions(recordOptions = RoborazziOptions.RecordOptions(resizeScale = 1.0)),
-        )
+        val path = File(outputDir, "$name.png").path
+        val options = RoborazziOptions(recordOptions = RoborazziOptions.RecordOptions(resizeScale = 1.0))
+        if (popups) captureScreenRoboImage(path, options) else controller.get().window.decorView.captureRoboImage(path, options)
+        dispose(controller)
+    }
+
+    /**
+     * Destroys the activity and runs what it left on the main looper. A Compose frame dispatch dropped at teardown
+     * otherwise stalls `AndroidUiDispatcher` for the next capture in the same JVM: effects never run, so a bottom
+     * sheet stays hidden and the snapshot silently shows the screen without it.
+     */
+    private fun dispose(controller: ActivityController<ComponentActivity>) {
         controller.pause().stop().destroy()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
     }
 
     private fun render(
