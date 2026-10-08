@@ -8,6 +8,8 @@ import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToLog
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -90,8 +92,15 @@ class StatementPickerTest {
     private fun SemanticsNodeInteractionsProvider.hasTag(tag: String) =
         onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
 
-    private fun androidx.compose.ui.test.junit4.ComposeTestRule.waitForTag(tag: String, timeoutMs: Long = 10_000) =
-        waitUntil(timeoutMs) { hasTag(tag) }
+    /** Waits for [tag]; on timeout logs the semantics tree (logcat, tag `PfTest`) so the report shows what was on screen. */
+    private fun androidx.compose.ui.test.junit4.ComposeTestRule.waitForTag(tag: String, timeoutMs: Long = 10_000) {
+        try {
+            waitUntil(timeoutMs) { hasTag(tag) }
+        } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            onRoot(useUnmergedTree = true).printToLog("PfTest")
+            throw AssertionError("no node with tag $tag after $timeoutMs ms; semantics tree is in logcat (PfTest)", e)
+        }
+    }
 
     private fun androidx.compose.ui.test.junit4.ComposeTestRule.hasTag(tag: String, waitMs: Long): Boolean =
         runCatching { waitUntil(waitMs) { hasTag(tag) } }.isSuccess
