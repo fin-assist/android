@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import android.os.SystemClock
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
@@ -50,6 +52,13 @@ internal class AppLockImpl @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val unlocked = MutableStateFlow(false)
     private var backgroundedAt: Long? = null
+
+    /**
+     * Serializes writes of the passcode. The sign-out reset (started on every cold start that begins signed out)
+     * deletes Keystore keys before the record — slow on some devices. A new code saved in between would lose its
+     * record or MAC key and end up «configured but locked» with a code that never matches.
+     */
+    private val writes = Mutex()
 
     override val state: StateFlow<LockState> = combine(store.isConfigured, unlocked) { configured, open ->
         when {
@@ -96,8 +105,10 @@ internal class AppLockImpl @Inject constructor(
     }
 
     override suspend fun setPasscode(code: String) {
-        store.save(code)
-        unlocked.value = true
+        writes.withLock {
+            store.save(code)
+            unlocked.value = true
+        }
         tracker.track(Events.APPLOCK_PASSCODE_SET)
     }
 
@@ -139,7 +150,7 @@ internal class AppLockImpl @Inject constructor(
         reset()
     }
 
-    override suspend fun reset() {
+    override suspend fun reset() = writes.withLock {
         store.clear()
         unlocked.value = false
     }
