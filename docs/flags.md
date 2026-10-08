@@ -1,6 +1,6 @@
 # Feature flags registry
 
-Source of truth for flag names. Code defaults live in `core/toggles` (`FlagRegistry`); the provider
+Source of truth for flag names. Code defaults live in `core/toggles` (`Flag` enum, `defaultValue`); the provider
 (RuStore Remote Config in `prod`, JSON asset in `mock`) may override them. Unknown or unreachable provider →
 code default. Values are read at the screen boundary (when a screen is entered), not mid-screen.
 
@@ -33,9 +33,10 @@ their own chip.
 
 ## Adding a flag
 
-1. Add a constant to `FlagRegistry` in `core/toggles` with its default.
+1. Add an entry to the `Flag` enum in `core/toggles` (default `true`, or `defaultValue = false`).
 2. Add a row here.
 3. Read it with `FeatureFlags.isEnabled(Flag.X)` at the screen boundary (view model init or `FeatureEntry`).
+4. Run `python3 scripts/agent-docs.py --write` to refresh the flags block in `AGENTS.md`.
 
 ## Known limitation: account switch and RuStore cache
 

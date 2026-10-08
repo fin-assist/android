@@ -19,7 +19,7 @@ kotlinx.serialization, OkHttp SSE, DataStore, Tink (refresh-токен под An
 
 ## Сборка
 
-Требования: Android Studio (Ladybug или новее), JDK 17, Android SDK 35.
+Требования: Android Studio (Ladybug или новее), JDK 21 для Gradle (см. ниже), Android SDK 35.
 
 ```
 ./gradlew assembleMockDebug     # сборка без сервера и без ключей SDK
