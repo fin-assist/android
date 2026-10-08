@@ -67,11 +67,12 @@ else
     log "preflight: auth.phone not found in the UI hierarchy (see $OUT/preflight-ui.xml, preflight.png, logcat.txt)"
 fi
 
+mkdir -p "$OUT/maestro" "$OUT/shots"
 maestro_args=(test "$FLOW" --format junit --output "$OUT/maestro-report.xml" --debug-output "$OUT/maestro")
 [[ -n "$TAGS" ]] && maestro_args+=(--include-tags "$TAGS")
 log "maestro ${maestro_args[*]}"
 status=0
-maestro "${maestro_args[@]}" || status=$?
+(cd "$OUT/shots" && maestro "${maestro_args[@]}") || status=$?
 adb logcat -d > "$OUT/logcat.txt" 2>/dev/null || true
 # Screenshots and logs of failed flows land in ~/.maestro/tests when --debug-output is not honoured.
 [[ -d "$HOME/.maestro/tests" ]] && cp -r "$HOME/.maestro/tests" "$OUT/maestro-tests" 2>/dev/null || true

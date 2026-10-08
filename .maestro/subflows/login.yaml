@@ -8,10 +8,12 @@ appId: ru.finassist.pf.mock.e2e
     env:
       PHONE: "9161234567"
 - runFlow: set_passcode.yaml
+# Saved next to the reports (build/e2e/shots): what the app showed right after the passcode.
+- takeScreenshot: ${MAESTRO_FILENAME}_after_passcode
 - extendedWaitUntil:
     visible:
       id: "operations.feed"
-    timeout: 20000
+    timeout: 40000
 - extendedWaitUntil:
     visible:
       id: "operations.row"

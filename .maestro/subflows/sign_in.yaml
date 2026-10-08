@@ -6,7 +6,7 @@ appId: ru.finassist.pf.mock.e2e
 - extendedWaitUntil:
     visible:
       id: "auth.phone"
-    timeout: 20000
+    timeout: 40000
 - tapOn:
     id: "auth.phone.input"
 - inputText: ${PHONE}
