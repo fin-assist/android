@@ -56,6 +56,15 @@ class ParseFlagsTest(unittest.TestCase):
         flags = docs.parse_flags(self.wrap('    A("a"),\n    B(\n        "b",\n        defaultValue = false,\n    ),'))
         self.assertEqual(flags, [("A", "a", True), ("B", "b", False)])
 
+    def test_entries_without_value_take_the_constructor_default(self):
+        text = 'enum class Flag(val key: String, val defaultValue: Boolean = false) {\n    A("a"),\n    B("b", true),\n;\n}'
+        self.assertEqual(docs.parse_flags(text), [("A", "a", False), ("B", "b", True)])
+
+    def test_no_default_anywhere_fails(self):
+        text = 'enum class Flag(val key: String, val defaultValue: Boolean) {\n    A("a"),\n;\n}'
+        with self.assertRaises(docs.ParseError):
+            docs.parse_flags(text)
+
     def test_unparsable_entry_fails_instead_of_disappearing(self):
         with self.assertRaises(docs.ParseError) as e:
             docs.parse_flags(self.wrap('    A("a"),\n    B(key = "b"),'))

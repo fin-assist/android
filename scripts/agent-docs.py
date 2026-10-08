@@ -83,17 +83,29 @@ def parse_settings(text: str) -> list[str]:
 
 
 def parse_flags(text: str) -> list[tuple[str, str, bool]]:
-    """(constant, key, default) of the Flag enum; the default is `true` unless given explicitly.
+    """(constant, key, default) of the Flag enum; an entry without its own value takes the constructor's default.
 
     Entries may span lines and end with a trailing comma. Every `NAME(` in the enum body must parse, so an
     entry in an unexpected shape fails the check instead of disappearing from the registry."""
-    body = re.search(r'enum\s+class\s+Flag\b[^{]*\{(.*?);', kotlin_code(text), re.S)
-    if not body:
+    enum = re.search(r'enum\s+class\s+Flag\b([^{]*)\{(.*?);', kotlin_code(text), re.S)
+    if not enum:
         raise ParseError("Flag.kt: `enum class Flag { ...; }` not found")
+    ctor, body = enum.groups()
+    param = re.search(r'\bdefaultValue\s*:\s*Boolean\s*(?:=\s*(true|false))?', ctor)
+    if not param:
+        raise ParseError("Flag.kt: constructor parameter `defaultValue: Boolean` not found")
+    ctor_default = param.group(1)  # None: every entry must pass its own value
     entry = re.compile(
         r'\b([A-Z][A-Z0-9_]*)\s*\(\s*"([^"]+)"\s*(?:,\s*(?:defaultValue\s*=\s*)?(true|false)\s*)?,?\s*\)', re.S)
-    flags = [(const, key, default != "false") for const, key, default in entry.findall(body.group(1))]
-    seen = re.findall(r'\b([A-Z][A-Z0-9_]*)\s*\(', body.group(1))
+    flags, missing = [], []
+    for const, key, own in entry.findall(body):
+        value = own or ctor_default
+        if value is None:
+            missing.append(const)
+        flags.append((const, key, value == "true"))
+    if missing:
+        raise ParseError(f"Flag.kt: no defaultValue for {missing} and none in the constructor")
+    seen = re.findall(r'\b([A-Z][A-Z0-9_]*)\s*\(', body)
     parsed = [const for const, _, _ in flags]
     if seen != parsed or not flags:
         raise ParseError(f"Flag.kt: cannot parse entries {sorted(set(seen) - set(parsed)) or seen}")
