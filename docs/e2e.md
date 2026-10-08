@@ -73,7 +73,8 @@ installs next to `mockDebug` and never exists for `prod`.
 ## Test tags
 
 Maestro finds elements by id; in Compose the id is `Modifier.testTag`, exposed as a resource id by
-`Modifier.pfTestRoot()` (set on the app root, dialogs and bottom sheets).
+`Modifier.pfTestRoot()` (set on the app root, dialogs and bottom sheets) — only in debuggable builds (`pfExposeTestTags`,
+set in `PfApplication`); release builds keep tags out of the accessibility tree.
 
 - Screens tag their own elements as `<feature>.<screen>[.<element>]`: `auth.phone.input`, `operations.feed`,
   `statements.upload.error.wrong_bank`. The constants live next to the screens (`AuthTags`, `OperationsTags`, …).

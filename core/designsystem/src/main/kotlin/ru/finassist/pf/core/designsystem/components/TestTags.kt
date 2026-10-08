@@ -37,8 +37,16 @@ object PfTestTags {
 }
 
 /**
- * Exposes test tags as resource ids to UI Automator (and so to Maestro) for this subtree. Every window root
- * needs it: the activity content, and each dialog and bottom sheet, which compose in windows of their own.
+ * Whether [pfTestRoot] exposes test tags. Set once by the app at start: on for debuggable builds (the e2e build
+ * is one), off in release, where tags have no reader and stay out of the accessibility tree.
+ */
+@Volatile
+var pfExposeTestTags: Boolean = false
+
+/**
+ * Exposes test tags as resource ids to UI Automator (and so to Maestro) for this subtree when [pfExposeTestTags]
+ * is on. Every window root needs it: the activity content, and each dialog and bottom sheet, which compose in
+ * windows of their own.
  */
 @OptIn(ExperimentalComposeUiApi::class)
-fun Modifier.pfTestRoot(): Modifier = semantics { testTagsAsResourceId = true }
+fun Modifier.pfTestRoot(): Modifier = if (pfExposeTestTags) semantics { testTagsAsResourceId = true } else this

@@ -32,7 +32,8 @@ interface Navigator {
 
     /**
      * Ends the current flow (upload → result, …) and shows the root of the tab [route]. Unlike [openTab] the
-     * screens of the flow are dropped, not kept for the next visit of their tab.
+     * screens of the flow are dropped, not kept for the next visit of their tab. As after a tab tap, system
+     * «back» from another tab's root returns to Operations.
      */
     fun finishTo(route: Any)
 }

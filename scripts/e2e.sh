@@ -57,10 +57,13 @@ adb logcat -c || true
 # A freshly booted CI emulator often shows «Pixel Launcher isn't responding». The dialog takes window focus
 # from the app under test, so every flow and the Espresso test fail. Hide system error dialogs for the run.
 adb shell settings put global hide_error_dialogs 1 || true
+# Restored on exit: on a developer's own device the setting must not stay behind.
+trap 'adb shell settings put global hide_error_dialogs 0 >/dev/null 2>&1 || true' EXIT
 adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
 
 # Preflight: cold start and dump the UI hierarchy. If test tags do not show up as resource-id here, every
 # flow would fail on its first step — the dump says why in one file instead of eighteen failures.
+preflight_ok=0
 for attempt in 1 2 3; do
     adb shell am force-stop "$APP_ID"
     adb shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
@@ -71,6 +74,7 @@ for attempt in 1 2 3; do
     if grep -q 'resource-id="auth.phone' "$OUT/preflight-ui.xml" 2>/dev/null \
         && ! grep -q "isn't responding" "$OUT/preflight-ui.xml" 2>/dev/null; then
         log "preflight: the phone screen is up, test tags are visible to UI Automator"
+        preflight_ok=1
         break
     fi
     log "preflight $attempt: app screen not clean (see $OUT/preflight-ui.xml, preflight.png); closing system dialogs"
@@ -78,6 +82,12 @@ for attempt in 1 2 3; do
     adb shell input keyevent KEYCODE_HOME || true
     sleep 15
 done
+if [[ "$preflight_ok" != 1 ]]; then
+    # Every flow would fail on its first step; stop here with the dump instead of eighteen failures.
+    adb logcat -d > "$OUT/logcat.txt" 2>/dev/null || true
+    log "preflight failed: no clean phone screen after 3 attempts (see $OUT/preflight-ui.xml, preflight.png, logcat.txt)"
+    exit 1
+fi
 
 mkdir -p "$OUT/maestro" "$OUT/maestro-log" "$OUT/shots"
 # --test-output-dir: failure screenshots and view hierarchies per flow; --debug-output: the session log.
@@ -94,7 +104,10 @@ fi
 
 if [[ "$NATIVE" == 1 ]]; then
     log "native instrumented tests (mockDebug)"
-    (cd "$ROOT" && ./gradlew :app:connectedMockDebugAndroidTest --console=plain) || status=$?
+    # The first failure decides the exit code: the Maestro status is kept if both fail.
+    native=0
+    (cd "$ROOT" && ./gradlew :app:connectedMockDebugAndroidTest --console=plain) || native=$?
+    [[ "$status" == 0 ]] && status=$native
     cp -r "$ROOT/app/build/outputs/androidTest-results" "$OUT/native" 2>/dev/null || true
 fi
 
