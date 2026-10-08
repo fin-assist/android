@@ -24,8 +24,17 @@ interface Navigator {
     /** Returns a value to the previous screen (e.g. a chosen category) and pops. */
     fun returnResult(key: String, value: String)
 
-    /** Switches to a bottom tab root ([route] is a tab root), clearing what is on top like a tab tap does. */
+    /**
+     * Switches to a bottom tab root ([route] is a tab root) from the tab bar: the tab being left is kept and comes
+     * back as it was on its next visit.
+     */
     fun openTab(route: Any)
+
+    /**
+     * Ends the current flow (upload → result, …) and shows the root of the tab [route]. Unlike [openTab] the
+     * screens of the flow are dropped, not kept for the next visit of their tab.
+     */
+    fun finishTo(route: Any)
 }
 
 class NavControllerNavigator(private val controller: NavHostController) : Navigator {
@@ -47,6 +56,15 @@ class NavControllerNavigator(private val controller: NavHostController) : Naviga
             popUpTo(controller.graph.findStartDestination().id) { saveState = true }
             launchSingleTop = true
             restoreState = true
+        }
+    }
+
+    // No saveState / restoreState: with them a flow opened in the start tab (Operations) is saved on the way out
+    // and restored at once, so «К операциям» on the upload result stayed on the result (FIN-41).
+    override fun finishTo(route: Any) {
+        controller.navigate(route) {
+            popUpTo(controller.graph.findStartDestination().id)
+            launchSingleTop = true
         }
     }
 }
