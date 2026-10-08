@@ -10,8 +10,9 @@ orientation map: read it first, then open only the files the task touches.
   updates this file in the same PR. The same goes for `docs/modules.md` (new module) and `docs/flags.md`
   (new flag).
 - Blocks between `<!-- generated:… -->` markers are produced by `python3 scripts/agent-docs.py --write`;
-  do not edit them by hand. CI runs `--check`: stale blocks, a module missing from `docs/modules.md`, or
-  `docs/flags.md` out of sync with `Flag.kt` fail the build.
+  do not edit them by hand. CI runs `--check`: stale blocks, a module missing from `docs/modules.md`, a
+  feature not wired in `:app`, or `docs/flags.md` out of sync with `Flag.kt` (keys and defaults) fail the
+  build. So does a source the parser cannot read; then fix the parser and its tests (`scripts/test_agent_docs.py`).
 
 ## Where things are decided
 
@@ -129,7 +130,8 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   `local.properties`, a Maven Central mirror in `~/.gradle/init.d`). Needs JDK 21 and network access to
   Google Maven, Gradle and Maven Central.
 - Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug testMockDebugUnitTest` — the same checks as CI.
-- `python3 scripts/agent-docs.py --check` — the docs check from CI, no Gradle needed.
+- `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
+  docs check and its parser tests from CI, no Gradle needed.
 
 ## Code
 

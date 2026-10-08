@@ -26,3 +26,4 @@ app/src/mock/assets/private/
 
 # SDK keys for the prod flavor
 sdk-keys.properties
+__pycache__/
