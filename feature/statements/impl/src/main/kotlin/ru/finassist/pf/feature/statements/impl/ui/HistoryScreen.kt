@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -162,7 +163,7 @@ fun HistoryScreen(
         vm.load()
         onPauseOrDispose { vm.pause() }
     }
-    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(StatementsTags.HISTORY)) {
         PfPageHeader("История загрузок", onBack = onBack)
         val list = state.list
         when {
@@ -170,8 +171,11 @@ fun HistoryScreen(
             state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
                 PfButton("Повторить", onClick = vm::load, variant = ButtonVariant.PRIMARY)
             }
-            list == null || list.uploads.isEmpty() -> PfEmptyState(PfIcons.FILE_TEXT, "Выписок пока нет", "Загрузите выписку Т-Банка — разберём операции и покажем аналитику") {
-                if (state.uploadEnabled) PfButton("Загрузить выписку", onClick = onUpload, variant = ButtonVariant.PRIMARY)
+            list == null || list.uploads.isEmpty() -> PfEmptyState(
+                PfIcons.FILE_TEXT, "Выписок пока нет", "Загрузите выписку Т-Банка — разберём операции и покажем аналитику",
+                modifier = Modifier.testTag(StatementsTags.HISTORY_EMPTY),
+            ) {
+                if (state.uploadEnabled) PfButton("Загрузить выписку", onClick = onUpload, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(StatementsTags.HISTORY_UPLOAD))
             }
             else -> LazyColumn(
                 Modifier.weight(1f),
@@ -198,7 +202,7 @@ fun HistoryScreen(
                 if (state.uploadEnabled) {
                     item {
                         Spacer(Modifier.height(d.space2))
-                        PfButton("Загрузить выписку", onClick = onUpload, block = true, icon = PfIcons.UPLOAD)
+                        PfButton("Загрузить выписку", onClick = onUpload, block = true, icon = PfIcons.UPLOAD, modifier = Modifier.testTag(StatementsTags.HISTORY_UPLOAD))
                     }
                 }
             }
@@ -240,13 +244,15 @@ private fun UploadRow(u: Upload, onDelete: () -> Unit, onOpenUnread: () -> Unit)
                 period,
                 countWithNoun(u.operationCount, "операция", "операции", "операций"),
             ).joinToString(" · "),
-            trailing = { PfIconButton(PfIcons.TRASH, contentDescription = "Удалить загрузку ${u.fileName}", onClick = onDelete) },
+            trailing = { PfIconButton(PfIcons.TRASH, contentDescription = "Удалить загрузку ${u.fileName}", onClick = onDelete, modifier = Modifier.testTag(StatementsTags.HISTORY_DELETE)) },
+            modifier = Modifier.testTag(StatementsTags.HISTORY_ROW),
         )
         if (u.unreadCount > 0) {
             PfListRow(
                 title = "Не прочитали ${countWithNoun(u.unreadCount, "строку", "строки", "строк")}",
                 icon = PfIcons.ALERT,
                 onClick = onOpenUnread,
+                modifier = Modifier.testTag(StatementsTags.HISTORY_UNREAD),
             )
         }
     }

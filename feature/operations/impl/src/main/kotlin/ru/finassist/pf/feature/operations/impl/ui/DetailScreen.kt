@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -50,7 +51,7 @@ import java.time.ZoneId
 fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(OperationsTags.DETAIL)) {
         PfPageHeader("Операция", onBack = onBack)
         val op = state.operation
         when {
@@ -73,6 +74,7 @@ fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
                         valueAccent = true,
                         onClick = vm::openPicker,
                         divider = false,
+                        modifier = Modifier.testTag(OperationsTags.DETAIL_CATEGORY),
                     )
                 }
                 PfCard {
@@ -122,6 +124,7 @@ fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
                     enabled = state.draftCategoryId != null && state.draftCategoryId != op.categoryId,
                     busy = state.saving,
                     busyText = "Сохраняем…",
+                    modifier = Modifier.testTag(OperationsTags.DETAIL_SAVE),
                 )
             },
         ) {
@@ -154,7 +157,7 @@ private fun Hero(op: OperationDetails) {
     Column {
         PfIconTile(op.categoryIcon)
         Spacer(Modifier.height(PfTheme.dimens.space3))
-        Text(op.title, style = PfTheme.type.title2, color = c.text)
+        Text(op.title, style = PfTheme.type.title2, color = c.text, modifier = Modifier.testTag(OperationsTags.DETAIL_TITLE))
         Text(amount, style = PfTheme.type.amountHero, color = if (op.kind == OperationKind.INCOME) c.positive else c.text)
         op.note?.let {
             Spacer(Modifier.height(PfTheme.dimens.space1))

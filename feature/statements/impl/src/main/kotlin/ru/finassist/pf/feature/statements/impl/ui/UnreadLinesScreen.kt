@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -100,7 +101,7 @@ fun UnreadLinesScreen(onBack: () -> Unit, vm: UnreadLinesViewModel = hiltViewMod
     val context = LocalContext.current
     val d = PfTheme.dimens
     var copied by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(StatementsTags.UNREAD)) {
         PfPageHeader("Непрочитанные строки", onBack = onBack)
         when {
             state.loading -> Unit

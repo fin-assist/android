@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -101,7 +102,7 @@ fun PfPageHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onBack != null) {
-            PfIconButton(PfIcons.ARROW_LEFT, contentDescription = "Назад", onClick = onBack)
+            PfIconButton(PfIcons.ARROW_LEFT, contentDescription = "Назад", onClick = onBack, modifier = Modifier.testTag(PfTestTags.BACK))
         } else {
             Spacer(Modifier.height(PfTheme.dimens.touch))
         }
@@ -113,16 +114,17 @@ fun PfPageHeader(
     }
 }
 
-data class TabItem(val icon: String, val label: String)
+/** [id] names the tab in its test tag (`ds.tab.<id>`). */
+data class TabItem(val icon: String, val label: String, val id: String)
 
 /**
  * Tabs of the main graph, in order: «Операции», «Аналитика», «Профиль». The app's `MainLayer` (which maps them
  * to routes by index) and the design-check harness draw the same bar from this list.
  */
 val PfMainTabs: List<TabItem> = listOf(
-    TabItem(PfIcons.LIST, "Операции"),
-    TabItem(PfIcons.BAR_CHART, "Аналитика"),
-    TabItem(PfIcons.USER, "Профиль"),
+    TabItem(PfIcons.LIST, "Операции", "operations"),
+    TabItem(PfIcons.BAR_CHART, "Аналитика", "analytics"),
+    TabItem(PfIcons.USER, "Профиль", "profile"),
 )
 
 /** Bottom tab bar: three sections, `nav` background, active tab `accent`, the rest `text-faint`. */
@@ -150,7 +152,8 @@ fun PfTabBar(
                         // stuck to the top border (FIN-27). Also makes the whole 56 dp the touch target.
                         .fillMaxHeight()
                         .clickable(role = Role.Tab) { onSelect(index) }
-                        .semantics { this.selected = selected },
+                        .semantics { this.selected = selected }
+                        .testTag(PfTestTags.tab(item.id)),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {

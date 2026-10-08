@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.navigation.toRoute
@@ -74,6 +75,7 @@ fun ResultScreen(
     BackHandler(onBack = onDone)
     Column(
         Modifier
+            .testTag(StatementsTags.RESULT)
             .fillMaxSize()
             .windowInsetsPadding(PfInsets.statusBars)
             .windowInsetsPadding(PfInsets.navigationBars),
@@ -99,6 +101,13 @@ fun ResultScreen(
                 title = ResultTexts.title(r),
                 subtitle = ResultTexts.subtitle(r),
                 centered = false,
+                modifier = Modifier.testTag(
+                    when {
+                        empty -> StatementsTags.RESULT_EMPTY
+                        r.newCount == 0 -> StatementsTags.RESULT_NO_NEW
+                        else -> StatementsTags.RESULT_NEW
+                    },
+                ),
             )
             r.totals?.let { t ->
                 val scope = when (t.scope) {
@@ -121,7 +130,7 @@ fun ResultScreen(
                 PfNotice(
                     "Не прочитали ${countWithNoun(r.unreadCount, "строку", "строки", "строк")} — суммы могут быть неполными",
                     tone = NoticeTone.WARNING,
-                    action = { PfLink("Какие строки", onClick = { onOpenUnread(vm.uploadId) }, inline = true) },
+                    action = { PfLink("Какие строки", onClick = { onOpenUnread(vm.uploadId) }, inline = true, modifier = Modifier.testTag(StatementsTags.RESULT_UNREAD)) },
                 )
             }
             val details = listOfNotNull(ResultTexts.duplicates(r), ResultTexts.accounts(r.accounts), ResultTexts.categories(r))
@@ -152,11 +161,11 @@ fun ResultScreen(
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4), verticalArrangement = Arrangement.spacedBy(d.space2)) {
             if (r != null && (r.operationCount == 0 || r.newCount == 0) && vm.uploadEnabled) {
-                PfButton("Загрузить другой файл", onClick = onUploadAnother, variant = ButtonVariant.PRIMARY, block = true)
-                PfButton("Готово", onClick = onDone, variant = ButtonVariant.GHOST, block = true)
+                PfButton("Загрузить другой файл", onClick = onUploadAnother, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(StatementsTags.RESULT_UPLOAD_ANOTHER))
+                PfButton("Готово", onClick = onDone, variant = ButtonVariant.GHOST, block = true, modifier = Modifier.testTag(StatementsTags.RESULT_DONE))
             } else {
-                PfButton("Посмотреть аналитику", onClick = onOpenAnalytics, variant = ButtonVariant.PRIMARY, block = true)
-                PfButton("К операциям", onClick = onDone, variant = ButtonVariant.GHOST, block = true)
+                PfButton("Посмотреть аналитику", onClick = onOpenAnalytics, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(StatementsTags.RESULT_ANALYTICS))
+                PfButton("К операциям", onClick = onDone, variant = ButtonVariant.GHOST, block = true, modifier = Modifier.testTag(StatementsTags.RESULT_DONE))
             }
         }
     }

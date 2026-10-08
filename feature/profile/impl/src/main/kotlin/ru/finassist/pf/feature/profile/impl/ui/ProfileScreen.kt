@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -95,13 +96,13 @@ internal fun ProfileContent(
     versionName: String? = null,
 ) {
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().testTag(ProfileTags.SCREEN)) {
         PfTabHeader("Профиль")
         val p = state.profile
         when {
             state.loading -> Unit
-            state.offline || p == null -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
-                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
+            state.offline || p == null -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(ProfileTags.OFFLINE)) {
+                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(ProfileTags.RETRY))
             }
             else -> Column(
                 Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(top = d.space4, bottom = d.space6),
@@ -109,7 +110,7 @@ internal fun ProfileContent(
             ) {
                 PfCard {
                     Text("Номер телефона", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
-                    Text(ProfileTexts.phone(p.phone), style = PfTheme.type.title2, color = PfTheme.colors.text, maxLines = 1, modifier = Modifier.padding(top = d.space1))
+                    Text(ProfileTexts.phone(p.phone), style = PfTheme.type.title2, color = PfTheme.colors.text, maxLines = 1, modifier = Modifier.padding(top = d.space1).testTag(ProfileTags.PHONE))
                 }
                 Section("Источник данных") {
                     PfCard(flush = true) {
@@ -119,6 +120,7 @@ internal fun ProfileContent(
                             description = if (state.statementsLoaded) ProfileTexts.statement(state.statements) else null,
                             onClick = if (state.statements == null && state.flags.upload) actions.openUpload else actions.openHistory,
                             divider = false,
+                            modifier = Modifier.testTag(ProfileTags.STATEMENTS),
                         )
                     }
                 }
@@ -131,6 +133,7 @@ internal fun ProfileContent(
                                 icon = PfIcons.MESSAGE,
                                 value = limit?.let { if (it.remaining == it.dailyMax) "${it.dailyMax} вопросов в день" else "осталось ${it.remaining} из ${it.dailyMax}" },
                                 onClick = actions.openChat,
+                                modifier = Modifier.testTag(ProfileTags.ASSISTANT),
                             )
                             val granted = p.assistantConsent.granted && !p.assistantConsent.needsRenewal
                             PfListRow(
@@ -140,22 +143,23 @@ internal fun ProfileContent(
                                 switchChecked = granted,
                                 onSwitch = { on -> if (state.consentBusy) Unit else if (on) actions.openConsent() else onRevokeConsent() },
                                 divider = false,
+                                modifier = Modifier.testTag(ProfileTags.ASSISTANT_CONSENT),
                             )
                         }
                     }
                 }
                 Section("Настройки") {
                     PfCard(flush = true) {
-                        PfListRow("Код-пароль и биометрия", icon = PfIcons.FINGERPRINT, value = ProfileTexts.biometric(state.biometric), onClick = actions.openSecurity)
-                        PfListRow("Тема", icon = PfIcons.MOON, value = ProfileTexts.theme(state.theme), onClick = { onThemeSheet(true) }, divider = false)
+                        PfListRow("Код-пароль и биометрия", icon = PfIcons.FINGERPRINT, value = ProfileTexts.biometric(state.biometric), onClick = actions.openSecurity, modifier = Modifier.testTag(ProfileTags.SECURITY))
+                        PfListRow("Тема", icon = PfIcons.MOON, value = ProfileTexts.theme(state.theme), onClick = { onThemeSheet(true) }, divider = false, modifier = Modifier.testTag(ProfileTags.THEME))
                     }
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(d.space2)) {
                     PfCard(flush = true) {
                         PfListRow("Написать в поддержку", icon = PfIcons.LIFE_BUOY, onClick = { onSupport(p.userId) })
-                        PfListRow("Выйти", icon = PfIcons.LOG_OUT, tone = RowTone.ACCENT, onClick = { onAskLogout(true) }, divider = false)
+                        PfListRow("Выйти", icon = PfIcons.LOG_OUT, tone = RowTone.ACCENT, onClick = { onAskLogout(true) }, divider = false, modifier = Modifier.testTag(ProfileTags.LOGOUT))
                     }
-                    if (state.flags.deleteAccount) PfLink("Удалить аккаунт и все данные", onClick = actions.openDeleteAccount)
+                    if (state.flags.deleteAccount) PfLink("Удалить аккаунт и все данные", onClick = actions.openDeleteAccount, modifier = Modifier.testTag(ProfileTags.DELETE_ACCOUNT))
                     Text(
                         ProfileTexts.footer(versionName),
                         style = PfTheme.type.hint, color = PfTheme.colors.textMuted, textAlign = TextAlign.Center,
@@ -173,7 +177,7 @@ internal fun ProfileContent(
     }
     if (state.themeSheet) {
         PfBottomSheet("Тема", onDismiss = { onThemeSheet(false) }) {
-            Theme.entries.forEach { t -> PfOptionRow(ProfileTexts.theme(t), selected = t == state.theme, onClick = { onTheme(t) }) }
+            Theme.entries.forEach { t -> PfOptionRow(ProfileTexts.theme(t), selected = t == state.theme, onClick = { onTheme(t) }, modifier = Modifier.testTag(ProfileTags.theme(t.name.lowercase()))) }
         }
     }
     if (state.askLogout) {
@@ -196,4 +200,23 @@ private fun writeSupport(context: Context, userId: String) {
         putExtra(Intent.EXTRA_TEXT, "\n\n—\nID пользователя: $userId")
     }
     runCatching { context.startActivity(intent) }
+}
+
+/** Test tags of the profile screens (UI tests in `.maestro/`, convention in docs/e2e.md). */
+internal object ProfileTags {
+    const val SCREEN = "profile.screen"
+    const val OFFLINE = "profile.offline"
+    const val RETRY = "profile.retry"
+    const val PHONE = "profile.phone"
+    const val STATEMENTS = "profile.statements"
+    const val ASSISTANT = "profile.assistant"
+    const val ASSISTANT_CONSENT = "profile.assistant.consent"
+    const val SECURITY = "profile.security"
+    const val THEME = "profile.theme"
+    /** `profile.theme.<light|dark|system>` — options of the theme sheet, by [Theme] name. */
+    fun theme(name: String) = "profile.theme.$name"
+    const val LOGOUT = "profile.logout"
+    const val DELETE_ACCOUNT = "profile.delete_account"
+    const val DELETE_SCREEN = "profile.delete"
+    const val DELETE_SUBMIT = "profile.delete.submit"
 }

@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -113,6 +114,7 @@ fun PasscodeSetupScreen(onDone: () -> Unit, vm: PasscodeEntryViewModel = hiltVie
             onSkip = vm::skipBiometric,
         )
         else -> PasscodePad(
+            modifier = Modifier.testTag(if (state.step == EnterStep.REPEAT) AppLockTags.SETUP_REPEAT else AppLockTags.SETUP),
             header = { PfPageHeader(title = "Шаг 3 из 4", onBack = null) },
             title = if (state.step == EnterStep.REPEAT) "Повторите код-пароль" else "Придумайте код-пароль",
             subtitle = if (state.step == EnterStep.REPEAT) null else "4 цифры — чтобы открывать приложение на этом телефоне без звонка",
@@ -130,6 +132,7 @@ private fun BiometricOffer(noun: String, icon: String, onEnable: () -> Unit, onS
     BackHandler { onSkip() }
     Column(
         Modifier
+            .testTag(AppLockTags.BIOMETRIC_OFFER)
             .fillMaxSize()
             .background(PfTheme.colors.bg)
             .windowInsetsPadding(PfInsets.navigationBars),
@@ -144,9 +147,9 @@ private fun BiometricOffer(noun: String, icon: String, onEnable: () -> Unit, onS
             )
         }
         Column(Modifier.padding(horizontal = d.space5)) {
-            PfButton("Включить", onClick = onEnable, variant = ButtonVariant.PRIMARY, block = true)
+            PfButton("Включить", onClick = onEnable, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(AppLockTags.BIOMETRIC_ENABLE))
             Spacer(Modifier.height(d.space2))
-            PfButton("Не сейчас", onClick = onSkip, variant = ButtonVariant.GHOST, block = true)
+            PfButton("Не сейчас", onClick = onSkip, variant = ButtonVariant.GHOST, block = true, modifier = Modifier.testTag(AppLockTags.BIOMETRIC_SKIP))
             Spacer(Modifier.height(d.space4))
         }
     }
@@ -178,6 +181,7 @@ internal fun UnlockContent(
     onForgot: () -> Unit,
 ) {
     PasscodePad(
+        modifier = Modifier.testTag(AppLockTags.UNLOCK),
         mark = true,
         title = "Введите код-пароль",
         subtitle = null,
@@ -187,7 +191,7 @@ internal fun UnlockContent(
         onDelete = onDelete,
         biometric = if (state.biometricEnabled) state.biometric.toKind() else BiometricKind.NONE,
         onBiometric = onBiometric,
-        footer = { PfLink("Забыли код?", onClick = { onAskForgot(true) }) },
+        footer = { PfLink("Забыли код?", onClick = { onAskForgot(true) }, modifier = Modifier.testTag(AppLockTags.UNLOCK_FORGOT)) },
     )
     if (state.askForgot) {
         PfDialog(
@@ -209,6 +213,7 @@ fun SecurityScreen(onBack: () -> Unit, onChangePasscode: () -> Unit, vm: Securit
     val prompt = rememberBiometricPrompt(title = "Включить вход по биометрии", onSuccess = { vm.setBiometric(true) })
     Column(
         Modifier
+            .testTag(AppLockTags.SECURITY)
             .fillMaxSize()
             .background(PfTheme.colors.bg)
             .windowInsetsPadding(PfInsets.navigationBars),
@@ -216,7 +221,7 @@ fun SecurityScreen(onBack: () -> Unit, onChangePasscode: () -> Unit, vm: Securit
         PfPageHeader(title = "Код-пароль и биометрия", onBack = onBack)
         Column(Modifier.padding(horizontal = d.space5)) {
             PfCard(flush = true) {
-                PfListRow(title = "Сменить код-пароль", icon = PfIcons.LOCK, onClick = onChangePasscode)
+                PfListRow(title = "Сменить код-пароль", icon = PfIcons.LOCK, onClick = onChangePasscode, modifier = Modifier.testTag(AppLockTags.SECURITY_CHANGE))
                 if (state.biometric != BiometricAvailability.NONE) {
                     PfListRow(
                         title = "Вход по ${state.biometric.noun()}",
@@ -245,6 +250,7 @@ fun ChangePasscodeScreen(onBack: () -> Unit, onDone: () -> Unit, vm: PasscodeEnt
     LaunchedEffect(state.done) { if (state.done) onDone() }
     BackHandler { if (!vm.backToFirstEntry()) onBack() }
     PasscodePad(
+        modifier = Modifier.testTag(AppLockTags.CHANGE),
         header = { PfPageHeader(title = "Смена код-пароля", onBack = onBack) },
         title = when (state.step) {
             EnterStep.OLD -> "Введите текущий код"
@@ -267,6 +273,7 @@ fun ConfirmPasscodeScreen(onBack: () -> Unit, onConfirmed: () -> Unit, vm: Confi
     LaunchedEffect(state.confirmed) { if (state.confirmed) onConfirmed() }
     LaunchedEffect(Unit) { if (state.biometricEnabled) prompt() }
     PasscodePad(
+        modifier = Modifier.testTag(AppLockTags.CONFIRM),
         header = { PfPageHeader(title = "Подтверждение", onBack = onBack) },
         title = "Введите код-пароль",
         subtitle = "Чтобы подтвердить, что это вы",
@@ -277,4 +284,19 @@ fun ConfirmPasscodeScreen(onBack: () -> Unit, onConfirmed: () -> Unit, vm: Confi
         biometric = if (state.biometricEnabled) state.biometric.toKind() else BiometricKind.NONE,
         onBiometric = prompt,
     )
+}
+
+/** Test tags of the passcode screens (UI tests in `.maestro/`, convention in docs/e2e.md). */
+internal object AppLockTags {
+    const val SETUP = "applock.setup"
+    const val SETUP_REPEAT = "applock.setup.repeat"
+    const val BIOMETRIC_OFFER = "applock.biometric_offer"
+    const val BIOMETRIC_ENABLE = "applock.biometric_offer.enable"
+    const val BIOMETRIC_SKIP = "applock.biometric_offer.skip"
+    const val UNLOCK = "applock.unlock"
+    const val UNLOCK_FORGOT = "applock.unlock.forgot"
+    const val SECURITY = "applock.security"
+    const val SECURITY_CHANGE = "applock.security.change"
+    const val CHANGE = "applock.change"
+    const val CONFIRM = "applock.confirm"
 }
