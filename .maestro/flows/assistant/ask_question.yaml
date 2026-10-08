@@ -64,6 +64,11 @@ tags:
     visible:
       id: "operations.search"
     timeout: 10000
+# The scope chip comes after the filter chips, off screen in the sideways-scrolling row.
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
 - assertVisible:
     id: "operations.search.chip.scope"
 - assertVisible:
