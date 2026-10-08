@@ -87,8 +87,10 @@ object DesignCheck {
                     if (restPx <= 0f) break
                     // Exact for verticalScroll; a lazy list reports an estimate, so it may take another step.
                     height += ceil(restPx / DENSITY).toInt()
-                    dispose(controller)
+                    // Swap before disposing: if render throws, finally disposes the old, still live controller once.
+                    val old = controller
                     controller = render(height, dark, tab, content)
+                    dispose(old)
                 }
             }
             val path = File(outputDir, "$name.png").path
