@@ -1,0 +1,24 @@
+{
+  "project": "PLAINFIN",
+  "cases": {
+    ".maestro/flows/auth/sign_in_existing_user.yaml": 1,
+    ".maestro/flows/auth/register_new_user.yaml": 2,
+    ".maestro/flows/auth/phone_validation.yaml": 3,
+    ".maestro/flows/auth/registration_closed.yaml": 4,
+    ".maestro/flows/applock/unlock.yaml": 5,
+    ".maestro/flows/applock/forgot_code.yaml": 6,
+    ".maestro/flows/applock/change_passcode.yaml": 7,
+    ".maestro/flows/operations/feed_and_detail.yaml": 8,
+    ".maestro/flows/operations/search_filters.yaml": 9,
+    ".maestro/flows/analytics/overview.yaml": 10,
+    ".maestro/flows/analytics/blocks_switched_off.yaml": 11,
+    ".maestro/flows/assistant/ask_question.yaml": 12,
+    ".maestro/flows/assistant/daily_limit.yaml": 13,
+    ".maestro/flows/statements/upload_and_history.yaml": 14,
+    ".maestro/flows/statements/upload_errors.yaml": 15,
+    "ru.finassist.pf.StatementPickerTest#uploadsTheDocumentReturnedBySystemPicker": 16,
+    ".maestro/flows/profile/theme_and_logout.yaml": 17,
+    ".maestro/flows/profile/delete_account.yaml": 18,
+    ".maestro/flows/offline/no_network.yaml": 19
+  }
+}

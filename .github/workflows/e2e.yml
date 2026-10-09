@@ -93,6 +93,21 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # One Qase run per main merge or manual run (project PLAINFIN, cases in scripts/qase-cases.json). PR runs are
+      # not sent, nor cancelled ones (a newer push cancels the run: its partial results would read as lost coverage).
+      # Without the QASE_API_TOKEN secret the script only prints a notice; a Qase outage does not fail the job.
+      - name: Send results to Qase
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+        continue-on-error: true
+        env:
+          QASE_API_TOKEN: ${{ secrets.QASE_API_TOKEN }}
+        run: |
+          python3 scripts/qase-report.py \
+            --title "UI tests · ${GITHUB_REF_NAME} · ${GITHUB_SHA::7}" \
+            --description "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            build/e2e/maestro-report.xml \
+            'app/build/outputs/androidTest-results/connected/**/TEST-*.xml'
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
