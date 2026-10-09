@@ -7,6 +7,7 @@ appId: ru.finassist.pf.mock.e2e
 ---
 - clearState
 # Maestro has no plain sleep: wait for an id that never exists, without failing the flow.
+# `e2e.never` is reserved for this: never use it as a test tag.
 - extendedWaitUntil:
     visible:
       id: "e2e.never"

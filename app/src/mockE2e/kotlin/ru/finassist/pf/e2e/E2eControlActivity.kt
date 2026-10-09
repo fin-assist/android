@@ -71,7 +71,7 @@ class E2eControlActivity : ComponentActivity() {
         const val FLAG_PREFIX = "flag."
         /** Test tag shown once the values are applied; `.maestro/subflows/config.yaml` waits on it. */
         const val TAG_APPLIED = "e2e.config.applied"
-        /** Long enough for Maestro to see the tag between its polls. */
-        const val VISIBLE_MS = 1500L
+        /** Long enough for Maestro to catch the tag between its hierarchy polls, even on a slow CI emulator. */
+        const val VISIBLE_MS = 4000L
     }
 }
