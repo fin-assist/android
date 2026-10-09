@@ -145,6 +145,14 @@ class HttpTest(unittest.TestCase):
                 qase.http_request("t", sleep=lambda s: None)("GET", "/project", None)
 
 
+    def test_non_json_answer_becomes_qase_error(self):
+        page = mock.MagicMock()
+        page.__enter__.return_value.read.return_value = b"<html>gateway</html>"
+        with mock.patch.object(qase.urllib.request, "urlopen", side_effect=[page, page]):
+            with redirect_stdout(io.StringIO()), self.assertRaises(qase.QaseError):
+                qase.http_request("t", sleep=lambda s: None)("GET", "/project", None)
+
+
 class MainTest(unittest.TestCase):
     """CI without the secret must stay green: no token → notice, exit 0, no request."""
 

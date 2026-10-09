@@ -135,6 +135,8 @@ def http_request(token: str, sleep: Callable[[float], None] = time.sleep) -> Req
             raise QaseError(f"{method} {path}: HTTP {e.code} {text}", retryable=e.code == 429 or e.code >= 500) from e
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
             raise QaseError(f"{method} {path}: {e}", retryable=True) from e
+        except ValueError as e:  # not JSON: a proxy or gateway page instead of the API
+            raise QaseError(f"{method} {path}: unexpected response ({e})", retryable=True) from e
         if not answer.get("status", False):
             raise QaseError(f"{method} {path}: {answer}")
         return answer.get("result") or {}
