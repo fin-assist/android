@@ -31,9 +31,14 @@ kover {
         filters {
             excludes {
                 // Generated code: Hilt/Dagger, kotlinx.serialization, Android resources and BuildConfig.
+                // `*Module_*Factory`: factories of @Provides methods (`NetworkModule_ClientFactory`); the
+                // `@DaggerGenerated` annotation below catches the same classes, the pattern is a fallback.
+                // Not excluded: `Companion.serializer()` of @Serializable classes (one line each, ~2 % of the
+                // total) — Kover cannot tell those companions from hand-written ones.
                 classes(
                     "*.BuildConfig", "*.R", "*.R$*",
-                    "Hilt_*", "*.Hilt_*", "*_HiltModules*", "*_Factory", "*_Factory$*", "*_MembersInjector",
+                    "Hilt_*", "*.Hilt_*", "*_HiltModules*", "*_Factory", "*_Factory$*", "*Module_*Factory",
+                    "*_MembersInjector",
                     "*_GeneratedInjector", "*_ComponentTreeDeps", "*_HiltComponents*",
                     "dagger.hilt.internal.*", "hilt_aggregated_deps.*",
                     "*\$\$serializer",
@@ -45,6 +50,7 @@ kover {
                     "androidx.compose.runtime.Composable",
                     "androidx.compose.ui.tooling.preview.Preview",
                     "dagger.Module",
+                    "dagger.internal.DaggerGenerated",
                 )
             }
         }

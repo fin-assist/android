@@ -134,12 +134,12 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   Google Maven, Gradle and Maven Central.
 - Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug testMockDebugUnitTest` — the same checks as CI.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally, the `UI tests` workflow in CI
-  (after merge to `main` or `release/**`, or a PR labelled `e2e`).
+  (after merge to `main`, or a PR labelled `e2e`).
 - `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
   docs check and its parser tests from CI, no Gradle needed.
-- Coverage: `./gradlew koverXmlReportUnit` (runs the unit tests), then
+- Coverage: `./gradlew :koverXmlReportUnit` (runs the unit tests), then
   `python3 scripts/coverage-diff.py --base origin/<base branch>` for the changed lines; HTML report via
-  `koverHtmlReportUnit` (docs/testing.md).
+  `:koverHtmlReportUnit` (docs/testing.md).
 
 ## Code
 
@@ -168,21 +168,23 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 Every new piece of functionality is covered by automated tests in the same PR — not in a follow-up. Layers and
 commands: `docs/testing.md`.
 
-- Logic (domain, data, mappers, view models, `mock/backend`, `core/*`) → unit tests in the module's `src/test`:
-  the main path, the edge cases the code handles, every branch. View models are tested through their state and
-  handlers, with fake `:api` dependencies.
-- Screens, states, sheets, dialogs → design check (see Code); user scenarios → Maestro flow + Qase case
-  (docs/e2e.md); a native instrumented test only for platform gaps.
-- A bug fix comes with a test that fails without the fix.
-- Before opening the PR, measure the coverage of changed lines (Build in an agent container → Coverage). Target:
-  at least 80 % of changed executable lines; list the uncovered ones with the reason in the PR («Проверка»).
+- Logic (domain, data, mappers, view models, `mock/backend`, `core/*`) → unit tests in the module's `src/test`
+  covering the main path and every edge case and branch the code handles. View models are tested through their
+  state and handlers, with fake `:api` dependencies.
+- Screens, states, sheets, dialogs → design check; user scenarios → UI tests (both rules in Code, details in
+  docs/e2e.md).
+- A bug fix comes with a test that fails without the fix: a UI flow for a user-visible bug (see Code), plus a
+  unit test when the cause is in logic.
+- The measurable check is coverage of changed lines by unit tests: at least 80 % of changed executable lines
+  (Build in an agent container → Coverage). Composables are excluded from the report — they are covered by the
+  design check and UI tests, not by this number. Uncovered changed lines are listed in the PR («Проверка») with
+  the reason; an uncovered line without a reason is a review finding.
 - Tests assert behaviour; do not write tests that only execute lines.
 
 ## Workflow
 
 - Branches: `<kind>/<slug>` — `fix/…`, `feature/…`, `tooling/…`, `design-check/…` (historically `stage-N/…`).
-  `release/<version>` (`release/0.2`) is the release branch of a version, cut from `main`; CI and UI tests run on
-  pushes to it.
+  `release/<version>` (`release/0.2`) is the release branch of a version, cut from `main`; CI runs on pushes to it.
   Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
 - PR title and description in Russian: what changed and why, deviations from mockups/docs, how it was checked.
   A PR for a single YouTrack issue starts its title with the issue key (`FIN-42 Краш при открытии поиска`);
@@ -206,4 +208,5 @@ commands: `docs/testing.md`.
 - Check that the PR updates this file and `docs/` when it changes what they describe.
 - Check that a new screen, screen state, bottom sheet or dialog comes with its `*DesignCheckTest` (see Code).
 - Check that new functionality comes with tests (see Tests) and that the tests would fail if the behaviour
-  broke; flag changed logic the «Coverage of changed lines» summary of the CI run shows as uncovered.
+  broke; flag changed lines the «Coverage of changed lines» summary of the CI run shows as uncovered when the
+  PR gives no reason for them.

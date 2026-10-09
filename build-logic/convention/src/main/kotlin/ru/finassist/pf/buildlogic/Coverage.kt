@@ -5,8 +5,8 @@ import org.gradle.api.Project
 import org.gradle.kotlin.dsl.configure
 
 /**
- * Name of the Kover report variant shared by every module and the root aggregate (`koverXmlReportUnit`,
- * `koverHtmlReportUnit`, `koverLogUnit`). See docs/testing.md.
+ * Name of the Kover report variant shared by every module and the root aggregate (`:koverXmlReportUnit`,
+ * `:koverHtmlReportUnit`, `:koverLogUnit` — root tasks). See docs/testing.md.
  */
 const val COVERAGE_VARIANT = "unit"
 

@@ -70,6 +70,13 @@ class ParseTest(unittest.TestCase):
         self.assertIn("feature/x/impl/src/test/kotlin/ru/pf/x/VmTest.kt", changed)
         self.assertNotIn("core/a/src/main/kotlin/ru/pf/a/Gone.kt", changed)
 
+    def test_diff_unquotes_paths_with_special_characters(self):
+        diff = ('+++ "b/app/src/main/kotlin/ru/pf/Caf\\303\\251.kt"\n@@ -0,0 +1,2 @@\n+a\n+b\n'
+                "+++ b/app/src/main/kotlin/ru/pf/With Space.kt\t\n@@ -1 +1 @@\n+c\n")
+        changed = cov.parse_diff(diff)
+        self.assertEqual(changed["app/src/main/kotlin/ru/pf/Café.kt"], {1, 2})
+        self.assertEqual(changed["app/src/main/kotlin/ru/pf/With Space.kt"], {1})
+
     def test_report_counts_partly_covered_line_as_covered(self):
         lines = cov.parse_report(REPORT)["ru/pf/x/Vm.kt"]
         self.assertEqual(lines, {11: True, 13: False, 23: True, 40: False})

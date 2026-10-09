@@ -59,20 +59,24 @@ jobs:
       - name: Unit tests
         run: ./gradlew testMockDebugUnitTest testDebugUnitTest test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
-      # Kover instruments the test runs above; the report reuses them (docs/testing.md). Informational for now:
-      # the numbers go to the run summary, nothing fails on a low value.
+      # Kover instruments the test runs above; the report reuses them (docs/testing.md). Root tasks only (`:…`): an
+      # unqualified name would also build a separate report in every module. Informational for now: the numbers go
+      # to the run summary, nothing fails on a low value, and a script error does not fail the build either.
       - name: Coverage report
-        run: ./gradlew koverXmlReportUnit koverHtmlReportUnit --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew :koverXmlReportUnit :koverHtmlReportUnit --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       - name: Coverage of changed lines
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         run: python3 scripts/coverage-diff.py --base "origin/${{ github.base_ref }}" --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Coverage of the project
         if: github.event_name != 'pull_request'
+        continue-on-error: true
         run: python3 scripts/coverage-diff.py --base HEAD --summary "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
+        if: always() && hashFiles('build/reports/kover/**') != ''
         with:
           name: coverage-report
           path: build/reports/kover/

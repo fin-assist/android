@@ -7,7 +7,7 @@ tests run. A changed line counts only if the report has it: comments, declaratio
 and composables (excluded from the report, see build.gradle.kts) do not.
 
 Usage:
-  ./gradlew koverXmlReportUnit
+  ./gradlew :koverXmlReportUnit
   python3 scripts/coverage-diff.py --base origin/main                 # Markdown to stdout
   python3 scripts/coverage-diff.py --base origin/main --min 80        # exit 1 below 80 %
   python3 scripts/coverage-diff.py --base … --summary "$GITHUB_STEP_SUMMARY"
@@ -43,13 +43,22 @@ def source_key(path: str) -> str | None:
     return m.group(1) if m else None
 
 
+def unquote(name: str) -> str:
+    """A path as git prints it in `+++` lines: quoted C-style when it has special characters
+    (`"b/caf\\303\\251.kt"`), plain otherwise."""
+    if len(name) >= 2 and name[0] == name[-1] == '"':
+        raw = name[1:-1].encode("latin-1", "backslashreplace").decode("unicode_escape")
+        return raw.encode("latin-1").decode("utf-8")
+    return name
+
+
 def parse_diff(text: str) -> dict[str, set[int]]:
     """Added or modified lines per new file path from `git diff -U0` output (deleted files are skipped)."""
     changed: dict[str, set[int]] = {}
     path = None
     for line in text.splitlines():
         if line.startswith("+++ "):
-            target = line[4:].strip()
+            target = unquote(line[4:].rstrip("\t\n"))
             path = None if target == "/dev/null" else re.sub(r'^b/', '', target)
         elif path and (m := _HUNK.match(line)):
             start, count = int(m.group(1)), int(m.group(2) or "1")
@@ -151,7 +160,9 @@ def render(files: list[FileCoverage], totals: dict[str, tuple[int, int]], base: 
 
 def git_diff(base: str) -> str:
     return subprocess.run(
-        ["git", "diff", "-U0", "--no-color", "--no-ext-diff", f"{base}...HEAD", "--", "*.kt", "*.java"],
+        # Fixed prefixes and unquoted paths whatever the user's git config says (diff.noprefix, core.quotepath).
+        ["git", "-c", "core.quotepath=off", "diff", "-U0", "--no-color", "--no-ext-diff",
+         "--src-prefix=a/", "--dst-prefix=b/", f"{base}...HEAD", "--", "*.kt", "*.java"],
         cwd=ROOT, check=True, capture_output=True, text=True,
     ).stdout
 
@@ -165,7 +176,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.report.exists():
-        print(f"coverage-diff: {args.report} not found; run ./gradlew koverXmlReportUnit first", file=sys.stderr)
+        print(f"coverage-diff: {args.report} not found; run ./gradlew :koverXmlReportUnit first", file=sys.stderr)
         return 1
     xml = args.report.read_text(encoding="utf-8")
     files = diff_coverage(parse_diff(git_diff(args.base)), parse_report(xml))
