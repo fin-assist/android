@@ -32,6 +32,7 @@ internal fun Project.configureKotlinAndroid(extension: CommonExtension<*, *, *, 
     }
 
     configureKotlin()
+    configureCoverage()
 
     dependencies {
         add("testImplementation", libs.findLibrary("junit4").get())

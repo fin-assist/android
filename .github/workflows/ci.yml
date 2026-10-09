@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, 'stage-*/**']
+    branches: [main, 'release/**', 'stage-*/**']
   pull_request:
 
 permissions:
@@ -39,6 +39,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: coverage of changed lines diffs the PR against its base branch.
+          fetch-depth: 0
 
       - uses: actions/setup-java@v4
         with:
@@ -55,6 +58,25 @@ jobs:
 
       - name: Unit tests
         run: ./gradlew testMockDebugUnitTest testDebugUnitTest test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      # Kover instruments the test runs above; the report reuses them (docs/testing.md). Informational for now:
+      # the numbers go to the run summary, nothing fails on a low value.
+      - name: Coverage report
+        run: ./gradlew koverXmlReportUnit koverHtmlReportUnit --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      - name: Coverage of changed lines
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/coverage-diff.py --base "origin/${{ github.base_ref }}" --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Coverage of the project
+        if: github.event_name != 'pull_request'
+        run: python3 scripts/coverage-diff.py --base HEAD --summary "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: build/reports/kover/
+          retention-days: 14
 
       - name: Lint
         run: ./gradlew lintMockDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
