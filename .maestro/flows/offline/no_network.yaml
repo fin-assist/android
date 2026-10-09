@@ -3,7 +3,7 @@ name: Нет сети — экран ошибки и «Повторить»
 tags:
   - offline
 ---
-- clearState
+- runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/login.yaml
 # Every request of the fake backend fails from now on (until the process restarts or offline=false).
 - openLink: "pfe2e://config?offline=true"

@@ -4,7 +4,7 @@ tags:
   - smoke
   - applock
 ---
-- clearState
+- runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/login.yaml
 - stopApp
 - launchApp

@@ -4,7 +4,7 @@ tags:
   - smoke
   - analytics
 ---
-- clearState
+- runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/login.yaml
 - tapOn:
     id: "ds.tab.analytics"

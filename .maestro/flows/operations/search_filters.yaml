@@ -3,7 +3,7 @@ name: Поиск операций и фильтры
 tags:
   - operations
 ---
-- clearState
+- runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/login.yaml
 - tapOn:
     id: "operations.feed.search"

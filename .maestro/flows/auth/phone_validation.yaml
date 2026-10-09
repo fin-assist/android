@@ -3,7 +3,7 @@ name: Проверка номера и «Изменить номер» на эк
 tags:
   - auth
 ---
-- clearState
+- runFlow: ../../subflows/clear_state.yaml
 - launchApp
 - extendedWaitUntil:
     visible:

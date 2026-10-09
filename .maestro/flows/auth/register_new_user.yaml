@@ -4,7 +4,7 @@ tags:
   - smoke
   - auth
 ---
-- clearState
+- runFlow: ../../subflows/clear_state.yaml
 - launchApp
 - runFlow:
     file: ../../subflows/sign_in.yaml
