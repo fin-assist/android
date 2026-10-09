@@ -1,0 +1,42 @@
+appId: ru.finassist.pf.mock.e2e
+name: Регистрация закрыта флагом auth.registration
+tags:
+  - auth
+  - flags
+---
+- clearState
+- openLink: "pfe2e://config?flag.auth.registration=false"
+# stopApp: false — an openLink right before this may still be writing a flag override in this process.
+- launchApp:
+    stopApp: false
+- runFlow:
+    file: ../../subflows/sign_in.yaml
+    env:
+      PHONE: "9002223344"
+- extendedWaitUntil:
+    visible:
+      id: "auth.closed"
+    timeout: 15000
+- assertVisible: "Регистрация пока закрыта"
+- tapOn:
+    id: "auth.closed.back"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+
+# The existing account still signs in.
+# The number is kept; tap at the right edge so erasing starts after the last digit.
+- tapOn:
+    id: "auth.phone.input"
+    point: "90%,50%"
+- eraseText: 20
+- inputText: "9161234567"
+- hideKeyboard
+- tapOn:
+    id: "auth.phone.submit"
+- runFlow: ../../subflows/set_passcode.yaml
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 20000

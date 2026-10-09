@@ -29,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -53,6 +54,7 @@ import ru.finassist.pf.core.designsystem.components.PfNotice
 import ru.finassist.pf.core.designsystem.components.PfOptionRow
 import ru.finassist.pf.core.designsystem.components.PfSearchField
 import ru.finassist.pf.core.designsystem.components.PfTextField
+import ru.finassist.pf.core.designsystem.components.PfTestTags
 import ru.finassist.pf.core.designsystem.components.PfTransactionGroup
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
@@ -108,42 +110,42 @@ internal fun SearchContent(
     val d = PfTheme.dimens
     val f = state.filter
 
-    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.statusBars).imePadding()) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.statusBars).imePadding().testTag(OperationsTags.SEARCH)) {
         Row(Modifier.fillMaxWidth().padding(start = d.space2, end = d.space5, top = d.space2), verticalAlignment = Alignment.CenterVertically) {
-            PfIconButton(PfIcons.ARROW_LEFT, contentDescription = "Назад", onClick = onBack)
-            PfSearchField(f.q.orEmpty(), actions.setQuery, placeholder = "Описание, категория, сумма", modifier = Modifier.weight(1f))
+            PfIconButton(PfIcons.ARROW_LEFT, contentDescription = "Назад", onClick = onBack, modifier = Modifier.testTag(PfTestTags.BACK))
+            PfSearchField(f.q.orEmpty(), actions.setQuery, placeholder = "Описание, категория, сумма", modifier = Modifier.weight(1f), testTag = OperationsTags.SEARCH_INPUT)
         }
         PfChipRow(Modifier.padding(horizontal = d.space5, vertical = d.space2)) {
             // A filter switched off by `search.filter.*` but preset by Analytics or a chip is shown as a fixed,
             // non-editable chip (docs/flags.md); «Сбросить» still removes it.
             val period = f.from != null || f.to != null || state.allTime
             if (state.chips.period || period) {
-                PfChip(periodLabel(f, state.allTime), onClick = { actions.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period)
+                PfChip(periodLabel(f, state.allTime), onClick = { actions.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period, modifier = Modifier.testTag(OperationsTags.CHIP_PERIOD))
             }
             if (state.chips.category || f.categoryId != null) {
                 val name = state.categories.firstOrNull { it.id == f.categoryId }?.name
-                PfChip(name ?: "Категория", onClick = { actions.openSheet(SearchSheet.CATEGORY) }, selected = f.categoryId != null, dropdown = state.chips.category, enabled = state.chips.category)
+                PfChip(name ?: "Категория", onClick = { actions.openSheet(SearchSheet.CATEGORY) }, selected = f.categoryId != null, dropdown = state.chips.category, enabled = state.chips.category, modifier = Modifier.testTag(OperationsTags.CHIP_CATEGORY))
             }
             val amount = f.amountFrom != null || f.amountTo != null
             if (state.chips.amount || amount) {
-                PfChip(amountLabel(f), onClick = { actions.openSheet(SearchSheet.AMOUNT) }, selected = amount, dropdown = state.chips.amount, enabled = state.chips.amount)
+                PfChip(amountLabel(f), onClick = { actions.openSheet(SearchSheet.AMOUNT) }, selected = amount, dropdown = state.chips.amount, enabled = state.chips.amount, modifier = Modifier.testTag(OperationsTags.CHIP_AMOUNT))
             }
             if (state.chips.kind || f.kind != null) {
-                PfChip(if (f.kind == OperationKindFilter.INCOME) "Только доходы" else "Только расходы", onClick = actions.toggleKind, selected = f.kind != null, enabled = state.chips.kind)
+                PfChip(if (f.kind == OperationKindFilter.INCOME) "Только доходы" else "Только расходы", onClick = actions.toggleKind, selected = f.kind != null, enabled = state.chips.kind, modifier = Modifier.testTag(OperationsTags.CHIP_KIND))
             }
             // Filters without their own chip (api.md: one chip, removed by tap or «Сбросить»).
             if (f.selection != null || f.transferMode != null) {
-                PfChip((f.selectionName ?: "Как на «Аналитике»") + "  ✕", onClick = actions.clearAnalyticsScope, selected = true)
+                PfChip((f.selectionName ?: "Как на «Аналитике»") + "  ✕", onClick = actions.clearAnalyticsScope, selected = true, modifier = Modifier.testTag(OperationsTags.CHIP_SCOPE))
             }
             if (state.allTime || !f.copy(q = null).isEmpty) {
-                PfChip("Сбросить", onClick = actions.reset)
+                PfChip("Сбросить", onClick = actions.reset, modifier = Modifier.testTag(OperationsTags.CHIP_RESET))
             }
         }
         if (state.selectionDropped) {
             PfNotice("Выборка с «Аналитики» больше не действует — ищем без неё", tone = NoticeTone.INFO, modifier = Modifier.padding(horizontal = d.space5))
         }
         when (val r = state.result) {
-            SearchResult.Initial -> PfEmptyState(PfIcons.SEARCH, "Поиск по операциям", "Например: «самокат», «Супермаркеты», «1520» или последние 4 цифры счёта")
+            SearchResult.Initial -> PfEmptyState(PfIcons.SEARCH, "Поиск по операциям", "Например: «самокат», «Супермаркеты», «1520» или последние 4 цифры счёта", modifier = Modifier.testTag(OperationsTags.SEARCH_INITIAL))
             SearchResult.Loading -> Unit
             SearchResult.TooMany -> PfEmptyState(PfIcons.SLIDERS, "Слишком много операций", "Выберите период покороче или добавьте фильтр")
             SearchResult.Offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
@@ -159,7 +161,7 @@ internal fun SearchContent(
                         Text(
                             if (r.totalCount == 0) "Ничего не нашли" else "Найдено ${countWithNoun(r.totalCount, "операция", "операции", "операций")}",
                             style = PfTheme.type.bodyStrong, color = PfTheme.colors.text,
-                            modifier = Modifier.padding(vertical = d.space2),
+                            modifier = Modifier.padding(vertical = d.space2).testTag(OperationsTags.SEARCH_COUNT),
                         )
                         if (r.range != null && f.from == null && f.to == null && !state.allTime) {
                             Text(
@@ -186,7 +188,7 @@ internal fun SearchContent(
                         item(key = "older") {
                             Column(Modifier.fillMaxWidth().padding(top = d.space4), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("Есть операции раньше — их не проверяли", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
-                                PfLink("Искать за всё время", onClick = actions.searchAllTime)
+                                PfLink("Искать за всё время", onClick = actions.searchAllTime, modifier = Modifier.testTag(OperationsTags.SEARCH_ALL_TIME))
                             }
                         }
                     }
@@ -199,7 +201,7 @@ internal fun SearchContent(
         SearchSheet.PERIOD -> PeriodSheet(f, state.allTime, onDismiss = { actions.openSheet(null) }, onPick = actions.setPeriod)
         SearchSheet.CATEGORY -> PfBottomSheet("Категория", onDismiss = { actions.openSheet(null) }) {
             if (f.categoryId != null) {
-                PfOptionRow("Все категории", selected = false, onClick = { actions.setCategory(null) })
+                PfOptionRow("Все категории", selected = false, onClick = { actions.setCategory(null) }, modifier = Modifier.testTag(OperationsTags.CATEGORY_ALL))
             }
             CategoryList(
                 categories = state.categories,
@@ -253,9 +255,12 @@ private fun PeriodSheet(
     val custom = f.from != null || f.to != null
     if (!pickDates) {
         PfBottomSheet("Период", onDismiss = onDismiss) {
-            PfOptionRow("Последние 12 месяцев", selected = !custom && !allTime, onClick = { onPick(null, null, false) })
-            PfOptionRow("За всё время", selected = allTime, onClick = { onPick(null, null, true) })
-            PfOptionRow("Выбрать даты", selected = custom, onClick = { pickDates = true }, description = if (custom) periodLabel(f, false) else null)
+            PfOptionRow("Последние 12 месяцев", selected = !custom && !allTime, onClick = { onPick(null, null, false) }, modifier = Modifier.testTag(OperationsTags.PERIOD_LAST_12))
+            PfOptionRow("За всё время", selected = allTime, onClick = { onPick(null, null, true) }, modifier = Modifier.testTag(OperationsTags.PERIOD_ALL))
+            PfOptionRow(
+                "Выбрать даты", selected = custom, onClick = { pickDates = true }, description = if (custom) periodLabel(f, false) else null,
+                modifier = Modifier.testTag(OperationsTags.PERIOD_CUSTOM),
+            )
         }
     } else {
         val zone = ZoneId.systemDefault()
@@ -305,14 +310,16 @@ private fun AmountSheet(f: OperationsFilter, onDismiss: () -> Unit, onApply: (Mo
                 variant = ButtonVariant.PRIMARY,
                 block = true,
                 enabled = !invalid,
+                modifier = Modifier.testTag(OperationsTags.AMOUNT_APPLY),
             )
         },
     ) {
         Row(Modifier.padding(horizontal = PfTheme.dimens.space5), horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space3)) {
-            PfTextField(from, { from = it.filter(Char::isDigit).take(9) }, label = "От, ₽", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+            PfTextField(from, { from = it.filter(Char::isDigit).take(9) }, label = "От, ₽", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f), testTag = OperationsTags.AMOUNT_FROM)
             PfTextField(
                 to, { to = it.filter(Char::isDigit).take(9) }, label = "До, ₽", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f),
                 error = if (invalid) "Меньше, чем «от»" else null,
+                testTag = OperationsTags.AMOUNT_TO,
             )
         }
         Spacer(Modifier.height(PfTheme.dimens.space2))

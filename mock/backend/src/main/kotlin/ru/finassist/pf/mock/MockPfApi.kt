@@ -56,7 +56,7 @@ class MockPfApi(
     }
 
     private suspend fun preload(context: Context) {
-        val (name, text) = listOf(PRIVATE_ASSET, FIXTURE_ASSET).firstNotNullOfOrNull { path ->
+        val (name, text) = backend.config.statementAssets.firstNotNullOfOrNull { path ->
             runCatching { context.assets.open(path).bufferedReader().use { it.readText() } }.getOrNull()?.let { path to it }
         } ?: run {
             Log.w(TAG, "no statement asset found; the mock starts empty")
@@ -70,7 +70,5 @@ class MockPfApi(
 
     private companion object {
         const val TAG = "PfMock"
-        const val PRIVATE_ASSET = "private/statement.ofx"
-        const val FIXTURE_ASSET = "statements/fixture.ofx"
     }
 }

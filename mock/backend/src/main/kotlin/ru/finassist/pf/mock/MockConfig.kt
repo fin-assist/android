@@ -17,8 +17,16 @@ data class MockConfig(
     val assistantChunkDelayMs: Long = 40,
     /** Load the bundled (or private) statement as the first upload on start. */
     val preloadStatement: Boolean = true,
+    /** Assets tried for the preload, first found wins: your private statement, then the anonymized fixture. */
+    val statementAssets: List<String> = listOf(PRIVATE_STATEMENT, FIXTURE_STATEMENT),
     /** Supported file size limit, as the server config reports it. */
     val maxFileSizeBytes: Long = 10L * 1024 * 1024,
     /** When true every request fails with Offline — to check "нет сети" states. */
     val offline: Boolean = false,
-)
+) {
+    companion object {
+        /** Git-ignored: `app/src/mock/assets/private/statement.ofx`. */
+        const val PRIVATE_STATEMENT = "private/statement.ofx"
+        const val FIXTURE_STATEMENT = "statements/fixture.ofx"
+    }
+}

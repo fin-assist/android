@@ -17,6 +17,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -149,7 +150,7 @@ internal fun ChatContent(
         if (state.items.isNotEmpty()) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1)
     }
 
-    Column(Modifier.fillMaxSize().imePadding()) {
+    Column(Modifier.fillMaxSize().imePadding().testTag(AssistantTags.CHAT)) {
         val limit = state.limit
         PfPageHeader(
             "Помощник",
@@ -193,7 +194,7 @@ internal fun ChatContent(
                     }
                     item(key = item.id) {
                         when (item) {
-                            is ChatItem.Question -> PfUserMessage(item.text)
+                            is ChatItem.Question -> PfUserMessage(item.text, Modifier.testTag(AssistantTags.QUESTION))
                             is ChatItem.Answer -> Answer(item, zone, onRetry = { actions.onRetryAnswer(item.id) }, onOpenSearch = actions.onOpenSearch, onOpenAnalytics = actions.onOpenAnalytics)
                         }
                     }
@@ -252,13 +253,18 @@ private fun Answer(
     when {
         item.status == AnswerStatus.FAILED -> {
             if (item.errorCode == AnswerErrorCode.CANNOT_ANSWER) {
-                PfChatStatus("Не хватает данных или вопрос непонятен — переформулируйте его. Вопрос не потрачен", tone = ChatStatusTone.ERROR)
+                PfChatStatus("Не хватает данных или вопрос непонятен — переформулируйте его. Вопрос не потрачен", tone = ChatStatusTone.ERROR, modifier = Modifier.testTag(AssistantTags.ANSWER_CANNOT))
             } else {
-                PfChatStatus("Не получилось ответить. Вопрос не потрачен", tone = ChatStatusTone.ERROR, action = { PfLink("Повторить", onClick = onRetry) })
+                PfChatStatus(
+                    "Не получилось ответить. Вопрос не потрачен", tone = ChatStatusTone.ERROR, action = { PfLink("Повторить", onClick = onRetry) },
+                    modifier = Modifier.testTag(AssistantTags.ANSWER_FAILED),
+                )
             }
         }
-        item.blocks.isEmpty() && item.status == AnswerStatus.GENERATING -> PfChatStatus("Считаю по выписке…")
+        item.blocks.isEmpty() && item.status == AnswerStatus.GENERATING -> PfChatStatus("Считаю по выписке…", Modifier.testTag(AssistantTags.ANSWER_GENERATING))
         else -> PfAssistantMessage(
+            // A finished answer gets its own tag, so tests can wait for the end of the stream.
+            modifier = Modifier.testTag(if (item.status == AnswerStatus.COMPLETE) AssistantTags.ANSWER else AssistantTags.ANSWER_GENERATING),
             source = item.source?.let { AnswerFormat.source(it, zone) },
             staleText = item.source?.let { AnswerFormat.changedSince(it.changedSince) },
         ) {
@@ -267,7 +273,7 @@ private fun Answer(
             if (chips.isNotEmpty() && item.status == AnswerStatus.COMPLETE) {
                 PfChipRow {
                     chips.forEach { chip ->
-                        PfChip(chip.label, transition = true, onClick = {
+                        PfChip(chip.label, transition = true, modifier = Modifier.testTag(AssistantTags.chip(chip.screen.name.lowercase())), onClick = {
                             when (chip.screen) {
                                 ChipScreen.OPERATIONS -> chip.filters?.let(onOpenSearch)
                                 ChipScreen.ANALYTICS -> chip.params?.let(onOpenAnalytics)
@@ -345,3 +351,20 @@ private fun markdown(text: String): AnnotatedString = buildAnnotatedString {
         if (part is TextPart.Paragraph) append("\n")
     }
 }.let { if (it.text.endsWith("\n")) it.subSequence(0, it.length - 1) else it }
+
+/** Test tags of the assistant screens (UI tests in `.maestro/`, convention in docs/e2e.md). */
+internal object AssistantTags {
+    const val CHAT = "assistant.chat"
+    const val QUESTION = "assistant.question"
+    /** A complete answer; while it streams the message carries [ANSWER_GENERATING]. */
+    const val ANSWER = "assistant.answer"
+    const val ANSWER_GENERATING = "assistant.answer.generating"
+    const val ANSWER_CANNOT = "assistant.answer.cannot"
+    const val ANSWER_FAILED = "assistant.answer.failed"
+    /** `assistant.answer.chip.operations`, `assistant.answer.chip.analytics`. */
+    fun chip(screen: String) = "assistant.answer.chip.$screen"
+
+    const val CONSENT = "assistant.consent"
+    const val CONSENT_CHECKBOX = "assistant.consent.checkbox"
+    const val CONSENT_SUBMIT = "assistant.consent.submit"
+}

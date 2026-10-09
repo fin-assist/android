@@ -1,0 +1,51 @@
+appId: ru.finassist.pf.mock.e2e
+name: Проверка номера и «Изменить номер» на экране звонка
+tags:
+  - auth
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 20000
+# The call «arrives» after a minute: enough time to look at the call screen.
+- openLink: "pfe2e://config?call_delay_ms=60000"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+
+- tapOn:
+    id: "auth.phone.submit"
+- assertVisible: "В номере не хватает цифр"
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "91612"
+- hideKeyboard
+- tapOn:
+    id: "auth.phone.submit"
+- assertVisible: "В номере не хватает цифр"
+
+# Tap at the right edge: the cursor goes after the last digit, not into the middle of the masked number.
+- tapOn:
+    id: "auth.phone.input"
+    point: "90%,50%"
+- eraseText: 20
+- inputText: "9161234567"
+- hideKeyboard
+- tapOn:
+    id: "auth.phone.submit"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 10000
+- assertVisible: "Позвоните нам для подтверждения"
+- tapOn:
+    id: "auth.call.change_number"
+# Back on the phone screen with the number kept.
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+- assertVisible: ".*916.*123.*45.*67.*"

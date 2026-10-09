@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -318,13 +319,14 @@ fun PfPeriodNav(
 ) {
     val c = PfTheme.colors
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        PfIconButton(PfIcons.CHEVRON_LEFT, contentDescription = "Предыдущий $unitName", onClick = { onPrev?.invoke() }, enabled = onPrev != null)
+        PfIconButton(PfIcons.CHEVRON_LEFT, contentDescription = "Предыдущий $unitName", onClick = { onPrev?.invoke() }, enabled = onPrev != null, modifier = Modifier.testTag(PfTestTags.PERIOD_PREV))
         Box(
             Modifier
                 .weight(1f)
                 .height(PfTheme.dimens.touch)
                 .clip(RoundedCornerShape(PfTheme.dimens.radiusMd))
-                .clickable(role = Role.Button, onClick = onPick),
+                .clickable(role = Role.Button, onClick = onPick)
+                .testTag(PfTestTags.PERIOD_PICK),
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -333,7 +335,7 @@ fun PfPeriodNav(
                 PfIcon(PfIcons.CHEVRON_DOWN, contentDescription = null, size = PfTheme.dimens.iconMd, tint = c.textFaint)
             }
         }
-        PfIconButton(PfIcons.CHEVRON_RIGHT, contentDescription = "Следующий $unitName", onClick = { onNext?.invoke() }, enabled = onNext != null)
+        PfIconButton(PfIcons.CHEVRON_RIGHT, contentDescription = "Следующий $unitName", onClick = { onNext?.invoke() }, enabled = onNext != null, modifier = Modifier.testTag(PfTestTags.PERIOD_NEXT))
     }
 }
 
@@ -387,7 +389,7 @@ fun PfPasscodeDots(filled: Int, modifier: Modifier = Modifier, length: Int = 4, 
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4),
-            modifier = Modifier.semantics { contentDescription = "$label: введено $filled из $length цифр" },
+            modifier = Modifier.semantics { contentDescription = "$label: введено $filled из $length цифр" }.testTag(PfTestTags.PASSCODE_DOTS),
         ) {
             repeat(length) { i ->
                 val isFilled = i < filled
@@ -403,7 +405,7 @@ fun PfPasscodeDots(filled: Int, modifier: Modifier = Modifier, length: Int = 4, 
             Spacer(Modifier.height(PfTheme.dimens.space3))
             Text(
                 error, style = PfTheme.type.caption.copy(fontWeight = FontWeight.SemiBold), color = c.warningText,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive },
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive }.testTag(PfTestTags.PASSCODE_ERROR),
             )
         }
     }
@@ -424,12 +426,13 @@ fun PfNumPad(
     val digitStyle = PfTheme.type.title1.copy(fontWeight = FontWeight.Normal)
 
     @Composable
-    fun Key(content: @Composable () -> Unit, label: String, onClick: (() -> Unit)?) {
+    fun Key(content: @Composable () -> Unit, label: String, tag: String?, onClick: (() -> Unit)?) {
         Box(
             Modifier
                 .size(72.dp)
                 .clip(RoundedCornerShape(PfTheme.dimens.radiusFull))
-                .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label } else Modifier),
+                .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label } else Modifier)
+                .then(if (tag != null) Modifier.testTag(tag) else Modifier),
             contentAlignment = Alignment.Center,
         ) { content() }
     }
@@ -437,17 +440,17 @@ fun PfNumPad(
     Column(modifier.semantics { contentDescription = "Цифровая клавиатура" }, verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4), horizontalAlignment = Alignment.CenterHorizontally) {
         listOf(listOf(1, 2, 3), listOf(4, 5, 6), listOf(7, 8, 9)).forEach { rowDigits ->
             Row(horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space8)) {
-                rowDigits.forEach { d -> Key({ Text("$d", style = digitStyle, color = c.text) }, "$d") { onDigit(d) } }
+                rowDigits.forEach { d -> Key({ Text("$d", style = digitStyle, color = c.text) }, "$d", PfTestTags.numpad(d)) { onDigit(d) } }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space8)) {
             when (biometric) {
-                BiometricKind.NONE -> Key({}, "", null)
-                BiometricKind.FINGERPRINT -> Key({ PfIcon(PfIcons.FINGERPRINT, contentDescription = null, size = 28.dp, tint = c.accent) }, "Войти по биометрии", onBiometric)
-                BiometricKind.FACE -> Key({ PfIcon(PfIcons.SCAN_FACE, contentDescription = null, size = 28.dp, tint = c.accent) }, "Войти по биометрии", onBiometric)
+                BiometricKind.NONE -> Key({}, "", null, null)
+                BiometricKind.FINGERPRINT -> Key({ PfIcon(PfIcons.FINGERPRINT, contentDescription = null, size = 28.dp, tint = c.accent) }, "Войти по биометрии", PfTestTags.NUMPAD_BIOMETRIC, onBiometric)
+                BiometricKind.FACE -> Key({ PfIcon(PfIcons.SCAN_FACE, contentDescription = null, size = 28.dp, tint = c.accent) }, "Войти по биометрии", PfTestTags.NUMPAD_BIOMETRIC, onBiometric)
             }
-            Key({ Text("0", style = digitStyle, color = c.text) }, "0") { onDigit(0) }
-            Key({ PfIcon(PfIcons.DELETE, contentDescription = null, size = 28.dp, tint = c.text) }, "Стереть", onDelete)
+            Key({ Text("0", style = digitStyle, color = c.text) }, "0", PfTestTags.numpad(0)) { onDigit(0) }
+            Key({ PfIcon(PfIcons.DELETE, contentDescription = null, size = 28.dp, tint = c.text) }, "Стереть", PfTestTags.NUMPAD_DELETE, onDelete)
         }
     }
 }

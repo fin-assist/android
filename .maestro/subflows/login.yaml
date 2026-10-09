@@ -1,0 +1,22 @@
+# Signs in with the existing mock account and sets passcode 1234; ends on the feed with the fixture statement.
+# Does not clear the app data: the caller starts with `clearState` (and sets flags with openLink before this).
+appId: ru.finassist.pf.mock.e2e
+---
+# stopApp: false — an openLink right before this may still be writing a flag override in this process.
+- launchApp:
+    stopApp: false
+- runFlow:
+    file: sign_in.yaml
+    env:
+      PHONE: "9161234567"
+- runFlow: set_passcode.yaml
+# Saved next to the reports (build/e2e/shots): what the app showed right after the passcode.
+- takeScreenshot: ${MAESTRO_FILENAME}_after_passcode
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 40000
+- extendedWaitUntil:
+    visible:
+      id: "operations.row"
+    timeout: 20000

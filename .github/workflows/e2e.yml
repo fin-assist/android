@@ -1,0 +1,104 @@
+# UI tests on an Android emulator: Maestro flows (.maestro/) against the mock e2e build and the native
+# instrumented tests (app/src/androidTestMock). Runs after every merge to main; on a PR — when it carries the
+# `e2e` label (add the label to run, push to re-run); also by hand from the Actions tab. Details: docs/e2e.md.
+name: UI tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [labeled, synchronize]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Maestro + instrumented (emulator)
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'e2e')
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      # The runner image leaves ~5 GB free; the emulator's userdata partition alone needs more.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+            /usr/local/lib/android/sdk/ndk /usr/local/share/powershell /usr/share/swift
+          df -h /
+
+      # Hardware acceleration for the emulator on GitHub's Linux runners.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Build APKs
+        run: ./gradlew :app:assembleMockE2e :app:assembleMockDebug :app:assembleMockDebugAndroidTest --no-daemon --console=plain
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Run UI tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 4
+          ram-size: 4096M
+          disk-size: 4096M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -timezone Europe/Moscow
+          script: scripts/e2e.sh --no-build
+
+      - name: Test report
+        if: always()
+        run: |
+          {
+            echo "### UI tests"
+            if [ -f build/e2e/maestro-report.xml ]; then
+              python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("build/e2e/maestro-report.xml").getroot()
+          cases = root.iter("testcase")
+          rows = []
+          for c in cases:
+              failed = c.find("failure") is not None or c.find("error") is not None
+              rows.append(f"| {'❌' if failed else '✅'} | {c.get('name')} | {float(c.get('time') or 0):.0f} s |")
+          print("| | Flow | Time |\n|---|---|---|\n" + "\n".join(rows))
+          PY
+            else
+              echo "No Maestro report (the run stopped before the flows)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-reports
+          path: |
+            build/e2e/
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+          retention-days: 14

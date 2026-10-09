@@ -1,0 +1,34 @@
+appId: ru.finassist.pf.mock.e2e
+name: Разблокировка после перезапуска, неверный код
+tags:
+  - smoke
+  - applock
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "applock.unlock"
+    timeout: 20000
+- assertVisible: "Введите код-пароль"
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "1111"
+- extendedWaitUntil:
+    visible:
+      id: "ds.passcode.error"
+    timeout: 5000
+- assertVisible: "Неверный код.*"
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "1234"
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- assertNotVisible:
+    id: "applock.unlock"

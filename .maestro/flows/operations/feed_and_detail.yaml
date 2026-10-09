@@ -1,0 +1,51 @@
+appId: ru.finassist.pf.mock.e2e
+name: Лента, карточка операции, смена категории
+tags:
+  - smoke
+  - operations
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "operations.row"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "operations.detail"
+    timeout: 10000
+- assertVisible:
+    id: "operations.detail.title"
+- assertVisible: "Дата и время"
+
+# Category picker: choose another category and save.
+- tapOn:
+    id: "operations.detail.category"
+- extendedWaitUntil:
+    visible:
+      id: "operations.category.search"
+    timeout: 5000
+- tapOn:
+    id: "operations.category.option"
+    index: 1
+# The first options may include the current category: then «Сохранить» stays disabled, take another one.
+- runFlow:
+    when:
+      visible:
+        id: "operations.detail.save"
+        enabled: false
+    commands:
+      - tapOn:
+          id: "operations.category.option"
+          index: 2
+- tapOn:
+    id: "operations.detail.save"
+- extendedWaitUntil:
+    notVisible:
+      id: "operations.category.search"
+    timeout: 10000
+- assertVisible: "Вы выбрали сами"
+
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "operations.feed"

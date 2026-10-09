@@ -1,0 +1,70 @@
+appId: ru.finassist.pf.mock.e2e
+name: Смена код-пароля в профиле
+tags:
+  - applock
+  - profile
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- scrollUntilVisible:
+    element:
+      id: "profile.security"
+- tapOn:
+    id: "profile.security"
+- extendedWaitUntil:
+    visible:
+      id: "applock.security"
+    timeout: 10000
+- tapOn:
+    id: "applock.security.change"
+- extendedWaitUntil:
+    visible:
+      id: "applock.change"
+    timeout: 10000
+
+- assertVisible: "Введите текущий код"
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "1234"
+- extendedWaitUntil:
+    visible: "Придумайте новый код"
+    timeout: 5000
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "5678"
+- extendedWaitUntil:
+    visible: "Повторите новый код"
+    timeout: 5000
+# A different repeat starts the new code over.
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "1111"
+- extendedWaitUntil:
+    visible: "Коды не совпали.*"
+    timeout: 5000
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "5678"
+- extendedWaitUntil:
+    visible: "Повторите новый код"
+    timeout: 5000
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "5678"
+- extendedWaitUntil:
+    visible:
+      id: "applock.security"
+    timeout: 10000
+
+# The new code unlocks the app after a restart.
+- runFlow:
+    file: ../../subflows/relaunch_and_unlock.yaml
+    env:
+      CODE: "5678"

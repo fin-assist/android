@@ -25,6 +25,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ru.finassist.pf.core.designsystem.components.PfTabBar
+import ru.finassist.pf.core.designsystem.components.pfTestRoot
 import ru.finassist.pf.core.designsystem.components.PfMainTabs
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.core.navigation.FeatureEntry
@@ -79,7 +80,8 @@ fun PfApp(
                 else -> Unit
             }
         }
-        Box(Modifier.fillMaxSize().background(PfTheme.colors.bg)) {
+        // pfTestRoot: test tags become resource ids for UI tests (.maestro/); dialogs and sheets set it themselves.
+        Box(Modifier.fillMaxSize().background(PfTheme.colors.bg).pfTestRoot()) {
             when (val s = sessionState) {
                 SessionState.Unknown -> Unit
                 SessionState.SignedOut -> LayerScope("auth") { AuthLayer(entries, session) }

@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -81,21 +82,22 @@ internal fun FeedContent(
     listState: LazyListState = rememberLazyListState(),
 ) {
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().testTag(OperationsTags.FEED)) {
         PfTabHeader("Операции") {
-            PfIconButton(PfIcons.SEARCH, contentDescription = "Поиск операций", onClick = onOpenSearch)
+            PfIconButton(PfIcons.SEARCH, contentDescription = "Поиск операций", onClick = onOpenSearch, modifier = Modifier.testTag(OperationsTags.FEED_SEARCH))
         }
         when {
             state.loading -> Unit
-            state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
-                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
+            state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(OperationsTags.FEED_OFFLINE)) {
+                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(OperationsTags.FEED_RETRY))
             }
             state.isEmpty -> PfEmptyState(
                 PfIcons.LIST,
                 "Пока нет операций",
                 if (state.uploadEnabled) "Загрузите выписку Т-Банка — разберём операции по категориям" else null,
+                modifier = Modifier.testTag(OperationsTags.FEED_EMPTY),
             ) {
-                if (state.uploadEnabled) PfButton("Загрузить выписку", onClick = onUpload, variant = ButtonVariant.PRIMARY, icon = PfIcons.UPLOAD)
+                if (state.uploadEnabled) PfButton("Загрузить выписку", onClick = onUpload, variant = ButtonVariant.PRIMARY, icon = PfIcons.UPLOAD, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD))
             }
             else -> {
                 val groups = remember(state.items) { OperationFormat.groupByDay(state.items, zone, today) }
@@ -113,7 +115,7 @@ internal fun FeedContent(
                                 "Операции в приложении по ${RussianDates.day(lastOperation, today.year)} — с тех пор прошло больше двух недель",
                                 tone = NoticeTone.INFO,
                                 modifier = Modifier.padding(top = d.space3),
-                                action = if (state.uploadEnabled) ({ PfLink("Загрузить новую выписку", onClick = onUpload, inline = true) }) else null,
+                                action = if (state.uploadEnabled) ({ PfLink("Загрузить новую выписку", onClick = onUpload, inline = true, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD_NEW)) }) else null,
                             )
                         }
                     } else if (lastOperation != null) {
@@ -124,7 +126,7 @@ internal fun FeedContent(
                                     "Операции по ${RussianDates.day(lastOperation, today.year)}" + if (state.uploadEnabled) " · " else "",
                                     style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
                                 )
-                                if (state.uploadEnabled) PfLink("Загрузить новую выписку", onClick = onUpload, inline = true)
+                                if (state.uploadEnabled) PfLink("Загрузить новую выписку", onClick = onUpload, inline = true, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD_NEW))
                             }
                         }
                     }
@@ -164,6 +166,7 @@ internal fun OperationRow(op: OperationItem, onClick: () -> Unit, divider: Boole
     PfTransactionRow(
         icon = row.icon, title = row.title, subtitle = row.subtitle, amount = row.amount,
         income = row.income, muted = row.muted, note = row.note, onClick = onClick, divider = divider,
+        modifier = Modifier.testTag(OperationsTags.ROW),
     )
 }
 
@@ -207,4 +210,44 @@ internal fun LoadMoreEffect(listState: LazyListState, cursor: Any?, onLoadMore: 
         if (cursor == null) return@LaunchedEffect
         snapshotFlow { nearEnd }.distinctUntilChanged().filter { it }.collect { onLoadMore() }
     }
+}
+
+/** Test tags of the operations screens (UI tests in `.maestro/`, convention in docs/e2e.md). */
+internal object OperationsTags {
+    const val FEED = "operations.feed"
+    const val FEED_SEARCH = "operations.feed.search"
+    const val FEED_OFFLINE = "operations.feed.offline"
+    const val FEED_RETRY = "operations.feed.retry"
+    const val FEED_EMPTY = "operations.feed.empty"
+    const val FEED_UPLOAD = "operations.feed.upload"
+    const val FEED_UPLOAD_NEW = "operations.feed.upload_new"
+    /** A row in the feed or in search results. */
+    const val ROW = "operations.row"
+
+    const val DETAIL = "operations.detail"
+    const val DETAIL_TITLE = "operations.detail.title"
+    const val DETAIL_CATEGORY = "operations.detail.category"
+    const val DETAIL_SAVE = "operations.detail.save"
+
+    const val CATEGORY_SEARCH = "operations.category.search"
+    const val CATEGORY_OPTION = "operations.category.option"
+    const val CATEGORY_ALL = "operations.category.all"
+
+    const val SEARCH = "operations.search"
+    const val SEARCH_INPUT = "operations.search.input"
+    const val SEARCH_COUNT = "operations.search.count"
+    const val SEARCH_INITIAL = "operations.search.initial"
+    const val CHIP_PERIOD = "operations.search.chip.period"
+    const val CHIP_CATEGORY = "operations.search.chip.category"
+    const val CHIP_AMOUNT = "operations.search.chip.amount"
+    const val CHIP_KIND = "operations.search.chip.kind"
+    const val CHIP_SCOPE = "operations.search.chip.scope"
+    const val CHIP_RESET = "operations.search.chip.reset"
+    const val PERIOD_LAST_12 = "operations.search.period.last12"
+    const val PERIOD_ALL = "operations.search.period.all"
+    const val PERIOD_CUSTOM = "operations.search.period.custom"
+    const val AMOUNT_FROM = "operations.search.amount.from"
+    const val AMOUNT_TO = "operations.search.amount.to"
+    const val AMOUNT_APPLY = "operations.search.amount.apply"
+    const val SEARCH_ALL_TIME = "operations.search.all_time"
 }

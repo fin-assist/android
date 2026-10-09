@@ -1,0 +1,11 @@
+# Types a 4-digit code on the passcode keypad. env: CODE ("1234").
+appId: ru.finassist.pf.mock.e2e
+---
+- tapOn:
+    id: "ds.numpad.${CODE.charAt(0)}"
+- tapOn:
+    id: "ds.numpad.${CODE.charAt(1)}"
+- tapOn:
+    id: "ds.numpad.${CODE.charAt(2)}"
+- tapOn:
+    id: "ds.numpad.${CODE.charAt(3)}"

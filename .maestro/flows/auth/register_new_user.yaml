@@ -1,0 +1,60 @@
+appId: ru.finassist.pf.mock.e2e
+name: Регистрация нового номера до первой выписки
+tags:
+  - smoke
+  - auth
+---
+- clearState
+- launchApp
+- runFlow:
+    file: ../../subflows/sign_in.yaml
+    env:
+      PHONE: "9001112233"
+
+# Consent: the button without the tick shows the error and keeps the user here.
+- extendedWaitUntil:
+    visible:
+      id: "auth.consent"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "auth.consent.submit"
+- tapOn:
+    id: "auth.consent.submit"
+- assertVisible: "Без согласия мы не сможем создать аккаунт и хранить ваши данные"
+- assertVisible:
+    id: "auth.consent"
+- tapOn:
+    id: "auth.consent.checkbox"
+- tapOn:
+    id: "auth.consent.submit"
+
+- runFlow: ../../subflows/set_passcode.yaml
+
+# First run continues with the upload (step 4 of 4).
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 15000
+- assertVisible: "Шаг 4 из 4"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.new"
+- tapOn:
+    id: "statements.result.done"
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- assertVisible:
+    id: "operations.row"

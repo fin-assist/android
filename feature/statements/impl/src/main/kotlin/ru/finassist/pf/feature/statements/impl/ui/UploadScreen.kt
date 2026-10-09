@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -62,7 +62,7 @@ fun UploadScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.onFilePicked(uri) }
+    val picker = rememberLauncherForActivityResult(PickStatementDocument()) { uri -> if (uri != null) vm.onFilePicked(uri) }
 
     LaunchedEffect(state.doneUploadId) {
         val id = state.doneUploadId ?: return@LaunchedEffect
@@ -113,6 +113,7 @@ internal fun UploadContent(
 
     Column(
         Modifier
+            .testTag(StatementsTags.UPLOAD)
             .fillMaxSize()
             .windowInsetsPadding(PfInsets.navigationBars),
     ) {
@@ -133,9 +134,9 @@ internal fun UploadContent(
                 UploadPhase.Disabled -> PfEmptyState(PfIcons.FILE_TEXT, "Загрузка выписки временно недоступна", "Попробуйте позже — операции и аналитика работают как обычно") {
                     if (firstRun) PfButton("Продолжить", onClick = onLater, variant = ButtonVariant.PRIMARY)
                 }
-                UploadPhase.Offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
-                    PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
-                    if (firstRun) PfLink("Загружу позже", onClick = onLater)
+                UploadPhase.Offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(StatementsTags.UPLOAD_OFFLINE)) {
+                    PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(StatementsTags.UPLOAD_RETRY))
+                    if (firstRun) PfLink("Загружу позже", onClick = onLater, modifier = Modifier.testTag(StatementsTags.UPLOAD_LATER))
                 }
                 is UploadPhase.Guide -> Guide(
                     config = phase.config,
@@ -215,7 +216,7 @@ private fun ColumnScope.Guide(
         }
     }
     Spacer(Modifier.height(d.space6))
-    PfFileDrop(onPick = onPick, hint = "Файл ${config.acceptedFormats.joinToString(" / ")} до ${config.maxFileSizeBytes / (1024 * 1024)} МБ")
+    PfFileDrop(onPick = onPick, hint = "Файл ${config.acceptedFormats.joinToString(" / ")} до ${config.maxFileSizeBytes / (1024 * 1024)} МБ", modifier = Modifier.testTag(StatementsTags.UPLOAD_PICK))
     config.loaded?.let { loaded ->
         Spacer(Modifier.height(d.space4))
         PfCard {
@@ -233,7 +234,7 @@ private fun ColumnScope.Guide(
     )
     if (firstRun) {
         Spacer(Modifier.height(d.space4))
-        PfLink("Загружу позже", onClick = onLater, modifier = Modifier.align(Alignment.CenterHorizontally))
+        PfLink("Загружу позже", onClick = onLater, modifier = Modifier.align(Alignment.CenterHorizontally).testTag(StatementsTags.UPLOAD_LATER))
     }
 }
 
@@ -244,9 +245,9 @@ private fun ColumnScope.BusyBlock(phase: UploadPhase.Busy, onCancel: () -> Unit)
     Spacer(Modifier.height(d.space2))
     Text("Читаем операции, ищем повторы и проставляем категории. Обычно это меньше минуты", style = PfTheme.type.lead, color = PfTheme.colors.textMuted)
     Spacer(Modifier.height(d.space6))
-    PfFileDrop(onPick = {}, busyFileName = phase.fileName, progress = phase.progress)
+    PfFileDrop(onPick = {}, busyFileName = phase.fileName, progress = phase.progress, modifier = Modifier.testTag(StatementsTags.UPLOAD_BUSY))
     Spacer(Modifier.height(d.space4))
-    PfButton("Прервать", onClick = onCancel, variant = ButtonVariant.GHOST, block = true, enabled = !phase.cancelling)
+    PfButton("Прервать", onClick = onCancel, variant = ButtonVariant.GHOST, block = true, enabled = !phase.cancelling, modifier = Modifier.testTag(StatementsTags.UPLOAD_CANCEL))
 }
 
 @Composable
@@ -261,15 +262,49 @@ private fun ColumnScope.ErrorBlock(phase: UploadPhase.Error, onPickAnother: () -
         else -> "Не удалось разобрать файл" to "Ничего не загрузили — данные не изменились. Попробуйте скачать выписку заново; если не поможет, напишите нам"
     }
     Spacer(Modifier.height(d.space8))
-    PfStatusHero(tone = HeroTone.WARNING, title = title, subtitle = text)
+    PfStatusHero(tone = HeroTone.WARNING, title = title, subtitle = text, modifier = Modifier.testTag(StatementsTags.uploadError(phase.code)))
     Spacer(Modifier.height(d.space8))
     Column(verticalArrangement = Arrangement.spacedBy(d.space2), modifier = Modifier.fillMaxWidth()) {
-        PfButton("Выбрать другой файл", onClick = onPickAnother, variant = ButtonVariant.PRIMARY, block = true)
-        PfButton("К инструкции", onClick = onBack, variant = ButtonVariant.GHOST, block = true)
+        PfButton("Выбрать другой файл", onClick = onPickAnother, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(StatementsTags.UPLOAD_PICK_ANOTHER))
+        PfButton("К инструкции", onClick = onBack, variant = ButtonVariant.GHOST, block = true, modifier = Modifier.testTag(StatementsTags.UPLOAD_GUIDE))
     }
 }
 
 private fun openUrl(context: android.content.Context, url: String) {
     runCatching { CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(url)) }
         .onFailure { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+}
+
+/** Test tags of the statement screens (UI tests in `.maestro/`, convention in docs/e2e.md). */
+internal object StatementsTags {
+    const val UPLOAD = "statements.upload"
+    const val UPLOAD_PICK = "statements.upload.pick"
+    const val UPLOAD_LATER = "statements.upload.later"
+    const val UPLOAD_OFFLINE = "statements.upload.offline"
+    const val UPLOAD_RETRY = "statements.upload.retry"
+    const val UPLOAD_BUSY = "statements.upload.busy"
+    const val UPLOAD_CANCEL = "statements.upload.cancel"
+    const val UPLOAD_PICK_ANOTHER = "statements.upload.pick_another"
+    const val UPLOAD_GUIDE = "statements.upload.guide"
+    /** `statements.upload.error.csv_not_accepted`, `.wrong_format`, `.wrong_bank`, `.file_too_large`, … */
+    fun uploadError(code: String) = "statements.upload.error.${code.lowercase()}"
+
+    const val RESULT = "statements.result"
+    /** Hero of the result: new operations added / nothing new (all duplicates) / empty statement. */
+    const val RESULT_NEW = "statements.result.new"
+    const val RESULT_NO_NEW = "statements.result.no_new"
+    const val RESULT_EMPTY = "statements.result.empty"
+    const val RESULT_UNREAD = "statements.result.unread"
+    const val RESULT_ANALYTICS = "statements.result.analytics"
+    const val RESULT_UPLOAD_ANOTHER = "statements.result.upload_another"
+    const val RESULT_DONE = "statements.result.done"
+
+    const val HISTORY = "statements.history"
+    const val HISTORY_EMPTY = "statements.history.empty"
+    const val HISTORY_ROW = "statements.history.row"
+    const val HISTORY_DELETE = "statements.history.delete"
+    const val HISTORY_UNREAD = "statements.history.unread"
+    const val HISTORY_UPLOAD = "statements.history.upload"
+
+    const val UNREAD = "statements.unread"
 }

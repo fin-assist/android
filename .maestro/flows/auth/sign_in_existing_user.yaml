@@ -1,0 +1,30 @@
+appId: ru.finassist.pf.mock.e2e
+name: Вход существующего пользователя и вкладки
+tags:
+  - smoke
+  - auth
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+
+# The fixture statement is already there: the feed has rows; all three tabs open.
+- assertVisible:
+    id: "ds.tab.operations"
+    selected: true
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.screen"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.phone"
+    timeout: 10000
+- assertVisible: ".*916.*123.*45.*67.*"
+- tapOn:
+    id: "ds.tab.operations"
+- assertVisible:
+    id: "operations.row"

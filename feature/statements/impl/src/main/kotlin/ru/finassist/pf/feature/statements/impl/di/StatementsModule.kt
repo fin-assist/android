@@ -28,17 +28,17 @@ class StatementsEntry @Inject constructor() : FeatureEntry {
             UploadScreen(
                 firstRun = route.firstRun,
                 onBack = { navigator.back() },
-                onLater = { navigator.openTab(OperationsRoutes.Feed) },
+                onLater = { navigator.finishTo(OperationsRoutes.Feed) },
                 // The guide is replaced by the result: «back» from the result goes where the upload was opened from.
                 onDone = { id -> navigator.navigate(StatementsRoutes.Result(id)) { popUpTo<StatementsRoutes.Upload> { inclusive = true } } },
             )
         }
         composable<StatementsRoutes.Result> {
             ResultScreen(
-                onDone = { navigator.openTab(OperationsRoutes.Feed) },
+                onDone = { navigator.finishTo(OperationsRoutes.Feed) },
                 onOpenSearch = { filter -> navigator.navigate(OperationsRoutes.Search(filter)) },
                 onOpenUnread = { id -> navigator.navigate(StatementsRoutes.UnreadLines(uploadId = id)) },
-                onOpenAnalytics = { navigator.openTab(AnalyticsRoutes.Home) },
+                onOpenAnalytics = { navigator.finishTo(AnalyticsRoutes.Home) },
                 onUploadAnother = { navigator.navigate(StatementsRoutes.Upload()) { popUpTo<StatementsRoutes.Result> { inclusive = true } } },
             )
         }

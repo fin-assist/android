@@ -15,6 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -107,7 +108,7 @@ internal fun DeleteAccountContent(
     onConfirmed: () -> Unit,
 ) {
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(ProfileTags.DELETE_SCREEN)) {
         PfPageHeader("Удаление аккаунта", onBack = if (state.deleting) null else onBack)
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5, vertical = d.space2),
@@ -135,7 +136,7 @@ internal fun DeleteAccountContent(
             block = true,
             busy = state.deleting,
             busyText = "Удаляем…",
-            modifier = Modifier.fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4).testTag(ProfileTags.DELETE_SUBMIT),
         )
     }
     if (state.askConfirm) {

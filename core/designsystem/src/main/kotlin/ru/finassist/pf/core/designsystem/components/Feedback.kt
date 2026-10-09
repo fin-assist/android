@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
@@ -217,6 +218,8 @@ fun PfDialog(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(dismissOnClickOutside = !busy)) {
         Column(
             modifier
+                .pfTestRoot()
+                .testTag(PfTestTags.DIALOG)
                 .fillMaxWidth()
                 .background(c.surface, RoundedCornerShape(PfTheme.dimens.radius2xl))
                 .padding(PfTheme.dimens.space5),
@@ -229,9 +232,13 @@ fun PfDialog(
             PfButton(
                 text = confirmText, onClick = onConfirm, block = true, busy = busy, busyText = busyText,
                 variant = if (danger) ButtonVariant.DANGER else ButtonVariant.PRIMARY,
+                modifier = Modifier.testTag(PfTestTags.DIALOG_CONFIRM),
             )
             Spacer(Modifier.height(PfTheme.dimens.space2))
-            PfButton(text = cancelText, onClick = onDismiss, block = true, variant = ButtonVariant.GHOST, enabled = !busy)
+            PfButton(
+                text = cancelText, onClick = onDismiss, block = true, variant = ButtonVariant.GHOST, enabled = !busy,
+                modifier = Modifier.testTag(PfTestTags.DIALOG_CANCEL),
+            )
         }
     }
 }
@@ -258,14 +265,14 @@ fun PfBottomSheet(
         dragHandle = {
             Box(Modifier.padding(top = PfTheme.dimens.space3).size(width = 36.dp, height = 4.dp).background(c.borderStrong, RoundedCornerShape(PfTheme.dimens.radiusFull)))
         },
-        modifier = modifier,
+        modifier = modifier.pfTestRoot(),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(start = PfTheme.dimens.space5, end = PfTheme.dimens.space2),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(title, style = PfTheme.type.title2, color = c.text, modifier = Modifier.weight(1f).semantics { heading() })
-            PfIconButton(PfIcons.X, contentDescription = "Закрыть", onClick = onDismiss, tint = c.textMuted)
+            PfIconButton(PfIcons.X, contentDescription = "Закрыть", onClick = onDismiss, tint = c.textMuted, modifier = Modifier.testTag(PfTestTags.SHEET_CLOSE))
         }
         // Content scrolls between the header and the footer; the footer stays reachable on long lists.
         Column(
@@ -294,7 +301,8 @@ fun PfSnackbar(text: String, modifier: Modifier = Modifier) {
             .background(if (c.isDark) c.surface else c.text, shape)
             .then(if (c.isDark) Modifier.border(1.dp, c.borderStrong, shape) else Modifier)
             .padding(horizontal = PfTheme.dimens.space4, vertical = PfTheme.dimens.space3)
-            .semantics { liveRegion = LiveRegionMode.Polite },
+            .semantics { liveRegion = LiveRegionMode.Polite }
+            .testTag(PfTestTags.SNACKBAR),
     ) {
         Text(text, style = PfTheme.type.body, color = if (c.isDark) c.text else c.bg)
     }

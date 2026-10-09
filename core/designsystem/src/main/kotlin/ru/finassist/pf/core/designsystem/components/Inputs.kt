@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -65,8 +66,10 @@ fun PfTextField(
     onImeAction: () -> Unit = {},
     singleLine: Boolean = true,
     enabled: Boolean = true,
+    /** Tag of the editable field itself (not the label block), so UI tests can tap and type into it. */
+    testTag: String? = null,
 ) {
-    FieldFrame(label, value.isEmpty(), placeholder, hint, error, modifier) { interaction, fieldModifier, decoration ->
+    FieldFrame(label, value.isEmpty(), placeholder, hint, error, modifier, testTag) { interaction, fieldModifier, decoration ->
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -101,8 +104,9 @@ fun PfTextField(
     imeAction: ImeAction = ImeAction.Done,
     onImeAction: () -> Unit = {},
     enabled: Boolean = true,
+    testTag: String? = null,
 ) {
-    FieldFrame(label, value.text.isEmpty(), placeholder, hint, error, modifier) { interaction, fieldModifier, decoration ->
+    FieldFrame(label, value.text.isEmpty(), placeholder, hint, error, modifier, testTag) { interaction, fieldModifier, decoration ->
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -129,6 +133,7 @@ private fun FieldFrame(
     hint: String?,
     error: String?,
     modifier: Modifier,
+    testTag: String?,
     field: @Composable (MutableInteractionSource, Modifier, @Composable (@Composable () -> Unit) -> Unit) -> Unit,
 ) {
     val c = PfTheme.colors
@@ -150,7 +155,8 @@ private fun FieldFrame(
                 .background(c.surface, RoundedCornerShape(PfTheme.dimens.radiusMd))
                 .border(if (error != null || focused) 2.dp else 1.dp, borderColor, RoundedCornerShape(PfTheme.dimens.radiusMd))
                 .padding(horizontal = PfTheme.dimens.space4)
-                .semantics { if (error != null) this.error(error) },
+                .semantics { if (error != null) this.error(error) }
+                .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         ) { inner ->
             Box(contentAlignment = Alignment.CenterStart) {
                 if (isEmpty && placeholder != null) {
@@ -175,6 +181,7 @@ fun PfSearchField(
     modifier: Modifier = Modifier,
     placeholder: String = "Поиск",
     onSearch: () -> Unit = {},
+    testTag: String? = null,
 ) {
     val c = PfTheme.colors
     val shape = RoundedCornerShape(PfTheme.dimens.radiusFull)
@@ -197,7 +204,7 @@ fun PfSearchField(
             cursorBrush = SolidColor(c.accent),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-            modifier = Modifier.weight(1f).semantics { contentDescription = placeholder },
+            modifier = Modifier.weight(1f).semantics { contentDescription = placeholder }.then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (value.isEmpty()) Text(placeholder, style = PfTheme.type.lead, color = c.textMuted, maxLines = 1)
@@ -361,7 +368,8 @@ fun PfSegmentedControl(
                     .clip(RoundedCornerShape(PfTheme.dimens.radiusSm))
                     .background(if (isSelected) c.accentSoft else Color.Transparent)
                     .clickable(role = Role.Tab) { onSelect(i) }
-                    .semantics { this.contentDescription = option; if (isSelected) toggleableState = ToggleableState.On },
+                    .semantics { this.contentDescription = option; if (isSelected) toggleableState = ToggleableState.On }
+                    .testTag(PfTestTags.segment(i)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(option, style = PfTheme.type.bodyStrong, color = if (isSelected) c.accent else c.textMuted, maxLines = 1)

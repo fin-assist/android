@@ -1,0 +1,26 @@
+# First-run passcode: 1234 twice, then «Не сейчас» on the biometrics offer if the device has biometrics.
+appId: ru.finassist.pf.mock.e2e
+---
+- extendedWaitUntil:
+    visible:
+      id: "applock.setup"
+    timeout: 20000
+- runFlow:
+    file: enter_code.yaml
+    env:
+      CODE: "1234"
+- extendedWaitUntil:
+    visible:
+      id: "applock.setup.repeat"
+    timeout: 5000
+- runFlow:
+    file: enter_code.yaml
+    env:
+      CODE: "1234"
+- runFlow:
+    when:
+      visible:
+        id: "applock.biometric_offer"
+    commands:
+      - tapOn:
+          id: "applock.biometric_offer.skip"

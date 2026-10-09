@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import ru.finassist.pf.core.api.model.Category
 import ru.finassist.pf.core.api.model.CategoryKind
@@ -62,13 +63,16 @@ fun CategoryList(
     var query by rememberSaveable { mutableStateOf(initialQuery) }
     val groups = remember(categories, kinds, query) { CategoryGrouping.group(categories, kinds, onlyAssignable, query) }
     Column(modifier) {
-        PfSearchField(query, { query = it }, placeholder = "Найти категорию", modifier = Modifier.padding(horizontal = PfTheme.dimens.space5, vertical = PfTheme.dimens.space2))
+        PfSearchField(
+            query, { query = it }, placeholder = "Найти категорию", testTag = OperationsTags.CATEGORY_SEARCH,
+            modifier = Modifier.padding(horizontal = PfTheme.dimens.space5, vertical = PfTheme.dimens.space2),
+        )
         LazyColumn(Modifier.heightIn(max = 480.dp)) {
             fun section(title: String, list: List<Category>) {
                 if (list.isEmpty()) return
                 item(key = "t-$title") { PfOptionGroupTitle(title, Modifier.padding(horizontal = PfTheme.dimens.space4, vertical = PfTheme.dimens.space2)) }
                 items(list, key = { "$title-${it.id}" }) { c ->
-                    PfOptionRow(c.name, selected = c.id == selectedId, onClick = { onSelect(c) }, icon = c.icon, description = c.note)
+                    PfOptionRow(c.name, selected = c.id == selectedId, onClick = { onSelect(c) }, icon = c.icon, description = c.note, modifier = Modifier.testTag(OperationsTags.CATEGORY_OPTION))
                 }
             }
             section("Системные", groups.system)

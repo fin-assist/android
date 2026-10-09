@@ -1,0 +1,77 @@
+appId: ru.finassist.pf.mock.e2e
+name: Загрузка — CSV, не выписка, другой банк
+tags:
+  - statements
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+
+- tapOn:
+    id: "e2e.picker.statement.csv"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload.error.csv_not_accepted"
+    timeout: 15000
+- assertVisible: "Это CSV, а нужен OFX"
+
+- tapOn:
+    id: "statements.upload.pick_another"
+- tapOn:
+    id: "e2e.picker.notes.txt"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload.error.wrong_format"
+    timeout: 15000
+
+- tapOn:
+    id: "statements.upload.pick_another"
+- tapOn:
+    id: "e2e.picker.other-bank.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload.error.wrong_bank"
+    timeout: 15000
+- assertVisible: "Выписка другого банка"
+
+# Leaving the picker without a file keeps the guide.
+- tapOn:
+    id: "statements.upload.guide"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- extendedWaitUntil:
+    visible:
+      id: "e2e.picker"
+    timeout: 5000
+- back
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"

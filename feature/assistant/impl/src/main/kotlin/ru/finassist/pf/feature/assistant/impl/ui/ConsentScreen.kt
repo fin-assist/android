@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -126,7 +127,7 @@ internal fun AiConsentContent(
     onGrant: () -> Unit,
 ) {
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars)) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(AssistantTags.CONSENT)) {
         PfPageHeader("Помощник", onBack = onBack)
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5, vertical = d.space2),
@@ -145,7 +146,7 @@ internal fun AiConsentContent(
                 "Помощник работает на Alice AI (Яндекс). Отозвать согласие можно в профиле в любой момент — история ответов сохранится",
                 style = PfTheme.type.body, color = PfTheme.colors.textMuted,
             )
-            PfCheckbox(state.accepted, onAccepted, label = "Согласен на передачу данных помощнику", error = state.error)
+            PfCheckbox(state.accepted, onAccepted, label = "Согласен на передачу данных помощнику", error = state.error, modifier = Modifier.testTag(AssistantTags.CONSENT_CHECKBOX))
             state.document?.let { doc ->
                 PfLink(doc.title, onClick = { onOpenDocument(doc) })
             }
@@ -153,7 +154,7 @@ internal fun AiConsentContent(
         }
         PfButton(
             "Продолжить", onClick = onGrant, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Сохраняем…",
-            modifier = Modifier.fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4).testTag(AssistantTags.CONSENT_SUBMIT),
         )
     }
 }

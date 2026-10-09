@@ -1,0 +1,106 @@
+appId: ru.finassist.pf.mock.e2e
+name: Помощник — непонятный вопрос не тратит попытку, лимит 5 в день
+tags:
+  - assistant
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+
+# Nothing to answer from: «Вопрос не потрачен», still 5 of 5.
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "hello"
+- tapOn:
+    id: "ds.chat.send"
+# The first question asks for consent; after it the question goes out by itself.
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- tapOn:
+    id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.cannot"
+    timeout: 20000
+- assertVisible: ".*осталось 5 из 5.*"
+
+# Five answered questions use up the day; each answer lowers the counter, the fifth replaces the composer.
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Krabsbir"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible: ".*осталось 4 из 5.*"
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.input"
+      enabled: true
+    timeout: 20000
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Krabsbir"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible: ".*осталось 3 из 5.*"
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.input"
+      enabled: true
+    timeout: 20000
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Krabsbir"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible: ".*осталось 2 из 5.*"
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.input"
+      enabled: true
+    timeout: 20000
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Krabsbir"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible: ".*осталось 1 из 5.*"
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.input"
+      enabled: true
+    timeout: 20000
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Krabsbir"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.limit"
+    timeout: 20000
+- assertVisible: "Вопросы на сегодня закончились"
+- assertNotVisible:
+    id: "ds.chat.send"

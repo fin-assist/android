@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -114,18 +115,19 @@ interface AnalyticsHandlers {
 @Composable
 internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions, vm: AnalyticsHandlers) {
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().testTag(AnalyticsTags.SCREEN)) {
         if (actions.back != null) PfPageHeader("Аналитика", onBack = actions.back) else PfTabHeader("Аналитика")
         val a = state.data
         when {
             state.loading -> Unit
-            state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
-                PfButton("Повторить", onClick = { vm.load() }, variant = ButtonVariant.PRIMARY)
+            state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(AnalyticsTags.OFFLINE)) {
+                PfButton("Повторить", onClick = { vm.load() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
             }
             a == null || !a.hasData -> PfEmptyState(
                 PfIcons.BAR_CHART,
                 "Аналитики пока нет",
                 if (state.blocks.upload) "Загрузите выписку Т-Банка — посчитаем расходы и доходы по категориям" else null,
+                modifier = Modifier.testTag(AnalyticsTags.EMPTY),
             ) {
                 if (state.blocks.upload) PfButton("Загрузить выписку", onClick = actions.openUpload, variant = ButtonVariant.PRIMARY, icon = PfIcons.UPLOAD)
             }
@@ -160,6 +162,7 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
     if (blocks.assistant) {
         val limit = state.limit
         PfAskCard(
+            modifier = Modifier.testTag(AnalyticsTags.ASK),
             onClick = { actions.openChat(params.transferMode.effective) },
             remaining = limit?.remaining ?: 5,
             total = limit?.dailyMax ?: 5,
@@ -200,7 +203,10 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         Gap(d.space3)
         PfChipRow {
             val without = params.transferMode.effective == TransferMode.WITHOUT
-            PfChip(if (without) "Без переводов" else "С переводами", onClick = { vm.openSheet(AnalyticsSheet.TRANSFERS) }, selected = without, dropdown = true)
+            PfChip(
+                if (without) "Без переводов" else "С переводами", onClick = { vm.openSheet(AnalyticsSheet.TRANSFERS) }, selected = without, dropdown = true,
+                modifier = Modifier.testTag(AnalyticsTags.TRANSFERS),
+            )
         }
     }
     a.state?.let { s ->
@@ -209,7 +215,12 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
             PfNotice(
                 "${countWithNoun(s.unreadLinesCount, "строку", "строки", "строк")} за период не прочитали — суммы могут быть неполными",
                 tone = NoticeTone.WARNING,
-                action = { PfLink("Подробнее", onClick = { actions.openUnreadLines(period.range.from.toApiString(), period.range.to.toApiString()) }, inline = true) },
+                action = {
+                    PfLink(
+                        "Подробнее", onClick = { actions.openUnreadLines(period.range.from.toApiString(), period.range.to.toApiString()) }, inline = true,
+                        modifier = Modifier.testTag(AnalyticsTags.UNREAD),
+                    )
+                },
             )
         }
         if (s.recalculating) {
@@ -225,18 +236,18 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
 
     if (blocks.tiles && a.tiles != null) {
         Gap(d.space4)
-        Tiles(a, vm, actions)
+        Block(AnalyticsTags.BLOCK_TILES) { Tiles(a, vm, actions) }
     }
 
-    if (blocks.monthlyChart) a.monthlyChart?.let { chart -> ExpenseChart(a, chart) }
+    if (blocks.monthlyChart) a.monthlyChart?.let { chart -> Block(AnalyticsTags.BLOCK_MONTHLY_CHART) { ExpenseChart(a, chart) } }
 
     if (blocks.expenseCategories) a.expenseCategories?.let { b ->
         Gap(d.space6)
-        ExpenseBreakdown(b, a.tiles?.expense?.value, periodCaption(period), state, vm, actions.openSearch)
+        Block(AnalyticsTags.BLOCK_EXPENSE_CATEGORIES) { ExpenseBreakdown(b, a.tiles?.expense?.value, periodCaption(period), state, vm, actions.openSearch) }
     }
     if (blocks.incomeCategories) a.incomeCategories?.let { b ->
         Gap(d.space4)
-        IncomeBreakdown(b, params.period, period, actions.openSearch)
+        Block(AnalyticsTags.BLOCK_INCOME_CATEGORIES) { IncomeBreakdown(b, params.period, period, actions.openSearch) }
     }
     a.insights?.let { insights -> Insights(insights, a, blocks, vm, actions) }
     if (blocks.monthlyChart && params.period != PeriodTypeCode.YEAR) BalanceSection(a)
@@ -244,6 +255,12 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
 
 @Composable
 private fun Gap(height: androidx.compose.ui.unit.Dp) = Spacer(Modifier.height(height))
+
+/** A screen block under one test tag — the tags match the `analytics.block.*` flags that switch the blocks off. */
+@Composable
+private fun Block(tag: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().testTag(tag), content = content)
+}
 
 /** 2×2 tiles as on the mockup: «Доходы минус расходы», forecast, «Расходы в день», «Доходы». */
 @Composable
@@ -261,7 +278,7 @@ private fun Tiles(a: Analytics, vm: AnalyticsHandlers, actions: AnalyticsActions
             // With stale data the forecast is replaced by the fact (api.md 6.1 `stale_data`).
             val staleFact = f.status.effective == MetricStatus.LOCKED && f.lock?.reason == LockReason.STALE_DATA
             if (staleFact) {
-                PfStatTile("Расходы", m, value = tiles.expense.value?.format(), note = periodCaption(period), chartId = "analytics.tile.forecast", onClick = open("expense", tiles.expense.filters))
+                PfStatTile("Расходы", m.testTag("analytics.tile.forecast"), value = tiles.expense.value?.format(), note = periodCaption(period), chartId = "analytics.tile.forecast", onClick = open("expense", tiles.expense.filters))
             } else {
                 Tile(
                     "Прогноз расходов", f, a, m, note = AnalyticsTexts.forecastNote(params.date),
@@ -306,12 +323,13 @@ private fun Tile(
     chartId: String,
 ) {
     val value = (metric as? Metric)?.value
+    // The chart id doubles as the test tag («analytics.tile.income» …).
     if (!metric.isReady) {
-        PfStatTile(label, modifier, locked = true, lockedText = AnalyticsTexts.lock(metric.lock, a.state), chartId = chartId)
+        PfStatTile(label, modifier.testTag(chartId), locked = true, lockedText = AnalyticsTexts.lock(metric.lock, a.state), chartId = chartId)
     } else {
         val shown = value?.format(sign)
         PfStatTile(
-            label, modifier,
+            label, modifier.testTag(chartId),
             value = shown?.let { if (approx) "≈$it" else it },
             valueLabel = shown?.let { if (approx) "около $it" else it },
             note = note, chartId = chartId, onClick = onClick,
@@ -471,13 +489,14 @@ private fun ExpenseBreakdown(
                     share = item.share?.let { "${(it * 100).toInt()}%" },
                     spoken = "${item.categoryName}: ${item.amount.format()}, ${countWithNoun(item.operationCount, "операция", "операции", "операций")}",
                     onClick = { openSearch(item.filters) },
+                    modifier = Modifier.testTag(AnalyticsTags.EXPENSE_CATEGORY),
                 )
             }
         }
     }
     if (b.items.size > TOP_CATEGORIES) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            PfLink(if (expanded) "Свернуть" else "Все категории", onClick = vm::toggleAllCategories)
+            PfLink(if (expanded) "Свернуть" else "Все категории", onClick = vm::toggleAllCategories, modifier = Modifier.testTag(AnalyticsTags.ALL_CATEGORIES))
         }
     }
 }
@@ -511,6 +530,7 @@ private fun IncomeBreakdown(
                 tone = ValueTone.POSITIVE,
                 onClick = { openSearch(item.filters) },
                 divider = i < b.items.lastIndex,
+                modifier = Modifier.testTag(AnalyticsTags.INCOME_CATEGORY),
             )
         }
     }
@@ -558,6 +578,7 @@ private fun Insights(
                 lockedText = AnalyticsTexts.lock(r.lock, a.state),
                 chartId = "analytics.insight.regular",
                 onClick = r.filters?.let { f -> { actions.openSearch(f) } },
+                modifier = Modifier.testTag(AnalyticsTags.BLOCK_REGULAR_PAYMENTS),
             ) {
                 // «Не подписка» stays per row: each link names the payment it removes.
                 r.items.orEmpty().take(3).forEach { p ->
@@ -584,6 +605,7 @@ private fun Insights(
                         description = AnalyticsTexts.notable(item.amount, item.typicalAmount, n.basis?.range),
                         chartId = "analytics.insight.notable",
                         onClick = { actions.openSearch(item.filters) },
+                        modifier = Modifier.testTag(AnalyticsTags.BLOCK_NOTABLE_SPENDING),
                     )
                 }
             } else {
@@ -596,6 +618,7 @@ private fun Insights(
                     state = stateOf(n),
                     lockedText = AnalyticsTexts.lock(n.lock, a.state),
                     chartId = "analytics.insight.notable",
+                    modifier = Modifier.testTag(AnalyticsTags.BLOCK_NOTABLE_SPENDING),
                 )
             }
         }
@@ -612,6 +635,7 @@ private fun Insights(
                 lockedText = AnalyticsTexts.lock(f.lock, a.state),
                 chartId = "analytics.insight.fees",
                 onClick = f.filters?.let { filter -> { actions.openSearch(filter) } },
+                modifier = Modifier.testTag(AnalyticsTags.BLOCK_BANK_FEES),
             )
         }
         if (blocks.smallFrequent) {
@@ -632,6 +656,7 @@ private fun Insights(
                 chartId = "analytics.insight.small",
                 // The card shows the first group, so it opens that group; the other groups have their own rows.
                 onClick = first?.let { g -> { actions.openSearch(g.filters) } },
+                modifier = Modifier.testTag(AnalyticsTags.BLOCK_SMALL_FREQUENT),
             ) {
                 // The first group is the description; any further groups stay as rows.
                 groups.drop(1).forEach { g ->
@@ -668,6 +693,7 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
                             selected = p.key == current,
                             onClick = { vm.goTo(p.key) },
                             description = if (p.coverage.effective != Coverage.COMPLETE) "неполный" else null,
+                            modifier = Modifier.testTag(AnalyticsTags.PERIOD_OPTION),
                         )
                     }
                 }
@@ -675,8 +701,15 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
         }
         AnalyticsSheet.TRANSFERS -> PfBottomSheet("Переводы людям", onDismiss = { vm.openSheet(null) }) {
             val mode = vm.currentTransferMode()
-            PfOptionRow("С переводами", selected = mode == TransferMode.WITH, onClick = { vm.setTransferMode(TransferMode.WITH) }, description = "Переводы людям считаем тратами и доходами")
-            PfOptionRow("Без переводов", selected = mode == TransferMode.WITHOUT, onClick = { vm.setTransferMode(TransferMode.WITHOUT) }, description = "Убираем переводы людям в обе стороны — остаются покупки и зарплата")
+            PfOptionRow(
+                "С переводами", selected = mode == TransferMode.WITH, onClick = { vm.setTransferMode(TransferMode.WITH) }, description = "Переводы людям считаем тратами и доходами",
+                modifier = Modifier.testTag(AnalyticsTags.TRANSFERS_WITH),
+            )
+            PfOptionRow(
+                "Без переводов", selected = mode == TransferMode.WITHOUT, onClick = { vm.setTransferMode(TransferMode.WITHOUT) },
+                description = "Убираем переводы людям в обе стороны — остаются покупки и зарплата",
+                modifier = Modifier.testTag(AnalyticsTags.TRANSFERS_WITHOUT),
+            )
             Text(
                 "Переводы между своими счетами не считаем в обоих режимах",
                 style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
@@ -687,3 +720,30 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
     }
 }
 
+
+/** Test tags of the analytics screen (UI tests in `.maestro/`, convention in docs/e2e.md). */
+internal object AnalyticsTags {
+    const val SCREEN = "analytics.screen"
+    const val EMPTY = "analytics.empty"
+    const val OFFLINE = "analytics.offline"
+    const val RETRY = "analytics.retry"
+    const val ASK = "analytics.ask"
+    const val UNREAD = "analytics.unread"
+    const val TRANSFERS = "analytics.transfers"
+    const val TRANSFERS_WITH = "analytics.transfers.with"
+    const val TRANSFERS_WITHOUT = "analytics.transfers.without"
+    const val PERIOD_OPTION = "analytics.period.option"
+    const val EXPENSE_CATEGORY = "analytics.expense_category"
+    const val INCOME_CATEGORY = "analytics.income_category"
+    const val ALL_CATEGORIES = "analytics.all_categories"
+
+    // Same names as the flags in docs/flags.md that hide these blocks.
+    const val BLOCK_TILES = "analytics.block.tiles"
+    const val BLOCK_MONTHLY_CHART = "analytics.block.monthly_chart"
+    const val BLOCK_EXPENSE_CATEGORIES = "analytics.block.expense_categories"
+    const val BLOCK_INCOME_CATEGORIES = "analytics.block.income_categories"
+    const val BLOCK_REGULAR_PAYMENTS = "analytics.block.regular_payments"
+    const val BLOCK_NOTABLE_SPENDING = "analytics.block.notable_spending"
+    const val BLOCK_BANK_FEES = "analytics.block.bank_fees"
+    const val BLOCK_SMALL_FREQUENT = "analytics.block.small_frequent"
+}

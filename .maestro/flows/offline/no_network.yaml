@@ -1,0 +1,49 @@
+appId: ru.finassist.pf.mock.e2e
+name: Нет сети — экран ошибки и «Повторить»
+tags:
+  - offline
+---
+- clearState
+- runFlow: ../../subflows/login.yaml
+# Every request of the fake backend fails from now on (until the process restarts or offline=false).
+- openLink: "pfe2e://config?offline=true"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.offline"
+    timeout: 15000
+- assertVisible: "Нет сети"
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.offline"
+    timeout: 15000
+
+- openLink: "pfe2e://config?offline=false"
+# Back from the control link the profile reloads on resume by itself; «Повторить» only if it is still there.
+- runFlow:
+    when:
+      visible:
+        id: "profile.retry"
+    commands:
+      - tapOn:
+          id: "profile.retry"
+- extendedWaitUntil:
+    visible:
+      id: "profile.phone"
+    timeout: 15000
+- tapOn:
+    id: "ds.tab.analytics"
+- runFlow:
+    when:
+      visible:
+        id: "analytics.retry"
+    commands:
+      - tapOn:
+          id: "analytics.retry"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000

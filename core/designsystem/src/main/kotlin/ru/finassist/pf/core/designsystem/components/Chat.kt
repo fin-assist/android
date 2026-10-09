@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
@@ -153,9 +154,9 @@ fun PfChatComposer(
         Column(Modifier.padding(horizontal = PfTheme.dimens.space3, vertical = PfTheme.dimens.space2)) {
             when (state) {
                 ComposerState.OFFLINE -> PfNotice(offlineText, tone = NoticeTone.WARNING)
-                ComposerState.LIMIT -> PfNotice(limitText, tone = NoticeTone.LIMIT)
+                ComposerState.LIMIT -> PfNotice(limitText, tone = NoticeTone.LIMIT, modifier = Modifier.testTag(PfTestTags.CHAT_LIMIT))
                 else -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    PfIconButton(PfIcons.MIC, contentDescription = "Голосовой ввод", onClick = onVoice, enabled = state == ComposerState.IDLE, tint = c.accent)
+                    PfIconButton(PfIcons.MIC, contentDescription = "Голосовой ввод", onClick = onVoice, enabled = state == ComposerState.IDLE, tint = c.accent, modifier = Modifier.testTag(PfTestTags.CHAT_VOICE))
                     val shape = RoundedCornerShape(PfTheme.dimens.radiusFull)
                     BasicTextField(
                         value = value,
@@ -170,7 +171,8 @@ fun PfChatComposer(
                             .weight(1f)
                             .background(c.surface, shape)
                             .border(1.dp, c.borderStrong, shape)
-                            .padding(horizontal = PfTheme.dimens.space4, vertical = 14.dp),
+                            .padding(horizontal = PfTheme.dimens.space4, vertical = 14.dp)
+                            .testTag(PfTestTags.CHAT_INPUT),
                         decorationBox = { inner ->
                             Box {
                                 if (value.isEmpty()) Text(placeholder, style = PfTheme.type.lead, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -183,7 +185,8 @@ fun PfChatComposer(
                         Modifier
                             .size(PfTheme.dimens.touch)
                             .background(c.accent, RoundedCornerShape(PfTheme.dimens.radiusFull))
-                            .clickable(enabled = state == ComposerState.IDLE, role = Role.Button, onClick = onSend),
+                            .clickable(enabled = state == ComposerState.IDLE, role = Role.Button, onClick = onSend)
+                            .testTag(PfTestTags.CHAT_SEND),
                         contentAlignment = Alignment.Center,
                     ) {
                         PfIcon(PfIcons.SEND, contentDescription = "Отправить", tint = c.onAccent)
