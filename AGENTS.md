@@ -42,6 +42,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Tokens, preferences, idempotency keys | `core/storage` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md`, `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks, native gaps, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/qase-*` |
+| Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
 
 Package root: `ru.finassist.pf`. Flavors: `mock` (default for development and CI) and `prod`. Build type `e2e`
 (mock only): debug + UI-test hooks, pinned date (docs/e2e.md).
@@ -136,6 +137,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   (after merge to `main`, or a PR labelled `e2e`).
 - `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
   docs check and its parser tests from CI, no Gradle needed.
+- Coverage: `./gradlew :koverXmlReportUnit` (runs the unit tests), then
+  `python3 scripts/coverage-diff.py --base origin/<base branch>` for the changed lines; HTML report via
+  `:koverHtmlReportUnit` (docs/testing.md).
 
 ## Code
 
@@ -173,9 +177,28 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - Document in moderation: KDoc on public `:api` interfaces, comments where logic is non-obvious
   (accounting rules, idempotency, animation), not on every method.
 
+## Tests
+
+Every new piece of functionality is covered by automated tests in the same PR — not in a follow-up. Layers and
+commands: `docs/testing.md`.
+
+- Logic (domain, data, mappers, view models, `mock/backend`, `core/*`) → unit tests in the module's `src/test`
+  covering the main path and every edge case and branch the code handles. View models are tested through their
+  state and handlers, with fake `:api` dependencies.
+- Screens, states, sheets, dialogs → design check; user scenarios → UI tests (both rules in Code, details in
+  docs/e2e.md).
+- A bug fix comes with a test that fails without the fix: a UI flow for a user-visible bug (see Code), plus a
+  unit test when the cause is in logic.
+- The measurable check is coverage of changed lines by unit tests: at least 80 % of changed executable lines
+  (Build in an agent container → Coverage). Composables are excluded from the report — they are covered by the
+  design check and UI tests, not by this number. Uncovered changed lines are listed in the PR («Проверка») with
+  the reason; an uncovered line without a reason is a review finding.
+- Tests assert behaviour; do not write tests that only execute lines.
+
 ## Workflow
 
 - Branches: `<kind>/<slug>` — `fix/…`, `feature/…`, `tooling/…`, `design-check/…` (historically `stage-N/…`).
+  `release/<version>` (`release/0.2`) is the release branch of a version, cut from `main`; CI runs on pushes to it.
   Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
 - PR title and description in Russian: what changed and why, deviations from mockups/docs, how it was checked.
   A PR for a single YouTrack issue starts its title with the issue key (`FIN-42 Краш при открытии поиска`);
@@ -201,3 +224,6 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - Check that a new or changed user scenario comes with a UI test (or a «Not covered yet» entry with a technical
   reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md,
   and that the PR has the `e2e` label (see Code).
+- Check that new functionality comes with tests (see Tests) and that the tests would fail if the behaviour
+  broke; flag changed lines the «Coverage of changed lines» summary of the CI run shows as uncovered when the
+  PR gives no reason for them.
