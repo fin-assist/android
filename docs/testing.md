@@ -65,7 +65,12 @@ python3 scripts/coverage-diff.py --base origin/main
 
 ### In CI
 
-The `build` job (`.github/workflows/ci.yml`) builds the reports after the unit tests and adds to the run
-summary the project totals and, on a PR, the coverage of changed lines against the PR's base branch with the
-uncovered lines per file. The HTML report is the `coverage-report` artifact. Nothing fails on a low value yet:
-the 80 % target is checked in review.
+The `build` job (`.github/workflows/ci.yml`) builds the reports after the unit tests:
+
+- PR: a comment «Unit test coverage» in the PR conversation — project totals, coverage of changed lines against
+  the PR's base branch, uncovered lines per file (files with gaps first, up to 50). One comment per PR, edited on
+  every push; PRs from forks get none (read-only token). The run summary has the same text with the full table.
+- Push to `main` / `release/**`: project totals in the run summary.
+- The HTML report is the `coverage-report` artifact of the run.
+
+Nothing fails on a low value or on a failed post: the 80 % target is checked in review.
