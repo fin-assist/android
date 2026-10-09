@@ -1,11 +1,11 @@
 # UI tests on an Android emulator: Maestro flows (.maestro/) against the mock e2e build and the native
-# instrumented tests (app/src/androidTestMock). Runs after every merge to main or a release branch; on a PR — when it carries the
+# instrumented tests (app/src/androidTestMock). Runs after every merge to main; on a PR — when it carries the
 # `e2e` label (add the label to run, push to re-run); also by hand from the Actions tab. Details: docs/e2e.md.
 name: UI tests
 
 on:
   push:
-    branches: [main, 'release/**']
+    branches: [main]
   pull_request:
     types: [labeled, synchronize]
   workflow_dispatch:
@@ -93,7 +93,7 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # One Qase run per merge to main or a release branch, or manual run (project PLAINFIN, cases in scripts/qase-cases.json). PR runs are
+      # One Qase run per main merge or manual run (project PLAINFIN, cases in scripts/qase-cases.json). PR runs are
       # not sent, nor cancelled ones (a newer push cancels the run: its partial results would read as lost coverage).
       # Without the QASE_API_TOKEN secret the script only prints a notice; a Qase outage does not fail the job.
       - name: Send results to Qase

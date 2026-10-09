@@ -31,7 +31,7 @@ scripts/e2e.sh --no-build --flow .maestro/flows/assistant/ask_question.yaml
 Reports go to `build/e2e/`: JUnit XML, `maestro-output.tgz` (per flow: screenshot and view hierarchy of the failed
 step, commands, log), logcat, the preflight dump.
 
-In CI (`.github/workflows/e2e.yml`) the tests run after every merge to `main` or a `release/**` branch, on a PR labelled `e2e`
+In CI (`.github/workflows/e2e.yml`) the tests run after every merge to `main`, on a PR labelled `e2e`
 (add the label, push to re-run), and by hand from the Actions tab. The run summary lists the flows; reports are in the
 `e2e-reports` artifact.
 
@@ -42,7 +42,7 @@ steps and expected results in Russian, marked automated.
 
 - `scripts/qase-cases.json` maps tests to cases: a Maestro flow by its path (`.maestro/flows/<feature>/<flow>.yaml`),
   an instrumented test by `<class>#<method>`.
-- After a merge to `main` or a `release/**` branch, or a manual run, the `UI tests` workflow sends the results as one Qase run
+- After a merge to `main` or a manual run, the `UI tests` workflow sends the results as one Qase run
   (`scripts/qase-report.py`: JUnit reports → run → bulk results → complete). The run title is
   `UI tests · <branch> · <sha>`, its description links the Actions run. PR runs and cancelled runs are not sent; a
   manual run from another branch is sent with that branch in the title.
