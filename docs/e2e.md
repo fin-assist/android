@@ -44,7 +44,11 @@ steps and expected results in Russian, marked automated.
   an instrumented test by `<class>#<method>`.
 - After a merge to `main` or a manual run, the `UI tests` workflow sends the results as one Qase run
   (`scripts/qase-report.py`: JUnit reports → run → bulk results → complete). The run title is
-  `UI tests · <branch> · <sha>`, its description links the Actions run. PR runs are not sent.
+  `UI tests · <branch> · <sha>`, its description links the Actions run. PR runs and cancelled runs are not sent; a
+  manual run from another branch is sent with that branch in the title.
+- Statuses: passed, failed (an assertion `failure` and an unexpected `error` alike: in UI tests the latter is usually
+  an app crash), skipped. A test found in several reports keeps its worst result.
+- If the results cannot be recorded, the script retries once (429, 5xx, network) and otherwise deletes the empty run.
 - The token is the repository secret `QASE_API_TOKEN`. Without it the step prints a notice and passes; a Qase error
   does not fail the job either.
 - Check what would be sent without a token: `scripts/qase-report.py --dry-run build/e2e/maestro-report.xml`.

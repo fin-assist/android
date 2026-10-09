@@ -25,6 +25,7 @@ import glob
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -37,6 +38,10 @@ CASES_FILE = ROOT / "scripts" / "qase-cases.json"
 API = "https://api.qase.io/v1"
 # Qase keeps stack traces short in the UI anyway; huge Maestro traces only slow the request down.
 MAX_TRACE = 8000
+# One retry after this pause for rate limits, 5xx and network errors.
+RETRY_DELAY_S = 5
+# The same test in several reports (e.g. several devices) keeps its worst result.
+SEVERITY = {"passed": 0, "skipped": 1, "failed": 2}
 
 
 @dataclass
@@ -88,8 +93,9 @@ def parse_report(xml_text: str) -> list[TestResult]:
 
 
 def map_results(results: list[TestResult], cases: dict[str, int]) -> tuple[list[dict], list[TestResult]]:
-    """Qase result payloads for mapped tests, and the tests that have no case."""
-    payload, unmapped = [], []
+    """Qase result payloads for mapped tests (one per case, the worst one), and the tests that have no case."""
+    by_case: dict[int, dict] = {}
+    unmapped = []
     for r in results:
         case_id = cases.get(r.key)
         if case_id is None:
@@ -100,15 +106,23 @@ def map_results(results: list[TestResult], cases: dict[str, int]) -> tuple[list[
             item["comment"] = r.message
         if r.trace:
             item["stacktrace"] = r.trace
-        payload.append(item)
-    return payload, unmapped
+        kept = by_case.get(case_id)
+        if kept is None or SEVERITY[item["status"]] > SEVERITY[kept["status"]]:
+            by_case[case_id] = item
+    return list(by_case.values()), unmapped
 
 
 Request = Callable[[str, str, dict | None], dict]
 
 
-def http_request(token: str) -> Request:
-    def call(method: str, path: str, body: dict | None) -> dict:
+class QaseError(RuntimeError):
+    def __init__(self, message: str, retryable: bool = False):
+        super().__init__(message)
+        self.retryable = retryable
+
+
+def http_request(token: str, sleep: Callable[[float], None] = time.sleep) -> Request:
+    def once(method: str, path: str, body: dict | None) -> dict:
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(API + path, data=data, method=method, headers={
             "Token": token, "Content-Type": "application/json", "Accept": "application/json",
@@ -117,21 +131,45 @@ def http_request(token: str) -> Request:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 answer = json.loads(resp.read() or b"{}")
         except urllib.error.HTTPError as e:
-            raise RuntimeError(f"{method} {path}: HTTP {e.code} {e.read().decode(errors='replace')[:500]}") from e
+            text = e.read().decode(errors="replace")[:500]
+            raise QaseError(f"{method} {path}: HTTP {e.code} {text}", retryable=e.code == 429 or e.code >= 500) from e
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            raise QaseError(f"{method} {path}: {e}", retryable=True) from e
         if not answer.get("status", False):
-            raise RuntimeError(f"{method} {path}: {answer}")
+            raise QaseError(f"{method} {path}: {answer}")
         return answer.get("result") or {}
+
+    def call(method: str, path: str, body: dict | None) -> dict:
+        try:
+            return once(method, path, body)
+        except QaseError as e:
+            if not e.retryable:
+                raise
+            print(f"qase: {e}; retrying in {RETRY_DELAY_S} s")
+            sleep(RETRY_DELAY_S)
+            return once(method, path, body)
     return call
 
 
 def send(project: str, title: str, description: str, payload: list[dict], request: Request) -> int:
-    """Creates the run with exactly the reported cases, records the results, completes it; returns the run id."""
+    """Creates the run with exactly the reported cases, records the results, completes it; returns the run id.
+
+    A run whose results could not be recorded is deleted (best effort): an open empty run would read as «not run»,
+    and the next attempt creates a new one anyway.
+    """
     case_ids = sorted({p["case_id"] for p in payload})
     run = request("POST", f"/run/{project}", {
         "title": title, "description": description, "cases": case_ids, "is_autotest": True,
     })
     run_id = run["id"]
-    request("POST", f"/result/{project}/{run_id}/bulk", {"results": payload})
+    try:
+        request("POST", f"/result/{project}/{run_id}/bulk", {"results": payload})
+    except Exception:
+        try:
+            request("DELETE", f"/run/{project}/{run_id}", None)
+        except Exception as cleanup:  # the original error matters more
+            print(f"::warning::could not delete the empty Qase run {run_id}: {cleanup}")
+        raise
     request("POST", f"/run/{project}/{run_id}/complete", {})
     return run_id
 
@@ -152,6 +190,8 @@ def main(argv: list[str]) -> int:
         # GitHub turns this line into a warning annotation on the run.
         print(f"::warning::no Qase case for {r.key} ({r.name}); add it to scripts/qase-cases.json")
     print(f"qase: {len(files)} report(s), {len(results)} test(s), {len(payload)} mapped")
+    if not files:
+        print("::notice::no JUnit reports found (the tests did not run or stopped before writing them)")
 
     if not payload:
         print("qase: nothing to report")
@@ -164,7 +204,11 @@ def main(argv: list[str]) -> int:
         print("::notice::QASE_API_TOKEN is not set; results are not sent to Qase")
         return 0
     project = config["project"]
-    run_id = send(project, args.title, args.description, payload, http_request(token))
+    try:
+        run_id = send(project, args.title, args.description, payload, http_request(token))
+    except QaseError as e:
+        print(f"::error::Qase: {e}")
+        return 1
     print(f"qase: run https://app.qase.io/run/{project}/dashboard/{run_id}")
     return 0
 
