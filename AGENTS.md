@@ -156,16 +156,20 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - A PR that adds or changes a user scenario covers it with a UI test in the same PR (docs/e2e.md, «When a change
   needs a UI test»). A scenario is what the user does and sees: a new screen or state, a step between screens, an
   error, empty or offline path they can reach, a flag that changes behaviour, a user-visible bug fix (the flow
-  reproduces the bug first).
+  reproduces the bug first). «Can reach» means in a real build (no network, a server error, an empty statement);
+  tests bring it about with a fixture, the control link or a flag. Not a scenario: copy, colours or layout of an
+  existing screen (the design check covers them), logic without UI (unit tests), a refactoring that keeps behaviour.
   - Maestro by default: extend the feature's flow or add one under `.maestro/flows/<feature>/`. A native test in
     `app/src/androidTestMock` only for what Maestro cannot drive (system pickers, intents, permissions).
   - Tag the root, the controls and the checked states (`<feature>.<screen>[.<element>]`, shared components `ds.*`).
     Renaming a tag means updating `.maestro/`.
   - A new or renamed test also updates its Qase case, `scripts/qase-cases.json` and the coverage table in
     docs/e2e.md («Qase», «Coverage»).
-  - Not automatable on the emulator (biometrics, voice): add it to «Not covered yet» in docs/e2e.md and say so in
-    the PR.
-  - Put the `e2e` label on the PR: the UI tests run on it before merge, not only after.
+  - Not automatable on the emulator (biometrics, voice, a bug that does not reproduce there): add it to «Not
+    covered yet» in docs/e2e.md and say so in the PR. The reason must be technical — what the emulator or the mock
+    cannot do — not the effort.
+  - Put the `e2e` label on the PR so the UI tests run before merge, not only after; if you cannot set labels, ask the
+    owner in the PR.
 - Document in moderation: KDoc on public `:api` interfaces, comments where logic is non-obvious
   (accounting rules, idempotency, animation), not on every method.
 
@@ -194,5 +198,6 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   not only in a summary comment; the summary lists what was checked.
 - Check that the PR updates this file and `docs/` when it changes what they describe.
 - Check that a new screen, screen state, bottom sheet or dialog comes with its `*DesignCheckTest` (see Code).
-- Check that a new or changed user scenario comes with a UI test (or a «Not covered yet» entry with the reason), its
-  Qase case and map line, and that the PR has the `e2e` label (see Code).
+- Check that a new or changed user scenario comes with a UI test (or a «Not covered yet» entry with a technical
+  reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md,
+  and that the PR has the `e2e` label (see Code).
