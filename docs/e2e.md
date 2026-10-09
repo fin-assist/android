@@ -35,6 +35,20 @@ In CI (`.github/workflows/e2e.yml`) the tests run after every merge to `main`, o
 (add the label, push to re-run), and by hand from the Actions tab. The run summary lists the flows; reports are in the
 `e2e-reports` artifact.
 
+## Qase
+
+Every scenario is a test case in Qase, project `PLAINFIN`, suite «UI-автотесты (Android)» (one sub-suite per feature):
+steps and expected results in Russian, marked automated.
+
+- `scripts/qase-cases.json` maps tests to cases: a Maestro flow by its path (`.maestro/flows/<feature>/<flow>.yaml`),
+  an instrumented test by `<class>#<method>`.
+- After a merge to `main` or a manual run, the `UI tests` workflow sends the results as one Qase run
+  (`scripts/qase-report.py`: JUnit reports → run → bulk results → complete). The run title is
+  `UI tests · <branch> · <sha>`, its description links the Actions run. PR runs are not sent.
+- The token is the repository secret `QASE_API_TOKEN`. Without it the step prints a notice and passes; a Qase error
+  does not fail the job either.
+- Check what would be sent without a token: `scripts/qase-report.py --dry-run build/e2e/maestro-report.xml`.
+
 ## The `e2e` build type
 
 `assembleMockE2e` builds `ru.finassist.pf.mock.e2e`: the mock flavor plus test hooks from `app/src/mockE2e/`. It
@@ -96,6 +110,8 @@ set in `PfApplication`); release builds keep tags out of the accessibility tree.
 - Wait for screens with `extendedWaitUntil` rather than fixed sleeps; scroll to below-the-fold elements with
   `scrollUntilVisible` before tapping them.
 - Type ASCII where you can (merchant `Krabsbir`, digits): non-ASCII input depends on the emulator keyboard.
+- A new flow needs a case in Qase and a line in `scripts/qase-cases.json`; a renamed or removed flow updates both.
+  `scripts/test_qase_report.py` (CI, `agent-docs` job) fails on a flow without a case or a case without a flow.
 
 ## Coverage
 

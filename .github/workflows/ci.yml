@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Test the agent-docs parsers
+      - name: Test the scripts (agent-docs parsers, Qase report and case map)
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
       - name: Check AGENTS.md and docs registries

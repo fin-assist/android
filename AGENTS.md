@@ -41,7 +41,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Events / crashes | `core/tracking/…/Tracker.kt`; providers in `providers/*` (only `:app` depends on them) |
 | Tokens, preferences, idempotency keys | `core/storage` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md`, `*DesignCheckTest.kt` in feature `:impl` modules |
-| UI tests: Maestro flows, e2e build hooks, native gaps | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/` |
+| UI tests: Maestro flows, e2e build hooks, native gaps, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/qase-*` |
 
 Package root: `ru.finassist.pf`. Flavors: `mock` (default for development and CI) and `prod`. Build type `e2e`
 (mock only): debug + UI-test hooks, pinned date (docs/e2e.md).
@@ -155,7 +155,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - Flags are read at the screen boundary (view model init or `FeatureEntry`), never mid-screen.
 - New or changed screens: tag the root, the controls and the checked states (`<feature>.<screen>[.<element>]`,
   shared components `ds.*`), and add or update the Maestro flow (docs/e2e.md). Renaming a tag means updating
-  `.maestro/`.
+  `.maestro/`. A new or renamed flow also updates its Qase case and `scripts/qase-cases.json` (docs/e2e.md, «Qase»).
 - Document in moderation: KDoc on public `:api` interfaces, comments where logic is non-obvious
   (accounting rules, idempotency, animation), not on every method.
 
