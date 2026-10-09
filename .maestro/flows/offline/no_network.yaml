@@ -6,7 +6,10 @@ tags:
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/login.yaml
 # Every request of the fake backend fails from now on (until the process restarts or offline=false).
-- openLink: "pfe2e://config?offline=true"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
@@ -21,7 +24,10 @@ tags:
       id: "profile.offline"
     timeout: 15000
 
-- openLink: "pfe2e://config?offline=false"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
 # Back from the control link the profile reloads on resume by itself; «Повторить» only if it is still there.
 - runFlow:
     when:

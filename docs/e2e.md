@@ -76,7 +76,10 @@ installs next to `mockDebug` and never exists for `prod`.
   | `notes.txt` | `WRONG_FORMAT` |
   | `other-bank.ofx` | `WRONG_BANK` |
 
-- **Control link.** `openLink: "pfe2e://config?…"` changes state from a flow (`E2eControlActivity`):
+- **Control link.** `pfe2e://config?…` changes state from a flow (`E2eControlActivity`). Open it through the subflow,
+  not a bare `openLink`: `runFlow: {file: ../../subflows/config.yaml, env: {LINK: "pfe2e://config?…"}}`. The activity
+  writes the values, shows `e2e.config.applied` and finishes; the subflow waits for that, so a `launchApp` right
+  after cannot cut the writes short.
 
   | Parameter | Effect | Lifetime |
   |---|---|---|
@@ -112,7 +115,7 @@ set in `PfApplication`); release builds keep tags out of the accessibility tree.
   right after `pm clear` Android may still kill a freshly started app process while it removes the old task, and
   the flow waits on a blank window. `clear_state.yaml` pauses for 3 s after the wipe; `sign_in.yaml` relaunches
   the app once if the phone screen still does not show up.
-- Shared steps are in `.maestro/subflows/`: `clear_state`, `login`, `sign_in` (env `PHONE`), `set_passcode`,
+- Shared steps are in `.maestro/subflows/`: `clear_state`, `config` (env `LINK`), `login`, `sign_in` (env `PHONE`), `set_passcode`,
   `enter_code` (env `CODE`), `relaunch_and_unlock` (env `CODE`).
 - Wait for screens with `extendedWaitUntil` rather than fixed sleeps; scroll to below-the-fold elements with
   `scrollUntilVisible` before tapping them.
