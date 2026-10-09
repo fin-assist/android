@@ -43,13 +43,32 @@ def source_key(path: str) -> str | None:
     return m.group(1) if m else None
 
 
+_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
+
+
 def unquote(name: str) -> str:
     """A path as git prints it in `+++` lines: quoted C-style when it has special characters
-    (`"b/caf\\303\\251.kt"`), plain otherwise."""
-    if len(name) >= 2 and name[0] == name[-1] == '"':
-        raw = name[1:-1].encode("latin-1", "backslashreplace").decode("unicode_escape")
-        return raw.encode("latin-1").decode("utf-8")
-    return name
+    (`"b/caf\\303\\251.kt"`, `"b/a\\"b.kt"`), plain otherwise. Octal escapes are UTF-8 bytes; other
+    characters (non-ASCII under `core.quotepath=off`) are taken as they are. Never raises: an undecodable
+    byte becomes U+FFFD, so the file at worst misses the report instead of failing the script."""
+    if len(name) < 2 or not (name[0] == name[-1] == '"'):
+        return name
+    body, out, i = name[1:-1], bytearray(), 0
+    while i < len(body):
+        ch = body[i]
+        if ch == "\\" and i + 1 < len(body):
+            nxt = body[i + 1]
+            if body[i + 1:i + 4].isdigit() and len(body[i + 1:i + 4]) == 3:
+                out.append(int(body[i + 1:i + 4], 8) & 0xFF)
+                i += 4
+                continue
+            if nxt in _ESCAPES:
+                out.append(_ESCAPES[nxt])
+                i += 2
+                continue
+        out += ch.encode("utf-8")
+        i += 1
+    return out.decode("utf-8", errors="replace")
 
 
 def parse_diff(text: str) -> dict[str, set[int]]:

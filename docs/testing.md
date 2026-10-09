@@ -42,11 +42,14 @@ python3 scripts/coverage-diff.py --base origin/main
 - Variant `unit`: the JVM tests of pure Kotlin modules, `debug` unit tests of Android libraries, `mockDebug` of
   `:app`. Release, `prod` and `e2e` variants are not run for coverage.
 - Excluded from the report (root `build.gradle.kts`): generated code (Hilt/Dagger, kotlinx.serialization
-  serializers, `R`, `BuildConfig`, `ComposableSingletons`), `@Composable` and `@Preview` functions, Dagger
-  `@Module`s and Dagger-generated factories (`@DaggerGenerated`, `*Module_*Factory`), and
-  `:core:screenshot-testing`. Stays in: `Companion.serializer()` of `@Serializable` classes (one line each,
-  about 2 % of the total) — Kover cannot tell those companions from hand-written ones. Composables are checked by design check and Maestro; leaving them
-  in would make the number about UI code that unit tests are not meant to run.
+  serializers, `R`, `BuildConfig`, `ComposableSingletons`, `HiltWrapper_*`, Dagger-generated factories — `@DaggerGenerated`,
+  `*Module_*Factory`), `@Composable` and `@Preview` functions, and `:core:screenshot-testing`. Composables are
+  checked by design check and Maestro; leaving them in would make the number about UI code that unit tests are
+  not meant to run.
+- Stays in: hand-written Dagger `@Module`s — a `@Provides` method can hold real logic (`NetworkModule.client()`
+  sets up the refresh dispatcher and timeouts); plain wiring there is a fine reason for an uncovered line in the
+  PR. Also `Companion.serializer()` of `@Serializable` classes (one line each, about 2 % of the total) — Kover
+  cannot tell those companions from hand-written ones.
 - Maestro and instrumented tests do not feed the number: it is unit coverage only.
 - `scripts/coverage-diff.py` counts the changed lines of production source sets (`src/main`, `src/mock`, …)
   that the report knows as executable; comments, declarations, tests and excluded code do not count. A line
@@ -57,7 +60,7 @@ python3 scripts/coverage-diff.py --base origin/main
 
 - Changed lines: at least **80 %** covered. Lines left uncovered are listed in the PR («Проверка») with the
   reason (e.g. platform glue that only an instrumented test can reach).
-- Project: the baseline on 2026-10-09 (`release/0.2` cut) is 35.9 % of lines, 27.4 % of branches. It should only
+- Project: the baseline on 2026-10-09 (`release/0.2` cut) is 35.6 % of lines, 27.3 % of branches. It should only
   go up.
 
 ### In CI

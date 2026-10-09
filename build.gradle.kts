@@ -8,7 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.hilt) apply false
-    // Unit test coverage of all modules in one report: `./gradlew koverHtmlReportUnit` (docs/testing.md).
+    // Unit test coverage of all modules in one report: `./gradlew :koverHtmlReportUnit` (docs/testing.md).
     alias(libs.plugins.kover)
     // Enforces the module dependency rules (see docs/modules.md). Fails the build on a violation.
     id("pf.module.rules")
@@ -33,12 +33,13 @@ kover {
                 // Generated code: Hilt/Dagger, kotlinx.serialization, Android resources and BuildConfig.
                 // `*Module_*Factory`: factories of @Provides methods (`NetworkModule_ClientFactory`); the
                 // `@DaggerGenerated` annotation below catches the same classes, the pattern is a fallback.
+                // Hand-written @Module classes stay in: @Provides methods may hold real logic (client setup).
                 // Not excluded: `Companion.serializer()` of @Serializable classes (one line each, ~2 % of the
                 // total) — Kover cannot tell those companions from hand-written ones.
                 classes(
                     "*.BuildConfig", "*.R", "*.R$*",
-                    "Hilt_*", "*.Hilt_*", "*_HiltModules*", "*_Factory", "*_Factory$*", "*Module_*Factory",
-                    "*_MembersInjector",
+                    "Hilt_*", "*.Hilt_*", "HiltWrapper_*", "*.HiltWrapper_*", "*_HiltModules*",
+                    "*_Factory", "*_Factory$*", "*Module_*Factory", "*_MembersInjector",
                     "*_GeneratedInjector", "*_ComponentTreeDeps", "*_HiltComponents*",
                     "dagger.hilt.internal.*", "hilt_aggregated_deps.*",
                     "*\$\$serializer",
@@ -49,7 +50,6 @@ kover {
                 annotatedBy(
                     "androidx.compose.runtime.Composable",
                     "androidx.compose.ui.tooling.preview.Preview",
-                    "dagger.Module",
                     "dagger.internal.DaggerGenerated",
                 )
             }

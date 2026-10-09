@@ -77,6 +77,13 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(changed["app/src/main/kotlin/ru/pf/Café.kt"], {1, 2})
         self.assertEqual(changed["app/src/main/kotlin/ru/pf/With Space.kt"], {1})
 
+    def test_unquote_mixed_escapes_and_non_ascii(self):
+        self.assertEqual(cov.unquote('"b/x/Caf\\303\\251.kt"'), "b/x/Café.kt")
+        self.assertEqual(cov.unquote('"b/x/Café \\"q\\".kt"'), 'b/x/Café "q".kt')
+        self.assertEqual(cov.unquote('"b/x/a\\\\b\\tc.kt"'), "b/x/a\\b\tc.kt")
+        self.assertEqual(cov.unquote("b/plain.kt"), "b/plain.kt")
+        self.assertEqual(cov.unquote('"b/x/\\377.kt"'), "b/x/\ufffd.kt")
+
     def test_report_counts_partly_covered_line_as_covered(self):
         lines = cov.parse_report(REPORT)["ru/pf/x/Vm.kt"]
         self.assertEqual(lines, {11: True, 13: False, 23: True, 40: False})
