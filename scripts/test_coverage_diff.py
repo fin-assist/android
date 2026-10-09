@@ -110,6 +110,20 @@ class ComputeTest(unittest.TestCase):
         self.assertIn("**66.7 %** (2/3)", text)
         self.assertIn("| `feature/x/impl/src/main/kotlin/ru/pf/x/Vm.kt` | 2/3 | 13 |", text)
 
+    def test_render_totals_only_without_base(self):
+        text = cov.render([], cov.report_totals(REPORT), None)
+        self.assertIn("lines 70.0 %", text)
+        self.assertNotIn("Changed lines", text)
+
+    def test_render_puts_uncovered_files_first_and_truncates(self):
+        files = [cov.FileCoverage(f"m/src/main/kotlin/F{i}.kt", covered=[1], missed=[2] if i % 2 else [])
+                 for i in range(6)]
+        text = cov.render(files, cov.report_totals(REPORT), "b", max_files=3)
+        rows = [l for l in text.splitlines() if l.startswith("| `")]
+        self.assertEqual([r.split("`")[1] for r in rows],
+                         ["m/src/main/kotlin/F1.kt", "m/src/main/kotlin/F3.kt", "m/src/main/kotlin/F5.kt"])
+        self.assertIn("…and 3 more files (0 uncovered lines): the full table is in the CI run summary.", text)
+
     def test_render_without_changes(self):
         self.assertIn("no executable production lines changed", cov.render([], cov.report_totals(REPORT), "b"))
 

@@ -65,15 +65,44 @@ jobs:
       - name: Coverage report
         run: ./gradlew :koverXmlReportUnit :koverHtmlReportUnit --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
+      # Full table in the run summary; a shorter one (50 files) for the PR comment below.
       - name: Coverage of changed lines
         if: github.event_name == 'pull_request'
         continue-on-error: true
-        run: python3 scripts/coverage-diff.py --base "origin/${{ github.base_ref }}" --summary "$GITHUB_STEP_SUMMARY"
+        run: |
+          python3 scripts/coverage-diff.py --base "origin/${{ github.base_ref }}" --summary "$GITHUB_STEP_SUMMARY" --max-files 1000
+          python3 scripts/coverage-diff.py --base "origin/${{ github.base_ref }}" --summary coverage.md > /dev/null
 
       - name: Coverage of the project
         if: github.event_name != 'pull_request'
         continue-on-error: true
-        run: python3 scripts/coverage-diff.py --base HEAD --summary "$GITHUB_STEP_SUMMARY"
+        run: python3 scripts/coverage-diff.py --summary "$GITHUB_STEP_SUMMARY"
+
+      # One comment per PR, found by its marker and edited on every push. PRs from forks get a read-only token,
+      # so they are skipped; a failed post never fails the build.
+      - name: Coverage comment on the PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && hashFiles('coverage.md') != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          marker='<!-- coverage-report (ci.yml) -->'
+          {
+            echo "$marker"
+            cat coverage.md
+            echo
+            echo "<sub>Commit ${HEAD_SHA::7} · [CI run]($RUN_URL) · HTML report: artifact \`coverage-report\` · docs/testing.md</sub>"
+          } > comment.md
+          id=$(gh api "repos/${{ github.repository }}/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n 1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$id" -F body=@comment.md > /dev/null
+          else
+            gh api "repos/${{ github.repository }}/issues/$PR/comments" -F body=@comment.md > /dev/null
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always() && hashFiles('build/reports/kover/**') != ''

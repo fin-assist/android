@@ -225,5 +225,5 @@ commands: `docs/testing.md`.
   reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md,
   and that the PR has the `e2e` label (see Code).
 - Check that new functionality comes with tests (see Tests) and that the tests would fail if the behaviour
-  broke; flag changed lines the «Coverage of changed lines» summary of the CI run shows as uncovered when the
-  PR gives no reason for them.
+  broke; flag changed lines the «Unit test coverage» comment of the PR (posted by CI) shows as uncovered when
+  the PR gives no reason for them.
