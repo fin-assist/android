@@ -4,8 +4,11 @@ tags:
   - analytics
   - flags
 ---
-- clearState
-- openLink: "pfe2e://config?flag.analytics.block.tiles=false&flag.analytics.block.expense_categories=false&flag.analytics.filter.transfers=false&flag.assistant=false"
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?flag.analytics.block.tiles=false&flag.analytics.block.expense_categories=false&flag.analytics.filter.transfers=false&flag.assistant=false"
 - runFlow: ../../subflows/login.yaml
 - tapOn:
     id: "ds.tab.analytics"

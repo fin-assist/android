@@ -4,7 +4,7 @@ tags:
   - smoke
   - operations
 ---
-- clearState
+- runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/login.yaml
 - tapOn:
     id: "operations.row"

@@ -6,7 +6,21 @@ appId: ru.finassist.pf.mock.e2e
 - extendedWaitUntil:
     visible:
       id: "auth.phone"
-    timeout: 40000
+    timeout: 20000
+    optional: true
+# A blank window instead of the phone screen: the process died on start (see clear_state.yaml). Start it once
+# more; flag overrides set before are in the app's storage and survive the restart. Process-scoped control values
+# (`offline`, `call_delay_ms`) would be lost: a flow that needs them before signing in must not rely on this subflow.
+- runFlow:
+    when:
+      notVisible:
+        id: "auth.phone"
+    commands:
+      - launchApp
+      - extendedWaitUntil:
+          visible:
+            id: "auth.phone"
+          timeout: 40000
 - tapOn:
     id: "auth.phone.input"
 - inputText: ${PHONE}

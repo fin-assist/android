@@ -3,14 +3,17 @@ name: Проверка номера и «Изменить номер» на эк
 tags:
   - auth
 ---
-- clearState
+- runFlow: ../../subflows/clear_state.yaml
 - launchApp
 - extendedWaitUntil:
     visible:
       id: "auth.phone"
     timeout: 20000
 # The call «arrives» after a minute: enough time to look at the call screen.
-- openLink: "pfe2e://config?call_delay_ms=60000"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_delay_ms=60000"
 - extendedWaitUntil:
     visible:
       id: "auth.phone"

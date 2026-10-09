@@ -1,0 +1,15 @@
+# Wipes the app data and lets the system finish with the old process before anything starts the app again.
+# After `pm clear` Android still removes the app's old task; on a slow emulator that hits a ~1 s timeout, and the
+# system then kills every process of the app — including one launched right after the wipe (logcat:
+# «Destroy timeout of remove-task … Killing <pid> … remove task»). The flow would wait on a blank window (FIN-44).
+# Every flow starts with this instead of a bare `clearState`.
+appId: ru.finassist.pf.mock.e2e
+---
+- clearState
+# Maestro has no plain sleep: wait for an id that never exists, without failing the flow.
+# `e2e.never` is reserved for this: never use it as a test tag.
+- extendedWaitUntil:
+    visible:
+      id: "e2e.never"
+    timeout: 3000
+    optional: true

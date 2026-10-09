@@ -4,9 +4,12 @@ tags:
   - auth
   - flags
 ---
-- clearState
-- openLink: "pfe2e://config?flag.auth.registration=false"
-# stopApp: false — an openLink right before this may still be writing a flag override in this process.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?flag.auth.registration=false"
+# stopApp: false — keep the process a control link may have just started (no need for a second cold start).
 - launchApp:
     stopApp: false
 - runFlow:
