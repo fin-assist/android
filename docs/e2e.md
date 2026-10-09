@@ -106,6 +106,27 @@ set in `PfApplication`); release builds keep tags out of the accessibility tree.
   Prefer ids to texts: texts are fine for checking content, not for finding controls.
 - Renaming a tag breaks flows: search `.maestro/` first.
 
+## When a change needs a UI test
+
+A PR that adds or changes something the user does or sees covers it in the same PR (rule in `AGENTS.md`, Code):
+
+| Change | UI test |
+|---|---|
+| New screen, sheet or dialog | a flow that reaches it and checks what it is for (not only that it opens) |
+| New state of a screen: error, empty, offline, limit | a flow that brings the app into it (fixture file, control link, flag) |
+| New step or branch between screens | the feature's flow walks the new path; a separate flow when it is a scenario of its own |
+| Flag that changes behaviour | a flow with the flag switched (`config.yaml`), next to the default path |
+| User-visible bug fix | a check that fails without the fix: the flow reproduces the bug |
+| Copy, colours, layout only | none — the design check covers it |
+| Logic without UI (parsing, accounting, API) | unit tests, not UI tests |
+
+Maestro is the default. A native test (`app/src/androidTestMock`) covers what Maestro cannot drive — system
+pickers, intents, permissions; keep it to that gap. When a scenario cannot run on the emulator, list it under
+«Not covered yet» below with the reason and say so in the PR.
+
+Every new or renamed test: a Qase case (suite of the feature, steps and expected results in Russian, automated),
+a line in `scripts/qase-cases.json`, a row in «Coverage». The PR gets the `e2e` label so the flows run before merge.
+
 ## Writing a flow
 
 - One file per scenario under `.maestro/flows/<feature>/`, `name` in Russian, tags: the feature and `smoke` for the

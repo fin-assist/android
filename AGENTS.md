@@ -153,9 +153,19 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - A screen is a thin ViewModel wrapper around `…Content(state, handlers)`; design-check tests render the
   content from mockup data (`design-check/README.md`).
 - Flags are read at the screen boundary (view model init or `FeatureEntry`), never mid-screen.
-- New or changed screens: tag the root, the controls and the checked states (`<feature>.<screen>[.<element>]`,
-  shared components `ds.*`), and add or update the Maestro flow (docs/e2e.md). Renaming a tag means updating
-  `.maestro/`. A new or renamed flow also updates its Qase case and `scripts/qase-cases.json` (docs/e2e.md, «Qase»).
+- A PR that adds or changes a user scenario covers it with a UI test in the same PR (docs/e2e.md, «When a change
+  needs a UI test»). A scenario is what the user does and sees: a new screen or state, a step between screens, an
+  error, empty or offline path they can reach, a flag that changes behaviour, a user-visible bug fix (the flow
+  reproduces the bug first).
+  - Maestro by default: extend the feature's flow or add one under `.maestro/flows/<feature>/`. A native test in
+    `app/src/androidTestMock` only for what Maestro cannot drive (system pickers, intents, permissions).
+  - Tag the root, the controls and the checked states (`<feature>.<screen>[.<element>]`, shared components `ds.*`).
+    Renaming a tag means updating `.maestro/`.
+  - A new or renamed test also updates its Qase case, `scripts/qase-cases.json` and the coverage table in
+    docs/e2e.md («Qase», «Coverage»).
+  - Not automatable on the emulator (biometrics, voice): add it to «Not covered yet» in docs/e2e.md and say so in
+    the PR.
+  - Put the `e2e` label on the PR: the UI tests run on it before merge, not only after.
 - Document in moderation: KDoc on public `:api` interfaces, comments where logic is non-obvious
   (accounting rules, idempotency, animation), not on every method.
 
@@ -184,3 +194,5 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   not only in a summary comment; the summary lists what was checked.
 - Check that the PR updates this file and `docs/` when it changes what they describe.
 - Check that a new screen, screen state, bottom sheet or dialog comes with its `*DesignCheckTest` (see Code).
+- Check that a new or changed user scenario comes with a UI test (or a «Not covered yet» entry with the reason), its
+  Qase case and map line, and that the PR has the `e2e` label (see Code).
