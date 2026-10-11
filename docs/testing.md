@@ -7,7 +7,7 @@ checks what:
 |---|---|---|---|
 | Unit (JUnit 4, coroutines-test, Turbine) | logic: domain rules, mappers, repositories, view models, the fake backend, `core/*` helpers | `src/test/` of the module | CI on every push and PR |
 | Design check (Robolectric + Roborazzi) | how a screen, state, sheet or dialog looks next to its mockup | `*DesignCheckTest` in feature `:impl` | by hand, `-Ppf.designcheck` (design-check/README.md) |
-| Maestro | user scenarios end to end on the mock build | `.maestro/flows/<feature>/` | emulator; CI after merges to `main` and on PRs labelled `e2e` (docs/e2e.md) |
+| Maestro | user scenarios end to end on the mock build | `.maestro/flows/<feature>/` | emulator; CI only after merges to `main` (docs/e2e.md) |
 | Native instrumented | what Maestro cannot drive: system dialogs, intents, permissions | `app/src/androidTestMock/` | same as Maestro |
 
 What a change needs:
