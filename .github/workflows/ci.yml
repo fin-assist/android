@@ -65,13 +65,17 @@ jobs:
       - name: Coverage report
         run: ./gradlew :koverXmlReportUnit :koverHtmlReportUnit --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
-      # Full table in the run summary; a shorter one (50 files) for the PR comment below.
+      # Full table in the run summary; a capped one (50 files, short cells) for the PR comment below. The branch
+      # name goes through env, never into the script text.
       - name: Coverage of changed lines
         if: github.event_name == 'pull_request'
         continue-on-error: true
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          python3 scripts/coverage-diff.py --base "origin/${{ github.base_ref }}" --summary "$GITHUB_STEP_SUMMARY" --max-files 1000
-          python3 scripts/coverage-diff.py --base "origin/${{ github.base_ref }}" --summary coverage.md > /dev/null
+          rm -f coverage.md
+          python3 scripts/coverage-diff.py --base "origin/$BASE_REF" --summary "$GITHUB_STEP_SUMMARY" --full
+          python3 scripts/coverage-diff.py --base "origin/$BASE_REF" --summary coverage.md > /dev/null
 
       - name: Coverage of the project
         if: github.event_name != 'pull_request'
@@ -97,7 +101,8 @@ jobs:
             echo "<sub>Commit ${HEAD_SHA::7} · [CI run]($RUN_URL) · HTML report: artifact \`coverage-report\` · docs/testing.md</sub>"
           } > comment.md
           id=$(gh api "repos/${{ github.repository }}/issues/$PR/comments" --paginate \
-            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n 1)
+            | jq -rs --arg m "$marker" \
+              '[.[][] | select(.user.login == "github-actions[bot]" and (.body | startswith($m)))][0].id // empty')
           if [ -n "$id" ]; then
             gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$id" -F body=@comment.md > /dev/null
           else

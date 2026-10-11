@@ -10,7 +10,7 @@ Usage:
   ./gradlew :koverXmlReportUnit
   python3 scripts/coverage-diff.py --base origin/main                 # Markdown to stdout
   python3 scripts/coverage-diff.py --base origin/main --min 80        # exit 1 below 80 %
-  python3 scripts/coverage-diff.py --base … --summary "$GITHUB_STEP_SUMMARY" --max-files 1000
+  python3 scripts/coverage-diff.py --base … --summary "$GITHUB_STEP_SUMMARY" --full
   python3 scripts/coverage-diff.py                                    # project totals only (no diff)
 
 Standard library only, so CI runs it without pip.
@@ -158,15 +158,36 @@ def percent(covered: int, total: int) -> str:
     return f"{100 * covered / total:.1f} %" if total else "—"
 
 
-# A PR comment is limited to 65 536 characters; a few hundred table rows stay well below it.
+# A PR comment is limited to 65 536 characters. 50 rows with the «Not covered» cell capped at MAX_CELL stay
+# well below it; MAX_TEXT is the last guard for whatever else grows (long paths).
 MAX_FILES = 50
+MAX_CELL = 200
+MAX_TEXT = 60_000
+
+
+def code(text: str) -> str:
+    """`text` as a Markdown code span. Backticks are replaced so a file name cannot close the span and turn the
+    rest into Markdown (or an @mention) in the PR comment."""
+    return "`" + text.replace("`", "'") + "`"
+
+
+def cell(text: str, limit: int = MAX_CELL) -> str:
+    """Cut a table cell to `limit` characters at a separator, marking the cut."""
+    if len(text) <= limit:
+        return text
+    cut = text.rfind(", ", 0, limit)
+    return (text[:cut] if cut > 0 else text[:limit]) + ", …"
 
 
 def render(files: list[FileCoverage], totals: dict[str, tuple[int, int]], base: str | None,
-           max_files: int = MAX_FILES) -> str:
+           max_files: int | None = MAX_FILES, max_cell: int | None = MAX_CELL,
+           max_text: int | None = MAX_TEXT) -> str:
     """Markdown report: project totals, then (with a base) changed-line coverage and a table per file.
 
-    The table lists files with uncovered lines first; beyond `max_files` rows the rest is summarised in one line."""
+    The table lists files with uncovered lines first; beyond `max_files` rows the rest is summarised in one line.
+    The «Not covered» cell is capped at `max_cell` characters and the whole text at `max_text`; `None` lifts a
+    limit (the CI run summary shows the full table)."""
+    max_files = None if max_files is None else max(max_files, 1)
     out = ["### Unit test coverage", ""]
     line_c, line_m = totals.get("LINE", (0, 0))
     branch_c, branch_m = totals.get("BRANCH", (0, 0))
@@ -177,18 +198,24 @@ def render(files: list[FileCoverage], totals: dict[str, tuple[int, int]], base: 
     covered = sum(len(f.covered) for f in files)
     total = covered + sum(len(f.missed) for f in files)
     if not total:
-        out.append(f"Changed lines vs `{base}`: no executable production lines changed.")
+        out.append(f"Changed lines vs {code(base)}: no executable production lines changed.")
         return "\n".join(out) + "\n"
-    out.append(f"Changed lines vs `{base}`: **{percent(covered, total)}** ({covered}/{total}).")
+    out.append(f"Changed lines vs {code(base)}: **{percent(covered, total)}** ({covered}/{total}).")
     ordered = [f for f in files if f.missed] + [f for f in files if not f.missed]
     out += ["", "| File | Covered | Not covered |", "|---|---|---|"]
-    for f in ordered[:max_files]:
-        out.append(f"| `{f.path}` | {len(f.covered)}/{len(f.covered) + len(f.missed)} | {ranges(f.missed) or '—'} |")
-    rest = ordered[max_files:]
+    shown, rest = (ordered, []) if max_files is None else (ordered[:max_files], ordered[max_files:])
+    for f in shown:
+        gaps = ranges(f.missed)
+        gaps = cell(gaps, max_cell) if max_cell is not None else gaps
+        out.append(f"| {code(f.path)} | {len(f.covered)}/{len(f.covered) + len(f.missed)} | {gaps or '—'} |")
     if rest:
         missed = sum(len(f.missed) for f in rest)
-        out += ["", f"…and {len(rest)} more files ({missed} uncovered lines): the full table is in the CI run summary."]
-    return "\n".join(out) + "\n"
+        out += ["", f"…and {len(rest)} more files ({missed} uncovered lines): "
+                    "the full table is in the CI run summary."]
+    text = "\n".join(out) + "\n"
+    if max_text is not None and len(text) > max_text:
+        text = text[:text.rfind("\n", 0, max_text)] + "\n\n…cut: the full table is in the CI run summary.\n"
+    return text
 
 
 # --- entry point --------------------------------------------------------------------------------------------
@@ -202,22 +229,34 @@ def git_diff(base: str) -> str:
     ).stdout
 
 
-def main() -> int:
+def positive_int(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {number}")
+    return number
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--base", help="ref the branch is compared with, e.g. origin/main; omit for totals only")
     parser.add_argument("--report", type=Path, default=REPORT, help=f"Kover XML report (default {REPORT.relative_to(ROOT)})")
     parser.add_argument("--min", type=float, help="fail when changed-line coverage is below this percentage")
     parser.add_argument("--summary", type=Path, action="append", default=[],
                         help="also append the Markdown to this file ($GITHUB_STEP_SUMMARY); repeatable")
-    parser.add_argument("--max-files", type=int, default=MAX_FILES, help=f"table rows (default {MAX_FILES})")
-    args = parser.parse_args()
+    parser.add_argument("--max-files", type=positive_int, default=MAX_FILES, help=f"table rows (default {MAX_FILES})")
+    parser.add_argument("--full", action="store_true",
+                        help="no limits on rows, cell or text length (for the CI run summary)")
+    args = parser.parse_args(argv)
+    if args.min is not None and args.base is None:
+        parser.error("--min checks changed lines and needs --base")
 
     if not args.report.exists():
         print(f"coverage-diff: {args.report} not found; run ./gradlew :koverXmlReportUnit first", file=sys.stderr)
         return 1
     xml = args.report.read_text(encoding="utf-8")
     files = diff_coverage(parse_diff(git_diff(args.base)), parse_report(xml)) if args.base else []
-    text = render(files, report_totals(xml), args.base, args.max_files)
+    limits = (None, None, None) if args.full else (args.max_files, MAX_CELL, MAX_TEXT)
+    text = render(files, report_totals(xml), args.base, *limits)
     print(text)
     for path in args.summary:
         with path.open("a", encoding="utf-8") as f:
