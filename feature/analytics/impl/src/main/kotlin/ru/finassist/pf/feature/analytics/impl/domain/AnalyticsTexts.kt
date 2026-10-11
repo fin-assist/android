@@ -218,4 +218,101 @@ object AnalyticsTexts {
         if (income.minor <= 0) return null
         return (income.minor - expense.minor).toDouble() / income.minor
     }
+
+    /**
+     * Filled share of a partial month's bar: the days with data over the days of the month (`PfBarChart` rounds it
+     * to a quarter). September with data to the 25th → 25/30. `null` for a complete month or one without data.
+     */
+    fun partialFill(p: MonthlyPoint): Float? {
+        if (p.coverage.effective != Coverage.PARTIAL) return null
+        val monthStart = p.range.from.toLocalDate()
+        val monthEnd = RussianDates.lastDayOf(p.range)
+        val from = p.dataFrom?.toLocalDate()?.coerceAtLeast(monthStart) ?: monthStart
+        val to = p.dataTo?.toLocalDate()?.coerceAtMost(monthEnd) ?: monthEnd
+        val days = monthStart.lengthOfMonth()
+        val gapDays = p.gaps.sumOf { g -> (RussianDates.lastDayOf(g).toEpochDay() - g.from.toLocalDate().toEpochDay() + 1).coerceAtLeast(0) }
+        val covered = (to.toEpochDay() - from.toEpochDay() + 1 - gapDays).coerceIn(0, days.toLong())
+        return covered.toFloat() / days
+    }
+
+    /**
+     * Note under the year chart (mockup `AnalyticsYear`): months without operations, then partial months —
+     * «Январь — март: в выписке нет операций. Сентябрь — по 25-е». In the current period the months after the
+     * last one with data have not come yet and are not named.
+     */
+    fun yearChartNote(points: List<MonthlyPoint>, current: Boolean): String? {
+        val lastWithData = points.indexOfLast { it.expense != null }
+        val considered = if (current && lastWithData >= 0) points.take(lastWithData + 1) else points
+        val parts = mutableListOf<String>()
+        var runStart = -1
+        fun flush(end: Int) {
+            if (runStart < 0) return
+            val from = YearMonth.parse(considered[runStart].month)
+            val to = YearMonth.parse(considered[end].month)
+            val name = (if (from == to) RussianDates.monthNominative(from.month) else RussianDates.monthRange(from, to))
+                .replaceFirstChar { it.uppercase() }
+            parts += "$name: в выписке нет операций"
+            runStart = -1
+        }
+        considered.forEachIndexed { i, p ->
+            if (p.expense == null) {
+                if (runStart < 0) runStart = i
+            } else {
+                flush(i - 1)
+            }
+        }
+        flush(considered.lastIndex)
+        considered.filter { it.expense != null }.forEach { p ->
+            barNote(p)?.let { note ->
+                parts += RussianDates.monthNominative(YearMonth.parse(p.month).month).replaceFirstChar { it.uppercase() } +
+                    " ${RussianDates.EM_DASH} $note"
+            }
+        }
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(". ")
+    }
+
+    /**
+     * Period label: «Сентябрь 2026», but «1–25 сентября 2026» while the statement covers only part of the first
+     * month (mockup `AnalyticsEarly`).
+     */
+    fun periodLabel(key: PeriodKey, period: AnalyticsPeriodInfo, type: PeriodTypeCode, early: Boolean): String {
+        val from = period.dataFrom?.toLocalDate()
+        val to = period.dataTo?.toLocalDate()
+        return if (early && type == PeriodTypeCode.MONTH && from != null && to != null) {
+            RussianDates.dayRange(from, to, withYear = true)
+        } else {
+            periodTitle(key)
+        }
+    }
+
+    /**
+     * The statement holds only part of one month: a month period with partial coverage and no earlier period to
+     * go to. The screen then has no monthly chart and names the days instead of the month.
+     */
+    fun isEarly(type: PeriodTypeCode, period: AnalyticsPeriodInfo, hasPrevious: Boolean): Boolean =
+        type == PeriodTypeCode.MONTH && !hasPrevious && period.coverage.effective == Coverage.PARTIAL
+
+    /** «5 строк за сентябрь не прочитали — суммы могут быть неполными» (a quarter or a year: «за период»). */
+    fun unreadLines(count: Int, type: PeriodTypeCode, period: AnalyticsPeriodInfo): String {
+        val span = if (type == PeriodTypeCode.MONTH) "за ${RussianDates.monthNominative(period.range.from.month)}" else "за период"
+        return "${countWithNoun(count, "строку", "строки", "строк")} $span не прочитали ${RussianDates.EM_DASH} суммы могут быть неполными"
+    }
+
+    /** «Прогноз на год» for a year, «Прогноз расходов» otherwise. */
+    fun forecastLabel(type: PeriodTypeCode): String = if (type == PeriodTypeCode.YEAR) "Прогноз на год" else "Прогноз расходов"
+
+    /**
+     * What the category total covers: the days of a month («1–25 сентября»), the months of a quarter or a year
+     * («апрель — сентябрь»).
+     */
+    fun totalCaption(type: PeriodTypeCode, period: AnalyticsPeriodInfo): String {
+        if (type != PeriodTypeCode.MONTH) {
+            val from = period.dataFrom?.let(YearMonth::from)
+            val to = period.dataTo?.let { YearMonth.from(it.minusSeconds(1)) }
+            if (from != null && to != null) return RussianDates.monthRange(from, to)
+        }
+        val from = period.dataFrom?.toLocalDate() ?: period.range.from.toLocalDate()
+        val to = period.dataTo?.toLocalDate() ?: RussianDates.lastDayOf(period.range)
+        return RussianDates.dayRange(from, to)
+    }
 }

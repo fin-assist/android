@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +23,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -54,8 +60,10 @@ import ru.finassist.pf.core.designsystem.components.PfButton
 import ru.finassist.pf.core.designsystem.components.PfCard
 import ru.finassist.pf.core.designsystem.components.PfCategoryBar
 import ru.finassist.pf.core.designsystem.components.PfChip
-import ru.finassist.pf.core.designsystem.components.PfChipRow
 import ru.finassist.pf.core.designsystem.components.PfCoachmark
+import ru.finassist.pf.core.designsystem.components.TextPart
+import ru.finassist.pf.core.designsystem.components.PfLinkedText
+import ru.finassist.pf.core.designsystem.components.PfDivider
 import ru.finassist.pf.core.designsystem.components.PfDataRow
 import ru.finassist.pf.core.designsystem.components.PfEmptyState
 import ru.finassist.pf.core.designsystem.components.PfInsightCard
@@ -123,13 +131,21 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
             state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(AnalyticsTags.OFFLINE)) {
                 PfButton("Повторить", onClick = { vm.load() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
             }
-            a == null || !a.hasData -> PfEmptyState(
-                PfIcons.BAR_CHART,
-                "Аналитики пока нет",
-                if (state.blocks.upload) "Загрузите выписку Т-Банка — посчитаем расходы и доходы по категориям" else null,
-                modifier = Modifier.testTag(AnalyticsTags.EMPTY),
+            a == null || !a.hasData -> Column(
+                Modifier.weight(1f).fillMaxWidth().padding(start = d.space5, end = d.space5, bottom = d.space6).testTag(AnalyticsTags.EMPTY),
+                verticalArrangement = Arrangement.Center,
             ) {
-                if (state.blocks.upload) PfButton("Загрузить выписку", onClick = actions.openUpload, variant = ButtonVariant.PRIMARY, icon = PfIcons.UPLOAD)
+                PfEmptyState(
+                    PfIcons.BAR_CHART,
+                    "Аналитики пока нет",
+                    if (state.blocks.upload) {
+                        "Загрузите выписку — покажем расходы по категориям, доходы и разницу между ними, и помощник сможет ответить на вопросы о ваших деньгах"
+                    } else {
+                        null
+                    },
+                    padding = PaddingValues(start = d.space8, top = d.space8, end = d.space8, bottom = d.space6),
+                )
+                if (state.blocks.upload) PfButton("Загрузить выписку", onClick = actions.openUpload, variant = ButtonVariant.PRIMARY, block = true)
             }
             else -> Column(
                 Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(top = d.space2, bottom = d.space6),
@@ -169,58 +185,58 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
             exhausted = limit != null && limit.remaining <= 0,
         )
     }
-    if (state.hint == AnalyticsHint.ASK) {
-        Gap(d.space3)
-        PfCoachmark(
-            "Спросите помощника о своих расходах — он посчитает по вашим операциям. 5 вопросов в день",
-            onClose = { vm.nextHint(stop = false) },
-            onNever = { vm.nextHint(stop = true) },
-        )
-    }
-    a.state?.takeIf { it.stale }?.lastOperationAt?.let { last ->
-        Gap(d.space3)
-        PfNotice(
-            "Операции в приложении по ${RussianDates.day(last.toLocalDate())} — с тех пор прошло больше двух недель",
-            tone = NoticeTone.WARNING,
-            action = if (blocks.upload) ({ PfLink("Загрузить новую выписку", onClick = actions.openUpload, inline = true) }) else null,
-        )
-    }
-    Gap(d.space3)
-    PfPeriodNav(
-        label = AnalyticsTexts.periodTitle(params.date),
-        onPrev = a.navigation?.previous?.let { key -> { vm.goTo(key) } },
-        onNext = a.navigation?.next?.let { key -> { vm.goTo(key) } },
-        onPick = { vm.openSheet(AnalyticsSheet.PERIODS) },
-        unitName = AnalyticsTexts.unitName(params.period),
-    )
-    Gap(d.space2)
-    PfSegmentedControl(
-        options = listOf("Месяц", "Квартал", "Год"),
-        selected = PERIOD_TYPES.indexOf(params.period).coerceAtLeast(0),
-        onSelect = { vm.setPeriodType(PERIOD_TYPES[it]) },
-    )
-    if (blocks.transfersFilter) {
-        Gap(d.space3)
-        PfChipRow {
-            val without = params.transferMode.effective == TransferMode.WITHOUT
-            PfChip(
-                if (without) "Без переводов" else "С переводами", onClick = { vm.openSheet(AnalyticsSheet.TRANSFERS) }, selected = without, dropdown = true,
-                modifier = Modifier.testTag(AnalyticsTags.TRANSFERS),
+    val early = AnalyticsTexts.isEarly(params.period, period, hasPrevious = a.navigation?.previous != null)
+    // The coachmark lies over the controls under the card (mockup `AnalyticsHintAsk`) and does not move them.
+    WithCoachmark(
+        show = state.hint == AnalyticsHint.ASK,
+        text = "Помощник отвечает по вашим операциям, 5 вопросов в день",
+        vm = vm,
+    ) {
+        a.state?.takeIf { it.stale }?.lastOperationAt?.let { last ->
+            Gap(d.space3)
+            PfNotice(
+                "Операции в приложении по ${RussianDates.day(last.toLocalDate())} — с тех пор прошло больше двух недель",
+                tone = NoticeTone.INFO,
+                action = if (blocks.upload) ({ PfLink("Загрузить новую выписку", onClick = actions.openUpload) }) else null,
             )
+        }
+        Gap(d.space3)
+        PfPeriodNav(
+            label = AnalyticsTexts.periodLabel(params.date, period, params.period, early),
+            onPrev = a.navigation?.previous?.let { key -> { vm.goTo(key) } },
+            onNext = a.navigation?.next?.let { key -> { vm.goTo(key) } },
+            onPick = { vm.openSheet(AnalyticsSheet.PERIODS) },
+            unitName = AnalyticsTexts.unitName(params.period),
+        )
+        Gap(d.space2)
+        PfSegmentedControl(
+            options = listOf("Месяц", "Квартал", "Год"),
+            selected = PERIOD_TYPES.indexOf(params.period).coerceAtLeast(0),
+            onSelect = { vm.setPeriodType(PERIOD_TYPES[it]) },
+        )
+        if (blocks.transfersFilter) {
+            Gap(d.space3)
+            Row {
+                val without = params.transferMode.effective == TransferMode.WITHOUT
+                PfChip(
+                    if (without) "Без переводов" else "С переводами", onClick = { vm.openSheet(AnalyticsSheet.TRANSFERS) }, selected = without, dropdown = true,
+                    modifier = Modifier.testTag(AnalyticsTags.TRANSFERS),
+                )
+            }
         }
     }
     a.state?.let { s ->
         if (s.unreadLinesCount > 0) {
+            // A caption with an inline link, not a notice (mockup `AnalyticsPartial`).
             Gap(d.space3)
-            PfNotice(
-                "${countWithNoun(s.unreadLinesCount, "строку", "строки", "строк")} за период не прочитали — суммы могут быть неполными",
-                tone = NoticeTone.WARNING,
-                action = {
-                    PfLink(
-                        "Подробнее", onClick = { actions.openUnreadLines(period.range.from.toApiString(), period.range.to.toApiString()) }, inline = true,
-                        modifier = Modifier.testTag(AnalyticsTags.UNREAD),
-                    )
-                },
+            PfLinkedText(
+                listOf(
+                    TextPart.Plain(AnalyticsTexts.unreadLines(s.unreadLinesCount, params.period, period) + " · "),
+                    TextPart.Link("Подробнее", AnalyticsTags.UNREAD) {
+                        actions.openUnreadLines(period.range.from.toApiString(), period.range.to.toApiString())
+                    },
+                ),
+                modifier = Modifier.testTag(AnalyticsTags.UNREAD),
             )
         }
         if (s.recalculating) {
@@ -228,22 +244,27 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
             PfNotice("Пересчитываем после изменений — цифры обновятся через несколько секунд", tone = NoticeTone.INFO)
         }
     }
-    // A past month or an incomplete quarter/year says which part of it the numbers cover.
-    (AnalyticsTexts.partialPeriod(period, params.period) ?: AnalyticsTexts.coverage(period).takeIf { !period.isCurrent })?.let {
+    // A past month or an incomplete quarter/year says which part of it the numbers cover; the tiles follow 8 dp
+    // under it (mockup `AnalyticsYear`: `margin-bottom: space-2 − space-4`).
+    val coverageCaption = AnalyticsTexts.partialPeriod(period, params.period) ?: AnalyticsTexts.coverage(period).takeIf { !period.isCurrent }
+    coverageCaption?.let {
         Gap(d.space4)
         Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
     }
 
     if (blocks.tiles && a.tiles != null) {
-        Gap(d.space4)
+        Gap(if (coverageCaption != null) d.space2 else d.space4)
         Block(AnalyticsTags.BLOCK_TILES) { Tiles(a, vm, actions) }
     }
 
-    if (blocks.monthlyChart) a.monthlyChart?.let { chart -> Block(AnalyticsTags.BLOCK_MONTHLY_CHART) { ExpenseChart(a, chart) } }
+    // While the statement covers only part of one month there is nothing to chart by month (mockup `AnalyticsEarly`).
+    if (blocks.monthlyChart && !early) a.monthlyChart?.let { chart -> Block(AnalyticsTags.BLOCK_MONTHLY_CHART) { ExpenseChart(a, chart) } }
 
     if (blocks.expenseCategories) a.expenseCategories?.let { b ->
         Gap(d.space6)
-        Block(AnalyticsTags.BLOCK_EXPENSE_CATEGORIES) { ExpenseBreakdown(b, a.tiles?.expense?.value, periodCaption(period), state, vm, actions.openSearch) }
+        Block(AnalyticsTags.BLOCK_EXPENSE_CATEGORIES) {
+            ExpenseBreakdown(b, a.tiles?.expense?.value, periodCaption(period), AnalyticsTexts.totalCaption(params.period, period), state, vm, actions.openSearch)
+        }
     }
     if (blocks.incomeCategories) a.incomeCategories?.let { b ->
         Gap(d.space4)
@@ -255,6 +276,30 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
 
 @Composable
 private fun Gap(height: androidx.compose.ui.unit.Dp) = Spacer(Modifier.height(height))
+
+/** Partial bar fill when a point does not say which days it covers. */
+private const val DEFAULT_PARTIAL_FILL = 0.5f
+
+/**
+ * [content] with a coachmark laid over its top, 12 dp down (mockups: `position: absolute; top: space-3`): the
+ * hint covers what lies under it instead of pushing the screen down.
+ */
+@Composable
+private fun WithCoachmark(show: Boolean, text: String, vm: AnalyticsHandlers, content: @Composable ColumnScope.() -> Unit) {
+    if (!show) {
+        Column(Modifier.fillMaxWidth(), content = content)
+        return
+    }
+    Box(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth(), content = content)
+        PfCoachmark(
+            text,
+            onClose = { vm.nextHint(stop = false) },
+            onNever = { vm.nextHint(stop = true) },
+            modifier = Modifier.padding(top = PfTheme.dimens.space3).zIndex(1f),
+        )
+    }
+}
 
 /** A screen block under one test tag — the tags match the `analytics.block.*` flags that switch the blocks off. */
 @Composable
@@ -281,7 +326,7 @@ private fun Tiles(a: Analytics, vm: AnalyticsHandlers, actions: AnalyticsActions
                 PfStatTile("Расходы", m.testTag("analytics.tile.forecast"), value = tiles.expense.value?.format(), note = periodCaption(period), chartId = "analytics.tile.forecast", onClick = open("expense", tiles.expense.filters))
             } else {
                 Tile(
-                    "Прогноз расходов", f, a, m, note = AnalyticsTexts.forecastNote(params.date),
+                    AnalyticsTexts.forecastLabel(params.period), f, a, m, note = AnalyticsTexts.forecastNote(params.date),
                     approx = true, chartId = "analytics.tile.forecast",
                 )
             }
@@ -352,8 +397,13 @@ private fun ExpenseChart(a: Analytics, chart: ru.finassist.pf.core.api.model.Mon
     val points = chart.points!!
     // Expenses are signed (refunds can exceed purchases): scale by the largest magnitude, keep the sign.
     val maxValue = points.mapNotNull { it.expense?.minor?.let { m -> kotlin.math.abs(m) } }.maxOrNull()?.coerceAtLeast(1) ?: 1
-    // Month mode highlights the selected month; quarter and year — the last month of the period.
+    // Month mode highlights the selected month, a quarter its last month; a year highlights none (mockup `AnalyticsYear`).
     val selected = points.indexOfFirst { it.month == params.date.value }
+    val highlight = when {
+        selected >= 0 -> selected
+        params.period == PeriodTypeCode.YEAR -> -1
+        else -> points.lastIndex
+    }
     PfCard {
         PfBarChart(
             chartId = "analytics.expense.monthly",
@@ -367,10 +417,11 @@ private fun ExpenseChart(a: Analytics, chart: ru.finassist.pf.core.api.model.Mon
                     value = p.expense?.minor?.toFloat()?.div(maxValue),
                     display = p.expense?.format() ?: "нет данных",
                     partial = p.coverage.effective == Coverage.PARTIAL,
+                    partialFill = AnalyticsTexts.partialFill(p) ?: DEFAULT_PARTIAL_FILL,
                     note = note,
                 )
             },
-            highlight = if (selected >= 0) selected else points.lastIndex,
+            highlight = highlight,
             height = 96.dp,
         )
         val expense = a.tiles?.expense
@@ -380,7 +431,12 @@ private fun ExpenseChart(a: Analytics, chart: ru.finassist.pf.core.api.model.Mon
             AnalyticsTexts.peakMonth(points)
         }
         main?.let { Text(it, style = PfTheme.type.body, color = PfTheme.colors.text, modifier = Modifier.padding(top = d.space4)) }
-        AnalyticsTexts.typical(expense?.typical)?.let {
+        val secondary = if (params.period == PeriodTypeCode.YEAR) {
+            AnalyticsTexts.yearChartNote(points, a.period?.isCurrent == true)
+        } else {
+            AnalyticsTexts.typical(expense?.typical)
+        }
+        secondary?.let {
             Text(it, style = PfTheme.type.hint, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = d.space1))
         }
     }
@@ -418,6 +474,7 @@ private fun BalanceSection(a: Analytics) {
                         value = share?.let { (it / maxShare).toFloat() },
                         display = share?.let { "${if (it < 0) Money.MINUS else ""}${kotlin.math.abs((it * 100).roundToInt())}%" } ?: "нет данных",
                         partial = p.coverage.effective == Coverage.PARTIAL,
+                        partialFill = AnalyticsTexts.partialFill(p) ?: DEFAULT_PARTIAL_FILL,
                         note = AnalyticsTexts.barNote(p),
                     )
                 },
@@ -446,6 +503,7 @@ private fun ExpenseBreakdown(
     b: CategoryBreakdown,
     total: Money?,
     caption: String,
+    totalCaption: String,
     state: AnalyticsUiState,
     vm: AnalyticsHandlers,
     openSearch: (OperationsFilter) -> Unit,
@@ -459,20 +517,25 @@ private fun ExpenseBreakdown(
     }
     if (total != null) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(d.space3)) {
-            Text("Всего · $caption", style = PfTheme.type.body, color = PfTheme.colors.textMuted, modifier = Modifier.weight(1f))
+            Text("Всего · $totalCaption", style = PfTheme.type.body, color = PfTheme.colors.textMuted, modifier = Modifier.weight(1f))
             PfAmountText(total.format(), style = PfTheme.type.amountMd, color = PfTheme.colors.text)
         }
     }
-    if (state.hint == AnalyticsHint.CATEGORIES) {
-        Gap(d.space3)
-        PfCoachmark(
-            "Нажмите на категорию или любую цифру — откроются операции, из которых она сложилась. Категорию операции можно поменять",
-            title = "Выписка разобрана",
-            onClose = { vm.nextHint(stop = false) },
-            onNever = { vm.nextHint(stop = true) },
-        )
-    }
     Gap(d.space2)
+    // The coachmark lies over the card (mockup `AnalyticsHintCategories`).
+    WithCoachmark(show = state.hint == AnalyticsHint.CATEGORIES, text = "Категории проставили мы — любую можно поправить в операции", vm = vm) {
+        CategoryCard(b, state, openSearch)
+    }
+    if (b.items.size > TOP_CATEGORIES) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            PfLink(if (state.allExpenseCategories) "Свернуть" else "Все категории", onClick = vm::toggleAllCategories, modifier = Modifier.testTag(AnalyticsTags.ALL_CATEGORIES))
+        }
+    }
+}
+
+@Composable
+private fun CategoryCard(b: CategoryBreakdown, state: AnalyticsUiState, openSearch: (OperationsFilter) -> Unit) {
+    val d = PfTheme.dimens
     val maxPositive = b.items.maxOf { it.amount.minor }.coerceAtLeast(1)
     val expanded = state.allExpenseCategories
     val visible = if (expanded) b.items else b.items.take(TOP_CATEGORIES)
@@ -492,11 +555,6 @@ private fun ExpenseBreakdown(
                     modifier = Modifier.testTag(AnalyticsTags.EXPENSE_CATEGORY),
                 )
             }
-        }
-    }
-    if (b.items.size > TOP_CATEGORIES) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            PfLink(if (expanded) "Свернуть" else "Все категории", onClick = vm::toggleAllCategories, modifier = Modifier.testTag(AnalyticsTags.ALL_CATEGORIES))
         }
     }
 }
@@ -580,15 +638,28 @@ private fun Insights(
                 onClick = r.filters?.let { f -> { actions.openSearch(f) } },
                 modifier = Modifier.testTag(AnalyticsTags.BLOCK_REGULAR_PAYMENTS),
             ) {
-                // «Не подписка» stays per row: each link names the payment it removes.
-                r.items.orEmpty().take(3).forEach { p ->
-                    PfDataRow(p.title, p.amount.format(), sublabel = p.scheduleName, onClick = { actions.openSearch(p.filters) }, divider = false)
-                    PfLink("Не подписка", onClick = { vm.dismissRegular(p.id) }, inline = true)
-                }
+                // Mockup `Analytics`: the payments under the title, a line above the list and between the rows; each
+                // row is plain (the card opens the search) with its own «Не подписка» under it.
+                val shown = r.items.orEmpty().take(3)
                 val rest = r.items.orEmpty().drop(3)
-                if (rest.isNotEmpty()) {
-                    val sum = rest.fold(Money.ZERO) { acc, p -> acc + p.monthlyAmount }
-                    PfDataRow("Ещё ${rest.size}", sum.format(), tone = ValueTone.MUTED, divider = false)
+                if (shown.isNotEmpty()) {
+                    Column(Modifier.padding(top = d.space2)) {
+                        PfDivider()
+                        shown.forEach { p ->
+                            PfDataRow(p.title, p.amount.format(), sublabel = p.scheduleName, divider = false)
+                            Box(Modifier.offset(x = -d.space4)) {
+                                PfButton(
+                                    "Не подписка", onClick = { vm.dismissRegular(p.id) }, variant = ButtonVariant.GHOST,
+                                    modifier = Modifier.semantics { contentDescription = "Не подписка — ${p.title}" },
+                                )
+                            }
+                            PfDivider()
+                        }
+                        if (rest.isNotEmpty()) {
+                            val sum = rest.fold(Money.ZERO) { acc, p -> acc + p.monthlyAmount }
+                            PfDataRow("Ещё ${rest.size}", sum.format(), tone = ValueTone.MUTED, divider = false)
+                        }
+                    }
                 }
             }
         }
@@ -679,12 +750,12 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
             val current = state.data?.params?.date
             val periods = state.periods
             if (state.periodsFailed) {
-                Column(Modifier.padding(PfTheme.dimens.space5)) {
+                Column(Modifier.padding(vertical = PfTheme.dimens.space5)) {
                     Text("Не получилось загрузить периоды", style = PfTheme.type.body, color = PfTheme.colors.textMuted)
                     PfLink("Повторить", onClick = { vm.openSheet(AnalyticsSheet.PERIODS) })
                 }
             } else if (periods == null) {
-                Text("Загружаем…", style = PfTheme.type.body, color = PfTheme.colors.textMuted, modifier = Modifier.padding(PfTheme.dimens.space5))
+                Text("Загружаем…", style = PfTheme.type.body, color = PfTheme.colors.textMuted, modifier = Modifier.padding(vertical = PfTheme.dimens.space5))
             } else {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     periods.forEach { p ->
@@ -693,6 +764,7 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
                             selected = p.key == current,
                             onClick = { vm.goTo(p.key) },
                             description = if (p.coverage.effective != Coverage.COMPLETE) "неполный" else null,
+                            divider = p !== periods.last(),
                             modifier = Modifier.testTag(AnalyticsTags.PERIOD_OPTION),
                         )
                     }
@@ -701,19 +773,25 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
         }
         AnalyticsSheet.TRANSFERS -> PfBottomSheet("Переводы людям", onDismiss = { vm.openSheet(null) }) {
             val mode = vm.currentTransferMode()
+            Text(
+                "Переводы по номеру телефона и на карту — часто не покупки и не зарплата, а долги, подарки или общие траты",
+                style = PfTheme.type.body, color = PfTheme.colors.textMuted,
+                modifier = Modifier.padding(top = PfTheme.dimens.space1, bottom = PfTheme.dimens.space3),
+            )
             PfOptionRow(
-                "С переводами", selected = mode == TransferMode.WITH, onClick = { vm.setTransferMode(TransferMode.WITH) }, description = "Переводы людям считаем тратами и доходами",
+                "С переводами", selected = mode == TransferMode.WITH, onClick = { vm.setTransferMode(TransferMode.WITH) },
+                icon = "users", description = "Учитываем в расходах и доходах", divider = true,
                 modifier = Modifier.testTag(AnalyticsTags.TRANSFERS_WITH),
             )
             PfOptionRow(
                 "Без переводов", selected = mode == TransferMode.WITHOUT, onClick = { vm.setTransferMode(TransferMode.WITHOUT) },
-                description = "Убираем переводы людям в обе стороны — остаются покупки и зарплата",
+                icon = PfIcons.BAR_CHART, description = "Убираем и входящие, и исходящие переводы",
                 modifier = Modifier.testTag(AnalyticsTags.TRANSFERS_WITHOUT),
             )
             Text(
-                "Переводы между своими счетами не считаем в обоих режимах",
-                style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
-                modifier = Modifier.padding(horizontal = PfTheme.dimens.space5, vertical = PfTheme.dimens.space2),
+                "Переводы между своими счетами не считаем ни в одном режиме. Выбор действует на всю «Аналитику», цифры ведут в Поиск с тем же правилом",
+                style = PfTheme.type.hint, color = PfTheme.colors.textMuted,
+                modifier = Modifier.padding(top = PfTheme.dimens.space3),
             )
         }
         null -> Unit
