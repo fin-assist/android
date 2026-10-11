@@ -7,6 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SlugTest {
     @Test fun `identifiers are accepted`() {
@@ -59,6 +60,12 @@ class CrashValueTest {
 class CrashKeyTest {
     @Test fun `config version key`() = assertEquals("rc_ver", CrashKey.RC_VERSION.name)
 
+    @Test fun `experiment keys fit the provider limit`() {
+        val longest = "e".repeat(CrashKey.MAX_EXPERIMENT_NAME_LENGTH)
+        assertEquals(CrashKey.MAX_NAME_LENGTH, CrashKey.experiment(Slug.of(longest)).name.length)
+        assertFailsWith<IllegalArgumentException> { CrashKey.experiment(Slug.of(longest + "e")) }
+    }
+
     @Test fun `experiment keys are prefixed and flat`() {
         assertEquals("exp_new_onboarding", CrashKey.experiment(Slug.of("new_onboarding")).name)
         assertEquals("exp_analytics_tiles", CrashKey.experiment(Slug.of("analytics.tiles")).name)
@@ -96,6 +103,23 @@ class ScreenSlugTest {
         assertEquals("statements.unread_lines", screenSlug("ru.finassist.pf.feature.statements.api.StatementsRoutes.UnreadLines/{id}")?.value)
 
     @Test fun `a top level route class`() = assertEquals("category_picker", screenSlug("ru.finassist.pf.CategoryPicker")?.value)
+
+    @Test fun `a name longer than a slug keeps its innermost segments`() {
+        val route = "ru.finassist.pf.feature.statements.api.StatementsRoutes.VeryLongNestedFlow.AnotherQuiteLongScreenName/{id}"
+        assertEquals("another_quite_long_screen_name", screenSlug(route)?.value)
+    }
+
+    @Test fun `a single segment longer than a slug is cut`() {
+        val route = "ru.finassist.pf.X.A" + "b".repeat(60)
+        val slug = screenSlug(route)!!.value
+        assertEquals(Slug.MAX_LENGTH, slug.length)
+        assertTrue(slug.startsWith("ab"))
+    }
+
+    @Test fun `the longest routes of the app keep their full name`() {
+        assertEquals("statements.unread_lines", screenSlug("ru.finassist.pf.feature.statements.api.StatementsRoutes.UnreadLines")?.value)
+        assertEquals("profile.delete_account", screenSlug("ru.finassist.pf.feature.profile.api.ProfileRoutes.DeleteAccount")?.value)
+    }
 
     @Test fun `unnamed routes give nothing`() {
         assertNull(screenSlug(null))

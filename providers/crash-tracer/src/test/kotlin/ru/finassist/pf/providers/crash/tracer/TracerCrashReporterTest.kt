@@ -4,6 +4,7 @@ import ru.finassist.pf.core.tracking.Breadcrumb
 import ru.finassist.pf.core.tracking.CrashKey
 import ru.finassist.pf.core.tracking.CrashValue
 import ru.finassist.pf.core.tracking.NonFatal
+import ru.finassist.pf.core.tracking.ScrubbedThrowable
 import ru.finassist.pf.core.tracking.Severity
 import ru.finassist.pf.core.tracking.Slug
 import kotlin.test.Test
@@ -77,36 +78,10 @@ class TracerCrashReporterTest {
         val cause = IllegalArgumentException("cannot parse amount of «Пятёрочка» 2 340 ₽ for +79161234567")
         reporter.report(nonFatal(cause))
 
-        val sent = assertIs<ReportedError>(tracer.reported)
+        val sent = assertIs<ScrubbedThrowable>(tracer.reported)
         assertEquals("java.lang.IllegalArgumentException [server_503]", sent.message)
         assertEquals("java.lang.IllegalArgumentException", sent.type)
         assertTrue(sent.stackTrace.contentEquals(cause.stackTrace))
-    }
-
-    @Test fun `without a code only the type is sent`() {
-        reporter.report(nonFatal(IllegalStateException("secret"), code = null))
-        assertEquals("java.lang.IllegalStateException", tracer.reported?.message)
-    }
-
-    @Test fun `causes keep type and stack but lose their messages`() {
-        val root = java.io.IOException("GET /v1/operations?q=Самокат failed")
-        reporter.report(nonFatal(RuntimeException("wrapper for Самокат", root)))
-
-        val cause = assertIs<ReportedError>(tracer.reported?.cause)
-        assertEquals("java.io.IOException", cause.message)
-        assertTrue(cause.stackTrace.contentEquals(root.stackTrace))
-        assertNull(cause.cause)
-    }
-
-    @Test fun `a long cause chain is cut`() {
-        var error: Throwable = RuntimeException("0")
-        repeat(20) { error = RuntimeException("level", error) }
-        reporter.report(nonFatal(error))
-
-        var depth = 0
-        var current: Throwable? = tracer.reported
-        while (current?.cause != null) { current = current.cause; depth++ }
-        assertEquals(ReportedError.MAX_CAUSES, depth)
     }
 
     @Test fun `a build without a token never touches the sdk`() {

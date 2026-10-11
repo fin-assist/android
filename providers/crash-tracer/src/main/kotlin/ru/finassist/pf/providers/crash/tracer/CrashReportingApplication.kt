@@ -1,6 +1,8 @@
 package ru.finassist.pf.providers.crash.tracer
 
 import android.app.Application
+import android.content.pm.ApplicationInfo
+import android.util.Log
 import ru.ok.tracer.CoreTracerConfiguration
 import ru.ok.tracer.HasTracerConfiguration
 import ru.ok.tracer.TracerConfiguration
@@ -23,8 +25,27 @@ abstract class CrashReportingApplication : Application(), HasTracerConfiguration
      */
     protected abstract val uploadCrashesFromDebugBuilds: Boolean
 
+    /** `true` when the build has a Tracer app token (the SDK started from its provider before [onCreate]). */
+    protected abstract val crashReportingEnabled: Boolean
+
     override val tracerConfiguration: List<TracerConfiguration>
         get() = tracerConfiguration(uploadCrashesFromDebugBuilds)
+
+    override fun onCreate() {
+        super.onCreate()
+        // Tracer has installed its handler by now; put the scrubbing one in front of it. The original message
+        // stays in logcat only in debuggable builds.
+        if (crashReportingEnabled) {
+            val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+            ScrubbingExceptionHandler.install { thread, error ->
+                if (debuggable) Log.e(TAG, "Uncaught in ${thread.name} (sent to Tracer without the message)", error)
+            }
+        }
+    }
+
+    private companion object {
+        const val TAG = "PfCrash"
+    }
 }
 
 /** The SDK configuration of the app (FIN-24): crashes, ANR, crash-free sessions; no native crashes. */

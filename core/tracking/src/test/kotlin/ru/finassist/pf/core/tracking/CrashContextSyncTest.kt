@@ -49,3 +49,40 @@ class CrashContextSyncTest {
         assertEquals(emptyList(), calls)
     }
 }
+
+class CrashContextSyncFollowTest {
+    private val keys = mutableListOf<String?>()
+    private val reporter = object : CrashReporter {
+        override fun report(error: NonFatal) = Unit
+        override fun breadcrumb(crumb: Breadcrumb) = Unit
+        override fun setUserId(userId: String?) = Unit
+        override fun setKey(key: CrashKey, value: CrashValue?) { keys += value?.value }
+    }
+
+    @Test fun `the version in effect is set at once and every later one follows`() = kotlinx.coroutines.test.runTest {
+        var version = "defaults"
+        val changes = kotlinx.coroutines.flow.MutableSharedFlow<Unit>()
+        val job = CrashContextSync(reporter) { version }.follow(backgroundScope, changes)
+
+        assertEquals(listOf<String?>("defaults"), keys)
+        version = "0a1b2c3d"
+        changes.emit(Unit)
+        assertEquals(listOf<String?>("defaults", "0a1b2c3d"), keys)
+        job.cancel()
+    }
+
+    @Test fun `an update right after start is not lost`() = kotlinx.coroutines.test.runTest {
+        // A provider's `changes` does not replay. If the subscription were made after the initial read (in a
+        // coroutine that has not started yet), this update would be emitted to nobody and rc_ver would stay stale.
+        var version = "defaults"
+        val changes = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        val job = CrashContextSync(reporter) { version }.follow(backgroundScope, changes)
+
+        version = "0a1b2c3d"
+        changes.tryEmit(Unit)
+        kotlinx.coroutines.yield()
+
+        assertEquals(listOf<String?>("defaults", "0a1b2c3d"), keys)
+        job.cancel()
+    }
+}

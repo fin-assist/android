@@ -10,6 +10,7 @@ import ru.finassist.pf.core.tracking.CrashKey
 import ru.finassist.pf.core.tracking.CrashReporter
 import ru.finassist.pf.core.tracking.CrashValue
 import ru.finassist.pf.core.tracking.NonFatal
+import ru.finassist.pf.core.tracking.ScrubbedThrowable
 import ru.finassist.pf.core.tracking.Severity
 import ru.ok.tracer.Tracer
 import ru.ok.tracer.crash.report.TracerCrashReport
@@ -35,7 +36,7 @@ class TracerCrashReporter internal constructor(
     @Inject constructor(@Named(CRASH_REPORTING_ENABLED) enabled: Boolean) : this(enabled, SdkTracerGateway)
 
     override fun report(error: NonFatal) = guarded {
-        tracer.report(error.severity.toTracer(), ReportedError.of(error.cause, error.code?.value), error.issueKey)
+        tracer.report(error.severity.toTracer(), ScrubbedThrowable.of(error.cause, error.code?.value), error.issueKey)
     }
 
     override fun breadcrumb(crumb: Breadcrumb) = guarded { tracer.log(crumb.render()) }
@@ -77,34 +78,6 @@ internal object SdkTracerGateway : TracerGateway {
     override fun log(message: String) = TracerCrashReport.log(message)
     override fun setUserId(userId: String?) = Tracer.setUserId(userId)
     override fun setKey(key: String, value: String?) = Tracer.setKey(key, value)
-}
-
-/**
- * What is sent instead of the original exception of a non-fatal: the same type name and stack trace, but the
- * message is replaced by the machine-readable code. Exception messages are free text written by libraries and
- * parsers and can quote what they failed on (an operation title, an amount), so they stay on the device. Causes
- * are converted the same way, up to [MAX_CAUSES] deep.
- */
-internal class ReportedError private constructor(
-    val type: String,
-    code: String?,
-    cause: ReportedError?,
-) : Exception(if (code == null) type else "$type [$code]", cause) {
-
-    companion object {
-        const val MAX_CAUSES = 5
-
-        fun of(original: Throwable, code: String?): ReportedError = convert(original, code, depth = 0)
-
-        private fun convert(original: Throwable, code: String?, depth: Int): ReportedError {
-            val cause = original.cause?.takeIf { it !== original && depth < MAX_CAUSES }
-            return ReportedError(
-                type = original.javaClass.name,
-                code = code,
-                cause = cause?.let { convert(it, code = null, depth = depth + 1) },
-            ).also { it.stackTrace = original.stackTrace }
-        }
-    }
 }
 
 @Module

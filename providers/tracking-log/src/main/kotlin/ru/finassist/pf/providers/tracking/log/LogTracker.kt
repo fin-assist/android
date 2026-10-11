@@ -12,6 +12,7 @@ import ru.finassist.pf.core.tracking.CrashReporter
 import ru.finassist.pf.core.tracking.CrashValue
 import ru.finassist.pf.core.tracking.Event
 import ru.finassist.pf.core.tracking.NonFatal
+import ru.finassist.pf.core.tracking.ScrubbedThrowable
 import ru.finassist.pf.core.tracking.Tracker
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,7 +35,8 @@ class LogTracker @Inject constructor() : Tracker, CrashReporter {
     }
 
     override fun report(error: NonFatal) {
-        Log.e(TAG, "non-fatal ${error.severity} ${error.issueKey} code=${error.code}", error.cause)
+        // The same scrubbed copy Tracer gets: in `mock` messages may quote the statement (titles, amounts).
+        Log.e(TAG, "non-fatal ${error.severity} ${error.issueKey}", ScrubbedThrowable.of(error.cause, error.code?.value))
     }
 
     override fun breadcrumb(crumb: Breadcrumb) {

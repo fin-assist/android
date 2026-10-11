@@ -4,9 +4,10 @@ package ru.finassist.pf.core.tracking
  * Crash, ANR and non-fatal reporting (Tracer; logcat in builds without a Tracer token). Fatal crashes and ANRs
  * are collected by the provider on its own; the app only adds context through this interface.
  *
- * Everything that leaves the device here is typed: [Slug]s, enums and the classes below. There is no method
- * that takes a free-form string, so operation titles, amounts and phone numbers cannot end up in a report by
- * accident.
+ * Everything the app adds here is typed: [Slug]s, enums and the classes below. There is no method that takes a
+ * free-form string, so operation titles, amounts and phone numbers cannot end up in a report by accident.
+ * Exceptions go out as [ScrubbedThrowable] (type and stack trace, no message) — both non-fatals sent through this
+ * interface and fatal crashes, which the Tracer provider scrubs in its uncaught-exception handler.
  */
 interface CrashReporter {
     /** A handled error worth knowing about (a degraded block, a failed secondary request). */
@@ -93,8 +94,22 @@ value class CrashKey private constructor(val name: String) {
         /** Version (hash) of the applied Remote Config. */
         val RC_VERSION = CrashKey("rc_ver")
 
-        /** Variant of a running experiment: `exp_<name>`. Remove it (`null` value) when the experiment ends. */
-        fun experiment(name: Slug): CrashKey = CrashKey("exp_" + name.value.replace('.', '_'))
+        /** The provider keeps key names up to 31 characters and cuts longer ones, so two keys could merge. */
+        const val MAX_NAME_LENGTH = 31
+        private const val EXPERIMENT_PREFIX = "exp_"
+
+        /** Longest experiment name that still fits a key. */
+        const val MAX_EXPERIMENT_NAME_LENGTH = MAX_NAME_LENGTH - EXPERIMENT_PREFIX.length
+
+        /**
+         * Variant of a running experiment: `exp_<name>`. Remove it (`null` value) when the experiment ends.
+         * @throws IllegalArgumentException when [name] is longer than [MAX_EXPERIMENT_NAME_LENGTH] — a programming
+         * error: the experiment needs a shorter name.
+         */
+        fun experiment(name: Slug): CrashKey {
+            require(name.value.length <= MAX_EXPERIMENT_NAME_LENGTH) { "Experiment name too long for a crash key: ${name.value}" }
+            return CrashKey(EXPERIMENT_PREFIX + name.value.replace('.', '_'))
+        }
     }
 }
 
@@ -132,16 +147,21 @@ class CompositeCrashReporter(private val reporters: Collection<CrashReporter>) :
 /**
  * Screen name for [Breadcrumb.ScreenOpened] from a navigation route pattern: the route class without its package
  * and arguments, in snake case — `ru.finassist.pf.feature.analytics.api.AnalyticsRoutes.Period/{params}` →
- * `analytics.period`. Only the pattern is read, never the argument values. `null` for a route it cannot name.
+ * `analytics.period`. Only the pattern is read, never the argument values. A name longer than [Slug.MAX_LENGTH]
+ * keeps its innermost segments. `null` for a route it cannot name.
  */
 fun screenSlug(routePattern: String?): Slug? {
     val qualifiedName = routePattern?.substringBefore('/')?.substringBefore('?') ?: return null
     val classNames = qualifiedName.split('.').filter { it.firstOrNull()?.isUpperCase() == true }
     if (classNames.isEmpty()) return null
-    val name = classNames.joinToString(".") { className ->
+    val segments = classNames.map { className ->
         className.removeSuffix("Routes").ifEmpty { className }
             .replace(Regex("(?<=[a-z0-9])(?=[A-Z])"), "_")
             .lowercase()
     }
-    return Slug.orNull(name)
+    // Too long for a slug: keep the innermost segments (the screen itself) rather than lose the breadcrumb.
+    for (from in segments.indices) {
+        Slug.orNull(segments.drop(from).joinToString("."))?.let { return it }
+    }
+    return Slug.orNull(segments.last().take(Slug.MAX_LENGTH).trimEnd('_'))
 }

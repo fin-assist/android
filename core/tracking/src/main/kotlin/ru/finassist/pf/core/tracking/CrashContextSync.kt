@@ -1,5 +1,11 @@
 package ru.finassist.pf.core.tracking
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
+
 /**
  * Keeps the crash report context in step with the app: the version of the applied feature-flag config
  * ([CrashKey.RC_VERSION]) and the trail of opened screens. The app calls it from its root; providers of the
@@ -12,6 +18,17 @@ class CrashContextSync(
     private val configVersion: () -> String,
 ) {
     private var appliedVersion: String? = null
+
+    /**
+     * Keeps `rc_ver` current: subscribes to [changes] first and only then reads the version in effect, so an
+     * update that lands in between is not lost (`changes` of the providers does not replay). Both paths end in
+     * [onConfigApplied], which ignores an unchanged version.
+     */
+    fun follow(scope: CoroutineScope, changes: Flow<Unit>): Job {
+        val job = scope.launch(start = CoroutineStart.UNDISPATCHED) { changes.collect { onConfigApplied() } }
+        onConfigApplied()
+        return job
+    }
 
     /** Call once at start and after every config update; repeated calls with an unchanged version do nothing. */
     @Synchronized

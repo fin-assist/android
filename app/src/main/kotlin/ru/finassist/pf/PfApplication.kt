@@ -5,7 +5,6 @@ import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import ru.finassist.pf.core.designsystem.components.pfExposeTestTags
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.tracking.CrashContextSync
@@ -30,13 +29,13 @@ class PfApplication : CrashReportingApplication() {
 
     // Debug builds upload too: a debug build only has a token when its crashes are wanted (the mock alpha).
     override val uploadCrashesFromDebugBuilds: Boolean get() = BuildConfig.DEBUG
+    override val crashReportingEnabled: Boolean get() = BuildConfig.CRASH_REPORTING_ENABLED
 
     override fun onCreate() {
         // Test tags as resource ids for UI tests (docs/e2e.md): debuggable builds only, before any screen.
         pfExposeTestTags = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         super.onCreate()
         // `rc_ver` in crash reports: the config in effect now, then every config that arrives later.
-        crashContext.onConfigApplied()
-        scope.launch { flags.changes.collect { crashContext.onConfigApplied() } }
+        crashContext.follow(scope, flags.changes)
     }
 }
