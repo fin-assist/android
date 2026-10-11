@@ -7,8 +7,4 @@ object ProfileRoutes {
     /** Tab root «Профиль». */
     @Serializable
     data object Home
-
-    /** «Удалить аккаунт»: what is deleted, then the passcode confirmation. */
-    @Serializable
-    data object DeleteAccount
 }

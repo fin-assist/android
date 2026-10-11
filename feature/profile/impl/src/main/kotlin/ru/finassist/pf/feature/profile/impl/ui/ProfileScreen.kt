@@ -11,6 +11,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.runtime.State
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -48,14 +51,29 @@ class ProfileActions(
     val openChat: () -> Unit,
     val openConsent: () -> Unit,
     val openSecurity: () -> Unit,
+    /** «Удалить аккаунт и все данные»: the passcode step; its result comes back through [ProfileScreen]. */
     val openDeleteAccount: () -> Unit,
 )
 
 /** «Профиль» (mvp-scope «Профиль»): phone, statement, assistant, theme, security, support, sign-out, deletion. */
 @Composable
-fun ProfileScreen(actions: ProfileActions, vm: ProfileViewModel = hiltViewModel()) {
+fun ProfileScreen(
+    actions: ProfileActions,
+    passcodeResult: State<String?>,
+    onPasscodeResultConsumed: () -> Unit,
+    vm: ProfileViewModel = hiltViewModel(),
+    deleteVm: DeleteAccountViewModel = hiltViewModel(),
+) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val deleteState by deleteVm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val confirmed by passcodeResult
+    LaunchedEffect(confirmed) {
+        if (confirmed == "true") {
+            onPasscodeResultConsumed()
+            deleteVm.onPasscodeConfirmed()
+        }
+    }
     LifecycleResumeEffect(Unit) {
         vm.load()
         onPauseOrDispose { }
@@ -66,6 +84,9 @@ fun ProfileScreen(actions: ProfileActions, vm: ProfileViewModel = hiltViewModel(
         onSupport = { userId -> writeSupport(context, userId) }, onAskLogout = vm::askLogout, onLogout = vm::logout,
         onSnackbarShown = vm::consumeSnackbar,
         versionName = remember { appVersion(context) },
+        deleteState = deleteState,
+        onDeleteAccount = deleteVm::delete,
+        onDismissDelete = deleteVm::dismiss,
     )
 }
 
@@ -94,6 +115,9 @@ internal fun ProfileContent(
     onLogout: () -> Unit,
     onSnackbarShown: () -> Unit,
     versionName: String? = null,
+    deleteState: DeleteUiState = DeleteUiState(),
+    onDeleteAccount: () -> Unit = {},
+    onDismissDelete: () -> Unit = {},
 ) {
     val d = PfTheme.dimens
     Column(Modifier.fillMaxSize().testTag(ProfileTags.SCREEN)) {
@@ -177,9 +201,18 @@ internal fun ProfileContent(
     }
     if (state.themeSheet) {
         PfBottomSheet("Тема", onDismiss = { onThemeSheet(false) }) {
-            Theme.entries.forEach { t -> PfOptionRow(ProfileTexts.theme(t), selected = t == state.theme, onClick = { onTheme(t) }, modifier = Modifier.testTag(ProfileTags.theme(t.name.lowercase()))) }
+            // Mockup `ProfileThemeSheet`: the options start 8 dp under the header, each with its icon tile.
+            Spacer(Modifier.height(d.space2))
+            Theme.entries.forEach { t ->
+                PfOptionRow(
+                    ProfileTexts.theme(t), selected = t == state.theme, onClick = { onTheme(t) }, icon = themeIcon(t),
+                    divider = t != Theme.entries.last(),
+                    modifier = Modifier.testTag(ProfileTags.theme(t.name.lowercase())),
+                )
+            }
         }
     }
+    DeleteAccountDialog(deleteState, onDelete = onDeleteAccount, onDismiss = onDismissDelete)
     if (state.askLogout) {
         PfDialog(
             title = "Выйти из аккаунта?",
@@ -191,6 +224,12 @@ internal fun ProfileContent(
             busyText = "Выходим…",
         )
     }
+}
+
+private fun themeIcon(t: Theme): String = when (t) {
+    Theme.SYSTEM -> PfIcons.SMARTPHONE
+    Theme.LIGHT -> PfIcons.SUN
+    Theme.DARK -> PfIcons.MOON
 }
 
 private fun writeSupport(context: Context, userId: String) {
@@ -217,6 +256,4 @@ internal object ProfileTags {
     fun theme(name: String) = "profile.theme.$name"
     const val LOGOUT = "profile.logout"
     const val DELETE_ACCOUNT = "profile.delete_account"
-    const val DELETE_SCREEN = "profile.delete"
-    const val DELETE_SUBMIT = "profile.delete.submit"
 }
