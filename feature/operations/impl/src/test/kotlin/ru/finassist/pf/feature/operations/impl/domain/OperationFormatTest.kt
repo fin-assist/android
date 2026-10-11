@@ -87,4 +87,51 @@ class OperationFormatTest {
         assertEquals("Найдена 21 операция", searchSummary(21).plain())
         assertEquals("Найдено 1 086 операций", searchSummary(1086).plain())
     }
+
+    private fun details(kind: OperationKind) = ru.finassist.pf.core.api.model.OperationDetails(
+        id = "d", kind = kind, occurredAt = at(2026, 9, 25), amount = Money(2_340_00), currency = "RUB", title = "Пятёрочка",
+        categoryId = "c", categoryName = "Супермаркеты", categoryIcon = "cart", isCategoryManual = false,
+        status = OperationStatus.POSTED, sourceName = "Выписка Т-Банка",
+    )
+
+    private val current = ru.finassist.pf.core.api.model.Account("Текущий", "··4821", "текущий счёт, последние цифры 4821")
+    private val saving = ru.finassist.pf.core.api.model.Account("Накопительный", "··0734")
+
+    @Test fun `statement rows of a purchase`() {
+        val rows = OperationFormat.statementRows(details(OperationKind.EXPENSE).copy(account = current, bankCategory = "Супермаркеты")) { "x" }
+        assertEquals(
+            listOf(
+                StatementRow("Счёт", "Текущий ··4821", spoken = "текущий счёт, последние цифры 4821"),
+                StatementRow("Категория банка", "Супермаркеты", sublabel = "как в выписке"),
+            ),
+            rows,
+        )
+    }
+
+    @Test fun `statement rows of a transfer name both accounts`() {
+        val rows = OperationFormat.statementRows(
+            details(OperationKind.OWN_TRANSFER).copy(fromAccount = saving, toAccount = current, bankCategory = "Между своими счетами"),
+        ) { "x" }
+        assertEquals(listOf("Счёт списания", "Счёт зачисления", "В выписке"), rows.map { it.label })
+        assertEquals("Накопительный ··0734", rows[0].value)
+    }
+
+    @Test fun `optional statement rows`() {
+        val rows = OperationFormat.statementRows(
+            details(OperationKind.EXPENSE).copy(
+                account = ru.finassist.pf.core.api.model.Account("Текущий"), description = "PYATEROCHKA 123",
+                postedAt = at(2026, 9, 26), mcc = "5411",
+            ),
+        ) { "26 сентября, 12:00" }
+        assertEquals(
+            listOf(
+                StatementRow("Счёт", "Текущий"),
+                StatementRow("Описание в выписке", "PYATEROCHKA 123"),
+                StatementRow("Проведена банком", "26 сентября, 12:00"),
+                StatementRow("MCC", "5411"),
+            ),
+            rows,
+        )
+        assertEquals(emptyList(), OperationFormat.statementRows(details(OperationKind.OWN_TRANSFER)) { "x" })
+    }
 }

@@ -311,7 +311,7 @@ private fun Answer(
 private fun BlockGroupView(group: List<Block>, chartId: String) {
     val chart = group.firstOrNull { it.type == BlockType.CHART }
     val rows = group.firstOrNull { it.type == BlockType.ROWS }
-    if (chart != null && rows != null && isDrawableChart(chart)) {
+    if (chart != null && rows != null && AnswerFormat.isDrawableChart(chart)) {
         val rowValues = rows.rows.orEmpty().mapNotNull { r -> AnswerFormat.rowValue(r)?.let { r to it } }
         PfCard {
             ChartBody(chart, chartId)
@@ -326,16 +326,13 @@ private fun BlockGroupView(group: List<Block>, chartId: String) {
     }
 }
 
-private fun isDrawableChart(block: Block) =
-    block.kind == ChartKind.BAR && block.valueKind != null && block.valueKind != ChartValueKind.UNKNOWN && !block.points.isNullOrEmpty()
-
 @Composable
 private fun BlockView(block: Block, chartId: String) {
     val c = PfTheme.colors
     when (block.type) {
         BlockType.TEXT -> Text(markdown(block.text.orEmpty()), style = PfTheme.type.body, color = c.text)
         BlockType.CHART -> {
-            if (!isDrawableChart(block)) {
+            if (!AnswerFormat.isDrawableChart(block)) {
                 Text(block.altText.orEmpty(), style = PfTheme.type.body, color = c.text)
             } else {
                 PfCard { ChartBody(block, chartId) }

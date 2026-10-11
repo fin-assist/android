@@ -4,6 +4,8 @@ import ru.finassist.pf.core.api.model.AnswerSource
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockRow
 import ru.finassist.pf.core.api.model.BlockType
+import ru.finassist.pf.core.api.model.ChartKind
+import ru.finassist.pf.core.api.model.ChartValueKind
 import ru.finassist.pf.core.api.model.ChangedSince
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.time.RussianDates
@@ -131,4 +133,8 @@ object AnswerFormat {
         val day = dataTo.toLocalDate()
         return day.dayOfMonth.toFloat() / day.lengthOfMonth()
     }
+
+    /** A chart block the app can draw: bars of a known value kind with points; otherwise its alt text is shown. */
+    fun isDrawableChart(block: Block): Boolean =
+        block.kind == ChartKind.BAR && block.valueKind != null && block.valueKind != ChartValueKind.UNKNOWN && !block.points.isNullOrEmpty()
 }

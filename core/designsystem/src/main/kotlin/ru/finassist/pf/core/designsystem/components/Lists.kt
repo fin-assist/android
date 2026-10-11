@@ -280,8 +280,6 @@ fun PfOptionRow(
     modifier: Modifier = Modifier,
     icon: String? = null,
     description: String? = null,
-    /** `.pf-opt` has a bottom border except the last row of its group: the caller says which one is last. */
-    divider: Boolean = false,
 ) {
     val c = PfTheme.colors
     val d = PfTheme.dimens
@@ -308,7 +306,6 @@ fun PfOptionRow(
                 if (selected) PfIcon(PfIcons.CHECK, contentDescription = null, size = d.iconMd, tint = c.accent)
             }
         }
-        if (divider) PfDivider()
     }
 }
 
@@ -334,14 +331,15 @@ fun PfOrderedSteps(steps: List<String>, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space3)) {
         steps.forEachIndexed { i, step ->
             Row(verticalAlignment = Alignment.Top) {
+                // `.pf-ostep-num`: 24 dp, 12/24 700; `.pf-ostep-text`: 2 dp from the top.
                 Box(
-                    Modifier.size(28.dp).background(PfTheme.colors.accentSoft, RoundedCornerShape(PfTheme.dimens.radiusFull)),
+                    Modifier.size(24.dp).background(PfTheme.colors.accentSoft, RoundedCornerShape(PfTheme.dimens.radiusFull)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("${i + 1}", style = PfTheme.type.micro, color = PfTheme.colors.accent)
+                    Text("${i + 1}", style = PfTheme.type.hint.copy(fontWeight = FontWeight.Bold), color = PfTheme.colors.accent)
                 }
                 Spacer(Modifier.width(PfTheme.dimens.space3))
-                Text(step, style = PfTheme.type.body, color = PfTheme.colors.text, modifier = Modifier.weight(1f).padding(top = 4.dp))
+                Text(step, style = PfTheme.type.body, color = PfTheme.colors.text, modifier = Modifier.weight(1f).padding(top = 2.dp))
             }
         }
     }

@@ -206,7 +206,6 @@ internal fun ProfileContent(
             Theme.entries.forEach { t ->
                 PfOptionRow(
                     ProfileTexts.theme(t), selected = t == state.theme, onClick = { onTheme(t) }, icon = themeIcon(t),
-                    divider = t != Theme.entries.last(),
                     modifier = Modifier.testTag(ProfileTags.theme(t.name.lowercase())),
                 )
             }
@@ -226,7 +225,8 @@ internal fun ProfileContent(
     }
 }
 
-private fun themeIcon(t: Theme): String = when (t) {
+/** Icon tile of a theme option (mockup `ProfileThemeSheet`). */
+internal fun themeIcon(t: Theme): String = when (t) {
     Theme.SYSTEM -> PfIcons.SMARTPHONE
     Theme.LIGHT -> PfIcons.SUN
     Theme.DARK -> PfIcons.MOON

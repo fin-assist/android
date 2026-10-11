@@ -85,4 +85,21 @@ class AnswerFormatTest {
         assertNull(AnswerFormat.partialFill(to, partial = false))
         assertNull(AnswerFormat.partialFill(null, partial = true))
     }
+
+    @Test
+    fun `only known bar charts with points are drawn`() {
+        val point = ru.finassist.pf.core.api.model.ChartPoint(
+            DateRange(OffsetDateTime.parse("2026-09-01T00:00:00+03:00"), OffsetDateTime.parse("2026-10-01T00:00:00+03:00")),
+            value = 1.0, coverage = ru.finassist.pf.core.api.model.Coverage.COMPLETE,
+        )
+        val bar = Block(
+            BlockType.CHART, kind = ru.finassist.pf.core.api.model.ChartKind.BAR,
+            valueKind = ru.finassist.pf.core.api.model.ChartValueKind.AMOUNT, points = listOf(point),
+        )
+        assertEquals(true, AnswerFormat.isDrawableChart(bar))
+        assertEquals(false, AnswerFormat.isDrawableChart(bar.copy(kind = ru.finassist.pf.core.api.model.ChartKind.UNKNOWN)))
+        assertEquals(false, AnswerFormat.isDrawableChart(bar.copy(valueKind = null)))
+        assertEquals(false, AnswerFormat.isDrawableChart(bar.copy(valueKind = ru.finassist.pf.core.api.model.ChartValueKind.UNKNOWN)))
+        assertEquals(false, AnswerFormat.isDrawableChart(bar.copy(points = emptyList())))
+    }
 }

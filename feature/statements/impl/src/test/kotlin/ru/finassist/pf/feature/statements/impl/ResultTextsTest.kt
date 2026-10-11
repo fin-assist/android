@@ -47,6 +47,8 @@ class ResultTextsTest {
     @Test
     fun `subtitle and duplicates`() {
         assertEquals("1 086 операций · 1 апреля — 25 сентября 2026", ResultTexts.subtitle(result())!!.plain())
+        assertEquals("1 апреля — 25 сентября", ResultTexts.period(result())!!.plain())
+        assertNull(ResultTexts.period(result().copy(firstOperationAt = null)))
         assertEquals("1 операция · 1 апреля — 25 сентября 2026", ResultTexts.subtitle(result(new = 1, total = 1))!!.plain())
         assertEquals("Новых: 1 214 · 1 апреля — 25 сентября 2026", ResultTexts.subtitle(result(new = 1214, total = 1300).copy(isFirstImport = false))!!.plain())
         assertNull(ResultTexts.subtitle(result(new = 0)))

@@ -112,7 +112,7 @@ internal fun DetailContent(
                     PfSectionTitle("Из выписки")
                     Spacer(Modifier.height(d.space2))
                     PfCard {
-                        val rows = statementRows(op, zone, today)
+                        val rows = OperationFormat.statementRows(op) { dateTime(it, zone, today) }
                         rows.forEachIndexed { i, row ->
                             PfDataRow(
                                 row.label, row.value, sublabel = row.sublabel, divider = i < rows.lastIndex,
@@ -195,31 +195,6 @@ private fun Hero(op: OperationDetails, zone: ZoneId) {
             Text(OperationFormat.numericDateTime(op.occurredAt, zone), style = PfTheme.type.caption.copy(fontFeatureSettings = "tnum"), color = c.textMuted)
         }
     }
-}
-
-/** A row of the «Из выписки» card. */
-private data class StatementRow(val label: String, val value: String, val sublabel: String? = null, val spoken: String? = null)
-
-/**
- * «Из выписки»: accounts (a transfer names both sides), what the statement says and the bank's category; posting
- * time and MCC when the bank sent them. A transfer's bank category is labelled «В выписке».
- */
-private fun statementRows(op: OperationDetails, zone: ZoneId, today: LocalDate): List<StatementRow> = buildList {
-    fun account(label: String, a: Account?) {
-        if (a != null) add(StatementRow(label, listOfNotNull(a.typeName, a.mask).joinToString(" "), spoken = a.spoken))
-    }
-    if (op.kind == OperationKind.OWN_TRANSFER) {
-        account("Счёт списания", op.fromAccount)
-        account("Счёт зачисления", op.toAccount)
-    } else {
-        account("Счёт", op.account)
-    }
-    op.description?.let { add(StatementRow("Описание в выписке", it)) }
-    op.bankCategory?.let {
-        add(if (op.kind == OperationKind.OWN_TRANSFER) StatementRow("В выписке", it) else StatementRow("Категория банка", it, sublabel = "как в выписке"))
-    }
-    op.postedAt?.let { add(StatementRow("Проведена банком", dateTime(it, zone, today))) }
-    op.mcc?.let { add(StatementRow("MCC", it)) }
 }
 
 private fun dateTime(at: OffsetDateTime, zone: ZoneId, today: LocalDate): String {

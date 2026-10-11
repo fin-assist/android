@@ -226,7 +226,7 @@ internal fun SearchContent(
         SearchSheet.PERIOD -> PeriodSheet(f, state.allTime, state.windowFrom, onDismiss = { actions.openSheet(null) }, onPick = actions.setPeriod)
         SearchSheet.CATEGORY -> PfBottomSheet("Категория", onDismiss = { actions.openSheet(null) }) {
             if (f.categoryId != null) {
-                PfOptionRow("Все категории", selected = false, onClick = { actions.setCategory(null) }, divider = true, modifier = Modifier.testTag(OperationsTags.CATEGORY_ALL))
+                PfOptionRow("Все категории", selected = false, onClick = { actions.setCategory(null) }, modifier = Modifier.testTag(OperationsTags.CATEGORY_ALL))
             }
             CategoryList(
                 categories = state.categories,
@@ -287,12 +287,12 @@ private fun PeriodSheet(
         PfBottomSheet("Период", onDismiss = onDismiss) {
             Spacer(Modifier.height(PfTheme.dimens.space2))
             PfOptionRow(
-                "Последние 12 месяцев", selected = !custom && !allTime, onClick = { onPick(null, null, false) }, divider = true,
+                "Последние 12 месяцев", selected = !custom && !allTime, onClick = { onPick(null, null, false) },
                 description = windowFrom?.let { OperationFormat.windowStart(it).replaceFirstChar { c -> c.uppercase() } },
                 modifier = Modifier.testTag(OperationsTags.PERIOD_LAST_12),
             )
             PfOptionRow(
-                "За всё время", selected = allTime, onClick = { onPick(null, null, true) }, description = "Все загруженные операции", divider = true,
+                "За всё время", selected = allTime, onClick = { onPick(null, null, true) }, description = "Все загруженные операции",
                 modifier = Modifier.testTag(OperationsTags.PERIOD_ALL),
             )
             PfOptionRow(

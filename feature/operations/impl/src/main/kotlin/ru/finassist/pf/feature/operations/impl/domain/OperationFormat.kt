@@ -1,6 +1,7 @@
 package ru.finassist.pf.feature.operations.impl.domain
 
 import ru.finassist.pf.core.api.model.Account
+import ru.finassist.pf.core.api.model.OperationDetails
 import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.api.model.OperationKind
 import ru.finassist.pf.core.api.model.OperationStatus
@@ -14,6 +15,9 @@ import java.time.YearMonth
 import java.time.ZoneId
 
 /** How an operation row looks; pure, so the rules (sign, colour, subtitle) are unit-tested. */
+/** A row of the «Из выписки» card of the operation; [spoken] — how a screen reader names an account. */
+data class StatementRow(val label: String, val value: String, val sublabel: String? = null, val spoken: String? = null)
+
 data class RowModel(
     val id: String,
     val icon: String,
@@ -99,6 +103,29 @@ object OperationFormat {
                     row(op).copy(subtitle = if (op.status == OperationStatus.PENDING) "$day · холд" else day)
                 }
             }
+
+    /**
+     * «Из выписки» (mockup `Detail`): accounts (a transfer names both sides), what the statement says and the bank's
+     * category; posting time ([dateTime] formats it) and MCC when the bank sent them. A transfer's bank category is
+     * labelled «В выписке».
+     */
+    fun statementRows(op: OperationDetails, dateTime: (OffsetDateTime) -> String): List<StatementRow> = buildList {
+        fun account(label: String, a: Account?) {
+            if (a != null) add(StatementRow(label, listOfNotNull(a.typeName, a.mask).joinToString(" "), spoken = a.spoken))
+        }
+        if (op.kind == OperationKind.OWN_TRANSFER) {
+            account("Счёт списания", op.fromAccount)
+            account("Счёт зачисления", op.toAccount)
+        } else {
+            account("Счёт", op.account)
+        }
+        op.description?.let { add(StatementRow("Описание в выписке", it)) }
+        op.bankCategory?.let {
+            add(if (op.kind == OperationKind.OWN_TRANSFER) StatementRow("В выписке", it) else StatementRow("Категория банка", it, sublabel = "как в выписке"))
+        }
+        op.postedAt?.let { add(StatementRow("Проведена банком", dateTime(it))) }
+        op.mcc?.let { add(StatementRow("MCC", it)) }
+    }
 
     /** The kind above the amount on the operation card: «Списание», «Зачисление», «Перевод». */
     fun kindLabel(kind: OperationKind): String = when (kind) {

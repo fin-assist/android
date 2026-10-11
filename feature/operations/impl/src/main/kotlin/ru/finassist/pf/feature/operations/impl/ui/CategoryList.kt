@@ -89,7 +89,6 @@ fun CategoryList(
                 items(list, key = { "$title-${it.id}" }) { c ->
                     PfOptionRow(
                         c.name, selected = c.id == selectedId, onClick = { onSelect(c) }, icon = c.icon, description = c.note,
-                        divider = c !== list.last(),
                         modifier = Modifier.testTag(OperationsTags.CATEGORY_OPTION),
                     )
                 }

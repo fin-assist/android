@@ -764,7 +764,6 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
                             selected = p.key == current,
                             onClick = { vm.goTo(p.key) },
                             description = if (p.coverage.effective != Coverage.COMPLETE) "неполный" else null,
-                            divider = p !== periods.last(),
                             modifier = Modifier.testTag(AnalyticsTags.PERIOD_OPTION),
                         )
                     }
@@ -780,7 +779,7 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
             )
             PfOptionRow(
                 "С переводами", selected = mode == TransferMode.WITH, onClick = { vm.setTransferMode(TransferMode.WITH) },
-                icon = "users", description = "Учитываем в расходах и доходах", divider = true,
+                icon = "users", description = "Учитываем в расходах и доходах",
                 modifier = Modifier.testTag(AnalyticsTags.TRANSFERS_WITH),
             )
             PfOptionRow(
