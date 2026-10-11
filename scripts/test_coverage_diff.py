@@ -1,9 +1,13 @@
 """Tests of scripts/coverage-diff.py. Run: python3 -m unittest discover -s scripts -p 'test_*.py'"""
 
 import importlib.util
+import io
 import sys
+import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("coverage_diff", ROOT / "scripts" / "coverage-diff.py")
@@ -110,8 +114,96 @@ class ComputeTest(unittest.TestCase):
         self.assertIn("**66.7 %** (2/3)", text)
         self.assertIn("| `feature/x/impl/src/main/kotlin/ru/pf/x/Vm.kt` | 2/3 | 13 |", text)
 
+    def test_render_totals_only_without_base(self):
+        text = cov.render([], cov.report_totals(REPORT), None)
+        self.assertIn("lines 70.0 %", text)
+        self.assertNotIn("Changed lines", text)
+
+    def test_render_puts_uncovered_files_first_and_truncates(self):
+        files = [cov.FileCoverage(f"m/src/main/kotlin/F{i}.kt", covered=[1], missed=[2] if i % 2 else [])
+                 for i in range(6)]
+        text = cov.render(files, cov.report_totals(REPORT), "b", max_files=3)
+        rows = [l for l in text.splitlines() if l.startswith("| `")]
+        self.assertEqual([r.split("`")[1] for r in rows],
+                         ["m/src/main/kotlin/F1.kt", "m/src/main/kotlin/F3.kt", "m/src/main/kotlin/F5.kt"])
+        self.assertIn("…and 3 more files (0 uncovered lines): the full table is in the CI run summary.", text)
+
     def test_render_without_changes(self):
         self.assertIn("no executable production lines changed", cov.render([], cov.report_totals(REPORT), "b"))
+
+
+class LimitsTest(unittest.TestCase):
+    def test_code_span_cannot_be_closed_by_a_file_name(self):
+        self.assertEqual(cov.code("a`@b.kt"), "`a'@b.kt`")
+
+    def test_cell_is_cut_at_a_separator(self):
+        text = cov.ranges(list(range(1, 400, 2)))
+        cut = cov.cell(text, 30)
+        self.assertLessEqual(len(cut), 33)
+        self.assertTrue(cut.endswith(", …"))
+        self.assertEqual(cov.cell("1–3", 30), "1–3")
+
+    def test_render_caps_the_cell_and_the_whole_text(self):
+        files = [cov.FileCoverage(f"m/src/main/kotlin/{'P' * 200}{i}.kt", missed=list(range(1, 2000, 2)))
+                 for i in range(50)]
+        text = cov.render(files, cov.report_totals(REPORT), "b")
+        self.assertLess(len(text), 65_536)
+        self.assertTrue(all(len(line) < 500 for line in text.splitlines()))
+        text = cov.render(files, cov.report_totals(REPORT), "b", max_text=2_000)
+        self.assertLessEqual(len(text), 2_100)
+        self.assertIn("…cut: the full table is in the CI run summary.", text)
+
+    def test_render_full_has_every_row_and_no_cuts(self):
+        files = [cov.FileCoverage(f"m/src/main/kotlin/F{i}.kt", missed=list(range(1, 400, 2))) for i in range(60)]
+        text = cov.render(files, cov.report_totals(REPORT), "b", None, None, None)
+        self.assertEqual(len([l for l in text.splitlines() if l.startswith("| `")]), 60)
+        self.assertNotIn("…", text)
+
+
+class MainTest(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.report = Path(self.dir.name) / "report.xml"
+        self.report.write_text(REPORT, encoding="utf-8")
+
+    def run_main(self, *args, diff=DIFF):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(cov, "git_diff", return_value=diff) as git, redirect_stdout(out), redirect_stderr(err):
+            try:
+                code = cov.main(["--report", str(self.report), *args])
+            except SystemExit as e:
+                code = e.code
+        return code, out.getvalue(), err.getvalue(), git
+
+    def test_without_base_prints_totals_and_never_runs_git(self):
+        code, out, _, git = self.run_main()
+        self.assertEqual(code, 0)
+        self.assertIn("lines 70.0 %", out)
+        self.assertNotIn("Changed lines", out)
+        git.assert_not_called()
+
+    def test_summary_is_repeatable(self):
+        a, b = Path(self.dir.name) / "a.md", Path(self.dir.name) / "b.md"
+        code, out, _, _ = self.run_main("--base", "origin/x", "--summary", str(a), "--summary", str(b))
+        self.assertEqual(code, 0)
+        self.assertEqual(a.read_text(encoding="utf-8"), out.rstrip("\n") + "\n")
+        self.assertEqual(a.read_text(encoding="utf-8"), b.read_text(encoding="utf-8"))
+
+    def test_min_needs_base(self):
+        code, _, err, _ = self.run_main("--min", "80")
+        self.assertEqual(code, 2)
+        self.assertIn("--min checks changed lines and needs --base", err)
+
+    def test_min_fails_below_threshold(self):
+        self.assertEqual(self.run_main("--base", "b", "--min", "80")[0], 1)  # 2 of 3 changed lines
+        self.assertEqual(self.run_main("--base", "b", "--min", "60")[0], 0)
+
+    def test_max_files_must_be_positive(self):
+        for value in ("0", "-1"):
+            code, _, err, _ = self.run_main("--base", "b", "--max-files", value)
+            self.assertEqual(code, 2)
+            self.assertIn("must be at least 1", err)
 
 
 if __name__ == "__main__":
