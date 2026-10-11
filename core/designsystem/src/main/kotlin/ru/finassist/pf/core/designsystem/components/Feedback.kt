@@ -75,6 +75,8 @@ fun PfNotice(
     title: String? = null,
     alert: Boolean = false,
     icon: String? = null,
+    /** Text with inline links (`Pf.Link inline` inside the notice); replaces [text] when given. */
+    parts: List<TextPart>? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
     val c = PfTheme.colors
@@ -100,7 +102,7 @@ fun PfNotice(
                 Text(title, style = PfTheme.type.body.copy(fontWeight = FontWeight.Bold), color = fg)
                 Spacer(Modifier.height(d.space1))
             }
-            Text(text, style = PfTheme.type.caption, color = fg)
+            if (parts != null) PfLinkedText(parts, style = PfTheme.type.caption, color = fg) else Text(text, style = PfTheme.type.caption, color = fg)
             if (action != null) action()
         }
     }

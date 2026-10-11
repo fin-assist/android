@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ru.finassist.pf.core.common.LegalLinks
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.HeroTone
 import ru.finassist.pf.core.designsystem.components.NoticeTone
@@ -340,15 +341,6 @@ internal fun ConsentContent(
             }
         }
     }
-}
-
-/**
- * Public documents the registration footer links to (FIN-40). The contract has no such documents (`ConsentType`
- * covers only the consents), so the addresses are constants of the app; they open in the browser.
- */
-internal object LegalLinks {
-    const val TERMS = "https://plainfin.ru/terms"
-    const val PRIVACY = "https://plainfin.ru/privacy"
 }
 
 @Composable

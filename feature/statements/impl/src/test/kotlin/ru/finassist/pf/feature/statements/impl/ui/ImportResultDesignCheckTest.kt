@@ -131,7 +131,7 @@ class ImportResultDesignCheckTest {
         DesignCheck.capture(name, dark = dark, heightDp = heightDp) {
             ResultContent(
                 result, uploadEnabled = true, onDone = {}, onOpenSearch = {}, onOpenUnread = {}, onOpenAnalytics = {},
-                onUploadAnother = {},
+                onUploadAnother = {}, onOpenHistory = {},
             )
         }
 

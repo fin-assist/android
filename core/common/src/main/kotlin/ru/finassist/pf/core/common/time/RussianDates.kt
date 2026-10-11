@@ -90,7 +90,8 @@ fun pluralize(count: Int, one: String, few: String, many: String): String {
 fun countWithNoun(count: Int, one: String, few: String, many: String): String =
     "${groupThousands(count)} ${pluralize(count, one, few, many)}"
 
-private fun groupThousands(value: Int): String {
+/** «1 086»: a count with its thousands grouped by spaces, as in [countWithNoun]. */
+fun groupThousands(value: Int): String {
     val s = kotlin.math.abs(value).toString()
     val sb = StringBuilder()
     s.forEachIndexed { i, c ->

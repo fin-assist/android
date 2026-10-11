@@ -38,13 +38,16 @@ class UploadDesignCheckTest {
         popups: Boolean = false,
     ) = DesignCheck.capture(name, dark = dark, heightDp = heightDp, popups = popups) {
         UploadContent(
-            state, firstRun = false, onBack = {}, onLater = {}, onRetry = {}, onToggleFallback = {}, onOpenUrl = {},
-            onPick = {}, onPickAnother = {}, onBackToGuide = {}, onAskCancel = {}, onCancelImport = {},
+            state, firstRun = false, onBack = {}, onLater = {}, onRetry = {}, onShowFallback = {}, onOpenUrl = {},
+            onPick = {}, onPickAnother = {}, onBackToGuide = {}, onAskCancel = {}, onCancelImport = {}, onRetryUpload = {}, onSupport = {},
         )
     }
 
-    private val guide = UploadUiState(phase = UploadPhase.Guide(config))
-    private val busy = UploadUiState(phase = UploadPhase.Busy("operations_2026.ofx", 0.6f, uploadId = "u1"))
+    private val guide = UploadUiState(phase = UploadPhase.Guide(config), config = config)
+    private val more = UploadUiState(phase = UploadPhase.Guide(loaded), config = loaded)
+
+    /** Parsing keeps the guide on screen; only the file area changes (mockup `ImportGuideBusy`). */
+    private val busy = UploadUiState(phase = UploadPhase.Busy("operations_2026.ofx", 0.6f, uploadId = "u1"), config = loaded)
 
     private fun error(code: String, file: String) = UploadUiState(phase = UploadPhase.Error(code, file, config))
 
@@ -52,17 +55,16 @@ class UploadDesignCheckTest {
 
     @Test fun importGuideDark() = capture("ImportGuideDark", guide, dark = true)
 
-    @Test fun importGuideMore() = capture("ImportGuideMore", UploadUiState(phase = UploadPhase.Guide(loaded)), heightDp = 884)
+    @Test fun importGuideMore() = capture("ImportGuideMore", more, heightDp = 884)
 
-    /** The app expands the manual-export card inline; the mockup draws it as a bottom sheet. */
-    @Test fun importGuideFallback() = capture("ImportGuideFallback", guide.copy(fallbackOpen = true))
+    @Test fun importGuideFallback() = capture("ImportGuideFallback", guide.copy(fallbackOpen = true), popups = true)
 
     @Test fun importGuideBusy() = capture("ImportGuideBusy", busy, heightDp = 884)
 
     @Test fun importGuideBusyCancel() = capture("ImportGuideBusyCancel", busy.copy(askCancel = true), heightDp = 884, popups = true)
 
-    /** The file did not go out for lack of network: the app shows it as an upload error. */
-    @Test fun importGuideOffline() = capture("ImportGuideOffline", error("OFFLINE", "operations_2026.ofx"), heightDp = 1020)
+    /** The file did not go out for lack of network: the guide with a notice and «Повторить». */
+    @Test fun importGuideOffline() = capture("ImportGuideOffline", more.copy(uploadOffline = true), heightDp = 1020)
 
     @Test fun importError() = capture("ImportError", error(ErrorCodes.WRONG_FORMAT, "statement_09_2026.pdf"))
 
