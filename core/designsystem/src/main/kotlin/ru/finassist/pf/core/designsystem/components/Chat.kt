@@ -179,7 +179,7 @@ fun PfChatComposer(
     onVoice: () -> Unit,
     modifier: Modifier = Modifier,
     state: ComposerState = ComposerState.IDLE,
-    placeholder: String = "Например: сколько я трачу на такси?",
+    placeholder: String = "Например: траты на такси",
     offlineText: String = "Нет сети — помощнику нужен интернет. Операции и аналитика доступны",
     limitText: String = "Вопросы на сегодня закончились. Новые — в 00:00 по Москве",
     onRetry: (() -> Unit)? = null,

@@ -36,6 +36,7 @@ object PfTestTags {
     const val CHAT_LIMIT = "ds.chat.limit"
     const val CHAT_OFFLINE = "ds.chat.offline"
     const val CHAT_RETRY = "ds.chat.retry"
+    const val LIMIT_METER = "ds.limit_meter"
 }
 
 /**

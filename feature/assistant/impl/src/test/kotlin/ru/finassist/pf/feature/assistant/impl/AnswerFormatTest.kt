@@ -66,4 +66,23 @@ class AnswerFormatTest {
         blocks = ChatViewModel.appendChunk(blocks, 2, "Итог")
         assertEquals(listOf("Привет, мир", null, "Итог"), blocks.map { it.text })
     }
+
+    @Test
+    fun `a chart followed by rows is one group`() {
+        val text = Block(BlockType.TEXT, text = "a")
+        val chart = Block(BlockType.CHART)
+        val rows = Block(BlockType.ROWS)
+        assertEquals(listOf(listOf(text), listOf(chart, rows)), AnswerFormat.groupBlocks(listOf(text, chart, rows)))
+        assertEquals(listOf(listOf(rows), listOf(chart)), AnswerFormat.groupBlocks(listOf(rows, chart)))
+        assertEquals(listOf(listOf(chart), listOf(text), listOf(rows)), AnswerFormat.groupBlocks(listOf(chart, text, rows)))
+        assertEquals(emptyList(), AnswerFormat.groupBlocks(emptyList()))
+    }
+
+    @Test
+    fun `a partial month is filled by its days`() {
+        val to = OffsetDateTime.parse("2026-09-25T21:40:00+03:00")
+        assertEquals(25f / 30, AnswerFormat.partialFill(to, partial = true))
+        assertNull(AnswerFormat.partialFill(to, partial = false))
+        assertNull(AnswerFormat.partialFill(null, partial = true))
+    }
 }

@@ -1,10 +1,13 @@
 package ru.finassist.pf.feature.assistant.impl.domain
 
 import ru.finassist.pf.core.api.model.AnswerSource
+import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockRow
+import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.ChangedSince
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.time.RussianDates
+import java.time.OffsetDateTime
 import java.time.YearMonth
 import java.time.ZoneId
 import kotlin.math.roundToInt
@@ -99,5 +102,33 @@ object AnswerFormat {
         r.percent != null -> "${(r.percent!! * 100).roundToInt()}%"
         r.text != null -> r.text
         else -> null
+    }
+
+    /**
+     * Blocks as the message draws them: a chart immediately followed by rows is one group (one card — the rows
+     * describe the chart), every other block is a group of its own.
+     */
+    fun groupBlocks(blocks: List<Block>): List<List<Block>> {
+        val groups = mutableListOf<List<Block>>()
+        var i = 0
+        while (i < blocks.size) {
+            val b = blocks[i]
+            val next = blocks.getOrNull(i + 1)
+            if (b.type == BlockType.CHART && next?.type == BlockType.ROWS) {
+                groups += listOf(b, next)
+                i += 2
+            } else {
+                groups += listOf(b)
+                i += 1
+            }
+        }
+        return groups
+    }
+
+    /** Filled share of a partial month's bar: the days up to [dataTo] over the days of its month. */
+    fun partialFill(dataTo: OffsetDateTime?, partial: Boolean): Float? {
+        if (!partial || dataTo == null) return null
+        val day = dataTo.toLocalDate()
+        return day.dayOfMonth.toFloat() / day.lengthOfMonth()
     }
 }

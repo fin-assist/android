@@ -1,6 +1,16 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import ru.finassist.pf.core.designsystem.components.PfTestTags
+import ru.finassist.pf.core.designsystem.components.PfLimitMeter
+import ru.finassist.pf.core.designsystem.components.PfDivider
+import ru.finassist.pf.core.designsystem.components.PfButton
+import ru.finassist.pf.core.designsystem.components.ButtonVariant
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -152,15 +162,8 @@ internal fun ChatContent(
 
     Column(Modifier.fillMaxSize().imePadding().testTag(AssistantTags.CHAT)) {
         val limit = state.limit
-        PfPageHeader(
-            "Помощник",
-            onBack = actions.onBack,
-            subtitle = when {
-                limit == null -> "Отвечает по вашим операциям"
-                limit.remaining <= 0 -> "Вопросы на сегодня закончились"
-                else -> "Отвечает по вашим операциям · осталось ${limit.remaining} из ${limit.dailyMax}"
-            },
-        )
+        // The remaining questions are in the meter above the composer (mockup `Chat`).
+        PfPageHeader("Помощник", onBack = actions.onBack, subtitle = "Отвечает по вашим операциям")
         when {
             state.loading -> Column(Modifier.weight(1f)) {}
             state.loadFailed -> Column(Modifier.weight(1f)) {
@@ -168,22 +171,25 @@ internal fun ChatContent(
                     PfLink("Повторить", onClick = actions.onReload)
                 }
             }
+            // An empty dialog: the empty state in the middle (mockup `ChatEmpty`).
+            state.items.isEmpty() && !state.hasOlder -> Column(
+                Modifier.weight(1f).fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                PfEmptyState(
+                    PfIcons.MESSAGE, "Спросите о своих тратах и доходах", "Помощник отвечает по вашим операциям. 5 вопросов в день",
+                    modifier = Modifier.testTag(AssistantTags.EMPTY),
+                )
+            }
+            // The thread sits at the bottom, over the meter, while it is shorter than the screen (`justify-content: flex-end`).
             else -> LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = d.space5, vertical = d.space3),
-                verticalArrangement = Arrangement.spacedBy(d.space4),
+                contentPadding = PaddingValues(horizontal = d.space5, vertical = d.space4),
+                verticalArrangement = Arrangement.spacedBy(d.space4, Alignment.Bottom),
             ) {
                 if (state.hasOlder) {
                     item(key = "older") { PfLink(if (state.loadingOlder) "Загружаем…" else "Показать раньше", onClick = actions.onLoadOlder) }
-                }
-                if (state.items.isEmpty()) {
-                    item(key = "empty") {
-                        Text(
-                            "Спросите о своих расходах и доходах — помощник посчитает по загруженным операциям. Например: «Сколько я трачу на такси?»",
-                            style = PfTheme.type.body, color = PfTheme.colors.textMuted,
-                        )
-                    }
                 }
                 var lastDay: LocalDate? = null
                 state.items.forEach { item ->
@@ -204,12 +210,19 @@ internal fun ChatContent(
         if (voiceListening) {
             Text("Слушаю…", style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(horizontal = d.space5, vertical = d.space1))
         }
-        if (state.offline || state.sendFailed) {
+        if (state.sendFailed && !state.offline) {
             PfNotice(
-                if (state.offline) "Нет сети — помощнику нужен интернет. Операции и аналитика доступны" else "Не получилось отправить вопрос",
+                "Не получилось отправить вопрос",
                 tone = NoticeTone.WARNING,
                 modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2),
-                action = { PfLink("Повторить", onClick = actions.onRetryAfterFailure, inline = true) },
+                action = { PfLink("Повторить", onClick = actions.onRetryAfterFailure) },
+            )
+        }
+        // «Осталось 3 из 5 вопросов на сегодня» above the composer; with the limit spent the composer says it itself.
+        if (limit != null && !state.limitExhausted) {
+            PfLimitMeter(
+                used = (limit.dailyMax - limit.remaining).coerceAtLeast(0), total = limit.dailyMax,
+                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(PfTestTags.LIMIT_METER),
             )
         }
         PfChatComposer(
@@ -217,12 +230,15 @@ internal fun ChatContent(
             onValueChange = actions.onDraft,
             onSend = actions.onSend,
             onVoice = actions.onVoice,
-            // Offline is shown as a notice with «Повторить» above the composer, so the user is never stuck.
+            // Offline replaces the input with a notice (mockup `ChatOffline`); the app has no network monitor, so
+            // the notice has «Повторить» (FIN-40, decided with the owner).
             state = when {
                 state.limitExhausted -> ComposerState.LIMIT
+                state.offline -> ComposerState.OFFLINE
                 state.sending || state.generating || voiceListening -> ComposerState.BUSY
                 else -> ComposerState.IDLE
             },
+            onRetry = actions.onRetryAfterFailure,
             limitText = limit?.let { "Вопросы на сегодня закончились. Новые — в ${resetTime(it.resetsAt, zone)}" } ?: "Вопросы на сегодня закончились. Новые — в 00:00 по Москве",
         )
     }
@@ -253,22 +269,25 @@ private fun Answer(
     when {
         item.status == AnswerStatus.FAILED -> {
             if (item.errorCode == AnswerErrorCode.CANNOT_ANSWER) {
-                PfChatStatus("Не хватает данных или вопрос непонятен — переформулируйте его. Вопрос не потрачен", tone = ChatStatusTone.ERROR, modifier = Modifier.testTag(AssistantTags.ANSWER_CANNOT))
+                PfChatStatus("Не получилось ответить — недостаточно данных, переформулируйте вопрос. Вопрос не потрачен", tone = ChatStatusTone.ERROR, modifier = Modifier.testTag(AssistantTags.ANSWER_CANNOT))
             } else {
                 PfChatStatus(
-                    "Не получилось ответить. Вопрос не потрачен", tone = ChatStatusTone.ERROR, action = { PfLink("Повторить", onClick = onRetry) },
+                    "Не получилось ответить. Вопрос не потрачен", tone = ChatStatusTone.ERROR, action = { PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.GHOST) },
                     modifier = Modifier.testTag(AssistantTags.ANSWER_FAILED),
                 )
             }
         }
         item.blocks.isEmpty() && item.status == AnswerStatus.GENERATING -> PfChatStatus("Считаю по выписке…", Modifier.testTag(AssistantTags.ANSWER_GENERATING))
-        else -> PfAssistantMessage(
-            // A finished answer gets its own tag, so tests can wait for the end of the stream.
-            modifier = Modifier.testTag(if (item.status == AnswerStatus.COMPLETE) AssistantTags.ANSWER else AssistantTags.ANSWER_GENERATING),
-            source = item.source?.let { AnswerFormat.source(it, zone) },
-            staleText = item.source?.let { AnswerFormat.changedSince(it.changedSince) },
-        ) {
-            item.blocks.forEachIndexed { i, block -> BlockView(block, chartId = "assistant.${item.id}.$i") }
+        else -> Column(verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4)) {
+            PfAssistantMessage(
+                // A finished answer gets its own tag, so tests can wait for the end of the stream.
+                modifier = Modifier.testTag(if (item.status == AnswerStatus.COMPLETE) AssistantTags.ANSWER else AssistantTags.ANSWER_GENERATING),
+                source = item.source?.let { AnswerFormat.source(it, zone) },
+                staleText = item.source?.let { AnswerFormat.changedSince(it.changedSince) },
+            ) {
+                AnswerFormat.groupBlocks(item.blocks).forEachIndexed { i, group -> BlockGroupView(group, chartId = "assistant.${item.id}.$i") }
+            }
+            // The chips follow the message and its source line, across the full width (mockup `Chat`).
             val chips = item.chips.filter { it.screen != ChipScreen.UNKNOWN }
             if (chips.isNotEmpty() && item.status == AnswerStatus.COMPLETE) {
                 PfChipRow {
@@ -287,40 +306,39 @@ private fun Answer(
     }
 }
 
+/** A chart followed by its rows is one card (mockup `Chat`); other blocks stand alone. */
+@Composable
+private fun BlockGroupView(group: List<Block>, chartId: String) {
+    val chart = group.firstOrNull { it.type == BlockType.CHART }
+    val rows = group.firstOrNull { it.type == BlockType.ROWS }
+    if (chart != null && rows != null && isDrawableChart(chart)) {
+        val rowValues = rows.rows.orEmpty().mapNotNull { r -> AnswerFormat.rowValue(r)?.let { r to it } }
+        PfCard {
+            ChartBody(chart, chartId)
+            if (rowValues.isNotEmpty()) {
+                Spacer(Modifier.height(PfTheme.dimens.space3))
+                PfDivider()
+                rowValues.forEachIndexed { i, (r, value) -> PfDataRow(r.label, value, sublabel = r.sublabel, divider = i < rowValues.lastIndex) }
+            }
+        }
+    } else {
+        group.forEachIndexed { i, block -> BlockView(block, chartId = if (i == 0) chartId else "$chartId.$i") }
+    }
+}
+
+private fun isDrawableChart(block: Block) =
+    block.kind == ChartKind.BAR && block.valueKind != null && block.valueKind != ChartValueKind.UNKNOWN && !block.points.isNullOrEmpty()
+
 @Composable
 private fun BlockView(block: Block, chartId: String) {
     val c = PfTheme.colors
     when (block.type) {
         BlockType.TEXT -> Text(markdown(block.text.orEmpty()), style = PfTheme.type.body, color = c.text)
         BlockType.CHART -> {
-            val points = block.points
-            if (block.kind != ChartKind.BAR || block.valueKind == null || block.valueKind == ChartValueKind.UNKNOWN || points.isNullOrEmpty()) {
+            if (!isDrawableChart(block)) {
                 Text(block.altText.orEmpty(), style = PfTheme.type.body, color = c.text)
             } else {
-                val max = points.mapNotNull { it.value?.let(::abs) }.maxOrNull()?.takeIf { it > 0 } ?: 1.0
-                PfCard {
-                    block.title?.let { Text(it, style = PfTheme.type.bodyStrong, color = c.text) }
-                    PfBarChart(
-                        chartId = chartId,
-                        points = points.map { p ->
-                            val ym = YearMonth.from(p.range.from.atZoneSameInstant(ZoneId.systemDefault()))
-                            val display = p.value?.let { v ->
-                                if (block.valueKind == ChartValueKind.PERCENT) "${(v * 100).roundToInt()}%" else Money(v.toLong()).format()
-                            } ?: "нет данных"
-                            BarPoint(
-                                key = p.range.from.toString(),
-                                label = RussianDates.monthShort(ym.month),
-                                spokenLabel = RussianDates.monthTitle(ym),
-                                // Signed: refunds can make a period negative; the chart draws a centred baseline then.
-                                value = p.value?.let { (it / max).toFloat() },
-                                display = display,
-                                partial = p.coverage.effective == Coverage.PARTIAL,
-                                note = p.dataTo?.takeIf { p.coverage.effective == Coverage.PARTIAL }?.let { "по ${it.dayOfMonth}-е" },
-                            )
-                        },
-                        highlight = block.highlightIndex ?: points.lastIndex,
-                    )
-                }
+                PfCard { ChartBody(block, chartId) }
             }
         }
         BlockType.ROWS -> {
@@ -333,6 +351,38 @@ private fun BlockView(block: Block, chartId: String) {
         }
         BlockType.UNKNOWN -> block.altText?.let { Text(it, style = PfTheme.type.body, color = c.text) }
     }
+}
+
+/** The bars of a chart block, 64 dp high (mockup `Chat`); a partial month is filled by its days with data. */
+@Composable
+private fun ChartBody(block: Block, chartId: String) {
+    val c = PfTheme.colors
+    val points = block.points.orEmpty()
+    val max = points.mapNotNull { it.value?.let(::abs) }.maxOrNull()?.takeIf { it > 0 } ?: 1.0
+    block.title?.let { Text(it, style = PfTheme.type.bodyStrong, color = c.text) }
+    PfBarChart(
+        chartId = chartId,
+        points = points.map { p ->
+            val ym = YearMonth.from(p.range.from.atZoneSameInstant(ZoneId.systemDefault()))
+            val display = p.value?.let { v ->
+                if (block.valueKind == ChartValueKind.PERCENT) "${(v * 100).roundToInt()}%" else Money(v.toLong()).format()
+            } ?: "нет данных"
+            val partial = p.coverage.effective == Coverage.PARTIAL
+            BarPoint(
+                key = p.range.from.toString(),
+                label = RussianDates.monthShort(ym.month),
+                spokenLabel = RussianDates.monthTitle(ym),
+                // Signed: refunds can make a period negative; the chart draws a centred baseline then.
+                value = p.value?.let { (it / max).toFloat() },
+                display = display,
+                partial = partial,
+                partialFill = AnswerFormat.partialFill(p.dataTo, partial) ?: 0.5f,
+                note = p.dataTo?.takeIf { partial }?.let { "по ${it.dayOfMonth}-е" },
+            )
+        },
+        highlight = block.highlightIndex ?: points.lastIndex,
+        height = 64.dp,
+    )
 }
 
 private fun markdown(text: String): AnnotatedString = buildAnnotatedString {
@@ -366,5 +416,8 @@ internal object AssistantTags {
 
     const val CONSENT = "assistant.consent"
     const val CONSENT_CHECKBOX = "assistant.consent.checkbox"
+    const val EMPTY = "assistant.chat.empty"
     const val CONSENT_SUBMIT = "assistant.consent.submit"
+    const val CONSENT_DOCUMENT = "assistant.consent.document"
+    const val CONSENT_LATER = "assistant.consent.later"
 }
