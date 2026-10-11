@@ -44,13 +44,21 @@ object RussianDates {
     fun monthTitle(month: YearMonth): String =
         monthNominative(month.month).replaceFirstChar { it.uppercase() } + " " + month.year
 
-    /** «1–25 сентября», «29 июня — 25 сентября», «1 апреля 2025 — 25 сентября 2026». */
-    fun dayRange(from: LocalDate, toInclusive: LocalDate): String = when {
-        from == toInclusive -> day(from)
-        from.year != toInclusive.year ->
-            "${day(from)} ${from.year} $EM_DASH ${day(toInclusive)} ${toInclusive.year}"
-        from.month == toInclusive.month -> "${from.dayOfMonth}$EN_DASH${toInclusive.dayOfMonth}$NBSP${monthGenitive(from.month)}"
-        else -> "${day(from)} $EM_DASH ${day(toInclusive)}"
+    /**
+     * «1–25 сентября», «29 июня — 25 сентября», «1 апреля 2025 — 25 сентября 2026». With [withYear] a range inside
+     * one year ends with it too — «1–25 сентября 2026», «1 апреля — 25 сентября 2026» — as the mockups label a
+     * loaded period (upload card, import result, upload history).
+     */
+    fun dayRange(from: LocalDate, toInclusive: LocalDate, withYear: Boolean = false): String {
+        val year = if (withYear) "$NBSP${toInclusive.year}" else ""
+        return when {
+            from == toInclusive -> day(from) + year
+            from.year != toInclusive.year ->
+                "${day(from)} ${from.year} $EM_DASH ${day(toInclusive)} ${toInclusive.year}"
+            from.month == toInclusive.month ->
+                "${from.dayOfMonth}$EN_DASH${toInclusive.dayOfMonth}$NBSP${monthGenitive(from.month)}$year"
+            else -> "${day(from)} $EM_DASH ${day(toInclusive)}$year"
+        }
     }
 
     /** «апрель — сентябрь», «сентябрь», «ноябрь 2025 — сентябрь 2026». */

@@ -24,5 +24,5 @@ class CodeDesignCheckTest {
 
     @Test fun codeExpired() = capture("CodeExpired", state.copy(phase = CallPhase.EXPIRED))
 
-    @Test fun codeLocked() = capture("CodeLocked", state.copy(phase = CallPhase.LOCKED, lockedUntil = "14:32"))
+    @Test fun codeLocked() = capture("CodeLocked", state.copy(phase = CallPhase.LOCKED, lockText = "Слишком много попыток. Позвонить можно будет через 10 минут, в 14:32"))
 }

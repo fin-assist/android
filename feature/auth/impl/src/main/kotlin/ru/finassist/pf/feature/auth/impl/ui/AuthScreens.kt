@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -40,6 +42,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.HeroTone
 import ru.finassist.pf.core.designsystem.components.NoticeTone
+import ru.finassist.pf.core.designsystem.components.PfLinkedText
+import ru.finassist.pf.core.designsystem.components.TextPart
 import ru.finassist.pf.core.designsystem.components.PfButton
 import ru.finassist.pf.core.designsystem.components.PfCard
 import ru.finassist.pf.core.designsystem.components.PfCheckbox
@@ -227,7 +231,7 @@ internal fun CallContent(
                     )
                 }
                 CallPhase.LOCKED -> PfNotice(
-                    "Слишком много попыток. Позвонить можно будет позже" + (state.lockedUntil?.let { ", в $it" } ?: ""),
+                    state.lockText.orEmpty(),
                     tone = NoticeTone.WARNING, alert = true,
                 )
                 CallPhase.OFFLINE -> {
@@ -264,63 +268,87 @@ internal fun ConsentContent(
 ) {
     Column(Modifier.fillMaxSize().testTag(AuthTags.CONSENT)) {
         PfPageHeader("Регистрация", onBack = onBack)
-        Column(
-            Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = PfTheme.dimens.space5, vertical = PfTheme.dimens.space4),
-        ) {
-            Text("Номер подтверждён", style = PfTheme.type.title1, color = PfTheme.colors.text)
-            Text(
-                "На ${state.phoneDisplay} ещё нет аккаунта — создадим его. Для этого нужно ваше согласие на обработку персональных данных",
-                style = PfTheme.type.lead, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space1),
-            )
-            Spacer(Modifier.height(PfTheme.dimens.space6))
-            PfCard {
-                Text("Что будем хранить", style = PfTheme.type.bodyStrong, color = PfTheme.colors.text)
-                Spacer(Modifier.height(PfTheme.dimens.space2))
-                listOf(
-                    "Номер телефона — для входа",
-                    "Операции из выписок, которые вы загрузите, — для аналитики",
-                    "Сами файлы выписок — зашифрованными, чтобы поддержка могла разобраться с ошибкой разбора",
-                ).forEach { line ->
-                    Row(Modifier.padding(vertical = PfTheme.dimens.space1), verticalAlignment = Alignment.Top) {
-                        PfIcon(PfIcons.CHECK, contentDescription = null, size = PfTheme.dimens.iconMd, tint = PfTheme.colors.accent)
-                        Spacer(Modifier.width(PfTheme.dimens.space3))
-                        Text(line, style = PfTheme.type.body, color = PfTheme.colors.text)
+        // The button sits at the bottom of the viewport (mockup: a growing spacer of at least space6 before it);
+        // the column is at least as tall as the viewport, so the spacer can grow inside the scroll.
+        BoxWithConstraints(Modifier.weight(1f)) {
+            val viewport = maxHeight
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = viewport)
+                    .padding(horizontal = PfTheme.dimens.space5, vertical = PfTheme.dimens.space4),
+            ) {
+                Text("Номер подтверждён", style = PfTheme.type.title1, color = PfTheme.colors.text)
+                Text(
+                    "На ${state.phoneDisplay} ещё нет аккаунта — создадим его. Для этого нужно ваше согласие на обработку персональных данных",
+                    style = PfTheme.type.lead, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space1),
+                )
+                Spacer(Modifier.height(PfTheme.dimens.space6))
+                PfCard {
+                    Text("Что будем хранить", style = PfTheme.type.bodyStrong, color = PfTheme.colors.text)
+                    Column(
+                        Modifier.padding(top = PfTheme.dimens.space2),
+                        verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2),
+                    ) {
+                        listOf(
+                            "Номер телефона — для входа",
+                            "Операции из выписок, которые вы загрузите, — для аналитики",
+                            "Сами файлы выписок — зашифрованными, чтобы поддержка могла разобраться с ошибкой разбора",
+                        ).forEach { line ->
+                            Row(verticalAlignment = Alignment.Top) {
+                                PfIcon(PfIcons.CHECK, contentDescription = null, size = PfTheme.dimens.iconMd, tint = PfTheme.colors.accent)
+                                Spacer(Modifier.width(PfTheme.dimens.space3))
+                                Text(line, style = PfTheme.type.body, color = PfTheme.colors.text)
+                            }
+                        }
                     }
+                    Spacer(Modifier.height(PfTheme.dimens.space4))
+                    ru.finassist.pf.core.designsystem.components.PfDivider()
+                    Text(
+                        "Данные хранятся в России. Удалить их можно в любой момент — вместе с аккаунтом в профиле",
+                        style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space4),
+                    )
+                }
+                Spacer(Modifier.height(PfTheme.dimens.space1))
+                Row {
+                    PfLink(state.document?.title ?: "Текст согласия", onClick = {
+                        state.document?.url?.let(onOpenDocument)
+                    })
                 }
                 Spacer(Modifier.height(PfTheme.dimens.space4))
-                ru.finassist.pf.core.designsystem.components.PfDivider()
-                Text(
-                    "Данные хранятся в России. Удалить их можно в любой момент — вместе с аккаунтом в профиле",
-                    style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space4),
+                PfCheckbox(
+                    checked = state.accepted, onCheckedChange = onAccepted, label = "Даю согласие на обработку персональных данных", error = state.error,
+                    modifier = Modifier.testTag(AuthTags.CONSENT_CHECKBOX),
                 )
+                Spacer(Modifier.weight(1f).heightIn(min = PfTheme.dimens.space6))
+                state.formError?.let { PfNotice(it, tone = NoticeTone.WARNING, alert = true); Spacer(Modifier.height(PfTheme.dimens.space3)) }
+                PfButton(
+                    "Создать аккаунт", onClick = onSubmit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Создаём…",
+                    modifier = Modifier.testTag(AuthTags.CONSENT_SUBMIT),
+                )
+                PfLinkedText(
+                    listOf(
+                        TextPart.Plain("Нажимая «Создать аккаунт», вы принимаете "),
+                        TextPart.Link("условия использования", AuthTags.CONSENT_TERMS) { onOpenDocument(LegalLinks.TERMS) },
+                        TextPart.Plain(" и "),
+                        TextPart.Link("политику конфиденциальности", AuthTags.CONSENT_PRIVACY) { onOpenDocument(LegalLinks.PRIVACY) },
+                    ),
+                    modifier = Modifier.padding(top = PfTheme.dimens.space3),
+                )
+                Spacer(Modifier.windowInsetsPadding(PfInsets.navigationBars))
             }
-            Spacer(Modifier.height(PfTheme.dimens.space1))
-            Row {
-                PfLink(state.document?.title ?: "Текст согласия", onClick = {
-                    state.document?.url?.let(onOpenDocument)
-                })
-            }
-            Spacer(Modifier.height(PfTheme.dimens.space4))
-            PfCheckbox(
-                checked = state.accepted, onCheckedChange = onAccepted, label = "Даю согласие на обработку персональных данных", error = state.error,
-                modifier = Modifier.testTag(AuthTags.CONSENT_CHECKBOX),
-            )
-            Spacer(Modifier.height(PfTheme.dimens.space6))
-            state.formError?.let { PfNotice(it, tone = NoticeTone.WARNING, alert = true); Spacer(Modifier.height(PfTheme.dimens.space3)) }
-            PfButton(
-                "Создать аккаунт", onClick = onSubmit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Создаём…",
-                modifier = Modifier.testTag(AuthTags.CONSENT_SUBMIT),
-            )
-            Text(
-                "Нажимая «Создать аккаунт», вы принимаете условия использования и политику конфиденциальности",
-                style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space3),
-            )
-            Spacer(Modifier.windowInsetsPadding(PfInsets.navigationBars))
         }
     }
+}
+
+/**
+ * Public documents the registration footer links to (FIN-40). The contract has no such documents (`ConsentType`
+ * covers only the consents), so the addresses are constants of the app; they open in the browser.
+ */
+internal object LegalLinks {
+    const val TERMS = "https://plainfin.ru/terms"
+    const val PRIVACY = "https://plainfin.ru/privacy"
 }
 
 @Composable
@@ -366,6 +394,8 @@ internal object AuthTags {
     const val CONSENT = "auth.consent"
     const val CONSENT_CHECKBOX = "auth.consent.checkbox"
     const val CONSENT_SUBMIT = "auth.consent.submit"
+    const val CONSENT_TERMS = "auth.consent.terms"
+    const val CONSENT_PRIVACY = "auth.consent.privacy"
     const val CLOSED = "auth.closed"
     const val CLOSED_BACK = "auth.closed.back"
     const val DELETED = "auth.deleted"

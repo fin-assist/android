@@ -13,11 +13,13 @@ import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.api.model.VerificationStatus
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.auth.impl.data.SessionRepositoryImpl
+import ru.finassist.pf.feature.auth.impl.domain.CallLockText
 import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
 import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
 import javax.inject.Inject
@@ -28,7 +30,8 @@ data class CallUiState(
     val phoneDisplay: String,
     val callbackNumber: String,
     val phase: CallPhase = CallPhase.WAITING,
-    val lockedUntil: String? = null,
+    /** Text of the [CallPhase.LOCKED] state (`CallLockText`). */
+    val lockText: String? = null,
     val busy: Boolean = false,
 )
 
@@ -50,6 +53,7 @@ class CallViewModel @Inject constructor(
     private val session: SessionRepositoryImpl,
     private val flags: FeatureFlags,
     private val tracker: Tracker,
+    private val clock: Clock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         CallUiState(
@@ -79,7 +83,7 @@ class CallViewModel @Inject constructor(
                 when (e) {
                     is AppError.Offline -> _state.update { it.copy(phase = CallPhase.OFFLINE) }
                     is AppError.Unauthorized -> _state.update { it.copy(phase = CallPhase.EXPIRED) }
-                    is AppError.RateLimited -> _state.update { it.copy(phase = CallPhase.LOCKED, lockedUntil = e.retryAt?.let { "%02d:%02d".format(it.hour, it.minute) }) }
+                    is AppError.RateLimited -> _state.update { it.copy(phase = CallPhase.LOCKED, lockText = lockText(e)) }
                     else -> _state.update { it.copy(phase = CallPhase.EXPIRED) }
                 }
             }
@@ -124,7 +128,7 @@ class CallViewModel @Inject constructor(
                 watch()
             } catch (e: AppError) {
                 when (e) {
-                    is AppError.RateLimited -> _state.update { it.copy(phase = CallPhase.LOCKED, lockedUntil = e.retryAt?.let { "%02d:%02d".format(it.hour, it.minute) }) }
+                    is AppError.RateLimited -> _state.update { it.copy(phase = CallPhase.LOCKED, lockText = lockText(e)) }
                     is AppError.Offline -> _state.update { it.copy(phase = CallPhase.OFFLINE) }
                     else -> _state.update { it.copy(phase = CallPhase.EXPIRED) }
                 }
@@ -133,6 +137,8 @@ class CallViewModel @Inject constructor(
             }
         }
     }
+
+    private fun lockText(e: AppError.RateLimited) = CallLockText.of(e.retryAt, clock.now(), clock.zone)
 
     fun consumeEvent() { _events.value = null }
 }

@@ -28,7 +28,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ru.finassist.pf.core.designsystem.icons.PfIcon
@@ -149,4 +154,38 @@ fun PfLink(
     ) {
         Text(text, style = style, color = c.accent)
     }
+}
+
+/** A piece of [PfLinkedText]: plain text or an inline link (`Pf.Link inline`). */
+sealed interface TextPart {
+    val text: String
+
+    data class Plain(override val text: String) : TextPart
+
+    /** [tag] names the link for accessibility and tests; [onClick] runs on tap. */
+    data class Link(override val text: String, val tag: String, val onClick: () -> Unit) : TextPart
+}
+
+/**
+ * A paragraph with inline links that continue the text, as the mockups' `Pf.Link inline` inside a sentence:
+ * links are accent and semibold, the rest uses [style] and [color]. Each link is a separate accessibility action.
+ */
+@Composable
+fun PfLinkedText(
+    parts: List<TextPart>,
+    modifier: Modifier = Modifier,
+    style: TextStyle = PfTheme.type.caption,
+    color: Color = PfTheme.colors.textMuted,
+    textAlign: TextAlign? = null,
+) {
+    val linkStyle = TextLinkStyles(SpanStyle(color = PfTheme.colors.accent, fontWeight = FontWeight.SemiBold))
+    val text = buildAnnotatedString {
+        parts.forEach { part ->
+            when (part) {
+                is TextPart.Plain -> append(part.text)
+                is TextPart.Link -> withLink(LinkAnnotation.Clickable(part.tag, linkStyle) { part.onClick() }) { append(part.text) }
+            }
+        }
+    }
+    Text(text, modifier = modifier, style = style, color = color, textAlign = textAlign)
 }
