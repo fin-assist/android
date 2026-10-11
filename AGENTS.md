@@ -134,7 +134,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   Google Maven, Gradle and Maven Central.
 - Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug testMockDebugUnitTest` — the same checks as CI.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally, the `UI tests` workflow in CI
-  (after merge to `main`, or a PR labelled `e2e`).
+  (only after a merge to `main`; PRs never run them).
 - `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
   docs check and its parser tests from CI, no Gradle needed.
 - Coverage: `./gradlew :koverXmlReportUnit` (runs the unit tests), then
@@ -172,8 +172,8 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   - Not automatable on the emulator (biometrics, voice, a bug that does not reproduce there): add it to «Not
     covered yet» in docs/e2e.md and say so in the PR. The reason must be technical — what the emulator or the mock
     cannot do — not the effort.
-  - Put the `e2e` label on the PR so the UI tests run before merge, not only after; if you cannot set labels, ask the
-    owner in the PR.
+  - CI runs UI tests only after the merge to `main`: a new or changed flow is first run there, unless it was run
+    locally with `scripts/e2e.sh`. Say in the PR whether the flows were run and how.
 - Document in moderation: KDoc on public `:api` interfaces, comments where logic is non-obvious
   (accounting rules, idempotency, animation), not on every method.
 
@@ -222,8 +222,8 @@ commands: `docs/testing.md`.
 - Check that the PR updates this file and `docs/` when it changes what they describe.
 - Check that a new screen, screen state, bottom sheet or dialog comes with its `*DesignCheckTest` (see Code).
 - Check that a new or changed user scenario comes with a UI test (or a «Not covered yet» entry with a technical
-  reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md,
-  and that the PR has the `e2e` label (see Code).
+  reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md
+  (see Code).
 - Check that new functionality comes with tests (see Tests) and that the tests would fail if the behaviour
   broke; flag changed lines the «Unit test coverage» comment of the PR (posted by CI) shows as uncovered when
   the PR gives no reason for them.

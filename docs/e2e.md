@@ -31,9 +31,9 @@ scripts/e2e.sh --no-build --flow .maestro/flows/assistant/ask_question.yaml
 Reports go to `build/e2e/`: JUnit XML, `maestro-output.tgz` (per flow: screenshot and view hierarchy of the failed
 step, commands, log), logcat, the preflight dump.
 
-In CI (`.github/workflows/e2e.yml`) the tests run after every merge to `main`, on a PR labelled `e2e`
-(add the label, push to re-run), and by hand from the Actions tab. The run summary lists the flows; reports are in the
-`e2e-reports` artifact.
+In CI (`.github/workflows/e2e.yml`) the tests run only after a merge to `main`; PRs never run them. A failed run is
+re-run from the Actions tab («Re-run jobs»). The run summary lists the flows; reports are in the `e2e-reports`
+artifact.
 
 ## Qase
 
@@ -42,10 +42,9 @@ steps and expected results in Russian, marked automated.
 
 - `scripts/qase-cases.json` maps tests to cases: a Maestro flow by its path (`.maestro/flows/<feature>/<flow>.yaml`),
   an instrumented test by `<class>#<method>`.
-- After a merge to `main` or a manual run, the `UI tests` workflow sends the results as one Qase run
+- After a merge to `main` the `UI tests` workflow sends the results as one Qase run
   (`scripts/qase-report.py`: JUnit reports → run → bulk results → complete). The run title is
-  `UI tests · <branch> · <sha>`, its description links the Actions run. PR runs and cancelled runs are not sent; a
-  manual run from another branch is sent with that branch in the title.
+  `UI tests · <branch> · <sha>`, its description links the Actions run. Cancelled runs are not sent.
 - Statuses: passed, failed (an assertion `failure` and an unexpected `error` alike: in UI tests the latter is usually
   an app crash), skipped. A test found in several reports keeps its worst result.
 - If the results cannot be recorded, the script retries once (429, 5xx, network) and otherwise deletes the empty run.
@@ -129,8 +128,8 @@ a bug that does not reproduce there), list it in «Not covered yet» at the end 
 reason and say so in the PR; «takes long to write» is not a reason.
 
 Every new or renamed test: a Qase case (suite of the feature, steps and expected results in Russian, automated),
-a line in `scripts/qase-cases.json`, a row in «Coverage». The PR gets the `e2e` label so the flows run before merge
-(an agent that cannot set labels asks the owner in the PR).
+a line in `scripts/qase-cases.json`, a row in «Coverage». CI runs the flows only after the merge to `main`; before
+that they run only locally (`scripts/e2e.sh`), and the PR says whether they were.
 
 ## Writing a flow
 
