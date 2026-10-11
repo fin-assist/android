@@ -41,6 +41,22 @@ class ScrubbingExceptionHandlerTest {
         assertIs<ScrubbedThrowable>(next.received)
     }
 
+    @Test fun `a VM error still reaches the next handler when it cannot be scrubbed`() {
+        val next = Recording()
+        val oom = OutOfMemoryError("Failed to allocate 64 bytes")
+        ScrubbingExceptionHandler(next, scrub = { throw OutOfMemoryError() }) { _, _ -> }
+            .uncaughtException(Thread.currentThread(), oom)
+        assertSame(oom, next.received)
+    }
+
+    @Test fun `any other crash that cannot be scrubbed goes on without its message`() {
+        val next = Recording()
+        ScrubbingExceptionHandler(next, scrub = { throw OutOfMemoryError() }) { _, _ -> }
+            .uncaughtException(Thread.currentThread(), IllegalStateException("bad row: Перевод Иванову 15000"))
+        val sent = assertIs<IllegalStateException>(next.received)
+        assertEquals("Uncaught exception could not be scrubbed", sent.message)
+    }
+
     @Test fun `install wraps the current default handler once`() {
         val tracer = Recording()
         Thread.setDefaultUncaughtExceptionHandler(tracer)

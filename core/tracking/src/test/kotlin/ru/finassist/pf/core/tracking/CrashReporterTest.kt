@@ -104,6 +104,11 @@ class ScreenSlugTest {
 
     @Test fun `a top level route class`() = assertEquals("category_picker", screenSlug("ru.finassist.pf.CategoryPicker")?.value)
 
+    @Test fun `app lock screens outside navigation`() {
+        assertEquals("app_lock.setup", screenSlug("AppLock.Setup")?.value)
+        assertEquals("app_lock.unlock", screenSlug("AppLock.Unlock")?.value)
+    }
+
     @Test fun `a name longer than a slug keeps its innermost segments`() {
         val route = "ru.finassist.pf.feature.statements.api.StatementsRoutes.VeryLongNestedFlow.AnotherQuiteLongScreenName/{id}"
         assertEquals("another_quite_long_screen_name", screenSlug(route)?.value)

@@ -33,8 +33,8 @@ abstract class CrashReportingApplication : Application(), HasTracerConfiguration
 
     override fun onCreate() {
         super.onCreate()
-        // Tracer has installed its handler by now; put the scrubbing one in front of it. The original message
-        // stays in logcat only in debuggable builds.
+        // Tracer installed its handler from its startup provider (see ScrubbingExceptionHandler.install); put the
+        // scrubbing one in front of it. The original message stays in logcat only in debuggable builds.
         if (crashReportingEnabled) {
             val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
             ScrubbingExceptionHandler.install { thread, error ->
