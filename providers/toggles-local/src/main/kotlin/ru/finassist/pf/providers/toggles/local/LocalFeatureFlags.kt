@@ -23,6 +23,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.toggles.FlagOverrides
+import ru.finassist.pf.core.toggles.flagsVersion
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -57,6 +58,10 @@ class LocalFeatureFlags @Inject constructor(
         overrideValues[flag] ?: assetValues[flag] ?: flag.defaultValue
 
     override val changes: Flow<Unit> = changesFlow
+
+    /** Asset values with the debug overrides on top — what [isEnabled] actually answers from. */
+    override val version: String
+        get() = flagsVersion((assetValues + overrideValues).mapKeys { it.key.key })
 
     override suspend fun setUser(userId: String?) = Unit
 

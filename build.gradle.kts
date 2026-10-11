@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.hilt) apply false
+    alias(libs.plugins.tracer) apply false
     // Unit test coverage of all modules in one report: `./gradlew :koverHtmlReportUnit` (docs/testing.md).
     alias(libs.plugins.kover)
     // Enforces the module dependency rules (see docs/modules.md). Fails the build on a violation.

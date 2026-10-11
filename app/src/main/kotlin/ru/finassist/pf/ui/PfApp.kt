@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,7 +21,9 @@ import ru.finassist.pf.core.designsystem.components.LocalSuppressPopups
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -58,6 +61,7 @@ fun PfApp(
     appLockScreens: AppLockScreens,
     preferences: AppPreferences,
     flags: FeatureFlags,
+    onScreenOpened: (routePattern: String?) -> Unit,
 ) {
     val theme by preferences.theme.collectAsStateWithLifecycle(initialValue = null)
     val dark = when (theme) {
@@ -84,7 +88,7 @@ fun PfApp(
         Box(Modifier.fillMaxSize().background(PfTheme.colors.bg).pfTestRoot()) {
             when (val s = sessionState) {
                 SessionState.Unknown -> Unit
-                SessionState.SignedOut -> LayerScope("auth") { AuthLayer(entries, session) }
+                SessionState.SignedOut -> LayerScope("auth") { AuthLayer(entries, session, onScreenOpened) }
                 is SessionState.SignedIn -> when {
                     (settingUp && lockState != LockState.Locked) || lockState == LockState.NotConfigured ->
                         LayerScope("setup-${s.userId}") { appLockScreens.Setup(onDone = { settingUp = false }) }
@@ -95,7 +99,7 @@ fun PfApp(
                         CompositionLocalProvider(LocalSuppressPopups provides locked) {
                             LayerScope("main-${s.userId}") {
                                 MainLayer(
-                                    entries, session, flags, userId = s.userId,
+                                    entries, session, flags, userId = s.userId, onScreenOpened = onScreenOpened,
                                     modifier = if (locked) Modifier.clearAndSetSemantics { } else Modifier,
                                 )
                             }
@@ -114,12 +118,26 @@ fun PfApp(
 }
 
 @Composable
-private fun AuthLayer(entries: Set<FeatureEntry>, session: SessionRepository) {
+private fun AuthLayer(entries: Set<FeatureEntry>, session: SessionRepository, onScreenOpened: (String?) -> Unit) {
     val controller = rememberNavController()
+    ScreenBreadcrumbs(controller, onScreenOpened)
     val navigator = remember(controller) { NavControllerNavigator(controller) }
     val reason = remember { session.consumeSignOutReason() }
     NavHost(controller, startDestination = AuthRoutes.Phone(reason)) {
         entries.forEach { entry -> with(entry) { install(navigator) } }
+    }
+}
+
+/**
+ * Reports every destination the user lands on by its route pattern (`…AnalyticsRoutes.Period/{params}`): the
+ * class of the route, never the arguments it was opened with. Feeds the screen trail of crash reports.
+ */
+@Composable
+private fun ScreenBreadcrumbs(controller: NavHostController, onScreenOpened: (String?) -> Unit) {
+    DisposableEffect(controller) {
+        val listener = NavController.OnDestinationChangedListener { _, destination, _ -> onScreenOpened(destination.route) }
+        controller.addOnDestinationChangedListener(listener)
+        onDispose { controller.removeOnDestinationChangedListener(listener) }
     }
 }
 
@@ -132,9 +150,11 @@ private fun MainLayer(
     session: SessionRepository,
     flags: FeatureFlags,
     userId: String,
+    onScreenOpened: (String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val controller = rememberNavController()
+    ScreenBreadcrumbs(controller, onScreenOpened)
     val navigator = remember(controller) { NavControllerNavigator(controller) }
     // Right after registration the first run continues with the statement upload (step 4 of 4) — unless the
     // upload screen is switched off by `statements.upload`.

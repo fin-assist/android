@@ -8,7 +8,13 @@ import ru.finassist.pf.BuildConfig
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.common.time.ShiftedClock
 import ru.finassist.pf.core.common.time.SystemClock
+import ru.finassist.pf.core.toggles.FeatureFlags
+import ru.finassist.pf.core.tracking.CompositeCrashReporter
+import ru.finassist.pf.core.tracking.CrashContextSync
+import ru.finassist.pf.core.tracking.CrashReporter
+import ru.finassist.pf.providers.crash.tracer.TracerCrashReporter
 import java.time.OffsetDateTime
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Module
@@ -19,4 +25,22 @@ object AppModule {
     @Singleton
     fun clock(): Clock =
         if (BuildConfig.E2E_NOW.isEmpty()) SystemClock() else ShiftedClock(OffsetDateTime.parse(BuildConfig.E2E_NOW))
+
+    /** `true` when the build has a Tracer app token; otherwise the SDK is not even started. */
+    @Provides
+    @Named(TracerCrashReporter.CRASH_REPORTING_ENABLED)
+    fun crashReportingEnabled(): Boolean = BuildConfig.CRASH_REPORTING_ENABLED
+
+    /**
+     * What the app injects as [CrashReporter]: every provider of the flavor at once — Tracer in both, plus logcat
+     * in `mock` (providers contribute with `@IntoSet`).
+     */
+    @Provides
+    @Singleton
+    fun crashReporter(providers: Set<@JvmSuppressWildcards CrashReporter>): CrashReporter = CompositeCrashReporter(providers)
+
+    @Provides
+    @Singleton
+    fun crashContext(reporter: CrashReporter, flags: FeatureFlags): CrashContextSync =
+        CrashContextSync(reporter, configVersion = { flags.version })
 }
