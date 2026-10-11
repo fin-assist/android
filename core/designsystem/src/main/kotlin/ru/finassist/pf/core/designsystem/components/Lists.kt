@@ -191,13 +191,14 @@ fun PfDataRow(
 
 /** Day group of operations: `overline` date header in `text-faint` and the rows. */
 @Composable
-fun PfTransactionGroup(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun PfTransactionGroup(label: String, modifier: Modifier = Modifier, first: Boolean = false, content: @Composable () -> Unit) {
     Column(modifier.fillMaxWidth()) {
         Text(
             label.uppercase(),
             style = PfTheme.type.overline,
             color = PfTheme.colors.textFaint,
-            modifier = Modifier.padding(top = PfTheme.dimens.space4).semantics { heading() },
+            // `.pf-tgroup:first-child .pf-tgroup-title { padding-top: 0 }`
+            modifier = Modifier.padding(top = if (first) 0.dp else PfTheme.dimens.space4).semantics { heading() },
         )
         content()
     }
@@ -279,30 +280,35 @@ fun PfOptionRow(
     modifier: Modifier = Modifier,
     icon: String? = null,
     description: String? = null,
+    /** `.pf-opt` has a bottom border except the last row of its group: the caller says which one is last. */
+    divider: Boolean = false,
 ) {
     val c = PfTheme.colors
     val d = PfTheme.dimens
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(role = Role.RadioButton, onClick = onClick)
-            .defaultMinSize(minHeight = d.row)
-            .padding(vertical = d.space2)
-            .semantics(mergeDescendants = true) {
-                this.contentDescription = listOfNotNull(title, description).joinToString(", ")
-                this.selected = selected
-            },
-        horizontalArrangement = Arrangement.spacedBy(d.space3),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (icon != null) PfIconTile(icon, small = true)
-        Column(Modifier.weight(1f)) {
-            Text(title, style = if (selected) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.body, color = c.text)
-            if (description != null) Text(description, style = PfTheme.type.caption, color = c.textMuted)
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.RadioButton, onClick = onClick)
+                .defaultMinSize(minHeight = d.row)
+                .padding(vertical = d.space2)
+                .semantics(mergeDescendants = true) {
+                    this.contentDescription = listOfNotNull(title, description).joinToString(", ")
+                    this.selected = selected
+                },
+            horizontalArrangement = Arrangement.spacedBy(d.space3),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) PfIconTile(icon, small = true)
+            Column(Modifier.weight(1f)) {
+                Text(title, style = if (selected) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.body, color = c.text)
+                if (description != null) Text(description, style = PfTheme.type.caption, color = c.textMuted)
+            }
+            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                if (selected) PfIcon(PfIcons.CHECK, contentDescription = null, size = d.iconMd, tint = c.accent)
+            }
         }
-        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-            if (selected) PfIcon(PfIcons.CHECK, contentDescription = null, size = d.iconMd, tint = c.accent)
-        }
+        if (divider) PfDivider()
     }
 }
 

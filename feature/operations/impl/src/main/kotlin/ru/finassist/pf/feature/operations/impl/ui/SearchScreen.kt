@@ -30,6 +30,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -40,6 +44,7 @@ import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.RussianDates
 import ru.finassist.pf.core.common.time.countWithNoun
+import ru.finassist.pf.core.common.time.pluralize
 import ru.finassist.pf.core.designsystem.components.LocalSuppressPopups
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.NoticeTone
@@ -111,11 +116,15 @@ internal fun SearchContent(
     val f = state.filter
 
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.statusBars).imePadding().testTag(OperationsTags.SEARCH)) {
-        Row(Modifier.fillMaxWidth().padding(start = d.space2, end = d.space5, top = d.space2), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = d.space3, end = d.space5, top = d.space2),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(d.space1),
+        ) {
             PfIconButton(PfIcons.ARROW_LEFT, contentDescription = "Назад", onClick = onBack, modifier = Modifier.testTag(PfTestTags.BACK))
-            PfSearchField(f.q.orEmpty(), actions.setQuery, placeholder = "Описание, категория, сумма", modifier = Modifier.weight(1f), testTag = OperationsTags.SEARCH_INPUT)
+            PfSearchField(f.q.orEmpty(), actions.setQuery, placeholder = "Магазин, категория или сумма", modifier = Modifier.weight(1f), testTag = OperationsTags.SEARCH_INPUT)
         }
-        PfChipRow(Modifier.padding(horizontal = d.space5, vertical = d.space2)) {
+        PfChipRow(Modifier.padding(start = d.space5, end = d.space5, top = d.space3)) {
             // A filter switched off by `search.filter.*` but preset by Analytics or a chip is shown as a fixed,
             // non-editable chip (docs/flags.md); «Сбросить» still removes it.
             val period = f.from != null || f.to != null || state.allTime
@@ -145,7 +154,8 @@ internal fun SearchContent(
             PfNotice("Выборка с «Аналитики» больше не действует — ищем без неё", tone = NoticeTone.INFO, modifier = Modifier.padding(horizontal = d.space5))
         }
         when (val r = state.result) {
-            SearchResult.Initial -> PfEmptyState(PfIcons.SEARCH, "Поиск по операциям", "Например: «самокат», «Супермаркеты», «1520» или последние 4 цифры счёта", modifier = Modifier.testTag(OperationsTags.SEARCH_INITIAL))
+            // Nothing under the chips until the first search (mockup `SearchInitial`).
+            SearchResult.Initial -> Box(Modifier.weight(1f).fillMaxWidth().testTag(OperationsTags.SEARCH_INITIAL))
             SearchResult.Loading -> Unit
             SearchResult.TooMany -> PfEmptyState(PfIcons.SLIDERS, "Слишком много операций", "Выберите период покороче или добавьте фильтр")
             SearchResult.Offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
@@ -154,40 +164,55 @@ internal fun SearchContent(
             SearchResult.Failed -> PfEmptyState(PfIcons.ALERT, "Не получилось найти", "Попробуйте ещё раз") {
                 PfButton("Повторить", onClick = actions.retry, variant = ButtonVariant.PRIMARY)
             }
-            is SearchResult.Found -> {
-                val months = remember(r.items) { OperationFormat.groupByMonth(r.items, zone) }
-                LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = d.space5, end = d.space5, bottom = d.space6)) {
+            is SearchResult.Found -> if (r.totalCount == 0) {
+                // Mockup `SearchEmpty`: no count line — the empty state's title is the result, announced politely;
+                // the button drops the filters (the query stays).
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = d.space5, end = d.space5, top = d.space6)
+                        .semantics { liveRegion = LiveRegionMode.Polite }
+                        .testTag(OperationsTags.SEARCH_COUNT),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    PfEmptyState(
+                        PfIcons.SEARCH, "По запросу ничего не найдено",
+                        padding = PaddingValues(start = d.space8, top = d.space8, end = d.space8, bottom = d.space6),
+                        modifier = Modifier.testTag(OperationsTags.SEARCH_EMPTY),
+                    )
+                    PfButton("Сбросить фильтры", onClick = actions.reset, variant = ButtonVariant.SECONDARY, modifier = Modifier.testTag(OperationsTags.SEARCH_RESET))
+                }
+            } else {
+                val months = remember(r.items, today) { OperationFormat.searchGroups(r.items, zone, today) }
+                LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space4, bottom = d.space6)) {
                     item(key = "count") {
                         Text(
-                            if (r.totalCount == 0) "Ничего не нашли" else "Найдено ${countWithNoun(r.totalCount, "операция", "операции", "операций")}",
-                            style = PfTheme.type.bodyStrong, color = PfTheme.colors.text,
-                            modifier = Modifier.padding(vertical = d.space2).testTag(OperationsTags.SEARCH_COUNT),
+                            searchSummary(r.totalCount),
+                            style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag(OperationsTags.SEARCH_COUNT),
                         )
-                        if (r.range != null && f.from == null && f.to == null && !state.allTime) {
-                            Text(
-                                "За последние 12 месяцев: ${RussianDates.dayRange(r.range!!.from.toLocalDate(), RussianDates.lastDayOf(r.range!!))}",
-                                style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
-                            )
-                        }
                     }
-                    months.forEach { (month, ops) ->
-                        item(key = "m-$month") {
-                            Text(
-                                RussianDates.monthTitle(month),
-                                style = PfTheme.type.title2, color = PfTheme.colors.text,
-                                modifier = Modifier.padding(top = d.space5),
-                            )
-                        }
-                        OperationFormat.groupByDay(ops, zone, today).forEach { (label, dayOps) ->
-                            item(key = "d-$month-$label") {
-                                PfTransactionGroup(label) { dayOps.forEach { op -> OperationRow(op, onClick = { onOpenOperation(op.id) }) } }
+                    months.forEachIndexed { index, (label, rows) ->
+                        item(key = "m-$label") {
+                            PfTransactionGroup(label, first = index == 0, modifier = if (index == 0) Modifier.padding(top = d.space3) else Modifier) {
+                                rows.forEach { row ->
+                                    OperationRow(row, onClick = { onOpenOperation(row.id) }, divider = row !== rows.last())
+                                }
                             }
                         }
                     }
                     if (r.hasOlderData) {
                         item(key = "older") {
-                            Column(Modifier.fillMaxWidth().padding(top = d.space4), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Есть операции раньше — их не проверяли", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
+                            Column(
+                                Modifier.fillMaxWidth().padding(top = d.space4),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(d.space1),
+                            ) {
+                                val window = r.range?.let { " — " + OperationFormat.windowStart(it.from.toLocalDate()) }.orEmpty()
+                                Text(
+                                    "Искали за последние 12 месяцев$window. Есть операции и раньше",
+                                    style = PfTheme.type.hint, color = PfTheme.colors.textMuted, textAlign = TextAlign.Center,
+                                )
                                 PfLink("Искать за всё время", onClick = actions.searchAllTime, modifier = Modifier.testTag(OperationsTags.SEARCH_ALL_TIME))
                             }
                         }
@@ -198,10 +223,10 @@ internal fun SearchContent(
     }
 
     when (state.sheet) {
-        SearchSheet.PERIOD -> PeriodSheet(f, state.allTime, onDismiss = { actions.openSheet(null) }, onPick = actions.setPeriod)
+        SearchSheet.PERIOD -> PeriodSheet(f, state.allTime, state.windowFrom, onDismiss = { actions.openSheet(null) }, onPick = actions.setPeriod)
         SearchSheet.CATEGORY -> PfBottomSheet("Категория", onDismiss = { actions.openSheet(null) }) {
             if (f.categoryId != null) {
-                PfOptionRow("Все категории", selected = false, onClick = { actions.setCategory(null) }, modifier = Modifier.testTag(OperationsTags.CATEGORY_ALL))
+                PfOptionRow("Все категории", selected = false, onClick = { actions.setCategory(null) }, divider = true, modifier = Modifier.testTag(OperationsTags.CATEGORY_ALL))
             }
             CategoryList(
                 categories = state.categories,
@@ -232,6 +257,10 @@ private fun periodLabel(f: OperationsFilter, allTime: Boolean): String {
     }
 }
 
+/** `Pf.SearchSummary`: «Найдена 1 операция», «Найдено 9 операций». */
+internal fun searchSummary(count: Int): String =
+    pluralize(count, "Найдена", "Найдено", "Найдено") + " " + countWithNoun(count, "операция", "операции", "операций")
+
 private fun amountLabel(f: OperationsFilter): String {
     val from = f.amountFrom?.format()
     val to = f.amountTo?.format()
@@ -248,6 +277,7 @@ private fun amountLabel(f: OperationsFilter): String {
 private fun PeriodSheet(
     f: OperationsFilter,
     allTime: Boolean,
+    windowFrom: LocalDate?,
     onDismiss: () -> Unit,
     onPick: (from: java.time.OffsetDateTime?, to: java.time.OffsetDateTime?, allTime: Boolean) -> Unit,
 ) {
@@ -255,8 +285,16 @@ private fun PeriodSheet(
     val custom = f.from != null || f.to != null
     if (!pickDates) {
         PfBottomSheet("Период", onDismiss = onDismiss) {
-            PfOptionRow("Последние 12 месяцев", selected = !custom && !allTime, onClick = { onPick(null, null, false) }, modifier = Modifier.testTag(OperationsTags.PERIOD_LAST_12))
-            PfOptionRow("За всё время", selected = allTime, onClick = { onPick(null, null, true) }, modifier = Modifier.testTag(OperationsTags.PERIOD_ALL))
+            Spacer(Modifier.height(PfTheme.dimens.space2))
+            PfOptionRow(
+                "Последние 12 месяцев", selected = !custom && !allTime, onClick = { onPick(null, null, false) }, divider = true,
+                description = windowFrom?.let { OperationFormat.windowStart(it).replaceFirstChar { c -> c.uppercase() } },
+                modifier = Modifier.testTag(OperationsTags.PERIOD_LAST_12),
+            )
+            PfOptionRow(
+                "За всё время", selected = allTime, onClick = { onPick(null, null, true) }, description = "Все загруженные операции", divider = true,
+                modifier = Modifier.testTag(OperationsTags.PERIOD_ALL),
+            )
             PfOptionRow(
                 "Выбрать даты", selected = custom, onClick = { pickDates = true }, description = if (custom) periodLabel(f, false) else null,
                 modifier = Modifier.testTag(OperationsTags.PERIOD_CUSTOM),
@@ -314,7 +352,7 @@ private fun AmountSheet(f: OperationsFilter, onDismiss: () -> Unit, onApply: (Mo
             )
         },
     ) {
-        Row(Modifier.padding(horizontal = PfTheme.dimens.space5), horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space3)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space3)) {
             PfTextField(from, { from = it.filter(Char::isDigit).take(9) }, label = "От, ₽", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f), testTag = OperationsTags.AMOUNT_FROM)
             PfTextField(
                 to, { to = it.filter(Char::isDigit).take(9) }, label = "До, ₽", keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f),
@@ -323,8 +361,6 @@ private fun AmountSheet(f: OperationsFilter, onDismiss: () -> Unit, onApply: (Mo
             )
         }
         Spacer(Modifier.height(PfTheme.dimens.space2))
-        Box(Modifier.padding(horizontal = PfTheme.dimens.space5)) {
-            Text("Сумма операции без знака: и расходы, и доходы", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
-        }
+        Text("Сумма операции без знака: и расходы, и доходы", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
     }
 }

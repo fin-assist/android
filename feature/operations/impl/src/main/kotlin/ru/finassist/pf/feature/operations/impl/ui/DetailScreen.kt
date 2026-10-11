@@ -3,6 +3,7 @@ package ru.finassist.pf.feature.operations.impl.ui
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -14,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -29,7 +31,6 @@ import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.RussianDates
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.NoticeTone
-import ru.finassist.pf.core.designsystem.components.PfBadge
 import ru.finassist.pf.core.designsystem.components.PfBottomSheet
 import ru.finassist.pf.core.designsystem.components.PfButton
 import ru.finassist.pf.core.designsystem.components.PfCard
@@ -37,6 +38,7 @@ import ru.finassist.pf.core.designsystem.components.PfDataRow
 import ru.finassist.pf.core.designsystem.components.PfEmptyState
 import ru.finassist.pf.core.designsystem.components.PfIconTile
 import ru.finassist.pf.core.designsystem.components.PfListRow
+import ru.finassist.pf.core.designsystem.components.PfSectionTitle
 import ru.finassist.pf.core.designsystem.components.PfNotice
 import ru.finassist.pf.core.designsystem.components.PfPageHeader
 import ru.finassist.pf.core.designsystem.components.PfSnackbar
@@ -78,8 +80,12 @@ internal fun DetailContent(
 ) {
     val d = PfTheme.dimens
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(OperationsTags.DETAIL)) {
-        PfPageHeader("Операция", onBack = onBack)
         val op = state.operation
+        // The operation's name is the title (mockup `Detail`); «Операция» while it loads or fails.
+        PfPageHeader(
+            op?.title ?: "Операция", onBack = onBack,
+            modifier = if (op != null) Modifier.testTag(OperationsTags.DETAIL_TITLE) else Modifier,
+        )
         when {
             state.loading -> Unit
             state.notFound -> PfEmptyState(PfIcons.FILE_TEXT, "Операции больше нет", "Возможно, удалили загрузку, в которой она была")
@@ -87,35 +93,33 @@ internal fun DetailContent(
                 PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
             }
             else -> Column(
-                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5, vertical = d.space2),
-                verticalArrangement = Arrangement.spacedBy(d.space4),
+                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = d.space5, end = d.space5, top = d.space4, bottom = d.space4),
+                verticalArrangement = Arrangement.spacedBy(d.space5),
             ) {
-                Hero(op)
+                Hero(op, zone)
                 PfCard(flush = true) {
                     PfListRow(
-                        title = op.categoryName,
-                        icon = op.categoryIcon,
+                        title = "Категория",
                         description = op.noteDetails ?: if (op.isCategoryManual) "Вы выбрали сами" else null,
-                        value = "Изменить",
+                        value = op.categoryName,
                         valueAccent = true,
                         onClick = onOpenPicker,
                         divider = false,
                         modifier = Modifier.testTag(OperationsTags.DETAIL_CATEGORY),
                     )
                 }
-                PfCard {
-                    PfDataRow("Дата и время", dateTime(op.occurredAt, zone, today))
-                    op.postedAt?.let { PfDataRow("Проведена банком", dateTime(it, zone, today)) }
-                    if (op.kind == OperationKind.OWN_TRANSFER) {
-                        AccountRow("Списание", op.fromAccount)
-                        AccountRow("Зачисление", op.toAccount)
-                    } else {
-                        AccountRow("Счёт", op.account)
+                Column {
+                    PfSectionTitle("Из выписки")
+                    Spacer(Modifier.height(d.space2))
+                    PfCard {
+                        val rows = statementRows(op, zone, today)
+                        rows.forEachIndexed { i, row ->
+                            PfDataRow(
+                                row.label, row.value, sublabel = row.sublabel, divider = i < rows.lastIndex,
+                                modifier = row.spoken?.let { spoken -> Modifier.semantics { contentDescription = "${row.label}: $spoken" } } ?: Modifier,
+                            )
+                        }
                     }
-                    op.description?.let { PfDataRow("Описание в выписке", it) }
-                    op.bankCategory?.let { PfDataRow("Категория банка", it, sublabel = "как в выписке") }
-                    op.mcc?.let { PfDataRow("MCC", it) }
-                    PfDataRow("Источник", op.sourceName, divider = false)
                 }
                 if (op.status == OperationStatus.PENDING) {
                     PfNotice("Операция ещё не проведена банком — сумма может измениться", tone = NoticeTone.INFO)
@@ -157,7 +161,6 @@ internal fun DetailContent(
                 Text(
                     "Если это не перевод себе, разделим его на списание и зачисление: выбранная категория — подходящей стороне, другой — категория банка",
                     style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
-                    modifier = Modifier.padding(horizontal = PfTheme.dimens.space5),
                 )
             }
             CategoryList(
@@ -172,31 +175,51 @@ internal fun DetailContent(
     }
 }
 
+/**
+ * Mockup `Detail`: the category tile and, beside it, the kind («Списание» / «Зачисление» / «Перевод»), the amount
+ * and «25.09.2026, 19:11».
+ */
 @Composable
-private fun Hero(op: OperationDetails) {
+private fun Hero(op: OperationDetails, zone: ZoneId) {
     val c = PfTheme.colors
     val amount = when (op.kind) {
         OperationKind.EXPENSE -> OperationFormat.money(-op.amount, op.currency, Money.Sign.AUTO)
         OperationKind.INCOME -> OperationFormat.money(op.amount, op.currency, Money.Sign.ALWAYS)
         else -> OperationFormat.money(op.amount, op.currency, Money.Sign.NONE)
     }
-    Column {
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space3)) {
         PfIconTile(op.categoryIcon)
-        Spacer(Modifier.height(PfTheme.dimens.space3))
-        Text(op.title, style = PfTheme.type.title2, color = c.text, modifier = Modifier.testTag(OperationsTags.DETAIL_TITLE))
-        Text(amount, style = PfTheme.type.amountHero, color = if (op.kind == OperationKind.INCOME) c.positive else c.text)
-        op.note?.let {
-            Spacer(Modifier.height(PfTheme.dimens.space1))
-            PfBadge(it)
+        Column {
+            Text(OperationFormat.kindLabel(op.kind), style = PfTheme.type.caption, color = c.textMuted)
+            Text(amount, style = PfTheme.type.amountLg, color = if (op.kind == OperationKind.INCOME) c.positive else c.text, maxLines = 1)
+            Text(OperationFormat.numericDateTime(op.occurredAt, zone), style = PfTheme.type.caption.copy(fontFeatureSettings = "tnum"), color = c.textMuted)
         }
     }
 }
 
-@Composable
-private fun AccountRow(label: String, account: Account?) {
-    if (account == null) return
-    val text = listOfNotNull(account.typeName, account.mask).joinToString(" ")
-    PfDataRow(label, text, modifier = Modifier.semantics { account.spoken?.let { contentDescription = "$label: $it" } })
+/** A row of the «Из выписки» card. */
+private data class StatementRow(val label: String, val value: String, val sublabel: String? = null, val spoken: String? = null)
+
+/**
+ * «Из выписки»: accounts (a transfer names both sides), what the statement says and the bank's category; posting
+ * time and MCC when the bank sent them. A transfer's bank category is labelled «В выписке».
+ */
+private fun statementRows(op: OperationDetails, zone: ZoneId, today: LocalDate): List<StatementRow> = buildList {
+    fun account(label: String, a: Account?) {
+        if (a != null) add(StatementRow(label, listOfNotNull(a.typeName, a.mask).joinToString(" "), spoken = a.spoken))
+    }
+    if (op.kind == OperationKind.OWN_TRANSFER) {
+        account("Счёт списания", op.fromAccount)
+        account("Счёт зачисления", op.toAccount)
+    } else {
+        account("Счёт", op.account)
+    }
+    op.description?.let { add(StatementRow("Описание в выписке", it)) }
+    op.bankCategory?.let {
+        add(if (op.kind == OperationKind.OWN_TRANSFER) StatementRow("В выписке", it) else StatementRow("Категория банка", it, sublabel = "как в выписке"))
+    }
+    op.postedAt?.let { add(StatementRow("Проведена банком", dateTime(it, zone, today))) }
+    op.mcc?.let { add(StatementRow("MCC", it)) }
 }
 
 private fun dateTime(at: OffsetDateTime, zone: ZoneId, today: LocalDate): String {

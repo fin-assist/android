@@ -14,6 +14,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import ru.finassist.pf.core.api.model.Category
 import ru.finassist.pf.core.api.model.CategoryKind
@@ -63,24 +66,37 @@ fun CategoryList(
     var query by rememberSaveable { mutableStateOf(initialQuery) }
     val groups = remember(categories, kinds, query) { CategoryGrouping.group(categories, kinds, onlyAssignable, query) }
     Column(modifier) {
+        // The sheet gives the 20 dp side margins (mockup `CategoryPicker`).
         PfSearchField(
             query, { query = it }, placeholder = "Найти категорию", testTag = OperationsTags.CATEGORY_SEARCH,
-            modifier = Modifier.padding(horizontal = PfTheme.dimens.space5, vertical = PfTheme.dimens.space2),
+            modifier = Modifier.padding(top = PfTheme.dimens.space2),
         )
-        LazyColumn(Modifier.heightIn(max = 480.dp)) {
+        val nothing = groups.system.isEmpty() && groups.expense.isEmpty() && groups.income.isEmpty()
+        if (nothing) {
+            Text(
+                "Ничего не нашли",
+                style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+                modifier = Modifier.padding(top = PfTheme.dimens.space4, bottom = PfTheme.dimens.space1).semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
+        LazyColumn(Modifier.heightIn(max = 480.dp).padding(top = PfTheme.dimens.space2)) {
+            var first = true
             fun section(title: String, list: List<Category>) {
                 if (list.isEmpty()) return
-                item(key = "t-$title") { PfOptionGroupTitle(title, Modifier.padding(horizontal = PfTheme.dimens.space4, vertical = PfTheme.dimens.space2)) }
+                val isFirst = first
+                first = false
+                item(key = "t-$title") { PfOptionGroupTitle(title, first = isFirst) }
                 items(list, key = { "$title-${it.id}" }) { c ->
-                    PfOptionRow(c.name, selected = c.id == selectedId, onClick = { onSelect(c) }, icon = c.icon, description = c.note, modifier = Modifier.testTag(OperationsTags.CATEGORY_OPTION))
+                    PfOptionRow(
+                        c.name, selected = c.id == selectedId, onClick = { onSelect(c) }, icon = c.icon, description = c.note,
+                        divider = c !== list.last(),
+                        modifier = Modifier.testTag(OperationsTags.CATEGORY_OPTION),
+                    )
                 }
             }
             section("Системные", groups.system)
             section("Расходы", groups.expense)
             section("Доходы", groups.income)
-            if (groups.system.isEmpty() && groups.expense.isEmpty() && groups.income.isEmpty()) {
-                item { Text("Ничего не нашли", style = PfTheme.type.body, color = PfTheme.colors.textMuted, modifier = Modifier.padding(PfTheme.dimens.space5)) }
-            }
         }
     }
 }

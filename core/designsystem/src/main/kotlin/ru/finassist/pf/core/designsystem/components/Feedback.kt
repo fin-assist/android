@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -116,11 +117,18 @@ fun PfEmptyState(
     title: String,
     text: String? = null,
     modifier: Modifier = Modifier,
+    padding: PaddingValues = PaddingValues(PfTheme.dimens.space8),
     actions: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     val c = PfTheme.colors
     val d = PfTheme.dimens
-    Column(modifier.fillMaxWidth().padding(d.space8), horizontalAlignment = Alignment.CenterHorizontally) {
+    // Centred vertically when the caller gives it the height (`Modifier.weight(1f)`): mockups centre the block in
+    // the free area of the screen.
+    Column(
+        modifier.fillMaxWidth().padding(padding),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
         Box(
             Modifier.size(72.dp).background(c.accentSoft, RoundedCornerShape(d.radius2xl)),
             contentAlignment = Alignment.Center,

@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -44,6 +45,7 @@ import ru.finassist.pf.core.designsystem.components.SummaryItem
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.operations.impl.domain.OperationFormat
+import ru.finassist.pf.feature.operations.impl.domain.RowModel
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -84,20 +86,33 @@ internal fun FeedContent(
     val d = PfTheme.dimens
     Column(Modifier.fillMaxSize().testTag(OperationsTags.FEED)) {
         PfTabHeader("Операции") {
-            PfIconButton(PfIcons.SEARCH, contentDescription = "Поиск операций", onClick = onOpenSearch, modifier = Modifier.testTag(OperationsTags.FEED_SEARCH))
+            // Nothing to search in an empty feed (mockup `MainEmpty`: no header actions).
+            if (!state.isEmpty) {
+                PfIconButton(PfIcons.SEARCH, contentDescription = "Поиск операций", onClick = onOpenSearch, modifier = Modifier.testTag(OperationsTags.FEED_SEARCH))
+            }
         }
         when {
             state.loading -> Unit
             state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(OperationsTags.FEED_OFFLINE)) {
                 PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(OperationsTags.FEED_RETRY))
             }
-            state.isEmpty -> PfEmptyState(
-                PfIcons.LIST,
-                "Пока нет операций",
-                if (state.uploadEnabled) "Загрузите выписку Т-Банка — разберём операции по категориям" else null,
-                modifier = Modifier.testTag(OperationsTags.FEED_EMPTY),
+            state.isEmpty -> Column(
+                Modifier.weight(1f).fillMaxWidth().padding(start = d.space5, end = d.space5, bottom = d.space6).testTag(OperationsTags.FEED_EMPTY),
+                verticalArrangement = Arrangement.Center,
             ) {
-                if (state.uploadEnabled) PfButton("Загрузить выписку", onClick = onUpload, variant = ButtonVariant.PRIMARY, icon = PfIcons.UPLOAD, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD))
+                PfEmptyState(
+                    PfIcons.RECEIPT,
+                    "Пока нет операций",
+                    if (state.uploadEnabled) {
+                        "Загрузите выписку из Т-Банка за несколько месяцев — лучше за год. Разложим траты по категориям, сравним месяцы и найдём регулярные платежи"
+                    } else {
+                        null
+                    },
+                    padding = PaddingValues(start = d.space8, top = d.space8, end = d.space8, bottom = d.space6),
+                )
+                if (state.uploadEnabled) {
+                    PfButton("Загрузить выписку", onClick = onUpload, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD))
+                }
             }
             else -> {
                 val groups = remember(state.items) { OperationFormat.groupByDay(state.items, zone, today) }
@@ -130,10 +145,11 @@ internal fun FeedContent(
                             }
                         }
                     }
-                    groups.forEach { (label, ops) ->
+                    groups.forEachIndexed { index, (label, ops) ->
                         item(key = "day-$label-${ops.first().id}") {
-                            PfTransactionGroup(label) {
-                                ops.forEach { op -> OperationRow(op, onClick = { onOpenOperation(op.id) }, divider = true) }
+                            // The days start 8 dp under the summary block; no divider under a day's last row (mockup `Main`).
+                            PfTransactionGroup(label, first = index == 0, modifier = if (index == 0) Modifier.padding(top = d.space2) else Modifier) {
+                                ops.forEach { op -> OperationRow(op, onClick = { onOpenOperation(op.id) }, divider = op !== ops.last()) }
                             }
                         }
                     }
@@ -163,6 +179,11 @@ internal fun FeedContent(
 @Composable
 internal fun OperationRow(op: OperationItem, onClick: () -> Unit, divider: Boolean = false) {
     val row = remember(op) { OperationFormat.row(op) }
+    OperationRow(row, onClick, divider)
+}
+
+@Composable
+internal fun OperationRow(row: RowModel, onClick: () -> Unit, divider: Boolean = false) {
     PfTransactionRow(
         icon = row.icon, title = row.title, subtitle = row.subtitle, amount = row.amount,
         income = row.income, muted = row.muted, note = row.note, onClick = onClick, divider = divider,
@@ -237,6 +258,8 @@ internal object OperationsTags {
     const val SEARCH_INPUT = "operations.search.input"
     const val SEARCH_COUNT = "operations.search.count"
     const val SEARCH_INITIAL = "operations.search.initial"
+    const val SEARCH_EMPTY = "operations.search.empty"
+    const val SEARCH_RESET = "operations.search.reset"
     const val CHIP_PERIOD = "operations.search.chip.period"
     const val CHIP_CATEGORY = "operations.search.chip.category"
     const val CHIP_AMOUNT = "operations.search.chip.amount"
