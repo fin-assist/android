@@ -4,6 +4,7 @@ import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.JavaVersion
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.dependencies
+import ru.finassist.pf.buildlogic.configureCoverage
 import ru.finassist.pf.buildlogic.configureKotlin
 import ru.finassist.pf.buildlogic.libs
 
@@ -22,6 +23,7 @@ class JvmLibraryConventionPlugin : Plugin<Project> {
             targetCompatibility = JavaVersion.VERSION_17
         }
         configureKotlin()
+        configureCoverage()
 
         dependencies {
             add("implementation", libs.findLibrary("kotlinx.coroutines.core").get())

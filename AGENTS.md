@@ -42,6 +42,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Tokens, preferences, idempotency keys | `core/storage` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md`, `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks, native gaps, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/qase-*` |
+| Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
 
 Package root: `ru.finassist.pf`. Flavors: `mock` (default for development and CI) and `prod`. Build type `e2e`
 (mock only): debug + UI-test hooks, pinned date (docs/e2e.md).
@@ -136,6 +137,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   (after merge to `main`, or a PR labelled `e2e`).
 - `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
   docs check and its parser tests from CI, no Gradle needed.
+- Coverage: `./gradlew :koverXmlReportUnit` (runs the unit tests), then
+  `python3 scripts/coverage-diff.py --base origin/<base branch>` for the changed lines; HTML report via
+  `:koverHtmlReportUnit` (docs/testing.md).
 
 ## Code
 
@@ -153,15 +157,48 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - A screen is a thin ViewModel wrapper around `…Content(state, handlers)`; design-check tests render the
   content from mockup data (`design-check/README.md`).
 - Flags are read at the screen boundary (view model init or `FeatureEntry`), never mid-screen.
-- New or changed screens: tag the root, the controls and the checked states (`<feature>.<screen>[.<element>]`,
-  shared components `ds.*`), and add or update the Maestro flow (docs/e2e.md). Renaming a tag means updating
-  `.maestro/`. A new or renamed flow also updates its Qase case and `scripts/qase-cases.json` (docs/e2e.md, «Qase»).
+- A PR that adds or changes a user scenario covers it with a UI test in the same PR (docs/e2e.md, «When a change
+  needs a UI test»). A scenario is what the user does and sees: a new screen or state, a step between screens, an
+  error, empty or offline path they can reach, a flag that changes behaviour, a user-visible bug fix (the flow
+  reproduces the bug first). «Can reach» means in a real build (no network, a server error, an empty statement);
+  tests bring it about with a fixture, the control link or a flag. Not a scenario: copy, colours or layout of an
+  existing screen (the design check covers them), logic without UI (unit tests), a refactoring that keeps behaviour.
+  - Maestro by default: extend the feature's flow or add one under `.maestro/flows/<feature>/`. A native test in
+    `app/src/androidTestMock` only for what Maestro cannot drive (system pickers, intents, permissions).
+  - Tag the root, the controls and the checked states (`<feature>.<screen>[.<element>]`, shared components `ds.*`).
+    Renaming a tag means updating `.maestro/`.
+  - A new or renamed test also updates its Qase case, `scripts/qase-cases.json` and the coverage table in
+    docs/e2e.md («Qase», «Coverage»).
+  - Not automatable on the emulator (biometrics, voice, a bug that does not reproduce there): add it to «Not
+    covered yet» in docs/e2e.md and say so in the PR. The reason must be technical — what the emulator or the mock
+    cannot do — not the effort.
+  - Put the `e2e` label on the PR so the UI tests run before merge, not only after; if you cannot set labels, ask the
+    owner in the PR.
 - Document in moderation: KDoc on public `:api` interfaces, comments where logic is non-obvious
   (accounting rules, idempotency, animation), not on every method.
+
+## Tests
+
+Every new piece of functionality is covered by automated tests in the same PR — not in a follow-up. Layers and
+commands: `docs/testing.md`.
+
+- Logic (domain, data, mappers, view models, `mock/backend`, `core/*`) → unit tests in the module's `src/test`
+  covering the main path and every edge case and branch the code handles. View models are tested through their
+  state and handlers, with fake `:api` dependencies.
+- Screens, states, sheets, dialogs → design check; user scenarios → UI tests (both rules in Code, details in
+  docs/e2e.md).
+- A bug fix comes with a test that fails without the fix: a UI flow for a user-visible bug (see Code), plus a
+  unit test when the cause is in logic.
+- The measurable check is coverage of changed lines by unit tests: at least 80 % of changed executable lines
+  (Build in an agent container → Coverage). Composables are excluded from the report — they are covered by the
+  design check and UI tests, not by this number. Uncovered changed lines are listed in the PR («Проверка») with
+  the reason; an uncovered line without a reason is a review finding.
+- Tests assert behaviour; do not write tests that only execute lines.
 
 ## Workflow
 
 - Branches: `<kind>/<slug>` — `fix/…`, `feature/…`, `tooling/…`, `design-check/…` (historically `stage-N/…`).
+  `release/<version>` (`release/0.2`) is the release branch of a version, cut from `main`; CI runs on pushes to it.
   Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
 - PR title and description in Russian: what changed and why, deviations from mockups/docs, how it was checked.
   A PR for a single YouTrack issue starts its title with the issue key (`FIN-42 Краш при открытии поиска`);
@@ -184,3 +221,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   not only in a summary comment; the summary lists what was checked.
 - Check that the PR updates this file and `docs/` when it changes what they describe.
 - Check that a new screen, screen state, bottom sheet or dialog comes with its `*DesignCheckTest` (see Code).
+- Check that a new or changed user scenario comes with a UI test (or a «Not covered yet» entry with a technical
+  reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md,
+  and that the PR has the `e2e` label (see Code).
+- Check that new functionality comes with tests (see Tests) and that the tests would fail if the behaviour
+  broke; flag changed lines the «Unit test coverage» comment of the PR (posted by CI) shows as uncovered when
+  the PR gives no reason for them.
