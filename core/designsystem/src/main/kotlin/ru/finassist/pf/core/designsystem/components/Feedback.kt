@@ -34,6 +34,17 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import ru.finassist.pf.core.designsystem.icons.PfIcon
@@ -49,8 +60,11 @@ val LocalSuppressPopups = compositionLocalOf { false }
 enum class NoticeTone { INFO, WARNING, POSITIVE, LIMIT }
 
 /**
- * Notice: `info` explains what the app did, `warning` asks to check something, `positive` confirms an action,
- * `limit` — the question limit is exhausted (clock icon, info colours). `alert` announces immediately.
+ * Notice (mockup `.pf-notice`): `info` explains what the app did, `warning` asks to check something, `positive`
+ * confirms an action, `limit` — the question limit is exhausted (clock icon, info colours). 12/16 dp padding,
+ * 18 dp icon 8 dp from the text, `13/20` text, title `14/20 700` 4 dp above it; [action] follows the text
+ * directly (a standalone link brings its own 48 dp). [icon] overrides the tone's icon. `alert` announces
+ * immediately.
  */
 @Composable
 fun PfNotice(
@@ -59,10 +73,12 @@ fun PfNotice(
     tone: NoticeTone = NoticeTone.INFO,
     title: String? = null,
     alert: Boolean = false,
+    icon: String? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
     val c = PfTheme.colors
-    val (bg, fg, icon) = when (tone) {
+    val d = PfTheme.dimens
+    val (bg, fg, toneIcon) = when (tone) {
         NoticeTone.INFO -> Triple(c.infoSoft, c.infoText, PfIcons.INFO)
         NoticeTone.WARNING -> Triple(c.warningSoft, c.warningText, PfIcons.ALERT)
         NoticeTone.POSITIVE -> Triple(c.positiveSoft, c.positive, PfIcons.CHECK_CIRCLE)
@@ -71,54 +87,71 @@ fun PfNotice(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(bg, RoundedCornerShape(PfTheme.dimens.radiusLg))
-            .padding(PfTheme.dimens.space4)
+            .background(bg, RoundedCornerShape(d.radiusLg))
+            .padding(horizontal = d.space4, vertical = d.space3)
             .semantics(mergeDescendants = true) { liveRegion = if (alert) LiveRegionMode.Assertive else LiveRegionMode.Polite },
+        horizontalArrangement = Arrangement.spacedBy(d.space2),
         verticalAlignment = Alignment.Top,
     ) {
-        PfIcon(icon, contentDescription = null, size = PfTheme.dimens.iconMd, tint = fg, modifier = Modifier.padding(top = 2.dp))
-        Spacer(Modifier.width(PfTheme.dimens.space3))
+        PfIcon(icon ?: toneIcon, contentDescription = null, size = 18.dp, tint = fg, modifier = Modifier.padding(top = 1.dp))
         Column(Modifier.weight(1f)) {
-            if (title != null) Text(title, style = PfTheme.type.bodyStrong, color = fg)
-            Text(text, style = PfTheme.type.caption, color = fg)
-            if (action != null) {
-                Spacer(Modifier.height(PfTheme.dimens.space2))
-                action()
+            if (title != null) {
+                Text(title, style = PfTheme.type.body.copy(fontWeight = FontWeight.Bold), color = fg)
+                Spacer(Modifier.height(d.space1))
             }
+            Text(text, style = PfTheme.type.caption, color = fg)
+            if (action != null) action()
         }
     }
 }
 
-/** Empty state of a main screen: large icon on `accent-soft`, title, one or two sentences, actions below. */
+/**
+ * Empty state (mockup `.pf-empty`): 72 dp icon tile (`radius-2xl`, 34 dp icon) on `accent-soft`, 20 dp to a
+ * `20/24 700` title, `15/20` muted text, actions 24 dp below stretched to the full width, 8 dp apart; 32 dp
+ * padding around. The screen decides where the block sits (the mockups centre it in the free space).
+ */
 @Composable
 fun PfEmptyState(
     icon: String,
     title: String,
     text: String? = null,
     modifier: Modifier = Modifier,
-    actions: @Composable ColumnScope.() -> Unit = {},
+    actions: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
-    Column(modifier.fillMaxWidth().padding(PfTheme.dimens.space8), horizontalAlignment = Alignment.CenterHorizontally) {
+    val c = PfTheme.colors
+    val d = PfTheme.dimens
+    Column(modifier.fillMaxWidth().padding(d.space8), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.size(PfTheme.dimens.status).background(PfTheme.colors.accentSoft, RoundedCornerShape(PfTheme.dimens.radiusXl)),
+            Modifier.size(72.dp).background(c.accentSoft, RoundedCornerShape(d.radius2xl)),
             contentAlignment = Alignment.Center,
         ) {
-            PfIcon(icon, contentDescription = null, size = 28.dp, tint = PfTheme.colors.accent)
+            PfIcon(icon, contentDescription = null, size = 34.dp, tint = c.accent)
         }
-        Spacer(Modifier.height(PfTheme.dimens.space4))
-        Text(title, style = PfTheme.type.title2, color = PfTheme.colors.text, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
+        Spacer(Modifier.height(d.space5))
+        Text(
+            title,
+            style = PfTheme.type.amountMd.copy(fontFeatureSettings = null),
+            color = c.text,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { heading() },
+        )
         if (text != null) {
-            Spacer(Modifier.height(PfTheme.dimens.space2))
-            Text(text, style = PfTheme.type.body, color = PfTheme.colors.textMuted, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(d.space2))
+            Text(text, style = PfTheme.type.lead, color = c.textMuted, textAlign = TextAlign.Center)
         }
-        Spacer(Modifier.height(PfTheme.dimens.space6))
-        actions()
+        if (actions != null) {
+            Spacer(Modifier.height(d.space6))
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(d.space2), content = actions)
+        }
     }
 }
 
 enum class HeroTone { POSITIVE, WARNING, INFO }
 
-/** Large status icon (64) with title and subtitle: import result, import error. */
+/**
+ * Status icon (mockup `.pf-hero`: 64 dp, `radius-xl`, 30 dp icon) with an optional `title-1` 20 dp below and a
+ * muted `caption` subtitle 4 dp under it: import result, import error.
+ */
 @Composable
 fun PfStatusHero(
     modifier: Modifier = Modifier,
@@ -138,15 +171,15 @@ fun PfStatusHero(
     val textAlign = if (centered) TextAlign.Center else TextAlign.Start
     Column(modifier.fillMaxWidth(), horizontalAlignment = align) {
         Box(Modifier.size(PfTheme.dimens.status).background(bg, RoundedCornerShape(PfTheme.dimens.radiusXl)), contentAlignment = Alignment.Center) {
-            PfIcon(icon ?: defaultIcon, contentDescription = null, size = 32.dp, tint = fg)
+            PfIcon(icon ?: defaultIcon, contentDescription = null, size = 30.dp, tint = fg)
         }
         if (title != null) {
-            Spacer(Modifier.height(PfTheme.dimens.space4))
+            Spacer(Modifier.height(PfTheme.dimens.space5))
             Text(title, style = PfTheme.type.title1, color = c.text, textAlign = textAlign, modifier = Modifier.semantics { heading() })
         }
         if (subtitle != null) {
-            Spacer(Modifier.height(PfTheme.dimens.space2))
-            Text(subtitle, style = PfTheme.type.lead, color = c.textMuted, textAlign = textAlign)
+            Spacer(Modifier.height(PfTheme.dimens.space1))
+            Text(subtitle, style = PfTheme.type.caption, color = c.textMuted, textAlign = textAlign)
         }
     }
 }
@@ -171,24 +204,41 @@ fun PfBadge(text: String, modifier: Modifier = Modifier, positive: Boolean = fal
     }
 }
 
-/** «Осталось N из 5» with five segments: remaining `accent`, used `border-strong`. Announced as a status. */
+/**
+ * Questions left (mockup `.pf-limit`): «Осталось **3 из 5** вопросов на сегодня» on the left (`13/20`, the count
+ * in `text`), five 16×8 dots on the right — used `border-strong`, left `accent`. Announced as a status.
+ */
 @Composable
-fun PfLimitMeter(used: Int, total: Int = 5, modifier: Modifier = Modifier) {
+fun PfLimitMeter(used: Int, modifier: Modifier = Modifier, total: Int = 5) {
     val c = PfTheme.colors
-    val remaining = (total - used).coerceAtLeast(0)
-    Column(modifier.fillMaxWidth().semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+    val d = PfTheme.dimens
+    val left = (total - used).coerceIn(0, total)
+    Row(
+        modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+        horizontalArrangement = Arrangement.spacedBy(d.space3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
-            if (remaining == total) "$total вопросов в день" else "Осталось $remaining из $total",
-            style = PfTheme.type.hint, color = c.textMuted,
+            buildAnnotatedString {
+                append("Осталось ")
+                withStyle(SpanStyle(color = c.text, fontWeight = FontWeight.Bold)) { append("$left из $total") }
+                append(" вопросов на сегодня")
+            },
+            style = PfTheme.type.caption,
+            color = c.textMuted,
+            modifier = Modifier.weight(1f),
         )
-        Spacer(Modifier.height(PfTheme.dimens.space1))
-        Row(horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space1)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(d.space1),
+            modifier = Modifier.semantics { contentDescription = "Использовано $used из $total" },
+        ) {
             repeat(total) { i ->
                 Box(
                     Modifier
-                        .weight(1f)
-                        .height(4.dp)
-                        .background(if (i < remaining) c.accent else c.borderStrong, RoundedCornerShape(PfTheme.dimens.radiusFull)),
+                        .size(width = 16.dp, height = 8.dp)
+                        .background(if (i >= used) c.accent else c.borderStrong, RoundedCornerShape(d.radiusFull)),
                 )
             }
         }
@@ -228,7 +278,8 @@ fun PfDialog(
             Spacer(Modifier.height(PfTheme.dimens.space2))
             Text(description, style = PfTheme.type.body, color = c.textMuted)
             content()
-            Spacer(Modifier.height(PfTheme.dimens.space5))
+            // `.pf-dialog-actions { margin-top: var(--space-4); gap: var(--space-2) }`
+            Spacer(Modifier.height(PfTheme.dimens.space4))
             PfButton(
                 text = confirmText, onClick = onConfirm, block = true, busy = busy, busyText = busyText,
                 variant = if (danger) ButtonVariant.DANGER else ButtonVariant.PRIMARY,
@@ -243,7 +294,11 @@ fun PfDialog(
     }
 }
 
-/** Bottom sheet with a handle, `title-2` and a close button; content scrolls inside. */
+/**
+ * Bottom sheet (mockup `.pf-sheet`): handle, 8 dp below it a `title-2` header with a close button, content and
+ * footer on the sheet's 20 dp side margin — rows inside (`PfOptionRow`) add no padding of their own. Content
+ * scrolls between the header and the footer.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PfBottomSheet(
@@ -263,12 +318,13 @@ fun PfBottomSheet(
         scrimColor = c.scrim,
         shape = RoundedCornerShape(topStart = PfTheme.dimens.radius2xl, topEnd = PfTheme.dimens.radius2xl),
         dragHandle = {
-            Box(Modifier.padding(top = PfTheme.dimens.space3).size(width = 36.dp, height = 4.dp).background(c.borderStrong, RoundedCornerShape(PfTheme.dimens.radiusFull)))
+            Box(Modifier.padding(top = PfTheme.dimens.space2).size(width = 36.dp, height = 4.dp).background(c.borderStrong, RoundedCornerShape(PfTheme.dimens.radiusFull)))
         },
         modifier = modifier.pfTestRoot(),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(start = PfTheme.dimens.space5, end = PfTheme.dimens.space2),
+            // `.pf-sheet-head { margin-top: var(--space-2) }`; the close button sits 12 dp into the right margin.
+            Modifier.fillMaxWidth().padding(start = PfTheme.dimens.space5, end = PfTheme.dimens.space2, top = PfTheme.dimens.space2),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(title, style = PfTheme.type.title2, color = c.text, modifier = Modifier.weight(1f).semantics { heading() })
@@ -280,6 +336,7 @@ fun PfBottomSheet(
                 .fillMaxWidth()
                 .weight(1f, fill = false)
                 .verticalScroll(rememberScrollState())
+                .padding(horizontal = PfTheme.dimens.space5)
                 .padding(bottom = PfTheme.dimens.space4),
         ) { content() }
         if (footer != null) {
@@ -308,7 +365,11 @@ fun PfSnackbar(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Non-modal hint anchored near an element: `info-soft`, «Понятно» and «Больше не показывать». */
+/**
+ * Non-modal hint anchored to an element (mockup `.pf-coach`): `info-soft`, a 16 dp arrow pointing [up] (or
+ * down) at [arrowOffset] from the left, optional `15/20 700` title, `14/20` text and two ghost buttons —
+ * «Понятно» and «Больше не показывать» — whose labels line up with the text. Padding 16 / 16 / 4.
+ */
 @Composable
 fun PfCoachmark(
     text: String,
@@ -316,20 +377,39 @@ fun PfCoachmark(
     onNever: () -> Unit,
     modifier: Modifier = Modifier,
     title: String? = null,
+    up: Boolean = true,
+    arrowOffset: Dp = 24.dp,
 ) {
     val c = PfTheme.colors
-    Column(
-        modifier
-            .fillMaxWidth()
-            .background(c.infoSoft, RoundedCornerShape(PfTheme.dimens.radiusLg))
-            .padding(PfTheme.dimens.space4),
-    ) {
-        if (title != null) Text(title, style = PfTheme.type.bodyStrong, color = c.infoText)
-        Text(text, style = PfTheme.type.caption, color = c.infoText)
-        Spacer(Modifier.height(PfTheme.dimens.space2))
-        Row {
-            PfButton("Понятно", onClick = onClose, variant = ButtonVariant.GHOST)
-            PfButton("Больше не показывать", onClick = onNever, variant = ButtonVariant.GHOST)
+    val d = PfTheme.dimens
+    val shape = RoundedCornerShape(d.radiusLg)
+    Box(modifier.fillMaxWidth()) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    // The arrow: a 16 dp square turned 45°, half of it outside the card.
+                    val side = 16.dp.toPx()
+                    val cx = arrowOffset.toPx()
+                    val cy = if (up) 0f else size.height
+                    rotate(45f, pivot = Offset(cx, cy)) {
+                        drawRect(c.infoSoft, topLeft = Offset(cx - side / 2, cy - side / 2), size = Size(side, side))
+                    }
+                }
+                .background(c.infoSoft, shape)
+                .padding(start = d.space4, end = d.space4, top = d.space4, bottom = d.space1),
+        ) {
+            if (title != null) {
+                Text(title, style = PfTheme.type.bodyStrong.copy(fontWeight = FontWeight.Bold), color = c.infoText)
+                Spacer(Modifier.height(d.space1))
+            }
+            Text(text, style = PfTheme.type.body, color = c.infoText)
+            Spacer(Modifier.height(d.space1))
+            // `.pf-coach-actions { margin-left: -16px }`: the ghost buttons' own padding puts the labels on the text edge.
+            Row(Modifier.offset(x = -d.space4)) {
+                PfButton("Понятно", onClick = onClose, variant = ButtonVariant.GHOST)
+                PfButton("Больше не показывать", onClick = onNever, variant = ButtonVariant.GHOST)
+            }
         }
     }
 }

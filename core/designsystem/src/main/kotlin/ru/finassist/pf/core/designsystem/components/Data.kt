@@ -49,26 +49,38 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 
-/** Dashed 2 dp `border-strong` frame used by locked tiles and cards. */
-internal fun Modifier.dashedBorder(color: Color, radius: Dp): Modifier = drawBehind {
-    val stroke = 2.dp.toPx()
+/**
+ * Dashed frame: 2 dp with 8/6 dp dashes for locked tiles and cards; the file drop uses 1.5 dp with short
+ * 4.5/4.5 dp dashes, as a browser draws `1.5px dashed`.
+ */
+internal fun Modifier.dashedBorder(
+    color: Color,
+    radius: Dp,
+    width: Dp = 2.dp,
+    dash: Dp = 8.dp,
+    gap: Dp = 6.dp,
+): Modifier = drawBehind {
+    val stroke = width.toPx()
     drawRoundRect(
         color = color,
         topLeft = Offset(stroke / 2, stroke / 2),
         size = Size(size.width - stroke, size.height - stroke),
         cornerRadius = CornerRadius(radius.toPx()),
-        style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))),
+        style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash.toPx(), gap.toPx()))),
     )
 }
 
 /**
- * Metric tile for the 2×2 grid on Analytics: label, `amount-md` value, note. [locked] shows a dashed frame, a
- * lock icon and [lockedText] instead of a value. One TalkBack node per tile.
+ * Metric tile for the 2×2 grid on Analytics (mockup `.pf-stat`): label, `amount-md` value, note; as tall as its
+ * content. [locked] shows a dashed frame, a lock icon and [lockedText] instead of a value. One TalkBack node per
+ * tile.
  */
 @Composable
 fun PfStatTile(
@@ -93,19 +105,19 @@ fun PfStatTile(
             .background(c.surface, shape)
             .then(if (locked) Modifier.dashedBorder(c.borderStrong, PfTheme.dimens.radiusXl) else Modifier.border(1.dp, c.border, shape))
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
-            .defaultMinSize(minHeight = 96.dp)
             .padding(PfTheme.dimens.space3)
             .semantics(mergeDescendants = true) { contentDescription = spoken },
     ) {
         Text(label, style = PfTheme.type.caption, color = c.textMuted)
-        Spacer(Modifier.height(PfTheme.dimens.space1))
         if (locked) {
-            Row(verticalAlignment = Alignment.Top) {
-                PfIcon(PfIcons.LOCK, contentDescription = null, size = PfTheme.dimens.iconSm, tint = c.textMuted, modifier = Modifier.padding(top = 4.dp))
-                Spacer(Modifier.width(PfTheme.dimens.space1))
+            // `.pf-stat-lock`: 8 dp below the label, a 16 dp lock centred on the text, 8 dp gap.
+            Spacer(Modifier.height(PfTheme.dimens.space2))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2)) {
+                PfIcon(PfIcons.LOCK, contentDescription = null, size = 16.dp, tint = c.textMuted)
                 Text(lockedText ?: "Пока не считаем", style = PfTheme.type.caption, color = c.textMuted)
             }
         } else {
+            Spacer(Modifier.height(PfTheme.dimens.space1))
             PfAmountText(value ?: "—", style = PfTheme.type.amountMd, color = c.text)
             if (note != null) {
                 Spacer(Modifier.height(PfTheme.dimens.space1))
@@ -192,8 +204,10 @@ fun PfMonthSummary(
 enum class InsightState { READY, TENTATIVE, LOCKED, EMPTY }
 
 /**
- * Insight card: icon tile, title, amount on the right, one-line description naming the base. `tentative` shows
- * a «предварительно» badge, `locked` a dashed frame with the lock text, `empty` a muted title and no link.
+ * Insight card (mockup `.pf-insight`): icon tile at the top left, and a column beside it: title, amount and
+ * chevron in one top-aligned row, then the «предварительно» tag, the description over the whole column width,
+ * [content] and the secondary [action] — 4 dp apart. `locked` — transparent with a dashed frame and a 16 dp lock
+ * centred on the lock text; `empty` — a muted title and no link.
  */
 @Composable
 fun PfInsightCard(
@@ -210,55 +224,49 @@ fun PfInsightCard(
     content: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     val c = PfTheme.colors
-    val shape = RoundedCornerShape(PfTheme.dimens.radiusXl)
-    val clickable = onClick != null && state != InsightState.LOCKED && state != InsightState.EMPTY
-    val alpha = if (chartId != null && state != InsightState.LOCKED && state != InsightState.EMPTY) rememberIntroAlpha(chartId) else 1f
-    Column(
+    val d = PfTheme.dimens
+    val shape = RoundedCornerShape(d.radiusXl)
+    val locked = state == InsightState.LOCKED
+    val empty = state == InsightState.EMPTY
+    val clickable = onClick != null && !locked && !empty
+    val alpha = if (chartId != null && !locked && !empty) rememberIntroAlpha(chartId) else 1f
+    Row(
         modifier
             .alpha(alpha)
             .fillMaxWidth()
             .clip(shape)
-            .background(c.surface, shape)
-            .then(if (state == InsightState.LOCKED) Modifier.dashedBorder(c.borderStrong, PfTheme.dimens.radiusXl) else Modifier.border(1.dp, c.border, shape))
+            .then(if (locked) Modifier.dashedBorder(c.borderStrong, d.radiusXl) else Modifier.background(c.surface, shape).border(1.dp, c.border, shape))
             .then(if (clickable) Modifier.clickable(role = Role.Button, onClick = onClick!!) else Modifier)
-            .padding(PfTheme.dimens.space4),
+            .padding(d.space4),
+        horizontalArrangement = Arrangement.spacedBy(d.space3),
+        verticalAlignment = Alignment.Top,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            PfIconTile(icon)
-            Spacer(Modifier.width(PfTheme.dimens.space3))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, style = PfTheme.type.bodyStrong, color = if (state == InsightState.EMPTY) c.textMuted else c.text, modifier = Modifier.weight(1f, fill = false))
-                    if (state == InsightState.TENTATIVE) {
-                        Spacer(Modifier.width(PfTheme.dimens.space2))
-                        PfBadge("предварительно")
-                    }
+        PfIconTile(icon)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(d.space1)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(d.space2), verticalAlignment = Alignment.Top) {
+                Text(
+                    title,
+                    style = PfTheme.type.bodyStrong,
+                    color = if (empty) c.textMuted else c.text,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
+                if (amount != null && !locked && !empty) {
+                    Text(amount, style = PfTheme.type.bodyStrong, color = c.text, maxLines = 1, softWrap = false)
                 }
-                when (state) {
-                    InsightState.LOCKED -> Row(verticalAlignment = Alignment.Top) {
-                        PfIcon(PfIcons.LOCK, contentDescription = null, size = PfTheme.dimens.iconSm, tint = c.textMuted, modifier = Modifier.padding(top = 4.dp))
-                        Spacer(Modifier.width(PfTheme.dimens.space1))
-                        Text(lockedText ?: "Пока не считаем", style = PfTheme.type.caption, color = c.textMuted)
-                    }
-                    else -> if (description != null) Text(description, style = PfTheme.type.caption, color = c.textMuted)
-                }
+                if (clickable) PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = 18.dp, tint = c.textFaint, modifier = Modifier.padding(top = 1.dp))
             }
-            if (amount != null && state != InsightState.LOCKED && state != InsightState.EMPTY) {
-                Spacer(Modifier.width(PfTheme.dimens.space3))
-                Text(amount, style = PfTheme.type.bodyStrong, color = c.text, maxLines = 1)
-                if (clickable) {
-                    Spacer(Modifier.width(PfTheme.dimens.space1))
-                    PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = PfTheme.dimens.iconMd, tint = c.textFaint)
+            if (state == InsightState.TENTATIVE) PfBadge("предварительно")
+            if (locked) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(d.space2)) {
+                    PfIcon(PfIcons.LOCK, contentDescription = null, size = 16.dp, tint = c.textMuted)
+                    Text(lockedText ?: "Пока не считаем", style = PfTheme.type.caption, color = c.textMuted)
                 }
+            } else if (description != null) {
+                Text(description, style = PfTheme.type.caption, color = c.textMuted)
             }
-        }
-        if (content != null) {
-            Spacer(Modifier.height(PfTheme.dimens.space3))
-            content()
-        }
-        if (action != null) {
-            Spacer(Modifier.height(PfTheme.dimens.space2))
-            action()
+            content?.invoke(this)
+            // `.pf-insight-action { margin-left: -16px }`: a ghost button or link lines up with the text.
+            if (action != null) Box(Modifier.offset(x = -d.space4)) { action() }
         }
     }
 }
@@ -301,9 +309,15 @@ fun PfAskCard(
                 else -> "Осталось $remaining из $total на сегодня"
             }
             Text(subtitle, style = PfTheme.type.caption, color = c.textMuted)
-            if (exhausted) Text("История ответов", style = PfTheme.type.bodyStrong, color = c.accent)
+            if (exhausted) {
+                // `.pf-ask-action`: 14/20 600 accent, 4 dp above.
+                Spacer(Modifier.height(PfTheme.dimens.space1))
+                Text("История ответов", style = PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold), color = c.accent)
+            }
         }
-        PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = PfTheme.dimens.iconMd, tint = c.textFaint)
+        // `.pf-ask { gap: var(--space-3) }`, 22 dp chevron.
+        Spacer(Modifier.width(PfTheme.dimens.space3))
+        PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = 22.dp, tint = c.textFaint)
     }
 }
 
@@ -330,24 +344,30 @@ fun PfPeriodNav(
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(label, style = PfTheme.type.title2, color = c.text, modifier = Modifier.semantics { heading() })
+                // `.pf-period-label`: 15/20 600, a 16 dp chevron 4 dp after it.
+                Text(label, style = PfTheme.type.bodyStrong, color = c.text, modifier = Modifier.semantics { heading() })
                 Spacer(Modifier.width(PfTheme.dimens.space1))
-                PfIcon(PfIcons.CHEVRON_DOWN, contentDescription = null, size = PfTheme.dimens.iconMd, tint = c.textFaint)
+                PfIcon(PfIcons.CHEVRON_DOWN, contentDescription = null, size = 16.dp, tint = c.textFaint)
             }
         }
         PfIconButton(PfIcons.CHEVRON_RIGHT, contentDescription = "Следующий $unitName", onClick = { onNext?.invoke() }, enabled = onNext != null, modifier = Modifier.testTag(PfTestTags.PERIOD_NEXT))
     }
 }
 
-/** Progress of a file upload: `border` track, `accent` fill. */
+/** Progress of a file upload (mockup `.pf-drop-progress`): 8 dp `border` track, rounded `accent` fill. */
 @Composable
 fun PfProgressBar(progress: Float, modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(PfTheme.dimens.radiusFull)).background(PfTheme.colors.border)) {
-        Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).height(6.dp).background(PfTheme.colors.accent))
+    Box(modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(PfTheme.dimens.radiusFull)).background(PfTheme.colors.border)) {
+        Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).height(8.dp).background(PfTheme.colors.accent, RoundedCornerShape(PfTheme.dimens.radiusFull)))
     }
 }
 
-/** File picker zone: dashed frame, upload icon, title and hint; `busy` shows the file name and a progress bar. */
+/**
+ * File picker zone (mockup `.pf-drop`), on `surface`, items 8 dp apart, 24/16 dp padding.
+ * - idle: 1.5 dp dashed `border-strong` frame, upload icon in an `accent-soft` tile, accent title, `hint`;
+ * - busy ([busyFileName]): solid `border` frame, a 26 dp file icon in `text`, «Разбираем операции…», the file name
+ *   (`hint`) and an 8 dp progress bar.
+ */
 @Composable
 fun PfFileDrop(
     onPick: () -> Unit,
@@ -358,34 +378,47 @@ fun PfFileDrop(
     progress: Float? = null,
 ) {
     val c = PfTheme.colors
+    val d = PfTheme.dimens
+    val shape = RoundedCornerShape(d.radiusXl)
     val busy = busyFileName != null
     Column(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(PfTheme.dimens.radiusXl))
-            .dashedBorder(c.borderStrong, PfTheme.dimens.radiusXl)
+            .clip(shape)
+            .background(c.surface, shape)
+            .then(
+                if (busy) Modifier.border(1.dp, c.border, shape)
+                else Modifier.dashedBorder(c.borderStrong, d.radiusXl, width = 1.5.dp, dash = 4.5.dp, gap = 4.5.dp),
+            )
             .then(if (!busy) Modifier.clickable(role = Role.Button, onClick = onPick) else Modifier)
-            .padding(PfTheme.dimens.space5),
+            .padding(horizontal = d.space4, vertical = d.space6),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(d.space2),
     ) {
-        PfIcon(if (busy) PfIcons.FILE_TEXT else PfIcons.UPLOAD, contentDescription = null, size = 28.dp, tint = c.accent)
-        Spacer(Modifier.height(PfTheme.dimens.space3))
         if (busy) {
-            Text("Разбираем операции…", style = PfTheme.type.bodyStrong, color = c.text)
-            Text(busyFileName!!, style = PfTheme.type.caption, color = c.textMuted, maxLines = 1)
-            Spacer(Modifier.height(PfTheme.dimens.space3))
+            PfIcon(PfIcons.FILE_TEXT, contentDescription = null, size = 26.dp, tint = c.text)
+            Text("Разбираем операции…", style = PfTheme.type.bodyStrong, color = c.text, textAlign = TextAlign.Center)
+            Text(busyFileName!!, style = PfTheme.type.hint, color = c.textMuted, maxLines = 1, textAlign = TextAlign.Center)
             PfProgressBar(progress ?: 0f)
         } else {
-            Text(title, style = PfTheme.type.bodyStrong, color = c.accent)
-            Text(hint, style = PfTheme.type.caption, color = c.textMuted)
+            Box(Modifier.size(d.tile).background(c.accentSoft, RoundedCornerShape(d.radiusMd)), contentAlignment = Alignment.Center) {
+                PfIcon(PfIcons.UPLOAD, contentDescription = null, size = d.iconMd, tint = c.accent)
+            }
+            Text(title, style = PfTheme.type.bodyStrong, color = c.accent, textAlign = TextAlign.Center)
+            Text(hint, style = PfTheme.type.hint, color = c.textMuted, textAlign = TextAlign.Center)
         }
     }
 }
 
-/** 4-digit passcode dots: empty — 2 dp `border-strong` ring, filled — `accent`; error text below. */
+/**
+ * 4-digit passcode dots (mockup `.pf-pass`): empty — 2 dp `border-strong` ring, filled — `accent`. With an
+ * [error] every ring turns `warning-text` and filled dots fill with it, so a wrong code stays visible as four
+ * warning dots; the error (`13/20 600`) is centred 16 dp below.
+ */
 @Composable
 fun PfPasscodeDots(filled: Int, modifier: Modifier = Modifier, length: Int = 4, label: String = "Код-пароль", error: String? = null) {
     val c = PfTheme.colors
+    val invalid = error != null
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4),
@@ -393,18 +426,24 @@ fun PfPasscodeDots(filled: Int, modifier: Modifier = Modifier, length: Int = 4, 
         ) {
             repeat(length) { i ->
                 val isFilled = i < filled
+                val ring = when {
+                    invalid -> c.warningText
+                    isFilled -> c.accent
+                    else -> c.borderStrong
+                }
                 Box(
                     Modifier
                         .size(16.dp)
-                        .background(if (isFilled) c.accent else Color.Transparent, RoundedCornerShape(PfTheme.dimens.radiusFull))
-                        .border(if (isFilled) 0.dp else 2.dp, if (error != null) c.warningText else c.borderStrong, RoundedCornerShape(PfTheme.dimens.radiusFull)),
+                        .background(if (isFilled) ring else Color.Transparent, RoundedCornerShape(PfTheme.dimens.radiusFull))
+                        .border(2.dp, ring, RoundedCornerShape(PfTheme.dimens.radiusFull)),
                 )
             }
         }
         if (error != null) {
-            Spacer(Modifier.height(PfTheme.dimens.space3))
+            Spacer(Modifier.height(PfTheme.dimens.space4))
             Text(
                 error, style = PfTheme.type.caption.copy(fontWeight = FontWeight.SemiBold), color = c.warningText,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive }.testTag(PfTestTags.PASSCODE_ERROR),
             )
         }
