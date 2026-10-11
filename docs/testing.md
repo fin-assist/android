@@ -69,8 +69,8 @@ The `build` job (`.github/workflows/ci.yml`) builds the reports after the unit t
 
 - PR: a comment «Unit test coverage» in the PR conversation — project totals, coverage of changed lines against
   the PR's base branch, uncovered lines per file (files with gaps first, up to 50, long line lists cut to fit a
-  comment). One comment per PR, edited on
-  every push; PRs from forks get none (read-only token). The run summary has the same text with the full table.
+  comment). One comment per PR, edited on every push; PRs from forks get none (read-only token). The run summary
+  has the same text with the full table.
 - Push to `main` / `release/**`: project totals in the run summary.
 - The HTML report is the `coverage-report` artifact of the run.
 
