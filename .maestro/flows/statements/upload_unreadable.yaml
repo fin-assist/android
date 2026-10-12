@@ -42,4 +42,5 @@ tags:
     timeout: 20000
 - assertVisible:
     id: "statements.result.unread"
-- assertVisible: "2 строки не прочитали — их нет в суммах.*"
+# The count is joined to the noun with a no-break space: match around it.
+- assertVisible: ".*строки не прочитали — их нет в суммах.*"

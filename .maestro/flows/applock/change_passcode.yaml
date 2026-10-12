@@ -24,7 +24,7 @@ tags:
       id: "applock.change"
     timeout: 10000
 
-- assertVisible: "Введите текущий код"
+- assertVisible: "Введите текущий код-пароль"
 - runFlow:
     file: ../../subflows/enter_code.yaml
     env:
