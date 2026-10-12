@@ -175,7 +175,8 @@ that they run only locally (`scripts/e2e.sh`), and the PR says whether they were
 | native `StatementPickerTest` | upload through `ACTION_OPEN_DOCUMENT` (Espresso-Intents) up to the import result |
 
 Not covered yet: voice input (needs a speech recognizer on the emulator), biometrics (needs an enrolled
-fingerprint), the unread-lines screen (needs a test statement with unreadable lines), custom date ranges in search,
+fingerprint), the unread-lines screen and the empty import result with unread lines (both need a test statement
+with unreadable lines), custom date ranges in search,
 links inside a sentence — the registration terms and privacy policy, «Как мы защищаем данные», «разобрать» and
 «Подробнее» on the import result, «Подробнее» on «Аналитика» (a link inside a text node has no own view or
 resource id for Maestro to tap, and the first three open an external browser the flow cannot check).
