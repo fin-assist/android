@@ -133,8 +133,8 @@ Known limits:
 - Dependencies are instrumented too (the probes cost start-up time on the e2e build only); the report lists
   project modules only.
 - The report step never fails the job: without data there is no report and the summary says so. The first
-  measurement (manual run of the workflow on 2026-10-12, 18 flows and the native test): 83.3 % of lines, 54.1 % of
-  branches of the project modules; `UnreadLinesScreen.kt` the one screen file no test touched.
+  measurement (manual run of the workflow on 2026-10-12, 18 flows and the native test): 83.3 % of lines, 54.0 % of
+  branches of the project modules (run 38216952064); `UnreadLinesScreen.kt` the one screen file no test touched.
 
 ### Scenario coverage
 
