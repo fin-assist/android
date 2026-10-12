@@ -5,6 +5,7 @@ import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockRow
 import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.ChangedSince
+import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
@@ -79,11 +80,18 @@ class AnswerFormatTest {
     }
 
     @Test
-    fun `a partial month is filled by its days`() {
-        val to = OffsetDateTime.parse("2026-09-25T21:40:00+03:00")
-        assertEquals(25f / 30, AnswerFormat.partialFill(to, partial = true))
-        assertNull(AnswerFormat.partialFill(to, partial = false))
-        assertNull(AnswerFormat.partialFill(null, partial = true))
+    fun `a partial month is filled by its days with data`() {
+        val september = DateRange(OffsetDateTime.parse("2026-09-01T00:00:00+03:00"), OffsetDateTime.parse("2026-10-01T00:00:00+03:00"))
+        fun point(coverage: Coverage, from: String? = null, to: String? = null) = ru.finassist.pf.core.api.model.ChartPoint(
+            september, value = 1.0, coverage = coverage,
+            dataFrom = from?.let(OffsetDateTime::parse), dataTo = to?.let(OffsetDateTime::parse),
+        )
+        assertEquals(25f / 30, AnswerFormat.partialFill(point(Coverage.PARTIAL, to = "2026-09-25T21:40:00+03:00")))
+        // A statement that starts late in the month: six days, not thirty.
+        assertEquals(6f / 30, AnswerFormat.partialFill(point(Coverage.PARTIAL, from = "2026-09-25T09:00:00+03:00", to = "2026-09-30T23:59:59+03:00")))
+        assertEquals(1f, AnswerFormat.partialFill(point(Coverage.PARTIAL)))  // no bounds: the whole month
+        assertNull(AnswerFormat.partialFill(point(Coverage.COMPLETE, to = "2026-09-25T21:40:00+03:00")))
+        assertNull(AnswerFormat.partialFill(point(Coverage.NO_DATA)))
     }
 
     @Test

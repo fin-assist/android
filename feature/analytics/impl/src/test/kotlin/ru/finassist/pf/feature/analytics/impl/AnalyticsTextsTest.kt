@@ -189,6 +189,9 @@ class AnalyticsTextsTest {
         assertEquals("1–25 сентября", AnalyticsTexts.totalCaption(PeriodTypeCode.MONTH, period()).plain())
         val year = period(from = "2026-04-01T00:00:00+03:00", to = "2026-09-25T21:40:00+03:00", range = DateRange(t("2026-01-01T00:00:00+03:00"), t("2027-01-01T00:00:00+03:00")))
         assertEquals("апрель — сентябрь", AnalyticsTexts.totalCaption(PeriodTypeCode.YEAR, year).plain())
+        // The last operation at midnight on the 1st still belongs to September.
+        val midnight = period(from = "2026-04-01T00:00:00+03:00", to = "2026-09-01T00:00:00+03:00", range = DateRange(t("2026-01-01T00:00:00+03:00"), t("2027-01-01T00:00:00+03:00")))
+        assertEquals("апрель — сентябрь", AnalyticsTexts.totalCaption(PeriodTypeCode.YEAR, midnight).plain())
         assertEquals("1–30 сентября", AnalyticsTexts.totalCaption(PeriodTypeCode.MONTH, period(from = null, to = null)).plain())
     }
 }

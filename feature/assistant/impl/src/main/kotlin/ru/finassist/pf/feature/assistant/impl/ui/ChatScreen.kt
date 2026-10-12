@@ -373,7 +373,7 @@ private fun ChartBody(block: Block, chartId: String) {
                 value = p.value?.let { (it / max).toFloat() },
                 display = display,
                 partial = partial,
-                partialFill = AnswerFormat.partialFill(p.dataTo, partial) ?: 0.5f,
+                partialFill = AnswerFormat.partialFill(p) ?: 0.5f,
                 note = p.dataTo?.takeIf { partial }?.let { "по ${it.dayOfMonth}-е" },
             )
         },

@@ -308,7 +308,8 @@ object AnalyticsTexts {
     fun totalCaption(type: PeriodTypeCode, period: AnalyticsPeriodInfo): String {
         if (type != PeriodTypeCode.MONTH) {
             val from = period.dataFrom?.let(YearMonth::from)
-            val to = period.dataTo?.let { YearMonth.from(it.minusSeconds(1)) }
+            // `data_to` is the last moment with data (inclusive, api.md): an operation at 00:00 on the 1st is that month.
+            val to = period.dataTo?.let(YearMonth::from)
             if (from != null && to != null) return RussianDates.monthRange(from, to)
         }
         val from = period.dataFrom?.toLocalDate() ?: period.range.from.toLocalDate()
