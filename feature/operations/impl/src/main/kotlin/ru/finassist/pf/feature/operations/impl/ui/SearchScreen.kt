@@ -146,7 +146,7 @@ internal fun SearchContent(
             if (f.selection != null || f.transferMode != null) {
                 PfChip((f.selectionName ?: "Как на «Аналитике»") + "  ✕", onClick = actions.clearAnalyticsScope, selected = true, modifier = Modifier.testTag(OperationsTags.CHIP_SCOPE))
             }
-            if (state.allTime || !f.copy(q = null).isEmpty) {
+            if (!state.onlyQuery) {
                 PfChip("Сбросить", onClick = actions.reset, modifier = Modifier.testTag(OperationsTags.CHIP_RESET))
             }
         }
@@ -166,7 +166,7 @@ internal fun SearchContent(
             }
             is SearchResult.Found -> if (r.totalCount == 0) {
                 // Mockup `SearchEmpty`: no count line — the empty state's title is the result, announced politely;
-                // the button drops the filters (the query stays).
+                // the button drops the filters (the query stays, unless it is the only one — then it goes).
                 Column(
                     Modifier
                         .fillMaxWidth()

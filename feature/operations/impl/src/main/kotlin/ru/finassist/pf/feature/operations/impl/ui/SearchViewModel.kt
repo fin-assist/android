@@ -68,6 +68,8 @@ data class SearchUiState(
     val windowFrom: LocalDate? = null,
 ) {
     val hasFilters: Boolean get() = !filter.isEmpty || allTime
+    /** Nothing to reset besides the text: «Сбросить фильтры» on the empty result then clears the query instead of repeating it. */
+    val onlyQuery: Boolean get() = filter.copy(q = null).isEmpty && !allTime
 }
 
 /**
@@ -134,9 +136,11 @@ class SearchViewModel @Inject constructor(
         updateFilter { it.copy(from = null, to = null) }
     }
 
+    /** Drops the filters and keeps the query — unless the query is the only filter: then it is the one to drop. */
     fun reset() {
+        val onlyQuery = _state.value.onlyQuery
         _state.update { it.copy(allTime = false, selectionDropped = false) }
-        updateFilter { OperationsFilter(q = it.q) }
+        updateFilter { if (onlyQuery) OperationsFilter() else OperationsFilter(q = it.q) }
     }
 
     fun openSheet(sheet: SearchSheet?) = _state.update { it.copy(sheet = sheet) }

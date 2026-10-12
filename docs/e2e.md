@@ -160,7 +160,7 @@ that they run only locally (`scripts/e2e.sh`), and the PR says whether they were
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |
 | `applock/change_passcode` | current → new → mismatch → new → repeat; the new code unlocks after restart |
 | `operations/feed_and_detail` (smoke) | feed → card → change category → saved as manual |
-| `operations/search_filters` | query, «Только расходы», amount, «Сбросить», period, result card |
+| `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card |
 | `analytics/overview` (smoke) | blocks, previous month, month/quarter/year, «Без переводов», category → operations |
 | `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card and profile) |
 | `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
