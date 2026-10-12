@@ -101,6 +101,6 @@ tags:
     visible:
       id: "ds.chat.limit"
     timeout: 20000
-- assertVisible: "Вопросы на сегодня закончились"
+- assertVisible: "Вопросы на сегодня закончились.*"
 - assertNotVisible:
     id: "ds.chat.send"
