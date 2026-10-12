@@ -33,9 +33,10 @@ step, commands, log), logcat, the preflight dump, and in `coverage/ec/` the JaCo
 the device (`./gradlew :e2eCoverageReport` turns it into the UI test coverage report — docs/testing.md, «UI test
 coverage»).
 
-In CI (`.github/workflows/e2e.yml`) the tests run only after a merge to `main`; PRs never run them. A failed run is
-re-run from the Actions tab («Re-run jobs»). The run summary lists the flows and the UI test coverage; reports are
-in the `e2e-reports` artifact.
+In CI (`.github/workflows/e2e.yml`) the tests run after a merge to `main`; PRs never run them automatically. A
+failed run is re-run from the Actions tab («Re-run jobs»); any branch can be run by hand there («Run workflow» →
+the branch) to check a new flow or the coverage pipeline before the merge — such a run sends nothing to Qase. The
+run summary lists the flows and the UI test coverage; reports are in the `e2e-reports` artifact.
 
 ## Qase
 
@@ -136,8 +137,9 @@ a bug that does not reproduce there), list it in «Not covered yet» at the end 
 reason and say so in the PR; «takes long to write» is not a reason.
 
 Every new or renamed test: a Qase case (suite of the feature, steps and expected results in Russian, automated),
-a line in `scripts/qase-cases.json`, a row in «Coverage». CI runs the flows only after the merge to `main`; before
-that they run only locally (`scripts/e2e.sh`), and the PR says whether they were.
+a line in `scripts/qase-cases.json`, a row in «Coverage». CI runs the flows after the merge to `main`; before that
+they run locally (`scripts/e2e.sh`) or by a manual start of the `UI tests` workflow, and the PR says whether they
+were.
 
 ## Writing a flow
 

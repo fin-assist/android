@@ -135,7 +135,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   Google Maven, Gradle and Maven Central.
 - Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug testMockDebugUnitTest` — the same checks as CI.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally, the `UI tests` workflow in CI
-  (only after a merge to `main`; PRs never run them). Their coverage: `./gradlew :e2eCoverageReport` after a run, then
+  (after a merge to `main`, or started by hand for a branch; PRs never run them by themselves). Their coverage: `./gradlew :e2eCoverageReport` after a run, then
   `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml`; the scenario part
   (`python3 scripts/ui-coverage.py summary`) needs no device (docs/testing.md).
 - `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
@@ -175,8 +175,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   - Not automatable on the emulator (biometrics, voice, a bug that does not reproduce there): add it to «Not
     covered yet» in docs/e2e.md and say so in the PR. The reason must be technical — what the emulator or the mock
     cannot do — not the effort.
-  - CI runs UI tests only after the merge to `main`: a new or changed flow is first run there, unless it was run
-    locally with `scripts/e2e.sh`. Say in the PR whether the flows were run and how.
+  - CI runs UI tests after the merge to `main`, never on a PR by itself: a new or changed flow is first run there,
+    unless it was run locally with `scripts/e2e.sh` or the owner started the `UI tests` workflow for the branch by
+    hand. Say in the PR whether the flows were run and how.
 - Document in moderation: KDoc on public `:api` interfaces, comments where logic is non-obvious
   (accounting rules, idempotency, animation), not on every method.
 
