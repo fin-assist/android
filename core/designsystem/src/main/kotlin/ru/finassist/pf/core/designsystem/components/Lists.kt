@@ -29,7 +29,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.Layout
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
@@ -58,9 +61,11 @@ enum class RowTone { DEFAULT, ACCENT }
 
 /**
  * Settings / list row inside `PfCard(flush = true)` (mockup `.pf-lrow`): accent icon, title (`15/20` regular,
- * accent rows `600`), optional description (`hint`), value on the right (at most half the row, wraps) and a
- * chevron — or a switch. Min height `row` (56), 8 dp vertical padding, 12 dp between parts. The divider runs
- * under the whole row inside the card's 16 dp side padding; the last row of a card passes `divider = false`.
+ * accent rows `600`), optional description (`hint`), value on the right and a chevron — or a switch. Min height
+ * `row` (56) including the 1 dp divider, 8 dp vertical padding, 12 dp between parts. When the title and the value
+ * do not fit side by side they give way in proportion to their widths, as flex items do; the value stays within
+ * half of the row and never narrower than its longest word, and both wrap. The divider runs under the whole row
+ * inside the card's 16 dp side padding; the last row of a card passes `divider = false`.
  */
 @Composable
 fun PfListRow(
@@ -96,7 +101,8 @@ fun PfListRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(clickable)
-                    .defaultMinSize(minHeight = d.row)
+                    // `box-sizing: border-box; min-height: 56px`: the divider is part of the 56 dp.
+                    .defaultMinSize(minHeight = if (divider) d.row - 1.dp else d.row)
                     .padding(horizontal = d.space4, vertical = d.space2)
                     .semantics(mergeDescendants = true) {
                         if (valueLabel != null) contentDescription = listOfNotNull(title, description, valueLabel).joinToString(", ")
@@ -105,23 +111,31 @@ fun PfListRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (icon != null) PfIcon(icon, contentDescription = null, size = d.iconMd, tint = c.accent)
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        title,
-                        style = if (tone == RowTone.ACCENT) PfTheme.type.bodyStrong else PfTheme.type.lead,
-                        color = if (tone == RowTone.ACCENT) c.accent else c.text,
-                    )
-                    if (description != null) Text(description, style = PfTheme.type.hint, color = c.textMuted)
-                }
-                if (value != null) {
-                    Text(
-                        value,
-                        style = if (valueAccent) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.caption,
-                        color = if (valueAccent) c.accent else c.textMuted,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.widthIn(max = valueMaxWidth),
-                    )
-                }
+                FlexShrinkPair(
+                    modifier = Modifier.weight(1f),
+                    gap = d.space3,
+                    endMaxWidth = valueMaxWidth,
+                    start = {
+                        Column {
+                            Text(
+                                title,
+                                style = if (tone == RowTone.ACCENT) PfTheme.type.bodyStrong else PfTheme.type.lead,
+                                color = if (tone == RowTone.ACCENT) c.accent else c.text,
+                            )
+                            if (description != null) Text(description, style = PfTheme.type.hint, color = c.textMuted)
+                        }
+                    },
+                    end = if (value == null) null else {
+                        {
+                            Text(
+                                value,
+                                style = if (valueAccent) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.caption,
+                                color = if (valueAccent) c.accent else c.textMuted,
+                                textAlign = TextAlign.End,
+                            )
+                        }
+                    },
+                )
                 when {
                     trailing != null -> trailing()
                     isSwitch -> PfSwitch(checked = switchChecked!!, onCheckedChange = null)
@@ -133,13 +147,55 @@ fun PfListRow(
     }
 }
 
+/**
+ * Two items side by side that shrink like flex items when they do not fit: the overflow is taken from each in
+ * proportion to its natural width (`flex-shrink: 1` with the content width as the basis). [start] can shrink to
+ * nothing (`min-width: 0`); [end] never goes below its narrowest layout (the longest word) and not above
+ * [endMaxWidth] (`max-width: 50%`). [end] is placed at the right edge, both are centred vertically.
+ */
+@Composable
+private fun FlexShrinkPair(
+    modifier: Modifier,
+    gap: Dp,
+    endMaxWidth: Dp,
+    start: @Composable () -> Unit,
+    end: (@Composable () -> Unit)?,
+) {
+    Layout(contents = listOf(start, end ?: {}), modifier = modifier) { (startMeasurables, endMeasurables), constraints ->
+        val width = constraints.maxWidth
+        val startM = startMeasurables.firstOrNull()
+        val endM = endMeasurables.firstOrNull()
+        val gapPx = if (endM != null) gap.roundToPx() else 0
+        val startWant = startM?.maxIntrinsicWidth(constraints.maxHeight) ?: 0
+        val endCap = endMaxWidth.roundToPx().coerceAtMost(width)
+        val endWant = endM?.maxIntrinsicWidth(constraints.maxHeight)?.coerceAtMost(endCap) ?: 0
+        val endMin = endM?.minIntrinsicWidth(constraints.maxHeight)?.coerceAtMost(endCap) ?: 0
+        val overflow = startWant + gapPx + endWant - width
+        val (startWidth, endWidth) = if (overflow <= 0 || startWant + endWant == 0) {
+            startWant to endWant
+        } else {
+            val endShrink = (overflow.toLong() * endWant / (startWant + endWant)).toInt()
+            val endW = (endWant - endShrink).coerceAtLeast(endMin)
+            val startW = (width - gapPx - endW).coerceAtLeast(0)
+            startW to endW
+        }
+        val startP = startM?.measure(Constraints(maxWidth = startWidth, maxHeight = constraints.maxHeight))
+        val endP = endM?.measure(Constraints(maxWidth = endWidth, maxHeight = constraints.maxHeight))
+        val height = maxOf(startP?.height ?: 0, endP?.height ?: 0, constraints.minHeight)
+        layout(width, height) {
+            startP?.placeRelative(0, (height - startP.height) / 2)
+            endP?.placeRelative(width - endP.width, (height - endP.height) / 2)
+        }
+    }
+}
+
 enum class ValueTone { DEFAULT, POSITIVE, MUTED }
 
 /**
  * «label — value» row (mockup `.pf-drow`): operation details, income rows, assistant rows. Label `body`, value
  * `14/20 600`, 12 dp apart, both aligned to the top. A text value takes at most 60 % of the row and wraps, so
  * the label is always readable; an [amount] value never wraps and takes what it needs. A clickable row is 48 dp
- * tall and centred. `total` draws a strong top line and a bold value.
+ * tall including its divider, and centred. `total` draws a strong top line and a bold value.
  */
 @Composable
 fun PfDataRow(
@@ -165,7 +221,8 @@ fun PfDataRow(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick).defaultMinSize(minHeight = d.touch) else Modifier)
+                    // `.pf-drow-link { min-height: 48px; box-sizing: border-box }`: the divider is part of the 48 dp.
+                    .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick).defaultMinSize(minHeight = if (divider) d.touch - 1.dp else d.touch) else Modifier)
                     .padding(vertical = d.space2)
                     .semantics(mergeDescendants = true) {
                         if (valueLabel != null) contentDescription = "$label, $valueLabel"
@@ -263,7 +320,8 @@ private fun TransactionRowBody(
                 color = when { income -> c.positive; muted -> c.textMuted; else -> c.text },
                 maxLines = 1,
             )
-            if (note != null) Text(note, style = PfTheme.type.micro, color = c.textMuted, maxLines = 1)
+            // `.pf-row-note`: 11/16 regular — `micro` is the same size but semibold.
+            if (note != null) Text(note, style = PfTheme.type.micro.copy(fontWeight = FontWeight.Normal), color = c.textMuted, maxLines = 1)
         }
     }
 }

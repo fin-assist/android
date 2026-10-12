@@ -1,7 +1,5 @@
 package ru.finassist.pf.feature.operations.impl.ui
-
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,7 +15,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import ru.finassist.pf.core.api.model.Category
 import ru.finassist.pf.core.api.model.CategoryKind
 import ru.finassist.pf.core.designsystem.components.PfOptionGroupTitle
@@ -52,7 +49,7 @@ object CategoryGrouping {
     }
 }
 
-/** Searchable single-choice category list for sheets. */
+/** Searchable single-choice category list for sheets; the caller's column gives it the height (`scrollable = false` on the sheet). */
 @Composable
 fun CategoryList(
     categories: List<Category>,
@@ -79,7 +76,8 @@ fun CategoryList(
                 modifier = Modifier.padding(top = PfTheme.dimens.space4, bottom = PfTheme.dimens.space1).semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
-        LazyColumn(Modifier.heightIn(max = 480.dp).padding(top = PfTheme.dimens.space2)) {
+        // The list takes what the sheet leaves it (85 % of the window at most) and scrolls inside.
+        LazyColumn(Modifier.weight(1f, fill = false).padding(top = PfTheme.dimens.space2)) {
             var first = true
             fun section(title: String, list: List<Category>) {
                 if (list.isEmpty()) return

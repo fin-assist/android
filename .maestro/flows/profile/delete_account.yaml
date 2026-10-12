@@ -1,5 +1,5 @@
 appId: ru.finassist.pf.mock.e2e
-name: Удаление аккаунта — код-пароль, затем подтверждение в диалоге
+name: Удаление аккаунта — код-пароль, подтверждение в диалоге, «Назад» во время удаления
 tags:
   - profile
 ---
@@ -32,12 +32,25 @@ tags:
 - extendedWaitUntil:
     visible: "Удалить аккаунт?"
     timeout: 10000
+# While the request runs, the dialog is «Удаляем…» and neither «Отмена» nor Back closes it: the deletion is
+# already sent, closing would only hide its outcome (FIN-64). A slow backend keeps that state up for 6 s.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?network_delay_ms=6000"
 - tapOn:
     id: "ds.dialog.confirm"
 - extendedWaitUntil:
+    visible: "Удаляем…"
+    timeout: 5000
+- pressKey: Back
+- assertVisible:
+    id: "ds.dialog"
+- assertVisible: "Удаляем…"
+- extendedWaitUntil:
     visible:
       id: "auth.deleted"
-    timeout: 15000
+    timeout: 20000
 - assertVisible: "Аккаунт удалён"
 - tapOn:
     id: "auth.deleted.done"

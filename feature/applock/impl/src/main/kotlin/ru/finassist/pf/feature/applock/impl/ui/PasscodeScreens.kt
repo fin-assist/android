@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -112,11 +113,11 @@ private fun PasscodePad(
         }
         PfNumPad(onDigit = onDigit, onDelete = onDelete, biometric = biometric, onBiometric = onBiometric)
         if (footer != null) {
-            Box(Modifier.height(d.control + d.space4), contentAlignment = Alignment.Center) { footer() }
-            Spacer(Modifier.height(d.space2))
-        } else {
+            // Mockup: the link 16 dp under the keypad (48 dp touch height), 16 dp to the bottom edge.
             Spacer(Modifier.height(d.space4))
+            Box(Modifier.defaultMinSize(minHeight = d.touch), contentAlignment = Alignment.Center) { footer() }
         }
+        Spacer(Modifier.height(d.space4))
     }
 }
 
@@ -273,7 +274,7 @@ internal fun SecurityContent(
                         onSwitch = onBiometricSwitch,
                     )
                 }
-                PfListRow(title = "Сменить код-пароль", icon = PfIcons.LOCK, onClick = onChangePasscode, modifier = Modifier.testTag(AppLockTags.SECURITY_CHANGE))
+                PfListRow(title = "Сменить код-пароль", icon = PfIcons.LOCK, onClick = onChangePasscode, divider = false, modifier = Modifier.testTag(AppLockTags.SECURITY_CHANGE))
             }
             Spacer(Modifier.height(d.space3))
             PfNotice(

@@ -1,10 +1,8 @@
 package ru.finassist.pf.core.designsystem.components
 
-import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.background
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,11 +12,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -27,29 +29,32 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.offset
-import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
+import ru.finassist.pf.core.designsystem.theme.PfInsets
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 
 /**
@@ -64,8 +69,8 @@ enum class NoticeTone { INFO, WARNING, POSITIVE, LIMIT }
  * Notice (mockup `.pf-notice`): `info` explains what the app did, `warning` asks to check something, `positive`
  * confirms an action, `limit` — the question limit is exhausted (clock icon, info colours). 12/16 dp padding,
  * 18 dp icon 8 dp from the text, `13/20` text, title `14/20 700` 4 dp above it; [action] follows the text
- * directly (a standalone link brings its own 48 dp). [icon] overrides the tone's icon. `alert` announces
- * immediately.
+ * directly — a standalone link goes through [PfNoticeLink], which trims its 48 dp touch height the way the
+ * mockups do. [icon] overrides the tone's icon. `alert` announces immediately.
  */
 @Composable
 fun PfNotice(
@@ -105,6 +110,31 @@ fun PfNotice(
             if (parts != null) PfLinkedText(parts, style = PfTheme.type.caption, color = fg) else Text(text, style = PfTheme.type.caption, color = fg)
             if (action != null) action()
         }
+    }
+}
+
+/**
+ * Standalone link as the action of a [PfNotice]. The mockups wrap a 48 dp link in `margin: -8px 0 -12px 0`, so
+ * it takes 28 dp of the notice: the text sits 6 dp under the notice text and 2 dp above the slot's end (14 dp to
+ * the notice's edge). The layout is that 28 dp box; the touch target is still 48 dp — Compose expands the touch
+ * bounds of a clickable smaller than the minimum touch target to it, 10 dp above and below the box.
+ */
+@Composable
+fun PfNoticeLink(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .height(28.dp)
+            .clip(RoundedCornerShape(PfTheme.dimens.radiusSm))
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text,
+            style = PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold),
+            color = PfTheme.colors.accent,
+            // Centred the text would sit 4/4; the mockup's margins put it 6/2.
+            modifier = Modifier.offset(y = 2.dp),
+        )
     }
 }
 
@@ -257,7 +287,10 @@ fun PfLimitMeter(used: Int, modifier: Modifier = Modifier, total: Int = 5) {
 
 /**
  * Confirmation dialog for an irreversible action: title (question), description (what is lost), extra content,
- * a `danger` button and a `ghost` «Отмена». System back closes it like «Отмена».
+ * a `danger` button and a `ghost` «Отмена». System back and an outside tap close it like «Отмена». While [busy],
+ * «Отмена» is disabled and neither back nor an outside tap dismisses the dialog: the request is already sent and
+ * cannot be taken back, so closing the dialog would only hide its outcome (FIN-64; the `DeleteAccountBusy`
+ * mockup follows).
  */
 @Composable
 fun PfDialog(
@@ -275,7 +308,7 @@ fun PfDialog(
 ) {
     if (LocalSuppressPopups.current) return
     val c = PfTheme.colors
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(dismissOnClickOutside = !busy)) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(dismissOnBackPress = !busy, dismissOnClickOutside = !busy)) {
         Column(
             modifier
                 .pfTestRoot()
@@ -306,8 +339,9 @@ fun PfDialog(
 
 /**
  * Bottom sheet (mockup `.pf-sheet`): handle, 8 dp below it a `title-2` header with a close button, content and
- * footer on the sheet's 20 dp side margin — rows inside (`PfOptionRow`) add no padding of their own. Content
- * scrolls between the header and the footer.
+ * footer on the sheet's 20 dp side margin — rows inside (`PfOptionRow`) add no padding of their own. The sheet
+ * takes at most 85 % of the window (`max-height: 85%`); content scrolls between the header and the footer, unless
+ * [scrollable] is false — then the content brings its own list (a `LazyColumn`), which gets the remaining height.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -316,11 +350,13 @@ fun PfBottomSheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     footer: (@Composable ColumnScope.() -> Unit)? = null,
+    scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (LocalSuppressPopups.current) return
     val c = PfTheme.colors
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val windowHeight = LocalConfiguration.current.screenHeightDp.dp
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = state,
@@ -332,28 +368,34 @@ fun PfBottomSheet(
         },
         modifier = modifier.pfTestRoot(),
     ) {
-        Row(
-            // `.pf-sheet-head { margin-top: var(--space-2) }`; the close button sits 12 dp into the right margin.
-            Modifier.fillMaxWidth().padding(start = PfTheme.dimens.space5, end = PfTheme.dimens.space2, top = PfTheme.dimens.space2),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(title, style = PfTheme.type.title2, color = c.text, modifier = Modifier.weight(1f).semantics { heading() })
-            PfIconButton(PfIcons.X, contentDescription = "Закрыть", onClick = onDismiss, tint = c.textMuted, modifier = Modifier.testTag(PfTestTags.SHEET_CLOSE))
+        // The handle (12 dp) is outside this column; 85 % of the window includes it. No window size yet — no cap.
+        val maxHeight = if (windowHeight > 0.dp) windowHeight * 0.85f - PfTheme.dimens.space3 else Dp.Infinity
+        Column(Modifier.heightIn(max = maxHeight)) {
+            Row(
+                // `.pf-sheet-head { margin-top: var(--space-2) }`; the close button sits 12 dp into the right margin.
+                Modifier.fillMaxWidth().padding(start = PfTheme.dimens.space5, end = PfTheme.dimens.space2, top = PfTheme.dimens.space2),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(title, style = PfTheme.type.title2, color = c.text, modifier = Modifier.weight(1f).semantics { heading() })
+                PfIconButton(PfIcons.X, contentDescription = "Закрыть", onClick = onDismiss, tint = c.textMuted, modifier = Modifier.testTag(PfTestTags.SHEET_CLOSE))
+            }
+            // Content scrolls between the header and the footer; the footer stays reachable on long lists. The sheet's
+            // own bottom padding (`.pf-sheet`: inset + 16 dp) is the two spacers below — the content adds none.
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    .padding(horizontal = PfTheme.dimens.space5),
+            ) { content() }
+            if (footer != null) {
+                // The mockups' sticky footer: `margin-top: space-3; padding-top: space-3` — 24 dp from the last row.
+                Spacer(Modifier.height(PfTheme.dimens.space6))
+                Column(Modifier.fillMaxWidth().padding(horizontal = PfTheme.dimens.space5)) { footer() }
+            }
+            Spacer(Modifier.windowInsetsPadding(PfInsets.navigationBars))
+            Spacer(Modifier.height(PfTheme.dimens.space4))
         }
-        // Content scrolls between the header and the footer; the footer stays reachable on long lists.
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = false)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = PfTheme.dimens.space5)
-                .padding(bottom = PfTheme.dimens.space4),
-        ) { content() }
-        if (footer != null) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = PfTheme.dimens.space5)) { footer() }
-        }
-        Spacer(Modifier.windowInsetsPadding(PfInsets.navigationBars))
-        Spacer(Modifier.height(PfTheme.dimens.space4))
     }
 }
 

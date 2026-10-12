@@ -286,7 +286,8 @@ private fun UploadRow(u: Upload, divider: Boolean, onDelete: () -> Unit, onOpenU
         null
     }
     Column(Modifier.testTag(StatementsTags.HISTORY_ROW)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = d.space3), horizontalArrangement = Arrangement.spacedBy(d.space2), verticalAlignment = Alignment.CenterVertically) {
+        // `.pf-card-flush { padding: 0 16px }`: the row and its divider keep 16 dp from the card's frame.
+        Row(Modifier.fillMaxWidth().padding(horizontal = d.space4, vertical = d.space3), horizontalArrangement = Arrangement.spacedBy(d.space2), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(u.fileName, style = PfTheme.type.bodyStrong, color = c.text)
                 Text(
@@ -309,6 +310,6 @@ private fun UploadRow(u: Upload, divider: Boolean, onDelete: () -> Unit, onOpenU
                 modifier = Modifier.testTag(StatementsTags.HISTORY_DELETE),
             )
         }
-        if (divider) PfDivider()
+        if (divider) PfDivider(Modifier.padding(horizontal = d.space4))
     }
 }
