@@ -83,7 +83,8 @@ class StatementPickerTest {
             // FIN-63: twice on CI the session was stored and reported («session signed_in») but this composition
             // stayed on the call screen. The picker is what this test is for; a recreated activity composes on
             // the stored session. The breadcrumbs in logcat keep the evidence of the stall.
-            Log.w("PfTest", "FIN-63: applock.setup did not appear after sign-in ($report); recreating the activity")
+            // «FIN-63 workaround» is what the CI summary greps for (e2e.yml): the workaround must not hide the stall.
+            Log.e("PfTest", "FIN-63 workaround: applock.setup did not appear after sign-in ($report); recreating the activity")
             compose.onRoot(useUnmergedTree = true).printToLog("PfTest")
             compose.activityRule.scenario.recreate()
             compose.waitForTag("applock.setup", timeoutMs = 10_000)
