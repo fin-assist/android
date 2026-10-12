@@ -47,4 +47,9 @@ class CrashContextSync(
         val screen = screenSlug(routePattern) ?: return
         reporter.breadcrumb(Breadcrumb.ScreenOpened(screen))
     }
+
+    /** The session value the app root switched its graphs on; `null` (not known yet) leaves no trace. */
+    fun onSessionShown(state: Breadcrumb.SessionCrumb?) {
+        if (state != null) reporter.breadcrumb(Breadcrumb.SessionShown(state))
+    }
 }

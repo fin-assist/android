@@ -91,6 +91,11 @@ sealed interface Breadcrumb {
         override fun render(): String = "session ${state.name.lowercase()}"
     }
 
+    /** The session value the app root composed on — next to [SessionChanged], it shows whether the UI saw the change (FIN-63). */
+    data class SessionShown(val state: SessionCrumb) : Breadcrumb {
+        override fun render(): String = "ui session ${state.name.lowercase()}"
+    }
+
     enum class SessionCrumb { SIGNED_OUT, PENDING_USER, SIGNED_IN }
 }
 

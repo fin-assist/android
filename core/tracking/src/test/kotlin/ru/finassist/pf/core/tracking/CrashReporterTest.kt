@@ -89,6 +89,7 @@ class BreadcrumbTest {
         assertEquals("config 0a1b2c3d", Breadcrumb.ConfigApplied(CrashValue.of("0a1b2c3d")).render())
         assertEquals("session pending_user", Breadcrumb.SessionChanged(Breadcrumb.SessionCrumb.PENDING_USER).render())
         assertEquals("session signed_in", Breadcrumb.SessionChanged(Breadcrumb.SessionCrumb.SIGNED_IN).render())
+        assertEquals("ui session signed_out", Breadcrumb.SessionShown(Breadcrumb.SessionCrumb.SIGNED_OUT).render())
     }
 }
 

@@ -43,6 +43,12 @@ class CrashContextSyncTest {
         assertEquals(listOf("screen operations.detail"), calls)
     }
 
+    @Test fun `the session the root composed on becomes a breadcrumb, an unknown one does not`() {
+        sync.onSessionShown(null)
+        sync.onSessionShown(Breadcrumb.SessionCrumb.SIGNED_IN)
+        assertEquals(listOf("ui session signed_in"), calls)
+    }
+
     @Test fun `a route without a name is skipped`() {
         sync.onScreenOpened(null)
         sync.onScreenOpened("home")
