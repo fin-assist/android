@@ -97,6 +97,10 @@ if [[ "$preflight_ok" != 1 ]]; then
     exit 1
 fi
 
+# The preflight start ran the instrumented app too: stop it and drop its data, so the report holds the flows only.
+adb shell am force-stop "$APP_ID" || true
+adb shell rm -rf "$DEVICE_COVERAGE" >/dev/null 2>&1 || true
+
 mkdir -p "$OUT/maestro" "$OUT/maestro-log" "$OUT/shots"
 # --test-output-dir: failure screenshots and view hierarchies per flow; --debug-output: the session log.
 maestro_args=(test "$FLOW" --format junit --output "$OUT/maestro-report.xml" --test-output-dir "$OUT/maestro" --debug-output "$OUT/maestro-log")
