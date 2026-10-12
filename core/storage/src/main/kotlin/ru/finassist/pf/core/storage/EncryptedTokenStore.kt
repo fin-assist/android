@@ -2,6 +2,7 @@ package ru.finassist.pf.core.storage
 
 import android.content.Context
 import android.util.Base64
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -108,9 +109,15 @@ class EncryptedTokenStore @Inject constructor(
         val plain = aead.decrypt(Base64.decode(blob, Base64.NO_WRAP), AAD).toString(Charsets.UTF_8)
         val (userId, access, refresh) = plain.split("\n", limit = 3)
         TokenStore.Session(userId, TokenPair(accessToken = access, refreshToken = refresh))
+    }.onFailure { e ->
+        // «No session» is the right outcome, but a silent one hides a keystore hiccup behind a sign-in that
+        // seems to go nowhere (FIN-63). The exception names the reason (bad MAC, invalidated key, a short blob)
+        // and never carries the blob.
+        Log.w(TAG, "stored session could not be decoded, treated as signed out", e)
     }.getOrNull()
 
     private companion object {
+        const val TAG = "PfSession"
         val KEY_BLOB = stringPreferencesKey("session.blob")
         const val KEYSET_NAME = "pf_session_keyset"
         const val KEYSET_PREFS = "pf_session_keyset_prefs"

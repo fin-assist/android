@@ -4,6 +4,10 @@ import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -26,6 +30,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import ru.finassist.pf.e2e.E2eDocumentPickerActivity
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * The upload screen against a picker result that comes back as an activity result — the one part Maestro skips
@@ -93,13 +99,72 @@ class StatementPickerTest {
     private fun SemanticsNodeInteractionsProvider.hasTag(tag: String) =
         onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
 
-    /** Waits for [tag]; on timeout logs the semantics tree (logcat, tag `PfTest`) so the report shows what was on screen. */
+    /**
+     * Waits for [tag]. On timeout the error carries what the screen showed (semantics tree in logcat, tag `PfTest`)
+     * and how the main thread behaved during the whole wait — a screen that never changed can also mean a starved
+     * main thread (FIN-63), which a probe taken after the fact would not see.
+     */
     private fun androidx.compose.ui.test.junit4.ComposeTestRule.waitForTag(tag: String, timeoutMs: Long = 10_000) {
+        val watch = MainThreadWatch().also { it.start() }
         try {
             waitUntil(timeoutMs) { hasTag(tag) }
         } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            val report = watch.stop()
+            Log.w("PfTest", report)
+            // After the probe: fetching semantics itself waits for the UI thread.
             onRoot(useUnmergedTree = true).printToLog("PfTest")
-            throw AssertionError("no node with tag $tag after $timeoutMs ms; semantics tree is in logcat (PfTest)", e)
+            val message = "no node with tag $tag after $timeoutMs ms; semantics tree is in logcat (PfTest); $report"
+            throw AssertionError(message, e)
+        } finally {
+            watch.stop()
+        }
+    }
+
+    /**
+     * Pings the main looper every [PERIOD_MS] from its own thread and keeps the slowest reply; a reply later than
+     * [STALL_MS] also captures the main thread's stack at that moment.
+     */
+    private class MainThreadWatch {
+        private val handler = Handler(Looper.getMainLooper())
+        @Volatile private var running = false
+        @Volatile private var maxLatencyMs = 0L
+        /** When the ping still waiting for a reply was sent; 0 between pings. */
+        @Volatile private var pendingSince = 0L
+        @Volatile private var stalledStack: String? = null
+        private var thread: Thread? = null
+
+        fun start() {
+            running = true
+            thread = Thread({
+                while (running) {
+                    val latch = CountDownLatch(1)
+                    val sent = SystemClock.uptimeMillis()
+                    pendingSince = sent
+                    handler.post { latch.countDown() }
+                    if (!latch.await(STALL_MS, TimeUnit.MILLISECONDS)) {
+                        stalledStack = stalledStack ?: Looper.getMainLooper().thread.stackTrace.joinToString("\n    at ")
+                        latch.await()
+                    }
+                    maxLatencyMs = maxOf(maxLatencyMs, SystemClock.uptimeMillis() - sent)
+                    pendingSince = 0L
+                    SystemClock.sleep(PERIOD_MS)
+                }
+            }, "pf-main-thread-watch").also { it.isDaemon = true; it.start() }
+        }
+
+        /** Idempotent; returns the report of the watched period. */
+        fun stop(): String {
+            running = false
+            // A ping still unanswered is the slowest one: the main thread may not have come back at all.
+            val pending = pendingSince.takeIf { it > 0L }?.let { SystemClock.uptimeMillis() - it } ?: 0L
+            val slowest = if (pending > maxLatencyMs) "at least $pending ms (no reply yet)" else "$maxLatencyMs ms"
+            val stack = stalledStack
+            return "main thread: slowest reply $slowest" + if (stack != null) "; stack at the stall:\n    at $stack" else ""
+        }
+
+        private companion object {
+            const val PERIOD_MS = 500L
+            const val STALL_MS = 2_000L
         }
     }
 
