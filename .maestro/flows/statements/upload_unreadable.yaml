@@ -1,0 +1,46 @@
+appId: ru.finassist.pf.mock.e2e
+name: Загрузка — ни одной прочитанной операции, непрочитанные строки видны
+tags:
+  - statements
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
+
+# A file whose two operations cannot be read (no date, a letter in the amount): the result is empty, but the
+# unread lines are still reported there with the link to their list (PR #34 review).
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.unreadable.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result.empty"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.unread"
+# The count is joined to the noun with a no-break space: any single character between them.
+- assertVisible: "2.строки не прочитали — их нет в суммах.*"

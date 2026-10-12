@@ -31,7 +31,7 @@ class AiConsentDesignCheckTest {
     /** «Продолжить» without the checkbox. */
     @Test fun aiConsentError() = capture(
         "AiConsentError",
-        state.copy(error = "Отметьте согласие, чтобы задавать вопросы помощнику"),
+        state.copy(error = CONSENT_REQUIRED),
         heightDp = 968,
     )
 }

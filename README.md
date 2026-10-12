@@ -8,7 +8,7 @@
 
 Kotlin 2.1, Jetpack Compose, Hilt (KSP), Navigation Compose (typed routes), OkHttp + Retrofit +
 kotlinx.serialization, OkHttp SSE, DataStore, Tink (refresh-токен под Android Keystore).
-Флаги — RuStore Remote Config, события — MyTracker, крэши/ANR — AppMetrica (flavor `prod`).
+Флаги — RuStore Remote Config, события — MyTracker (flavor `prod`); крэши и ANR — Tracer (оба flavor, при заданном токене).
 
 ## Структура
 
@@ -64,7 +64,7 @@ Gradle 8.11 не запускается на JDK 25, а Android Studio 2026.x п
 
 ### Flavor `prod`
 
-Настоящий HTTP-клиент, флаги из RuStore Remote Config, события в MyTracker, крэши и ANR в AppMetrica.
+Настоящий HTTP-клиент, флаги из RuStore Remote Config, события в MyTracker.
 Ключи SDK не хранятся в репозитории: Gradle-свойства в `~/.gradle/gradle.properties` или переменные
 окружения в CI. Без ключа соответствующий SDK не включается (флаги — значения по умолчанию из `Flag`).
 
@@ -72,9 +72,23 @@ Gradle 8.11 не запускается на JDK 25, а Android Studio 2026.x п
 |---|---|---|
 | `pf.rustoreRemoteConfigAppId` | `PF_RUSTORE_REMOTE_CONFIG_APP_ID` | ID приложения в RuStore Remote Config |
 | `pf.mytrackerSdkKey` | `PF_MYTRACKER_SDK_KEY` | SDK key MyTracker — выдаётся только опубликованному приложению; до публикации пусто |
-| `pf.appmetricaApiKey` | `PF_APPMETRICA_API_KEY` | API key AppMetrica — пока не задаём (SDK выключен); крэши и ANR переедут в Tracer |
 
-Пока ключи MyTracker и AppMetrica пусты, события пишутся никуда, а крэши и ANR в `prod` не собираются.
+Пока ключ MyTracker пуст, события пишутся никуда.
+
+### Крэши и ANR: Tracer (оба flavor)
+
+Tracer (VK, консоль RuStore) собирает крэши, ANR и non-fatal ошибки. Токены — из консоли Tracer, в репозиторий не
+коммитятся:
+
+| Свойство | Переменная окружения | Что это |
+|---|---|---|
+| `pf.tracerAppToken` | `PF_TRACER_APP_TOKEN` | Токен приложения. Без него SDK не стартует ни в одном варианте: провайдер запуска выключен в манифесте, `TracerCrashReporter` ничего не делает. CI проверяет это по собранному манифесту (`scripts/check-tracer-off.py`) |
+| `pf.tracerPluginToken` | `PF_TRACER_PLUGIN_TOKEN` | Токен Gradle-плагина: загрузка маппингов R8 у минифицированных сборок. Без него маппинги не грузятся |
+
+Текст исключений в Tracer не уходит — ни у non-fatal, ни у фатальных крашей (`ScrubbedThrowable`): только тип, стек и код ошибки; в debug-сборке исходный текст фатального краша остаётся в logcat (`PfCrash`). С токеном отчёты отправляются и из debug-сборок (`setDebugUpload`): токен задают только для сборки, чьи крэши
+нужны, — сейчас это `mock` альфы. В `mock` отчёты дублируются в logcat (`PfTracking`). Как проверить: собрать с
+токеном, вызвать краш, ANR (заблокировать главный поток на 5+ секунд) и non-fatal — они появятся в консоли с
+`userId` и ключом `rc_ver`; после выхода из аккаунта — без `userId`.
 
 Ключи флагов в консоли RuStore — как в `docs/flags.md` (булевы значения). Таргетинг и AB — по `account`
 (наш `user_id` после входа).
@@ -83,8 +97,8 @@ Gradle 8.11 не запускается на JDK 25, а Android Studio 2026.x п
 
 Сценарии пользователя — на Maestro (`.maestro/`), против сборки `mockE2e` с закреплённой датой и тестовыми
 хуками; то, что Maestro не умеет (системный выбор файла), — нативными тестами в `app/src/androidTestMock/`.
-Запуск на эмуляторе: `scripts/e2e.sh` (быстрый прогон — `--tags smoke`). В CI — после мержа в `main` или на PR
-с меткой `e2e`. Подробности, теги и покрытие — [docs/e2e.md](docs/e2e.md).
+Запуск на эмуляторе: `scripts/e2e.sh` (быстрый прогон — `--tags smoke`). В CI — только после мержа в `main`.
+Подробности, теги и покрытие — [docs/e2e.md](docs/e2e.md).
 
 ## Документирование
 

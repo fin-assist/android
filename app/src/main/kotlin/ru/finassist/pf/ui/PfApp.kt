@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.CompositionLocalProvider
@@ -20,7 +22,9 @@ import ru.finassist.pf.core.designsystem.components.LocalSuppressPopups
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -58,6 +62,7 @@ fun PfApp(
     appLockScreens: AppLockScreens,
     preferences: AppPreferences,
     flags: FeatureFlags,
+    onScreenOpened: (routePattern: String?) -> Unit,
 ) {
     val theme by preferences.theme.collectAsStateWithLifecycle(initialValue = null)
     val dark = when (theme) {
@@ -84,10 +89,13 @@ fun PfApp(
         Box(Modifier.fillMaxSize().background(PfTheme.colors.bg).pfTestRoot()) {
             when (val s = sessionState) {
                 SessionState.Unknown -> Unit
-                SessionState.SignedOut -> LayerScope("auth") { AuthLayer(entries, session) }
+                SessionState.SignedOut -> LayerScope("auth") { AuthLayer(entries, session, onScreenOpened) }
                 is SessionState.SignedIn -> when {
                     (settingUp && lockState != LockState.Locked) || lockState == LockState.NotConfigured ->
-                        LayerScope("setup-${s.userId}") { appLockScreens.Setup(onDone = { settingUp = false }) }
+                        LayerScope("setup-${s.userId}") {
+                            LayerBreadcrumb(APP_LOCK_SETUP, onScreenOpened)
+                            appLockScreens.Setup(onDone = { settingUp = false })
+                        }
                     else -> {
                         val locked = lockState == LockState.Locked
                         // Main stays composed under the lock so the back stack survives; while locked it is
@@ -95,7 +103,8 @@ fun PfApp(
                         CompositionLocalProvider(LocalSuppressPopups provides locked) {
                             LayerScope("main-${s.userId}") {
                                 MainLayer(
-                                    entries, session, flags, userId = s.userId,
+                                    entries, session, flags, userId = s.userId, onScreenOpened = onScreenOpened,
+                                    active = !locked,
                                     modifier = if (locked) Modifier.clearAndSetSemantics { } else Modifier,
                                 )
                             }
@@ -103,7 +112,10 @@ fun PfApp(
                         if (locked) {
                             // A pointer handler on the overlay root makes it the hit target: taps never reach the app below.
                             Box(Modifier.fillMaxSize().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
-                                LayerScope("unlock") { appLockScreens.Unlock() }
+                                LayerScope("unlock") {
+                                    LayerBreadcrumb(APP_LOCK_UNLOCK, onScreenOpened)
+                                    appLockScreens.Unlock()
+                                }
                             }
                         }
                     }
@@ -114,14 +126,50 @@ fun PfApp(
 }
 
 @Composable
-private fun AuthLayer(entries: Set<FeatureEntry>, session: SessionRepository) {
+private fun AuthLayer(entries: Set<FeatureEntry>, session: SessionRepository, onScreenOpened: (String?) -> Unit) {
     val controller = rememberNavController()
+    ScreenBreadcrumbs(controller, onScreenOpened)
     val navigator = remember(controller) { NavControllerNavigator(controller) }
     val reason = remember { session.consumeSignOutReason() }
     NavHost(controller, startDestination = AuthRoutes.Phone(reason)) {
         entries.forEach { entry -> with(entry) { install(navigator) } }
     }
 }
+
+/**
+ * Reports every destination the user lands on by its route pattern (`…AnalyticsRoutes.Period/{params}`): the
+ * class of the route, never the arguments it was opened with. Feeds the screen trail of crash reports.
+ *
+ * While [active] is `false` (the main layer under the lock screen) nothing is reported: the user is on the lock
+ * screen, which reports itself. When the layer becomes active again its current destination is reported anew.
+ */
+@Composable
+private fun ScreenBreadcrumbs(controller: NavHostController, onScreenOpened: (String?) -> Unit, active: Boolean = true) {
+    val isActive by rememberUpdatedState(active)
+    val report by rememberUpdatedState(onScreenOpened)
+    DisposableEffect(controller) {
+        val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
+            if (isActive) report(destination.route)
+        }
+        controller.addOnDestinationChangedListener(listener)
+        onDispose { controller.removeOnDestinationChangedListener(listener) }
+    }
+    var wasActive by remember { mutableStateOf(active) }
+    LaunchedEffect(active) {
+        if (active && !wasActive) controller.currentDestination?.let { report(it.route) }
+        wasActive = active
+    }
+}
+
+/** Reports a screen shown outside navigation (app lock setup and unlock) when it appears. */
+@Composable
+private fun LayerBreadcrumb(routePattern: String, onScreenOpened: (String?) -> Unit) {
+    LaunchedEffect(Unit) { onScreenOpened(routePattern) }
+}
+
+/** Route-like names of the app lock screens, for [screenSlug][ru.finassist.pf.core.tracking.screenSlug]. */
+private const val APP_LOCK_SETUP = "AppLock.Setup"
+private const val APP_LOCK_UNLOCK = "AppLock.Unlock"
 
 /** Routes of [PfMainTabs], by index. */
 private val tabRoutes: List<Any> = listOf(OperationsRoutes.Feed, AnalyticsRoutes.Home, ProfileRoutes.Home)
@@ -132,9 +180,12 @@ private fun MainLayer(
     session: SessionRepository,
     flags: FeatureFlags,
     userId: String,
+    onScreenOpened: (String?) -> Unit,
+    active: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val controller = rememberNavController()
+    ScreenBreadcrumbs(controller, onScreenOpened, active)
     val navigator = remember(controller) { NavControllerNavigator(controller) }
     // Right after registration the first run continues with the statement upload (step 4 of 4) — unless the
     // upload screen is switched off by `statements.upload`.

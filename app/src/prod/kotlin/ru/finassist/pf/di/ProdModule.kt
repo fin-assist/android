@@ -8,7 +8,7 @@ import ru.finassist.pf.BuildConfig
 import javax.inject.Named
 
 /**
- * Flavor `prod`: real HTTP client (`:core:network`), RuStore Remote Config, MyTracker, AppMetrica
+ * Flavor `prod`: real HTTP client (`:core:network`), RuStore Remote Config, MyTracker
  * (`:providers:*`). Keys come from BuildConfig; blank keys keep the SDKs off (local builds).
  */
 @Module
@@ -25,7 +25,4 @@ object ProdModule {
 
     @Provides @Named("mytrackerSdkKey")
     fun mytrackerKey(): String = BuildConfig.MYTRACKER_SDK_KEY
-
-    @Provides @Named("appmetricaApiKey")
-    fun appmetricaKey(): String = BuildConfig.APPMETRICA_API_KEY
 }

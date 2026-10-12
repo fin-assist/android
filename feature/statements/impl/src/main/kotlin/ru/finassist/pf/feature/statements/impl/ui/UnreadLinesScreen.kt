@@ -7,6 +7,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
+import ru.finassist.pf.feature.statements.impl.domain.UnreadTexts
+import ru.finassist.pf.core.designsystem.components.PfDivider
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,6 +61,8 @@ data class UnreadUiState(
     val error: Boolean = false,
     val lines: List<UnreadLine> = emptyList(),
     val userId: String? = null,
+    /** False when the upload read no operation (route): the intro drops «остальные операции загружены». */
+    val othersLoaded: Boolean = true,
 )
 
 @HiltViewModel
@@ -67,7 +72,7 @@ class UnreadLinesViewModel @Inject constructor(
     private val tokenStore: TokenStore,
 ) : ViewModel() {
     private val route = savedState.toRoute<StatementsRoutes.UnreadLines>()
-    private val _state = MutableStateFlow(UnreadUiState())
+    private val _state = MutableStateFlow(UnreadUiState(othersLoaded = route.othersLoaded))
     val state: StateFlow<UnreadUiState> = _state
 
     init {
@@ -128,51 +133,69 @@ internal fun UnreadLinesContent(
             }
             state.lines.isEmpty() -> PfEmptyState(PfIcons.CHECK_CIRCLE, "Все строки прочитаны")
             else -> {
+                // Mockup `UnreadLines` (a screen since FIN-59): the intro, the lines as two-line rows
+                // without a card, «Сообщить нам» and what the letter holds.
+                val byUpload = state.lines.groupBy { it.uploadId }
                 LazyColumn(
                     Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = d.space5, vertical = d.space2),
-                    verticalArrangement = Arrangement.spacedBy(d.space3),
+                    contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space2, bottom = d.space4),
                 ) {
-                    item {
+                    item(key = "intro") {
                         Text(
-                            "Эти строки файла не получилось разобрать — их операций нет в приложении. Содержимое строк мы не храним, поэтому показываем только номер, дату и причину",
+                            UnreadTexts.intro(byUpload.values.map { it.first().fileName }, state.othersLoaded),
                             style = PfTheme.type.body, color = PfTheme.colors.textMuted,
+                            modifier = Modifier.padding(top = d.space1, bottom = d.space2),
                         )
                     }
                     // By upload, not by file name: T-Bank names every export the same way.
-                    state.lines.groupBy { it.uploadId }.forEach { (uploadId, lines) ->
-                        val file = lines.first().fileName
-                        item(key = uploadId) {
-                            PfCard {
-                                Text(file, style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
-                                lines.forEachIndexed { i, l ->
-                                    PfDataRow(
-                                        label = "Строка ${l.lineNumber}" + (l.date?.let { " · " + RussianDates.day(it.toLocalDate()) } ?: ""),
-                                        value = l.reasonName,
-                                        divider = i < lines.lastIndex,
-                                    )
-                                }
+                    byUpload.entries.forEachIndexed { index, (uploadId, lines) ->
+                        if (byUpload.size > 1) {
+                            item(key = "file-$uploadId") {
+                                Text(
+                                    lines.first().fileName, style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+                                    modifier = Modifier.padding(top = if (index == 0) 0.dp else d.space4),
+                                )
+                            }
+                        }
+                        lines.forEachIndexed { i, l ->
+                            item(key = "$uploadId-${l.lineNumber}") {
+                                UnreadLineRow(UnreadTexts.line(l.lineNumber, l.date?.toLocalDate()), l.reasonName, divider = i < lines.lastIndex)
                             }
                         }
                     }
-                }
-                Column(Modifier.fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4)) {
-                    PfButton(
-                        if (copied) "Данные скопированы" else "Сообщить нам",
-                        onClick = onReport,
-                        variant = ButtonVariant.PRIMARY,
-                        block = true,
-                        icon = PfIcons.MAIL,
-                    )
-                    Text(
-                        if (copied) "Почтового приложения нет. Отправьте скопированное на ${Support.EMAIL}"
-                        else "Откроется письмо в поддержку с номерами строк — без содержимого. Ответим на вашу почту",
-                        style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
-                        modifier = Modifier.padding(top = d.space2),
-                    )
+                    item(key = "report") {
+                        Column(Modifier.padding(top = d.space3)) {
+                            PfButton(
+                                if (copied) "Данные скопированы" else "Сообщить нам",
+                                onClick = onReport,
+                                variant = ButtonVariant.SECONDARY,
+                                block = true,
+                                icon = PfIcons.SEND,
+                                modifier = Modifier.testTag(StatementsTags.UNREAD_REPORT),
+                            )
+                            Text(
+                                if (copied) "Почтового приложения нет. Отправьте скопированное на ${Support.EMAIL}"
+                                else "Откроется письмо в поддержку — номер загрузки и этот список уже в нём. Ответим на вашу почту",
+                                style = PfTheme.type.hint, color = PfTheme.colors.textMuted,
+                                modifier = Modifier.padding(top = d.space2),
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/** «Строка 214 · 3 сентября» over the reason, 12 dp padding, a line under all but the last of a file. */
+@Composable
+private fun UnreadLineRow(title: String, reason: String, divider: Boolean) {
+    Column {
+        Column(Modifier.fillMaxWidth().padding(vertical = PfTheme.dimens.space3)) {
+            Text(title, style = PfTheme.type.body.copy(fontFeatureSettings = "tnum"), color = PfTheme.colors.text)
+            Text(reason, style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
+        }
+        if (divider) PfDivider()
     }
 }
 

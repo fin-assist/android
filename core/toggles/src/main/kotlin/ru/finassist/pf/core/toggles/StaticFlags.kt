@@ -9,6 +9,7 @@ class StaticFlags(private val values: Map<Flag, Boolean> = emptyMap()) : Feature
 
     override fun isEnabled(flag: Flag): Boolean = values[flag] ?: flag.defaultValue
     override val changes: Flow<Unit> = changesFlow
+    override val version: String get() = flagsVersion(values.mapKeys { it.key.key })
     override suspend fun setUser(userId: String?) = Unit
     override suspend fun refresh() = Unit
 }

@@ -5,7 +5,7 @@ Two layers, both on an emulator or device:
 | Layer | What | Where | Build |
 |---|---|---|---|
 | Maestro | User scenarios end to end: sign-in, passcode, operations, search, analytics, assistant, statements, profile, flags, offline | `.maestro/` | `mockE2e` |
-| Native (Espresso / Compose test) | What Maestro cannot drive reliably — the system document picker | `app/src/androidTestMock/` | `mockDebug` |
+| Native (Espresso / Compose test) | What Maestro cannot drive reliably — the system document picker | `app/src/androidTestMock/` | `mockE2e` (`connectedMockE2eAndroidTest`) |
 
 Native tests are for the gaps, not a second copy of the scenarios. When a check needs the platform itself
 (system dialogs, intents, permissions, biometrics), it goes there; everything a user does on our screens goes to
@@ -29,11 +29,14 @@ scripts/e2e.sh --no-build --flow .maestro/flows/assistant/ask_question.yaml
 ```
 
 Reports go to `build/e2e/`: JUnit XML, `maestro-output.tgz` (per flow: screenshot and view hierarchy of the failed
-step, commands, log), logcat, the preflight dump.
+step, commands, log), logcat, the preflight dump, and in `coverage/ec/` the JaCoCo execution data the flows left on
+the device (`./gradlew :e2eCoverageReport` turns it into the UI test coverage report — docs/testing.md, «UI test
+coverage»).
 
-In CI (`.github/workflows/e2e.yml`) the tests run after every merge to `main`, on a PR labelled `e2e`
-(add the label, push to re-run), and by hand from the Actions tab. The run summary lists the flows; reports are in the
-`e2e-reports` artifact.
+In CI (`.github/workflows/e2e.yml`) the tests run after a merge to `main`; PRs never run them automatically. A
+failed run is re-run from the Actions tab («Re-run jobs»); any branch can be run by hand there («Run workflow» →
+the branch) to check a new flow or the coverage pipeline before the merge — such a run sends nothing to Qase. The
+run summary lists the flows and the UI test coverage; reports are in the `e2e-reports` artifact.
 
 ## Qase
 
@@ -42,10 +45,9 @@ steps and expected results in Russian, marked automated.
 
 - `scripts/qase-cases.json` maps tests to cases: a Maestro flow by its path (`.maestro/flows/<feature>/<flow>.yaml`),
   an instrumented test by `<class>#<method>`.
-- After a merge to `main` or a manual run, the `UI tests` workflow sends the results as one Qase run
+- After a merge to `main` the `UI tests` workflow sends the results as one Qase run
   (`scripts/qase-report.py`: JUnit reports → run → bulk results → complete). The run title is
-  `UI tests · <branch> · <sha>`, its description links the Actions run. PR runs and cancelled runs are not sent; a
-  manual run from another branch is sent with that branch in the title.
+  `UI tests · <branch> · <sha>`, its description links the Actions run. Cancelled runs are not sent.
 - Statuses: passed, failed (an assertion `failure` and an unexpected `error` alike: in UI tests the latter is usually
   an app crash), skipped. A test found in several reports keeps its worst result.
 - If the results cannot be recorded, the script retries once (429, 5xx, network) and otherwise deletes the empty run.
@@ -56,7 +58,8 @@ steps and expected results in Russian, marked automated.
 ## The `e2e` build type
 
 `assembleMockE2e` builds `ru.finassist.pf.mock.e2e`: the mock flavor plus test hooks from `app/src/mockE2e/`. It
-installs next to `mockDebug` and never exists for `prod`.
+installs next to `mockDebug` and never exists for `prod`. It is also the `testBuildType`: the native tests run on
+it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»).
 
 - **Pinned date.** "Now" starts at 2026-10-08 12:00 MSK (`BuildConfig.E2E_NOW`, `ShiftedClock`) and runs from
   there. The fixture statement covers October 2025 — September 2026, so periods, amounts and limits stay the same
@@ -74,6 +77,7 @@ installs next to `mockDebug` and never exists for `prod`.
   | `october.ofx` | 3 new operations, 3–6 October 2026 |
   | `statement.csv` | `CSV_NOT_ACCEPTED` |
   | `notes.txt` | `WRONG_FORMAT` |
+| `unreadable.ofx` | no readable operation, 2 unread lines (`EMPTY_STATEMENT`, `unread_count = 2`) |
   | `other-bank.ofx` | `WRONG_BANK` |
 
 - **Control link.** `pfe2e://config?…` changes state from a flow (`E2eControlActivity`). Open it through the subflow,
@@ -90,6 +94,11 @@ installs next to `mockDebug` and never exists for `prod`.
 
   Flags are read when a screen opens: set them before the screen (usually right after `clear_state.yaml`, before
   `launchApp`). Process-scoped values are set after `launchApp`.
+- **Coverage data.** `E2eCoverage` (a content provider) saves the JaCoCo execution data of the process every 2 s
+  while it changes and when an activity stops, into shared storage (`Download/pf-coverage`), where `clearState`
+  does not reach; `scripts/e2e.sh` pulls it after the flows. Native tests go through the test storage service
+  instead (`useTestStorageService`). The system picker contract that the native test used to check on `mockDebug`
+  is now a Robolectric test (`PickStatementDocumentTest`): on the e2e build the picker is `E2eDocumentPickerActivity`.
 
 ## Test tags
 
@@ -129,8 +138,9 @@ a bug that does not reproduce there), list it in «Not covered yet» at the end 
 reason and say so in the PR; «takes long to write» is not a reason.
 
 Every new or renamed test: a Qase case (suite of the feature, steps and expected results in Russian, automated),
-a line in `scripts/qase-cases.json`, a row in «Coverage». The PR gets the `e2e` label so the flows run before merge
-(an agent that cannot set labels asks the owner in the PR).
+a line in `scripts/qase-cases.json`, a row in «Coverage». CI runs the flows after the merge to `main`; before that
+they run locally (`scripts/e2e.sh`) or by a manual start of the `UI tests` workflow, and the PR says whether they
+were.
 
 ## Writing a flow
 
@@ -161,17 +171,24 @@ a line in `scripts/qase-cases.json`, a row in «Coverage». The PR gets the `e2e
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |
 | `applock/change_passcode` | current → new → mismatch → new → repeat; the new code unlocks after restart |
 | `operations/feed_and_detail` (smoke) | feed → card → change category → saved as manual |
-| `operations/search_filters` | query, «Только расходы», amount, «Сбросить», period, result card |
+| `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card |
 | `analytics/overview` (smoke) | blocks, previous month, month/quarter/year, «Без переводов», category → operations |
 | `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card and profile) |
 | `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
 | `assistant/daily_limit` | unanswerable question is free; five questions exhaust the day |
+| `assistant/offline_retry` | no network: the notice replaces the input; «Повторить» sends the question once the network is back |
 | `statements/upload_errors` | CSV, not a statement, another bank; leaving the picker |
-| `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new; delete an upload |
+| `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice |
+| `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
+| `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
 | `profile/theme_and_logout` | dark theme; logout cancel / confirm with the notice |
-| `profile/delete_account` | dialog → passcode (wrong, right) → «Аккаунт удалён» |
+| `profile/delete_account` | passcode (wrong, right) → «Удалить аккаунт?» over the profile → «Аккаунт удалён» |
 | `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
-| native `StatementPickerTest` | upload through `ACTION_OPEN_DOCUMENT` (Espresso-Intents) up to the import result |
+| native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
 
 Not covered yet: voice input (needs a speech recognizer on the emulator), biometrics (needs an enrolled
-fingerprint), the unread-lines screen (needs a test statement with unreadable lines), custom date ranges in search.
+fingerprint), the unread-lines screen (opened by «Подробнее» — a link inside a text node, see below), custom date
+ranges in search,
+links inside a sentence — the registration terms and privacy policy, «Как мы защищаем данные», «разобрать» and
+«Подробнее» on the import result, «Подробнее» on «Аналитика» (a link inside a text node has no own view or
+resource id for Maestro to tap, and the first three open an external browser the flow cannot check).

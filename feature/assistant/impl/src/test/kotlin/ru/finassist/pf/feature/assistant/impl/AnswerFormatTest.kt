@@ -5,6 +5,7 @@ import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockRow
 import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.ChangedSince
+import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
@@ -65,5 +66,48 @@ class AnswerFormatTest {
         blocks = blocks + Block(type = BlockType.CHART)
         blocks = ChatViewModel.appendChunk(blocks, 2, "Итог")
         assertEquals(listOf("Привет, мир", null, "Итог"), blocks.map { it.text })
+    }
+
+    @Test
+    fun `a chart followed by rows is one group`() {
+        val text = Block(BlockType.TEXT, text = "a")
+        val chart = Block(BlockType.CHART)
+        val rows = Block(BlockType.ROWS)
+        assertEquals(listOf(listOf(text), listOf(chart, rows)), AnswerFormat.groupBlocks(listOf(text, chart, rows)))
+        assertEquals(listOf(listOf(rows), listOf(chart)), AnswerFormat.groupBlocks(listOf(rows, chart)))
+        assertEquals(listOf(listOf(chart), listOf(text), listOf(rows)), AnswerFormat.groupBlocks(listOf(chart, text, rows)))
+        assertEquals(emptyList(), AnswerFormat.groupBlocks(emptyList()))
+    }
+
+    @Test
+    fun `a partial month is filled by its days with data`() {
+        val september = DateRange(OffsetDateTime.parse("2026-09-01T00:00:00+03:00"), OffsetDateTime.parse("2026-10-01T00:00:00+03:00"))
+        fun point(coverage: Coverage, from: String? = null, to: String? = null) = ru.finassist.pf.core.api.model.ChartPoint(
+            september, value = 1.0, coverage = coverage,
+            dataFrom = from?.let(OffsetDateTime::parse), dataTo = to?.let(OffsetDateTime::parse),
+        )
+        assertEquals(25f / 30, AnswerFormat.partialFill(point(Coverage.PARTIAL, to = "2026-09-25T21:40:00+03:00")))
+        // A statement that starts late in the month: six days, not thirty.
+        assertEquals(6f / 30, AnswerFormat.partialFill(point(Coverage.PARTIAL, from = "2026-09-25T09:00:00+03:00", to = "2026-09-30T23:59:59+03:00")))
+        assertEquals(1f, AnswerFormat.partialFill(point(Coverage.PARTIAL)))  // no bounds: the whole month
+        assertNull(AnswerFormat.partialFill(point(Coverage.COMPLETE, to = "2026-09-25T21:40:00+03:00")))
+        assertNull(AnswerFormat.partialFill(point(Coverage.NO_DATA)))
+    }
+
+    @Test
+    fun `only known bar charts with points are drawn`() {
+        val point = ru.finassist.pf.core.api.model.ChartPoint(
+            DateRange(OffsetDateTime.parse("2026-09-01T00:00:00+03:00"), OffsetDateTime.parse("2026-10-01T00:00:00+03:00")),
+            value = 1.0, coverage = ru.finassist.pf.core.api.model.Coverage.COMPLETE,
+        )
+        val bar = Block(
+            BlockType.CHART, kind = ru.finassist.pf.core.api.model.ChartKind.BAR,
+            valueKind = ru.finassist.pf.core.api.model.ChartValueKind.AMOUNT, points = listOf(point),
+        )
+        assertEquals(true, AnswerFormat.isDrawableChart(bar))
+        assertEquals(false, AnswerFormat.isDrawableChart(bar.copy(kind = ru.finassist.pf.core.api.model.ChartKind.UNKNOWN)))
+        assertEquals(false, AnswerFormat.isDrawableChart(bar.copy(valueKind = null)))
+        assertEquals(false, AnswerFormat.isDrawableChart(bar.copy(valueKind = ru.finassist.pf.core.api.model.ChartValueKind.UNKNOWN)))
+        assertEquals(false, AnswerFormat.isDrawableChart(bar.copy(points = emptyList())))
     }
 }

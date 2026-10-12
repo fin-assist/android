@@ -38,14 +38,15 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Screen registration | `FeatureEntry` / `Navigator` in `core/navigation/…/Navigation.kt`; each `:impl` binds its entry in `di/` |
 | Design system: theme, tokens, components, icons | `core/designsystem/…/theme`, `components`, `icons` |
 | Feature flags | `core/toggles/…/Flag.kt` (registry + defaults), `docs/flags.md` (meaning); mock overrides `app/src/mock/assets/flags.json` |
-| Events / crashes | `core/tracking/…/Tracker.kt`; providers in `providers/*` (only `:app` depends on them) |
+| Events / crashes | `core/tracking/…/Tracker.kt`, `CrashReporter.kt` (typed context, no free-form strings); providers in `providers/*` (only `:app` depends on them; Tracer keys — README) |
 | Tokens, preferences, idempotency keys | `core/storage` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md`, `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks, native gaps, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/qase-*` |
 | Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
+| UI test coverage: JaCoCo on the e2e build, scenario coverage of the flows | `docs/testing.md` («UI test coverage»); `:e2eCoverageReport` in root `build.gradle.kts`, `app/src/mockE2e/…/E2eCoverage.kt`, `scripts/ui-coverage.py` |
 
 Package root: `ru.finassist.pf`. Flavors: `mock` (default for development and CI) and `prod`. Build type `e2e`
-(mock only): debug + UI-test hooks, pinned date (docs/e2e.md).
+(mock only): debug + UI-test hooks, pinned date, JaCoCo probes; the native tests run on it (docs/e2e.md).
 
 ### Stack
 
@@ -79,9 +80,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:core:network` | `pf.android.library`, `pf.hilt` | unit |
 | `:core:screenshot-testing` | `pf.android.library.compose` | - |
 | `:core:storage` | `pf.android.library`, `pf.hilt` | - |
-| `:core:toggles` | `pf.jvm.library` | - |
-| `:core:tracking` | `pf.jvm.library` | - |
-| `:providers:crash-appmetrica` | `pf.android.library`, `pf.hilt` | - |
+| `:core:toggles` | `pf.jvm.library` | unit |
+| `:core:tracking` | `pf.jvm.library` | unit |
+| `:providers:crash-tracer` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:toggles-local` | `pf.android.library`, `pf.hilt` | - |
 | `:providers:toggles-rustore` | `pf.android.library`, `pf.hilt` | - |
 | `:providers:tracking-log` | `pf.android.library`, `pf.hilt` | - |
@@ -134,7 +135,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   Google Maven, Gradle and Maven Central.
 - Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug testMockDebugUnitTest` — the same checks as CI.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally, the `UI tests` workflow in CI
-  (after merge to `main`, or a PR labelled `e2e`).
+  (after a merge to `main`, or started by hand for a branch; PRs never run them by themselves). Their coverage: `./gradlew :e2eCoverageReport` after a run, then
+  `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml`; the scenario part
+  (`python3 scripts/ui-coverage.py summary`) needs no device (docs/testing.md).
 - `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
   docs check and its parser tests from CI, no Gradle needed.
 - Coverage: `./gradlew :koverXmlReportUnit` (runs the unit tests), then
@@ -172,8 +175,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   - Not automatable on the emulator (biometrics, voice, a bug that does not reproduce there): add it to «Not
     covered yet» in docs/e2e.md and say so in the PR. The reason must be technical — what the emulator or the mock
     cannot do — not the effort.
-  - Put the `e2e` label on the PR so the UI tests run before merge, not only after; if you cannot set labels, ask the
-    owner in the PR.
+  - CI runs UI tests after the merge to `main`, never on a PR by itself: a new or changed flow is first run there,
+    unless it was run locally with `scripts/e2e.sh` or the owner started the `UI tests` workflow for the branch by
+    hand. Say in the PR whether the flows were run and how.
 - Document in moderation: KDoc on public `:api` interfaces, comments where logic is non-obvious
   (accounting rules, idempotency, animation), not on every method.
 
@@ -222,8 +226,8 @@ commands: `docs/testing.md`.
 - Check that the PR updates this file and `docs/` when it changes what they describe.
 - Check that a new screen, screen state, bottom sheet or dialog comes with its `*DesignCheckTest` (see Code).
 - Check that a new or changed user scenario comes with a UI test (or a «Not covered yet» entry with a technical
-  reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md,
-  and that the PR has the `e2e` label (see Code).
+  reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md
+  (see Code).
 - Check that new functionality comes with tests (see Tests) and that the tests would fail if the behaviour
   broke; flag changed lines the «Unit test coverage» comment of the PR (posted by CI) shows as uncovered when
   the PR gives no reason for them.

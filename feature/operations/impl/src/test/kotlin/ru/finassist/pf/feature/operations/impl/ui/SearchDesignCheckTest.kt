@@ -51,6 +51,7 @@ class SearchDesignCheckTest {
         result = SearchResult.Found(items, totalCount = 9, range = range, hasOlderData = false),
         chips = chips,
         categories = categories,
+        windowFrom = range.from.toLocalDate(),
     )
 
     private val actions = SearchActions(

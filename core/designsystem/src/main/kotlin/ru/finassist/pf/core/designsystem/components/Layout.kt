@@ -27,13 +27,18 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 
-/** Card: `surface` with a 1 dp `border`, `radius-xl`; `flush` removes the inner padding for list rows. */
+/**
+ * Card: `surface` with a 1 dp `border`, `radius-xl`, 16 dp padding; `flush` keeps no padding for list rows (they
+ * pad themselves). As in the mockup's CSS the border adds to the padding (1 + 16), so a card is as tall as its
+ * artboard counterpart.
+ */
 @Composable
 fun PfCard(
     modifier: Modifier = Modifier,
@@ -47,6 +52,7 @@ fun PfCard(
             .clip(shape)
             .background(PfTheme.colors.surface, shape)
             .border(1.dp, PfTheme.colors.border, shape)
+            .padding(1.dp)
             .padding(if (flush) 0.dp else PfTheme.dimens.space4),
         content = content,
     )
@@ -58,7 +64,7 @@ fun PfSectionTitle(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         // Mockup `.pf-sectitle-text`: 13/20, semibold.
-        style = PfTheme.type.caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+        style = PfTheme.type.caption.copy(fontWeight = FontWeight.SemiBold),
         color = PfTheme.colors.textMuted,
         modifier = modifier.semantics { heading() },
     )
@@ -85,7 +91,11 @@ fun PfTabHeader(
     }
 }
 
-/** Header of a nested screen: back arrow (48), `title-2`, optional subtitle and a trailing action. */
+/**
+ * Header of a nested screen (mockup `.pf-header`): back arrow (48), `title-2`, optional `hint` subtitle and a
+ * trailing action; 8 dp under the status bar, 12 dp left, 20 dp right and nothing below — the screen content
+ * starts with its own top padding.
+ */
 @Composable
 fun PfPageHeader(
     title: String,
@@ -98,7 +108,7 @@ fun PfPageHeader(
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(PfInsets.statusBars)
-            .padding(start = PfTheme.dimens.space3, end = PfTheme.dimens.space3, top = PfTheme.dimens.space2, bottom = PfTheme.dimens.space2),
+            .padding(start = PfTheme.dimens.space3, end = PfTheme.dimens.space5, top = PfTheme.dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onBack != null) {
@@ -108,7 +118,7 @@ fun PfPageHeader(
         }
         Column(Modifier.weight(1f).padding(start = PfTheme.dimens.space1)) {
             Text(title, style = PfTheme.type.title2, modifier = Modifier.semantics { heading() })
-            if (subtitle != null) Text(subtitle, style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
+            if (subtitle != null) Text(subtitle, style = PfTheme.type.hint, color = PfTheme.colors.textMuted)
         }
         actions()
     }
@@ -127,7 +137,7 @@ val PfMainTabs: List<TabItem> = listOf(
     TabItem(PfIcons.USER, "Профиль", "profile"),
 )
 
-/** Bottom tab bar: three sections, `nav` background, active tab `accent`, the rest `text-faint`. */
+/** Bottom tab bar: three sections, `nav` background, active tab `accent` and `600`, the rest `text-faint` regular. */
 @Composable
 fun PfTabBar(
     items: List<TabItem>,
@@ -159,7 +169,7 @@ fun PfTabBar(
                 ) {
                     PfIcon(item.icon, contentDescription = null, tint = tint)
                     Spacer(Modifier.height(PfTheme.dimens.space1))
-                    Text(item.label, style = PfTheme.type.micro, color = tint)
+                    Text(item.label, style = if (selected) PfTheme.type.micro else PfTheme.type.micro.copy(fontWeight = FontWeight.Normal), color = tint)
                 }
             }
         }

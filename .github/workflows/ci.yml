@@ -27,8 +27,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Test the scripts (agent-docs parsers, Qase report and case map)
+      - name: Test the scripts (agent-docs parsers, Qase report and case map, UI coverage)
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
+      # Which screens and test tags the Maestro flows refer to (docs/testing.md, «UI test coverage»). Static, no
+      # device: the number next to the code coverage the UI-tests workflow measures after a merge.
+      - name: Scenario coverage of the flows
+        run: python3 scripts/ui-coverage.py summary --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Check AGENTS.md and docs registries
         run: python3 scripts/agent-docs.py --check
@@ -43,7 +48,7 @@ jobs:
           # Full history: coverage of changed lines diffs the PR against its base branch.
           fetch-depth: 0
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -121,6 +126,10 @@ jobs:
 
       - name: Assemble
         run: ./gradlew assembleMockDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      # CI has no Tracer token: the SDK must not be able to start (scripts/check-tracer-off.py, README).
+      - name: Tracer is off without a token
+        run: python3 scripts/check-tracer-off.py app/build/intermediates/merged_manifests/mockDebug/processMockDebugManifest/AndroidManifest.xml 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       - uses: actions/upload-artifact@v4
         if: success()

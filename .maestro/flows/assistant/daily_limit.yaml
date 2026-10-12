@@ -37,7 +37,7 @@ tags:
     visible:
       id: "assistant.answer.cannot"
     timeout: 20000
-- assertVisible: ".*осталось 5 из 5.*"
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
 
 # Five answered questions use up the day; each answer lowers the counter, the fifth replaces the composer.
 - tapOn:
@@ -46,7 +46,7 @@ tags:
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:
-    visible: ".*осталось 4 из 5.*"
+    visible: ".*[Оо]сталось 4 из 5.*"
     timeout: 20000
 - extendedWaitUntil:
     visible:
@@ -59,7 +59,7 @@ tags:
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:
-    visible: ".*осталось 3 из 5.*"
+    visible: ".*[Оо]сталось 3 из 5.*"
     timeout: 20000
 - extendedWaitUntil:
     visible:
@@ -72,7 +72,7 @@ tags:
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:
-    visible: ".*осталось 2 из 5.*"
+    visible: ".*[Оо]сталось 2 из 5.*"
     timeout: 20000
 - extendedWaitUntil:
     visible:
@@ -85,7 +85,7 @@ tags:
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:
-    visible: ".*осталось 1 из 5.*"
+    visible: ".*[Оо]сталось 1 из 5.*"
     timeout: 20000
 - extendedWaitUntil:
     visible:
@@ -101,6 +101,6 @@ tags:
     visible:
       id: "ds.chat.limit"
     timeout: 20000
-- assertVisible: "Вопросы на сегодня закончились"
+- assertVisible: "Вопросы на сегодня закончились.*"
 - assertNotVisible:
     id: "ds.chat.send"

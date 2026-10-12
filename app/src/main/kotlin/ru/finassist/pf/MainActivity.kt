@@ -9,6 +9,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import ru.finassist.pf.core.navigation.FeatureEntry
 import ru.finassist.pf.core.storage.AppPreferences
 import ru.finassist.pf.core.toggles.FeatureFlags
+import ru.finassist.pf.core.tracking.CrashContextSync
 import ru.finassist.pf.feature.applock.api.AppLock
 import ru.finassist.pf.feature.applock.impl.ui.AppLockScreens
 import ru.finassist.pf.feature.auth.api.SessionRepository
@@ -27,6 +28,7 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var appLockScreens: AppLockScreens
     @Inject lateinit var preferences: AppPreferences
     @Inject lateinit var flags: FeatureFlags
+    @Inject lateinit var crashContext: CrashContextSync
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +43,7 @@ class MainActivity : FragmentActivity() {
                 appLockScreens = appLockScreens,
                 preferences = preferences,
                 flags = flags,
+                onScreenOpened = crashContext::onScreenOpened,
             )
         }
     }

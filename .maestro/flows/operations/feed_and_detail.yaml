@@ -15,7 +15,7 @@ tags:
     timeout: 10000
 - assertVisible:
     id: "operations.detail.title"
-- assertVisible: "Дата и время"
+- assertVisible: "Из выписки"
 
 # Category picker: choose another category and save.
 - tapOn:

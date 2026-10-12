@@ -55,7 +55,11 @@ sealed interface UploadPhase {
 
 data class UploadUiState(
     val phase: UploadPhase = UploadPhase.Loading,
-    /** «Не скачивается?» expanded. */
+    /** The config the guide is drawn with; the guide stays on screen while a file is parsed (mockup `ImportGuideBusy`). */
+    val config: ImportConfig? = null,
+    /** The file was not sent for lack of network: the guide shows a notice with «Повторить» (mockup `ImportGuideOffline`). */
+    val uploadOffline: Boolean = false,
+    /** «Не скачивается?» sheet open. */
     val fallbackOpen: Boolean = false,
     val askCancel: Boolean = false,
     /** Finished import: the screen navigates to the result. */
@@ -83,6 +87,9 @@ class UploadViewModel @Inject constructor(
      */
     private var heldComplete: Pair<String, ImportEvent.Complete>? = null
 
+    /** The last picked file: «Повторить» after a network failure sends it again. */
+    private var lastPicked: Uri? = null
+
     init {
         load()
     }
@@ -97,9 +104,11 @@ class UploadViewModel @Inject constructor(
             try {
                 val c = api.getImportConfig()
                 config = c
-                _state.update { it.copy(phase = UploadPhase.Guide(c)) }
+                _state.update { it.copy(phase = UploadPhase.Guide(c), config = c) }
             } catch (e: AppError) {
-                _state.update { it.copy(phase = if (e is AppError.Offline) UploadPhase.Offline else UploadPhase.Guide(fallbackConfig())) }
+                _state.update {
+                    if (e is AppError.Offline) it.copy(phase = UploadPhase.Offline) else it.copy(phase = UploadPhase.Guide(fallbackConfig()), config = fallbackConfig())
+                }
             }
         }
     }
@@ -115,10 +124,12 @@ class UploadViewModel @Inject constructor(
         ),
     )
 
-    fun toggleFallback() = _state.update { it.copy(fallbackOpen = !it.fallbackOpen) }
+    fun showFallback(show: Boolean) = _state.update { it.copy(fallbackOpen = show) }
 
     fun onFilePicked(uri: Uri) {
         if (uploadJob?.isActive == true) return
+        lastPicked = uri
+        _state.update { it.copy(uploadOffline = false, config = it.config ?: fallbackConfig()) }
         uploadJob = viewModelScope.launch {
             val max = config?.maxFileSizeBytes ?: (10L * 1024 * 1024)
             // One pass off the main thread: real size (providers may not report it) and a content hash for the key.
@@ -242,11 +253,21 @@ class UploadViewModel @Inject constructor(
     private fun fail(e: AppError, fileName: String) {
         val code = when (e) {
             is AppError.Api -> e.code
-            is AppError.Offline -> "OFFLINE"
+            is AppError.Offline -> OFFLINE
             else -> ErrorCodes.PROCESSING_FAILED
         }
         tracker.track(Events.STATEMENTS_UPLOAD_FAILED, mapOf("code" to code))
-        _state.update { it.copy(phase = UploadPhase.Error(code, fileName, config), askCancel = false) }
+        _state.update {
+            // No network: nothing reached the server — back to the guide with «Повторить» for the same file.
+            if (code == OFFLINE) it.copy(phase = UploadPhase.Guide(fallbackConfig()), uploadOffline = true, askCancel = false)
+            else it.copy(phase = UploadPhase.Error(code, fileName, config), askCancel = false)
+        }
+    }
+
+    /** «Повторить» in the no-network notice: sends the same file again (the same content keeps its key). */
+    fun retryUpload() {
+        val uri = lastPicked ?: return
+        onFilePicked(uri)
     }
 
     fun askCancel(show: Boolean) = _state.update { it.copy(askCancel = show) }
@@ -292,7 +313,7 @@ class UploadViewModel @Inject constructor(
     }
 
     /** «Выбрать другой файл» after an error. */
-    fun backToGuide() = _state.update { it.copy(phase = UploadPhase.Guide(fallbackConfig())) }
+    fun backToGuide() = _state.update { it.copy(phase = UploadPhase.Guide(fallbackConfig()), uploadOffline = false) }
 
     fun consumeDone() = _state.update { it.copy(doneUploadId = null) }
 
@@ -324,5 +345,6 @@ class UploadViewModel @Inject constructor(
 
     private companion object {
         const val IN_PROGRESS_RETRIES = 3
+        const val OFFLINE = "OFFLINE"
     }
 }

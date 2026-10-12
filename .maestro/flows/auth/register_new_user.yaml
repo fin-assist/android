@@ -31,12 +31,13 @@ tags:
 
 - runFlow: ../../subflows/set_passcode.yaml
 
-# First run continues with the upload (step 4 of 4).
+# First run continues with the upload: the guide with «Загружу позже» (mockup `ImportGuide`, no step counter since FIN-40).
 - extendedWaitUntil:
     visible:
       id: "statements.upload"
     timeout: 15000
-- assertVisible: "Шаг 4 из 4"
+- assertVisible:
+    id: "statements.upload.later"
 - scrollUntilVisible:
     element:
       id: "statements.upload.pick"

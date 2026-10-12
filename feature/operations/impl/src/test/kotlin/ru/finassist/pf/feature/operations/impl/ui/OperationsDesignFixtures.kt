@@ -84,7 +84,7 @@ internal object OperationsDesignFixtures {
         currency = "RUB", title = "Перевод между счетами", categoryId = SystemCategories.OWN_TRANSFER,
         categoryName = "Между своими счетами", categoryIcon = "transfer", isCategoryManual = false, note = "не в тратах",
         status = OperationStatus.POSTED, fromAccount = savings, toAccount = current,
-        noteDetails = "Не считаем тратой и доходом", sourceName = SOURCE,
+        noteDetails = "Не считаем тратой и доходом", bankCategory = "Между своими счетами", sourceName = SOURCE,
     )
 
     fun detailState(op: OperationDetails) = DetailUiState(loading = false, operation = op, categories = categories)

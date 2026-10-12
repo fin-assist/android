@@ -119,7 +119,8 @@ class AssistantEngine(
                 value = if (cov.hasData(m)) v.toDouble() else null,
                 coverage = when (cov.coverageOf(mFrom, mTo)) { "complete" -> ApiCoverage.COMPLETE; "no_data" -> ApiCoverage.NO_DATA; else -> ApiCoverage.PARTIAL },
                 dataFrom = bounds?.first?.atStartOfDay(scope.zone)?.toOffsetDateTime(),
-                dataTo = bounds?.second?.plusDays(1)?.atStartOfDay(scope.zone)?.toOffsetDateTime(),
+                // api.md 7: `data_to` is the last moment with data («сентябрь по 25-е»), not an exclusive boundary.
+                dataTo = bounds?.second?.plusDays(1)?.atStartOfDay(scope.zone)?.minusSeconds(1)?.toOffsetDateTime(),
             )
         }
         val chart = Block(

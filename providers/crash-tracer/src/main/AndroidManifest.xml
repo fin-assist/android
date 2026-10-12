@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <!-- The SDK starts from this provider, before Application.onCreate. In a build without an app token it is
+             switched off: the SDK never initializes, nothing is collected or sent (TracerCrashReporter is a no-op
+             then). `tracerEnabled` is a manifest placeholder set by :app. -->
+        <provider
+            android:name="ru.ok.tracer.startup.InitializationProvider"
+            android:authorities="${applicationId}.tracer-startup"
+            android:enabled="${tracerEnabled}"
+            android:exported="false"
+            tools:node="merge" />
+    </application>
+
+</manifest>

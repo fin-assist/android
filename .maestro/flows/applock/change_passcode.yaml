@@ -24,20 +24,20 @@ tags:
       id: "applock.change"
     timeout: 10000
 
-- assertVisible: "Введите текущий код"
+- assertVisible: "Введите текущий код-пароль"
 - runFlow:
     file: ../../subflows/enter_code.yaml
     env:
       CODE: "1234"
 - extendedWaitUntil:
-    visible: "Придумайте новый код"
+    visible: "Введите новый код-пароль"
     timeout: 5000
 - runFlow:
     file: ../../subflows/enter_code.yaml
     env:
       CODE: "5678"
 - extendedWaitUntil:
-    visible: "Повторите новый код"
+    visible: "Повторите новый код-пароль"
     timeout: 5000
 # A different repeat starts the new code over.
 - runFlow:
@@ -45,14 +45,14 @@ tags:
     env:
       CODE: "1111"
 - extendedWaitUntil:
-    visible: "Коды не совпали.*"
+    visible: "Коды не совпадают.*"
     timeout: 5000
 - runFlow:
     file: ../../subflows/enter_code.yaml
     env:
       CODE: "5678"
 - extendedWaitUntil:
-    visible: "Повторите новый код"
+    visible: "Повторите новый код-пароль"
     timeout: 5000
 - runFlow:
     file: ../../subflows/enter_code.yaml
