@@ -313,7 +313,7 @@ class UploadViewModel @Inject constructor(
     }
 
     /** «Выбрать другой файл» after an error. */
-    fun backToGuide() = _state.update { it.copy(phase = UploadPhase.Guide(fallbackConfig())) }
+    fun backToGuide() = _state.update { it.copy(phase = UploadPhase.Guide(fallbackConfig()), uploadOffline = false) }
 
     fun consumeDone() = _state.update { it.copy(doneUploadId = null) }
 

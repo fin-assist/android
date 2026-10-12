@@ -4,6 +4,7 @@ import ru.finassist.pf.core.common.time.pluralize
 import java.time.Duration
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.util.Locale
 
 /** Text of the «too many attempts» state on the call screen (`CodeLocked`). */
 object CallLockText {
@@ -17,7 +18,7 @@ object CallLockText {
         val seconds = Duration.between(now, retryAt).seconds.coerceAtLeast(0)
         val minutes = ((seconds + 59) / 60).toInt().coerceAtLeast(1)
         val local = retryAt.atZoneSameInstant(zone)
-        val time = "%02d:%02d".format(local.hour, local.minute)
+        val time = "%02d:%02d".format(Locale.ROOT, local.hour, local.minute)
         return "$base через $minutes ${pluralize(minutes, "минуту", "минуты", "минут")}, в $time"
     }
 }
