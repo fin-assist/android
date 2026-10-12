@@ -3,6 +3,7 @@ package ru.finassist.pf.mock
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import ru.finassist.pf.core.common.time.Clock
+import ru.finassist.pf.core.api.model.ImportNotice
 import ru.finassist.pf.mock.api.MockStatementsApi
 import ru.finassist.pf.mock.ofx.OfxCheck
 import ru.finassist.pf.mock.ofx.OfxParser
@@ -10,6 +11,7 @@ import java.io.File
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -51,6 +53,26 @@ class E2eStatementsTest {
             assertEquals(3, first.result?.newCount)
             val again = statements.startUpload("october.ofx", october, backend.now(), instant = true)
             assertEquals(0, again.result?.newCount)
+        }
+    }
+
+    @Test
+    fun `unreadable has no readable operation but two unread lines, and the result says so`() {
+        val backend = MockBackend(MockConfig(networkDelayMs = 0), FixedClock(OffsetDateTime.parse("2026-10-08T12:00:00+03:00")))
+        backend.ready.complete(Unit)
+        backend.profile = backend.emptyProfile("+79161234567", "u1")
+        val statements = MockStatementsApi(backend)
+        runBlocking {
+            statements.startUpload("fixture.ofx", OfxParser.parse(fixture), backend.now().minusDays(1), instant = true)
+            assertEquals(OfxCheck.Ok, OfxParser.check(read("unreadable.ofx")))
+            val doc = OfxParser.parse(read("unreadable.ofx"))
+            assertEquals(0, doc.transactions.size)
+            assertEquals(listOf("no_date", "bad_amount"), doc.unreadLines.map { it.reason })
+
+            val result = assertNotNull(statements.startUpload("unreadable.ofx", doc, backend.now(), instant = true).result)
+            assertEquals(0, result.operationCount)
+            assertEquals(2, result.unreadCount)
+            assertTrue(ImportNotice.EMPTY_STATEMENT in result.notices)
         }
     }
 }

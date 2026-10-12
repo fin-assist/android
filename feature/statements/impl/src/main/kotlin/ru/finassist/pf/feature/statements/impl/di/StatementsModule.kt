@@ -37,7 +37,7 @@ class StatementsEntry @Inject constructor() : FeatureEntry {
             ResultScreen(
                 onDone = { navigator.finishTo(OperationsRoutes.Feed) },
                 onOpenSearch = { filter -> navigator.navigate(OperationsRoutes.Search(filter)) },
-                onOpenUnread = { id -> navigator.navigate(StatementsRoutes.UnreadLines(uploadId = id)) },
+                onOpenUnread = { id, othersLoaded -> navigator.navigate(StatementsRoutes.UnreadLines(uploadId = id, othersLoaded = othersLoaded)) },
                 onOpenAnalytics = { navigator.finishTo(AnalyticsRoutes.Home) },
                 onUploadAnother = { navigator.navigate(StatementsRoutes.Upload()) { popUpTo<StatementsRoutes.Result> { inclusive = true } } },
                 // Opened from the history, the upload went back to it under the result: no second copy on top.
@@ -53,7 +53,7 @@ class StatementsEntry @Inject constructor() : FeatureEntry {
             HistoryScreen(
                 onBack = { navigator.back() },
                 onUpload = { navigator.navigate(StatementsRoutes.Upload()) },
-                onOpenUnread = { id -> navigator.navigate(StatementsRoutes.UnreadLines(uploadId = id)) },
+                onOpenUnread = { id, othersLoaded -> navigator.navigate(StatementsRoutes.UnreadLines(uploadId = id, othersLoaded = othersLoaded)) },
             )
         }
         composable<StatementsRoutes.UnreadLines> {

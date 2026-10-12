@@ -82,7 +82,7 @@ class ResultViewModel @Inject constructor(
 fun ResultScreen(
     onDone: () -> Unit,
     onOpenSearch: (OperationsFilter) -> Unit,
-    onOpenUnread: (uploadId: String) -> Unit,
+    onOpenUnread: (uploadId: String, othersLoaded: Boolean) -> Unit,
     onOpenAnalytics: () -> Unit,
     onUploadAnother: () -> Unit,
     onOpenHistory: () -> Unit,
@@ -94,7 +94,7 @@ fun ResultScreen(
         uploadEnabled = vm.uploadEnabled,
         onDone = onDone,
         onOpenSearch = onOpenSearch,
-        onOpenUnread = { onOpenUnread(vm.uploadId) },
+        onOpenUnread = { onOpenUnread(vm.uploadId, (vm.result?.operationCount ?: 0) > 0) },
         onOpenAnalytics = onOpenAnalytics,
         onUploadAnother = onUploadAnother,
         onOpenHistory = onOpenHistory,

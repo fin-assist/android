@@ -159,7 +159,7 @@ class HistoryViewModel @Inject constructor(
 fun HistoryScreen(
     onBack: () -> Unit,
     onUpload: () -> Unit,
-    onOpenUnread: (uploadId: String) -> Unit,
+    onOpenUnread: (uploadId: String, othersLoaded: Boolean) -> Unit,
     vm: HistoryViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -188,7 +188,7 @@ internal fun HistoryContent(
     state: HistoryUiState,
     onBack: () -> Unit,
     onUpload: () -> Unit,
-    onOpenUnread: (uploadId: String) -> Unit,
+    onOpenUnread: (uploadId: String, othersLoaded: Boolean) -> Unit,
     onRetry: () -> Unit,
     onAskDelete: (Upload?) -> Unit,
     onDelete: () -> Unit,
@@ -232,7 +232,7 @@ internal fun HistoryContent(
                         }
                         PfCard(flush = true) {
                             list.uploads.forEachIndexed { i, u ->
-                                UploadRow(u, divider = i < list.uploads.lastIndex, onDelete = { onAskDelete(u) }, onOpenUnread = { onOpenUnread(u.uploadId) })
+                                UploadRow(u, divider = i < list.uploads.lastIndex, onDelete = { onAskDelete(u) }, onOpenUnread = { onOpenUnread(u.uploadId, u.operationCount > 0) })
                             }
                         }
                         Text(

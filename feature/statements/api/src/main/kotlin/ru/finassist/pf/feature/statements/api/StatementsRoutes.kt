@@ -24,5 +24,9 @@ object StatementsRoutes {
      * one of the two forms is used (api.md 3.6).
      */
     @Serializable
-    data class UnreadLines(val uploadId: String? = null, val from: String? = null, val to: String? = null)
+    /**
+     * Unread lines of one upload or of a period. [othersLoaded] is false when the upload read no operation at all:
+     * the intro then does not claim «остальные операции загружены».
+     */
+    data class UnreadLines(val uploadId: String? = null, val from: String? = null, val to: String? = null, val othersLoaded: Boolean = true)
 }

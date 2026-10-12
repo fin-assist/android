@@ -61,6 +61,8 @@ data class UnreadUiState(
     val error: Boolean = false,
     val lines: List<UnreadLine> = emptyList(),
     val userId: String? = null,
+    /** False when the upload read no operation (route): the intro drops «остальные операции загружены». */
+    val othersLoaded: Boolean = true,
 )
 
 @HiltViewModel
@@ -70,7 +72,7 @@ class UnreadLinesViewModel @Inject constructor(
     private val tokenStore: TokenStore,
 ) : ViewModel() {
     private val route = savedState.toRoute<StatementsRoutes.UnreadLines>()
-    private val _state = MutableStateFlow(UnreadUiState())
+    private val _state = MutableStateFlow(UnreadUiState(othersLoaded = route.othersLoaded))
     val state: StateFlow<UnreadUiState> = _state
 
     init {
@@ -140,7 +142,7 @@ internal fun UnreadLinesContent(
                 ) {
                     item(key = "intro") {
                         Text(
-                            UnreadTexts.intro(byUpload.values.map { it.first().fileName }),
+                            UnreadTexts.intro(byUpload.values.map { it.first().fileName }, state.othersLoaded),
                             style = PfTheme.type.body, color = PfTheme.colors.textMuted,
                             modifier = Modifier.padding(top = d.space1, bottom = d.space2),
                         )

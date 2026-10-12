@@ -38,7 +38,7 @@ class UploadHistoryDesignCheckTest {
     private fun capture(name: String, state: HistoryUiState, dark: Boolean = false, popups: Boolean = false) =
         DesignCheck.capture(name, dark = dark, popups = popups) {
             HistoryContent(
-                state, onBack = {}, onUpload = {}, onOpenUnread = {}, onRetry = {}, onAskDelete = {}, onDelete = {},
+                state, onBack = {}, onUpload = {}, onOpenUnread = { _, _ -> }, onRetry = {}, onAskDelete = {}, onDelete = {},
                 onSnackbarShown = {},
             )
         }
