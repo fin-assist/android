@@ -91,6 +91,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `flags=reset` | drops all overrides | — |
   | `offline=true\|false` | every backend request fails with «нет сети» | process |
   | `call_delay_ms=<n>` | how long the sign-in call takes | process |
+  | `network_delay_ms=<n>` | latency of every backend request (a «busy» state stays up for that long) | process |
 
   Flags are read when a screen opens: set them before the screen (usually right after `clear_state.yaml`, before
   `launchApp`). Process-scoped values are set after `launchApp`.
@@ -182,7 +183,7 @@ were.
 | `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
 | `profile/theme_and_logout` | dark theme; logout cancel / confirm with the notice |
-| `profile/delete_account` | passcode (wrong, right) → «Удалить аккаунт?» over the profile → «Аккаунт удалён» |
+| `profile/delete_account` | passcode (wrong, right) → «Удалить аккаунт?» over the profile → «Удаляем…» ignores Back → «Аккаунт удалён» |
 | `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
 | native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
 
