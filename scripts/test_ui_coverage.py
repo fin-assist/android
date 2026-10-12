@@ -27,9 +27,10 @@ class TagParsingTest(unittest.TestCase):
             }
             object Other { const val SOMETHING = "not.in.a.tags.object" }
             Box(Modifier.testTag("analytics.tile.forecast"))
+            Tile("Доходы", tiles.income, chartId = "analytics.tile.income")
         '''
         tags = ui.parse_tags(text)
-        self.assertEqual({"profile.screen", "analytics.tile.forecast"}, tags.exact)
+        self.assertEqual({"profile.screen", "analytics.tile.forecast", "analytics.tile.income"}, tags.exact)
         self.assertEqual({"profile.theme."}, tags.prefixes)
 
     def test_flow_ids_and_screens(self):
@@ -101,6 +102,37 @@ class CodeCoverageTest(unittest.TestCase):
         self.assertIn("Lines: **67.9 %** (53/78), branches: **75.0 %** (30/40)", text)
         self.assertIn("| `feature/auth` | 70.0 % | 35/50 |", text)
         self.assertNotIn("mock/backend", text)  # no lines at all: left out of the table
+
+    def test_not_measured_lists_top_level_declarations_named_R_in_e2e_modules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def write(rel: str, text: str) -> None:
+                path = root / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+            write("feature/statements/impl/src/main/kotlin/ui/ResultScreen.kt", "@Composable\nfun ResultScreen() {}\nprivate class Row\n")
+            write("feature/statements/impl/src/main/kotlin/ui/Texts.kt", "internal object ResultTexts\ndata class Rows(val n: Int)\nclass Summary\n")
+            write("core/common/src/main/kotlin/time/RussianDates.kt", "object RussianDates\n")  # no top-level function: no …Kt facade
+            write("app/src/mockE2e/kotlin/e2e/Recorder.kt", "internal class Recorder\n")
+            write("core/network/src/main/kotlin/RequestId.kt", "class RequestIdInterceptor\n")  # not in the e2e APK
+            write("feature/auth/impl/src/test/kotlin/Rig.kt", "class Rig\n")  # tests are not measured anyway
+            write("feature/auth/impl/build/generated/R.kt", "class Rx\n")
+            self.assertEqual(
+                [
+                    "app: Recorder",
+                    "core/common: RussianDates",
+                    "feature/statements: ResultScreenKt",
+                    "feature/statements: ResultTexts",
+                    "feature/statements: Row",
+                    "feature/statements: Rows",
+                ],
+                ui.not_measured(root),
+            )
+            xml = root / "report.xml"
+            xml.write_text(JACOCO_XML, encoding="utf-8")
+            text = ui.code_markdown(ui.code_coverage(xml, root))
+            self.assertIn("Not measured — 6 top-level declaration(s)", text)
+            self.assertIn("`feature/statements: ResultTexts`", text)
 
     def test_module_of_package(self):
         self.assertEqual("feature/auth", ui.module_of("ru/finassist/pf/feature/auth/impl/ui"))

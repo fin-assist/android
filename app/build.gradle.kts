@@ -137,6 +137,8 @@ dependencies {
     androidTestUtil(libs.androidx.test.orchestrator)
     androidTestUtil(libs.androidx.test.services)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    // The tested build type is `e2e`: `createComposeRule()` needs the test activity of this manifest there too.
+    "e2eImplementation"(libs.androidx.compose.ui.test.manifest)
 }
 
 /** Gradle property or environment variable (`pf.mytrackerSdkKey` → `PF_MYTRACKER_SDK_KEY`); empty when absent. */

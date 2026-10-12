@@ -42,7 +42,9 @@ TAGS_OBJECT = re.compile(r"\bobject\s+\w*Tags\s*\{")
 CONST_TAG = re.compile(r'\bconst\s+val\s+\w+\s*=\s*"([^"$]+)"')
 # fun chip(screen: String) = "assistant.answer.chip.$screen"  →  prefix «assistant.answer.chip.»
 FUN_TAG = re.compile(r'\bfun\s+\w+\([^)]*\)\s*=\s*"([^"$]*)\$')
-LITERAL_TAG = re.compile(r'\.testTag\("([a-z][a-z0-9_.]*)"\)')
+# Literal tags outside the `…Tags` objects: `.testTag("…")`, and the tile/chart ids the analytics screen passes down
+# as `chartId = "…"` (the tile sets them as its test tag).
+LITERAL_TAG = re.compile(r'(?:\.testTag\(|\bchartId\s*=\s*)"([a-z][a-z0-9_.]*)"')
 FLOW_ID = re.compile(r'^\s*(?:-\s*)?id:\s*"([^"]+)"', re.MULTILINE)
 
 
@@ -209,13 +211,53 @@ class CodeCoverage:
     modules: dict[str, Counter]
     #: Source files of screens (`…Screen….kt`, `…Screens.kt`) in which the flows executed no line.
     untouched_screens: list[str]
+    #: Top-level declarations AGP leaves without probes (`not_measured`), absent from the report.
+    not_measured: list[str] = field(default_factory=list)
 
 
-def code_coverage(report: Path) -> CodeCoverage:
-    root = ET.parse(report).getroot()
+# AGP 8.9 copies instead of instrumenting every class whose simple name starts with `R` or `Manifest` (its filter
+# for the generated `R`/`Manifest` classes is `.+?/R\$?.*?\.class$`), so `:e2eCoverageReport` leaves them out
+# (root build.gradle.kts). Counted here from the sources, so the gap is visible next to the number.
+NOT_INSTRUMENTED = re.compile(r"^(?:(?:public|internal|private|data|sealed|enum|abstract|open|value|annotation|fun)\s+)*(?:class|object|interface)\s+((?:R|Manifest)[A-Za-z0-9_]*)\b", re.MULTILINE)
+TOP_LEVEL_MEMBER = re.compile(r"^(?:(?:public|internal|private|inline|suspend|operator|infix)\s+)*(?:fun|val|var)\b", re.MULTILINE)
+SOURCE_SETS = ("main", "mock", "mockE2e")
+# Modules outside the mock e2e APK (`e2eCoverageModules` in the root build.gradle.kts).
+NOT_IN_E2E_APK = ("core/network", "core/screenshot-testing", "providers/toggles-rustore", "providers/tracking-mytracker", "providers/crash-appmetrica")
+
+
+def source_module(path: Path) -> str:
+    """`feature/auth/impl/src/main/…` → `feature/auth`; `core/common/…` → `core/common`; `mock/backend/…`; else `app`."""
+    parts = path.parts
+    if parts[0] in ("feature", "core", "providers") and len(parts) > 1:
+        return f"{parts[0]}/{parts[1]}"
+    return "mock/backend" if parts[0] == "mock" else "app"
+
+
+def not_measured(root: Path) -> list[str]:
+    """Top-level classes, objects and `…Kt` facades named `R…`/`Manifest…` in the production sources: no probes."""
+    found: set[str] = set()
+    for path in sorted(root.rglob("*.kt")):
+        rel = path.relative_to(root)
+        parts = rel.parts
+        if "build" in parts or "src" not in parts or parts[parts.index("src") + 1] not in SOURCE_SETS:
+            continue
+        if parts[0] in ("design-check", "scripts", "build-logic"):
+            continue
+        module = source_module(rel)
+        if module in NOT_IN_E2E_APK:
+            continue
+        text = path.read_text(encoding="utf-8")
+        found.update(f"{module}: {name}" for name in NOT_INSTRUMENTED.findall(text))
+        if path.stem.startswith(("R", "Manifest")) and TOP_LEVEL_MEMBER.search(text):
+            found.add(f"{module}: {path.stem}Kt")
+    return sorted(found)
+
+
+def code_coverage(report: Path, root: Path | None = None) -> CodeCoverage:
+    root_node = ET.parse(report).getroot()
     modules: dict[str, Counter] = {}
     untouched: list[str] = []
-    for package in root.iter("package"):
+    for package in root_node.iter("package"):
         name = package.get("name", "")
         modules.setdefault(module_of(name), Counter()).add(_counter(package, "LINE"))
         for source in package.findall("sourcefile"):
@@ -223,7 +265,10 @@ def code_coverage(report: Path) -> CodeCoverage:
             lines = _counter(source, "LINE")
             if "Screen" in file_name and lines.total > 0 and lines.covered == 0:
                 untouched.append(f"{module_of(name)}: {file_name}")
-    return CodeCoverage(_counter(root, "LINE"), _counter(root, "BRANCH"), modules, sorted(untouched))
+    return CodeCoverage(
+        _counter(root_node, "LINE"), _counter(root_node, "BRANCH"), modules, sorted(untouched),
+        not_measured(root) if root is not None else [],
+    )
 
 
 def code_markdown(c: CodeCoverage) -> str:
@@ -242,6 +287,12 @@ def code_markdown(c: CodeCoverage) -> str:
             lines.append(f"| `{module}` | {percent(counter.covered, counter.total)} | {counter.covered}/{counter.total} |")
     if c.untouched_screens:
         lines += ["", "Screen files in which no line ran: " + ", ".join(f"`{s}`" for s in c.untouched_screens) + "."]
+    if c.not_measured:
+        lines += [
+            "",
+            f"Not measured — {len(c.not_measured)} top-level declaration(s) named `R…`/`Manifest…`, which AGP leaves "
+            "without probes (docs/testing.md): " + ", ".join(f"`{s}`" for s in c.not_measured) + ".",
+        ]
     return "\n".join(lines)
 
 
@@ -341,7 +392,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parts = ["### UI test coverage", ""]
     if args.jacoco is not None and args.jacoco.is_file():
-        parts += [code_markdown(code_coverage(args.jacoco)), ""]
+        parts += [code_markdown(code_coverage(args.jacoco, args.root)), ""]
     elif args.jacoco is not None:
         parts += [f"No code coverage: `{args.jacoco}` was not produced (no execution data from the device).", ""]
     parts.append(scenario_markdown(scenario_coverage(declared_tags(args.root), flow_ids(args.root))))

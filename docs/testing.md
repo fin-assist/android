@@ -117,10 +117,12 @@ How it is measured:
   generated code as the Kover report, the e2e hooks (`ru.finassist.pf.e2e`), and — a gap of AGP 8.9 — every
   class whose simple name starts with `R` or `Manifest` (`ResultViewModel`, `ResultScreen.kt`, `RussianDates`,
   `RowModel`…): AGP's filter for the generated `R`/`Manifest` classes (`.+?/R\$?.*?\.class$`) copies them
-  without probes, so they would show as never executed. Composables stay in: UI tests are the layer that runs
-  them.
-- `scripts/ui-coverage.py summary --jacoco` prints the totals, a table per module and the `*Screen*` source
-  files no test touched. The same JaCoCo version drives the probes and the report (`libs.versions.jacoco`):
+  without probes, so they would show as never executed. The summary counts these declarations from the sources
+  («Not measured — N …») so the gap stays visible next to the number. Composables stay in: UI tests are the layer
+  that runs them.
+- `scripts/ui-coverage.py summary --jacoco` prints the totals, a table per module, the `*Screen*` source files no
+  test touched and the not-measured declarations. Without execution data the task writes no report and the
+  summary says so instead of showing 0 %. The same JaCoCo version drives the probes and the report (`libs.versions.jacoco`):
   data of one version is not read by another.
 
 Known limits:
@@ -140,9 +142,10 @@ python3 scripts/ui-coverage.py summary            # Markdown to stdout; --summar
 ```
 
 - A **screen** is a tag's first two segments (`statements.upload.fallback` → `statements.upload`); the tags come
-  from the `*Tags` objects (constants and `fun` builders with a `$` suffix count as a prefix) and `testTag("…")`
-  literals of the sources, the ids from `id: "…"` in `.maestro/flows/`. `e2e.*` ids are the control links, not
-  tags.
+  from the `*Tags` objects (constants and `fun` builders with a `$` suffix count as a prefix), `testTag("…")`
+  literals and the `chartId = "…"` of the analytics tiles in the sources, the ids from `id: "…"` in
+  `.maestro/flows/`. `e2e.*` ids are the control links, not tags. A tag passed to a component some other way is
+  invisible to the script: declare it in the feature's `*Tags` object.
 - Covered: a screen with at least one tag a flow refers to; a tag a flow refers to (a prefix tag when any id
   starts with it). The table lists per feature the missing tags; an id no source declares is reported — a renamed
   tag shows up there, and `scripts/test_ui_coverage.py` fails on it.

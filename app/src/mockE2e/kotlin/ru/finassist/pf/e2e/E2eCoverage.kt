@@ -14,6 +14,7 @@ import android.os.Process
 import android.provider.MediaStore
 import android.util.Log
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -38,7 +39,8 @@ class E2eCoverage : ContentProvider() {
     }
     private val processTag = "${System.currentTimeMillis()}-${Process.myPid()}"
     private var sequence = 0
-    private var lastHash = 0
+    /** The data of the last successful save: an unchanged snapshot is not written again. */
+    private var lastData: ByteArray? = null
     private var lastSaved: Saved? = null
 
     private sealed interface Saved {
@@ -75,13 +77,13 @@ class E2eCoverage : ContentProvider() {
     private fun save(agent: Any) {
         try {
             val data = agent.javaClass.getMethod("getExecutionData", Boolean::class.javaPrimitiveType).invoke(agent, false) as ByteArray
-            val hash = data.contentHashCode()
-            if (hash == lastHash && lastSaved != null) return
-            val name = "pf-$processTag-%05d.ec".format(++sequence)
+            if (lastSaved != null && lastData?.contentEquals(data) == true) return
+            // Locale.ROOT: the device locale could render `%05d` with non-ASCII digits, which `collect` does not read.
+            val name = "pf-$processTag-%05d.ec".format(Locale.ROOT, ++sequence)
             val saved = write(name, data) ?: return
             lastSaved?.let(::delete)
             lastSaved = saved
-            lastHash = hash
+            lastData = data
         } catch (e: Throwable) {
             Log.w(TAG, "coverage data not saved", e)
         }

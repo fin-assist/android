@@ -57,9 +57,10 @@ adb install -r -t "$APK" >/dev/null
 
 mkdir -p "$OUT"
 adb logcat -c || true
-# Execution data of an earlier run must not count: the folder is pulled whole after the flows.
+# Execution data of an earlier run must not count: the device folder is pulled whole after the flows, and
+# :e2eCoverageReport reads every .ec AGP left from the native tests — of this run only.
 adb shell rm -rf "$DEVICE_COVERAGE" >/dev/null 2>&1 || true
-rm -rf "$OUT/coverage"
+rm -rf "$OUT/coverage" "$ROOT/app/build/outputs/code_coverage"
 
 # A freshly booted CI emulator often shows «Pixel Launcher isn't responding». The dialog takes window focus
 # from the app under test, so every flow and the Espresso test fail. Hide system error dialogs for the run.

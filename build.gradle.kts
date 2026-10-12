@@ -128,9 +128,9 @@ tasks.register<JacocoReport>("e2eCoverageReport") {
         html.outputLocation.set(layout.projectDirectory.dir("build/reports/e2e-coverage/html"))
         csv.required.set(false)
     }
-    doFirst {
-        if (executionData.files.none { it.isFile }) {
-            logger.warn("e2eCoverageReport: no execution data (build/e2e/coverage/ec, app/build/outputs/code_coverage) — the report will be empty")
-        }
+    // No data (the run stopped before the flows) — no report: an empty report.xml would read as 0 % in the summary,
+    // which prints «No code coverage» for a missing file instead.
+    onlyIf("execution data exists in build/e2e/coverage/ec or app/build/outputs/code_coverage") {
+        executionData.files.any { it.isFile }.also { if (!it) logger.warn("e2eCoverageReport: no execution data — no report") }
     }
 }
