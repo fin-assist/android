@@ -211,7 +211,10 @@ commands: `docs/testing.md`.
 - After the PR is open and all planned changes are pushed, request a review with one PR comment in Russian
   addressed to both `@codex` and `@claude`, asking for comments in Russian. `@claude` runs from
   `.github/workflows/claude.yml` (default branch), `@codex` is the Codex GitHub integration.
-- Address review findings in follow-up commits on the same branch, reply in the conversation and resolve it.
+- Poll for review comments 2 minutes after requesting a review, then every 2 minutes until both reviewers have
+  answered and no thread is open; longer pauses only stretch the cycle (Codex answers irregularly).
+- Address review findings in follow-up commits on the same branch, reply in the conversation and resolve it;
+  then request a review again and keep polling the same way.
   Agents never merge a PR into `main`; the owner does.
 
 ## Review guidelines
