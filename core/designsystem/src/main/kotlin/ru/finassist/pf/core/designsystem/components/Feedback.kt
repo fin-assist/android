@@ -43,7 +43,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.layout.layout
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.SpanStyle
@@ -112,25 +114,28 @@ fun PfNotice(
 }
 
 /**
- * Standalone link as the action of a [PfNotice]. The mockups wrap it in `margin: -8px 0 -12px 0`: of the link's
- * 48 dp touch height only 28 dp count in the notice, so its text sits 6 dp under the notice text and 16 dp above
- * the notice's bottom edge. The touch target itself stays 48 dp — it reaches 8 dp above and 12 dp below.
+ * Standalone link as the action of a [PfNotice]. The mockups wrap a 48 dp link in `margin: -8px 0 -12px 0`, so
+ * it takes 28 dp of the notice: the text sits 6 dp under the notice text and 2 dp above the slot's end (14 dp to
+ * the notice's edge). The layout is that 28 dp box; the touch target is still 48 dp — Compose expands the touch
+ * bounds of a clickable smaller than the minimum touch target to it, 10 dp above and below the box.
  */
 @Composable
 fun PfNoticeLink(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val top = PfTheme.dimens.space2
-    val bottom = PfTheme.dimens.space3
-    PfLink(
-        text,
-        onClick = onClick,
-        modifier = modifier.layout { measurable, constraints ->
-            val placeable = measurable.measure(constraints)
-            val trim = (top + bottom).roundToPx()
-            layout(placeable.width, (placeable.height - trim).coerceAtLeast(0)) {
-                placeable.placeRelative(0, -top.roundToPx())
-            }
-        },
-    )
+    Box(
+        modifier = modifier
+            .height(28.dp)
+            .clip(RoundedCornerShape(PfTheme.dimens.radiusSm))
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text,
+            style = PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold),
+            color = PfTheme.colors.accent,
+            // Centred the text would sit 4/4; the mockup's margins put it 6/2.
+            modifier = Modifier.offset(y = 2.dp),
+        )
+    }
 }
 
 /**
@@ -282,9 +287,10 @@ fun PfLimitMeter(used: Int, modifier: Modifier = Modifier, total: Int = 5) {
 
 /**
  * Confirmation dialog for an irreversible action: title (question), description (what is lost), extra content,
- * a `danger` button and a `ghost` «Отмена». System back closes it like «Отмена». While [busy], «Отмена» is
- * disabled and the dialog does not dismiss on an outside tap: the request is already sent and cannot be taken
- * back, so closing the dialog would only hide its outcome (FIN-64; the `DeleteAccountBusy` mockup follows).
+ * a `danger` button and a `ghost` «Отмена». System back and an outside tap close it like «Отмена». While [busy],
+ * «Отмена» is disabled and neither back nor an outside tap dismisses the dialog: the request is already sent and
+ * cannot be taken back, so closing the dialog would only hide its outcome (FIN-64; the `DeleteAccountBusy`
+ * mockup follows).
  */
 @Composable
 fun PfDialog(
@@ -302,7 +308,7 @@ fun PfDialog(
 ) {
     if (LocalSuppressPopups.current) return
     val c = PfTheme.colors
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(dismissOnClickOutside = !busy)) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(dismissOnBackPress = !busy, dismissOnClickOutside = !busy)) {
         Column(
             modifier
                 .pfTestRoot()

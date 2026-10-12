@@ -1,5 +1,4 @@
 package ru.finassist.pf.feature.operations.impl.ui
-
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,7 +15,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-
 import ru.finassist.pf.core.api.model.Category
 import ru.finassist.pf.core.api.model.CategoryKind
 import ru.finassist.pf.core.designsystem.components.PfOptionGroupTitle
