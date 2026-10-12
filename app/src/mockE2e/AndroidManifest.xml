@@ -28,6 +28,12 @@
             </intent-filter>
         </activity>
 
+        <!-- UI test coverage (FIN-48): starts with the process and saves the JaCoCo execution data while flows run. -->
+        <provider
+            android:name="ru.finassist.pf.e2e.E2eCoverage"
+            android:authorities="${applicationId}.e2e.coverage"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.e2e.files"

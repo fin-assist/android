@@ -316,32 +316,32 @@ private fun Tiles(a: Analytics, vm: AnalyticsHandlers, actions: AnalyticsActions
     val d = PfTheme.dimens
     fun open(tile: String, f: OperationsFilter?): (() -> Unit)? = f?.let { { vm.onTileOpened(tile); actions.openSearch(it) } }
     val balance: @Composable (Modifier) -> Unit = { m ->
-        Tile("Доходы минус расходы", tiles.balance, a, m, note = AnalyticsTexts.share(tiles.balance).let { if (tiles.balance.shareOfIncome != null && it.endsWith("дохода")) "$it · по выписке" else it }, chartId = "analytics.tile.balance")
+        Tile("Доходы минус расходы", tiles.balance, a, m, note = AnalyticsTexts.share(tiles.balance).let { if (tiles.balance.shareOfIncome != null && it.endsWith("дохода")) "$it · по выписке" else it }, chartId = AnalyticsTags.TILE_BALANCE)
     }
     val forecast: (@Composable (Modifier) -> Unit)? = tiles.forecast?.let { f ->
         { m ->
             // With stale data the forecast is replaced by the fact (api.md 6.1 `stale_data`).
             val staleFact = f.status.effective == MetricStatus.LOCKED && f.lock?.reason == LockReason.STALE_DATA
             if (staleFact) {
-                PfStatTile("Расходы", m.testTag("analytics.tile.forecast"), value = tiles.expense.value?.format(), note = periodCaption(period), chartId = "analytics.tile.forecast", onClick = open("expense", tiles.expense.filters))
+                PfStatTile("Расходы", m.testTag(AnalyticsTags.TILE_FORECAST), value = tiles.expense.value?.format(), note = periodCaption(period), chartId = AnalyticsTags.TILE_FORECAST, onClick = open("expense", tiles.expense.filters))
             } else {
                 Tile(
                     AnalyticsTexts.forecastLabel(params.period), f, a, m, note = AnalyticsTexts.forecastNote(params.date),
-                    approx = true, chartId = "analytics.tile.forecast",
+                    approx = true, chartId = AnalyticsTags.TILE_FORECAST,
                 )
             }
         }
     }
     val daily: @Composable (Modifier) -> Unit = { m ->
         val note = if (params.period == PeriodTypeCode.MONTH) AnalyticsTexts.dailyComparison(tiles.dailyExpense.comparison) else AnalyticsTexts.dailyAverageOver(period)
-        Tile("Расходы в день", tiles.dailyExpense, a, m, note = note, chartId = "analytics.tile.daily")
+        Tile("Расходы в день", tiles.dailyExpense, a, m, note = note, chartId = AnalyticsTags.TILE_DAILY)
     }
     val income: @Composable (Modifier) -> Unit = { m ->
-        Tile("Доходы", tiles.income, a, m, sign = Money.Sign.ALWAYS, onClick = open("income", tiles.income.filters), chartId = "analytics.tile.income")
+        Tile("Доходы", tiles.income, a, m, sign = Money.Sign.ALWAYS, onClick = open("income", tiles.income.filters), chartId = AnalyticsTags.TILE_INCOME)
     }
     // Without a forecast (past periods) the expense of the period takes its place, so the grid stays 2×2.
     val second: @Composable (Modifier) -> Unit = forecast ?: { m ->
-        Tile("Расходы", tiles.expense, a, m, note = periodCaption(period), onClick = open("expense", tiles.expense.filters), chartId = "analytics.tile.expense")
+        Tile("Расходы", tiles.expense, a, m, note = periodCaption(period), onClick = open("expense", tiles.expense.filters), chartId = AnalyticsTags.TILE_EXPENSE)
     }
     Column(verticalArrangement = Arrangement.spacedBy(d.space4)) {
         Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(d.space4)) {
@@ -813,6 +813,12 @@ internal object AnalyticsTags {
     const val EXPENSE_CATEGORY = "analytics.expense_category"
     const val INCOME_CATEGORY = "analytics.income_category"
     const val ALL_CATEGORIES = "analytics.all_categories"
+    // Tiles: the chart id of a tile is also its test tag (`Tile` → `PfStatTile(modifier.testTag(chartId))`).
+    const val TILE_BALANCE = "analytics.tile.balance"
+    const val TILE_FORECAST = "analytics.tile.forecast"
+    const val TILE_DAILY = "analytics.tile.daily"
+    const val TILE_INCOME = "analytics.tile.income"
+    const val TILE_EXPENSE = "analytics.tile.expense"
 
     // Same names as the flags in docs/flags.md that hide these blocks.
     const val BLOCK_TILES = "analytics.block.tiles"

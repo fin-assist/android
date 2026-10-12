@@ -27,8 +27,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Test the scripts (agent-docs parsers, Qase report and case map)
+      - name: Test the scripts (agent-docs parsers, Qase report and case map, UI coverage)
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
+      # Which screens and test tags the Maestro flows refer to (docs/testing.md, «UI test coverage»). Static, no
+      # device: the number next to the code coverage the UI-tests workflow measures after a merge.
+      - name: Scenario coverage of the flows
+        run: python3 scripts/ui-coverage.py summary --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Check AGENTS.md and docs registries
         run: python3 scripts/agent-docs.py --check

@@ -5,7 +5,7 @@ Two layers, both on an emulator or device:
 | Layer | What | Where | Build |
 |---|---|---|---|
 | Maestro | User scenarios end to end: sign-in, passcode, operations, search, analytics, assistant, statements, profile, flags, offline | `.maestro/` | `mockE2e` |
-| Native (Espresso / Compose test) | What Maestro cannot drive reliably — the system document picker | `app/src/androidTestMock/` | `mockDebug` |
+| Native (Espresso / Compose test) | What Maestro cannot drive reliably — the system document picker | `app/src/androidTestMock/` | `mockE2e` (`connectedMockE2eAndroidTest`) |
 
 Native tests are for the gaps, not a second copy of the scenarios. When a check needs the platform itself
 (system dialogs, intents, permissions, biometrics), it goes there; everything a user does on our screens goes to
@@ -29,11 +29,14 @@ scripts/e2e.sh --no-build --flow .maestro/flows/assistant/ask_question.yaml
 ```
 
 Reports go to `build/e2e/`: JUnit XML, `maestro-output.tgz` (per flow: screenshot and view hierarchy of the failed
-step, commands, log), logcat, the preflight dump.
+step, commands, log), logcat, the preflight dump, and in `coverage/ec/` the JaCoCo execution data the flows left on
+the device (`./gradlew :e2eCoverageReport` turns it into the UI test coverage report — docs/testing.md, «UI test
+coverage»).
 
-In CI (`.github/workflows/e2e.yml`) the tests run only after a merge to `main`; PRs never run them. A failed run is
-re-run from the Actions tab («Re-run jobs»). The run summary lists the flows; reports are in the `e2e-reports`
-artifact.
+In CI (`.github/workflows/e2e.yml`) the tests run after a merge to `main`; PRs never run them automatically. A
+failed run is re-run from the Actions tab («Re-run jobs»); any branch can be run by hand there («Run workflow» →
+the branch) to check a new flow or the coverage pipeline before the merge — such a run sends nothing to Qase. The
+run summary lists the flows and the UI test coverage; reports are in the `e2e-reports` artifact.
 
 ## Qase
 
@@ -55,7 +58,8 @@ steps and expected results in Russian, marked automated.
 ## The `e2e` build type
 
 `assembleMockE2e` builds `ru.finassist.pf.mock.e2e`: the mock flavor plus test hooks from `app/src/mockE2e/`. It
-installs next to `mockDebug` and never exists for `prod`.
+installs next to `mockDebug` and never exists for `prod`. It is also the `testBuildType`: the native tests run on
+it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»).
 
 - **Pinned date.** "Now" starts at 2026-10-08 12:00 MSK (`BuildConfig.E2E_NOW`, `ShiftedClock`) and runs from
   there. The fixture statement covers October 2025 — September 2026, so periods, amounts and limits stay the same
@@ -90,6 +94,11 @@ installs next to `mockDebug` and never exists for `prod`.
 
   Flags are read when a screen opens: set them before the screen (usually right after `clear_state.yaml`, before
   `launchApp`). Process-scoped values are set after `launchApp`.
+- **Coverage data.** `E2eCoverage` (a content provider) saves the JaCoCo execution data of the process every 2 s
+  while it changes and when an activity stops, into shared storage (`Download/pf-coverage`), where `clearState`
+  does not reach; `scripts/e2e.sh` pulls it after the flows. Native tests go through the test storage service
+  instead (`useTestStorageService`). The system picker contract that the native test used to check on `mockDebug`
+  is now a Robolectric test (`PickStatementDocumentTest`): on the e2e build the picker is `E2eDocumentPickerActivity`.
 
 ## Test tags
 
@@ -129,8 +138,9 @@ a bug that does not reproduce there), list it in «Not covered yet» at the end 
 reason and say so in the PR; «takes long to write» is not a reason.
 
 Every new or renamed test: a Qase case (suite of the feature, steps and expected results in Russian, automated),
-a line in `scripts/qase-cases.json`, a row in «Coverage». CI runs the flows only after the merge to `main`; before
-that they run only locally (`scripts/e2e.sh`), and the PR says whether they were.
+a line in `scripts/qase-cases.json`, a row in «Coverage». CI runs the flows after the merge to `main`; before that
+they run locally (`scripts/e2e.sh`) or by a manual start of the `UI tests` workflow, and the PR says whether they
+were.
 
 ## Writing a flow
 
@@ -174,7 +184,7 @@ that they run only locally (`scripts/e2e.sh`), and the PR says whether they were
 | `profile/theme_and_logout` | dark theme; logout cancel / confirm with the notice |
 | `profile/delete_account` | passcode (wrong, right) → «Удалить аккаунт?» over the profile → «Аккаунт удалён» |
 | `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
-| native `StatementPickerTest` | upload through `ACTION_OPEN_DOCUMENT` (Espresso-Intents) up to the import result |
+| native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
 
 Not covered yet: voice input (needs a speech recognizer on the emulator), biometrics (needs an enrolled
 fingerprint), the unread-lines screen (opened by «Подробнее» — a link inside a text node, see below), custom date
