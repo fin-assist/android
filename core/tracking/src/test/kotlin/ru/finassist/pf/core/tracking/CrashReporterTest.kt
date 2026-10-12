@@ -87,6 +87,8 @@ class BreadcrumbTest {
     @Test fun `rendered lines`() {
         assertEquals("screen analytics.home", Breadcrumb.ScreenOpened(Slug.of("analytics.home")).render())
         assertEquals("config 0a1b2c3d", Breadcrumb.ConfigApplied(CrashValue.of("0a1b2c3d")).render())
+        assertEquals("session pending_user", Breadcrumb.SessionChanged(Breadcrumb.SessionCrumb.PENDING_USER).render())
+        assertEquals("session signed_in", Breadcrumb.SessionChanged(Breadcrumb.SessionCrumb.SIGNED_IN).render())
     }
 }
 

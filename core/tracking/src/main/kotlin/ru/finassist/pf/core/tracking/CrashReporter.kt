@@ -82,6 +82,16 @@ sealed interface Breadcrumb {
     data class ConfigApplied(val version: CrashValue) : Breadcrumb {
         override fun render(): String = "config ${version.value}"
     }
+
+    /**
+     * The stored session changed: the app switches its graphs on it, so a screen that stays put after a sign-in
+     * can be told apart from a session that never arrived (FIN-63). Never the user id or a token.
+     */
+    data class SessionChanged(val state: SessionCrumb) : Breadcrumb {
+        override fun render(): String = "session ${state.name.lowercase()}"
+    }
+
+    enum class SessionCrumb { SIGNED_OUT, PENDING_USER, SIGNED_IN }
 }
 
 /**

@@ -99,7 +99,14 @@ class StatementPickerTest {
             waitUntil(timeoutMs) { hasTag(tag) }
         } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
             onRoot(useUnmergedTree = true).printToLog("PfTest")
-            throw AssertionError("no node with tag $tag after $timeoutMs ms; semantics tree is in logcat (PfTest)", e)
+            // FIN-63: a screen that does not move can also mean a starved main thread; measure it.
+            val latch = java.util.concurrent.CountDownLatch(1)
+            val started = android.os.SystemClock.uptimeMillis()
+            android.os.Handler(android.os.Looper.getMainLooper()).post { latch.countDown() }
+            val responded = latch.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            val mainThread = if (responded) "main thread responded in ${android.os.SystemClock.uptimeMillis() - started} ms" else "main thread did not respond within 5 s"
+            android.util.Log.w("PfTest", mainThread)
+            throw AssertionError("no node with tag $tag after $timeoutMs ms; semantics tree is in logcat (PfTest); $mainThread", e)
         }
     }
 

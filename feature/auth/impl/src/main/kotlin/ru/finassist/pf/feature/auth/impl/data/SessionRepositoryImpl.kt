@@ -20,6 +20,7 @@ import ru.finassist.pf.core.api.model.ProfileUpdate
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.toggles.FeatureFlags
+import ru.finassist.pf.core.tracking.Breadcrumb
 import ru.finassist.pf.core.tracking.CrashReporter
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
@@ -65,6 +66,17 @@ class SessionRepositoryImpl @Inject constructor(
             var wasSignedIn = false
             tokenStore.session.collect { s ->
                 val signedIn = s != null && s.userId.isNotEmpty()
+                // Breadcrumb (logcat in mock, crash context in prod): `PfApp` switches graphs on this value, so a
+                // screen that does not move after `auth.verified` can be told apart from a session that never emitted (FIN-63).
+                crashReporter.breadcrumb(
+                    Breadcrumb.SessionChanged(
+                        when {
+                            signedIn -> Breadcrumb.SessionCrumb.SIGNED_IN
+                            s == null -> Breadcrumb.SessionCrumb.SIGNED_OUT
+                            else -> Breadcrumb.SessionCrumb.PENDING_USER
+                        },
+                    ),
+                )
                 if (wasSignedIn && s == null && !signingOut) {
                     // The network layer dropped the session (refresh rejected): same cleanup as a sign-out.
                     signOutReason.compareAndSet(null, AuthRoutes.Phone.REASON_EXPIRED)
