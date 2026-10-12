@@ -12,13 +12,6 @@ interface Tracker {
     fun setUserId(userId: String?)
 }
 
-/** Crash and ANR reporting (AppMetrica in `prod`). Non-fatal errors are reported with [report]. */
-interface CrashReporter {
-    fun report(throwable: Throwable, message: String? = null)
-    fun log(message: String)
-    fun setUserId(userId: String?)
-}
-
 @JvmInline
 value class Event(val name: String)
 
@@ -65,11 +58,5 @@ object Events {
 
 object NoopTracker : Tracker {
     override fun track(event: Event, params: Map<String, String>) = Unit
-    override fun setUserId(userId: String?) = Unit
-}
-
-object NoopCrashReporter : CrashReporter {
-    override fun report(throwable: Throwable, message: String?) = Unit
-    override fun log(message: String) = Unit
     override fun setUserId(userId: String?) = Unit
 }

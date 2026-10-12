@@ -1,6 +1,12 @@
 package ru.finassist.pf.core.designsystem.components
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,8 +57,10 @@ fun PfDivider(modifier: Modifier = Modifier, strong: Boolean = false) {
 enum class RowTone { DEFAULT, ACCENT }
 
 /**
- * Settings / list row inside `PfCard(flush = true)`: accent icon, title, optional description, value on the
- * right and a chevron — or a switch. Min height `row` (56).
+ * Settings / list row inside `PfCard(flush = true)` (mockup `.pf-lrow`): accent icon, title (`15/20` regular,
+ * accent rows `600`), optional description (`hint`), value on the right (at most half the row, wraps) and a
+ * chevron — or a switch. Min height `row` (56), 8 dp vertical padding, 12 dp between parts. The divider runs
+ * under the whole row inside the card's 16 dp side padding; the last row of a card passes `divider = false`.
  */
 @Composable
 fun PfListRow(
@@ -73,6 +81,7 @@ fun PfListRow(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val c = PfTheme.colors
+    val d = PfTheme.dimens
     val isSwitch = switchChecked != null
     val clickable = when {
         isSwitch && onSwitch != null -> Modifier.clickable(role = Role.Switch) { onSwitch(!switchChecked!!) }
@@ -80,46 +89,58 @@ fun PfListRow(
         else -> Modifier
     }
     Column(modifier) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(clickable)
-                .defaultMinSize(minHeight = PfTheme.dimens.row)
-                .padding(horizontal = PfTheme.dimens.space4, vertical = PfTheme.dimens.space3)
-                .semantics(mergeDescendants = true) {
-                    if (valueLabel != null) contentDescription = listOfNotNull(title, description, valueLabel).joinToString(", ")
-                },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (icon != null) {
-                PfIcon(icon, contentDescription = null, size = PfTheme.dimens.iconMd, tint = c.accent)
-                Spacer(Modifier.width(PfTheme.dimens.space3))
-            }
-            Column(Modifier.weight(1f)) {
-                Text(title, style = PfTheme.type.bodyStrong, color = if (tone == RowTone.ACCENT) c.accent else c.text)
-                if (description != null) Text(description, style = PfTheme.type.caption, color = c.textMuted)
-            }
-            if (value != null) {
-                Spacer(Modifier.width(PfTheme.dimens.space2))
-                Text(value, style = PfTheme.type.caption, color = if (valueAccent) c.accent else c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (trailing != null) {
-                trailing()
-            } else if (isSwitch) {
-                Spacer(Modifier.width(PfTheme.dimens.space3))
-                PfSwitch(checked = switchChecked!!, onCheckedChange = null)
-            } else if (chevron) {
-                Spacer(Modifier.width(PfTheme.dimens.space1))
-                PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = PfTheme.dimens.iconMd, tint = c.textFaint)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            // `.pf-lrow-value { max-width: 50% }` of the row's content box (the card pads it by 16 on each side).
+            val valueMaxWidth = (maxWidth - d.space4 * 2) / 2
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(clickable)
+                    .defaultMinSize(minHeight = d.row)
+                    .padding(horizontal = d.space4, vertical = d.space2)
+                    .semantics(mergeDescendants = true) {
+                        if (valueLabel != null) contentDescription = listOfNotNull(title, description, valueLabel).joinToString(", ")
+                    },
+                horizontalArrangement = Arrangement.spacedBy(d.space3),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (icon != null) PfIcon(icon, contentDescription = null, size = d.iconMd, tint = c.accent)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        style = if (tone == RowTone.ACCENT) PfTheme.type.bodyStrong else PfTheme.type.lead,
+                        color = if (tone == RowTone.ACCENT) c.accent else c.text,
+                    )
+                    if (description != null) Text(description, style = PfTheme.type.hint, color = c.textMuted)
+                }
+                if (value != null) {
+                    Text(
+                        value,
+                        style = if (valueAccent) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.caption,
+                        color = if (valueAccent) c.accent else c.textMuted,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.widthIn(max = valueMaxWidth),
+                    )
+                }
+                when {
+                    trailing != null -> trailing()
+                    isSwitch -> PfSwitch(checked = switchChecked!!, onCheckedChange = null)
+                    chevron -> PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = d.iconMd, tint = c.textFaint)
+                }
             }
         }
-        if (divider) PfDivider(Modifier.padding(start = if (icon != null) 48.dp else PfTheme.dimens.space4))
+        if (divider) PfDivider(Modifier.padding(horizontal = d.space4))
     }
 }
 
 enum class ValueTone { DEFAULT, POSITIVE, MUTED }
 
-/** «label — value» row: operation details, income rows, assistant rows. `total` draws a strong top line. */
+/**
+ * «label — value» row (mockup `.pf-drow`): operation details, income rows, assistant rows. Label `body`, value
+ * `14/20 600`, 12 dp apart, both aligned to the top. A text value takes at most 60 % of the row and wraps, so
+ * the label is always readable; an [amount] value never wraps and takes what it needs. A clickable row is 48 dp
+ * tall and centred. `total` draws a strong top line and a bold value.
+ */
 @Composable
 fun PfDataRow(
     label: String,
@@ -129,37 +150,39 @@ fun PfDataRow(
     tone: ValueTone = ValueTone.DEFAULT,
     valueLabel: String? = null,
     total: Boolean = false,
+    amount: Boolean = false,
     onClick: (() -> Unit)? = null,
     divider: Boolean = true,
 ) {
     val c = PfTheme.colors
+    val d = PfTheme.dimens
     val valueColor = when (tone) { ValueTone.POSITIVE -> c.positive; ValueTone.MUTED -> c.textMuted; else -> c.text }
+    val valueStyle = PfTheme.type.body.copy(fontWeight = if (total) FontWeight.Bold else FontWeight.SemiBold, fontFeatureSettings = "tnum")
     Column(modifier) {
         if (total) PfDivider(strong = true)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick).defaultMinSize(minHeight = PfTheme.dimens.touch) else Modifier)
-                .padding(vertical = PfTheme.dimens.space2)
-                .semantics(mergeDescendants = true) {
-                    if (valueLabel != null) contentDescription = "$label, $valueLabel"
-                },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(label, style = PfTheme.type.body, color = c.text)
-                if (sublabel != null) Text(sublabel, style = PfTheme.type.hint, color = c.textMuted)
-            }
-            Text(
-                value,
-                style = if (total) PfTheme.type.bodyStrong.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) else PfTheme.type.bodyStrong,
-                color = valueColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (onClick != null) {
-                Spacer(Modifier.width(PfTheme.dimens.space1))
-                PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = PfTheme.dimens.iconMd, tint = c.textFaint)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val valueMaxWidth = maxWidth * 0.6f
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick).defaultMinSize(minHeight = d.touch) else Modifier)
+                    .padding(vertical = d.space2)
+                    .semantics(mergeDescendants = true) {
+                        if (valueLabel != null) contentDescription = "$label, $valueLabel"
+                    },
+                horizontalArrangement = Arrangement.spacedBy(d.space3),
+                verticalAlignment = if (onClick != null) Alignment.CenterVertically else Alignment.Top,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(label, style = if (total) PfTheme.type.body.copy(fontWeight = FontWeight.Bold) else PfTheme.type.body, color = c.text)
+                    if (sublabel != null) Text(sublabel, style = PfTheme.type.hint, color = c.textMuted)
+                }
+                if (amount) {
+                    Text(value, style = valueStyle, color = valueColor, maxLines = 1, softWrap = false, textAlign = TextAlign.End)
+                } else {
+                    Text(value, style = valueStyle, color = valueColor, textAlign = TextAlign.End, modifier = Modifier.widthIn(max = valueMaxWidth))
+                }
+                if (onClick != null) PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = d.iconMd, tint = c.textFaint)
             }
         }
         if (divider && !total) PfDivider()
@@ -168,13 +191,14 @@ fun PfDataRow(
 
 /** Day group of operations: `overline` date header in `text-faint` and the rows. */
 @Composable
-fun PfTransactionGroup(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun PfTransactionGroup(label: String, modifier: Modifier = Modifier, first: Boolean = false, content: @Composable () -> Unit) {
     Column(modifier.fillMaxWidth()) {
         Text(
             label.uppercase(),
             style = PfTheme.type.overline,
             color = PfTheme.colors.textFaint,
-            modifier = Modifier.padding(top = PfTheme.dimens.space4).semantics { heading() },
+            // `.pf-tgroup:first-child .pf-tgroup-title { padding-top: 0 }`
+            modifier = Modifier.padding(top = if (first) 0.dp else PfTheme.dimens.space4).semantics { heading() },
         )
         content()
     }
@@ -244,7 +268,10 @@ private fun TransactionRowBody(
     }
 }
 
-/** Single-choice row for pickers (category, theme, month). `selected` shows a check in `accent`. */
+/**
+ * Single-choice row for pickers (mockup `.pf-opt`): optional icon tile, title `body` (`600` when selected),
+ * description `caption`, a check in a 24 dp box. No side padding — the row sits on the sheet's 20 dp margin.
+ */
 @Composable
 fun PfOptionRow(
     title: String,
@@ -255,52 +282,64 @@ fun PfOptionRow(
     description: String? = null,
 ) {
     val c = PfTheme.colors
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(role = Role.RadioButton, onClick = onClick)
-            .defaultMinSize(minHeight = PfTheme.dimens.row)
-            .padding(horizontal = PfTheme.dimens.space4, vertical = PfTheme.dimens.space3)
-            .semantics(mergeDescendants = true) { this.contentDescription = listOfNotNull(title, description).joinToString(", ") },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (icon != null) {
-            PfIconTile(icon, small = true)
-            Spacer(Modifier.width(PfTheme.dimens.space3))
+    val d = PfTheme.dimens
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.RadioButton, onClick = onClick)
+                .defaultMinSize(minHeight = d.row)
+                .padding(vertical = d.space2)
+                .semantics(mergeDescendants = true) {
+                    this.contentDescription = listOfNotNull(title, description).joinToString(", ")
+                    this.selected = selected
+                },
+            horizontalArrangement = Arrangement.spacedBy(d.space3),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) PfIconTile(icon, small = true)
+            Column(Modifier.weight(1f)) {
+                Text(title, style = if (selected) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.body, color = c.text)
+                if (description != null) Text(description, style = PfTheme.type.caption, color = c.textMuted)
+            }
+            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                if (selected) PfIcon(PfIcons.CHECK, contentDescription = null, size = d.iconMd, tint = c.accent)
+            }
         }
-        Column(Modifier.weight(1f)) {
-            Text(title, style = PfTheme.type.body, color = c.text)
-            if (description != null) Text(description, style = PfTheme.type.hint, color = c.textMuted)
-        }
-        if (selected) PfIcon(PfIcons.CHECK, contentDescription = "выбрано", size = PfTheme.dimens.iconMd, tint = c.accent)
     }
 }
 
-/** Group header inside an option list: `overline` uppercase, `text-faint`. */
+/**
+ * Group header inside an option list (mockup `.pf-optgroup-title`): `overline` uppercase, `text-faint`, 16 dp
+ * above (8 dp for the [first] group) and 4 dp below. No side padding, like the rows.
+ */
 @Composable
-fun PfOptionGroupTitle(text: String, modifier: Modifier = Modifier) {
+fun PfOptionGroupTitle(text: String, modifier: Modifier = Modifier, first: Boolean = false) {
     Text(
         text.uppercase(),
         style = PfTheme.type.overline,
         color = PfTheme.colors.textFaint,
-        modifier = modifier.padding(start = PfTheme.dimens.space4, top = PfTheme.dimens.space4, bottom = PfTheme.dimens.space1),
+        modifier = modifier
+            .padding(top = if (first) PfTheme.dimens.space2 else PfTheme.dimens.space4, bottom = PfTheme.dimens.space1)
+            .semantics { heading() },
     )
 }
 
 /** Numbered steps (upload instructions): indigo number on `accent-soft`, text beside. */
 @Composable
 fun PfOrderedSteps(steps: List<String>, modifier: Modifier = Modifier) {
-    Column(modifier, verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(PfTheme.dimens.space3)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space3)) {
         steps.forEachIndexed { i, step ->
             Row(verticalAlignment = Alignment.Top) {
+                // `.pf-ostep-num`: 24 dp, 12/24 700; `.pf-ostep-text`: 2 dp from the top.
                 Box(
-                    Modifier.size(28.dp).background(PfTheme.colors.accentSoft, RoundedCornerShape(PfTheme.dimens.radiusFull)),
+                    Modifier.size(24.dp).background(PfTheme.colors.accentSoft, RoundedCornerShape(PfTheme.dimens.radiusFull)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("${i + 1}", style = PfTheme.type.micro, color = PfTheme.colors.accent)
+                    Text("${i + 1}", style = PfTheme.type.hint.copy(fontWeight = FontWeight.Bold), color = PfTheme.colors.accent)
                 }
                 Spacer(Modifier.width(PfTheme.dimens.space3))
-                Text(step, style = PfTheme.type.body, color = PfTheme.colors.text, modifier = Modifier.weight(1f).padding(top = 4.dp))
+                Text(step, style = PfTheme.type.body, color = PfTheme.colors.text, modifier = Modifier.weight(1f).padding(top = 2.dp))
             }
         }
     }

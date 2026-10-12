@@ -127,6 +127,10 @@ jobs:
       - name: Assemble
         run: ./gradlew assembleMockDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
+      # CI has no Tracer token: the SDK must not be able to start (scripts/check-tracer-off.py, README).
+      - name: Tracer is off without a token
+        run: python3 scripts/check-tracer-off.py app/build/intermediates/merged_manifests/mockDebug/processMockDebugManifest/AndroidManifest.xml 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
       - uses: actions/upload-artifact@v4
         if: success()
         with:

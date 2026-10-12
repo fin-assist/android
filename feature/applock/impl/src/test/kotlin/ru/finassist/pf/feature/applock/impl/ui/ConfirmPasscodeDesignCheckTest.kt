@@ -9,7 +9,8 @@ import ru.finassist.pf.feature.applock.api.BiometricAvailability
 
 /**
  * Artboards `DeleteAccount` / `DeleteAccountDark` / `DeleteAccountCodeWrong`: the passcode step of account deletion.
- * In the app it is [ConfirmPasscodeScreen], which the profile's delete flow opens before the request.
+ * In the app it is [ConfirmPasscodeScreen], which the profile's delete link opens before the confirmation dialog.
+ * `DeleteAccountCodeWrong`: no attempt counter (decision of FIN-40, the mockup is to be fixed) — «Неверный код».
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -18,12 +19,12 @@ class ConfirmPasscodeDesignCheckTest {
 
     private fun capture(name: String, state: ConfirmUiState = base, dark: Boolean = false) =
         DesignCheck.capture(name, dark = dark) {
-            ConfirmPasscodeContent(state, onBack = {}, onDigit = {}, onDelete = {}, onBiometric = {})
+            ConfirmPasscodeContent(state, onBack = {}, onDigit = {}, onDelete = {}, onBiometric = {}, onAskForgot = {}, onForgot = {})
         }
 
     @Test fun deleteAccount() = capture("DeleteAccount")
 
     @Test fun deleteAccountDark() = capture("DeleteAccountDark", dark = true)
 
-    @Test fun deleteAccountCodeWrong() = capture("DeleteAccountCodeWrong", base.copy(error = CONFIRM_WRONG_MESSAGE))
+    @Test fun deleteAccountCodeWrong() = capture("DeleteAccountCodeWrong", base.copy(entered = "1234", error = CONFIRM_WRONG_MESSAGE))
 }

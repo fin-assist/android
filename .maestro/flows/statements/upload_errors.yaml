@@ -57,7 +57,7 @@ tags:
     visible:
       id: "statements.upload.error.wrong_bank"
     timeout: 15000
-- assertVisible: "Выписка другого банка"
+- assertVisible: "Похоже, это выписка не Т-Банка"
 
 # Leaving the picker without a file keeps the guide.
 - tapOn:

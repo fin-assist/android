@@ -28,6 +28,13 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.theme.PfTheme
@@ -67,8 +74,8 @@ fun PfButton(
         variant == ButtonVariant.PRIMARY -> c.onAccent
         variant == ButtonVariant.DANGER -> c.onWarning
         busy -> c.textMuted
-        variant == ButtonVariant.GHOST -> c.accent
-        else -> c.text
+        // Secondary and ghost buttons carry accent text (`.pf-btn-secondary`, `.pf-btn-ghost`).
+        else -> c.accent
     }
     val label = if (busy) busyText ?: text else text
     Box(
@@ -77,10 +84,10 @@ fun PfButton(
             .height(PfTheme.dimens.control)
             .clip(shape)
             .background(background, shape)
-            .then(if (variant == ButtonVariant.SECONDARY && enabled) Modifier.border(1.dp, c.borderStrong, shape) else Modifier)
+            .then(if (variant == ButtonVariant.SECONDARY && enabled) Modifier.border(1.dp, c.border, shape) else Modifier)
             .clickable(enabled = enabled && !busy, role = Role.Button, onClick = onClick)
             .semantics { if (busy) contentDescription = label }
-            .padding(horizontal = PfTheme.dimens.space5),
+            .padding(horizontal = PfTheme.dimens.space4),
         contentAlignment = Alignment.Center,
     ) {
         CompositionLocalProvider(LocalContentColor provides content) {
@@ -93,7 +100,9 @@ fun PfButton(
                     PfIcon(icon, contentDescription = null, size = PfTheme.dimens.iconMd)
                     Spacer(Modifier.width(PfTheme.dimens.space2))
                 }
-                Text(label, style = PfTheme.type.bodyStrong, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                // `.pf-btn` 15/20 600; `.pf-btn-ghost` 14.
+                val style = if (variant == ButtonVariant.GHOST) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.bodyStrong
+                Text(label, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
             }
         }
     }
@@ -121,8 +130,10 @@ fun PfIconButton(
 }
 
 /**
- * Link — a transition, not an action. Accent, semibold, no underline; the touch target is at least 48 dp tall
- * (inline links widen their hit area without changing their look).
+ * Link — a transition, not an action. Accent, `600`, no underline.
+ * - standalone (`.pf-link-standalone`): `14/20`, at least 48 dp tall, no side padding;
+ * - [inline] (`.pf-link-inline`): continues a sentence in [inlineStyle] (the surrounding text size) and keeps its
+ *   layout size; Compose widens the touch area to 48 dp around it.
  */
 @Composable
 fun PfLink(
@@ -130,16 +141,51 @@ fun PfLink(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     inline: Boolean = false,
+    inlineStyle: TextStyle = PfTheme.type.caption,
 ) {
     val c = PfTheme.colors
+    val style = (if (inline) inlineStyle else PfTheme.type.body).copy(fontWeight = FontWeight.SemiBold)
     Box(
         modifier = modifier
             .then(if (inline) Modifier else Modifier.defaultMinSize(minHeight = PfTheme.dimens.touch))
             .clip(RoundedCornerShape(PfTheme.dimens.radiusSm))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = if (inline) 0.dp else PfTheme.dimens.space1),
-        contentAlignment = Alignment.Center,
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Text(text, style = PfTheme.type.bodyStrong, color = c.accent)
+        Text(text, style = style, color = c.accent)
     }
+}
+
+/** A piece of [PfLinkedText]: plain text or an inline link (`Pf.Link inline`). */
+sealed interface TextPart {
+    val text: String
+
+    data class Plain(override val text: String) : TextPart
+
+    /** [tag] names the link for accessibility and tests; [onClick] runs on tap. */
+    data class Link(override val text: String, val tag: String, val onClick: () -> Unit) : TextPart
+}
+
+/**
+ * A paragraph with inline links that continue the text, as the mockups' `Pf.Link inline` inside a sentence:
+ * links are accent and semibold, the rest uses [style] and [color]. Each link is a separate accessibility action.
+ */
+@Composable
+fun PfLinkedText(
+    parts: List<TextPart>,
+    modifier: Modifier = Modifier,
+    style: TextStyle = PfTheme.type.caption,
+    color: Color = PfTheme.colors.textMuted,
+    textAlign: TextAlign? = null,
+) {
+    val linkStyle = TextLinkStyles(SpanStyle(color = PfTheme.colors.accent, fontWeight = FontWeight.SemiBold))
+    val text = buildAnnotatedString {
+        parts.forEach { part ->
+            when (part) {
+                is TextPart.Plain -> append(part.text)
+                is TextPart.Link -> withLink(LinkAnnotation.Clickable(part.tag, linkStyle) { part.onClick() }) { append(part.text) }
+            }
+        }
+    }
+    Text(text, modifier = modifier, style = style, color = color, textAlign = textAlign)
 }

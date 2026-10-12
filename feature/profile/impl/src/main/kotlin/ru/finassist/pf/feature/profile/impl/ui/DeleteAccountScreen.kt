@@ -1,24 +1,11 @@
 package ru.finassist.pf.feature.profile.impl.ui
 
-import ru.finassist.pf.core.designsystem.theme.PfInsets
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,13 +14,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.api.ProfileApi
 import ru.finassist.pf.core.common.error.AppError
-import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.NoticeTone
-import ru.finassist.pf.core.designsystem.components.PfButton
 import ru.finassist.pf.core.designsystem.components.PfDialog
 import ru.finassist.pf.core.designsystem.components.PfNotice
-import ru.finassist.pf.core.designsystem.components.PfOrderedSteps
-import ru.finassist.pf.core.designsystem.components.PfPageHeader
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
@@ -41,8 +24,14 @@ import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import javax.inject.Inject
 
-data class DeleteUiState(val askConfirm: Boolean = false, val deleting: Boolean = false, val error: String? = null)
+/** The deletion dialog over the profile: shown after the passcode, busy while deleting, an error inside it. */
+data class DeleteUiState(val dialog: Boolean = false, val deleting: Boolean = false, val error: String? = null)
 
+/**
+ * Account deletion as on the mockups (`DeleteAccount*`, FIN-40): profile link → passcode (applock `Confirm`) →
+ * «Удалить аккаунт?» over the profile → «Удалить навсегда». The request runs from the dialog, which shows its
+ * progress and a failure itself.
+ */
 @HiltViewModel
 class DeleteAccountViewModel @Inject constructor(
     private val profileApi: ProfileApi,
@@ -52,10 +41,15 @@ class DeleteAccountViewModel @Inject constructor(
     private val _state = MutableStateFlow(DeleteUiState())
     val state: StateFlow<DeleteUiState> = _state
 
-    fun askConfirm(show: Boolean) = _state.update { it.copy(askConfirm = show, error = null) }
+    /** The passcode step reported success: ask for the final confirmation. */
+    fun onPasscodeConfirmed() = _state.update { DeleteUiState(dialog = true) }
 
-    /** After the passcode is confirmed. A repeat after success also returns 204 (api.md 2.5). */
+    /** «Отмена» or system back; ignored while the request runs. */
+    fun dismiss() = _state.update { if (it.deleting) it else DeleteUiState() }
+
+    /** «Удалить навсегда». A repeat after success also returns 204 (api.md 2.5). */
     fun delete() {
+        if (_state.value.deleting) return
         viewModelScope.launch {
             _state.update { it.copy(deleting = true, error = null) }
             try {
@@ -63,89 +57,35 @@ class DeleteAccountViewModel @Inject constructor(
                 tracker.track(Events.PROFILE_ACCOUNT_DELETED)
                 session.clearLocal(reason = AuthRoutes.Phone.REASON_DELETED)
             } catch (e: AppError) {
-                _state.update {
-                    it.copy(deleting = false, error = if (e is AppError.Offline) "Нет сети — аккаунт не удалён. Проверьте интернет и повторите" else "Не получилось удалить аккаунт. Попробуйте ещё раз")
-                }
+                _state.update { it.copy(deleting = false, error = if (e is AppError.Offline) OFFLINE else FAILED) }
             }
         }
     }
+
+    internal companion object {
+        const val OFFLINE = "Нет сети — удалить аккаунт не получилось. Проверьте интернет и повторите"
+        const val FAILED = "Не получилось удалить аккаунт. Попробуйте ещё раз"
+    }
 }
 
-/** «Удалить аккаунт»: what will be deleted → dialog → passcode → DELETE /v1/profile. */
+/** «Удалить аккаунт?» (mockups `DeleteAccountDialog`, `DeleteAccountBusy`, `DeleteAccountOffline`). */
 @Composable
-fun DeleteAccountScreen(
-    onBack: () -> Unit,
-    onConfirmPasscode: () -> Unit,
-    passcodeResult: State<String?>,
-    onPasscodeResultConsumed: () -> Unit,
-    vm: DeleteAccountViewModel = hiltViewModel(),
-) {
-    val state by vm.state.collectAsStateWithLifecycle()
-    val confirmed by passcodeResult
-    LaunchedEffect(confirmed) {
-        if (confirmed == "true") {
-            onPasscodeResultConsumed()
-            vm.delete()
+internal fun DeleteAccountDialog(state: DeleteUiState, onDelete: () -> Unit, onDismiss: () -> Unit) {
+    if (!state.dialog) return
+    PfDialog(
+        title = "Удалить аккаунт?",
+        description = "Удалим аккаунт, выписки вместе с файлами, операции и ваши правки категорий, историю вопросов помощнику. Восстановить их будет нельзя.",
+        confirmText = "Удалить навсегда",
+        onConfirm = onDelete,
+        onDismiss = onDismiss,
+        busy = state.deleting,
+        busyText = "Удаляем…",
+    ) {
+        Spacer(Modifier.height(PfTheme.dimens.space2))
+        Text("Копию данных можно запросить в поддержке до удаления.", style = PfTheme.type.body, color = PfTheme.colors.textMuted)
+        state.error?.let {
+            Spacer(Modifier.height(PfTheme.dimens.space3))
+            PfNotice(it, tone = NoticeTone.WARNING, alert = true)
         }
-    }
-    DeleteAccountContent(
-        state,
-        onBack = onBack,
-        onAskConfirm = vm::askConfirm,
-        onConfirmed = {
-            vm.askConfirm(false)
-            onConfirmPasscode()
-        },
-    )
-}
-
-/** [onAskConfirm] opens (true) or dismisses (false) the confirmation dialog; [onConfirmed] goes on to the passcode. */
-@Composable
-internal fun DeleteAccountContent(
-    state: DeleteUiState,
-    onBack: () -> Unit,
-    onAskConfirm: (Boolean) -> Unit,
-    onConfirmed: () -> Unit,
-) {
-    val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(ProfileTags.DELETE_SCREEN)) {
-        PfPageHeader("Удаление аккаунта", onBack = if (state.deleting) null else onBack)
-        Column(
-            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5, vertical = d.space2),
-            verticalArrangement = Arrangement.spacedBy(d.space4),
-        ) {
-            Text("Что удалим", style = PfTheme.type.title1, color = PfTheme.colors.text)
-            PfOrderedSteps(
-                listOf(
-                    "Выписки вместе с файлами и историю загрузок",
-                    "Операции и ваши правки категорий",
-                    "Историю вопросов помощнику",
-                    "Номер телефона и согласия",
-                ),
-            )
-            Text(
-                "Восстановить данные будет нельзя. Копию данных можно запросить в поддержке до удаления.",
-                style = PfTheme.type.body, color = PfTheme.colors.textMuted,
-            )
-            state.error?.let { PfNotice(it, tone = NoticeTone.WARNING, alert = true) }
-        }
-        PfButton(
-            "Удалить аккаунт",
-            onClick = { onAskConfirm(true) },
-            variant = ButtonVariant.SECONDARY,
-            block = true,
-            busy = state.deleting,
-            busyText = "Удаляем…",
-            modifier = Modifier.fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4).testTag(ProfileTags.DELETE_SUBMIT),
-        )
-    }
-    if (state.askConfirm) {
-        PfDialog(
-            title = "Удалить аккаунт?",
-            description = "Удалим все данные без возможности восстановить. Подтвердите код-паролем.",
-            confirmText = "Удалить",
-            onConfirm = onConfirmed,
-            onDismiss = { onAskConfirm(false) },
-        )
     }
 }

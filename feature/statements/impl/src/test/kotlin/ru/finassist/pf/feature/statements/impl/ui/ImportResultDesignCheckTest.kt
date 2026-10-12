@@ -131,7 +131,7 @@ class ImportResultDesignCheckTest {
         DesignCheck.capture(name, dark = dark, heightDp = heightDp) {
             ResultContent(
                 result, uploadEnabled = true, onDone = {}, onOpenSearch = {}, onOpenUnread = {}, onOpenAnalytics = {},
-                onUploadAnother = {},
+                onUploadAnother = {}, onOpenHistory = {},
             )
         }
 
@@ -144,6 +144,9 @@ class ImportResultDesignCheckTest {
     @Test fun importResultNothingNew() = capture("ImportResultNothingNew", nothingNew, 844)
 
     @Test fun importResultEmpty() = capture("ImportResultEmpty", empty, 844)
+
+    /** No artboard on the canvas yet: a file with no readable operation keeps the link to its unread lines. */
+    @Test fun importResultEmptyUnread() = capture("ImportResultEmptyUnread", empty.copy(unreadCount = 3), 844)
 
     @Test fun importResultShort() = capture("ImportResultShort", short, 1044)
 

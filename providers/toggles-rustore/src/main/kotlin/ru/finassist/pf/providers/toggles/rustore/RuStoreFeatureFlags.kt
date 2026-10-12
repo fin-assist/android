@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
+import ru.finassist.pf.core.toggles.flagsVersion
 import ru.rustore.sdk.remoteconfig.Account
 import ru.rustore.sdk.remoteconfig.AppId
 import ru.rustore.sdk.remoteconfig.ConfigRequestParameter
@@ -82,6 +83,8 @@ class RuStoreFeatureFlags @Inject constructor(
     override fun isEnabled(flag: Flag): Boolean = values[flag.key] ?: flag.defaultValue
 
     override val changes: Flow<Unit> = changesFlow
+
+    override val version: String get() = flagsVersion(values)
 
     override suspend fun setUser(userId: String?) {
         if (account == userId) return

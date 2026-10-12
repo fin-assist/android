@@ -13,7 +13,6 @@ import ru.finassist.pf.core.navigation.Navigator
 import ru.finassist.pf.feature.applock.api.AppLockRoutes
 import ru.finassist.pf.feature.assistant.api.AssistantRoutes
 import ru.finassist.pf.feature.profile.api.ProfileRoutes
-import ru.finassist.pf.feature.profile.impl.ui.DeleteAccountScreen
 import ru.finassist.pf.feature.profile.impl.ui.ProfileActions
 import ru.finassist.pf.feature.profile.impl.ui.ProfileScreen
 import ru.finassist.pf.feature.statements.api.StatementsRoutes
@@ -21,7 +20,8 @@ import javax.inject.Inject
 
 class ProfileEntry @Inject constructor() : FeatureEntry {
     override fun NavGraphBuilder.install(navigator: Navigator) {
-        composable<ProfileRoutes.Home> {
+        composable<ProfileRoutes.Home> { entry ->
+            val handle = entry.savedStateHandle
             ProfileScreen(
                 ProfileActions(
                     openHistory = { navigator.navigate(StatementsRoutes.History) },
@@ -29,15 +29,9 @@ class ProfileEntry @Inject constructor() : FeatureEntry {
                     openChat = { navigator.navigate(AssistantRoutes.Chat()) },
                     openConsent = { navigator.navigate(AssistantRoutes.Consent) },
                     openSecurity = { navigator.navigate(AppLockRoutes.Security) },
-                    openDeleteAccount = { navigator.navigate(ProfileRoutes.DeleteAccount) },
+                    // Deletion starts with the passcode; its result opens the confirmation dialog over the profile.
+                    openDeleteAccount = { navigator.navigate(AppLockRoutes.Confirm) },
                 ),
-            )
-        }
-        composable<ProfileRoutes.DeleteAccount> { entry ->
-            val handle = entry.savedStateHandle
-            DeleteAccountScreen(
-                onBack = { navigator.back() },
-                onConfirmPasscode = { navigator.navigate(AppLockRoutes.Confirm) },
                 passcodeResult = produceState<String?>(null, handle) {
                     handle.getStateFlow<String?>(AppLockRoutes.Confirm.RESULT_CONFIRMED, null).collect { value = it }
                 },

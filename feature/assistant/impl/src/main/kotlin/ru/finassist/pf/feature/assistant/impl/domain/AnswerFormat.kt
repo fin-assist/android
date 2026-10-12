@@ -1,10 +1,17 @@
 package ru.finassist.pf.feature.assistant.impl.domain
 
 import ru.finassist.pf.core.api.model.AnswerSource
+import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockRow
+import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.ChangedSince
+import ru.finassist.pf.core.api.model.ChartKind
+import ru.finassist.pf.core.api.model.ChartPoint
+import ru.finassist.pf.core.api.model.ChartValueKind
+import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.time.RussianDates
+import java.time.OffsetDateTime
 import java.time.YearMonth
 import java.time.ZoneId
 import kotlin.math.roundToInt
@@ -100,4 +107,44 @@ object AnswerFormat {
         r.text != null -> r.text
         else -> null
     }
+
+    /**
+     * Blocks as the message draws them: a chart immediately followed by rows is one group (one card — the rows
+     * describe the chart), every other block is a group of its own.
+     */
+    fun groupBlocks(blocks: List<Block>): List<List<Block>> {
+        val groups = mutableListOf<List<Block>>()
+        var i = 0
+        while (i < blocks.size) {
+            val b = blocks[i]
+            val next = blocks.getOrNull(i + 1)
+            if (b.type == BlockType.CHART && next?.type == BlockType.ROWS) {
+                groups += listOf(b, next)
+                i += 2
+            } else {
+                groups += listOf(b)
+                i += 1
+            }
+        }
+        return groups
+    }
+
+    /**
+     * Filled share of a partial month's bar: the days from `data_from` to `data_to` (inclusive, api.md 7) over the
+     * days of the month, as the analytics chart does. September with data from the 1st to the 25th → 25/30, from the
+     * 25th to the 30th → 6/30. `null` for a complete month or one without data.
+     */
+    fun partialFill(p: ChartPoint): Float? {
+        if (p.coverage.effective != Coverage.PARTIAL) return null
+        val monthStart = p.range.from.toLocalDate()
+        val monthEnd = p.range.to.toLocalDate().minusDays(1)
+        val from = p.dataFrom?.toLocalDate()?.coerceAtLeast(monthStart) ?: monthStart
+        val to = p.dataTo?.toLocalDate()?.coerceAtMost(monthEnd) ?: monthEnd
+        val covered = (to.toEpochDay() - from.toEpochDay() + 1).coerceIn(0, monthStart.lengthOfMonth().toLong())
+        return covered.toFloat() / monthStart.lengthOfMonth()
+    }
+
+    /** A chart block the app can draw: bars of a known value kind with points; otherwise its alt text is shown. */
+    fun isDrawableChart(block: Block): Boolean =
+        block.kind == ChartKind.BAR && block.valueKind != null && block.valueKind != ChartValueKind.UNKNOWN && !block.points.isNullOrEmpty()
 }

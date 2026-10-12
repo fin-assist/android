@@ -2,7 +2,13 @@ plugins {
     id("pf.android.application")
     alias(libs.plugins.kotlin.serialization)
     id("pf.hilt")
+    alias(libs.plugins.tracer)
 }
+
+// Tracer (crashes, ANR): tokens come from ~/.gradle/gradle.properties or CI env and are never committed. Without
+// an app token the SDK is switched off in every variant (README, «Ключи SDK»).
+val tracerAppToken = secret("pf.tracerAppToken")
+val tracerPluginToken = secret("pf.tracerPluginToken")
 
 android {
     namespace = "ru.finassist.pf"
@@ -19,10 +25,14 @@ android {
         testInstrumentationRunnerArguments["useTestStorageService"] = "true"
         // Empty: the real clock. The e2e build pins "now" (see below).
         buildConfigField("String", "E2E_NOW", "\"\"")
+        buildConfigField("boolean", "CRASH_REPORTING_ENABLED", tracerAppToken.isNotBlank().toString())
+        // Enables the SDK's startup provider (providers/crash-tracer manifest).
+        manifestPlaceholders["tracerEnabled"] = tracerAppToken.isNotBlank()
     }
 
     // `mock`: in-process fake backend on an OFX statement, local toggles, logcat tracking — no SDK keys needed.
-    // `prod`: real HTTP client, RuStore Remote Config, MyTracker, AppMetrica.
+    // `prod`: real HTTP client, RuStore Remote Config, MyTracker.
+    // Both: Tracer for crashes and ANR, when a token is set.
     flavorDimensions += "backend"
     productFlavors {
         create("mock") {
@@ -36,7 +46,6 @@ android {
             // SDK keys come from ~/.gradle/gradle.properties or CI env; empty → the SDK stays off.
             buildConfigField("String", "RUSTORE_REMOTE_CONFIG_APP_ID", "\"${secret("pf.rustoreRemoteConfigAppId")}\"")
             buildConfigField("String", "MYTRACKER_SDK_KEY", "\"${secret("pf.mytrackerSdkKey")}\"")
-            buildConfigField("String", "APPMETRICA_API_KEY", "\"${secret("pf.appmetricaApiKey")}\"")
         }
     }
 
@@ -99,6 +108,7 @@ dependencies {
     implementation(projects.core.toggles)
     implementation(projects.core.tracking)
     implementation(projects.core.storage)
+    implementation(projects.providers.crashTracer)
 
     // Features: the app is the only module that sees :impl modules and binds them to their :api.
     listOf("auth", "applock", "operations", "statements", "analytics", "assistant", "profile").forEach { feature ->
@@ -113,7 +123,6 @@ dependencies {
     "prodImplementation"(projects.core.network)
     "prodImplementation"(projects.providers.togglesRustore)
     "prodImplementation"(projects.providers.trackingMytracker)
-    "prodImplementation"(projects.providers.crashAppmetrica)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -139,6 +148,17 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     // The tested build type is `e2e`: `createComposeRule()` needs the test activity of this manifest there too.
     "e2eImplementation"(libs.androidx.compose.ui.test.manifest)
+}
+
+tracer {
+    create("defaultConfig") {
+        // An empty app token is the SDK's «off»: nothing is generated or uploaded for the variant.
+        isDisabled = tracerAppToken.isBlank()
+        appToken = tracerAppToken
+        pluginToken = tracerPluginToken
+        // R8 mappings of minified builds, so stack traces in the console are readable. Needs the plugin token.
+        uploadMapping = tracerPluginToken.isNotBlank()
+    }
 }
 
 /** Gradle property or environment variable (`pf.mytrackerSdkKey` → `PF_MYTRACKER_SDK_KEY`); empty when absent. */
