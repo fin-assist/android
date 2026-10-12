@@ -1,6 +1,6 @@
-# UI tests on an Android emulator: Maestro flows (.maestro/) against the mock e2e build and the native
-# instrumented tests (app/src/androidTestMock). Runs only after a merge to main (a failed run is re-run from the
-# Actions tab with «Re-run jobs»). Details: docs/e2e.md.
+# UI tests on an Android emulator: Maestro flows (.maestro/) and the native instrumented tests
+# (app/src/androidTestMock) against the mock e2e build, then their code coverage (JaCoCo, docs/testing.md).
+# Runs only after a merge to main (a failed run is re-run from the Actions tab with «Re-run jobs»). Details: docs/e2e.md.
 name: UI tests
 
 on:
@@ -46,7 +46,7 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Build APKs
-        run: ./gradlew :app:assembleMockE2e :app:assembleMockDebug :app:assembleMockDebugAndroidTest --no-daemon --console=plain
+        run: ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest --no-daemon --console=plain
 
       - name: Install Maestro
         run: |
@@ -67,6 +67,13 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -timezone Europe/Moscow
           script: scripts/e2e.sh --no-build
 
+      # Flows and instrumented tests leave JaCoCo execution data (scripts/e2e.sh pulls the flows', AGP the tests');
+      # the report does not fail the job: without data it is empty and the summary says so.
+      - name: UI test coverage report
+        if: always()
+        continue-on-error: true
+        run: ./gradlew :e2eCoverageReport --no-daemon --console=plain
+
       - name: Test report
         if: always()
         run: |
@@ -86,6 +93,8 @@ jobs:
             else
               echo "No Maestro report (the run stopped before the flows)."
             fi
+            echo
+            python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml || echo "UI test coverage: the summary script failed."
           } >> "$GITHUB_STEP_SUMMARY"
 
       # One Qase run per merge to main (project PLAINFIN, cases in scripts/qase-cases.json). Cancelled runs are not
@@ -109,6 +118,8 @@ jobs:
           name: e2e-reports
           path: |
             build/e2e/
+            build/reports/e2e-coverage/
             app/build/outputs/androidTest-results/
+            app/build/outputs/code_coverage/
             app/build/reports/androidTests/
           retention-days: 14

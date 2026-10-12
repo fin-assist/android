@@ -16,25 +16,26 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intended
 import androidx.test.espresso.intent.Intents.intending
-import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
-import androidx.test.espresso.intent.matcher.IntentMatchers.hasCategories
+import androidx.test.espresso.intent.matcher.IntentMatchers.hasComponent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import org.hamcrest.Matchers.allOf
-import org.hamcrest.Matchers.hasItem
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import ru.finassist.pf.e2e.E2eDocumentPickerActivity
 import java.io.File
 
 /**
- * The upload screen against the real system picker contract — the one part Maestro skips (the e2e build swaps
- * the picker for a list of bundled files). Espresso-Intents answers `ACTION_OPEN_DOCUMENT` with a file Uri,
+ * The upload screen against a picker result that comes back as an activity result — the one part Maestro skips
+ * (it taps the e2e build's own list of bundled files). Espresso-Intents answers the picker intent with a file Uri,
  * as DocumentsUI would, and the test checks that the file goes all the way to the import result.
  *
- * Runs on `mockDebug` under the test orchestrator with `clearPackageData`, so it always starts signed out.
+ * Runs on the mock e2e build (the tested build type, with JaCoCo probes — docs/testing.md) under the test
+ * orchestrator with `clearPackageData`, so it always starts signed out. In that build `PickStatementDocument`
+ * opens [E2eDocumentPickerActivity] instead of `ACTION_OPEN_DOCUMENT`; the system intent itself is checked by
+ * `PickStatementDocumentTest` (Robolectric) in `:feature:statements:impl`.
  */
 @RunWith(AndroidJUnit4::class)
 class StatementPickerTest {
@@ -54,13 +55,13 @@ class StatementPickerTest {
         compose.onNodeWithTag("operations.feed.upload_new").performClick()
         compose.waitForTag("statements.upload.pick")
 
-        // The bundled fixture statement. Whether it adds operations depends on what mockDebug preloaded (a local
-        // private statement, if present, goes first), so the test checks only that the import reaches its result.
-        intending(hasAction(Intent.ACTION_OPEN_DOCUMENT))
+        // The bundled fixture statement, already loaded by the e2e build: the import reaches its result («nothing
+        // new»), which is all the test checks.
+        intending(hasComponent(E2eDocumentPickerActivity::class.java.name))
             .respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(fixtureCopy())))
         compose.onNodeWithTag("statements.upload.pick").performScrollTo().performClick()
 
-        intended(allOf(hasAction(Intent.ACTION_OPEN_DOCUMENT), hasCategories(hasItem(Intent.CATEGORY_OPENABLE))))
+        intended(hasComponent(E2eDocumentPickerActivity::class.java.name))
         compose.waitForTag("statements.result", timeoutMs = 30_000)
     }
 

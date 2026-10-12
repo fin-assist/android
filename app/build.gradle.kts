@@ -14,6 +14,9 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Each instrumented test starts from clean app data (no session or passcode left by a previous run).
         testInstrumentationRunnerArguments["clearPackageData"] = "true"
+        // Coverage of the instrumented tests goes through the test storage service (`androidx.test.services`):
+        // with `clearPackageData` the app's own directory is wiped before the data could be pulled.
+        testInstrumentationRunnerArguments["useTestStorageService"] = "true"
         // Empty: the real clock. The e2e build pins "now" (see below).
         buildConfigField("String", "E2E_NOW", "\"\"")
     }
@@ -37,6 +40,10 @@ android {
         }
     }
 
+    // Instrumented tests run against the e2e build (`connectedMockE2eAndroidTest`), the one with JaCoCo probes:
+    // AGP instruments a build type only when it is the tested one. Flows and native tests then measure one APK.
+    testBuildType = "e2e"
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -53,7 +60,17 @@ android {
             matchingFallbacks += "debug"
             applicationIdSuffix = ".e2e"
             buildConfigField("String", "E2E_NOW", "\"2026-10-08T12:00:00+03:00\"")
+            // UI test coverage (FIN-48, docs/testing.md): AGP instruments the classes of this build — the app and
+            // every project module in it — with JaCoCo probes. `E2eCoverage` saves the data while the flows run;
+            // AGP pulls the instrumented tests' data itself.
+            enableAndroidTestCoverage = true
         }
+    }
+
+    // The same JaCoCo for the probes in the APK and for the report task (`:e2eCoverageReport`): execution data
+    // of one version is not read by another.
+    testCoverage {
+        jacocoVersion = libs.versions.jacoco.get()
     }
 
     buildFeatures {
@@ -110,7 +127,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
 
-    // Native UI tests (src/androidTestMock): what Maestro cannot drive, e.g. the system document picker.
+    // Native UI tests (src/androidTestMock, run on the mock e2e build): what Maestro cannot drive.
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.ext.junit)
@@ -118,6 +135,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.test.espresso.intents)
     androidTestUtil(libs.androidx.test.orchestrator)
+    androidTestUtil(libs.androidx.test.services)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 

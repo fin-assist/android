@@ -43,9 +43,10 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Screens vs mockups (snapshot comparison) | `design-check/README.md`, `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks, native gaps, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/qase-*` |
 | Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
+| UI test coverage: JaCoCo on the e2e build, scenario coverage of the flows | `docs/testing.md` («UI test coverage»); `:e2eCoverageReport` in root `build.gradle.kts`, `app/src/mockE2e/…/E2eCoverage.kt`, `scripts/ui-coverage.py` |
 
 Package root: `ru.finassist.pf`. Flavors: `mock` (default for development and CI) and `prod`. Build type `e2e`
-(mock only): debug + UI-test hooks, pinned date (docs/e2e.md).
+(mock only): debug + UI-test hooks, pinned date, JaCoCo probes; the native tests run on it (docs/e2e.md).
 
 ### Stack
 
@@ -134,7 +135,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   Google Maven, Gradle and Maven Central.
 - Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug testMockDebugUnitTest` — the same checks as CI.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally, the `UI tests` workflow in CI
-  (only after a merge to `main`; PRs never run them).
+  (only after a merge to `main`; PRs never run them). Their coverage: `./gradlew :e2eCoverageReport` after a run, then
+  `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml`; the scenario part
+  (`python3 scripts/ui-coverage.py summary`) needs no device (docs/testing.md).
 - `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
   docs check and its parser tests from CI, no Gradle needed.
 - Coverage: `./gradlew :koverXmlReportUnit` (runs the unit tests), then

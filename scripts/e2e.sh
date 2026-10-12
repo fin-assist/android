@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs the UI tests on a connected emulator or device: Maestro flows (.maestro/) against the mock e2e build,
-# then the native instrumented tests (app/src/androidTestMock) on mockDebug. Details: docs/e2e.md.
+# then the native instrumented tests (app/src/androidTestMock) on the same build. Details: docs/e2e.md.
 #
 # Usage:
 #   scripts/e2e.sh                       # everything
@@ -10,13 +10,17 @@
 #   scripts/e2e.sh --no-native           # skip the instrumented tests
 #
 # Needs: adb with one device attached, Maestro on PATH (https://maestro.dev), JDK 21 for Gradle.
-# Reports: build/e2e/ (JUnit XML, Maestro screenshots and logs of failed flows).
+# Reports: build/e2e/ (JUnit XML, Maestro screenshots and logs of failed flows, JaCoCo execution data of the
+# flows in coverage/ec). Coverage report: `./gradlew :e2eCoverageReport`, then
+# `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml` (docs/testing.md).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$ROOT/build/e2e"
 APK="$ROOT/app/build/outputs/apk/mock/e2e/app-mock-e2e.apk"
 APP_ID="ru.finassist.pf.mock.e2e"
+# Where the e2e build saves its JaCoCo execution data (E2eCoverage.kt): shared storage, so it survives clearState.
+DEVICE_COVERAGE="/sdcard/Download/pf-coverage"
 
 TAGS=""
 FLOW="$ROOT/.maestro"
@@ -53,6 +57,9 @@ adb install -r -t "$APK" >/dev/null
 
 mkdir -p "$OUT"
 adb logcat -c || true
+# Execution data of an earlier run must not count: the folder is pulled whole after the flows.
+adb shell rm -rf "$DEVICE_COVERAGE" >/dev/null 2>&1 || true
+rm -rf "$OUT/coverage"
 
 # A freshly booted CI emulator often shows «Pixel Launcher isn't responding». The dialog takes window focus
 # from the app under test, so every flow and the Espresso test fail. Hide system error dialogs for the run.
@@ -97,16 +104,24 @@ log "maestro ${maestro_args[*]}"
 status=0
 (cd "$OUT/shots" && maestro "${maestro_args[@]}") || status=$?
 adb logcat -d > "$OUT/logcat.txt" 2>/dev/null || true
+# JaCoCo execution data of every app process the flows started; `collect` keeps the newest complete file of each.
+# Never fails the run: coverage is a number next to the results, not a result.
+mkdir -p "$OUT/coverage/device"
+if adb pull "$DEVICE_COVERAGE" "$OUT/coverage/device" >/dev/null 2>&1; then
+    python3 "$ROOT/scripts/ui-coverage.py" collect "$OUT/coverage/device" "$OUT/coverage/ec" || log "warning: could not collect coverage data"
+else
+    log "warning: no coverage data on the device ($DEVICE_COVERAGE)"
+fi
 # Per-flow folders are named after the flows («…?», quotes): CI artifacts reject such paths, so ship one archive.
 if [[ -d "$OUT/maestro" ]]; then
     tar -czf "$OUT/maestro-output.tgz" -C "$OUT" maestro && rm -rf "$OUT/maestro"
 fi
 
 if [[ "$NATIVE" == 1 ]]; then
-    log "native instrumented tests (mockDebug)"
+    log "native instrumented tests (mock e2e build)"
     # The first failure decides the exit code: the Maestro status is kept if both fail.
     native=0
-    (cd "$ROOT" && ./gradlew :app:connectedMockDebugAndroidTest --console=plain) || native=$?
+    (cd "$ROOT" && ./gradlew :app:connectedMockE2eAndroidTest --console=plain) || native=$?
     [[ "$status" == 0 ]] && status=$native
     cp -r "$ROOT/app/build/outputs/androidTest-results" "$OUT/native" 2>/dev/null || true
 fi
