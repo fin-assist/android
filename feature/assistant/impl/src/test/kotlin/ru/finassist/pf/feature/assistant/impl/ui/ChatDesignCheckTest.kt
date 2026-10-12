@@ -173,7 +173,7 @@ class ChatDesignCheckTest {
         answered.copy(items = listOf(question("Сколько я трачу на Самокат?"), samokatAnswer(listOf(ChangedSince.CATEGORIES)))),
     )
 
-    @Test fun chatOffline() = capture("ChatOffline", answered.copy(offline = true), heightDp = 848)
+    @Test fun chatOffline() = capture("ChatOffline", answered.copy(offline = true), heightDp = 853)
 
     @Test fun chatLimit() = capture("ChatLimit", answered.copy(limit = limit(0)))
 }

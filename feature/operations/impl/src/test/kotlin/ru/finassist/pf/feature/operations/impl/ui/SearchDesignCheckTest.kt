@@ -89,7 +89,7 @@ class SearchDesignCheckTest {
     @Test fun searchOlder() = capture(
         "SearchOlder",
         results.copy(result = SearchResult.Found(items, totalCount = 9, range = range, hasOlderData = true)),
-        heightDp = 960,
+        heightDp = 976,
     )
 
     @Test fun searchPeriod() = capture("SearchPeriod", results.copy(sheet = SearchSheet.PERIOD), heightDp = 892, popups = true)

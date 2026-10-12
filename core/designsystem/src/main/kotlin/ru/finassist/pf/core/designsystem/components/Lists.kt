@@ -139,7 +139,8 @@ fun PfListRow(
                 when {
                     trailing != null -> trailing()
                     isSwitch -> PfSwitch(checked = switchChecked!!, onCheckedChange = null)
-                    chevron -> PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = d.iconMd, tint = c.textFaint)
+                    // `.pf-lrow-chevron`: `chevron-right` size 18, not `icon-md`.
+                    chevron -> PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = 18.dp, tint = c.textFaint)
                 }
             }
         }
@@ -239,7 +240,8 @@ fun PfDataRow(
                 } else {
                     Text(value, style = valueStyle, color = valueColor, textAlign = TextAlign.End, modifier = Modifier.widthIn(max = valueMaxWidth))
                 }
-                if (onClick != null) PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = d.iconMd, tint = c.textFaint)
+                // `.pf-drow-link`: `chevron-right` size 18.
+                if (onClick != null) PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = 18.dp, tint = c.textFaint)
             }
         }
         if (divider && !total) PfDivider()

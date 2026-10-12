@@ -149,7 +149,8 @@ fun PfTabBar(
     Column(modifier = modifier.fillMaxWidth().background(c.nav)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
         Row(
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            // `.pf-tabbar { height: 80px; box-sizing: border-box }`: border 1 + 55 + bottom inset 24.
+            modifier = Modifier.fillMaxWidth().height(55.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             items.forEachIndexed { index, item ->
@@ -159,7 +160,7 @@ fun PfTabBar(
                     modifier = Modifier
                         .weight(1f)
                         // Full height: Row aligns children to the top by default, so a wrap-content item
-                        // stuck to the top border (FIN-27). Also makes the whole 56 dp the touch target.
+                        // stuck to the top border (FIN-27). Also makes the whole row the touch target.
                         .fillMaxHeight()
                         .clickable(role = Role.Tab) { onSelect(index) }
                         .semantics { this.selected = selected }
