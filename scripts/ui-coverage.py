@@ -42,9 +42,9 @@ TAGS_OBJECT = re.compile(r"\bobject\s+\w*Tags\s*\{")
 CONST_TAG = re.compile(r'\bconst\s+val\s+\w+\s*=\s*"([^"$]+)"')
 # fun chip(screen: String) = "assistant.answer.chip.$screen"  →  prefix «assistant.answer.chip.»
 FUN_TAG = re.compile(r'\bfun\s+\w+\([^)]*\)\s*=\s*"([^"$]*)\$')
-# Literal tags outside the `…Tags` objects: `.testTag("…")`, and the tile/chart ids the analytics screen passes down
-# as `chartId = "…"` (the tile sets them as its test tag).
-LITERAL_TAG = re.compile(r'(?:\.testTag\(|\bchartId\s*=\s*)"([a-z][a-z0-9_.]*)"')
+# Literal tags outside the `…Tags` objects. A tag that reaches `testTag` through a parameter is invisible here:
+# declare it in the feature's `…Tags` object (docs/testing.md).
+LITERAL_TAG = re.compile(r'\.testTag\("([a-z][a-z0-9_.]*)"\)')
 FLOW_ID = re.compile(r'^\s*(?:-\s*)?id:\s*"([^"]+)"', re.MULTILINE)
 
 

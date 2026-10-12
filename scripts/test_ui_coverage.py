@@ -27,10 +27,10 @@ class TagParsingTest(unittest.TestCase):
             }
             object Other { const val SOMETHING = "not.in.a.tags.object" }
             Box(Modifier.testTag("analytics.tile.forecast"))
-            Tile("Доходы", tiles.income, chartId = "analytics.tile.income")
+            PfBarChart(chartId = "analytics.expense.monthly")  // an animation id, not a tag
         '''
         tags = ui.parse_tags(text)
-        self.assertEqual({"profile.screen", "analytics.tile.forecast", "analytics.tile.income"}, tags.exact)
+        self.assertEqual({"profile.screen", "analytics.tile.forecast"}, tags.exact)
         self.assertEqual({"profile.theme."}, tags.prefixes)
 
     def test_flow_ids_and_screens(self):
