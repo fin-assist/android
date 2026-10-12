@@ -111,8 +111,9 @@ class EncryptedTokenStore @Inject constructor(
         TokenStore.Session(userId, TokenPair(accessToken = access, refreshToken = refresh))
     }.onFailure { e ->
         // «No session» is the right outcome, but a silent one hides a keystore hiccup behind a sign-in that
-        // seems to go nowhere (FIN-63): the class of the failure is logged, never the blob.
-        Log.w(TAG, "stored session could not be decoded, treated as signed out: ${e.javaClass.name}")
+        // seems to go nowhere (FIN-63): the failure is logged, never the blob.
+        // The exception and its stack name the reason (bad MAC, invalidated key, a short blob); none carry the blob.
+        Log.w(TAG, "stored session could not be decoded, treated as signed out", e)
     }.getOrNull()
 
     private companion object {
