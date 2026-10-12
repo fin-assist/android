@@ -145,6 +145,9 @@ class ImportResultDesignCheckTest {
 
     @Test fun importResultEmpty() = capture("ImportResultEmpty", empty, 844)
 
+    /** No artboard on the canvas yet: a file with no readable operation keeps the link to its unread lines. */
+    @Test fun importResultEmptyUnread() = capture("ImportResultEmptyUnread", empty.copy(unreadCount = 3), 844)
+
     @Test fun importResultShort() = capture("ImportResultShort", short, 1044)
 
     @Test fun importResultUnlocked() = capture("ImportResultUnlocked", unlocked, 1044)

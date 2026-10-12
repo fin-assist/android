@@ -230,7 +230,12 @@ object AnalyticsTexts {
         val from = p.dataFrom?.toLocalDate()?.coerceAtLeast(monthStart) ?: monthStart
         val to = p.dataTo?.toLocalDate()?.coerceAtMost(monthEnd) ?: monthEnd
         val days = monthStart.lengthOfMonth()
-        val gapDays = p.gaps.sumOf { g -> (RussianDates.lastDayOf(g).toEpochDay() - g.from.toLocalDate().toEpochDay() + 1).coerceAtLeast(0) }
+        // A gap may run past the month (`gapsWithin` keeps whole gaps): only its days inside [from, to] count.
+        val gapDays = p.gaps.sumOf { g ->
+            val gapFrom = g.from.toLocalDate().coerceAtLeast(from)
+            val gapTo = RussianDates.lastDayOf(g).coerceAtMost(to)
+            (gapTo.toEpochDay() - gapFrom.toEpochDay() + 1).coerceAtLeast(0)
+        }
         val covered = (to.toEpochDay() - from.toEpochDay() + 1 - gapDays).coerceIn(0, days.toLong())
         return covered.toFloat() / days
     }

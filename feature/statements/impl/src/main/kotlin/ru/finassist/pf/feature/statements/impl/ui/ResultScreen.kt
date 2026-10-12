@@ -135,13 +135,17 @@ internal fun ResultContent(
                 .heightIn(min = viewport)
                 .padding(start = d.space5, end = d.space5, top = d.space6, bottom = d.space4),
         ) {
-            val empty = r != null && (r.operationCount == 0 || ImportNotice.EMPTY_STATEMENT in r.notices)
-            if (empty) {
+            if (r != null && (r.operationCount == 0 || ImportNotice.EMPTY_STATEMENT in r.notices)) {
                 Column(Modifier.weight(1f).fillMaxWidth().testTag(StatementsTags.RESULT_EMPTY), verticalArrangement = Arrangement.Center) {
                     PfEmptyState(
                         PfIcons.FILE_TEXT, "В выписке нет операций",
                         "За выбранный период операций не нашлось — выгрузите выписку за другой период",
                     )
+                    // A file the parser could not read at all still has its unread lines: the reasons stay reachable.
+                    if (r.unreadCount > 0) {
+                        UnreadNotice(r, onOpenUnread)
+                        Spacer(Modifier.height(d.space4))
+                    }
                     if (uploadEnabled) {
                         PfButton("Выбрать другой файл", onClick = onUploadAnother, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(StatementsTags.RESULT_UPLOAD_ANOTHER))
                         Box(Modifier.fillMaxWidth().padding(top = d.space2), contentAlignment = Alignment.Center) {
@@ -165,6 +169,18 @@ internal fun ResultContent(
             }
         }
     }
+}
+
+/** «3 строки не прочитали — их нет в суммах. Подробнее»: shown with a summary and in the empty state alike. */
+@Composable
+private fun UnreadNotice(r: ImportResult, onOpenUnread: () -> Unit) {
+    val text = ResultTexts.unread(r) ?: return
+    Spacer(Modifier.height(PfTheme.dimens.space4))
+    PfNotice(
+        text, tone = NoticeTone.WARNING,
+        parts = listOf(TextPart.Plain("$text "), TextPart.Link("Подробнее", StatementsTags.RESULT_UNREAD, onOpenUnread)),
+        modifier = Modifier.testTag(StatementsTags.RESULT_UNREAD),
+    )
 }
 
 @Composable
@@ -193,14 +209,7 @@ private fun ColumnScope.Summary(
         Text(ResultTexts.nothingNew(r), style = PfTheme.type.lead, color = c.textMuted, modifier = Modifier.padding(top = d.space2))
         return
     }
-    ResultTexts.unread(r)?.let { text ->
-        Spacer(Modifier.height(d.space4))
-        PfNotice(
-            text, tone = NoticeTone.WARNING,
-            parts = listOf(TextPart.Plain("$text "), TextPart.Link("Подробнее", StatementsTags.RESULT_UNREAD, onOpenUnread)),
-            modifier = Modifier.testTag(StatementsTags.RESULT_UNREAD),
-        )
-    }
+    UnreadNotice(r, onOpenUnread)
     r.totals?.let { t ->
         val scope = when (t.scope) {
             ImportTotalsScope.ALL -> "Все операции"

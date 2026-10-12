@@ -138,6 +138,9 @@ class AnalyticsTextsTest {
         assertEquals(2f / 30, AnalyticsTexts.partialFill(point(9, 1, Coverage.PARTIAL, dataFrom = "2026-09-29T10:00:00+03:00")))
         val gap = DateRange(t("2026-09-11T00:00:00+03:00"), t("2026-09-21T00:00:00+03:00"))
         assertEquals(20f / 30, AnalyticsTexts.partialFill(point(9, 1, Coverage.PARTIAL, gaps = listOf(gap))))
+        // A gap that runs into the next months counts only its September days: data to the 20th, gap from the 21st.
+        val longGap = DateRange(t("2026-09-21T00:00:00+03:00"), t("2026-11-10T00:00:00+03:00"))
+        assertEquals(20f / 30, AnalyticsTexts.partialFill(point(9, 1, Coverage.PARTIAL, dataTo = "2026-09-20T18:00:00+03:00", gaps = listOf(longGap))))
         assertNull(AnalyticsTexts.partialFill(point(8, 89_700)))
         assertNull(AnalyticsTexts.partialFill(point(10, null)))
     }
