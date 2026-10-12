@@ -15,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToLog
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.intent.Intents
@@ -74,8 +75,15 @@ class StatementPickerTest {
     private fun signInWithExistingAccount() {
         compose.waitForTag("auth.phone.input")
         compose.onNodeWithTag("auth.phone.input").performTextInput(EXISTING_PHONE)
-        compose.onNodeWithTag("auth.phone.submit").performClick()
-        // The mock «receives the call» after a few seconds, then asks for a new passcode twice.
+        // Submit through the keyboard's «Готово» (the same `onSubmit` as «Продолжить»), not a click: typing focuses
+        // the field, the keyboard slides in and the sign-in screen (`imePadding`) moves the button up with it. A click
+        // computed during that animation lands where the button was and is dropped — FIN-63, run 38304375031: the
+        // number was never sent. An IME action has no coordinates.
+        compose.onNodeWithTag("auth.phone.input").performImeAction()
+        // Step 1: the number is accepted — the call screen, or already the passcode setup if the mock «received the
+        // call» between two polls. A miss here is the submit, not the session switch below.
+        compose.waitUntilTagged("auth.call", "applock.setup", timeoutMs = 10_000)
+        // Step 2: the mock «receives the call» after a few seconds, then asks for a new passcode twice.
         val watch = MainThreadWatch().also { it.start() }
         val setupShown = compose.hasTag("applock.setup", waitMs = 30_000)
         val report = watch.stop()
@@ -116,16 +124,24 @@ class StatementPickerTest {
      * and how the main thread behaved during the whole wait — a screen that never changed can also mean a starved
      * main thread (FIN-63), which a probe taken after the fact would not see.
      */
-    private fun androidx.compose.ui.test.junit4.ComposeTestRule.waitForTag(tag: String, timeoutMs: Long = 10_000) {
+    private fun androidx.compose.ui.test.junit4.ComposeTestRule.waitForTag(tag: String, timeoutMs: Long = 10_000) =
+        waitUntilTagged(tag, timeoutMs = timeoutMs)
+
+    /** [waitForTag] for any of [tags]: passes as soon as one of them is on screen. */
+    private fun androidx.compose.ui.test.junit4.ComposeTestRule.waitUntilTagged(
+        vararg tags: String,
+        timeoutMs: Long = 10_000,
+    ) {
         val watch = MainThreadWatch().also { it.start() }
         try {
-            waitUntil(timeoutMs) { hasTag(tag) }
+            waitUntil(timeoutMs) { tags.any { hasTag(it) } }
         } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
             val report = watch.stop()
             Log.w("PfTest", report)
             // After the probe: fetching semantics itself waits for the UI thread.
             onRoot(useUnmergedTree = true).printToLog("PfTest")
-            val message = "no node with tag $tag after $timeoutMs ms; semantics tree is in logcat (PfTest); $report"
+            val wanted = tags.joinToString(" / ")
+            val message = "no node with tag $wanted after $timeoutMs ms; semantics tree is in logcat (PfTest); $report"
             throw AssertionError(message, e)
         } finally {
             watch.stop()
