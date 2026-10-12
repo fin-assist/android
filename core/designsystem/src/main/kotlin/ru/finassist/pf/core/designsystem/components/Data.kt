@@ -57,8 +57,9 @@ import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 
 /**
- * Dashed frame: 2 dp with 8/6 dp dashes for locked tiles and cards; the file drop uses 1.5 dp with short
- * 4.5/4.5 dp dashes, as a browser draws `1.5px dashed`.
+ * Dashed frame: 2 dp with 8/6 dp dashes for locked tiles and cards; the file drop uses a 1 dp line with 3/2 dp
+ * dashes — what the mockups render for `1.5px dashed` (the browser rounds the stroke down and keeps the dashes
+ * about twice the width).
  */
 internal fun Modifier.dashedBorder(
     color: Color,
@@ -105,6 +106,8 @@ fun PfStatTile(
             .background(c.surface, shape)
             .then(if (locked) Modifier.dashedBorder(c.borderStrong, PfTheme.dimens.radiusXl) else Modifier.border(1.dp, c.border, shape))
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            // The frame sits outside the padding, as a CSS border does (2 px when locked).
+            .padding(if (locked) 2.dp else 1.dp)
             .padding(PfTheme.dimens.space3)
             .semantics(mergeDescendants = true) { contentDescription = spoken },
     ) {
@@ -237,6 +240,8 @@ fun PfInsightCard(
             .clip(shape)
             .then(if (locked) Modifier.dashedBorder(c.borderStrong, d.radiusXl) else Modifier.background(c.surface, shape).border(1.dp, c.border, shape))
             .then(if (clickable) Modifier.clickable(role = Role.Button, onClick = onClick!!) else Modifier)
+            // The frame sits outside the padding, as a CSS border does (2 px when locked).
+            .padding(if (locked) 2.dp else 1.dp)
             .padding(d.space4),
         horizontalArrangement = Arrangement.spacedBy(d.space3),
         verticalAlignment = Alignment.Top,
@@ -294,7 +299,9 @@ fun PfAskCard(
             .background(c.surface, shape)
             .border(1.dp, c.border, shape)
             .clickable(role = Role.Button, onClick = onClick)
+            // `.pf-ask-quiet`: `min-height: 72px` with `box-sizing: border-box` — the 1 px frame outside the padding.
             .defaultMinSize(minHeight = 72.dp)
+            .padding(1.dp)
             .padding(PfTheme.dimens.space4)
             .semantics(mergeDescendants = true) {},
         verticalAlignment = Alignment.CenterVertically,
@@ -388,9 +395,12 @@ fun PfFileDrop(
             .background(c.surface, shape)
             .then(
                 if (busy) Modifier.border(1.dp, c.border, shape)
-                else Modifier.dashedBorder(c.borderStrong, d.radiusXl, width = 1.5.dp, dash = 4.5.dp, gap = 4.5.dp),
+                else Modifier.dashedBorder(c.borderStrong, d.radiusXl, width = 1.dp, dash = 3.dp, gap = 2.dp),
             )
             .then(if (!busy) Modifier.clickable(role = Role.Button, onClick = onPick) else Modifier)
+            // `.pf-drop`: `border: 1.5px dashed` outside `padding: 24px 16px`; the frame rounds to 1 dp of ink, the
+            // 1.5 dp of space it takes stays.
+            .padding(1.5.dp)
             .padding(horizontal = d.space4, vertical = d.space6),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(d.space2),

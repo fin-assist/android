@@ -62,6 +62,7 @@ import ru.finassist.pf.core.designsystem.components.PfChipRow
 import ru.finassist.pf.core.designsystem.components.PfDataRow
 import ru.finassist.pf.core.designsystem.components.PfEmptyState
 import ru.finassist.pf.core.designsystem.components.PfLink
+import ru.finassist.pf.core.designsystem.components.PfNoticeLink
 import ru.finassist.pf.core.designsystem.components.PfNotice
 import ru.finassist.pf.core.designsystem.components.NoticeTone
 import ru.finassist.pf.core.designsystem.components.PfPageHeader
@@ -215,7 +216,7 @@ internal fun ChatContent(
                 "Не получилось отправить вопрос",
                 tone = NoticeTone.WARNING,
                 modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2),
-                action = { PfLink("Повторить", onClick = actions.onRetryAfterFailure) },
+                action = { PfNoticeLink("Повторить", onClick = actions.onRetryAfterFailure) },
             )
         }
         // «Осталось 3 из 5 вопросов на сегодня» above the composer; with the limit spent the composer says it itself.
@@ -330,10 +331,11 @@ private fun BlockGroupView(group: List<Block>, chartId: String) {
 private fun BlockView(block: Block, chartId: String) {
     val c = PfTheme.colors
     when (block.type) {
-        BlockType.TEXT -> Text(markdown(block.text.orEmpty()), style = PfTheme.type.body, color = c.text)
+        // `.pf-msg-body`: 15/20 (`lead`), `<strong>` is 700.
+        BlockType.TEXT -> Text(markdown(block.text.orEmpty()), style = PfTheme.type.lead, color = c.text)
         BlockType.CHART -> {
             if (!AnswerFormat.isDrawableChart(block)) {
-                Text(block.altText.orEmpty(), style = PfTheme.type.body, color = c.text)
+                Text(block.altText.orEmpty(), style = PfTheme.type.lead, color = c.text)
             } else {
                 PfCard { ChartBody(block, chartId) }
             }
@@ -346,7 +348,7 @@ private fun BlockView(block: Block, chartId: String) {
                 }
             }
         }
-        BlockType.UNKNOWN -> block.altText?.let { Text(it, style = PfTheme.type.body, color = c.text) }
+        BlockType.UNKNOWN -> block.altText?.let { Text(it, style = PfTheme.type.lead, color = c.text) }
     }
 }
 
@@ -393,7 +395,7 @@ private fun markdown(text: String): AnnotatedString = buildAnnotatedString {
             }
         }
         spans.forEach { s ->
-            if (s.bold) withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(s.text) } else append(s.text)
+            if (s.bold) withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(s.text) } else append(s.text)
         }
         if (part is TextPart.Paragraph) append("\n")
     }

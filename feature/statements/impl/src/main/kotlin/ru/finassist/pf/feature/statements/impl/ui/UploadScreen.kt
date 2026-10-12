@@ -368,11 +368,12 @@ private fun ColumnScope.ErrorBlock(phase: UploadPhase.Error, onPickAnother: () -
 private fun FileRow(label: String, value: String, divider: Boolean) {
     val d = PfTheme.dimens
     Column {
-        Row(Modifier.fillMaxWidth().padding(vertical = d.space3), horizontalArrangement = Arrangement.spacedBy(d.space4)) {
+        // `.pf-card-flush { padding: 0 16px }`: the row and its divider keep 16 dp from the card's frame.
+        Row(Modifier.fillMaxWidth().padding(horizontal = d.space4, vertical = d.space3), horizontalArrangement = Arrangement.spacedBy(d.space4)) {
             Text(label, style = PfTheme.type.body, color = PfTheme.colors.textMuted)
             Text(value, style = PfTheme.type.body, color = PfTheme.colors.text, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
         }
-        if (divider) PfDivider()
+        if (divider) PfDivider(Modifier.padding(horizontal = d.space4))
     }
 }
 

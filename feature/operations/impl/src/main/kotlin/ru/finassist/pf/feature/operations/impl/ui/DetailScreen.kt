@@ -140,6 +140,7 @@ internal fun DetailContent(
         PfBottomSheet(
             "Категория",
             onDismiss = onClosePicker,
+            scrollable = false,
             footer = {
                 state.pickerError?.let {
                     PfNotice(it, tone = NoticeTone.WARNING, alert = true)
@@ -170,6 +171,7 @@ internal fun DetailContent(
                 onSelect = { onChoose(it.id) },
                 onlyAssignable = true,
                 initialQuery = pickerQuery,
+                modifier = Modifier.weight(1f, fill = false),
             )
         }
     }

@@ -53,6 +53,7 @@ import ru.finassist.pf.core.designsystem.components.NoticeTone
 import ru.finassist.pf.core.designsystem.components.PfButton
 import ru.finassist.pf.core.designsystem.components.PfCard
 import ru.finassist.pf.core.designsystem.components.PfLink
+import ru.finassist.pf.core.designsystem.components.PfNoticeLink
 import ru.finassist.pf.core.designsystem.components.PfNotice
 import ru.finassist.pf.core.designsystem.components.PfStatusHero
 import ru.finassist.pf.core.designsystem.theme.PfTheme
@@ -243,7 +244,7 @@ private fun ColumnScope.Summary(
         PfNotice(
             "В выписке нет расходов — возможно, выгружен не тот счёт",
             tone = NoticeTone.WARNING,
-            action = onUploadAnother?.let { upload -> { PfLink("Выбрать другой файл", onClick = upload, modifier = Modifier.testTag(StatementsTags.RESULT_UPLOAD_ANOTHER)) } },
+            action = onUploadAnother?.let { upload -> { PfNoticeLink("Выбрать другой файл", onClick = upload, modifier = Modifier.testTag(StatementsTags.RESULT_UPLOAD_ANOTHER)) } },
         )
     }
     ResultTexts.coverageNotice(r)?.let { n ->
@@ -252,7 +253,7 @@ private fun ColumnScope.Summary(
             n.text,
             title = n.title,
             tone = if (n.positive) NoticeTone.POSITIVE else NoticeTone.INFO,
-            action = onUploadAnother?.let { upload -> { PfLink("Загрузить прошлые месяцы", onClick = upload, modifier = Modifier.testTag(StatementsTags.RESULT_UPLOAD_MORE)) } },
+            action = onUploadAnother?.let { upload -> { PfNoticeLink("Загрузить прошлые месяцы", onClick = upload, modifier = Modifier.testTag(StatementsTags.RESULT_UPLOAD_MORE)) } },
         )
     }
 }
@@ -267,6 +268,8 @@ private fun TotalTile(label: String, value: String, positive: Boolean, modifier:
         modifier
             .background(c.surface, shape)
             .border(1.dp, c.border, shape)
+            // The 1 px frame sits outside `padding: 12px 16px`, as in `PfCard`.
+            .padding(1.dp)
             .padding(horizontal = d.space4, vertical = d.space3),
     ) {
         Text(label, style = PfTheme.type.caption, color = c.textMuted)
@@ -289,7 +292,8 @@ private fun FindingRow(f: Finding, divider: Boolean, onSort: (() -> Unit)?) {
         FindingTint.MUTED -> c.textMuted
     }
     Column {
-        Row(Modifier.fillMaxWidth().padding(vertical = d.space3), horizontalArrangement = Arrangement.spacedBy(d.space3), verticalAlignment = Alignment.Top) {
+        // `.pf-card-flush { padding: 0 16px }`: the row and its divider keep 16 dp from the card's frame.
+        Row(Modifier.fillMaxWidth().padding(horizontal = d.space4, vertical = d.space3), horizontalArrangement = Arrangement.spacedBy(d.space3), verticalAlignment = Alignment.Top) {
             PfIcon(f.icon, contentDescription = null, size = d.iconMd, tint = tint)
             Column(Modifier.weight(1f)) {
                 if (f.uncategorized && onSort != null) {
@@ -305,6 +309,6 @@ private fun FindingRow(f: Finding, divider: Boolean, onSort: (() -> Unit)?) {
                 }
             }
         }
-        if (divider) PfDivider()
+        if (divider) PfDivider(Modifier.padding(horizontal = d.space4))
     }
 }

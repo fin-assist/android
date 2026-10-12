@@ -36,6 +36,7 @@ import ru.finassist.pf.core.designsystem.components.PfButton
 import ru.finassist.pf.core.designsystem.components.PfEmptyState
 import ru.finassist.pf.core.designsystem.components.PfIconButton
 import ru.finassist.pf.core.designsystem.components.PfLink
+import ru.finassist.pf.core.designsystem.components.PfNoticeLink
 import ru.finassist.pf.core.designsystem.components.PfMonthSummary
 import ru.finassist.pf.core.designsystem.components.PfNotice
 import ru.finassist.pf.core.designsystem.components.PfTabHeader
@@ -130,7 +131,7 @@ internal fun FeedContent(
                                 "Операции в приложении по ${RussianDates.day(lastOperation, today.year)} — с тех пор прошло больше двух недель",
                                 tone = NoticeTone.INFO,
                                 modifier = Modifier.padding(top = d.space3),
-                                action = if (state.uploadEnabled) ({ PfLink("Загрузить новую выписку", onClick = onUpload, inline = true, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD_NEW)) }) else null,
+                                action = if (state.uploadEnabled) ({ PfNoticeLink("Загрузить новую выписку", onClick = onUpload, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD_NEW)) }) else null,
                             )
                         }
                     } else if (lastOperation != null) {

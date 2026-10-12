@@ -68,6 +68,7 @@ import ru.finassist.pf.core.designsystem.components.PfDataRow
 import ru.finassist.pf.core.designsystem.components.PfEmptyState
 import ru.finassist.pf.core.designsystem.components.PfInsightCard
 import ru.finassist.pf.core.designsystem.components.PfLink
+import ru.finassist.pf.core.designsystem.components.PfNoticeLink
 import ru.finassist.pf.core.designsystem.components.PfNotice
 import ru.finassist.pf.core.designsystem.components.PfOptionRow
 import ru.finassist.pf.core.designsystem.components.PfPageHeader
@@ -197,7 +198,7 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
             PfNotice(
                 "Операции в приложении по ${RussianDates.day(last.toLocalDate())} — с тех пор прошло больше двух недель",
                 tone = NoticeTone.INFO,
-                action = if (blocks.upload) ({ PfLink("Загрузить новую выписку", onClick = actions.openUpload) }) else null,
+                action = if (blocks.upload) ({ PfNoticeLink("Загрузить новую выписку", onClick = actions.openUpload) }) else null,
             )
         }
         Gap(d.space3)
@@ -516,14 +517,16 @@ private fun ExpenseBreakdown(
         return
     }
     if (total != null) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(d.space3)) {
-            Text("Всего · $totalCaption", style = PfTheme.type.body, color = PfTheme.colors.textMuted, modifier = Modifier.weight(1f))
-            PfAmountText(total.format(), style = PfTheme.type.amountMd, color = PfTheme.colors.text)
+        // Mockup: `align-items: baseline` — the caption (14/20) and the amount (20/24) share a baseline.
+        Row(horizontalArrangement = Arrangement.spacedBy(d.space3)) {
+            Text("Всего · $totalCaption", style = PfTheme.type.body, color = PfTheme.colors.textMuted, modifier = Modifier.weight(1f).alignByBaseline())
+            PfAmountText(total.format(), style = PfTheme.type.amountMd, color = PfTheme.colors.text, modifier = Modifier.alignByBaseline())
         }
     }
-    Gap(d.space2)
-    // The coachmark lies over the card (mockup `AnalyticsHintCategories`).
+    // The coachmark lies over the card (mockup `AnalyticsHintCategories`): its 12 dp offset counts from the «Всего»
+    // row, so the 8 dp gap to the card is inside the wrapper.
     WithCoachmark(show = state.hint == AnalyticsHint.CATEGORIES, text = "Категории проставили мы — любую можно поправить в операции", vm = vm) {
+        Gap(d.space2)
         CategoryCard(b, state, openSearch)
     }
     if (b.items.size > TOP_CATEGORIES) {

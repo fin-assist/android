@@ -26,8 +26,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -122,11 +128,17 @@ fun PfBarChart(
     Column(modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = description }) {
         val hasNegative = points.any { (it.value ?: 0f) < 0f }
         val baselineFraction = if (hasNegative) 0.5f else 1f
-        Row(Modifier.fillMaxWidth().height(height + if (showValues) 20.dp else 0.dp), horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2)) {
+        // `.pf-chart-col`: a bottom-aligned column with 4 dp gaps — with `showValues` the value (16 dp) sits 4 dp
+        // above its own bar, so the row is 20 dp taller than the tallest bar.
+        val valueSpace = if (showValues) 20.dp else 0.dp
+        Row(Modifier.fillMaxWidth().height(height + valueSpace), horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2)) {
             points.forEachIndexed { i, p ->
                 val progress = anims.getOrNull(i)?.value ?: 0f
                 val color = if (i == highlight) c.accent else c.borderStrong
-                Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                // Bar geometry in fractions of the chart height: top edge and height of the bar.
+                val barFraction = abs(progress) * (if (hasNegative) 0.5f else 1f)
+                val topFraction = if (progress >= 0f) baselineFraction - barFraction else baselineFraction
+                Box(Modifier.weight(1f).fillMaxWidth().height(height + valueSpace)) {
                     if (showValues) {
                         val labelAlpha = ((progress / (targets.getOrNull(i)?.takeIf { it != 0f } ?: 1f)) - 0.7f).coerceIn(0f, 0.3f) / 0.3f
                         val on = i == highlight
@@ -135,13 +147,18 @@ fun PfBarChart(
                             style = if (on) PfTheme.type.hint.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.hint,
                             color = (if (on) c.accent else c.textMuted).copy(alpha = if (reduced) 1f else labelAlpha),
                             maxLines = 1, softWrap = false, textAlign = TextAlign.Center,
-                            modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally, unbounded = true),
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                // The text's 16 dp line ends 4 dp above the bar: its top is at the bar's top minus 20 dp,
+                                // which, with the 20 dp reserved above the chart, is the bar's top within the chart.
+                                .offset { IntOffset(0, (height.toPx() * topFraction).roundToInt()) }
+                                .wrapContentWidth(Alignment.CenterHorizontally, unbounded = true),
                         )
                     }
-                    Canvas(Modifier.fillMaxWidth().height(height)) {
+                    Canvas(Modifier.fillMaxWidth().height(height).align(Alignment.BottomCenter)) {
+                        val barHeight = barFraction * size.height
+                        val top = topFraction * size.height
                         val baselineY = size.height * baselineFraction
-                        val barHeight = abs(progress) * (if (hasNegative) size.height / 2 else size.height)
-                        val top = if (progress >= 0f) baselineY - barHeight else baselineY
                         // `.pf-chart-bar { border-radius: var(--space-2) }`
                         val radius = CornerRadius(8.dp.toPx())
                         // Empty column: nothing is drawn, the gap itself says «no data».
@@ -152,7 +169,10 @@ fun PfBarChart(
                             val fill = p.partialFill.coerceIn(0.25f, 0.75f).let { (it * 4).roundToInt() / 4f }
                             val fillHeight = barHeight * fill
                             val fillTop = if (progress >= 0f) baselineY - fillHeight else baselineY
-                            drawRoundRect(color, topLeft = Offset(0f, fillTop), size = Size(size.width, fillHeight), cornerRadius = radius)
+                            // `.pf-chart-bar-partial`: a gradient inside the rounded outline — the fill's top edge is
+                            // flat, only the outline's corners are round.
+                            val outline = Path().apply { addRoundRect(RoundRect(Rect(Offset(0f, top), Size(size.width, barHeight)), radius)) }
+                            clipPath(outline) { drawRect(color, topLeft = Offset(0f, fillTop), size = Size(size.width, fillHeight)) }
                         } else {
                             drawRoundRect(color, topLeft = Offset(0f, top), size = Size(size.width, barHeight), cornerRadius = radius)
                         }

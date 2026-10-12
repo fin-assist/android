@@ -54,7 +54,7 @@ import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 
-/** Text field with an always-visible label, 52 dp, `border-strong` frame, `accent` in focus, error in `warning-text`. */
+/** Text field with an always-visible label, 52 dp, 1 dp `border-strong` frame (`accent` in focus), 2 dp `warning-text` on error. */
 @Composable
 fun PfTextField(
     value: String,
@@ -151,14 +151,17 @@ private fun FieldFrame(
         Text(label, style = PfTheme.type.caption.copy(fontWeight = FontWeight.SemiBold), color = c.textMuted)
         // `.pf-field { gap: var(--space-2) }`: label, frame and hint/error are 8 dp apart.
         Spacer(Modifier.height(PfTheme.dimens.space2))
+        // `.pf-input`: 1 px `border-strong` frame, `accent` in focus (colour only), 2 px `warning-text` on error;
+        // `box-sizing: border-box` with `padding: 0 16px` puts the text 16 dp inside the frame, not the outer edge.
+        val borderWidth = if (error != null) 2.dp else 1.dp
         field(
             interaction,
             Modifier
                 .fillMaxWidth()
                 .height(PfTheme.dimens.field)
                 .background(c.surface, RoundedCornerShape(PfTheme.dimens.radiusMd))
-                .border(if (error != null || focused) 2.dp else 1.dp, borderColor, RoundedCornerShape(PfTheme.dimens.radiusMd))
-                .padding(horizontal = PfTheme.dimens.space4)
+                .border(borderWidth, borderColor, RoundedCornerShape(PfTheme.dimens.radiusMd))
+                .padding(horizontal = PfTheme.dimens.space4 + borderWidth)
                 .semantics { if (error != null) this.error(error) }
                 .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         ) { inner ->
@@ -324,9 +327,10 @@ fun PfSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: 
 
 /**
  * Checkbox with a label on the right (mockup `.pf-check`); unchecked by default for consents (152-ФЗ). The row
- * takes the height of its content — in the mockup a 12 dp padding is cancelled by a −12 dp margin — and Compose
- * widens the touch area to 48 dp. Label `13/20`; the error (`12/16 600`) is 4 dp below, under the label. The box
- * keeps the app's own look (owner's decision on FIN-40: the mockup shows a browser-native checkbox).
+ * is at least 24 dp — in the mockup `min-height: 48px` with a 12 dp padding cancelled by a −12 dp margin — and
+ * grows with the label; Compose widens the touch area to 48 dp. Label `13/20`; the error (`12/16 600`) is 4 dp
+ * below the row, under the label. The box keeps the app's own look (owner's decision on FIN-40: the mockup
+ * showed a browser-native checkbox; since FIN-55 the canvas draws the same box).
  */
 @Composable
 fun PfCheckbox(
@@ -342,6 +346,7 @@ fun PfCheckbox(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .defaultMinSize(minHeight = d.space6)
                 .clickable(role = Role.Checkbox) { onCheckedChange(!checked) }
                 .semantics(mergeDescendants = true) {
                     toggleableState = if (checked) ToggleableState.On else ToggleableState.Off

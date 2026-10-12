@@ -224,7 +224,7 @@ internal fun SearchContent(
 
     when (state.sheet) {
         SearchSheet.PERIOD -> PeriodSheet(f, state.allTime, state.windowFrom, onDismiss = { actions.openSheet(null) }, onPick = actions.setPeriod)
-        SearchSheet.CATEGORY -> PfBottomSheet("Категория", onDismiss = { actions.openSheet(null) }) {
+        SearchSheet.CATEGORY -> PfBottomSheet("Категория", onDismiss = { actions.openSheet(null) }, scrollable = false) {
             if (f.categoryId != null) {
                 PfOptionRow("Все категории", selected = false, onClick = { actions.setCategory(null) }, modifier = Modifier.testTag(OperationsTags.CATEGORY_ALL))
             }
@@ -238,6 +238,7 @@ internal fun SearchContent(
                 selectedId = f.categoryId,
                 onSelect = { actions.setCategory(it.id) },
                 onlyAssignable = false,
+                modifier = Modifier.weight(1f, fill = false),
             )
         }
         SearchSheet.AMOUNT -> AmountSheet(f, onDismiss = { actions.openSheet(null) }, onApply = actions.setAmount)
