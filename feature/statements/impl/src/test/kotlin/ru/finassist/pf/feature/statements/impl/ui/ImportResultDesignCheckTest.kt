@@ -154,13 +154,17 @@ class ImportResultDesignCheckTest {
 
     @Test fun importResultNoExpenses() = capture("ImportResultNoExpenses", noExpenses, 844)
 
-    /** The mockup opens the unread lines as a sheet over the result; the app opens them as a separate screen. */
-    @Test fun importResultRepeatSheet() {
+    /** Artboards `UnreadLines` / `UnreadLinesDark` (FIN-59): the separate screen the app opens from the result. */
+    @Test fun unreadLines() = DesignCheck.capture("UnreadLines", heightDp = 844) { UnreadLinesContent(unreadState(), copied = false, onBack = {}, onRetry = {}, onReport = {}) }
+
+    @Test fun unreadLinesDark() = DesignCheck.capture("UnreadLinesDark", dark = true, heightDp = 844) { UnreadLinesContent(unreadState(), copied = false, onBack = {}, onRetry = {}, onReport = {}) }
+
+    private fun unreadState(): UnreadUiState {
         fun line(n: Int, date: String?, reason: UnreadReason, name: String) = UnreadLine(
             uploadId = "u2", fileName = "operations_2026.ofx", lineNumber = n, date = date?.let(::t), reason = reason,
             reasonName = name,
         )
-        val state = UnreadUiState(
+        return UnreadUiState(
             loading = false,
             lines = listOf(
                 line(214, "2026-09-03T12:00:00+03:00", UnreadReason.BAD_AMOUNT, "Не распознали сумму"),
@@ -171,8 +175,5 @@ class ImportResultDesignCheckTest {
             ),
             userId = "u1",
         )
-        DesignCheck.capture("ImportResultRepeatSheet", heightDp = 1028) {
-            UnreadLinesContent(state, copied = false, onBack = {}, onRetry = {}, onReport = {})
-        }
     }
 }

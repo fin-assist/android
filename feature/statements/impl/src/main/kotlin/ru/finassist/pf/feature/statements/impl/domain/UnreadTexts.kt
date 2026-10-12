@@ -3,7 +3,7 @@ package ru.finassist.pf.feature.statements.impl.domain
 import ru.finassist.pf.core.common.time.RussianDates
 import java.time.LocalDate
 
-/** Texts of the unread lines list (mockup `ImportResultRepeatSheet`). */
+/** Texts of the unread lines list (mockup `UnreadLines`). */
 object UnreadTexts {
     /**
      * «В файле operations_2026.ofx эти строки не прочитали — их нет в суммах. Остальные операции загружены.» Lines
