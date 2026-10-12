@@ -128,7 +128,10 @@ class StatementPickerTest {
         waitUntilTagged(tag, timeoutMs = timeoutMs)
 
     /** [waitForTag] for any of [tags]: passes as soon as one of them is on screen. */
-    private fun androidx.compose.ui.test.junit4.ComposeTestRule.waitUntilTagged(vararg tags: String, timeoutMs: Long = 10_000) {
+    private fun androidx.compose.ui.test.junit4.ComposeTestRule.waitUntilTagged(
+        vararg tags: String,
+        timeoutMs: Long = 10_000,
+    ) {
         val watch = MainThreadWatch().also { it.start() }
         try {
             waitUntil(timeoutMs) { tags.any { hasTag(it) } }
@@ -137,7 +140,8 @@ class StatementPickerTest {
             Log.w("PfTest", report)
             // After the probe: fetching semantics itself waits for the UI thread.
             onRoot(useUnmergedTree = true).printToLog("PfTest")
-            val message = "no node with tag ${tags.joinToString(" / ")} after $timeoutMs ms; semantics tree is in logcat (PfTest); $report"
+            val wanted = tags.joinToString(" / ")
+            val message = "no node with tag $wanted after $timeoutMs ms; semantics tree is in logcat (PfTest); $report"
             throw AssertionError(message, e)
         } finally {
             watch.stop()
