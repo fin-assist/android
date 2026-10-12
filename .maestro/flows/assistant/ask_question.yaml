@@ -19,7 +19,7 @@ tags:
     visible:
       id: "assistant.chat"
     timeout: 10000
-- assertVisible: ".*осталось 5 из 5.*"
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
 
 # A merchant from the fixture. The first question asks for consent (off by default, the server answers
 # CONSENT_REQUIRED); after it the same question goes out by itself.
@@ -34,7 +34,7 @@ tags:
     timeout: 10000
 - tapOn:
     id: "assistant.consent.submit"
-- assertVisible: "Отметьте согласие, чтобы задавать вопросы помощнику"
+- assertVisible: "Без согласия помощник не сможет ответить"
 - tapOn:
     id: "assistant.consent.checkbox"
 - tapOn:
@@ -51,7 +51,7 @@ tags:
     visible:
       id: "assistant.answer"
     timeout: 20000
-- assertVisible: ".*осталось 4 из 5.*"
+- assertVisible: ".*[Оо]сталось 4 из 5.*"
 - assertVisible:
     id: "assistant.answer.chip.operations"
 - assertVisible:

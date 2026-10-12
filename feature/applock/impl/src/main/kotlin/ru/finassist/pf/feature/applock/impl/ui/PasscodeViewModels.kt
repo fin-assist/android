@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import ru.finassist.pf.core.common.time.pluralize
 import ru.finassist.pf.feature.applock.api.AppLock
 import ru.finassist.pf.feature.applock.api.BiometricAvailability
 import ru.finassist.pf.feature.applock.api.PASSCODE_LENGTH
@@ -109,11 +110,11 @@ class PasscodeEntryViewModel @Inject constructor(private val appLock: AppLock) :
 
 internal const val CONFIRM_WRONG_MESSAGE = "Неверный код"
 
-internal const val MISMATCH_MESSAGE = "Коды не совпали — придумайте код заново"
+internal const val MISMATCH_MESSAGE = "Коды не совпадают — введите ещё раз"
 
 internal fun wrongCodeMessage(attemptsLeft: Int): String =
-    if (attemptsLeft == 1) "Неверный код. Осталась последняя попытка — после неё придётся войти заново"
-    else "Неверный код. Осталось попыток: $attemptsLeft"
+    if (attemptsLeft == 1) "Неверный код. Осталась 1 попытка. После неё войти можно будет только по номеру телефона"
+    else "Неверный код. Осталось $attemptsLeft ${pluralize(attemptsLeft, "попытка", "попытки", "попыток")}"
 
 data class UnlockUiState(
     val entered: String = "",
@@ -177,6 +178,7 @@ data class ConfirmUiState(
     val entered: String = "",
     val error: String? = null,
     val busy: Boolean = false,
+    val askForgot: Boolean = false,
     val confirmed: Boolean = false,
     val biometric: BiometricAvailability = BiometricAvailability.NONE,
     val biometricEnabled: Boolean = false,
@@ -195,19 +197,32 @@ class ConfirmPasscodeViewModel @Inject constructor(private val appLock: AppLock)
 
     fun digit(d: Int) {
         val s = _state.value
-        if (s.busy || s.entered.length >= PASSCODE_LENGTH) return
-        val next = s.entered + d
+        // After a wrong code the dots stay filled (in the warning colour); the next digit starts a new code.
+        val entered = if (s.error != null) "" else s.entered
+        if (s.busy || entered.length >= PASSCODE_LENGTH) return
+        val next = entered + d
         _state.update { it.copy(entered = next, error = null) }
         if (next.length == PASSCODE_LENGTH) {
             viewModelScope.launch {
                 _state.update { it.copy(busy = true) }
                 val ok = appLock.matches(next)
-                _state.update { if (ok) it.copy(confirmed = true, busy = false) else it.copy(entered = "", error = CONFIRM_WRONG_MESSAGE, busy = false) }
+                _state.update { if (ok) it.copy(confirmed = true, busy = false) else it.copy(error = CONFIRM_WRONG_MESSAGE, busy = false) }
             }
         }
     }
 
-    fun delete() = _state.update { it.copy(entered = it.entered.dropLast(1), error = null) }
+    /** After a wrong code «delete» clears the whole code, not one digit. */
+    fun delete() = _state.update { if (it.error != null) it.copy(entered = "", error = null) else it.copy(entered = it.entered.dropLast(1)) }
+
+    fun askForgot(show: Boolean) = _state.update { it.copy(askForgot = show) }
+
+    /** «Забыли код?» on the deletion step: the same as on the unlock screen — forget the code and sign out. */
+    fun forgot() {
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true, askForgot = false) }
+            appLock.forgetAndSignOut()
+        }
+    }
 }
 
 data class SecurityUiState(

@@ -12,6 +12,23 @@ tags:
       id: "operations.search.initial"
     timeout: 10000
 
+# A query nothing matches: the empty state; «Сбросить фильтры» has only the query to drop, so it clears it and
+# the screen is back to the initial hint (PR #34 review: the button must not repeat the same empty search).
+- tapOn:
+    id: "operations.search.input"
+- inputText: "Zzqqxx"
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.empty"
+    timeout: 10000
+- tapOn:
+    id: "operations.search.reset"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.initial"
+    timeout: 10000
+
 # A merchant from the fixture statement (ASCII: Maestro types it reliably on any emulator).
 - tapOn:
     id: "operations.search.input"

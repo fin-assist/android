@@ -46,6 +46,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
@@ -145,8 +148,9 @@ private fun FieldFrame(
         else -> c.borderStrong
     }
     Column(modifier) {
-        Text(label, style = PfTheme.type.caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = c.textMuted)
-        Spacer(Modifier.height(PfTheme.dimens.space1))
+        Text(label, style = PfTheme.type.caption.copy(fontWeight = FontWeight.SemiBold), color = c.textMuted)
+        // `.pf-field { gap: var(--space-2) }`: label, frame and hint/error are 8 dp apart.
+        Spacer(Modifier.height(PfTheme.dimens.space2))
         field(
             interaction,
             Modifier
@@ -160,20 +164,25 @@ private fun FieldFrame(
         ) { inner ->
             Box(contentAlignment = Alignment.CenterStart) {
                 if (isEmpty && placeholder != null) {
-                    Text(placeholder, style = PfTheme.type.lead, color = c.textMuted, maxLines = 1)
+                    // Same size as the typed text (16), so the first digit does not make the line jump.
+                    Text(placeholder, style = PfTheme.type.lead.copy(fontSize = 16.sp), color = c.textMuted, maxLines = 1)
                 }
                 inner()
             }
         }
         val below = error ?: hint
         if (below != null) {
-            Spacer(Modifier.height(PfTheme.dimens.space1))
-            Text(below, style = PfTheme.type.hint, color = if (error != null) c.warningText else c.textMuted)
+            Spacer(Modifier.height(PfTheme.dimens.space2))
+            Text(
+                below,
+                style = if (error != null) PfTheme.type.hint.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.hint,
+                color = if (error != null) c.warningText else c.textMuted,
+            )
         }
     }
 }
 
-/** Search field 48 dp, `radius-full`, search icon and a clear button. */
+/** Search field 48 dp, `radius-md` (mockup `.pf-search-input`): icon 12 dp from the edge, text from 40 dp, clear button. */
 @Composable
 fun PfSearchField(
     value: String,
@@ -184,14 +193,14 @@ fun PfSearchField(
     testTag: String? = null,
 ) {
     val c = PfTheme.colors
-    val shape = RoundedCornerShape(PfTheme.dimens.radiusFull)
+    val shape = RoundedCornerShape(PfTheme.dimens.radiusMd)
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(PfTheme.dimens.control)
             .background(c.surface, shape)
             .border(1.dp, c.borderStrong, shape)
-            .padding(start = PfTheme.dimens.space4, end = PfTheme.dimens.space1),
+            .padding(start = PfTheme.dimens.space3, end = if (value.isEmpty()) PfTheme.dimens.space3 else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PfIcon(PfIcons.SEARCH, contentDescription = null, size = PfTheme.dimens.iconMd, tint = c.textMuted)
@@ -207,7 +216,7 @@ fun PfSearchField(
             modifier = Modifier.weight(1f).semantics { contentDescription = placeholder }.then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty()) Text(placeholder, style = PfTheme.type.lead, color = c.textMuted, maxLines = 1)
+                    if (value.isEmpty()) Text(placeholder, style = PfTheme.type.lead.copy(fontSize = 16.sp), color = c.textMuted, maxLines = 1)
                     inner()
                 }
             },
@@ -219,8 +228,10 @@ fun PfSearchField(
 }
 
 /**
- * Chip: filter (36 dp, `border-strong`; selected — `accent-soft` + `accent` frame), transition (40 dp, accent
- * text and chevron) or action («Сбросить»). The touch target is 48 dp regardless of the visible height.
+ * Chip (mockup `.pf-chip`): filter — 36 dp, `13` text, `border-strong` frame, selected — `accent-soft`, `accent`
+ * frame and `600`; transition (`.pf-chip-link`) — 40 dp, `14/600` accent text, 16 dp left and 12 dp right, a
+ * chevron. The chip takes only its visible height in the layout; Compose widens the touch area to 48 dp around a
+ * smaller clickable node, as the mockup does with `::after`.
  */
 @Composable
 fun PfChip(
@@ -233,43 +244,54 @@ fun PfChip(
     enabled: Boolean = true,
 ) {
     val c = PfTheme.colors
-    val shape = RoundedCornerShape(PfTheme.dimens.radiusFull)
-    val height = if (transition) 40.dp else 36.dp
-    Box(
+    val d = PfTheme.dimens
+    val shape = RoundedCornerShape(d.radiusFull)
+    val textStyle = when {
+        transition -> PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold)
+        selected -> PfTheme.type.caption.copy(fontWeight = FontWeight.SemiBold)
+        else -> PfTheme.type.caption
+    }
+    val contentColor = if (transition || selected) c.accent else c.text
+    Row(
         modifier = modifier
-            .defaultMinSize(minHeight = PfTheme.dimens.touch)
+            .height(if (transition) 40.dp else 36.dp)
             .clip(shape)
+            .background(if (selected) c.accentSoft else c.surface, shape)
+            .border(1.dp, if (selected) c.accent else c.borderStrong, shape)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .semantics { if (selected) toggleableState = ToggleableState.On },
-        contentAlignment = Alignment.Center,
+            .semantics { if (selected) toggleableState = ToggleableState.On }
+            .padding(start = if (transition) d.space4 else d.space3, end = d.space3),
+        horizontalArrangement = Arrangement.spacedBy(d.space1),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .height(height)
-                .background(if (selected) c.accentSoft else c.surface, shape)
-                .border(1.dp, if (selected) c.accent else c.borderStrong, shape)
-                .padding(horizontal = PfTheme.dimens.space3),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(text, style = PfTheme.type.caption, color = if (transition || selected) c.accent else c.text, maxLines = 1)
-            if (dropdown || transition) {
-                Spacer(Modifier.width(PfTheme.dimens.space1))
-                PfIcon(
-                    if (transition) PfIcons.CHEVRON_RIGHT else PfIcons.CHEVRON_DOWN,
-                    contentDescription = null,
-                    size = 16.dp,
-                    tint = if (transition || selected) c.accent else c.textMuted,
-                )
-            }
+        Text(text, style = textStyle, color = contentColor, maxLines = 1)
+        if (dropdown || transition) {
+            PfIcon(
+                if (transition) PfIcons.CHEVRON_RIGHT else PfIcons.CHEVRON_DOWN,
+                contentDescription = null,
+                size = 14.dp,
+                tint = contentColor,
+            )
         }
     }
 }
 
-/** Horizontal scrolling row of chips with `space-2` gaps; the first chip starts at the screen margin. */
+/**
+ * Horizontal scrolling row of chips with `space-2` gaps (mockup `.pf-chiprow`). [edge] is the screen margin the
+ * row sits in: the row extends over it, so chips scroll to the screen edge, while the first chip still starts at
+ * the margin.
+ */
 @Composable
-fun PfChipRow(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun PfChipRow(modifier: Modifier = Modifier, edge: Dp = PfTheme.dimens.screenMargin, content: @Composable () -> Unit) {
     Row(
-        modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        modifier = modifier
+            .layout { measurable, constraints ->
+                val extra = edge.roundToPx() * 2
+                val placeable = measurable.measure(constraints.copy(minWidth = constraints.minWidth + extra, maxWidth = constraints.maxWidth + extra))
+                layout(constraints.maxWidth, placeable.height) { placeable.place(-edge.roundToPx(), 0) }
+            }
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = edge),
         horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) { content() }
@@ -280,10 +302,11 @@ fun PfChipRow(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
 fun PfSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val c = PfTheme.colors
     val track by animateColorAsState(if (checked) c.accent else c.borderStrong, label = "track")
-    val offset by animateDpAsState(if (checked) 20.dp else 2.dp, label = "knob")
+    // Mockup `.pf-switch`: 52×32, 2 dp padding, a 28 dp knob.
+    val offset by animateDpAsState(if (checked) 22.dp else 2.dp, label = "knob")
     Box(
         modifier = modifier
-            .size(width = 44.dp, height = 26.dp)
+            .size(width = 52.dp, height = 32.dp)
             .background(track, RoundedCornerShape(PfTheme.dimens.radiusFull))
             .then(
                 if (onCheckedChange != null) Modifier.clickable(enabled = enabled, role = Role.Switch) { onCheckedChange(!checked) } else Modifier,
@@ -293,13 +316,18 @@ fun PfSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: 
         Box(
             Modifier
                 .offset(x = offset, y = 2.dp)
-                .size(22.dp)
+                .size(28.dp)
                 .background(c.knob, RoundedCornerShape(PfTheme.dimens.radiusFull)),
         )
     }
 }
 
-/** Checkbox with a label on the right; unchecked by default for consents (152-ФЗ). Error text goes below. */
+/**
+ * Checkbox with a label on the right (mockup `.pf-check`); unchecked by default for consents (152-ФЗ). The row
+ * takes the height of its content — in the mockup a 12 dp padding is cancelled by a −12 dp margin — and Compose
+ * widens the touch area to 48 dp. Label `13/20`; the error (`12/16 600`) is 4 dp below, under the label. The box
+ * keeps the app's own look (owner's decision on FIN-40: the mockup shows a browser-native checkbox).
+ */
 @Composable
 fun PfCheckbox(
     checked: Boolean,
@@ -309,23 +337,21 @@ fun PfCheckbox(
     error: String? = null,
 ) {
     val c = PfTheme.colors
-    Column(modifier) {
+    val d = PfTheme.dimens
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(d.space1)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(PfTheme.dimens.radiusSm))
                 .clickable(role = Role.Checkbox) { onCheckedChange(!checked) }
-                .defaultMinSize(minHeight = PfTheme.dimens.touch)
-                .padding(vertical = PfTheme.dimens.space2)
                 .semantics(mergeDescendants = true) {
                     toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
                     if (error != null) this.error(error)
                 },
+            horizontalArrangement = Arrangement.spacedBy(d.space3),
             verticalAlignment = Alignment.Top,
         ) {
             Box(
                 Modifier
-                    .padding(top = 2.dp)
                     .size(22.dp)
                     .background(if (checked) c.accent else c.surface, RoundedCornerShape(6.dp))
                     .border(if (checked) 0.dp else 2.dp, if (error != null) c.warningText else c.borderStrong, RoundedCornerShape(6.dp)),
@@ -333,10 +359,16 @@ fun PfCheckbox(
             ) {
                 if (checked) PfIcon(PfIcons.CHECK, contentDescription = null, size = 14.dp, tint = c.onAccent)
             }
-            Spacer(Modifier.width(PfTheme.dimens.space3))
-            Text(label, style = PfTheme.type.body, color = c.text, modifier = Modifier.weight(1f))
+            Text(label, style = PfTheme.type.caption, color = c.text, modifier = Modifier.weight(1f))
         }
-        if (error != null) Text(error, style = PfTheme.type.hint, color = c.warningText, modifier = Modifier.padding(start = 34.dp))
+        if (error != null) {
+            Text(
+                error,
+                style = PfTheme.type.hint.copy(fontWeight = FontWeight.SemiBold),
+                color = c.warningText,
+                modifier = Modifier.padding(start = 22.dp + d.space3),
+            )
+        }
     }
 }
 
@@ -372,7 +404,12 @@ fun PfSegmentedControl(
                     .testTag(PfTestTags.segment(i)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(option, style = PfTheme.type.bodyStrong, color = if (isSelected) c.accent else c.textMuted, maxLines = 1)
+                Text(
+                    option,
+                    style = if (isSelected) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.body,
+                    color = if (isSelected) c.accent else c.textMuted,
+                    maxLines = 1,
+                )
             }
         }
     }

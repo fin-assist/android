@@ -34,6 +34,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.designsystem.icons.PfIcon
@@ -63,7 +66,10 @@ data class BarPoint(
 )
 
 /**
- * Single-series bar chart: past periods `border-strong`, the highlighted one `accent`. The intro grows bars from
+ * Single-series bar chart (mockup `.pf-chart`): past periods `border-strong`, the highlighted one `accent` —
+ * with its label and value in `accent 600`; [highlight] `-1` highlights nothing. Labels, values and notes are
+ * `12/16` muted and never cut: a label wider than its column overflows it, centred. A period without data has
+ * no mark at all. The intro grows bars from
  * the baseline left to right (500 ms each, 40 ms stagger, emphasized decelerate) once per process per
  * [chartId]; later value changes transition in 250 ms. With "Remove animations" bars are drawn at full height.
  *
@@ -123,22 +129,23 @@ fun PfBarChart(
                 Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                     if (showValues) {
                         val labelAlpha = ((progress / (targets.getOrNull(i)?.takeIf { it != 0f } ?: 1f)) - 0.7f).coerceIn(0f, 0.3f) / 0.3f
+                        val on = i == highlight
                         Text(
                             if (p.value == null) "" else p.display,
-                            style = PfTheme.type.hint, color = c.textMuted.copy(alpha = if (reduced) 1f else labelAlpha),
-                            maxLines = 1, textAlign = TextAlign.Center,
+                            style = if (on) PfTheme.type.hint.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.hint,
+                            color = (if (on) c.accent else c.textMuted).copy(alpha = if (reduced) 1f else labelAlpha),
+                            maxLines = 1, softWrap = false, textAlign = TextAlign.Center,
+                            modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally, unbounded = true),
                         )
                     }
                     Canvas(Modifier.fillMaxWidth().height(height)) {
                         val baselineY = size.height * baselineFraction
                         val barHeight = abs(progress) * (if (hasNegative) size.height / 2 else size.height)
                         val top = if (progress >= 0f) baselineY - barHeight else baselineY
-                        val radius = CornerRadius(6.dp.toPx())
-                        if (p.value == null) {
-                            // Empty column: a thin baseline tick only.
-                            drawRoundRect(c.border, topLeft = Offset(0f, baselineY - 2.dp.toPx()), size = Size(size.width, 2.dp.toPx()), cornerRadius = radius)
-                            return@Canvas
-                        }
+                        // `.pf-chart-bar { border-radius: var(--space-2) }`
+                        val radius = CornerRadius(8.dp.toPx())
+                        // Empty column: nothing is drawn, the gap itself says «no data».
+                        if (p.value == null) return@Canvas
                         if (p.partial) {
                             val stroke = 2.dp.toPx()
                             drawRoundRect(color, topLeft = Offset(stroke / 2, top + stroke / 2), size = Size(size.width - stroke, max(barHeight - stroke, 0f)), cornerRadius = radius, style = Stroke(stroke))
@@ -155,10 +162,25 @@ fun PfBarChart(
         }
         Spacer(Modifier.height(PfTheme.dimens.space1))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2)) {
+            val anyNote = points.any { it.note != null }
             points.forEachIndexed { i, p ->
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(p.label, style = PfTheme.type.hint, color = if (i == highlight) c.text else c.textMuted, maxLines = 1)
-                    if (p.note != null) Text(p.note, style = PfTheme.type.micro, color = c.textMuted, maxLines = 1)
+                val on = i == highlight
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space1)) {
+                    Text(
+                        p.label,
+                        style = if (on) PfTheme.type.hint.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.hint,
+                        color = if (on) c.accent else c.textMuted,
+                        maxLines = 1, softWrap = false,
+                        modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally, unbounded = true),
+                    )
+                    // As in the mockup, every column keeps the note line when any column has a note.
+                    if (anyNote) {
+                        Text(
+                            p.note ?: "",
+                            style = PfTheme.type.hint, color = c.textMuted, maxLines = 1, softWrap = false,
+                            modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally, unbounded = true),
+                        )
+                    }
                 }
             }
         }
@@ -166,8 +188,10 @@ fun PfBarChart(
 }
 
 /**
- * Category row with a share bar: icon tile, name, share text, amount, chevron; the bar grows from 0 on the
- * intro (rows staggered 40 ms) and transitions on value changes. [percent] is relative to the largest category.
+ * Category row with a share bar (mockup `.pf-cat`): 36 dp icon tile, name, share and amount (`14/20`, amount
+ * `600`), an 8 dp bar 4 dp under them, chevron; a link row is 48 dp tall with no extra padding. The bar grows from
+ * 0 on the intro (rows staggered 40 ms) and transitions on value changes. [percent] is relative to the largest
+ * category.
  */
 @Composable
 fun PfCategoryBar(
@@ -202,31 +226,24 @@ fun PfCategoryBar(
             .clip(RoundedCornerShape(PfTheme.dimens.radiusMd))
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .defaultMinSize(minHeight = PfTheme.dimens.touch)
-            .padding(vertical = PfTheme.dimens.space3)
             .semantics(mergeDescendants = true) { contentDescription = spoken ?: listOfNotNull(label, amount, share?.let { "$it расходов" }).joinToString(", ") },
+        horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PfIconTile(icon)
-        Spacer(Modifier.width(PfTheme.dimens.space3))
+        PfIconTile(icon, small = true)
         Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(label, style = PfTheme.type.body, color = c.text, modifier = Modifier.weight(1f), maxLines = 1)
-                if (share != null) {
-                    Text(share, style = PfTheme.type.caption, color = c.textMuted)
-                    Spacer(Modifier.width(PfTheme.dimens.space2))
-                }
-                Text(amount, style = PfTheme.type.bodyStrong, color = c.text, maxLines = 1)
+            Row(horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2), verticalAlignment = Alignment.CenterVertically) {
+                Text(label, style = PfTheme.type.body, color = c.text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (share != null) Text(share, style = PfTheme.type.body.copy(fontFeatureSettings = "tnum"), color = c.textMuted, maxLines = 1)
+                Text(amount, style = PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum"), color = c.text, maxLines = 1)
             }
             Spacer(Modifier.height(PfTheme.dimens.space1))
-            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(PfTheme.dimens.radiusFull))) {
-                Box(Modifier.fillMaxWidth().height(6.dp).background(c.border))
-                Box(Modifier.fillMaxWidth(anim.value.coerceIn(0f, 1f)).height(6.dp).background(c.accent, RoundedCornerShape(PfTheme.dimens.radiusFull)))
+            Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(PfTheme.dimens.radiusFull))) {
+                Box(Modifier.fillMaxWidth().height(8.dp).background(c.border))
+                Box(Modifier.fillMaxWidth(anim.value.coerceIn(0f, 1f)).height(8.dp).background(c.accent, RoundedCornerShape(PfTheme.dimens.radiusFull)))
             }
         }
-        if (onClick != null) {
-            Spacer(Modifier.width(PfTheme.dimens.space2))
-            PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = PfTheme.dimens.iconMd, tint = c.textFaint)
-        }
+        if (onClick != null) PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = 18.dp, tint = c.textFaint)
     }
 }
 

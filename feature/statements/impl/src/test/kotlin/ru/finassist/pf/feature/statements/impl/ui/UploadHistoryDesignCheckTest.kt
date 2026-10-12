@@ -38,7 +38,7 @@ class UploadHistoryDesignCheckTest {
     private fun capture(name: String, state: HistoryUiState, dark: Boolean = false, popups: Boolean = false) =
         DesignCheck.capture(name, dark = dark, popups = popups) {
             HistoryContent(
-                state, onBack = {}, onUpload = {}, onOpenUnread = {}, onRetry = {}, onAskDelete = {}, onDelete = {},
+                state, onBack = {}, onUpload = {}, onOpenUnread = { _, _ -> }, onRetry = {}, onAskDelete = {}, onDelete = {},
                 onSnackbarShown = {},
             )
         }
@@ -51,7 +51,7 @@ class UploadHistoryDesignCheckTest {
 
     @Test fun uploadHistoryDeleted() = capture(
         "UploadHistoryDeleted",
-        state.copy(list = StatementsList(summary.copy(uploadCount = 2), listOf(all, aug)), snackbar = "Загрузка удалена"),
+        state.copy(list = StatementsList(summary.copy(uploadCount = 2), listOf(all, aug)), snackbar = "Загрузка удалена, аналитика пересчитана"),
     )
 
     @Test fun uploadHistoryEmpty() = capture("UploadHistoryEmpty", HistoryUiState(loading = false, list = StatementsList(null, emptyList())))

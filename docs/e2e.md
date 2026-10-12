@@ -73,6 +73,7 @@ installs next to `mockDebug` and never exists for `prod`.
   | `october.ofx` | 3 new operations, 3–6 October 2026 |
   | `statement.csv` | `CSV_NOT_ACCEPTED` |
   | `notes.txt` | `WRONG_FORMAT` |
+| `unreadable.ofx` | no readable operation, 2 unread lines (`EMPTY_STATEMENT`, `unread_count = 2`) |
   | `other-bank.ofx` | `WRONG_BANK` |
 
 - **Control link.** `pfe2e://config?…` changes state from a flow (`E2eControlActivity`). Open it through the subflow,
@@ -160,17 +161,24 @@ that they run only locally (`scripts/e2e.sh`), and the PR says whether they were
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |
 | `applock/change_passcode` | current → new → mismatch → new → repeat; the new code unlocks after restart |
 | `operations/feed_and_detail` (smoke) | feed → card → change category → saved as manual |
-| `operations/search_filters` | query, «Только расходы», amount, «Сбросить», period, result card |
+| `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card |
 | `analytics/overview` (smoke) | blocks, previous month, month/quarter/year, «Без переводов», category → operations |
 | `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card and profile) |
 | `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
 | `assistant/daily_limit` | unanswerable question is free; five questions exhaust the day |
+| `assistant/offline_retry` | no network: the notice replaces the input; «Повторить» sends the question once the network is back |
 | `statements/upload_errors` | CSV, not a statement, another bank; leaving the picker |
-| `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new; delete an upload |
+| `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice |
+| `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
+| `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
 | `profile/theme_and_logout` | dark theme; logout cancel / confirm with the notice |
-| `profile/delete_account` | dialog → passcode (wrong, right) → «Аккаунт удалён» |
+| `profile/delete_account` | passcode (wrong, right) → «Удалить аккаунт?» over the profile → «Аккаунт удалён» |
 | `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
 | native `StatementPickerTest` | upload through `ACTION_OPEN_DOCUMENT` (Espresso-Intents) up to the import result |
 
 Not covered yet: voice input (needs a speech recognizer on the emulator), biometrics (needs an enrolled
-fingerprint), the unread-lines screen (needs a test statement with unreadable lines), custom date ranges in search.
+fingerprint), the unread-lines screen (opened by «Подробнее» — a link inside a text node, see below), custom date
+ranges in search,
+links inside a sentence — the registration terms and privacy policy, «Как мы защищаем данные», «разобрать» and
+«Подробнее» on the import result, «Подробнее» on «Аналитика» (a link inside a text node has no own view or
+resource id for Maestro to tap, and the first three open an external browser the flow cannot check).

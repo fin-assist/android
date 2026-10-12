@@ -22,11 +22,6 @@ internal fun BiometricAvailability.toKind(): BiometricKind = when (this) {
     BiometricAvailability.FACE -> BiometricKind.FACE
 }
 
-internal fun BiometricAvailability.noun(): String = when (this) {
-    BiometricAvailability.FACE -> "лицу"
-    else -> "отпечатку"
-}
-
 private tailrec fun Context.findActivity(): FragmentActivity? = when (this) {
     is FragmentActivity -> this
     is ContextWrapper -> baseContext.findActivity()

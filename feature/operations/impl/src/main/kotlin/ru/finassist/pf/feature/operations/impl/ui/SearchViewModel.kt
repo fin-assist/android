@@ -30,6 +30,8 @@ import ru.finassist.pf.feature.operations.api.CategoriesRepository
 import ru.finassist.pf.feature.operations.api.OperationsRoutes
 import ru.finassist.pf.feature.operations.impl.data.OperationsRepositoryImpl
 import java.time.OffsetDateTime
+import ru.finassist.pf.feature.operations.impl.domain.OperationFormat
+import java.time.LocalDate
 import javax.inject.Inject
 
 /** Which filter chips are available (feature toggles `search.filter.*`). */
@@ -62,8 +64,12 @@ data class SearchUiState(
     val categories: List<Category> = emptyList(),
     /** The preset `selection` from analytics no longer exists: shown once above the results. */
     val selectionDropped: Boolean = false,
+    /** First day of the default 12-month window, from the last search made with it (period sheet: «С октября 2025»). */
+    val windowFrom: LocalDate? = null,
 ) {
     val hasFilters: Boolean get() = !filter.isEmpty || allTime
+    /** Nothing to reset besides the text: «Сбросить фильтры» on the empty result then clears the query instead of repeating it. */
+    val onlyQuery: Boolean get() = filter.copy(q = null).isEmpty && !allTime
 }
 
 /**
@@ -130,9 +136,11 @@ class SearchViewModel @Inject constructor(
         updateFilter { it.copy(from = null, to = null) }
     }
 
+    /** Drops the filters and keeps the query — unless the query is the only filter: then it is the one to drop. */
     fun reset() {
+        val onlyQuery = _state.value.onlyQuery
         _state.update { it.copy(allTime = false, selectionDropped = false) }
-        updateFilter { OperationsFilter(q = it.q) }
+        updateFilter { if (onlyQuery) OperationsFilter() else OperationsFilter(q = it.q) }
     }
 
     fun openSheet(sheet: SearchSheet?) = _state.update { it.copy(sheet = sheet) }
@@ -156,10 +164,13 @@ class SearchViewModel @Inject constructor(
             _state.update { it.copy(result = SearchResult.Loading) }
             val filter = _state.value.filter
             try {
-                val list = api.listOperations(OperationsQuery(filter = filter, allTime = _state.value.allTime))
+                val allTime = _state.value.allTime
+                val list = api.listOperations(OperationsQuery(filter = filter, allTime = allTime))
                 tracker.track(Events.OPERATIONS_SEARCH_SUBMITTED, mapOf("count" to (list.totalCount ?: list.items.size).toString()))
+                val window = OperationFormat.defaultWindowStart(list.range, filter, allTime)
                 _state.update {
                     it.copy(
+                        windowFrom = window ?: it.windowFrom,
                         result = SearchResult.Found(
                             items = list.items,
                             totalCount = list.totalCount ?: list.items.size,

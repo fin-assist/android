@@ -4,6 +4,19 @@ import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
+import ru.finassist.pf.core.designsystem.icons.PfIcons
+import ru.finassist.pf.core.designsystem.icons.PfIcon
+import ru.finassist.pf.core.designsystem.components.PfDivider
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,7 +52,6 @@ import ru.finassist.pf.core.designsystem.components.NoticeTone
 import ru.finassist.pf.core.designsystem.components.PfButton
 import ru.finassist.pf.core.designsystem.components.PfCard
 import ru.finassist.pf.core.designsystem.components.PfCheckbox
-import ru.finassist.pf.core.designsystem.components.PfDataRow
 import ru.finassist.pf.core.designsystem.components.PfLink
 import ru.finassist.pf.core.designsystem.components.PfNotice
 import ru.finassist.pf.core.designsystem.components.PfPageHeader
@@ -79,7 +91,7 @@ class AiConsentViewModel @Inject constructor(
     fun grant() {
         val s = _state.value
         if (!s.accepted) {
-            _state.update { it.copy(error = "Отметьте согласие, чтобы задавать вопросы помощнику") }
+            _state.update { it.copy(error = CONSENT_REQUIRED) }
             return
         }
         viewModelScope.launch {
@@ -118,6 +130,13 @@ fun AiConsentScreen(onBack: () -> Unit, onGranted: () -> Unit, vm: AiConsentView
     )
 }
 
+/** The checkbox error when «Продолжить» is pressed without consent (mockup `AiConsentError`). */
+internal const val CONSENT_REQUIRED = "Без согласия помощник не сможет ответить"
+
+/**
+ * Mockup `AiConsent`: what is sent and what is not, the daily limit, the consent and «Продолжить» at the bottom
+ * of the viewport, «Не сейчас» under it. «Как помощник использует данные» opens the consent document.
+ */
 @Composable
 internal fun AiConsentContent(
     state: AiConsentUiState,
@@ -129,32 +148,73 @@ internal fun AiConsentContent(
     val d = PfTheme.dimens
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(AssistantTags.CONSENT)) {
         PfPageHeader("Помощник", onBack = onBack)
-        Column(
-            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5, vertical = d.space2),
-            verticalArrangement = Arrangement.spacedBy(d.space4),
-        ) {
-            Text("Разрешите передавать данные помощнику", style = PfTheme.type.title1, color = PfTheme.colors.text)
-            Text(
-                "Данные уходят, только когда вы задаёте вопрос, и только те, что нужны для ответа",
-                style = PfTheme.type.lead, color = PfTheme.colors.textMuted,
-            )
-            PfCard {
-                PfDataRow("Передаём", "операции, категории и суммы за нужный период", divider = true)
-                PfDataRow("Не передаём", "ваш номер телефона", divider = false)
+        BoxWithConstraints(Modifier.weight(1f)) {
+            val viewport = maxHeight
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = viewport)
+                    .padding(start = d.space5, end = d.space5, top = d.space4, bottom = d.space4),
+            ) {
+                Text("Прежде чем спросить", style = PfTheme.type.title1, color = PfTheme.colors.text)
+                Text(
+                    "Данные уходят, только когда вы задаёте вопрос, и только те, что нужны для ответа. Помощник передаёт их нейросети Alice AI от Яндекса",
+                    style = PfTheme.type.lead, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = d.space1),
+                )
+                Spacer(Modifier.height(d.space6))
+                PfCard {
+                    DataList(
+                        "Передаём", PfIcons.CHECK, PfTheme.colors.accent,
+                        listOf("Суммы, даты и категории операций", "Описания операций, включая имена получателей переводов", "Текст вашего вопроса"),
+                    )
+                    Spacer(Modifier.height(d.space4))
+                    PfDivider()
+                    Spacer(Modifier.height(d.space4))
+                    DataList("Не передаём", PfIcons.X, PfTheme.colors.textMuted, listOf("Ваш номер телефона", "Номера карт и счетов"))
+                }
+                Spacer(Modifier.height(d.space1))
+                PfLink(
+                    "Как помощник использует данные",
+                    onClick = { state.document?.let(onOpenDocument) },
+                    modifier = Modifier.testTag(AssistantTags.CONSENT_DOCUMENT),
+                )
+                Spacer(Modifier.height(d.space3))
+                PfNotice("5 вопросов в день. Новые — в 00:00 по Москве", tone = NoticeTone.INFO, icon = PfIcons.CLOCK)
+                Spacer(Modifier.height(d.space5))
+                PfCheckbox(
+                    state.accepted, onAccepted, label = "Даю согласие на передачу этих данных помощнику", error = state.error,
+                    modifier = Modifier.testTag(AssistantTags.CONSENT_CHECKBOX),
+                )
+                state.formError?.let {
+                    Spacer(Modifier.height(d.space3))
+                    PfNotice(it, tone = NoticeTone.WARNING, alert = true)
+                }
+                Spacer(Modifier.weight(1f).heightIn(min = d.space6))
+                PfButton(
+                    "Продолжить", onClick = onGrant, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Сохраняем…",
+                    modifier = Modifier.testTag(AssistantTags.CONSENT_SUBMIT),
+                )
+                Spacer(Modifier.height(d.space2))
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    PfLink("Не сейчас", onClick = onBack, modifier = Modifier.testTag(AssistantTags.CONSENT_LATER))
+                }
             }
-            Text(
-                "Помощник работает на Alice AI (Яндекс). Отозвать согласие можно в профиле в любой момент — история ответов сохранится",
-                style = PfTheme.type.body, color = PfTheme.colors.textMuted,
-            )
-            PfCheckbox(state.accepted, onAccepted, label = "Согласен на передачу данных помощнику", error = state.error, modifier = Modifier.testTag(AssistantTags.CONSENT_CHECKBOX))
-            state.document?.let { doc ->
-                PfLink(doc.title, onClick = { onOpenDocument(doc) })
-            }
-            state.formError?.let { PfNotice(it, tone = NoticeTone.WARNING, alert = true) }
         }
-        PfButton(
-            "Продолжить", onClick = onGrant, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Сохраняем…",
-            modifier = Modifier.fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4).testTag(AssistantTags.CONSENT_SUBMIT),
-        )
+    }
+}
+
+/** «Передаём» / «Не передаём»: a heading and 20 dp-icon items 8 dp apart. */
+@Composable
+private fun DataList(title: String, icon: String, tint: Color, items: List<String>) {
+    val d = PfTheme.dimens
+    Text(title, style = PfTheme.type.bodyStrong, color = PfTheme.colors.text, modifier = Modifier.semantics { heading() })
+    Column(Modifier.padding(top = d.space2), verticalArrangement = Arrangement.spacedBy(d.space2)) {
+        items.forEach { item ->
+            Row(horizontalArrangement = Arrangement.spacedBy(d.space3), verticalAlignment = Alignment.Top) {
+                PfIcon(icon, contentDescription = null, size = d.iconMd, tint = tint)
+                Text(item, style = PfTheme.type.body, color = PfTheme.colors.text)
+            }
+        }
     }
 }

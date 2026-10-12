@@ -2,6 +2,8 @@ package ru.finassist.pf.mock
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
+import ru.finassist.pf.core.api.model.BlockType
+import ru.finassist.pf.core.api.model.Coverage as ApiCoverage
 import ru.finassist.pf.core.api.model.LockReason
 import ru.finassist.pf.core.api.model.MetricLock
 import ru.finassist.pf.core.api.model.MetricStatus
@@ -14,13 +16,16 @@ import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.mock.api.MockOperationsApi
 import ru.finassist.pf.mock.api.MockStatementsApi
+import ru.finassist.pf.mock.domain.AssistantEngine
 import ru.finassist.pf.mock.ofx.OfxCheck
 import ru.finassist.pf.mock.ofx.OfxDocument
 import ru.finassist.pf.mock.ofx.OfxParser
 import java.io.File
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -114,6 +119,23 @@ class FixtureTest {
         val year = backend.analytics.analytics(PeriodTypeCode.YEAR, PeriodKey("2026"), TransferMode.WITH)
         assertEquals(12, year.monthlyChart?.points?.size)
         assertEquals(null, year.insights)
+    }
+
+    @Test
+    fun `assistant chart marks a partial month with the last day of data, not the next one`() {
+        val (backend, _) = backend()
+        val engine = AssistantEngine(backend.ledger, backend.catalog, backend.operationScope, backend::coverage)
+        val answer = assertIs<AssistantEngine.Outcome.Answered>(engine.answer("Krabsbir", TransferMode.WITH, LocalDate.parse("2026-10-06"))).answer
+        val points = answer.blocks.first { it.type == BlockType.CHART }.points!!
+        val partial = points.filter { it.coverage == ApiCoverage.PARTIAL }
+        assertTrue(partial.isNotEmpty())
+        for (p in partial) {
+            val to = assertNotNull(p.dataTo)
+            // «по 25-е»: the day of `data_to` is the last day the statements cover in that month — not the next day
+            // (the start of which the mock used to send); the chart reads `dayOfMonth` from it.
+            val lastDay = assertNotNull(backend.coverage().dataBounds(p.range.from.toLocalDate(), p.range.to.toLocalDate())).second
+            assertEquals(lastDay, to.atZoneSameInstant(Clock.MOSCOW).toLocalDate())
+        }
     }
 
     @Test

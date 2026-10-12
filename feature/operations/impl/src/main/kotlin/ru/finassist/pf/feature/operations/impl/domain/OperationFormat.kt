@@ -1,16 +1,23 @@
 package ru.finassist.pf.feature.operations.impl.domain
 
 import ru.finassist.pf.core.api.model.Account
+import ru.finassist.pf.core.api.model.OperationDetails
 import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.api.model.OperationKind
 import ru.finassist.pf.core.api.model.OperationStatus
+import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.common.money.Money
+import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.core.common.time.RussianDates
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.time.YearMonth
 import java.time.ZoneId
 
 /** How an operation row looks; pure, so the rules (sign, colour, subtitle) are unit-tested. */
+/** A row of the «Из выписки» card of the operation; [spoken] — how a screen reader names an account. */
+data class StatementRow(val label: String, val value: String, val sublabel: String? = null, val spoken: String? = null)
+
 data class RowModel(
     val id: String,
     val icon: String,
@@ -80,9 +87,67 @@ object OperationFormat {
         else -> RussianDates.day(day, today.year)
     }
 
-    /** Search groups results by month first («Сентябрь 2026»), then by day. */
-    fun groupByMonth(items: List<OperationItem>, zone: ZoneId): List<Pair<YearMonth, List<OperationItem>>> =
+    /**
+     * Search results (mockup `Search`): one group per month, newest first, labelled «Сентябрь» («Сентябрь 2025» in
+     * another year); each row says its day instead of the category — «24 сентября» (with the year in another
+     * year), plus «холд» for a pending hold.
+     */
+    fun searchGroups(items: List<OperationItem>, zone: ZoneId, today: LocalDate): List<Pair<String, List<RowModel>>> =
         items.groupBy { YearMonth.from(it.occurredAt.atZoneSameInstant(zone)) }
             .toSortedMap(compareByDescending { it })
-            .map { (m, ops) -> m to ops }
+            .map { (month, ops) ->
+                val name = RussianDates.monthNominative(month.month).replaceFirstChar { it.uppercase() }
+                val label = if (month.year == today.year) name else "$name ${month.year}"
+                label to ops.sortedByDescending { it.occurredAt }.map { op ->
+                    val day = RussianDates.day(op.occurredAt.atZoneSameInstant(zone).toLocalDate(), today.year)
+                    row(op).copy(subtitle = if (op.status == OperationStatus.PENDING) "$day · холд" else day)
+                }
+            }
+
+    /**
+     * «Из выписки» (mockup `Detail`): accounts (a transfer names both sides), what the statement says and the bank's
+     * category; posting time ([dateTime] formats it) and MCC when the bank sent them. A transfer's bank category is
+     * labelled «В выписке».
+     */
+    fun statementRows(op: OperationDetails, dateTime: (OffsetDateTime) -> String): List<StatementRow> = buildList {
+        fun account(label: String, a: Account?) {
+            if (a != null) add(StatementRow(label, listOfNotNull(a.typeName, a.mask).joinToString(" "), spoken = a.spoken))
+        }
+        if (op.kind == OperationKind.OWN_TRANSFER) {
+            account("Счёт списания", op.fromAccount)
+            account("Счёт зачисления", op.toAccount)
+        } else {
+            account("Счёт", op.account)
+        }
+        op.description?.let { add(StatementRow("Описание в выписке", it)) }
+        op.bankCategory?.let {
+            add(if (op.kind == OperationKind.OWN_TRANSFER) StatementRow("В выписке", it) else StatementRow("Категория банка", it, sublabel = "как в выписке"))
+        }
+        op.postedAt?.let { add(StatementRow("Проведена банком", dateTime(it))) }
+        op.mcc?.let { add(StatementRow("MCC", it)) }
+    }
+
+    /** The kind above the amount on the operation card: «Списание», «Зачисление», «Перевод». */
+    fun kindLabel(kind: OperationKind): String = when (kind) {
+        OperationKind.EXPENSE -> "Списание"
+        OperationKind.INCOME -> "Зачисление"
+        OperationKind.OWN_TRANSFER -> "Перевод"
+        OperationKind.UNKNOWN -> "Операция"
+    }
+
+    /** «25.09.2026, 19:11» in [zone]: the date under the amount on the operation card. */
+    fun numericDateTime(at: OffsetDateTime, zone: ZoneId): String {
+        val t = at.atZoneSameInstant(zone)
+        return "%02d.%02d.%04d, %02d:%02d".format(t.dayOfMonth, t.monthValue, t.year, t.hour, t.minute)
+    }
+
+    /**
+     * First day of the server's default search window: known only from a search made without a period and without
+     * «за всё время» (then the response range is that window); `null` otherwise.
+     */
+    fun defaultWindowStart(range: DateRange?, filter: OperationsFilter, allTime: Boolean): LocalDate? =
+        range?.takeIf { !allTime && filter.from == null && filter.to == null }?.from?.toLocalDate()
+
+    /** «с октября 2025»: start of the default search window, as the search footer and the period sheet name it. */
+    fun windowStart(from: LocalDate): String = "с ${RussianDates.monthGenitive(from.month)} ${from.year}"
 }
