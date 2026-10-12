@@ -131,9 +131,10 @@ class FixtureTest {
         assertTrue(partial.isNotEmpty())
         for (p in partial) {
             val to = assertNotNull(p.dataTo)
-            // «по 25-е»: the day of `data_to` lies inside the month, the exclusive `range.to` does not.
-            assertTrue(to.isBefore(p.range.to), "data_to $to is not before ${p.range.to}")
-            assertTrue(to.toLocalDate().isBefore(p.range.to.toLocalDate()))
+            // «по 25-е»: the day of `data_to` is the last day the statements cover in that month — not the next day
+            // (the start of which the mock used to send); the chart reads `dayOfMonth` from it.
+            val lastDay = assertNotNull(backend.coverage().dataBounds(p.range.from.toLocalDate(), p.range.to.toLocalDate())).second
+            assertEquals(lastDay, to.atZoneSameInstant(Clock.MOSCOW).toLocalDate())
         }
     }
 
