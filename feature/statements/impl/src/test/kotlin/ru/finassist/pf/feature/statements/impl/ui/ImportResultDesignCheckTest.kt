@@ -154,8 +154,12 @@ class ImportResultDesignCheckTest {
 
     @Test fun importResultNoExpenses() = capture("ImportResultNoExpenses", noExpenses, 844)
 
-    /** The mockup opens the unread lines as a sheet over the result; the app opens them as a separate screen. */
-    @Test fun importResultRepeatSheet() {
+    /** Artboards `UnreadLines` / `UnreadLinesDark` (FIN-59): the separate screen the app opens from the result. */
+    @Test fun unreadLines() = captureUnread("UnreadLines", dark = false)
+
+    @Test fun unreadLinesDark() = captureUnread("UnreadLinesDark", dark = true)
+
+    private fun captureUnread(name: String, dark: Boolean) {
         fun line(n: Int, date: String?, reason: UnreadReason, name: String) = UnreadLine(
             uploadId = "u2", fileName = "operations_2026.ofx", lineNumber = n, date = date?.let(::t), reason = reason,
             reasonName = name,
@@ -171,7 +175,7 @@ class ImportResultDesignCheckTest {
             ),
             userId = "u1",
         )
-        DesignCheck.capture("ImportResultRepeatSheet", heightDp = 1028) {
+        DesignCheck.capture(name, dark = dark, heightDp = 844) {
             UnreadLinesContent(state, copied = false, onBack = {}, onRetry = {}, onReport = {})
         }
     }

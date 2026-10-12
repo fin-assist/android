@@ -133,7 +133,7 @@ internal fun UnreadLinesContent(
             }
             state.lines.isEmpty() -> PfEmptyState(PfIcons.CHECK_CIRCLE, "Все строки прочитаны")
             else -> {
-                // Mockup `ImportResultRepeatSheet` (here a screen, FIN-40): the intro, the lines as two-line rows
+                // Mockup `UnreadLines` (a screen since FIN-59): the intro, the lines as two-line rows
                 // without a card, «Сообщить нам» and what the letter holds.
                 val byUpload = state.lines.groupBy { it.uploadId }
                 LazyColumn(
