@@ -138,6 +138,7 @@ class CodeCoverageTest(unittest.TestCase):
         self.assertEqual("feature/auth", ui.module_of("ru/finassist/pf/feature/auth/impl/ui"))
         self.assertEqual("core/designsystem", ui.module_of("ru/finassist/pf/core/designsystem/components"))
         self.assertEqual("mock/backend", ui.module_of("ru/finassist/pf/mock"))
+        self.assertEqual("providers/toggles-local", ui.module_of("ru/finassist/pf/providers/toggles/local/di"))
         self.assertEqual("app", ui.module_of("ru/finassist/pf"))
         self.assertEqual("app", ui.module_of("ru/finassist/pf/di"))
 

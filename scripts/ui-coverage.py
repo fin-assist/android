@@ -192,11 +192,14 @@ def _counter(node: ET.Element, kind: str) -> Counter:
 
 
 def module_of(package: str) -> str:
-    """`ru/finassist/pf/feature/auth/impl/ui` → `feature/auth`; `…/pf/core/designsystem/…` → `core/designsystem`."""
+    """`ru/finassist/pf/feature/auth/impl/ui` → `feature/auth`; `…/pf/core/designsystem/…` → `core/designsystem`;
+    `…/pf/providers/toggles/local/di` → `providers/toggles-local`."""
     parts = package.split("/")
     rest = parts[3:] if parts[:3] == ["ru", "finassist", "pf"] else parts
     if not rest:
         return "app"
+    if rest[0] == "providers" and len(rest) > 2:
+        return f"providers/{rest[1]}-{rest[2]}"
     if rest[0] in ("feature", "core", "providers") and len(rest) > 1:
         return f"{rest[0]}/{rest[1]}"
     if rest[0] == "mock":
