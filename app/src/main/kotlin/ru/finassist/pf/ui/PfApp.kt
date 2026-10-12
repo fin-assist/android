@@ -63,6 +63,7 @@ fun PfApp(
     preferences: AppPreferences,
     flags: FeatureFlags,
     onScreenOpened: (routePattern: String?) -> Unit,
+    onSessionShown: (SessionState) -> Unit = {},
 ) {
     val theme by preferences.theme.collectAsStateWithLifecycle(initialValue = null)
     val dark = when (theme) {
@@ -73,6 +74,9 @@ fun PfApp(
     PfTheme(darkTheme = dark) {
         val sessionState by session.state.collectAsStateWithLifecycle(initialValue = SessionState.Unknown)
         val lockState by appLock.state.collectAsStateWithLifecycle()
+        // Breadcrumb of the value this composition switches on (FIN-63: tells «the session never reached the UI»
+        // from «the UI saw it and did not move»).
+        LaunchedEffect(sessionState) { onSessionShown(sessionState) }
         // Setup stays on screen until its own flow (code + biometric offer) says it is done, even though the
         // lock state flips to Unlocked as soon as the code is saved. Saveable: survives rotation on the offer.
         var settingUp by rememberSaveable { mutableStateOf(false) }

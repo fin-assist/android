@@ -9,10 +9,12 @@ import dagger.hilt.android.AndroidEntryPoint
 import ru.finassist.pf.core.navigation.FeatureEntry
 import ru.finassist.pf.core.storage.AppPreferences
 import ru.finassist.pf.core.toggles.FeatureFlags
+import ru.finassist.pf.core.tracking.Breadcrumb
 import ru.finassist.pf.core.tracking.CrashContextSync
 import ru.finassist.pf.feature.applock.api.AppLock
 import ru.finassist.pf.feature.applock.impl.ui.AppLockScreens
 import ru.finassist.pf.feature.auth.api.SessionRepository
+import ru.finassist.pf.feature.auth.api.SessionState
 import ru.finassist.pf.ui.PfApp
 import javax.inject.Inject
 
@@ -44,6 +46,15 @@ class MainActivity : FragmentActivity() {
                 preferences = preferences,
                 flags = flags,
                 onScreenOpened = crashContext::onScreenOpened,
+                onSessionShown = { s ->
+                    crashContext.onSessionShown(
+                        when (s) {
+                            SessionState.Unknown -> null
+                            SessionState.SignedOut -> Breadcrumb.SessionCrumb.SIGNED_OUT
+                            is SessionState.SignedIn -> Breadcrumb.SessionCrumb.SIGNED_IN
+                        },
+                    )
+                },
             )
         }
     }
