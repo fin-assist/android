@@ -56,7 +56,7 @@ include(":providers:toggles-local")
 include(":providers:tracking-log")
 include(":providers:toggles-rustore")
 include(":providers:tracking-mytracker")
-include(":providers:crash-appmetrica")
+include(":providers:crash-tracer")
 
 // In-process fake backend for the `mock` flavor (implements :core:api).
 include(":mock:backend")

@@ -1,6 +1,7 @@
 package ru.finassist.pf.core.toggles
 
 import kotlinx.coroutines.flow.Flow
+import java.util.zip.CRC32
 
 /**
  * Feature flags as the app reads them. The provider (RuStore Remote Config in `prod`, a JSON asset plus
@@ -14,6 +15,12 @@ interface FeatureFlags {
 
     /** Emits after every config update (fetch, user change, debug override). */
     val changes: Flow<Unit>
+
+    /**
+     * Version of the config in effect — [flagsVersion] of the provider's values, [FLAGS_VERSION_DEFAULTS] while it
+     * has none. Goes into crash reports (`rc_ver`), so a crash can be matched with the switches behind it.
+     */
+    val version: String
 
     /**
      * Identity for targeting: our own `user_id` after sign-in, `null` before sign-in and after sign-out
@@ -30,4 +37,18 @@ interface FlagOverrides {
     val overrides: Flow<Map<Flag, Boolean>>
     suspend fun set(flag: Flag, enabled: Boolean?)
     suspend fun clear()
+}
+
+/** [FeatureFlags.version] when the provider has no values: code defaults are in effect. */
+const val FLAGS_VERSION_DEFAULTS = "defaults"
+
+/**
+ * Short stable fingerprint of a set of flag values, by flag key: the same values give the same version on every
+ * device and launch, whatever the map order. Eight hex digits (CRC32) — it identifies a config, it is not a secret.
+ */
+fun flagsVersion(values: Map<String, Boolean>): String {
+    if (values.isEmpty()) return FLAGS_VERSION_DEFAULTS
+    val crc = CRC32()
+    values.toSortedMap().forEach { (key, value) -> crc.update("$key=$value;".toByteArray(Charsets.UTF_8)) }
+    return "%08x".format(crc.value)
 }

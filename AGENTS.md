@@ -38,7 +38,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Screen registration | `FeatureEntry` / `Navigator` in `core/navigation/…/Navigation.kt`; each `:impl` binds its entry in `di/` |
 | Design system: theme, tokens, components, icons | `core/designsystem/…/theme`, `components`, `icons` |
 | Feature flags | `core/toggles/…/Flag.kt` (registry + defaults), `docs/flags.md` (meaning); mock overrides `app/src/mock/assets/flags.json` |
-| Events / crashes | `core/tracking/…/Tracker.kt`; providers in `providers/*` (only `:app` depends on them) |
+| Events / crashes | `core/tracking/…/Tracker.kt`, `CrashReporter.kt` (typed context, no free-form strings); providers in `providers/*` (only `:app` depends on them; Tracer keys — README) |
 | Tokens, preferences, idempotency keys | `core/storage` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md`, `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks, native gaps, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/qase-*` |
@@ -79,9 +79,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:core:network` | `pf.android.library`, `pf.hilt` | unit |
 | `:core:screenshot-testing` | `pf.android.library.compose` | - |
 | `:core:storage` | `pf.android.library`, `pf.hilt` | - |
-| `:core:toggles` | `pf.jvm.library` | - |
-| `:core:tracking` | `pf.jvm.library` | - |
-| `:providers:crash-appmetrica` | `pf.android.library`, `pf.hilt` | - |
+| `:core:toggles` | `pf.jvm.library` | unit |
+| `:core:tracking` | `pf.jvm.library` | unit |
+| `:providers:crash-tracer` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:toggles-local` | `pf.android.library`, `pf.hilt` | - |
 | `:providers:toggles-rustore` | `pf.android.library`, `pf.hilt` | - |
 | `:providers:tracking-log` | `pf.android.library`, `pf.hilt` | - |
