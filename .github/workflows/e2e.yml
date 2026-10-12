@@ -100,11 +100,14 @@ jobs:
             if grep -rl "FIN-63 workaround" app/build/outputs/androidTest-results 2>/dev/null | grep -q .; then
               echo
               echo "> ⚠️ **FIN-63 workaround triggered**: the native test recreated the activity after a stalled sign-in — see \`logcat-*.txt\` in the \`e2e-reports\` artifact (breadcrumbs \`session …\` / \`ui session …\`)."
-              echo "::warning title=FIN-63::StatementPickerTest recreated the activity after a stalled sign-in; evidence in the e2e-reports artifact"
             fi
             echo
             python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml || echo "UI test coverage: the summary script failed."
           } >> "$GITHUB_STEP_SUMMARY"
+          # Workflow commands are read from stdout, not from the summary file.
+          if grep -rl "FIN-63 workaround" app/build/outputs/androidTest-results 2>/dev/null | grep -q .; then
+            echo "::warning title=FIN-63::StatementPickerTest recreated the activity after a stalled sign-in; evidence in the e2e-reports artifact"
+          fi
 
       # One Qase run per merge to main (project PLAINFIN, cases in scripts/qase-cases.json). Cancelled runs are not
       # sent (a newer merge cancels the run: its partial results would read as lost coverage); manual runs of a
