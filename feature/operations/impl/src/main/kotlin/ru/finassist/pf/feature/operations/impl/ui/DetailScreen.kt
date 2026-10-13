@@ -1,6 +1,5 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
-import androidx.compose.runtime.remember
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
