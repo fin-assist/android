@@ -158,9 +158,12 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
     override suspend fun retry(key: IdempotencyKey, answerId: String): RetryResponse {
         // The latency counts as the server's work on the request: a repeat with the same key while the first one is
         // on its way gets 409 REQUEST_IN_PROGRESS, as a double tap on «Повторить» would on a real server (FIN-75).
-        return backend.idempotent("assistant.retry:${key.value}") {
+        val network: suspend () -> Unit = {
             backend.simulateNetwork()
             backend.requireSession()
+        }
+        return backend.idempotent("assistant.retry:${key.value}", onRepeat = network) {
+            network()
             val old = backend.mutex.withLock { store.answers[answerId] } ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
             if (old.replaced || old.status != AnswerStatus.FAILED || old.errorCode != AnswerErrorCode.MODEL_ERROR) {
                 throw AppError.Api(ErrorCodes.RETRY_NOT_ALLOWED, 422)

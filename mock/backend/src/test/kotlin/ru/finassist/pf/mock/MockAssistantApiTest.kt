@@ -280,6 +280,16 @@ class MockAssistantApiTest {
     }
 
     @Test
+    fun `a repeated retry still goes through the network`() = runBlocking<Unit> {
+        val failed = failedAnswer("Сколько я трачу на Krabsbir?")
+        val response = api.retry(key("r1"), failed.id)
+        backend.config = backend.config.copy(offline = true)
+        assertFailsWith<AppError.Offline> { api.retry(key("r1"), failed.id) }
+        backend.config = backend.config.copy(offline = false)
+        assertEquals(response, api.retry(key("r1"), failed.id))
+    }
+
+    @Test
     fun `a request that failed frees its key`() = runBlocking<Unit> {
         val failed = failedAnswer("Сколько я трачу на Krabsbir?")
         backend.config = backend.config.copy(offline = true)

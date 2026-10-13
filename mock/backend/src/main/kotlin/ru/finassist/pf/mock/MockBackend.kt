@@ -108,13 +108,20 @@ class MockBackend(
     /**
      * Runs [block] once per key; a repeat with the same key returns the cached result, and a repeat while the
      * first request is still running gets 409 REQUEST_IN_PROGRESS (api.md, idempotency). A failed [block] is not
-     * stored: the key can be used again.
+     * stored: the key can be used again. [onRepeat] runs before a cached result is returned: a [block] that
+     * simulates the network itself passes the same checks here, so a repeat still meets offline and a lost session.
      */
-    suspend fun <T : Any> idempotent(key: String, block: suspend () -> T): T {
-        mutex.withLock {
+    suspend fun <T : Any> idempotent(key: String, onRepeat: suspend () -> Unit = {}, block: suspend () -> T): T {
+        val cached = mutex.withLock {
             @Suppress("UNCHECKED_CAST")
-            (idempotency[key] as? T)?.let { return it }
-            if (!inFlight.add(key)) throw AppError.InProgress(retryAfterSeconds = 1)
+            (idempotency[key] as? T) ?: run {
+                if (!inFlight.add(key)) throw AppError.InProgress(retryAfterSeconds = 1)
+                null
+            }
+        }
+        if (cached != null) {
+            onRepeat()
+            return cached
         }
         try {
             val result = block()
