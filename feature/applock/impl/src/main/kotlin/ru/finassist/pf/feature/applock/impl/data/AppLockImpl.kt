@@ -12,6 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -133,9 +134,14 @@ internal class AppLockImpl @Inject constructor(
         while (!refresh()) delay(READ_RETRY_MS)
     }
 
+    /** The background retry of [refreshAfterWrite]; one at a time, however many writes fail to read back. */
+    private var retry: Job? = null
+
     /** After an own write: a failed read is retried in the background, the writer gets its own outcome now. */
     private suspend fun refreshAfterWrite() {
-        if (!refresh()) scope.launch { refreshUntilRead() }
+        if (!refresh()) synchronized(this) {
+            if (retry?.isActive != true) retry = scope.launch { refreshUntilRead() }
+        }
     }
 
     override fun onStart(owner: LifecycleOwner) {

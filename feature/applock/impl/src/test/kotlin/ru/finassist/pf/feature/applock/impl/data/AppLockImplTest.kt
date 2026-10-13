@@ -350,4 +350,32 @@ class AppLockImplTest {
         flaky.failReads = false // no further write: the retried read publishes the passcode
         lock.state.await(LockState.Unlocked)
     }
+
+    @Test
+    fun `writes that fail to read back share one retry`() = runBlocking<Unit> {
+        val reads = java.util.concurrent.atomic.AtomicInteger()
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) {
+                    reads.incrementAndGet()
+                    throw IOException("disk read failed")
+                }
+                emitAll(dataStore.data)
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val lock = AppLockImpl(context, PasscodeStore(flaky, crypto), session, tracker)
+        lock.setPasscode("1234")
+        lock.state.await(LockState.Unlocked)
+        flaky.failReads = true
+        repeat(10) { lock.setBiometricEnabled(it % 2 == 0) }
+
+        // A second of retries: one background retry and the lock's own trigger read about once each (two flows per
+        // read), ten separate retries would read at least ten times.
+        reads.set(0)
+        delay(1_100)
+        assertTrue(reads.get() <= 6, "reads in a second: ${reads.get()}")
+        flaky.failReads = false
+    }
 }
