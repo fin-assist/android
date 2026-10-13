@@ -151,6 +151,8 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   (enforced by `pf.module.rules`).
 - System bar insets go through `PfInsets.statusBars` / `PfInsets.navigationBars`, never `WindowInsets.*`
   directly: design-check snapshots replace them with the mockups' fixed bars.
+- "Now" and "today" come from the injected `Clock` (`LocalPfClock` in composables), never `LocalDate.now()` /
+  `OffsetDateTime.now()`: the e2e build pins that clock, and the whole app has to live on the same date.
 - A PR that adds a screen, a new state of a screen, a bottom sheet or a dialog wires it into the design check in
   the same PR: a `…Content` the test can render, and a `*DesignCheckTest` capturing it under the artboard name
   (`popups = true` for a sheet or dialog). Capture every artboard the canvas has for it, `…Dark` ones included;

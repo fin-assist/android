@@ -62,7 +62,7 @@ installs next to `mockDebug` and never exists for `prod`. It is also the `testBu
 it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»).
 
 - **Pinned date.** "Now" starts at 2026-10-08 12:00 MSK (`BuildConfig.E2E_NOW`, `ShiftedClock`) and runs from
-  there. The fixture statement covers October 2025 — September 2026, so periods, amounts and limits stay the same
+  there — for the mock backend and the screens alike (`LocalPfClock`), whatever the emulator's date. The fixture statement covers October 2025 — September 2026, so periods, amounts and limits stay the same
   whenever the tests run.
 - **Fixture only.** The fake backend always loads `statements/fixture.ofx`, never a private statement on the
   machine (`E2eModule`). Delays are short: the call «arrives» in 1.5 s, imports and answers stream fast.
@@ -160,8 +160,8 @@ were.
 - Type ASCII where you can (merchant `Krabsbir`, digits): non-ASCII input depends on the emulator keyboard.
 - `id` and `text` in one selector must match the same node. A tag on a container (`PfLink`, `PfPageHeader`, a
   row) has no text of its own — its text is a child node: check the id and the text in two steps.
-- «Now» is pinned for the mock backend only (`E2E_NOW`); screens count «today» by the device clock. Do not check
-  labels that depend on it («Сегодня», «Вчера», the year next to a date).
+- Labels that depend on «today» («Сегодня», «Вчера», the year next to a date) follow the pinned date, not the
+  emulator's: 7 October 2026 is «Вчера».
 - A new flow needs a case in Qase and a line in `scripts/qase-cases.json`; a renamed or removed flow updates both.
   `scripts/test_qase_report.py` (CI, `agent-docs` job) fails on a flow without a case or a case without a flow.
 

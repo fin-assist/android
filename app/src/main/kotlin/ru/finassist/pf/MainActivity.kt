@@ -4,8 +4,11 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.fragment.app.FragmentActivity
 import dagger.hilt.android.AndroidEntryPoint
+import ru.finassist.pf.core.common.time.Clock
+import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.navigation.FeatureEntry
 import ru.finassist.pf.core.storage.AppPreferences
 import ru.finassist.pf.core.toggles.FeatureFlags
@@ -31,6 +34,7 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var preferences: AppPreferences
     @Inject lateinit var flags: FeatureFlags
     @Inject lateinit var crashContext: CrashContextSync
+    @Inject lateinit var clock: Clock
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,24 +42,26 @@ class MainActivity : FragmentActivity() {
         if (!BuildConfig.DEBUG) window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         setContent {
-            PfApp(
-                entries = entries,
-                session = session,
-                appLock = appLock,
-                appLockScreens = appLockScreens,
-                preferences = preferences,
-                flags = flags,
-                onScreenOpened = crashContext::onScreenOpened,
-                onSessionShown = { s ->
-                    crashContext.onSessionShown(
-                        when (s) {
-                            SessionState.Unknown -> null
-                            SessionState.SignedOut -> Breadcrumb.SessionCrumb.SIGNED_OUT
-                            is SessionState.SignedIn -> Breadcrumb.SessionCrumb.SIGNED_IN
-                        },
-                    )
-                },
-            )
+            CompositionLocalProvider(LocalPfClock provides clock) {
+                PfApp(
+                    entries = entries,
+                    session = session,
+                    appLock = appLock,
+                    appLockScreens = appLockScreens,
+                    preferences = preferences,
+                    flags = flags,
+                    onScreenOpened = crashContext::onScreenOpened,
+                    onSessionShown = { s ->
+                        crashContext.onSessionShown(
+                            when (s) {
+                                SessionState.Unknown -> null
+                                SessionState.SignedOut -> Breadcrumb.SessionCrumb.SIGNED_OUT
+                                is SessionState.SignedIn -> Breadcrumb.SessionCrumb.SIGNED_IN
+                            },
+                        )
+                    },
+                )
+            }
         }
     }
 }
