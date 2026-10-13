@@ -201,3 +201,7 @@ resource id for Maestro to tap, and the first three open an external browser the
 The server's own check of the phone number (400 `VALIDATION_ERROR` at `phone`, FIN-68) cannot be reached either:
 the app sends only `+7` and 10 digits, the very rule the server checks, so neither a real build nor the mock gets
 that error; `PhoneViewModelTest` covers the branch, `auth/phone_validation` the app's own check of a short number.
+A screen that stays put after a sign-in or a sign-out (FIN-88; the FIN-63 stall on the call screen) cannot be forced
+either: it needs a subscriber of the session to start while the token store is being written, a timing the emulator
+does not reproduce on demand (about 5 % of such starts on the JVM). `EncryptedTokenStoreRaceTest` repeats both writes
+200 times against the real store; `auth/sign_in_existing_user` and `profile/theme_and_logout` cover the plain paths.

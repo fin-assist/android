@@ -11,7 +11,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -25,6 +29,7 @@ import org.robolectric.annotation.Config
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.TokenPair
 import java.io.File
+import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
@@ -167,6 +172,31 @@ class EncryptedTokenStoreTest {
 
         assertEquals(SESSION, fresh.current())
         assertNotEquals("not a keyset", keysetPrefs().getString(KEYSET_NAME, null))
+    }
+
+    @Test
+    fun `a failed read after a write neither fails the write nor stops the session updates`() = runBlocking<Unit> {
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) throw IOException("disk read failed")
+                emitAll(dataStore.data)
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val store = EncryptedTokenStore(context, flaky)
+        store.save(SESSION)
+        withTimeout(5_000) { store.session.first { it == SESSION } }
+
+        flaky.failReads = true
+        store.clear() // the write lands; the read after it fails and must not surface here
+        assertNull(rawBlob())
+        assertEquals(SESSION, withTimeout(5_000) { store.session.first() }, "the last read stays")
+
+        flaky.failReads = false
+        val next = TokenStore.Session("user-2", TokenPair("access-2", "refresh-2"))
+        store.save(next)
+        withTimeout(5_000) { store.session.first { it == next } }
     }
 
     private companion object {
