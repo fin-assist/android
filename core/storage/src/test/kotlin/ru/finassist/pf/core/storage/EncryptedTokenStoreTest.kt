@@ -244,6 +244,38 @@ class EncryptedTokenStoreTest {
         withTimeout(5_000) { store.session.first { it == null } }
     }
 
+    @Test
+    fun `a write that fails to read back while a retry ends is read by that retry`() = runBlocking<Unit> {
+        // Reads see the store; the long-lived collection sees only its first value, as one that missed the writes.
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) throw IOException("disk read failed")
+                emit(dataStore.data.first())
+                kotlinx.coroutines.awaitCancellation()
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val store = EncryptedTokenStore(context, flaky)
+        store.save(SESSION)
+        withTimeout(5_000) { store.session.first { it == SESSION } }
+        val read = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        store.afterRetryRead = { if (!read.isCompleted) { read.complete(Unit); release.await() } }
+
+        flaky.failReads = true
+        store.clear() // fails to read back: a retry starts
+        flaky.failReads = false
+        withTimeout(5_000) { read.await() } // the retry has read the sign-out and is about to end
+
+        flaky.failReads = true
+        store.save(SESSION) // fails to read back while that retry is still running
+        flaky.failReads = false
+        release.complete(Unit)
+
+        withTimeout(5_000) { store.session.first { it == SESSION } }
+    }
+
     private companion object {
         val SESSION = TokenStore.Session("user-1", TokenPair("access-1", "refresh-1"))
         val BLOB = stringPreferencesKey("session.blob")
