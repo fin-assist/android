@@ -199,7 +199,25 @@ class SessionRepositoryImplTest {
         eventually { "flags.user:u2" in h.log.all() }
 
         assertNull(h.repo.consumeSignOutReason(), "the next phone screen must not show «session expired»")
-        assertEquals(1, h.log.all().count { it == "flags.user:null" }, "the identity is reset once: ${h.log.all()}")
+    }
+
+    @Test fun `a sign-out during a slow identity setup leaves the identity reset`() = runBlocking {
+        // The observer is still applying the restored user (a slow flags provider) when the user signs out:
+        // the sign-out resets the identity first, then the observer finishes and sets the user again.
+        val h = harness()
+        val applying = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        h.flags.beforeSetUser = { if (it == "u1") { applying.complete(Unit); release.await() } }
+        h.tokens.flow.value = TokenStore.Session("u1", pair)
+        withTimeout(5_000) { applying.await() }
+
+        h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
+        release.complete(Unit)
+        eventually { "tracker.user:u1" in h.log.all() } // the stalled setup has finished
+
+        eventually { h.log.all().lastOrNull { it.startsWith("tracker.user:") } == "tracker.user:null" }
+        eventually { h.log.all().lastOrNull { it.startsWith("flags.user:") } == "flags.user:null" }
+        assertEquals(AuthRoutes.Phone.REASON_LOGGED_OUT, h.repo.consumeSignOutReason(), "not reported as expired")
     }
 
     @Test fun `a local clearing seen late without a reason is not reported as expired`() = runBlocking {
@@ -222,11 +240,13 @@ class SessionRepositoryImplTest {
         h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
         h.repo.consumeSignOutReason()
         h.tokens.flow.value = TokenStore.Session("u1", TokenPair("a2", "r2")) // signed in again
+        // Handled in order: once the new sign-in is applied, the sign-out's `null` has been handled too.
         eventually { h.log.all().count { it == "flags.user:u1" } == 2 }
+        val resetsBefore = h.log.all().count { it == "flags.user:null" }
 
         h.tokens.flow.value = null // the refresh was rejected
 
-        eventually { h.log.all().count { it == "flags.user:null" } == 2 }
+        eventually { h.log.all().count { it == "flags.user:null" } == resetsBefore + 1 }
         assertEquals(AuthRoutes.Phone.REASON_EXPIRED, h.repo.consumeSignOutReason())
     }
 

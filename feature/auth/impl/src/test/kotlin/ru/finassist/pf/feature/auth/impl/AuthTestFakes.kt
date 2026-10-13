@@ -139,7 +139,12 @@ class RecordingFlags(private val log: Log, private val values: Map<Flag, Boolean
     override fun isEnabled(flag: Flag): Boolean = values[flag] ?: flag.defaultValue
     override val changes: Flow<Unit> = emptyFlow()
     override val version: String = "test"
-    override suspend fun setUser(userId: String?) { log += "flags.user:$userId" }
+    /** Suspends inside [setUser] before it is recorded — lets a test hold an identity change half-way. */
+    @Volatile var beforeSetUser: suspend (String?) -> Unit = {}
+    override suspend fun setUser(userId: String?) {
+        beforeSetUser(userId)
+        log += "flags.user:$userId"
+    }
     override suspend fun refresh() = Unit
 }
 

@@ -87,9 +87,11 @@ class SessionRepositoryImpl @Inject constructor(
                     ),
                 )
                 val ownedBy = if (s == null) ownSignOut.getAndSet(null) else null
-                if (signedInUser != null && s == null && ownedBy != signedInUser) {
-                    // The network layer dropped the session (refresh rejected): same cleanup as a sign-out.
-                    signOutReason.compareAndSet(null, AuthRoutes.Phone.REASON_EXPIRED)
+                if (signedInUser != null && s == null) {
+                    // Not ours: the network layer dropped the session (refresh rejected).
+                    if (ownedBy != signedInUser) signOutReason.compareAndSet(null, AuthRoutes.Phone.REASON_EXPIRED)
+                    // Ours too: [clearLocalNow] has reset the identity already, but an [applyIdentity] of this
+                    // collector still running then (a slow flags provider) set the user again after it.
                     resetIdentity()
                 }
                 if (signedInUser == null && signedIn) {
