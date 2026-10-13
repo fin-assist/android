@@ -29,6 +29,7 @@ import javax.inject.Inject
  * - `offline=true|false` — every request of the fake backend fails with «нет сети».
  * - `call_delay_ms=<n>` — how long the sign-in call takes to «arrive» (keeps the call screen up).
  * - `network_delay_ms=<n>` — latency of every backend request (keeps a «busy» state up long enough to act on it).
+ * - `assistant_model_errors=<n>` — the next n assistant answers fail with MODEL_ERROR («Повторить» under them).
  *
  * Backend values live until the process dies: set them after `launchApp`.
  *
@@ -63,6 +64,7 @@ class E2eControlActivity : ComponentActivity() {
                 name == "offline" -> backend.config = backend.config.copy(offline = value.toBoolean())
                 name == "call_delay_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(callVerifyDelayMs = it) }
                 name == "network_delay_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(networkDelayMs = it) }
+                name == "assistant_model_errors" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(assistantModelErrors = it) }
                 else -> Log.w(TAG, "unknown parameter $name in $uri")
             }
         }

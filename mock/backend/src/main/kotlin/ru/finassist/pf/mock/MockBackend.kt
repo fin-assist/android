@@ -1,6 +1,7 @@
 package ru.finassist.pf.mock
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,8 +34,10 @@ import java.util.UUID
 class MockBackend(
     @Volatile var config: MockConfig,
     private val clock: Clock,
+    /** Where background work (imports, answer generation) runs; tests pass one they control. */
+    dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
     val mutex = Mutex()
 
     /** Completed once the preloaded statement is imported; requests wait for it. */

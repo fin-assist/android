@@ -91,9 +91,12 @@ class Search(private val ledger: Ledger, private val catalog: Catalog, private v
         return { r -> (r as? Record.Single)?.op?.let(test) ?: false }
     }
 
-    /** Validates a selection up front so an unknown one fails the whole request, not per record. */
+    /**
+     * Validates a selection up front so an unknown one fails the whole request, not per record. An empty ledger
+     * is no exception: a merchant or regular payment it no longer has is as unknown as one it never had (FIN-76),
+     * and [apply] would resolve the same selection anyway.
+     */
     fun validateSelection(selection: String) {
-        if (ledger.all.isEmpty()) return
         selectionPredicate(selection)
     }
 
