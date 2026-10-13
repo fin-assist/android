@@ -29,11 +29,8 @@ class ScreenshotsConventionPlugin : Plugin<Project> {
         }
         val enabled = providers.gradleProperty("pf.designcheck").isPresent
         val outDir = rootDir.resolve("build/design-check/app").path
-        // Robolectric downloads its Android runtime from Maven Central itself; agent containers point it at a mirror.
-        // Unit tests of view models run on Robolectric too, not only the design check.
-        val robolectricRepo = providers.gradleProperty("pf.robolectric.repo").orNull
+        // The Robolectric mirror for agent containers is set for every Android module (configureKotlinAndroid).
         tasks.withType<Test>().configureEach {
-            if (robolectricRepo != null) systemProperty("robolectric.dependency.repo.url", robolectricRepo)
             if (!enabled) {
                 exclude("**/*DesignCheckTest*")
             } else {

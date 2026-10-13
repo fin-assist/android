@@ -3,6 +3,7 @@ package ru.finassist.pf.buildlogic
 import com.android.build.api.dsl.CommonExtension
 import org.gradle.api.JavaVersion
 import org.gradle.api.Project
+import org.gradle.api.tasks.testing.Test
 import org.gradle.kotlin.dsl.dependencies
 import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -33,6 +34,13 @@ internal fun Project.configureKotlinAndroid(extension: CommonExtension<*, *, *, 
 
     configureKotlin()
     configureCoverage()
+
+    // Robolectric downloads its Android runtime from Maven Central itself, outside Gradle's repositories; agent
+    // containers point it at a mirror (scripts/agent-setup.sh). Any module's unit tests may run on Robolectric.
+    val robolectricRepo = providers.gradleProperty("pf.robolectric.repo").orNull
+    if (robolectricRepo != null) {
+        tasks.withType<Test>().configureEach { systemProperty("robolectric.dependency.repo.url", robolectricRepo) }
+    }
 
     dependencies {
         add("testImplementation", libs.findLibrary("junit4").get())
