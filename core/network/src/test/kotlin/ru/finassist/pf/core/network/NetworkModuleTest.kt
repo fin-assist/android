@@ -101,8 +101,7 @@ class NetworkModuleTest {
         assertEquals("Bearer old-access", failed.getHeader("Authorization"))
         assertNull(refresh.getHeader("Authorization"))
         assertTrue(refresh.getHeader(HEADER_IDEMPOTENCY_KEY)!!.isNotBlank())
-        // Known gap (FIN-73): the refresh client has no AuthInterceptor, so the marker reaches the server. Enable once fixed:
-        // assertNull(refresh.getHeader(NoAuth.HEADER))
+        assertNull(refresh.getHeader(NoAuth.HEADER))
         assertEquals("""{"refresh_token":"old-refresh"}""", refresh.body.readUtf8())
         assertEquals("Bearer new-access", retried.getHeader("Authorization"))
         assertNotEquals(failed.getHeader(HEADER_REQUEST_ID), retried.getHeader(HEADER_REQUEST_ID))
