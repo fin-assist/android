@@ -93,6 +93,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `offline=true\|false` | every backend request fails with «нет сети» | process |
   | `call_delay_ms=<n>` | how long the sign-in call takes | process |
   | `network_delay_ms=<n>` | latency of every backend request (a «busy» state stays up for that long) | process |
+  | `assistant_model_errors=<n>` | the next n assistant answers fail with MODEL_ERROR («Повторить» under them) | process (counts down) |
 
   Flags are read when a screen opens: set them before the screen (usually right after `clear_state.yaml`, before
   `launchApp`). Process-scoped values are set after `launchApp`.
@@ -183,6 +184,8 @@ were.
 | `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
 | `assistant/daily_limit` | unanswerable question is free; five questions exhaust the day |
 | `assistant/offline_retry` | no network: the notice replaces the input; «Повторить» sends the question once the network is back |
+| `assistant/chip_after_statements_deleted` | every statement deleted: the operations chip of an earlier answer opens the search without its stale selection (notice, empty result) — FIN-76 |
+| `assistant/retry_without_transfers` | `assistant_model_errors=1`: a question asked «Без переводов» fails, not spent; «Повторить» answers it still «без переводов» — FIN-76 |
 | `statements/upload_errors` | CSV, not a statement, another bank; leaving the picker |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
 | `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
