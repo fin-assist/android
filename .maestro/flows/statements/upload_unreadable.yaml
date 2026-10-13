@@ -65,9 +65,10 @@ tags:
       id: "statements.history"
     timeout: 10000
 # The newest upload is on top; the fixture statement has no unread lines, so this is the only such link.
+# The tag is on the link's container, its text on a child node: id and text are checked apart (FIN-70).
 - assertVisible:
     id: "statements.history.unread"
-    text: "Не прочитали 2.строки"
+- assertVisible: "Не прочитали 2.строки"
 - tapOn:
     id: "statements.history.unread"
 - extendedWaitUntil:

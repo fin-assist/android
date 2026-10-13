@@ -40,7 +40,8 @@ tags:
 - assertNotVisible:
     id: "statements.result.unread"
 
-# 7 October is the day before the pinned «now»: the operation tops the feed.
+# 7 October is the day before the pinned «now» (E2E_NOW): the operation tops the feed under «Вчера», whatever the
+# emulator's date (FIN-71). The day header is drawn in capitals.
 - scrollUntilVisible:
     element:
       id: "statements.result.done"
@@ -50,14 +51,15 @@ tags:
     visible:
       id: "operations.feed"
     timeout: 10000
-- assertVisible: "Вчера"
+- assertVisible: "(?iu)вчера"
 - assertVisible: "Без описания"
 - tapOn: "Без описания"
+# The tag is on the header row, the title on a child node: id and text are checked apart (FIN-70).
 - extendedWaitUntil:
     visible:
       id: "operations.detail.title"
-      text: "Без описания"
     timeout: 10000
+- assertVisible: "Без описания"
 # No description in the statement: no «Описание в выписке» row; the bank's category is still there.
 - assertNotVisible: "Описание в выписке"
 - assertVisible: "Фастфуд"

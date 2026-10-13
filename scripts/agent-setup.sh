@@ -109,7 +109,9 @@ if (( DESIGN_CHECK )); then
             "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto%5Bwdth%2Cwght%5D.ttf"
         fc-cache -f >/dev/null 2>&1 || true
     fi
-    python3 -c "import PIL, skimage" 2>/dev/null || pip install -q --break-system-packages pillow scikit-image
+    # `python3 -m pip`, not `pip`: on PATH they can belong to different interpreters, and compare.py runs on python3.
+    python3 -c "import numpy, PIL, skimage" 2>/dev/null \
+        || python3 -m pip install -q --break-system-packages numpy pillow scikit-image
     node -e "require('playwright')" 2>/dev/null || NODE_PATH="$(npm root -g)" node -e "require('playwright')" \
         || log "playwright for Node is missing: npm i -g playwright (Chromium must be installed for it)"
 fi

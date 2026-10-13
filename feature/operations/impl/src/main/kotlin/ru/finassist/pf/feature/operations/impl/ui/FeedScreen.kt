@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,8 +61,9 @@ fun FeedScreen(
     vm: FeedViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val zone = remember { ZoneId.systemDefault() }
-    val today = remember { LocalDate.now(zone) }
+    val clock = LocalPfClock.current
+    val zone = clock.zone
+    val today = remember(clock) { clock.today() }
     val listState = rememberLazyListState()
     LoadMoreEffect(listState, cursor = state.nextBefore, onLoadMore = vm::loadMore)
     FeedContent(

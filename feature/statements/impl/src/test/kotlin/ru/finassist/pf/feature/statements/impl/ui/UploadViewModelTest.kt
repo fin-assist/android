@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import java.time.ZoneId
+import ru.finassist.pf.core.common.time.Clock
 import android.content.Context
 import android.net.Uri
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -59,8 +61,9 @@ class UploadViewModelTest {
 
     private inner class FakeApi : StatementsApi {
         var offline = false
+        var configFailure: AppError? = null
         val keys = mutableListOf<String>()
-        override suspend fun getImportConfig(): ImportConfig = config
+        override suspend fun getImportConfig(): ImportConfig = configFailure?.let { throw it } ?: config
         override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted {
             keys += key.value
             if (offline) throw AppError.Offline()
@@ -90,15 +93,31 @@ class UploadViewModelTest {
     private val api = FakeApi()
     private val uri: Uri = Uri.parse("content://test/operations_2026.ofx")
     private lateinit var vm: UploadViewModel
+    private lateinit var store: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences>
+    private val clock = object : Clock {
+        override fun now(): OffsetDateTime = OffsetDateTime.parse("2026-10-08T12:00:00+03:00")
+        override val zone: ZoneId = ZoneId.of("Europe/Moscow")
+    }
 
     @Before fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         shadowOf(context.contentResolver).registerInputStreamSupplier(uri) { ByteArrayInputStream("OFXHEADER:100".toByteArray()) }
-        val store = PreferenceDataStoreFactory.create { File(context.cacheDir, "upload-test-${System.nanoTime()}.preferences_pb") }
-        vm = UploadViewModel(context, api, StatementsRepositoryImpl(store, NoTokens), StaticFlags(), NoTracker, IdempotencyKeys(store))
+        store = PreferenceDataStoreFactory.create { File(context.cacheDir, "upload-test-${System.nanoTime()}.preferences_pb") }
+        vm = newViewModel()
     }
 
+    private fun newViewModel() =
+        UploadViewModel(context, api, StatementsRepositoryImpl(store, NoTokens), StaticFlags(), NoTracker, IdempotencyKeys(store), clock)
+
     @After fun tearDown() = Dispatchers.resetMain()
+
+    @Test fun `without the config the guide suggests the last 12 months by the app's clock`() {
+        api.configFailure = AppError.Server(500)
+        val vm = newViewModel()
+        val period = vm.state.value.config!!.suggestedPeriod
+        assertEquals(OffsetDateTime.parse("2025-10-08T12:00:00+03:00"), period.from)
+        assertEquals(OffsetDateTime.parse("2026-10-09T12:00:00+03:00"), period.to)
+    }
 
     /** The file is read on the IO dispatcher: wait until the state settles. */
     private fun await(what: String, condition: (UploadUiState) -> Boolean) {

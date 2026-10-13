@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -72,8 +73,9 @@ import java.time.ZoneOffset
 @Composable
 fun SearchScreen(onBack: () -> Unit, onOpenOperation: (String) -> Unit, vm: SearchViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val zone = remember { ZoneId.systemDefault() }
-    val today = remember { LocalDate.now(zone) }
+    val clock = LocalPfClock.current
+    val zone = clock.zone
+    val today = remember(clock) { clock.today() }
     SearchContent(
         state = state, zone = zone, today = today, onBack = onBack, onOpenOperation = onOpenOperation,
         actions = remember(vm) {
@@ -302,7 +304,7 @@ private fun PeriodSheet(
             )
         }
     } else {
-        val zone = ZoneId.systemDefault()
+        val zone = LocalPfClock.current.zone
         val pickerState = rememberDateRangePickerState(
             initialSelectedStartDateMillis = f.from?.toLocalDate()?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
             initialSelectedEndDateMillis = f.to?.toLocalDate()?.minusDays(1)?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
