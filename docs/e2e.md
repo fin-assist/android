@@ -201,3 +201,7 @@ resource id for Maestro to tap, and the first three open an external browser the
 The server's own check of the phone number (400 `VALIDATION_ERROR` at `phone`, FIN-68) cannot be reached either:
 the app sends only `+7` and 10 digits, the very rule the server checks, so neither a real build nor the mock gets
 that error; `PhoneViewModelTest` covers the branch, `auth/phone_validation` the app's own check of a short number.
+A false «сессия истекла» after the user's own sign-out (FIN-74) needs the session observer's coroutine to get the
+`null` only after the sign-out returned and the phone screen read the reason — a thread interleaving neither the
+emulator nor the mock can force; `SessionRepositoryImplTest` reproduces it with a token store that delivers the
+`null` late.

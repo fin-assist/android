@@ -53,8 +53,14 @@ class SessionRepositoryImpl @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val signOutReason = AtomicReference<String?>(null)
 
-    /** Set while [clearLocal] runs, so the observer below does not report our own sign-out as an expiry. */
-    @Volatile private var signingOut = false
+    /**
+     * User id of a session we are clearing ourselves, so the observer below does not report that sign-out as an
+     * expiry. A flag held only while [clearLocalNow] runs is not enough (FIN-74): the observer collects on its own
+     * coroutine and may get the resulting `null` after the sign-out returned and the reason was consumed. The
+     * observer takes the mark off on every `null` it sees, and it only matches the user whose session went away,
+     * so a mark left over (the `null` conflated away by a quick new sign-in) cannot hide another user's expiry.
+     */
+    private val ownSignOut = AtomicReference<String?>(null)
 
     override val state: Flow<SessionState> = tokenStore.session.map { session ->
         // A session without a user id exists only for the moment the profile is being fetched after sign-in.
@@ -63,7 +69,7 @@ class SessionRepositoryImpl @Inject constructor(
 
     init {
         scope.launch {
-            var wasSignedIn = false
+            var signedInUser: String? = null
             tokenStore.session.collect { s ->
                 val signedIn = s != null && s.userId.isNotEmpty()
                 // Breadcrumb (logcat in mock, crash context in prod): `PfApp` switches graphs on this value, so a
@@ -77,17 +83,18 @@ class SessionRepositoryImpl @Inject constructor(
                         },
                     ),
                 )
-                if (wasSignedIn && s == null && !signingOut) {
+                val ownedBy = if (s == null) ownSignOut.getAndSet(null) else null
+                if (signedInUser != null && s == null && ownedBy != signedInUser) {
                     // The network layer dropped the session (refresh rejected): same cleanup as a sign-out.
                     signOutReason.compareAndSet(null, AuthRoutes.Phone.REASON_EXPIRED)
                     resetIdentity()
                 }
-                if (!wasSignedIn && signedIn) {
+                if (signedInUser == null && signedIn) {
                     // Also on a cold start with a restored session: flags targeting and analytics need the user.
                     applyIdentity(s!!.userId)
                     syncTimeZone()
                 }
-                wasSignedIn = signedIn
+                signedInUser = if (signedIn) s!!.userId else null
             }
         }
     }
@@ -138,15 +145,13 @@ class SessionRepositoryImpl @Inject constructor(
     override suspend fun clearLocal(reason: String?): Unit = detached { clearLocalNow(reason) }
 
     private suspend fun clearLocalNow(reason: String?) {
-        signingOut = true
-        try {
-            signOutReason.set(reason)
-            tokenStore.clear()
-            dataStore.edit { it.remove(KEY_PENDING_FIRST_UPLOAD) }
-            resetIdentity()
-        } finally {
-            signingOut = false
-        }
+        // Marked before the clear, so the observer finds the mark whenever it sees the `null`. Only a signed-in
+        // session: clearing a pending sign-in (empty user id) is never taken for an expiry.
+        tokenStore.current()?.userId?.takeIf { it.isNotEmpty() }?.let(ownSignOut::set)
+        signOutReason.set(reason)
+        tokenStore.clear()
+        dataStore.edit { it.remove(KEY_PENDING_FIRST_UPLOAD) }
+        resetIdentity()
     }
 
     /**
