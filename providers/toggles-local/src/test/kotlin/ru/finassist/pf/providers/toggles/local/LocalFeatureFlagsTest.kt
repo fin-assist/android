@@ -12,11 +12,13 @@ import app.cash.turbine.test
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -162,7 +164,7 @@ class LocalFeatureFlagsTest {
     }
 
     @Test
-    fun `a failed read after a write neither fails the write nor stops the overrides`() = runBlocking<Unit> {
+    fun `a failed read after a write neither fails the write nor leaves the overrides behind`() = runBlocking<Unit> {
         val store = dataStore()
         val flaky = object : DataStore<Preferences> {
             @Volatile var failReads = false
@@ -176,11 +178,9 @@ class LocalFeatureFlagsTest {
 
         flaky.failReads = true
         flags.set(Flag.ASSISTANT, false) // the write lands; the read after it fails and must not surface here
-        assertTrue(flags.isEnabled(Flag.ASSISTANT), "the last read stays")
+        assertTrue(flags.isEnabled(Flag.ASSISTANT), "the last read stays while reads fail")
 
-        flaky.failReads = false
-        flags.set(Flag.STATEMENTS_UPLOAD, false)
-        assertFalse(flags.isEnabled(Flag.ASSISTANT))
-        assertFalse(flags.isEnabled(Flag.STATEMENTS_UPLOAD))
+        flaky.failReads = false // no further write: the retried read publishes the override
+        withTimeout(5_000) { while (flags.isEnabled(Flag.ASSISTANT)) delay(10) }
     }
 }

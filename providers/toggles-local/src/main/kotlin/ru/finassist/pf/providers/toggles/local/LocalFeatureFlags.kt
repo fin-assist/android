@@ -35,8 +35,8 @@ import javax.inject.Singleton
 
 /**
  * Flags for the `mock` flavor: `assets/flags.json` (`{"assistant": false}`) overridden by values set from the
- * debug screen (DataStore). Mirrors the provider contract: values are snapshotted, [changes] fires on every
- * update, [setUser] / [refresh] are no-ops.
+ * debug screen (DataStore). Mirrors the provider contract: values are snapshotted, [changes] fires when the
+ * overrides read from the store change and on [refresh], [setUser] is a no-op.
  */
 @Singleton
 class LocalFeatureFlags @Inject constructor(
@@ -70,7 +70,7 @@ class LocalFeatureFlags @Inject constructor(
         scope.launch {
             dataStore.data
                 .retryWhen { e, _ -> (e !is CancellationException).also { if (it) delay(READ_RETRY_MS) } }
-                .collect { reload() }
+                .collect { reloadUntilRead() }
         }
     }
 
@@ -85,6 +85,7 @@ class LocalFeatureFlags @Inject constructor(
 
     override suspend fun setUser(userId: String?) = Unit
 
+    /** Re-reads the asset; [changes] fires unconditionally, as a remote provider's fetch would. */
     override suspend fun refresh() {
         assetValues = readAsset()
         changesFlow.tryEmit(Unit)
@@ -98,7 +99,7 @@ class LocalFeatureFlags @Inject constructor(
                 if (enabled == null) prefs.remove(key) else prefs[key] = enabled
             }
         } finally {
-            reload()
+            reloadAfterWrite()
         }
     }
 
@@ -109,32 +110,48 @@ class LocalFeatureFlags @Inject constructor(
                 Flag.entries.forEach { prefs.remove(booleanPreferencesKey(PREFIX + it.key)) }
             }
         } finally {
-            reload()
+            reloadAfterWrite()
         }
     }
 
-    /** Blocks until the first DataStore read so flags are stable before the first screen renders. */
-    suspend fun awaitReady() = reload()
+    /** Reads the overrides once, so flags are stable before the first screen renders. */
+    suspend fun awaitReady() {
+        reload()
+    }
+
+    /** A failed read is retried in the background: the writer gets its own outcome now. */
+    private suspend fun reloadAfterWrite() {
+        if (!reload()) scope.launch { reloadUntilRead() }
+    }
+
+    /**
+     * Until a read lands, the overrides are behind the store, and no later change may come to fix it: a failed read
+     * is retried, not left waiting for the next write.
+     */
+    private suspend fun reloadUntilRead() {
+        while (!reload()) delay(READ_RETRY_MS)
+    }
 
     /**
      * Reads the overrides afresh and publishes them; [changes] fires when they differ from the last published ones
      * (and on the first read). NonCancellable: a write that has landed is published even if its caller has gone away.
      * A failed read keeps the last values and does not throw: it runs after every own write, where it would replace
-     * the write's own outcome, and in the trigger, which would stop.
+     * the write's own outcome, and in the trigger, which would stop. Returns whether the read landed.
      */
-    private suspend fun reload() = withContext(NonCancellable) {
+    private suspend fun reload(): Boolean = withContext(NonCancellable) {
         val changed = reads.withLock {
             val values = try {
                 dataStore.data.first().toOverrides()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                return@withLock false
+                return@withLock null
             }
             overrideValues = values
             (stored.value != values).also { stored.value = values }
-        }
+        } ?: return@withContext false
         if (changed) changesFlow.tryEmit(Unit)
+        true
     }
 
     private fun Preferences.toOverrides(): Map<Flag, Boolean> = Flag.entries.mapNotNull { flag ->
