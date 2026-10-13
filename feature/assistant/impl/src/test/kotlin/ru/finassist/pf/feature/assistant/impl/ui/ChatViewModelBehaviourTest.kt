@@ -1,6 +1,7 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
 import androidx.lifecycle.SavedStateHandle
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -92,6 +93,8 @@ class ChatViewModelBehaviourTest {
 
         val retryOutcomes = ArrayDeque<Any>()
         val retries = mutableListOf<Pair<IdempotencyKey, String>>()
+        /** When set, `retry` waits for it before answering: the request is still on its way. */
+        var retryGate: CompletableDeferred<Unit>? = null
 
         /** Each opening of an answer's stream takes the next script; none left — a stream that stays open. */
         val streams = HashMap<String, ArrayDeque<Flow<AnswerEvent>>>()
@@ -120,6 +123,7 @@ class ChatViewModelBehaviourTest {
 
         override suspend fun retry(key: IdempotencyKey, answerId: String): RetryResponse {
             retries += key to answerId
+            retryGate?.await()
             return when (val o = retryOutcomes.removeFirst()) {
                 is AppError -> throw o
                 else -> o as RetryResponse
@@ -570,6 +574,59 @@ class ChatViewModelBehaviourTest {
         assertEquals(listOf("q1", "a2"), vm.state.value.items.map { it.id })
     }
 
+    @Test fun `a second tap while the retry is on its way sends nothing`() {
+        api.retryGate = CompletableDeferred()
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        val vm = vmWithFailedAnswer()
+        vm.retry("a1")
+        vm.retry("a1")
+        assertEquals(1, api.retries.size)
+
+        api.retryGate!!.complete(Unit)
+        assertEquals(listOf("q1", "a2"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.sendFailed)
+    }
+
+    @Test fun `a retry can be tapped again once the first one has failed`() {
+        api.retryGate = CompletableDeferred()
+        api.retryOutcomes += AppError.Server(500)
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        val vm = vmWithFailedAnswer()
+        vm.retry("a1")
+        api.retryGate!!.complete(Unit)
+        assertTrue(vm.state.value.sendFailed)
+        vm.retry("a1")
+        assertEquals(2, api.retries.size)
+        assertEquals(listOf("q1", "a2"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `a retry in progress is repeated with the same key after retry_after, not shown as a failure`() {
+        api.retryOutcomes += AppError.InProgress(retryAfterSeconds = 3)
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        val vm = vmWithFailedAnswer()
+        vm.retry("a1")
+        assertFalse(vm.state.value.sendFailed)
+        // Waiting out Retry-After is still the same tap: another one sends nothing.
+        vm.retry("a1")
+        advance(2_999)
+        assertEquals(1, api.retries.size)
+        advance(1)
+        assertEquals(2, api.retries.size)
+        assertEquals(api.retries[0].first, api.retries[1].first)
+        assertFalse(vm.state.value.sendFailed)
+        assertEquals(listOf("q1", "a2"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `a retry still in progress after the retries ends in the retry notice`() {
+        repeat(4) { api.retryOutcomes += AppError.InProgress(retryAfterSeconds = 1) }
+        val vm = vmWithFailedAnswer()
+        vm.retry("a1")
+        advance(3_000)
+        assertEquals(4, api.retries.size)
+        assertTrue(vm.state.value.sendFailed)
+        assertEquals(AnswerStatus.FAILED, vm.answerItem("a1").status)
+    }
+
     @Test fun `retry over the limit zeroes the counter`() {
         api.retryOutcomes += AppError.Api(ErrorCodes.LIMIT_EXCEEDED, 429)
         val vm = vmWithFailedAnswer()
@@ -648,16 +705,46 @@ class ChatViewModelBehaviourTest {
         assertEquals(listOf(text("Начало")), vm.answerItem("a1").blocks)
     }
 
-    @Test fun `a stream error other than the network stops watching`() {
+    @Test fun `a stream error other than the network stops watching and the history gives the answer its status`() {
         api.askOutcomes += askResponse("a1")
+        api.askOutcomes += askResponse("a2")
         api.script("a1", flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) })
         val vm = newVm()
+        api.pages[null] = MessagesList(listOf(question("q-a1"), answer("a1", AnswerStatus.FAILED, AnswerErrorCode.MODEL_ERROR)), hasOlder = false)
         sendQuestion(vm)
         advance(60_000)
         assertEquals(listOf("a1"), api.streamOpens)
+        // FIN-75: the history was re-read, the answer is no longer «generating» and the composer is free.
+        assertEquals(2, api.listCalls.size)
+        assertEquals(AnswerStatus.FAILED, vm.answerItem("a1").status)
+        assertFalse(vm.state.value.generating)
+        sendQuestion(vm, "Ещё вопрос")
+        assertEquals(2, api.asks.size)
+    }
+
+    @Test fun `a stream error is not retried in a loop when the history still says generating`() {
+        api.askOutcomes += askResponse("a1")
+        api.script("a1", flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) })
+        val vm = newVm()
+        api.pages[null] = MessagesList(listOf(question("q-a1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        sendQuestion(vm)
+        advance(60_000)
+        assertEquals(listOf("a1"), api.streamOpens)
+        assertEquals(2, api.listCalls.size)
         // Re-opened on the next resume.
         vm.resumeStreams()
         assertEquals(listOf("a1", "a1"), api.streamOpens)
+    }
+
+    @Test fun `a failed reload after a stream error keeps the thread`() {
+        api.askOutcomes += askResponse("a1")
+        api.script("a1", flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) })
+        val vm = newVm()
+        api.listFailure = AppError.Server(500)
+        sendQuestion(vm)
+        assertEquals(2, api.listCalls.size)
+        assertEquals(listOf("q-a1", "a1"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.loadFailed)
     }
 
     @Test fun `streams stop on pause and are re-opened once on resume`() {

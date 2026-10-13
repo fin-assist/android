@@ -84,6 +84,16 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
     private fun generate(answer: AssistantStore.Answer, text: String, mode: TransferMode) {
         backend.scope.launch {
             delay(backend.config.networkDelayMs * 2)
+            val modelError = backend.mutex.withLock {
+                val left = backend.config.assistantModelErrors
+                if (left > 0) backend.config = backend.config.copy(assistantModelErrors = left - 1)
+                left > 0
+            }
+            if (modelError) {
+                refund()
+                answer.append(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "model unavailable", remaining())))
+                return@launch
+            }
             val outcome = backend.mutex.withLock { engine.answer(text, mode, moscowToday()) }
             when (outcome) {
                 AssistantEngine.Outcome.CannotAnswer -> {
@@ -146,9 +156,11 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
     }
 
     override suspend fun retry(key: IdempotencyKey, answerId: String): RetryResponse {
-        backend.simulateNetwork()
-        backend.requireSession()
+        // The latency counts as the server's work on the request: a repeat with the same key while the first one is
+        // on its way gets 409 REQUEST_IN_PROGRESS, as a double tap on «Повторить» would on a real server (FIN-75).
         return backend.idempotent("assistant.retry:${key.value}") {
+            backend.simulateNetwork()
+            backend.requireSession()
             val old = backend.mutex.withLock { store.answers[answerId] } ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
             if (old.replaced || old.status != AnswerStatus.FAILED || old.errorCode != AnswerErrorCode.MODEL_ERROR) {
                 throw AppError.Api(ErrorCodes.RETRY_NOT_ALLOWED, 422)
