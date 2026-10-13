@@ -271,6 +271,19 @@ class SessionRepositoryImplTest {
         eventually { h.repo.consumeSignOutReason() == AuthRoutes.Phone.REASON_EXPIRED }
     }
 
+    @Test fun `a sign-out that failed to clear the session does not hide its later expiry`() = runBlocking {
+        val h = harness(TokenStore.Session("u1", pair))
+        eventually { "flags.user:u1" in h.log.all() }
+        h.tokens.beforeClear = { throw java.io.IOException("disk full") }
+        assertFailsWith<java.io.IOException> { h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT) }
+        h.repo.consumeSignOutReason()
+        h.tokens.beforeClear = {}
+
+        h.tokens.flow.value = null // the refresh was rejected later
+
+        eventually { h.repo.consumeSignOutReason() == AuthRoutes.Phone.REASON_EXPIRED }
+    }
+
     @Test fun `a restored session applies the identity and syncs a changed time zone`() {
         val h = harness(TokenStore.Session("u1", pair))
         h.profile.timezone = "Asia/Vladivostok-not-this-device"

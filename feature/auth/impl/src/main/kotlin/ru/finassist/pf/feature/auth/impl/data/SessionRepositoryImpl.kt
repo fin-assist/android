@@ -152,9 +152,15 @@ class SessionRepositoryImpl @Inject constructor(
     private suspend fun clearLocalNow(reason: String?) {
         // Marked before the clear, so the observer finds the mark whenever it sees the `null`. A pending sign-in
         // (empty user id) leaves an empty mark, which matches no signed-in user and so hides nothing.
-        tokenStore.current()?.userId?.let(ownSignOut::set)
+        val mark = tokenStore.current()?.userId?.also(ownSignOut::set)
         signOutReason.set(reason)
-        tokenStore.clear()
+        try {
+            tokenStore.clear()
+        } catch (e: Throwable) {
+            // The session stays: a mark left behind would swallow its later expiry as our own sign-out.
+            if (mark != null) ownSignOut.compareAndSet(mark, null)
+            throw e
+        }
         dataStore.edit { it.remove(KEY_PENDING_FIRST_UPLOAD) }
         resetIdentity()
     }
