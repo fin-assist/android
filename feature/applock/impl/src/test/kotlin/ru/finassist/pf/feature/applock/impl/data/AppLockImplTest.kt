@@ -381,4 +381,37 @@ class AppLockImplTest {
         flaky.failReads = false // the retry ends on the last write's value
         lock.biometricEnabled.await(true)
     }
+
+    @Test
+    fun `a write that fails to read back while a retry ends is read by that retry`() = runBlocking<Unit> {
+        biometrics(available = true, fingerprint = true)
+        // Reads see the store; the long-lived collections see only their first value, as ones that missed the writes.
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) throw IOException("disk read failed")
+                emit(dataStore.data.first())
+                kotlinx.coroutines.awaitCancellation()
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val lock = AppLockImpl(context, PasscodeStore(flaky, crypto), session, tracker)
+        lock.setPasscode("1234")
+        lock.state.await(LockState.Unlocked)
+        val read = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        lock.afterRetryRead = { if (!read.isCompleted) { read.complete(Unit); release.await() } }
+
+        flaky.failReads = true
+        lock.setBiometricEnabled(false) // fails to read back: a retry starts
+        flaky.failReads = false
+        withTimeout(5_000) { read.await() } // the retry has read «off» and is about to end
+
+        flaky.failReads = true
+        lock.setBiometricEnabled(true) // fails to read back while that retry is still running
+        flaky.failReads = false
+        release.complete(Unit)
+
+        lock.biometricEnabled.await(true)
+    }
 }
