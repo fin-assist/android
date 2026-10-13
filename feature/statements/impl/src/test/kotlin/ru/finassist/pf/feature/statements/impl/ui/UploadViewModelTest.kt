@@ -6,10 +6,13 @@ import android.content.Context
 import android.net.Uri
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -25,7 +28,10 @@ import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.UploadFile
+import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.IdempotencyKey
+import ru.finassist.pf.core.api.model.ImportProgress
+import ru.finassist.pf.core.api.model.ImportStage
 import ru.finassist.pf.core.api.model.ImportConfig
 import ru.finassist.pf.core.api.model.StatementsList
 import ru.finassist.pf.core.api.model.TokenPair
@@ -34,16 +40,21 @@ import ru.finassist.pf.core.api.model.UploadAccepted
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.core.storage.IdempotencyKeys
+import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.toggles.StaticFlags
-import ru.finassist.pf.core.tracking.Event
-import ru.finassist.pf.core.tracking.Tracker
+import ru.finassist.pf.core.tracking.Events
+import ru.finassist.pf.feature.statements.impl.RecordingTracker
+import ru.finassist.pf.feature.statements.impl.importResult
 import ru.finassist.pf.feature.statements.impl.data.StatementsRepositoryImpl
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 import java.time.OffsetDateTime
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Robolectric: the view model reads the picked document through `ContentResolver`. */
@@ -62,17 +73,42 @@ class UploadViewModelTest {
     private inner class FakeApi : StatementsApi {
         var offline = false
         var configFailure: AppError? = null
-        val keys = mutableListOf<String>()
-        override suspend fun getImportConfig(): ImportConfig = configFailure?.let { throw it } ?: config
+        var currentConfig = config
+        var configCalls = 0
+        val keys: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+        /** Thrown by the next uploads, one each, before the file is accepted. */
+        val uploadFailures = ArrayDeque<AppError>()
+        /** While set, the upload waits for it: the request is «in flight». */
+        var uploadGate: CompletableDeferred<Unit>? = null
+        /** Each opening of the progress stream takes the next flow; none left — no events. */
+        val streams = ArrayDeque<Flow<ImportEvent>>()
+        val streamOpens = AtomicInteger()
+        var deleteGate: CompletableDeferred<Unit>? = null
+        var deleteFailure: AppError? = null
+        val deleted = mutableListOf<String>()
+
+        override suspend fun getImportConfig(): ImportConfig {
+            configCalls++
+            return configFailure?.let { throw it } ?: currentConfig
+        }
         override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted {
             keys += key.value
+            uploadGate?.await()
             if (offline) throw AppError.Offline()
+            synchronized(uploadFailures) { uploadFailures.removeFirstOrNull() }?.let { throw it }
             return UploadAccepted("u1", file.name)
         }
-        // No events: the upload stays «busy» for the assertions.
-        override fun streamProgress(uploadId: String): Flow<ImportEvent> = emptyFlow()
+        // No events by default: the upload stays «busy» for the assertions.
+        override fun streamProgress(uploadId: String): Flow<ImportEvent> {
+            streamOpens.incrementAndGet()
+            return synchronized(streams) { streams.removeFirstOrNull() } ?: emptyFlow()
+        }
         override suspend fun listStatements(): StatementsList = error("unused")
-        override suspend fun deleteStatement(uploadId: String) = Unit
+        override suspend fun deleteStatement(uploadId: String) {
+            deleted += uploadId
+            deleteGate?.await()
+            deleteFailure?.let { throw it }
+        }
         override suspend fun listUnreadLines(uploadId: String): UnreadLinesList = error("unused")
         override suspend fun listUnreadLines(from: OffsetDateTime, to: OffsetDateTime): UnreadLinesList = error("unused")
     }
@@ -85,12 +121,10 @@ class UploadViewModelTest {
         override suspend fun clear() = Unit
     }
 
-    private object NoTracker : Tracker {
-        override fun track(event: Event, params: Map<String, String>) = Unit
-        override fun setUserId(userId: String?) = Unit
-    }
-
+    private val dispatcher = UnconfinedTestDispatcher()
     private val api = FakeApi()
+    private val tracker = RecordingTracker()
+    private lateinit var repository: StatementsRepositoryImpl
     private val uri: Uri = Uri.parse("content://test/operations_2026.ofx")
     private lateinit var vm: UploadViewModel
     private lateinit var store: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences>
@@ -100,14 +134,15 @@ class UploadViewModelTest {
     }
 
     @Before fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
+        Dispatchers.setMain(dispatcher)
         shadowOf(context.contentResolver).registerInputStreamSupplier(uri) { ByteArrayInputStream("OFXHEADER:100".toByteArray()) }
         store = PreferenceDataStoreFactory.create { File(context.cacheDir, "upload-test-${System.nanoTime()}.preferences_pb") }
+        repository = StatementsRepositoryImpl(store, NoTokens)
         vm = newViewModel()
     }
 
-    private fun newViewModel() =
-        UploadViewModel(context, api, StatementsRepositoryImpl(store, NoTokens), StaticFlags(), NoTracker, IdempotencyKeys(store), clock)
+    private fun newViewModel(flags: StaticFlags = StaticFlags()) =
+        UploadViewModel(context, api, repository, flags, tracker, IdempotencyKeys(store), clock)
 
     @After fun tearDown() = Dispatchers.resetMain()
 
@@ -174,5 +209,286 @@ class UploadViewModelTest {
         await("the offline notice") { it.uploadOffline }
         vm.backToGuide()
         assertFalse(vm.state.value.uploadOffline)
+    }
+
+    // ---- picking a file ----
+
+    private val name = "operations_2026.ofx"
+
+    /** The progress stream is re-opened after a delay of the test clock: move it on until [condition] holds. */
+    private fun advanceUntil(what: String, condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (!condition()) {
+            check(System.currentTimeMillis() < deadline) { "timed out waiting for $what: ${vm.state.value}" }
+            dispatcher.scheduler.advanceTimeBy(1_000)
+            dispatcher.scheduler.runCurrent()
+            Thread.sleep(20)
+        }
+    }
+
+    private fun awaitAccepted() = await("the accepted upload") { (it.phase as? UploadPhase.Busy)?.uploadId == "u1" }
+
+    /** A progress stream the test emits into once the view model listens. */
+    private fun liveStream(): MutableSharedFlow<ImportEvent> {
+        val live = MutableSharedFlow<ImportEvent>(extraBufferCapacity = 8)
+        api.streams += live
+        return live
+    }
+
+    private fun MutableSharedFlow<ImportEvent>.awaitSubscribed() {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (subscriptionCount.value == 0) {
+            check(System.currentTimeMillis() < deadline) { "the progress stream was not opened" }
+            Thread.sleep(20)
+        }
+    }
+
+    @Test fun `with the upload toggle off the screen is disabled and loads nothing`() {
+        val before = api.configCalls
+        vm = newViewModel(StaticFlags(mapOf(Flag.STATEMENTS_UPLOAD to false)))
+        assertEquals(UploadPhase.Disabled, vm.state.value.phase)
+        assertEquals(before, api.configCalls)
+    }
+
+    @Test fun `no network for the config shows the offline screen until a reload succeeds`() {
+        api.configFailure = AppError.Offline()
+        vm = newViewModel()
+        assertEquals(UploadPhase.Offline, vm.state.value.phase)
+        api.configFailure = null
+        vm.load()
+        assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
+    }
+
+    @Test fun `a file over the size limit is rejected without sending it`() {
+        val small = config.copy(maxFileSizeBytes = 4)
+        api.currentConfig = small
+        vm = newViewModel()
+        vm.onFilePicked(uri)
+        await("the size error") { it.phase is UploadPhase.Error }
+        assertEquals(UploadPhase.Error(ErrorCodes.FILE_TOO_LARGE, name, small), vm.state.value.phase)
+        assertTrue(api.keys.isEmpty())
+    }
+
+    @Test fun `an unreadable document is an error and nothing is sent`() {
+        val broken = Uri.parse("content://test/broken.ofx")
+        shadowOf(context.contentResolver).registerInputStreamSupplier(broken) { throw IOException("revoked") }
+        vm.onFilePicked(broken)
+        await("the read error") { it.phase is UploadPhase.Error }
+        assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, "broken.ofx", config), vm.state.value.phase)
+        assertTrue(api.keys.isEmpty())
+    }
+
+    @Test fun `a rejected file is a final answer - picking it again is a new upload`() {
+        api.uploadFailures += AppError.Api(ErrorCodes.WRONG_FORMAT, 400)
+        vm.onFilePicked(uri)
+        await("the rejection") { it.phase is UploadPhase.Error }
+        assertEquals(UploadPhase.Error(ErrorCodes.WRONG_FORMAT, name, config), vm.state.value.phase)
+        assertEquals(mapOf("code" to ErrorCodes.WRONG_FORMAT), tracker.events.last { it.first == Events.STATEMENTS_UPLOAD_FAILED }.second)
+
+        vm.backToGuide()
+        assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        assertTrue(api.keys[0] != api.keys[1])
+    }
+
+    @Test fun `a server failure keeps the key - the same file is the same upload`() {
+        api.uploadFailures += AppError.Server(500)
+        vm.onFilePicked(uri)
+        await("the failure") { it.phase is UploadPhase.Error }
+        assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, name, config), vm.state.value.phase)
+
+        vm.backToGuide()
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        assertEquals(api.keys[0], api.keys[1])
+    }
+
+    @Test fun `an accepted file is a final answer - the same file later is a new upload`() {
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        assertTrue(Events.STATEMENTS_UPLOAD_STARTED in tracker.names())
+        vm.onFilePicked(uri)
+        await("the second upload") { api.keys.size == 2 }
+        assertTrue(api.keys[0] != api.keys[1])
+    }
+
+    @Test fun `a request still in progress is repeated with the same key`() {
+        api.uploadFailures += AppError.InProgress(retryAfterSeconds = 1)
+        vm.onFilePicked(uri)
+        await("the first attempt") { api.keys.size == 1 }
+        advanceUntil("the repeated request") { (vm.state.value.phase as? UploadPhase.Busy)?.uploadId == "u1" }
+        assertEquals(2, api.keys.size)
+        assertEquals(api.keys[0], api.keys[1])
+    }
+
+    @Test fun `a second pick while a file is being sent is ignored`() {
+        val gate = CompletableDeferred<Unit>()
+        api.uploadGate = gate
+        vm.onFilePicked(uri)
+        await("the upload in flight") { api.keys.size == 1 }
+        vm.onFilePicked(uri)
+        gate.complete(Unit)
+        awaitAccepted()
+        assertEquals(1, api.keys.size)
+    }
+
+    // ---- progress ----
+
+    @Test fun `progress moves the bar and complete opens the result`() {
+        val live = liveStream()
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        assertEquals(0.05f, assertIs<UploadPhase.Busy>(vm.state.value.phase).progress)
+        live.awaitSubscribed()
+
+        live.tryEmit(ImportEvent.Progress(ImportProgress(ImportStage.DEDUP, 40)))
+        assertEquals(0.4f, assertIs<UploadPhase.Busy>(vm.state.value.phase).progress)
+        // The bar never goes back to empty.
+        live.tryEmit(ImportEvent.Progress(ImportProgress(ImportStage.PARSING, 1)))
+        assertEquals(0.05f, assertIs<UploadPhase.Busy>(vm.state.value.phase).progress)
+
+        val result = importResult(newCount = 7)
+        live.tryEmit(ImportEvent.Complete(result))
+        assertEquals("u1", vm.state.value.doneUploadId)
+        assertEquals(result, repository.lastResult("u1"))
+        assertEquals(mapOf("new_count" to "7"), tracker.events.single { it.first == Events.STATEMENTS_UPLOAD_COMPLETED }.second)
+
+        vm.consumeDone()
+        assertNull(vm.state.value.doneUploadId)
+    }
+
+    @Test fun `a parsing failure shows the error`() {
+        api.streams += flowOf(ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, "failed"))
+        vm.onFilePicked(uri)
+        await("the parsing error") { it.phase is UploadPhase.Error }
+        assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, name, config), vm.state.value.phase)
+        assertNull(vm.state.value.doneUploadId)
+    }
+
+    @Test fun `parsing cancelled on the server returns to the guide`() {
+        api.streams += flowOf(ImportEvent.Error(ErrorCodes.CANCELLED, "cancelled"))
+        vm.onFilePicked(uri)
+        // The guide is on screen before the pick as well: wait for the stream to end.
+        await("the cancellation") { Events.STATEMENTS_UPLOAD_CANCELLED in tracker.names() }
+        assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
+    }
+
+    @Test fun `a stream error other than the network fails the upload`() {
+        api.streams += flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) }
+        vm.onFilePicked(uri)
+        await("the error") { it.phase is UploadPhase.Error }
+        assertEquals(UploadPhase.Error(ErrorCodes.NOT_FOUND, name, config), vm.state.value.phase)
+    }
+
+    @Test fun `a dropped stream is re-opened and picks up the result`() {
+        api.streams += flow { throw AppError.Offline() }
+        api.streams += flowOf(ImportEvent.Complete(importResult()))
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        advanceUntil("the result") { vm.state.value.doneUploadId == "u1" }
+        assertEquals(2, api.streamOpens.get())
+    }
+
+    @Test fun `the stream stops with the screen and is re-opened once on its return`() {
+        liveStream()
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        await("the stream") { api.streamOpens.get() == 1 }
+        // Already listening: no second stream.
+        vm.watch()
+        assertEquals(1, api.streamOpens.get())
+        vm.stopWatching()
+        liveStream()
+        vm.watch()
+        assertEquals(2, api.streamOpens.get())
+    }
+
+    @Test fun `watch outside of an accepted upload does nothing`() {
+        vm.watch()
+        assertEquals(0, api.streamOpens.get())
+    }
+
+    // ---- «Прервать разбор» ----
+
+    @Test fun `cancel before the server accepted the file stops the request`() {
+        val gate = CompletableDeferred<Unit>()
+        api.uploadGate = gate
+        vm.onFilePicked(uri)
+        await("the upload in flight") { api.keys.size == 1 }
+        assertNull(assertIs<UploadPhase.Busy>(vm.state.value.phase).uploadId)
+        vm.askCancel(true)
+        vm.cancelImport()
+        assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
+        assertFalse(vm.state.value.askCancel)
+        // A late answer of the cancelled request changes nothing.
+        gate.complete(Unit)
+        assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
+        assertTrue(api.deleted.isEmpty())
+    }
+
+    @Test fun `cancel after acceptance deletes the upload and returns to the guide`() {
+        liveStream()
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        vm.askCancel(true)
+        assertTrue(vm.state.value.askCancel)
+        vm.cancelImport()
+        assertEquals(listOf("u1"), api.deleted)
+        assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
+        assertFalse(vm.state.value.askCancel)
+        assertTrue(Events.STATEMENTS_UPLOAD_CANCELLED in tracker.names())
+    }
+
+    @Test fun `a failed cancel keeps the parsing on screen`() {
+        api.deleteFailure = AppError.Offline()
+        liveStream()
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        vm.askCancel(true)
+        vm.cancelImport()
+        val busy = assertIs<UploadPhase.Busy>(vm.state.value.phase)
+        assertFalse(busy.cancelling)
+        assertFalse(vm.state.value.askCancel)
+    }
+
+    @Test fun `a result that raced a successful cancel is dropped`() {
+        val live = liveStream()
+        val gate = CompletableDeferred<Unit>()
+        api.deleteGate = gate
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        live.awaitSubscribed()
+        vm.cancelImport()
+        assertTrue(assertIs<UploadPhase.Busy>(vm.state.value.phase).cancelling)
+
+        live.tryEmit(ImportEvent.Complete(importResult()))
+        assertNull(vm.state.value.doneUploadId)
+        gate.complete(Unit)
+        assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
+        assertNull(vm.state.value.doneUploadId)
+        assertNull(repository.lastResult("u1"))
+    }
+
+    @Test fun `a result that raced a failed cancel is shown`() {
+        val live = liveStream()
+        val gate = CompletableDeferred<Unit>()
+        api.deleteGate = gate
+        api.deleteFailure = AppError.Server(500)
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        live.awaitSubscribed()
+        vm.cancelImport()
+        val result = importResult()
+        live.tryEmit(ImportEvent.Complete(result))
+        gate.complete(Unit)
+        assertEquals("u1", vm.state.value.doneUploadId)
+        assertEquals(result, repository.lastResult("u1"))
+    }
+
+    @Test fun `cancel with nothing being parsed does nothing`() {
+        vm.cancelImport()
+        assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
+        assertTrue(api.deleted.isEmpty())
     }
 }
