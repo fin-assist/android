@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import androidx.compose.runtime.remember
+import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -52,9 +54,9 @@ import java.time.ZoneId
 @Composable
 fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val zone = ZoneId.systemDefault()
+    val clock = LocalPfClock.current
     DetailContent(
-        state = state, zone = zone, today = LocalDate.now(zone), onBack = onBack, onRetry = vm::load,
+        state = state, zone = clock.zone, today = remember(clock) { clock.today() }, onBack = onBack, onRetry = vm::load,
         onOpenPicker = vm::openPicker, onClosePicker = vm::closePicker, onChoose = vm::choose, onSave = vm::save,
         onSnackbarShown = vm::consumeSnackbar,
     )

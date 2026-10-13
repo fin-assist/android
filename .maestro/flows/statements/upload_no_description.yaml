@@ -40,8 +40,8 @@ tags:
 - assertNotVisible:
     id: "statements.result.unread"
 
-# 7 October, the newest day of the statements: the operation tops the feed. The day's label is not checked — the
-# feed counts «today» by the device clock, while the e2e build pins only the mock backend's (FIN-70).
+# 7 October is the day before the pinned «now» (E2E_NOW): the operation tops the feed under «Вчера», whatever the
+# emulator's date (FIN-71). The day header is drawn in capitals.
 - scrollUntilVisible:
     element:
       id: "statements.result.done"
@@ -51,6 +51,7 @@ tags:
     visible:
       id: "operations.feed"
     timeout: 10000
+- assertVisible: "(?iu)вчера"
 - assertVisible: "Без описания"
 - tapOn: "Без описания"
 # The tag is on the header row, the title on a child node: id and text are checked apart (FIN-70).

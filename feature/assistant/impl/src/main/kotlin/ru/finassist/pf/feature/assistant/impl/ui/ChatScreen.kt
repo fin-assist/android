@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import androidx.compose.foundation.layout.Arrangement
 import ru.finassist.pf.core.designsystem.components.PfTestTags
 import ru.finassist.pf.core.designsystem.components.PfLimitMeter
@@ -88,7 +89,8 @@ fun ChatScreen(
     vm: ChatViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val zone = remember { ZoneId.systemDefault() }
+    val clock = LocalPfClock.current
+    val zone = clock.zone
 
     LifecycleResumeEffect(Unit) {
         vm.resumeStreams()
@@ -111,7 +113,7 @@ fun ChatScreen(
     ChatContent(
         state = state,
         zone = zone,
-        today = LocalDate.now(zone),
+        today = remember(clock) { clock.today() },
         voiceListening = voice.listening,
         actions = remember(vm, voice.start, onBack, onOpenSearch, onOpenAnalytics) {
             ChatActions(
@@ -362,7 +364,7 @@ private fun ChartBody(block: Block, chartId: String) {
     PfBarChart(
         chartId = chartId,
         points = points.map { p ->
-            val ym = YearMonth.from(p.range.from.atZoneSameInstant(ZoneId.systemDefault()))
+            val ym = YearMonth.from(p.range.from.atZoneSameInstant(LocalPfClock.current.zone))
             val display = p.value?.let { v ->
                 if (block.valueKind == ChartValueKind.PERCENT) "${(v * 100).roundToInt()}%" else Money(v.toLong()).format()
             } ?: "нет данных"

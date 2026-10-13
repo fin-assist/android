@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.UploadFile
@@ -74,6 +75,7 @@ class UploadViewModel @Inject constructor(
     private val flags: FeatureFlags,
     private val tracker: Tracker,
     private val keys: IdempotencyKeys,
+    private val clock: Clock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(UploadUiState())
     val state: StateFlow<UploadUiState> = _state
@@ -120,7 +122,7 @@ class UploadViewModel @Inject constructor(
         maxFileSizeBytes = 10L * 1024 * 1024,
         acceptedFormats = listOf("OFX"),
         suggestedPeriod = ru.finassist.pf.core.common.time.DateRange(
-            java.time.OffsetDateTime.now().minusMonths(12), java.time.OffsetDateTime.now().plusDays(1),
+            clock.now().minusMonths(12), clock.now().plusDays(1),
         ),
     )
 

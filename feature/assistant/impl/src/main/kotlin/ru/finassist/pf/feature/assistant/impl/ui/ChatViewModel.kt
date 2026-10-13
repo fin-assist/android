@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.AssistantApi
 import ru.finassist.pf.core.api.model.AnswerErrorCode
 import ru.finassist.pf.core.api.model.AnswerEvent
@@ -81,6 +82,7 @@ class ChatViewModel @Inject constructor(
     private val savedState: SavedStateHandle,
     private val api: AssistantApi,
     private val tracker: Tracker,
+    private val clock: Clock,
 ) : ViewModel() {
     private val transferMode: TransferMode =
         TransferMode.entries.firstOrNull { it.code == savedState.toRoute<AssistantRoutes.Chat>().transferMode } ?: TransferMode.WITH
@@ -189,7 +191,7 @@ class ChatViewModel @Inject constructor(
                     e is AppError.Api && e.code == ErrorCodes.LIMIT_EXCEEDED -> {
                         // Not stored by the server (api.md 7.1): tomorrow the same key would pass, but it is a new day.
                         pending = null
-                        _state.update { it.copy(limit = it.limit?.copy(remaining = 0) ?: AssistantLimit(0, 5, e.resetsAt ?: OffsetDateTime.now())) }
+                        _state.update { it.copy(limit = it.limit?.copy(remaining = 0) ?: AssistantLimit(0, 5, e.resetsAt ?: clock.now())) }
                     }
                     e is AppError.Offline -> _state.update { it.copy(offline = true) }
                     else -> _state.update { it.copy(sendFailed = true) }
