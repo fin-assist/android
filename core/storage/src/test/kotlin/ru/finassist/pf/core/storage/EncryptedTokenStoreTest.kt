@@ -232,14 +232,16 @@ class EncryptedTokenStoreTest {
         store.save(SESSION)
         withTimeout(5_000) { store.session.first { it == SESSION } }
         flaky.failReads = true
-        repeat(10) { if (it % 2 == 0) store.clear() else store.save(SESSION) }
+        repeat(10) { if (it % 2 == 1) store.clear() else store.save(SESSION) }
 
         // A second of retries: one background retry and the store's own trigger read about once each, ten separate
         // retries would read at least ten times.
         reads.set(0)
         kotlinx.coroutines.delay(1_100)
         assertTrue(reads.get() <= 4, "reads in a second: ${reads.get()}")
-        flaky.failReads = false
+
+        flaky.failReads = false // the retry ends on the last write's value
+        withTimeout(5_000) { store.session.first { it == null } }
     }
 
     private companion object {
