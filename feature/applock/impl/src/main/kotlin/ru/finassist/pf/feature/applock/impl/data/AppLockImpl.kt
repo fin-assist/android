@@ -99,7 +99,7 @@ internal class AppLockImpl @Inject constructor(
         scope.launch {
             merge(store.isConfigured, store.biometricEnabled)
                 .retryWhen { e, _ -> (e !is CancellationException).also { if (it) delay(READ_RETRY_MS) } }
-                .collect { refresh() }
+                .collect { refreshUntilRead() }
         }
         scope.launch {
             session.state.collect { s -> if (s is SessionState.SignedOut) reset() }
@@ -109,18 +109,33 @@ internal class AppLockImpl @Inject constructor(
     /**
      * NonCancellable: a write that has landed is published even if its caller has gone away meanwhile. A failed
      * read keeps the last value (none yet reads as Locked) and does not throw: it runs in `finally` of the writes,
-     * where it would replace their own exception, and in the trigger, which would stop.
+     * where it would replace their own exception, and in the trigger, which would stop. Returns whether the read
+     * landed.
      */
-    private suspend fun refresh() = withContext(NonCancellable) {
+    private suspend fun refresh(): Boolean = withContext(NonCancellable) {
         reads.withLock {
             stored.value = try {
                 Stored(store.isConfigured.first(), store.biometricEnabled.first())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                return@withLock
+                return@withLock false
             }
+            true
         }
+    }
+
+    /**
+     * Until a read lands, [stored] is behind the store, and no later change may come to fix it: a failed read is
+     * retried, not left waiting for the next write.
+     */
+    private suspend fun refreshUntilRead() {
+        while (!refresh()) delay(READ_RETRY_MS)
+    }
+
+    /** After an own write: a failed read is retried in the background, the writer gets its own outcome now. */
+    private suspend fun refreshAfterWrite() {
+        if (!refresh()) scope.launch { refreshUntilRead() }
     }
 
     override fun onStart(owner: LifecycleOwner) {
@@ -163,7 +178,7 @@ internal class AppLockImpl @Inject constructor(
                 unlocked.value = false
                 throw e
             } finally {
-                refresh()
+                refreshAfterWrite()
             }
         }
         tracker.track(Events.APPLOCK_PASSCODE_SET)
@@ -186,13 +201,13 @@ internal class AppLockImpl @Inject constructor(
     }
 
     /** A right code refreshes: one of a legacy install is re-saved as a sealed record, which turns biometrics on. */
-    override suspend fun matches(code: String): Boolean = store.matches(code).also { if (it) refresh() }
+    override suspend fun matches(code: String): Boolean = store.matches(code).also { if (it) refreshAfterWrite() }
 
     override suspend fun setBiometricEnabled(enabled: Boolean) {
         try {
             store.setBiometricEnabled(enabled)
         } finally {
-            refresh()
+            refreshAfterWrite()
         }
         if (enabled) tracker.track(Events.APPLOCK_BIOMETRIC_ENABLED)
     }
@@ -217,7 +232,7 @@ internal class AppLockImpl @Inject constructor(
             store.clear()
             unlocked.value = false
         } finally {
-            refresh()
+            refreshAfterWrite()
         }
     }
 

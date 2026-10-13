@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +18,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -37,6 +42,7 @@ import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import ru.finassist.pf.feature.auth.api.SessionState
 import java.io.File
+import java.io.IOException
 import java.security.MessageDigest
 import java.time.Duration
 import java.util.Collections
@@ -320,5 +326,28 @@ class AppLockImplTest {
         assertFalse(lock.biometricEnabled.value)
         assertTrue(lock.matches("1234"))
         lock.biometricEnabled.await(true)
+    }
+
+    @Test
+    fun `a read that failed after an own write is retried until the lock shows the write`() = runBlocking<Unit> {
+        // Only new reads fail: the lock's own long-lived collection keeps working and reports the change.
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) throw IOException("disk read failed")
+                emitAll(dataStore.data)
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val lock = AppLockImpl(context, PasscodeStore(flaky, crypto), session, tracker)
+        lock.state.await(LockState.NotConfigured)
+
+        flaky.failReads = true
+        lock.setPasscode("1234") // the record lands; the reads after it fail
+        settle()
+        assertEquals(LockState.NotConfigured, lock.state.value, "the last read stays while reads fail")
+
+        flaky.failReads = false // no further write: the retried read publishes the passcode
+        lock.state.await(LockState.Unlocked)
     }
 }
