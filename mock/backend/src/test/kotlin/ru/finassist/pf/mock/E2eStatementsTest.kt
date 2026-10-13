@@ -68,6 +68,8 @@ class E2eStatementsTest {
             val doc = OfxParser.parse(read("unreadable.ofx"))
             assertEquals(0, doc.transactions.size)
             assertEquals(listOf("no_date", "bad_amount"), doc.unreadLines.map { it.reason })
+            // The UI flow upload_unreadable checks these line numbers on «Непрочитанные строки».
+            assertEquals(listOf(31, 38), doc.unreadLines.map { it.lineNumber })
 
             val result = assertNotNull(statements.startUpload("unreadable.ofx", doc, backend.now(), instant = true).result)
             assertEquals(0, result.operationCount)
