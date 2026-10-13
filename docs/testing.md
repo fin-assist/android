@@ -45,7 +45,10 @@ python3 scripts/coverage-diff.py --base origin/main
   serializers, `R`, `BuildConfig`, `ComposableSingletons`, `HiltWrapper_*`, Dagger-generated factories — `@DaggerGenerated`,
   `*Module_*Factory`), `@Composable` and `@Preview` functions, and `:core:screenshot-testing`. Composables are
   checked by design check and Maestro; leaving them in would make the number about UI code that unit tests are
-  not meant to run.
+  not meant to run. Also the design tokens of `:core:designsystem` — tables of constants a test could only restate:
+  `IconPaths.kt` (generated icon paths), `PfColors.kt` (`LightPfColors`, `DarkPfColors`, `PfColorScheme`),
+  `PfTypography`, `PfDimens`. The rest of the design system (`PfIcons` lookup, the Material scheme mapping, chart
+  helpers) stays in.
 - Stays in: hand-written Dagger `@Module`s — a `@Provides` method can hold real logic (`NetworkModule.client()`
   sets up the refresh dispatcher and timeouts); plain wiring there is a fine reason for an uncovered line in the
   PR. Also `Companion.serializer()` of `@Serializable` classes (one line each, about 2 % of the total) — Kover

@@ -89,7 +89,7 @@ beforeSettings { s ->
 }
 GRADLE
     log "Maven Central mirror: $INIT"
-    # Robolectric fetches android-all itself, outside Gradle's repositories (used by -Ppf.designcheck).
+    # Robolectric fetches android-all itself, outside Gradle's repositories (unit tests and -Ppf.designcheck).
     mkdir -p "$(dirname "$PROPS")"
     touch "$PROPS"
     grep -q '^pf.robolectric.repo=' "$PROPS" || echo 'pf.robolectric.repo=https://maven-central.storage-download.googleapis.com/maven2' >> "$PROPS"

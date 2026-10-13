@@ -47,6 +47,14 @@ kover {
                     "dagger.hilt.internal.*", "hilt_aggregated_deps.*",
                     "*\$\$serializer",
                     "*.ComposableSingletons*",
+                    // Design tokens: tables of constants (generated icon paths, colours, type scale, dimensions)
+                    // that a unit test could only restate (FIN-47). Logic of the design system stays in.
+                    "ru.finassist.pf.core.designsystem.icons.IconPathsKt",
+                    "ru.finassist.pf.core.designsystem.theme.PfColorsKt",
+                    "ru.finassist.pf.core.designsystem.theme.PfColorScheme",
+                    "ru.finassist.pf.core.designsystem.theme.PfTypography",
+                    "ru.finassist.pf.core.designsystem.theme.PfTypography\$Companion",
+                    "ru.finassist.pf.core.designsystem.theme.PfDimens",
                 )
                 // Composables are checked by design-check snapshots and Maestro flows, not by unit tests: their
                 // lines would only dilute the number that tells whether the logic is tested.

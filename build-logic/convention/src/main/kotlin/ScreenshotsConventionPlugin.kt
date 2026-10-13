@@ -30,8 +30,10 @@ class ScreenshotsConventionPlugin : Plugin<Project> {
         val enabled = providers.gradleProperty("pf.designcheck").isPresent
         val outDir = rootDir.resolve("build/design-check/app").path
         // Robolectric downloads its Android runtime from Maven Central itself; agent containers point it at a mirror.
+        // Unit tests of view models run on Robolectric too, not only the design check.
         val robolectricRepo = providers.gradleProperty("pf.robolectric.repo").orNull
         tasks.withType<Test>().configureEach {
+            if (robolectricRepo != null) systemProperty("robolectric.dependency.repo.url", robolectricRepo)
             if (!enabled) {
                 exclude("**/*DesignCheckTest*")
             } else {
@@ -40,7 +42,6 @@ class ScreenshotsConventionPlugin : Plugin<Project> {
                 systemProperty("robolectric.graphicsMode", "NATIVE")
                 systemProperty("robolectric.pixelCopyRenderMode", "hardware")
                 systemProperty("pf.designcheck.dir", outDir)
-                if (robolectricRepo != null) systemProperty("robolectric.dependency.repo.url", robolectricRepo)
                 maxHeapSize = "3g"
                 // The PNGs are a side effect, not declared outputs (all modules share one directory): never skip the
                 // run as up to date or restore it from the build cache, or the snapshots would not be written.
