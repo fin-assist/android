@@ -139,9 +139,13 @@ class LocalFeatureFlags @Inject constructor(
         if (retry != null) retryAgain = true else retry = scope.launch { retryUntilCurrent() }
     }
 
+    /** Test hook: runs after a retry's read, before it decides whether to end. */
+    internal var afterRetryRead: suspend () -> Unit = {}
+
     private suspend fun retryUntilCurrent() {
         while (true) {
             reloadUntilRead()
+            afterRetryRead()
             synchronized(this) {
                 if (!retryAgain) {
                     retry = null

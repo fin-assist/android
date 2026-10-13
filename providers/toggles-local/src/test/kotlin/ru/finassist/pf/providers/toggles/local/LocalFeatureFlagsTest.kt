@@ -212,4 +212,35 @@ class LocalFeatureFlagsTest {
         flaky.failReads = false // the retry ends on the last write's value
         withTimeout(5_000) { while (flags.isEnabled(Flag.ASSISTANT)) delay(10) }
     }
+
+    @Test
+    fun `a write that fails to read back while a retry ends is read by that retry`() = runBlocking<Unit> {
+        val store = dataStore()
+        // Reads see the store; the long-lived collection sees only its first value, as one that missed the writes.
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) throw IOException("disk read failed")
+                emit(store.data.first())
+                kotlinx.coroutines.awaitCancellation()
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = store.updateData(transform)
+        }
+        val flags = LocalFeatureFlags(context, flaky).also { it.awaitReady() }
+        val read = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        flags.afterRetryRead = { if (!read.isCompleted) { read.complete(Unit); release.await() } }
+
+        flaky.failReads = true
+        flags.set(Flag.ASSISTANT, false) // fails to read back: a retry starts
+        flaky.failReads = false
+        withTimeout(5_000) { read.await() } // the retry has read `false` and is about to end
+
+        flaky.failReads = true
+        flags.set(Flag.ASSISTANT, true) // fails to read back while that retry is still running
+        flaky.failReads = false
+        release.complete(Unit)
+
+        withTimeout(5_000) { while (!flags.isEnabled(Flag.ASSISTANT)) delay(10) }
+    }
 }
