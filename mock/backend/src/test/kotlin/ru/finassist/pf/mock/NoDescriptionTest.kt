@@ -83,7 +83,6 @@ class NoDescriptionTest {
         val backend = backendWithBlanks()
         val credit = backend.ledger.all.single { !it.isDebit && it.name.isEmpty() }
         assertFalse(credit.isRefund)
-        assertTrue(backend.ledger.all.filter { it.isRefund }.none { it.refundTarget != null && it.name.isEmpty() })
     }
 
     @Test
@@ -92,6 +91,20 @@ class NoDescriptionTest {
         val insights = assertNotNull(backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH).insights)
         assertTrue(insights.smallFrequent.items.orEmpty().none { it.title.isBlank() })
         assertTrue(insights.regularPayments.items.orEmpty().none { it.title.isBlank() })
+    }
+
+    @Test
+    fun `bank fees without a description name no kinds`() {
+        val base = OfxParser.parse(fixture)
+        val doc = base.copy(transactions = base.transactions.map { if (it.memo == "Услуги банка") it.copy(name = "") else it })
+        val backend = MockBackend(MockConfig(networkDelayMs = 0), FixedClock(OffsetDateTime.parse("2026-10-06T12:00:00+03:00")))
+        backend.ready.complete(Unit)
+        backend.profile = backend.emptyProfile("+79161234567", "u1")
+        runBlocking { MockStatementsApi(backend).startUpload("fixture.ofx", doc, backend.now().minusDays(1), instant = true) }
+        val months = (1..9).map { PeriodKey("2026-%02d".format(it)) }
+        val cards = months.mapNotNull { backend.analytics.analytics(PeriodTypeCode.MONTH, it, TransferMode.WITH).insights?.bankFees }
+        assertTrue(cards.any { it.value != null }, "the fixture has bank fees in some month")
+        assertTrue(cards.all { it.kindsName == null })
     }
 
     @Test

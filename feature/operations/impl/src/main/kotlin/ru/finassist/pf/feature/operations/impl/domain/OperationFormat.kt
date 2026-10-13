@@ -30,6 +30,10 @@ data class RowModel(
 )
 
 object OperationFormat {
+    const val NO_TITLE = "Без описания"
+
+    /** The operation's name for display; an empty `title` (no description in the statement, FIN-67) — «Без описания». */
+    fun title(title: String): String = title.ifBlank { NO_TITLE }
 
     fun account(a: Account?): String? = a?.let { listOfNotNull(it.typeName, it.mask).joinToString(" ") }
 
@@ -48,11 +52,6 @@ object OperationFormat {
      * Row: expense `−2 340 ₽`, income `+15 000 ₽` (positive colour), own transfer without sign and muted, unknown
      * kind — no sign, no colour (api.md 4.1). Pending holds get «холд» in the subtitle.
      */
-    /** The operation's name for display; an empty `title` (no description in the statement, FIN-67) — «Без описания». */
-    fun title(title: String): String = title.ifBlank { NO_TITLE }
-
-    const val NO_TITLE = "Без описания"
-
     fun row(item: OperationItem): RowModel {
         val amount = when (item.kind) {
             OperationKind.EXPENSE -> money(-item.amount, item.currency, Money.Sign.AUTO)
