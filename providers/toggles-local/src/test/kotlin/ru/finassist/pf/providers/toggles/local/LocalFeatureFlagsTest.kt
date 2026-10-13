@@ -208,6 +208,8 @@ class LocalFeatureFlagsTest {
         reads.set(0)
         delay(1_100)
         assertTrue(reads.get() <= 4, "reads in a second: ${reads.get()}")
-        flaky.failReads = false
+
+        flaky.failReads = false // the retry ends on the last write's value
+        withTimeout(5_000) { while (flags.isEnabled(Flag.ASSISTANT)) delay(10) }
     }
 }
