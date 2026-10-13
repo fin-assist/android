@@ -57,7 +57,7 @@ class SessionRepositoryImpl @Inject constructor(
      * User id of a session we are clearing ourselves, so the observer below does not report that sign-out as an
      * expiry. A flag held only while [clearLocalNow] runs is not enough (FIN-74): the observer collects on its own
      * coroutine and may get the resulting `null` after the sign-out returned and the reason was consumed. The
-     * observer takes the mark off on every `null` it sees, and [start] drops it before saving the final session: a
+     * observer takes the mark off on every `null` it sees, and [start] drops it once the final session is saved: a
      * stalled observer may never see the `null` of a sign-out followed by a quick sign-in (the state flow
      * conflates it), and a mark left over would hide the next real expiry of that user. If instead the observer
      * sees our own `null` only after the new sign-in dropped the mark, it records «expired»; that is harmless,
@@ -124,11 +124,11 @@ class SessionRepositoryImpl @Inject constructor(
         // Persisted: the first-run upload step must survive process death between registration and passcode.
         if (registered) dataStore.edit { it[KEY_PENDING_FIRST_UPLOAD] = true }
         signInFlow.reset()
-        // Right before the final session, not earlier: a mark from an earlier sign-out must not outlive this session,
-        // but a sign-in that fails on the way (the profile request) clears a placeholder, and the observer may still
-        // be due the earlier sign-out's `null`: without the mark it would read as an expiry.
-        ownSignOut.set(null)
         tokenStore.save(TokenStore.Session(id, tokens))
+        // Once the final session is stored, not earlier: a mark from an earlier sign-out must not outlive this session,
+        // but a sign-in that fails on the way (the profile request, the save itself) leaves no session, and the
+        // observer may still be due the earlier sign-out's `null`: without the mark it would read as an expiry.
+        ownSignOut.set(null)
         applyIdentity(id)
         tracker.track(if (registered) Events.AUTH_REGISTERED else Events.AUTH_VERIFIED)
     }
