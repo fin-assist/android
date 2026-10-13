@@ -10,9 +10,11 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -90,16 +93,34 @@ internal class AppLockImpl @Inject constructor(
 
     init {
         scope.launch(Dispatchers.Main.immediate) { ProcessLifecycleOwner.get().lifecycle.addObserver(this@AppLockImpl) }
-        // A trigger only (its values may be stale, see [stored]); it also takes the first read.
-        scope.launch { merge(store.isConfigured, store.biometricEnabled).collect { refresh() } }
+        // A trigger only (its values may be stale, see [stored]); it also takes the first read. A failed read
+        // (I/O, Keystore) would end the collection for good, so it starts over: a store that can be read again is
+        // picked up without waiting for the next write.
+        scope.launch {
+            merge(store.isConfigured, store.biometricEnabled)
+                .retryWhen { e, _ -> (e !is CancellationException).also { if (it) delay(READ_RETRY_MS) } }
+                .collect { refresh() }
+        }
         scope.launch {
             session.state.collect { s -> if (s is SessionState.SignedOut) reset() }
         }
     }
 
-    /** NonCancellable: a write that has landed is published even if its caller has gone away meanwhile. */
+    /**
+     * NonCancellable: a write that has landed is published even if its caller has gone away meanwhile. A failed
+     * read keeps the last value (none yet reads as Locked) and does not throw: it runs in `finally` of the writes,
+     * where it would replace their own exception, and in the trigger, which would stop.
+     */
     private suspend fun refresh() = withContext(NonCancellable) {
-        reads.withLock { stored.value = Stored(store.isConfigured.first(), store.biometricEnabled.first()) }
+        reads.withLock {
+            stored.value = try {
+                Stored(store.isConfigured.first(), store.biometricEnabled.first())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return@withLock
+            }
+        }
     }
 
     override fun onStart(owner: LifecycleOwner) {
@@ -164,8 +185,8 @@ internal class AppLockImpl @Inject constructor(
         return VerifyResult.Wrong(MAX_WRONG_ATTEMPTS - attempts)
     }
 
-    /** Refreshes: a right code of a legacy install is re-saved as a sealed record, which turns biometrics on. */
-    override suspend fun matches(code: String): Boolean = store.matches(code).also { refresh() }
+    /** A right code refreshes: one of a legacy install is re-saved as a sealed record, which turns biometrics on. */
+    override suspend fun matches(code: String): Boolean = store.matches(code).also { if (it) refresh() }
 
     override suspend fun setBiometricEnabled(enabled: Boolean) {
         try {
@@ -204,5 +225,6 @@ internal class AppLockImpl @Inject constructor(
 
     private companion object {
         const val BACKGROUND_LOCK_MS = 5 * 60 * 1000L
+        const val READ_RETRY_MS = 1_000L
     }
 }

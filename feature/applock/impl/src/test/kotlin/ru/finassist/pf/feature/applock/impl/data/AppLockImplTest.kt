@@ -4,12 +4,16 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.biometrics.BiometricManager
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -33,6 +37,7 @@ import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import ru.finassist.pf.feature.auth.api.SessionState
 import java.io.File
+import java.security.MessageDigest
 import java.time.Duration
 import java.util.Collections
 import kotlin.io.path.createTempDirectory
@@ -187,7 +192,8 @@ class AppLockImplTest {
         lock.verify("0000")
         lock.unlockByBiometric()
         lock.state.await(LockState.Unlocked)
-        withTimeout(5_000) { store.wrongAttempts.first { it == 0 } }
+        // A fresh read each time: a collector started while the write is in flight can miss it for good (FIN-87).
+        withTimeout(5_000) { while (store.wrongAttempts.first() != 0) delay(10) }
         lock.lock()
         lock.state.await(LockState.Locked)
     }
@@ -278,5 +284,41 @@ class AppLockImplTest {
         lock.setBiometricEnabled(true)
         settle()
         assertFalse(lock.biometricEnabled.value)
+    }
+
+    @Test
+    fun `a failed read keeps the last state and the writer's own outcome, and the lock picks the store up again`() =
+        runBlocking<Unit> {
+            val lock = appLock()
+            lock.state.await(LockState.NotConfigured)
+            crypto.failCommitCheck = true
+
+            lock.setBiometricEnabled(true) // the write lands; the read after it fails and must not surface here
+            settle()
+            assertEquals(LockState.NotConfigured, lock.state.value)
+
+            // A record makes the store readable again without the Keystore check; the trigger picks it up.
+            store.save("1234")
+            lock.state.await(LockState.Locked)
+        }
+
+    @Test
+    fun `the right code of a legacy install turns biometric unlock on`() = runBlocking<Unit> {
+        biometrics(available = true, fingerprint = true)
+        val salt = "abcd"
+        val hash = MessageDigest.getInstance("SHA-256").digest("$salt:1234".toByteArray()).joinToString("") { "%02x".format(it) }
+        dataStore.edit {
+            it[stringPreferencesKey("applock.salt")] = salt
+            it[stringPreferencesKey("applock.hash")] = hash
+            it[booleanPreferencesKey("applock.biometric")] = true
+        }
+        val lock = appLock()
+        lock.state.await(LockState.Locked)
+        assertFalse(lock.biometricEnabled.value)
+
+        assertFalse(lock.matches("0000"))
+        assertFalse(lock.biometricEnabled.value)
+        assertTrue(lock.matches("1234"))
+        lock.biometricEnabled.await(true)
     }
 }
