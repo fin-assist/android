@@ -145,4 +145,82 @@ class TokenAuthenticatorTest {
         assertEquals(2, keys.size)
         assertEquals(keys[0], keys[1])
     }
+
+    private fun alwaysUnauthorized() {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) =
+                MockResponse().setResponseCode(401).setBody("""{"error":{"code":"INVALID_TOKEN","message":"x"}}""")
+        }
+    }
+
+    @Test
+    fun `a retry that is still 401 is not refreshed again`() {
+        alwaysUnauthorized()
+        var pair = 0
+        val client = client { TokenPair("new-access-${++pair}", "new-refresh-$pair") }
+
+        val response = client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute()
+
+        assertEquals(401, response.code)
+        assertEquals(1, refreshCalls.get())
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `sign-out while refreshing is not undone by the refresh result`() {
+        alwaysUnauthorized()
+        val client = client {
+            store.clear() // the user signed out while the refresh was in flight
+            TokenPair("new-access", "new-refresh")
+        }
+
+        val response = client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute()
+
+        assertEquals(401, response.code)
+        assertEquals(1, server.requestCount, "the request is not retried with the discarded pair")
+        assertNull(runBlocking { store.current() })
+    }
+
+    @Test
+    fun `no session means no refresh`() {
+        alwaysUnauthorized()
+        runBlocking { store.clear() }
+        val client = client { TokenPair("new-access", "new-refresh") }
+
+        val response = client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute()
+
+        assertEquals(401, response.code)
+        assertEquals(0, refreshCalls.get())
+    }
+
+    @Test
+    fun `refresh rejected with a client error clears the session`() {
+        alwaysUnauthorized()
+        val client = client { throw AppError.Api(code = "VALIDATION_ERROR", httpStatus = 400) }
+
+        client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute()
+
+        assertNull(runBlocking { store.current() })
+    }
+
+    @Test
+    fun `transient refresh failures keep the session`() {
+        val transient = listOf(
+            AppError.InProgress(1),
+            AppError.Api(code = "IDEMPOTENCY_CONFLICT", httpStatus = 409),
+            AppError.Api(code = "RATE_LIMITED", httpStatus = 429),
+            AppError.RateLimited(null),
+            AppError.Server(503),
+            AppError.Offline(),
+        )
+        for (error in transient) {
+            alwaysUnauthorized()
+            val client = client { throw error }
+
+            val response = client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute()
+
+            assertEquals(401, response.code)
+            assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken }, "after $error")
+        }
+    }
 }
