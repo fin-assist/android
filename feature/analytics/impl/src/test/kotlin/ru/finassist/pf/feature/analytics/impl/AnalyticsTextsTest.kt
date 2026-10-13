@@ -197,4 +197,98 @@ class AnalyticsTextsTest {
         assertEquals("апрель — сентябрь", AnalyticsTexts.totalCaption(PeriodTypeCode.YEAR, midnight).plain())
         assertEquals("1–30 сентября", AnalyticsTexts.totalCaption(PeriodTypeCode.MONTH, period(from = null, to = null)).plain())
     }
+
+    @Test
+    fun `unit names of the period types`() {
+        assertEquals("месяц", AnalyticsTexts.unitName(PeriodTypeCode.MONTH))
+        assertEquals("квартал", AnalyticsTexts.unitName(PeriodTypeCode.QUARTER))
+        assertEquals("год", AnalyticsTexts.unitName(PeriodTypeCode.YEAR))
+        assertEquals("месяц", AnalyticsTexts.unitName(PeriodTypeCode.UNKNOWN))
+    }
+
+    @Test
+    fun `coverage caption under the period`() {
+        assertNull(AnalyticsTexts.coverage(period(Coverage.COMPLETE)))
+        assertEquals("За этот период данных нет", AnalyticsTexts.coverage(period(Coverage.NO_DATA)))
+        assertEquals("Данные за 1–25 сентября", AnalyticsTexts.coverage(period())!!.plain())
+        // Unknown coverage is shown as partial.
+        assertEquals("Данные за 1–25 сентября", AnalyticsTexts.coverage(period(Coverage.UNKNOWN))!!.plain())
+        assertEquals("Данные за часть периода", AnalyticsTexts.coverage(period(to = null)))
+        val gap = DateRange(t("2026-07-11T00:00:00+03:00"), t("2026-07-20T00:00:00+03:00"))
+        val july = AnalyticsPeriodInfo(
+            range = month(7), isCurrent = false, coverage = Coverage.PARTIAL,
+            dataFrom = t("2026-07-01T09:00:00+03:00"), dataTo = t("2026-07-31T20:00:00+03:00"), gaps = listOf(gap),
+        )
+        assertEquals("Данные за 1–31 июля, без 11–19 июля · период неполный", AnalyticsTexts.coverage(july)!!.plain())
+    }
+
+    @Test
+    fun `lock texts without details`() {
+        assertEquals("Пока недоступно", AnalyticsTexts.lock(null, state))
+        assertEquals("Нужно больше полных месяцев", AnalyticsTexts.lock(MetricLock(LockReason.NEED_FULL_MONTHS), state))
+        assertEquals("Нужно больше месяцев с данными", AnalyticsTexts.lock(MetricLock(LockReason.NEED_MONTHS_WITH_DATA), state))
+        // Without the state the day range is unknown: the count is named instead.
+        assertEquals("Нужно 3 полных месяца, есть 0", AnalyticsTexts.lock(MetricLock(LockReason.NEED_FULL_MONTHS, 3), null).plain())
+        assertEquals("Выписка устарела — загрузите новую", AnalyticsTexts.lock(MetricLock(LockReason.STALE_DATA), state))
+    }
+
+    @Test
+    fun `too early in the month names the first day it is counted from`() {
+        assertEquals(
+            "Посчитаем с 8 сентября",
+            AnalyticsTexts.lock(MetricLock(LockReason.TOO_EARLY_IN_MONTH, availableFrom = t("2026-09-08T00:00:00+03:00")), state).plain(),
+        )
+        assertEquals("Рано считать — мало дней", AnalyticsTexts.lock(MetricLock(LockReason.TOO_EARLY_IN_MONTH), state))
+    }
+
+    @Test
+    fun `quarter and year comparisons name the previous period`() {
+        val prev = Metric(status = MetricStatus.READY, value = Money(10_000_00), range = month(4))
+        assertEquals("На 20% больше, чем прошлый квартал к этому дню", AnalyticsTexts.comparison(Money(12_000_00), prev, PeriodTypeCode.QUARTER, PeriodKey("2026-Q3")))
+        assertEquals("Столько же, сколько прошлый год к этому дню", AnalyticsTexts.comparison(Money(10_000_00), prev, PeriodTypeCode.YEAR, PeriodKey("2026")))
+        assertEquals("На 20% больше, чем прошлый период к этому дню", AnalyticsTexts.comparison(Money(12_000_00), prev.copy(range = null), PeriodTypeCode.MONTH))
+    }
+
+    @Test
+    fun `daily average over the months with data`() {
+        val year = period(from = "2026-04-01T00:00:00+03:00", to = "2026-10-01T00:00:00+03:00", range = DateRange(t("2026-01-01T00:00:00+03:00"), t("2027-01-01T00:00:00+03:00")))
+        assertEquals("в среднем за апрель — сентябрь", AnalyticsTexts.dailyAverageOver(year)!!.plain())
+        assertNull(AnalyticsTexts.dailyAverageOver(period(from = null)))
+        assertNull(AnalyticsTexts.dailyAverageOver(period(to = null)))
+    }
+
+    @Test
+    fun `balance explained at the end of the screen`() {
+        assertEquals("Доходов за период нет", AnalyticsTexts.balanceExplained(Metric(status = MetricStatus.READY), withChart = true))
+        assertEquals(
+            "46% дохода: на столько доходы по выписке больше расходов. На графике — та же доля по месяцам",
+            AnalyticsTexts.balanceExplained(Metric(status = MetricStatus.READY, shareOfIncome = 0.456), withChart = true).plain(),
+        )
+        assertEquals(
+            "12% дохода: на столько расходы по выписке больше доходов. График по месяцам появится, когда в выписке будет хотя бы один полный месяц",
+            AnalyticsTexts.balanceExplained(Metric(status = MetricStatus.READY, shareOfIncome = -0.12), withChart = false).plain(),
+        )
+    }
+
+    @Test
+    fun `peak month of the chart`() {
+        assertEquals("Больше всего — в июле: 96 300 ₽", AnalyticsTexts.peakMonth(listOf(point(6, 90_000), point(7, 96_300), point(8, null)))!!.plain())
+        assertNull(AnalyticsTexts.peakMonth(listOf(point(8, null))))
+        assertNull(AnalyticsTexts.peakMonth(emptyList()))
+    }
+
+    @Test
+    fun `a partial bar covering the whole month has no note`() {
+        assertNull(AnalyticsTexts.barNote(point(9, 1_000, Coverage.PARTIAL, dataFrom = "2026-09-01T10:00:00+03:00", dataTo = "2026-09-30T20:00:00+03:00")))
+    }
+
+    @Test
+    fun `balance share of a month needs income and expenses`() {
+        val p = point(9, 600).copy(income = Money(1_000_00))
+        assertEquals(0.4, AnalyticsTexts.balanceShare(p)!!, 1e-9)
+        assertEquals(-0.5, AnalyticsTexts.balanceShare(point(9, 1_500).copy(income = Money(1_000_00)))!!, 1e-9)
+        assertNull(AnalyticsTexts.balanceShare(point(9, 600)))
+        assertNull(AnalyticsTexts.balanceShare(point(9, null).copy(income = Money(1_000_00))))
+        assertNull(AnalyticsTexts.balanceShare(point(9, 600).copy(income = Money(0))))
+    }
 }

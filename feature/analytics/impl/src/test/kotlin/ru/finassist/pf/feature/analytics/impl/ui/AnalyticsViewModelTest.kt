@@ -1,0 +1,476 @@
+package ru.finassist.pf.feature.analytics.impl.ui
+
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import ru.finassist.pf.core.api.AnalyticsApi
+import ru.finassist.pf.core.api.AssistantApi
+import ru.finassist.pf.core.api.model.Analytics
+import ru.finassist.pf.core.api.model.AnalyticsParams
+import ru.finassist.pf.core.api.model.AnalyticsPeriodItem
+import ru.finassist.pf.core.api.model.AnalyticsPeriodsList
+import ru.finassist.pf.core.api.model.AnalyticsState
+import ru.finassist.pf.core.api.model.AnswerEvent
+import ru.finassist.pf.core.api.model.AskRequest
+import ru.finassist.pf.core.api.model.AskResponse
+import ru.finassist.pf.core.api.model.AssistantLimit
+import ru.finassist.pf.core.api.model.Coverage
+import ru.finassist.pf.core.api.model.IdempotencyKey
+import ru.finassist.pf.core.api.model.ImportResult
+import ru.finassist.pf.core.api.model.MessagesList
+import ru.finassist.pf.core.api.model.PeriodTypeCode
+import ru.finassist.pf.core.api.model.RetryResponse
+import ru.finassist.pf.core.api.model.TransferMode
+import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.time.DateRange
+import ru.finassist.pf.core.common.time.PeriodKey
+import ru.finassist.pf.core.toggles.FeatureFlags
+import ru.finassist.pf.core.toggles.Flag
+import ru.finassist.pf.core.tracking.Event
+import ru.finassist.pf.core.tracking.Events
+import ru.finassist.pf.core.tracking.Tracker
+import ru.finassist.pf.feature.operations.api.OperationsRepository
+import ru.finassist.pf.feature.statements.api.StatementsEvent
+import ru.finassist.pf.feature.statements.api.StatementsRepository
+import java.time.OffsetDateTime
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/** The main dispatcher runs on [scheduler]: the 3 s re-request while the server recalculates is driven by hand. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class AnalyticsViewModelTest {
+    private data class Request(val period: PeriodTypeCode?, val date: PeriodKey?, val mode: TransferMode?)
+
+    private class FakeApi : AnalyticsApi {
+        val requests = mutableListOf<Request>()
+        /** Answers in order; the last one repeats. An [AppError] in the list is thrown. */
+        val answers = ArrayDeque<Any>()
+        val periodRequests = mutableListOf<PeriodTypeCode?>()
+        var periodsFailure: AppError? = null
+        var periodsGate: CompletableDeferred<Unit>? = null
+        val dismissed = mutableListOf<String>()
+        var dismissFailure: AppError? = null
+
+        override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?): Analytics {
+            requests += Request(period, date, transferMode)
+            val next = if (answers.size > 1) answers.removeFirst() else answers.first()
+            if (next is AppError) throw next
+            return next as Analytics
+        }
+
+        override suspend fun listPeriods(period: PeriodTypeCode?): AnalyticsPeriodsList {
+            periodRequests += period
+            periodsGate?.await()
+            periodsFailure?.let { throw it }
+            return AnalyticsPeriodsList(listOf(AnalyticsPeriodItem(PeriodKey("2026-09"), DateRange(at(1), at(30)), Coverage.COMPLETE)))
+        }
+
+        override suspend fun dismissRegularPayment(id: String) {
+            dismissFailure?.let { throw it }
+            dismissed += id
+        }
+
+        override suspend fun restoreRegularPayment(id: String) = Unit
+    }
+
+    private class FakeAssistant : AssistantApi {
+        var limitCalls = 0
+        var failure: AppError? = null
+        override suspend fun getLimit(): AssistantLimit {
+            limitCalls++
+            failure?.let { throw it }
+            return AssistantLimit(3, 5, at(30))
+        }
+        override suspend fun listMessages(limit: Int?, beforeId: String?): MessagesList = error("unused")
+        override suspend fun ask(key: IdempotencyKey, request: AskRequest): AskResponse = error("unused")
+        override fun streamAnswer(answerId: String): Flow<AnswerEvent> = error("unused")
+        override suspend fun retry(key: IdempotencyKey, answerId: String): RetryResponse = error("unused")
+    }
+
+    private class FakeStatements : StatementsRepository {
+        var firstImportHints = false
+        override val events = MutableSharedFlow<StatementsEvent>(extraBufferCapacity = 4)
+        override fun lastResult(uploadId: String): ImportResult? = null
+        override suspend fun consumeFirstImportHints(): Boolean = firstImportHints.also { firstImportHints = false }
+    }
+
+    private class FakeOperations : OperationsRepository {
+        override val categoryChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+    }
+
+    private class FakeFlags(private val values: MutableMap<Flag, Boolean> = mutableMapOf()) : FeatureFlags {
+        override val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+        override fun isEnabled(flag: Flag): Boolean = values[flag] ?: flag.defaultValue
+        override val version: String = "test"
+        override suspend fun setUser(userId: String?) = Unit
+        override suspend fun refresh() = Unit
+        fun set(flag: Flag, on: Boolean) {
+            values[flag] = on
+            changes.tryEmit(Unit)
+        }
+    }
+
+    private class FakeTracker : Tracker {
+        val events = mutableListOf<Pair<Event, Map<String, String>>>()
+        override fun track(event: Event, params: Map<String, String>) {
+            events += event to params
+        }
+        override fun setUserId(userId: String?) = Unit
+    }
+
+    private val scheduler = TestCoroutineScheduler()
+    private val api = FakeApi()
+    private val assistant = FakeAssistant()
+    private val statements = FakeStatements()
+    private val operations = FakeOperations()
+    private val flags = FakeFlags()
+    private val tracker = FakeTracker()
+
+    @BeforeTest fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+
+    @AfterTest fun tearDown() = Dispatchers.resetMain()
+
+    private fun vm() = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker)
+
+    private fun opened(params: AnalyticsParams? = null) = vm().apply { init(params) }
+
+    private fun data(
+        period: PeriodTypeCode = PeriodTypeCode.MONTH,
+        date: String = "2026-09",
+        mode: TransferMode = TransferMode.WITH,
+        hasData: Boolean = true,
+        recalculating: Boolean = false,
+    ) = Analytics(
+        hasData = hasData,
+        params = AnalyticsParams(period, PeriodKey(date), mode),
+        state = AnalyticsState(
+            stale = false, dataFrom = at(1), dataTo = at(30), fullMonths = 3, unreadLinesCount = 0,
+            calculatedAt = at(30), recalculating = recalculating,
+        ),
+    )
+
+    private fun names() = tracker.events.map { it.first.name }
+
+    @Test fun `the tab root asks for the server's default period and adopts the answer's parameters`() {
+        api.answers += data(date = "2026-09")
+        val vm = opened()
+        assertEquals(listOf(Request(PeriodTypeCode.MONTH, null, TransferMode.WITH)), api.requests)
+        assertFalse(vm.state.value.loading)
+        assertEquals(PeriodKey("2026-09"), vm.state.value.data?.params?.date)
+        assertEquals(listOf(Events.ANALYTICS_OPENED.name), names())
+
+        vm.load()
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH), api.requests.last())
+    }
+
+    @Test fun `opening twice (recomposition, back stack) loads once`() {
+        api.answers += data()
+        val vm = opened()
+        vm.init(null)
+        assertEquals(1, api.requests.size)
+        assertEquals(1, tracker.events.size)
+    }
+
+    @Test fun `the period route opens the given parameters`() {
+        api.answers += data(PeriodTypeCode.QUARTER, "2026-Q3", TransferMode.WITHOUT)
+        val vm = opened(AnalyticsParams(PeriodTypeCode.QUARTER, PeriodKey("2026-Q3"), TransferMode.WITHOUT))
+        assertEquals(Request(PeriodTypeCode.QUARTER, PeriodKey("2026-Q3"), TransferMode.WITHOUT), api.requests.single())
+        assertEquals(TransferMode.WITHOUT, vm.currentTransferMode())
+    }
+
+    @Test fun `with the transfers filter off every request is made with transfers`() {
+        flags.set(Flag.ANALYTICS_FILTER_TRANSFERS, false)
+        api.answers += data(mode = TransferMode.WITHOUT)
+        val vm = opened(AnalyticsParams(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITHOUT))
+        assertEquals(TransferMode.WITH, api.requests.single().mode)
+        // Even when the server answers `without`.
+        assertEquals(TransferMode.WITH, vm.currentTransferMode())
+    }
+
+    @Test fun `an unknown transfer mode in the answer is handled as with`() {
+        api.answers += data(mode = TransferMode.UNKNOWN)
+        assertEquals(TransferMode.WITH, opened().currentTransferMode())
+    }
+
+    @Test fun `the blocks follow their flags`() {
+        val off = Flag.entries.associateWith { false }.toMutableMap()
+        val vm = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(off), tracker)
+        assertEquals(AnalyticsBlocks(false, false, false, false, false, false, false, false, false, false, false), vm.state.value.blocks)
+
+        val on = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(Flag.entries.associateWith { true }.toMutableMap()), tracker)
+        assertEquals(AnalyticsBlocks(true, true, true, true, true, true, true, true, true, true, true), on.state.value.blocks)
+    }
+
+    @Test fun `a single block switched off remotely disappears from the open screen`() {
+        api.answers += data()
+        val vm = opened()
+        flags.set(Flag.ANALYTICS_BLOCK_BANK_FEES, false)
+        assertFalse(vm.state.value.blocks.bankFees)
+        assertTrue(vm.state.value.blocks.smallFrequent)
+        assertEquals(1, api.requests.size) // a block is not a request parameter
+    }
+
+    @Test fun `the transfers filter switched off remotely re-requests the shown period with transfers`() {
+        api.answers += data(mode = TransferMode.WITHOUT)
+        val vm = opened(AnalyticsParams(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITHOUT))
+        flags.set(Flag.ANALYTICS_FILTER_TRANSFERS, false)
+        assertFalse(vm.state.value.blocks.transfersFilter)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH), api.requests.last())
+        assertEquals(TransferMode.WITH, vm.currentTransferMode())
+    }
+
+    @Test fun `no network on the first load is the offline state without a snackbar`() {
+        api.answers += AppError.Offline()
+        api.answers += data()
+        val vm = opened()
+        assertTrue(vm.state.value.offline)
+        assertFalse(vm.state.value.loading)
+        assertNull(vm.state.value.snackbar)
+
+        vm.load()
+        assertFalse(vm.state.value.offline)
+        assertTrue(vm.state.value.data != null)
+    }
+
+    @Test fun `a failed period switch keeps the shown period and says so`() {
+        api.answers += data(PeriodTypeCode.MONTH, "2026-09")
+        api.answers += AppError.Offline()
+        api.answers += data(PeriodTypeCode.MONTH, "2026-09")
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(PeriodTypeCode.YEAR, api.requests.last().period)
+        assertEquals("Нет сети — показываем прежний период", vm.state.value.snackbar)
+        assertFalse(vm.state.value.offline)
+        assertEquals("2026-09", vm.state.value.data?.params?.date?.value)
+
+        // The parameters went back to what the screen shows: a reload asks for the month again.
+        vm.load()
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH), api.requests.last())
+    }
+
+    @Test fun `any other failure of a visible reload asks to try again`() {
+        api.answers += data()
+        api.answers += AppError.Server(500)
+        val vm = opened()
+        vm.goTo(PeriodKey("2026-08"))
+        assertEquals("Не получилось обновить. Попробуйте ещё раз", vm.state.value.snackbar)
+        vm.consumeSnackbar()
+        assertNull(vm.state.value.snackbar)
+    }
+
+    @Test fun `a background reload fails silently`() {
+        api.answers += data()
+        api.answers += AppError.Offline()
+        val vm = opened()
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("u1"))
+        assertEquals(2, api.requests.size)
+        assertNull(vm.state.value.snackbar)
+        assertFalse(vm.state.value.offline)
+    }
+
+    @Test fun `an import or a category change reloads the shown period`() {
+        api.answers += data(date = "2026-08")
+        opened(AnalyticsParams(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITH))
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("u1"))
+        operations.categoryChanges.tryEmit(Unit)
+        assertEquals(3, api.requests.size)
+        assertTrue(api.requests.all { it.date == PeriodKey("2026-08") })
+    }
+
+    @Test fun `while the server recalculates the screen asks again every 3 seconds`() {
+        api.answers += data(recalculating = true)
+        api.answers += data(recalculating = false)
+        opened()
+        assertEquals(1, api.requests.size)
+        scheduler.advanceTimeBy(2_999)
+        scheduler.runCurrent()
+        assertEquals(1, api.requests.size)
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        assertEquals(2, api.requests.size)
+        scheduler.advanceTimeBy(10_000)
+        scheduler.runCurrent()
+        assertEquals(2, api.requests.size)
+    }
+
+    @Test fun `the first data after the first import starts the hints, categories then ask`() {
+        statements.firstImportHints = true
+        api.answers += data()
+        val vm = opened()
+        assertEquals(AnalyticsHint.CATEGORIES, vm.state.value.hint)
+        vm.nextHint(stop = false)
+        assertEquals(AnalyticsHint.ASK, vm.state.value.hint)
+        vm.nextHint(stop = false)
+        assertNull(vm.state.value.hint)
+    }
+
+    @Test fun `«Не показывать» stops the hints`() {
+        statements.firstImportHints = true
+        api.answers += data()
+        val vm = opened()
+        vm.nextHint(stop = true)
+        assertNull(vm.state.value.hint)
+    }
+
+    @Test fun `without the assistant the ask hint is skipped and no limit is requested`() {
+        flags.set(Flag.ASSISTANT, false)
+        statements.firstImportHints = true
+        api.answers += data()
+        val vm = opened()
+        assertEquals(AnalyticsHint.CATEGORIES, vm.state.value.hint)
+        vm.nextHint(stop = false)
+        assertNull(vm.state.value.hint)
+        assertEquals(0, assistant.limitCalls)
+        assertNull(vm.state.value.limit)
+    }
+
+    @Test fun `no hints without data, and the one-time hints are not consumed by it`() {
+        statements.firstImportHints = true
+        api.answers += data(hasData = false)
+        val vm = opened()
+        assertNull(vm.state.value.hint)
+        assertTrue(statements.firstImportHints)
+    }
+
+    @Test fun `with the assistant the question limit is shown, and its failure is ignored`() {
+        api.answers += data()
+        val vm = opened()
+        assertEquals(AssistantLimit(3, 5, at(30)), vm.state.value.limit)
+
+        assistant.failure = AppError.Offline()
+        vm.load()
+        assertEquals(AssistantLimit(3, 5, at(30)), vm.state.value.limit)
+        assertNull(vm.state.value.snackbar)
+    }
+
+    @Test fun `the same period type does not request again`() {
+        api.answers += data()
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(1, api.requests.size)
+    }
+
+    @Test fun `a new period type keeps the date and is reported`() {
+        api.answers += data(date = "2026-09")
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        assertEquals(Request(PeriodTypeCode.QUARTER, PeriodKey("2026-09"), TransferMode.WITH), api.requests.last())
+        assertEquals(Events.ANALYTICS_PERIOD_CHANGED to mapOf("period" to "quarter"), tracker.events.last())
+    }
+
+    @Test fun `a period from the list closes the sheet and is requested`() {
+        api.answers += data()
+        val vm = opened()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        vm.goTo(PeriodKey("2026-07"))
+        assertNull(vm.state.value.sheet)
+        assertEquals(PeriodKey("2026-07"), api.requests.last().date)
+        assertEquals(Events.ANALYTICS_PERIOD_CHANGED to mapOf("period" to "month"), tracker.events.last())
+    }
+
+    @Test fun `the transfer mode closes the sheet and requests only when it changes`() {
+        api.answers += data()
+        api.answers += data(mode = TransferMode.WITHOUT)
+        val vm = opened()
+        vm.openSheet(AnalyticsSheet.TRANSFERS)
+        vm.setTransferMode(TransferMode.WITH)
+        assertNull(vm.state.value.sheet)
+        assertEquals(1, api.requests.size)
+
+        vm.setTransferMode(TransferMode.WITHOUT)
+        assertEquals(TransferMode.WITHOUT, api.requests.last().mode)
+        assertEquals(TransferMode.WITHOUT, vm.currentTransferMode())
+        assertEquals(Events.ANALYTICS_TRANSFERS_CHANGED to mapOf("mode" to "without"), tracker.events.last())
+    }
+
+    @Test fun `the period list is requested when its sheet opens, for the current period type`() {
+        api.answers += data(PeriodTypeCode.QUARTER, "2026-Q3")
+        val vm = opened(AnalyticsParams(PeriodTypeCode.QUARTER, PeriodKey("2026-Q3"), TransferMode.WITH))
+        assertEquals(emptyList(), api.periodRequests)
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(listOf<PeriodTypeCode?>(PeriodTypeCode.QUARTER), api.periodRequests)
+        assertEquals(listOf(PeriodKey("2026-09")), vm.state.value.periods?.map { it.key })
+
+        vm.openSheet(AnalyticsSheet.TRANSFERS)
+        assertEquals(1, api.periodRequests.size)
+        assertEquals(AnalyticsSheet.TRANSFERS, vm.state.value.sheet)
+    }
+
+    @Test fun `a failed period list shows its error and reopening asks again from scratch`() {
+        api.answers += data()
+        val vm = opened()
+        api.periodsFailure = AppError.Offline()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertTrue(vm.state.value.periodsFailed)
+        assertNull(vm.state.value.periods)
+
+        api.periodsFailure = null
+        vm.openSheet(null)
+        assertFalse(vm.state.value.periodsFailed)
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(2, api.periodRequests.size)
+        assertTrue(vm.state.value.periods != null)
+    }
+
+    @Test fun `closing the sheet drops the pending period list`() {
+        api.answers += data()
+        val vm = opened()
+        val gate = CompletableDeferred<Unit>()
+        api.periodsGate = gate
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        vm.openSheet(null)
+        gate.complete(Unit)
+        assertNull(vm.state.value.periods)
+    }
+
+    @Test fun `all expense categories toggle`() {
+        val vm = vm()
+        vm.toggleAllCategories()
+        assertTrue(vm.state.value.allExpenseCategories)
+        vm.toggleAllCategories()
+        assertFalse(vm.state.value.allExpenseCategories)
+    }
+
+    @Test fun `a dismissed regular payment is reported and the analytics recalculated`() {
+        api.answers += data()
+        val vm = opened()
+        vm.dismissRegular("rp_1")
+        assertEquals(listOf("rp_1"), api.dismissed)
+        assertEquals("Убрали из регулярных платежей", vm.state.value.snackbar)
+        assertEquals(Events.ANALYTICS_REGULAR_DISMISSED.name, names().last())
+        assertEquals(2, api.requests.size)
+    }
+
+    @Test fun `a regular payment that could not be dismissed says why`() {
+        api.answers += data()
+        val vm = opened()
+        api.dismissFailure = AppError.Offline()
+        vm.dismissRegular("rp_1")
+        assertEquals("Нет сети — не получилось убрать", vm.state.value.snackbar)
+        api.dismissFailure = AppError.Server(500)
+        vm.dismissRegular("rp_1")
+        assertEquals("Не получилось убрать. Попробуйте ещё раз", vm.state.value.snackbar)
+        assertEquals(1, api.requests.size)
+        assertTrue(tracker.events.none { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+    }
+
+    @Test fun `an opened tile is reported with its name`() {
+        vm().onTileOpened("expense")
+        assertEquals(Events.ANALYTICS_TILE_OPENED to mapOf("tile" to "expense"), tracker.events.single())
+    }
+
+    private companion object {
+        fun at(day: Int): OffsetDateTime = OffsetDateTime.parse("2026-09-%02dT00:00:00+03:00".format(day))
+    }
+}
