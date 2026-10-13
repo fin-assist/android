@@ -16,6 +16,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -144,8 +145,13 @@ class EncryptedTokenStore @Inject constructor(
     private suspend fun <T> writing(write: suspend () -> T): T = try {
         write()
     } finally {
-        if (!refresh()) scope.launch { refreshUntilRead() }
+        if (!refresh()) synchronized(this) {
+            if (retry?.isActive != true) retry = scope.launch { refreshUntilRead() }
+        }
     }
+
+    /** The background retry of [writing]; one at a time, however many writes fail to read back. */
+    private var retry: Job? = null
 
     /** Encryption failures surface as [AppError.Unknown], which every sign-in screen already handles. */
     override suspend fun save(session: TokenStore.Session) {
