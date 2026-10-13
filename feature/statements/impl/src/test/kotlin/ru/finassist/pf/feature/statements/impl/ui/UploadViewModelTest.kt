@@ -248,6 +248,10 @@ class UploadViewModelTest {
         return live
     }
 
+    /**
+     * The view model listens from the IO thread the upload resumed on: an event is not always handled inside
+     * `tryEmit`, so the test waits for its effect.
+     */
     private fun MutableSharedFlow<ImportEvent>.awaitSubscribed() {
         val deadline = System.currentTimeMillis() + 10_000
         while (subscriptionCount.value == 0) {
@@ -359,14 +363,14 @@ class UploadViewModelTest {
         live.awaitSubscribed()
 
         live.tryEmit(ImportEvent.Progress(ImportProgress(ImportStage.DEDUP, 40)))
-        assertEquals(0.4f, assertIs<UploadPhase.Busy>(vm.state.value.phase).progress)
+        await("40 %") { (it.phase as? UploadPhase.Busy)?.progress == 0.4f }
         // The bar never goes back to empty.
         live.tryEmit(ImportEvent.Progress(ImportProgress(ImportStage.PARSING, 1)))
-        assertEquals(0.05f, assertIs<UploadPhase.Busy>(vm.state.value.phase).progress)
+        await("the floor of the bar") { (it.phase as? UploadPhase.Busy)?.progress == 0.05f }
 
         val result = importResult(newCount = 7)
         live.tryEmit(ImportEvent.Complete(result))
-        assertEquals("u1", vm.state.value.doneUploadId)
+        await("the result") { it.doneUploadId == "u1" }
         assertEquals(result, repository.lastResult("u1"))
         assertEquals(mapOf("new_count" to "7"), tracker.events.single { it.first == Events.STATEMENTS_UPLOAD_COMPLETED }.second)
 
@@ -498,7 +502,7 @@ class UploadViewModelTest {
         val result = importResult()
         live.tryEmit(ImportEvent.Complete(result))
         gate.complete(Unit)
-        assertEquals("u1", vm.state.value.doneUploadId)
+        await("the result") { it.doneUploadId == "u1" }
         assertEquals(result, repository.lastResult("u1"))
     }
 

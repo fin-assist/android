@@ -13,6 +13,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -79,7 +80,12 @@ class AppLockImplTest {
         dir.deleteRecursively()
     }
 
-    private fun appLock() = AppLockImpl(context, store, session, tracker)
+    /**
+     * The lock observes the store through eager state flows. A DataStore collector that starts while a write is in
+     * flight can miss that write for good (FIN-86), so a test lets the collectors take their first value before it
+     * writes: an awaited first state where it differs from the initial `Locked`, and a pause for the rest.
+     */
+    private fun appLock() = AppLockImpl(context, store, session, tracker).also { settle() }
 
     private fun <T> StateFlow<T>.await(value: T) = runBlocking { withTimeout(5_000) { first { it == value } } }
 
@@ -187,7 +193,8 @@ class AppLockImplTest {
         lock.verify("0000")
         lock.unlockByBiometric()
         lock.state.await(LockState.Unlocked)
-        withTimeout(5_000) { store.wrongAttempts.first { it == 0 } }
+        // Fresh reads, not a new collector racing the write (see appLock()).
+        runBlocking { withTimeout(5_000) { while (store.wrongAttempts.first() != 0) delay(10) } }
         lock.lock()
         lock.state.await(LockState.Locked)
     }
@@ -196,6 +203,7 @@ class AppLockImplTest {
     fun `five minutes in the background lock the app, less does not`() = runBlocking<Unit> {
         val lock = appLock()
         val owner = ProcessLifecycleOwner.get()
+        lock.state.await(LockState.NotConfigured)
         lock.setPasscode("1234")
         lock.state.await(LockState.Unlocked)
 
@@ -221,6 +229,7 @@ class AppLockImplTest {
     @Test
     fun `a sign-out from anywhere forgets the passcode`() = runBlocking<Unit> {
         val lock = appLock()
+        lock.state.await(LockState.NotConfigured)
         lock.setPasscode("1234")
         lock.state.await(LockState.Unlocked)
         session.state.value = SessionState.SignedOut
