@@ -20,7 +20,8 @@ import ru.finassist.pf.core.api.model.RegisterRequest
 import ru.finassist.pf.core.api.model.RegisterResponse
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.common.error.AppError
-import ru.finassist.pf.core.tracking.NoopTracker
+import ru.finassist.pf.core.tracking.Event
+import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
 import java.time.OffsetDateTime
 import kotlin.test.AfterTest
@@ -28,14 +29,18 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PhoneViewModelTest {
     private class FakeAuth : AuthApi {
         var failure: AppError? = null
         val phones = mutableListOf<String>()
+        val keys = mutableListOf<String>()
         override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification {
+            keys += key.value
             failure?.let { throw it }
             phones += phone
             return PhoneVerification("vt_1", "+78000000000", OffsetDateTime.parse("2026-10-13T12:03:00+03:00"))
@@ -48,13 +53,19 @@ class PhoneViewModelTest {
     }
 
     private val auth = FakeAuth()
+    private val flow = SignInFlow()
+    private val tracked = mutableListOf<String>()
+    private val tracker = object : Tracker {
+        override fun track(event: Event, params: Map<String, String>) { tracked += event.name }
+        override fun setUserId(userId: String?) = Unit
+    }
 
     @BeforeTest fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
     private fun submitted(digits: String = "9161234567"): PhoneViewModel {
-        val vm = PhoneViewModel(auth, SignInFlow(), NoopTracker)
+        val vm = PhoneViewModel(auth, flow, tracker)
         vm.onInput(TextFieldValue(digits, TextRange(digits.length)))
         vm.submit()
         return vm
@@ -94,5 +105,78 @@ class PhoneViewModelTest {
         val vm = submitted("91612")
         assertEquals("В номере не хватает цифр", vm.state.value.error)
         assertEquals(emptyList(), auth.phones)
+    }
+
+    @Test fun `a successful request is kept for the call screen and tracked`() {
+        submitted()
+        assertEquals("+79161234567", flow.phone)
+        assertEquals("vt_1", flow.verification?.verificationToken)
+        assertEquals(auth.keys.single(), flow.phoneRequestKey)
+        assertEquals(listOf("auth.phone.submitted"), tracked)
+    }
+
+    @Test fun `a retry of the same number reuses the key, a new number gets a new one`() {
+        auth.failure = AppError.Offline()
+        val vm = submitted()
+        assertEquals("Нет сети — проверьте интернет и повторите", vm.state.value.error)
+        assertFalse(vm.state.value.busy)
+        assertTrue(tracked.isEmpty(), "a failed request is not tracked")
+
+        auth.failure = null
+        vm.submit()
+        assertEquals(auth.keys[0], auth.keys[1])
+
+        vm.onInput(TextFieldValue("9031234567", TextRange(10)))
+        vm.submit()
+        assertNotEquals(auth.keys[1], auth.keys[2])
+        assertEquals("+79031234567", flow.phone)
+    }
+
+    @Test fun `a new number drops the previous verification request`() {
+        flow.phone = "+79031234567"
+        flow.phoneRequestKey = "old"
+        flow.verification = PhoneVerification("vt_old", "+78000000000", OffsetDateTime.parse("2026-10-13T12:03:00+03:00"))
+        auth.failure = AppError.Offline()
+        submitted("9161234567")
+        assertNull(flow.verification)
+        assertNotEquals("old", flow.phoneRequestKey)
+    }
+
+    @Test fun `too many attempts names the time to retry when the server gives it`() {
+        auth.failure = AppError.RateLimited(OffsetDateTime.parse("2026-10-13T14:05:00+03:00"))
+        assertEquals("Слишком много попыток. Повторите в 14:05", submitted().state.value.error)
+        auth.failure = AppError.RateLimited(null)
+        assertEquals("Слишком много попыток", submitted().state.value.error)
+    }
+
+    @Test fun `a server error is the generic error`() {
+        auth.failure = AppError.Server(503)
+        assertEquals("Не получилось отправить номер. Попробуйте ещё раз", submitted().state.value.error)
+    }
+
+    @Test fun `the number typed before is restored with the cursor at the end`() {
+        flow.phone = "+79161234567"
+        val vm = PhoneViewModel(auth, flow, tracker)
+        assertEquals("9161234567", vm.state.value.digits)
+        assertEquals(TextRange(10), vm.state.value.input.selection)
+    }
+
+    @Test fun `moving the cursor keeps the error, editing the number clears it`() {
+        val vm = submitted("91612")
+        vm.onInput(TextFieldValue("91612", TextRange(2)))
+        assertEquals("В номере не хватает цифр", vm.state.value.error)
+        assertEquals(TextRange(2), vm.state.value.input.selection)
+        vm.onInput(TextFieldValue("916123", TextRange(6)))
+        assertNull(vm.state.value.error)
+    }
+
+    @Test fun `the notice and the navigation event are one-shot`() {
+        val vm = submitted()
+        vm.consumeEvent()
+        assertNull(vm.events.value)
+        vm.setNotice("Вы вышли из аккаунта")
+        assertEquals("Вы вышли из аккаунта", vm.state.value.notice)
+        vm.setNotice(null)
+        assertNull(vm.state.value.notice)
     }
 }

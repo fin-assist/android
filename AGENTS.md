@@ -79,7 +79,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:core:navigation` | `pf.android.library.compose` | - |
 | `:core:network` | `pf.android.library`, `pf.hilt` | unit |
 | `:core:screenshot-testing` | `pf.android.library.compose` | - |
-| `:core:storage` | `pf.android.library`, `pf.hilt` | - |
+| `:core:storage` | `pf.android.library`, `pf.hilt` | unit |
 | `:core:toggles` | `pf.jvm.library` | unit |
 | `:core:tracking` | `pf.jvm.library` | unit |
 | `:providers:crash-tracer` | `pf.android.library`, `pf.hilt` | unit |

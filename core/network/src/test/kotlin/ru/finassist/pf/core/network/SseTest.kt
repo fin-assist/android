@@ -10,11 +10,20 @@ import org.junit.Before
 import org.junit.Test
 import retrofit2.Retrofit
 import ru.finassist.pf.core.api.ImportEvent
+import okhttp3.mockwebserver.SocketPolicy
+import ru.finassist.pf.core.api.TokenStore
+import ru.finassist.pf.core.api.model.AnswerErrorCode
 import ru.finassist.pf.core.api.model.AnswerEvent
+import ru.finassist.pf.core.api.model.BlockType
+import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.ImportStage
+import ru.finassist.pf.core.api.model.TokenPair
+import ru.finassist.pf.core.api.model.TransferMode
+import ru.finassist.pf.core.api.model.VerificationStatus
 import ru.finassist.pf.core.common.error.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SseTest {
@@ -98,6 +107,156 @@ class SseTest {
         api.streamAnswer("missing").test {
             val error = assertIs<AppError.Api>(awaitError())
             assertEquals("NOT_FOUND", error.code)
+        }
+    }
+
+    private fun statementsApi() =
+        HttpStatementsApi(Retrofit.Builder().baseUrl(server.url("/")).build().create(StatementsService::class.java), sse)
+
+    private fun assistantApi() =
+        HttpAssistantApi(Retrofit.Builder().baseUrl(server.url("/")).build().create(AssistantService::class.java), sse)
+
+    @Test
+    fun `phone verification stream goes with the verification token and without the session`() = runBlocking {
+        server.enqueue(
+            stream(
+                "status" to """{"status":"pending"}""",
+                "status" to """{"status":"verified","is_new_user":false,"access_token":"a","refresh_token":"r"}""",
+            ),
+        )
+        // The production SSE client: AuthInterceptor would add the session if the marker were missing.
+        val stack = NetworkStack(server, InMemoryTokenStore(TokenStore.Session("u0", TokenPair("stale", "stale-r"))))
+
+        stack.api.auth.streamPhoneVerification("vt-1").test {
+            assertEquals(VerificationStatus.PENDING, awaitItem().status)
+            val verified = awaitItem()
+            assertEquals(VerificationStatus.VERIFIED, verified.status)
+            assertEquals("a", verified.accessToken)
+            awaitComplete()
+        }
+        val request = server.takeRequest()
+        assertEquals("/v1/auth/phone/events", request.path)
+        assertEquals("vt-1", request.getHeader(HEADER_VERIFICATION_TOKEN))
+        assertEquals("text/event-stream", request.getHeader("Accept"))
+        assertNull(request.getHeader("Authorization"))
+        assertNull(request.getHeader(NoAuth.HEADER))
+    }
+
+    @Test
+    fun `phone verification ignores unknown events and fails on an error event with its code`() = runBlocking {
+        server.enqueue(
+            stream(
+                "heartbeat" to "{}",
+                "error" to """{"code":"RATE_LIMITED","message":"Слишком часто"}""",
+            ),
+        )
+        val api = HttpAuthApi(Retrofit.Builder().baseUrl(server.url("/")).build().create(AuthService::class.java), sse)
+
+        api.streamPhoneVerification("vt").test {
+            val error = assertIs<AppError.Api>(awaitError())
+            assertEquals("RATE_LIMITED", error.code)
+            assertEquals(200, error.httpStatus)
+            assertEquals("Слишком часто", error.message)
+        }
+    }
+
+    @Test
+    fun `phone verification error event without a readable payload is an internal error`() = runBlocking {
+        server.enqueue(stream("error" to "not json"))
+        val api = HttpAuthApi(Retrofit.Builder().baseUrl(server.url("/")).build().create(AuthService::class.java), sse)
+
+        api.streamPhoneVerification("vt").test {
+            assertEquals(ErrorCodes.INTERNAL_ERROR, assertIs<AppError.Api>(awaitError()).code)
+        }
+    }
+
+    @Test
+    fun `malformed status payload is a server error, not a crash`() = runBlocking {
+        server.enqueue(stream("status" to """{"is_new_user":true}"""))
+        val api = HttpAuthApi(Retrofit.Builder().baseUrl(server.url("/")).build().create(AuthService::class.java), sse)
+
+        api.streamPhoneVerification("vt").test {
+            assertEquals(200, assertIs<AppError.Server>(awaitError()).httpStatus)
+        }
+    }
+
+    @Test
+    fun `import error event is a typed event and the stream completes`() = runBlocking {
+        server.enqueue(
+            stream(
+                "progress" to """{"stage":"dedup","percent":40}""",
+                "error" to """{"code":"PROCESSING_FAILED","message":"Не удалось обработать"}""",
+            ),
+        )
+
+        statementsApi().streamProgress("u1").test {
+            assertIs<ImportEvent.Progress>(awaitItem())
+            assertEquals(ImportEvent.Error("PROCESSING_FAILED", "Не удалось обработать"), awaitItem())
+            awaitComplete()
+        }
+        assertEquals("/v1/statements/u1/progress", server.takeRequest().path)
+    }
+
+    @Test
+    fun `import stream ignores unknown event types`() = runBlocking {
+        server.enqueue(stream("future" to "{}", "progress" to """{"stage":"rules","percent":99}"""))
+
+        statementsApi().streamProgress("u1").test {
+            assertEquals(99, assertIs<ImportEvent.Progress>(awaitItem()).progress.percent)
+            awaitComplete()
+        }
+    }
+
+    @Test
+    fun `connection dropped mid-stream is offline`() = runBlocking {
+        server.enqueue(
+            stream("progress" to """{"stage":"parsing","percent":10}""")
+                .setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY),
+        )
+
+        statementsApi().streamProgress("u1").test {
+            assertIs<AppError.Offline>(awaitError())
+        }
+    }
+
+    @Test
+    fun `answer stream maps block, source and error events`() = runBlocking {
+        server.enqueue(
+            stream(
+                "block" to """{"index":1,"block":{"type":"rows","alt_text":"Таблица","rows":[{"label":"Еда","amount":120000}]}}""",
+                "source" to """{"calculated_at":"2026-10-04T12:00:00+03:00","transfer_mode":"without","changed_since":[]}""",
+                "error" to """{"code":"CANNOT_ANSWER","message":"Не могу","remaining_limit":3}""",
+            ),
+        )
+
+        assistantApi().streamAnswer("a1").test {
+            val block = assertIs<AnswerEvent.BlockAdded>(awaitItem()).event
+            assertEquals(1, block.index)
+            assertEquals(BlockType.ROWS, block.block.type)
+            assertEquals(TransferMode.WITHOUT, assertIs<AnswerEvent.Source>(awaitItem()).event.transferMode)
+            val error = assertIs<AnswerEvent.Error>(awaitItem()).event
+            assertEquals(AnswerErrorCode.CANNOT_ANSWER, error.code)
+            assertEquals(3, error.remainingLimit)
+            awaitComplete()
+        }
+        assertEquals("/v1/assistant/messages/a1/events", server.takeRequest().path)
+    }
+
+    @Test
+    fun `malformed answer event is a server error`() = runBlocking {
+        server.enqueue(stream("chunk" to """{"index":"x"}"""))
+
+        assistantApi().streamAnswer("a1").test {
+            assertEquals(200, assertIs<AppError.Server>(awaitError()).httpStatus)
+        }
+    }
+
+    @Test
+    fun `401 before the stream starts is unauthorized`() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"code":"INVALID_TOKEN","message":"x"}}"""))
+
+        assistantApi().streamAnswer("a1").test {
+            assertEquals("INVALID_TOKEN", assertIs<AppError.Unauthorized>(awaitError()).code)
         }
     }
 

@@ -11,4 +11,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.tink.android)
+
+    // EncryptedTokenStore needs a Context, SharedPreferences and android.util.Base64.
+    testImplementation(libs.robolectric)
 }
