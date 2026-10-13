@@ -189,7 +189,7 @@ class UploadViewModelTest {
         await("the offline notice") { it.uploadOffline }
 
         api.offline = false
-        vm.retryUpload()
+        pickAgain { vm.retryUpload() }
         await("the accepted upload") { (it.phase as? UploadPhase.Busy)?.uploadId == "u1" }
         assertFalse(vm.state.value.uploadOffline)
         assertEquals("operations_2026.ofx", assertIs<UploadPhase.Busy>(vm.state.value.phase).fileName)
@@ -227,6 +227,21 @@ class UploadViewModelTest {
     }
 
     private fun awaitAccepted() = await("the accepted upload") { (it.phase as? UploadPhase.Busy)?.uploadId == "u1" }
+
+    /**
+     * Picks again after a finished attempt. The upload job ends on the IO thread just after its last state update,
+     * and a pick in that window is ignored as «still sending» (in the app both run on the main thread): repeat the
+     * pick until the file goes out.
+     */
+    private fun pickAgain(pick: () -> Unit = { vm.onFilePicked(uri) }) {
+        val sent = api.keys.size
+        val deadline = System.currentTimeMillis() + 10_000
+        while (api.keys.size == sent) {
+            check(System.currentTimeMillis() < deadline) { "timed out waiting for the new upload: ${vm.state.value}" }
+            pick()
+            Thread.sleep(20)
+        }
+    }
 
     /** A progress stream the test emits into once the view model listens. */
     private fun liveStream(): MutableSharedFlow<ImportEvent> {
@@ -287,7 +302,7 @@ class UploadViewModelTest {
 
         vm.backToGuide()
         assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
-        vm.onFilePicked(uri)
+        pickAgain()
         awaitAccepted()
         assertTrue(api.keys[0] != api.keys[1])
     }
@@ -299,7 +314,7 @@ class UploadViewModelTest {
         assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, name, config), vm.state.value.phase)
 
         vm.backToGuide()
-        vm.onFilePicked(uri)
+        pickAgain()
         awaitAccepted()
         assertEquals(api.keys[0], api.keys[1])
     }
@@ -308,8 +323,8 @@ class UploadViewModelTest {
         vm.onFilePicked(uri)
         awaitAccepted()
         assertTrue(Events.STATEMENTS_UPLOAD_STARTED in tracker.names())
-        vm.onFilePicked(uri)
-        await("the second upload") { api.keys.size == 2 }
+        pickAgain()
+        assertEquals(2, api.keys.size)
         assertTrue(api.keys[0] != api.keys[1])
     }
 
