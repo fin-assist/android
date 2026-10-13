@@ -201,3 +201,8 @@ resource id for Maestro to tap, and the first three open an external browser the
 The server's own check of the phone number (400 `VALIDATION_ERROR` at `phone`, FIN-68) cannot be reached either:
 the app sends only `+7` and 10 digits, the very rule the server checks, so neither a real build nor the mock gets
 that error; `PhoneViewModelTest` covers the branch, `auth/phone_validation` the app's own check of a short number.
+A passcode left behind by a signed-out session (the process died between the sign-out and the passcode reset) and
+cleared while the lock is starting (FIN-87) cannot be forced either: the flow cannot kill the process inside that
+window, and the stale state needs a DataStore collector to start while the reset is being written, a timing the
+emulator does not reproduce on demand (about 8 % of starts on the JVM). `AppLockStoreRaceTest` repeats that start
+200 times; `profile/theme_and_logout` covers the plain sign-out.
