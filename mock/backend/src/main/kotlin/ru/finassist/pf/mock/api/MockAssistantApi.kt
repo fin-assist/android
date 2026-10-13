@@ -64,10 +64,11 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
         if (request.text.isBlank() || request.text.length > 2000) throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400)
         if (request.transferMode == TransferMode.UNKNOWN) throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400)
         return backend.idempotent("assistant.ask:${key.value}") {
-            checkConsentAndLimit()
             val question = Message(id = UUID.randomUUID().toString(), role = MessageRole.USER, text = request.text, createdAt = backend.now())
             val mode = request.transferMode ?: TransferMode.WITH
             val (answer, remainingLimit) = backend.mutex.withLock {
+                // Checked under the lock with the charge: two questions at the last remaining one get one answer.
+                checkConsentAndLimit()
                 store.questions += question
                 store.usage[moscowToday()] = (store.usage[moscowToday()] ?: 0) + 1
                 // Read with the charge, before generation starts: a refund (CANNOT_ANSWER, not charged) is
@@ -169,18 +170,21 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
         backend.simulateNetwork()
         backend.requireSession()
         return backend.idempotent("assistant.retry:${key.value}") {
-            val old = backend.mutex.withLock { store.answers[answerId] } ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
-            if (old.replaced || old.status != AnswerStatus.FAILED || old.errorCode != AnswerErrorCode.MODEL_ERROR) {
-                throw AppError.Api(ErrorCodes.RETRY_NOT_ALLOWED, 422)
-            }
-            checkConsentAndLimit()
-            val question = store.questions.first { it.id == old.questionId }
-            val (fresh, remainingLimit) = backend.mutex.withLock {
+            val (fresh, remainingLimit, question) = backend.mutex.withLock {
+                // One critical section from the checks to the charge, as in [ask]: two retries of the same answer
+                // replace it once, and the last remaining question is not spent twice.
+                val old = store.answers[answerId] ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+                if (old.replaced || old.status != AnswerStatus.FAILED || old.errorCode != AnswerErrorCode.MODEL_ERROR) {
+                    throw AppError.Api(ErrorCodes.RETRY_NOT_ALLOWED, 422)
+                }
+                checkConsentAndLimit()
+                val question = store.questions.first { it.id == old.questionId }
                 old.replaced = true
                 store.usage[moscowToday()] = (store.usage[moscowToday()] ?: 0) + 1
                 // Same question, same transfer mode; the limit is read with the charge, as in [ask].
-                AssistantStore.Answer(UUID.randomUUID().toString(), old.questionId, backend.now(), old.transferMode)
-                    .also { store.answers[it.id] = it } to remaining()
+                val fresh = AssistantStore.Answer(UUID.randomUUID().toString(), old.questionId, backend.now(), old.transferMode)
+                    .also { store.answers[it.id] = it }
+                Triple(fresh, remaining(), question)
             }
             generate(fresh, question.text.orEmpty())
             RetryResponse(answerId = fresh.id, remainingLimit = remainingLimit)

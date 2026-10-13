@@ -2,6 +2,9 @@ package ru.finassist.pf.mock
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Test
@@ -288,6 +291,25 @@ class MockAssistantApiTest {
         assertIs<AnswerEvent.Error>(eager.assistant.answers.getValue(retry.answerId).log.last())
         assertEquals(4, retry.remainingLimit)
         assertEquals(5, api.getLimit().remaining)
+    }
+
+    @Test
+    fun `two questions at the last remaining one get one answer`() = runBlocking<Unit> {
+        // The limit is checked under the lock with the charge. Racing pairs, many times: with the check outside the
+        // lock both questions of a pair could pass it and the day would end at 6 of 5.
+        repeat(200) { i ->
+            val racing = testBackend(clock, assistantConsent = true).apply { load(doc) }
+            racing.assistant.usage[clock.at.toLocalDate()] = 4 // one question of five left
+            val api = MockAssistantApi(racing)
+            val start = CompletableDeferred<Unit>()
+            val results = List(2) { n ->
+                async(Dispatchers.Default) { start.await(); runCatching { api.ask(key("q$i-$n"), AskRequest("Сколько я трачу на Krabsbir?")) } }
+            }
+            start.complete(Unit)
+            val outcomes = results.awaitAll()
+            assertEquals(1, outcomes.count { it.isSuccess }, "pair $i")
+            assertEquals(ErrorCodes.LIMIT_EXCEEDED, (outcomes.single { it.isFailure }.exceptionOrNull() as AppError.Api).code)
+        }
     }
 
     @Test

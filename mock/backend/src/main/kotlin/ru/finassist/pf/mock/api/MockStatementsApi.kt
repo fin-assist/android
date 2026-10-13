@@ -121,7 +121,10 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             // ATOMIC: the job runs [process] even when cancelled before it started, so a cancelled upload is
             // always discarded and its progress stream ends with CANCELLED (FIN-76). A job cancelled under the
             // default start would never run, leaving the upload PROCESSING for good.
-            jobs[upload.id] = backend.scope.launch(start = CoroutineStart.ATOMIC) { process(upload, doc, backend.config.importStepDelayMs) }
+            val job = backend.scope.launch(start = CoroutineStart.ATOMIC) { process(upload, doc, backend.config.importStepDelayMs) }
+            jobs[upload.id] = job
+            // Removed only once registered: a job that finishes before this line still leaves no entry behind.
+            job.invokeOnCompletion { jobs.remove(upload.id, job) }
         }
         return upload
     }
@@ -151,7 +154,6 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             discard(upload)
             upload.events.value = ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, e.message ?: "failed")
         } finally {
-            jobs.remove(upload.id)
             cancelled.remove(upload.id)
         }
     }
