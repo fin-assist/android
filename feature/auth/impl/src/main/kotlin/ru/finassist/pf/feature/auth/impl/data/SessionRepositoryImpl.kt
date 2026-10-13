@@ -57,8 +57,11 @@ class SessionRepositoryImpl @Inject constructor(
      * User id of a session we are clearing ourselves, so the observer below does not report that sign-out as an
      * expiry. A flag held only while [clearLocalNow] runs is not enough (FIN-74): the observer collects on its own
      * coroutine and may get the resulting `null` after the sign-out returned and the reason was consumed. The
-     * observer takes the mark off on every `null` it sees, and it only matches the user whose session went away,
-     * so a mark left over (the `null` conflated away by a quick new sign-in) cannot hide another user's expiry.
+     * observer takes the mark off on every `null` it sees, and [start] drops it before saving a new session: a
+     * stalled observer may never see the `null` of a sign-out followed by a quick sign-in (the state flow
+     * conflates it), and a mark left over would hide the next real expiry of that user. If instead the observer
+     * sees our own `null` only after the new sign-in dropped the mark, it records «expired»; that is harmless,
+     * since the next own sign-out overwrites the reason ([clearLocalNow] sets it) and a real expiry means the same.
      */
     private val ownSignOut = AtomicReference<String?>(null)
 
@@ -106,6 +109,8 @@ class SessionRepositoryImpl @Inject constructor(
      * the final session is saved: a later sign-in with the same number must not reuse a spent request key.
      */
     suspend fun start(userId: String?, tokens: TokenPair, registered: Boolean): Unit = detached {
+        // Before any save, the placeholder included: a mark from an earlier sign-out must not outlive this session.
+        ownSignOut.set(null)
         val id = userId ?: run {
             tokenStore.save(TokenStore.Session("", tokens))
             try {
@@ -145,9 +150,9 @@ class SessionRepositoryImpl @Inject constructor(
     override suspend fun clearLocal(reason: String?): Unit = detached { clearLocalNow(reason) }
 
     private suspend fun clearLocalNow(reason: String?) {
-        // Marked before the clear, so the observer finds the mark whenever it sees the `null`. Only a signed-in
-        // session: clearing a pending sign-in (empty user id) is never taken for an expiry.
-        tokenStore.current()?.userId?.takeIf { it.isNotEmpty() }?.let(ownSignOut::set)
+        // Marked before the clear, so the observer finds the mark whenever it sees the `null`. A pending sign-in
+        // (empty user id) leaves an empty mark, which matches no signed-in user and so hides nothing.
+        tokenStore.current()?.userId?.let(ownSignOut::set)
         signOutReason.set(reason)
         tokenStore.clear()
         dataStore.edit { it.remove(KEY_PENDING_FIRST_UPLOAD) }

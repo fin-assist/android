@@ -230,7 +230,36 @@ class SessionRepositoryImplTest {
         assertEquals(AuthRoutes.Phone.REASON_EXPIRED, h.repo.consumeSignOutReason())
     }
 
-    @Test fun `clearing a pending sign-in leaves no mark that would hide a later expiry`() = runBlocking {
+    @Test fun `a sign-out absorbed by a quick sign-in of the same user does not hide a later expiry`() = runBlocking {
+        val h = harness(TokenStore.Session("u1", pair))
+        eventually { "flags.user:u1" in h.log.all() }
+        // The observer stalls on a value it is handling (as in a slow `applyIdentity`) while the user signs out and
+        // back in with the same account: the `null` in between is conflated away and never reaches it.
+        val refreshed = TokenStore.Session("u1", TokenPair("a2", "r2"))
+        val stalled = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        h.tokens.beforeDeliver = { if (it == refreshed) { stalled.complete(Unit); release.await() } }
+        h.tokens.flow.value = refreshed
+        withTimeout(5_000) { stalled.await() }
+
+        h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
+        assertEquals(AuthRoutes.Phone.REASON_LOGGED_OUT, h.repo.consumeSignOutReason())
+        h.repo.start(userId = "u1", tokens = TokenPair("a3", "r3"), registered = false)
+        release.complete(Unit)
+        eventually { h.crash.crumbs.size >= 3 } // restored, refreshed, signed in again — no `null` in between
+        val resetsBefore = h.log.all().count { it == "flags.user:null" }
+
+        h.tokens.flow.value = null // the refresh was rejected
+        eventually { h.crash.crumbs.size >= 4 }
+        // Handled in order: once the next session is applied, the `null` has been handled.
+        h.tokens.flow.value = TokenStore.Session("u2", pair)
+        eventually { "flags.user:u2" in h.log.all() }
+
+        assertEquals(AuthRoutes.Phone.REASON_EXPIRED, h.repo.consumeSignOutReason())
+        assertEquals(resetsBefore + 1, h.log.all().count { it == "flags.user:null" }, "identity reset on the expiry")
+    }
+
+    @Test fun `clearing a pending sign-in does not hide a later expiry`() = runBlocking {
         val h = harness()
         h.tokens.flow.value = TokenStore.Session("", pair) // profile is being fetched
         h.repo.clearLocal(reason = null)
