@@ -3,11 +3,13 @@ package ru.finassist.pf.mock
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.model.AssistantConsent
 import ru.finassist.pf.core.api.model.ErrorCodes
@@ -119,7 +121,9 @@ class MockBackend(
             mutex.withLock { idempotency[key] = result }
             return result
         } finally {
-            mutex.withLock { inFlight.remove(key) }
+            // Also when the caller was cancelled mid-request: the lock may be busy, and a cancellable wait for it
+            // would leave the key «in progress» for good.
+            withContext(NonCancellable) { mutex.withLock { inFlight.remove(key) } }
         }
     }
 
