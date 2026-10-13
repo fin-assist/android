@@ -113,7 +113,8 @@ fun ChatScreen(
     ChatContent(
         state = state,
         zone = zone,
-        today = remember(clock) { clock.today() },
+        // Read on every recomposition, as before FIN-71: a chat left open past midnight relabels its days.
+        today = clock.today(),
         voiceListening = voice.listening,
         actions = remember(vm, voice.start, onBack, onOpenSearch, onOpenAnalytics) {
             ChatActions(

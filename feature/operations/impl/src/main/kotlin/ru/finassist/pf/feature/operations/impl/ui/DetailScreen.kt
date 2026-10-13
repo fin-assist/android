@@ -56,7 +56,7 @@ fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val clock = LocalPfClock.current
     DetailContent(
-        state = state, zone = clock.zone, today = remember(clock) { clock.today() }, onBack = onBack, onRetry = vm::load,
+        state = state, zone = clock.zone, today = clock.today(), onBack = onBack, onRetry = vm::load,
         onOpenPicker = vm::openPicker, onClosePicker = vm::closePicker, onChoose = vm::choose, onSave = vm::save,
         onSnackbarShown = vm::consumeSnackbar,
     )
