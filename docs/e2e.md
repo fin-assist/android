@@ -158,6 +158,10 @@ were.
 - Wait for screens with `extendedWaitUntil` rather than fixed sleeps; scroll to below-the-fold elements with
   `scrollUntilVisible` before tapping them.
 - Type ASCII where you can (merchant `Krabsbir`, digits): non-ASCII input depends on the emulator keyboard.
+- `id` and `text` in one selector must match the same node. A tag on a container (`PfLink`, `PfPageHeader`, a
+  row) has no text of its own — its text is a child node: check the id and the text in two steps.
+- «Now» is pinned for the mock backend only (`E2E_NOW`); screens count «today» by the device clock. Do not check
+  labels that depend on it («Сегодня», «Вчера», the year next to a date).
 - A new flow needs a case in Qase and a line in `scripts/qase-cases.json`; a renamed or removed flow updates both.
   `scripts/test_qase_report.py` (CI, `agent-docs` job) fails on a flow without a case or a case without a flow.
 

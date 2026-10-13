@@ -40,7 +40,8 @@ tags:
 - assertNotVisible:
     id: "statements.result.unread"
 
-# 7 October is the day before the pinned «now»: the operation tops the feed.
+# 7 October, the newest day of the statements: the operation tops the feed. The day's label is not checked — the
+# feed counts «today» by the device clock, while the e2e build pins only the mock backend's (FIN-70).
 - scrollUntilVisible:
     element:
       id: "statements.result.done"
@@ -50,14 +51,14 @@ tags:
     visible:
       id: "operations.feed"
     timeout: 10000
-- assertVisible: "Вчера"
 - assertVisible: "Без описания"
 - tapOn: "Без описания"
+# The tag is on the header row, the title on a child node: id and text are checked apart (FIN-70).
 - extendedWaitUntil:
     visible:
       id: "operations.detail.title"
-      text: "Без описания"
     timeout: 10000
+- assertVisible: "Без описания"
 # No description in the statement: no «Описание в выписке» row; the bank's category is still there.
 - assertNotVisible: "Описание в выписке"
 - assertVisible: "Фастфуд"
