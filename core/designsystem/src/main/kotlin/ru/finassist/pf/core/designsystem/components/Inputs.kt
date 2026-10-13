@@ -207,7 +207,9 @@ fun PfSearchField(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PfIcon(PfIcons.SEARCH, contentDescription = null, size = PfTheme.dimens.iconMd, tint = c.textMuted)
-        Spacer(Modifier.width(PfTheme.dimens.space2))
+        // `.pf-search-input { padding-left: 40px; border: 1px; box-sizing: border-box }`: text at 41 dp from the
+        // outer edge, the icon (absolute, `left: 12px`) ignores the border.
+        Spacer(Modifier.width(PfTheme.dimens.space2 + 1.dp))
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -225,7 +227,7 @@ fun PfSearchField(
             },
         )
         if (value.isNotEmpty()) {
-            PfIconButton(PfIcons.X, contentDescription = "Очистить", onClick = { onValueChange("") }, tint = c.textMuted)
+            PfIconButton(PfIcons.X, contentDescription = "Очистить", onClick = { onValueChange("") }, tint = c.textMuted, iconSize = 18.dp)
         }
     }
 }
@@ -263,6 +265,8 @@ fun PfChip(
             .border(1.dp, if (selected) c.accent else c.borderStrong, shape)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { if (selected) toggleableState = ToggleableState.On }
+            // `.pf-chip { border: 1px; box-sizing: border-box }`: the frame is outside the 12/16 dp padding.
+            .padding(1.dp)
             .padding(start = if (transition) d.space4 else d.space3, end = d.space3),
         horizontalArrangement = Arrangement.spacedBy(d.space1),
         verticalAlignment = Alignment.CenterVertically,
@@ -394,6 +398,8 @@ fun PfSegmentedControl(
             .background(c.surface, outer)
             .border(1.dp, c.border, outer)
             .padding(4.dp),
+        // `.pf-seg { gap: var(--space-1) }`; the frame is an inset outline, so it overlaps the 4 dp padding.
+        horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space1),
     ) {
         options.forEachIndexed { i, option ->
             val isSelected = i == selected

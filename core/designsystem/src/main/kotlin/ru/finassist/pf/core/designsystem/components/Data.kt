@@ -398,9 +398,9 @@ fun PfFileDrop(
                 else Modifier.dashedBorder(c.borderStrong, d.radiusXl, width = 1.dp, dash = 3.dp, gap = 2.dp),
             )
             .then(if (!busy) Modifier.clickable(role = Role.Button, onClick = onPick) else Modifier)
-            // `.pf-drop`: `border: 1.5px dashed` outside `padding: 24px 16px`; the frame rounds to 1 dp of ink, the
-            // 1.5 dp of space it takes stays.
-            .padding(1.5.dp)
+            // `.pf-drop`: `border: 1.5px dashed` outside `padding: 24px 16px`. The rendered mockup lays the frame
+            // out as ~1 dp per side (142 dp tall, 140 dp without it), so 1 dp, not 1.5.
+            .padding(1.dp)
             .padding(horizontal = d.space4, vertical = d.space6),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(d.space2),

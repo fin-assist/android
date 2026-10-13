@@ -55,16 +55,16 @@ class UploadDesignCheckTest {
 
     @Test fun importGuideDark() = capture("ImportGuideDark", guide, dark = true)
 
-    @Test fun importGuideMore() = capture("ImportGuideMore", more, heightDp = 884)
+    @Test fun importGuideMore() = capture("ImportGuideMore", more, heightDp = 924)
 
     @Test fun importGuideFallback() = capture("ImportGuideFallback", guide.copy(fallbackOpen = true), popups = true)
 
-    @Test fun importGuideBusy() = capture("ImportGuideBusy", busy, heightDp = 884)
+    @Test fun importGuideBusy() = capture("ImportGuideBusy", busy, heightDp = 924)
 
-    @Test fun importGuideBusyCancel() = capture("ImportGuideBusyCancel", busy.copy(askCancel = true), heightDp = 884, popups = true)
+    @Test fun importGuideBusyCancel() = capture("ImportGuideBusyCancel", busy.copy(askCancel = true), heightDp = 924, popups = true)
 
     /** The file did not go out for lack of network: the guide with a notice and «Повторить». */
-    @Test fun importGuideOffline() = capture("ImportGuideOffline", more.copy(uploadOffline = true), heightDp = 1020)
+    @Test fun importGuideOffline() = capture("ImportGuideOffline", more.copy(uploadOffline = true), heightDp = 1040)
 
     @Test fun importError() = capture("ImportError", error(ErrorCodes.WRONG_FORMAT, "statement_09_2026.pdf"))
 

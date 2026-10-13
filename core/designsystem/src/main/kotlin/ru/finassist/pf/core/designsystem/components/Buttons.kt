@@ -35,6 +35,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.theme.PfTheme
@@ -117,6 +118,7 @@ fun PfIconButton(
     modifier: Modifier = Modifier,
     tint: Color = PfTheme.colors.text,
     enabled: Boolean = true,
+    iconSize: Dp = PfTheme.dimens.iconLg,
 ) {
     Box(
         modifier = modifier
@@ -125,7 +127,7 @@ fun PfIconButton(
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        PfIcon(icon, contentDescription = contentDescription, tint = if (enabled) tint else PfTheme.colors.borderStrong)
+        PfIcon(icon, contentDescription = contentDescription, size = iconSize, tint = if (enabled) tint else PfTheme.colors.borderStrong)
     }
 }
 

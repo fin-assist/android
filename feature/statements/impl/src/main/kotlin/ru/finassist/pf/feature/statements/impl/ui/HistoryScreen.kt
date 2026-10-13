@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -305,9 +307,13 @@ private fun UploadRow(u: Upload, divider: Boolean, onDelete: () -> Unit, onOpenU
                     )
                 }
             }
+            // Mockup: `Pf.Button variant="ghost" icon="trash"` — icon 20, `padding: 0 16px` and a 1 dp frame, so the
+            // button is 54 dp wide and the icon sits 17 dp from the row's content edge. The width overrides the
+            // icon button's 48 dp; the icon stays centred.
             PfIconButton(
                 PfIcons.TRASH, contentDescription = "Удалить загрузку ${u.fileName}", onClick = onDelete, tint = c.accent,
-                modifier = Modifier.testTag(StatementsTags.HISTORY_DELETE),
+                iconSize = d.iconMd,
+                modifier = Modifier.width(54.dp).testTag(StatementsTags.HISTORY_DELETE),
             )
         }
         if (divider) PfDivider(Modifier.padding(horizontal = d.space4))
