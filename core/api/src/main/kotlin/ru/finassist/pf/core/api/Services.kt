@@ -46,6 +46,10 @@ import java.time.OffsetDateTime
  */
 
 interface AuthApi {
+    /**
+     * `POST /v1/auth/phone`. A number outside `+7` and 10 digits — 400 `VALIDATION_ERROR` with a violation at the
+     * field `phone` (`INVALID_FORMAT`); there is no code of its own for it (FIN-68).
+     */
     suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification
 
     /** `GET /v1/auth/phone/events`. Completes after a terminal status (`verified` / `expired`). */

@@ -1,5 +1,5 @@
 appId: ru.finassist.pf.mock.e2e
-name: Загрузка — ни одной прочитанной операции, непрочитанные строки видны
+name: Загрузка — ни одной прочитанной операции, непрочитанные строки видны и открываются списком
 tags:
   - statements
 ---
@@ -44,3 +44,48 @@ tags:
     id: "statements.result.unread"
 # The count is joined to the noun with a no-break space: any single character between them.
 - assertVisible: "2.строки не прочитали — их нет в суммах.*"
+
+# «Подробнее» in the notice is a link inside a text node: no view or id for Maestro to tap (docs/e2e.md). The same
+# list opens from the upload's row in the history, through a link of its own (FIN-66).
+- back
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+# The newest upload is on top; the fixture statement has no unread lines, so this is the only such link.
+- assertVisible:
+    id: "statements.history.unread"
+    text: "Не прочитали 2.строки"
+- tapOn:
+    id: "statements.history.unread"
+- extendedWaitUntil:
+    visible:
+      id: "statements.unread"
+    timeout: 10000
+# Nothing of the file was read: the intro has no «Остальные операции загружены».
+- assertVisible: "В файле .* эти строки не прочитали — их нет в суммах\\."
+- assertNotVisible: ".*Остальные операции загружены.*"
+# Line numbers of the two <STMTTRN> blocks in unreadable.ofx; the date and the month are joined by a no-break space.
+- assertVisible: "Строка 31 · дата не прочитана"
+- assertVisible: "нет даты"
+- assertVisible: "Строка 38 · 5.октября"
+- assertVisible: "не распознали сумму"
+- assertVisible:
+    id: "statements.unread.report"
+- back
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000

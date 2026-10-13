@@ -169,7 +169,7 @@ class ImportResultDesignCheckTest {
             lines = listOf(
                 line(214, "2026-09-03T12:00:00+03:00", UnreadReason.BAD_AMOUNT, "Не распознали сумму"),
                 line(251, null, UnreadReason.BAD_DATE, "Неизвестный формат даты"),
-                line(298, "2026-09-11T12:00:00+03:00", UnreadReason.NO_DESCRIPTION, "Пустое описание"),
+                line(298, "2026-09-11T12:00:00+03:00", UnreadReason.BAD_AMOUNT, "Не распознали сумму"),
                 line(312, null, UnreadReason.NO_DATE, "Нет даты операции"),
                 line(377, "2026-09-21T12:00:00+03:00", UnreadReason.TRUNCATED, "Строка обрезана — не хватает данных"),
             ),

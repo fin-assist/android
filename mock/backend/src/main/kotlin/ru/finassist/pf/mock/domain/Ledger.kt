@@ -202,11 +202,12 @@ class Ledger(private val catalog: Catalog) {
      * Refund rule (decision-ofx-only.md): a credit is a refund when its bank category is an expense one, or an
      * earlier debit had the same description (except transfers), or the description says «возврат».
      * The category it reduces: past debits with the same name → a debit of the same amount on the same account
-     * within 60 days → the refund's own bank category if it is an expense one → none.
+     * within 60 days → the refund's own bank category if it is an expense one → none. An operation without a
+     * description is not matched by description, on either side (FIN-67).
      */
     private fun detectRefunds() {
         val ops = operations.values.sortedBy { it.occurredAt }
-        val debitsByName = ops.filter { it.isDebit }.groupBy { it.name.lowercase() }
+        val debitsByName = ops.filter { it.isDebit && it.name.isNotBlank() }.groupBy { it.name.lowercase() }
         for (op in ops) {
             if (op.isDebit || op.isManual || op.pairId != null) continue
             val bankCat = op.bankCategory

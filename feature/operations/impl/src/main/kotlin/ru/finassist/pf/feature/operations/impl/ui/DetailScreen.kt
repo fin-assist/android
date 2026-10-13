@@ -83,7 +83,7 @@ internal fun DetailContent(
         val op = state.operation
         // The operation's name is the title (mockup `Detail`); «Операция» while it loads or fails.
         PfPageHeader(
-            op?.title ?: "Операция", onBack = onBack,
+            op?.let { OperationFormat.title(it.title) } ?: "Операция", onBack = onBack,
             modifier = if (op != null) Modifier.testTag(OperationsTags.DETAIL_TITLE) else Modifier,
         )
         when {

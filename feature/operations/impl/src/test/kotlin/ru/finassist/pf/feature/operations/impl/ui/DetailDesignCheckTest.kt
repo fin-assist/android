@@ -12,7 +12,10 @@ import ru.finassist.pf.feature.operations.impl.ui.OperationsDesignFixtures.today
 import ru.finassist.pf.feature.operations.impl.ui.OperationsDesignFixtures.transfer
 import ru.finassist.pf.feature.operations.impl.ui.OperationsDesignFixtures.zone
 
-/** Artboards `Detail` / `DetailDark` / `DetailRefund` / `DetailTransfer`: purchase, refund and own transfer. */
+/**
+ * Artboards `Detail` / `DetailDark` / `DetailRefund` / `DetailTransfer`: purchase, refund and own transfer;
+ * `DetailNoDescription` — no artboard yet.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class DetailDesignCheckTest {
@@ -31,4 +34,10 @@ class DetailDesignCheckTest {
     @Test fun detailRefund() = capture("DetailRefund", detailState(refund))
 
     @Test fun detailTransfer() = capture("DetailTransfer", detailState(transfer))
+
+    /**
+     * No artboard on the canvas yet (FIN-67): an operation whose statement line had no description — «Без описания»
+     * as the title, no «Описание в выписке» row. The purchase of `Detail` with an empty title.
+     */
+    @Test fun detailNoDescription() = capture("DetailNoDescription", detailState(purchase.copy(title = "", description = null)))
 }

@@ -111,7 +111,6 @@ object OfxParser {
                 when {
                     date == null -> unread += UnreadLine(lineNumber, null, if (f["DTPOSTED"] == null) "no_date" else "bad_date")
                     amount == null -> unread += UnreadLine(lineNumber, date, "bad_amount")
-                    name.isNullOrEmpty() -> unread += UnreadLine(lineNumber, date, "no_description")
                     f["FITID"].isNullOrBlank() -> unread += UnreadLine(lineNumber, date, "truncated")
                     else -> transactions += OfxTransaction(
                         accountId = account.id,
@@ -119,7 +118,8 @@ object OfxParser {
                         isDebit = amount.signum() < 0 || f["TRNTYPE"]?.trim().equals("DEBIT", ignoreCase = true),
                         postedAt = date,
                         amountMinor = amount.abs().movePointRight(2).setScale(0, java.math.RoundingMode.HALF_UP).longValueExact(),
-                        name = unescape(name),
+                        // No description does not make a line unread (FIN-67): the operation keeps an empty title.
+                        name = unescape(name.orEmpty()),
                         memo = unescape(f["MEMO"]?.trim().orEmpty()),
                         currency = f["CURSYM"]?.trim()?.ifEmpty { null } ?: "RUB",
                         lineNumber = lineNumber,
