@@ -166,10 +166,13 @@ data class StatementsList(
     val uploads: List<Upload>,
 )
 
+/**
+ * Why a statement line was not read (api.md 3.6): only what an operation cannot be counted without — amount, date,
+ * an intact line. A missing description is not a reason (FIN-67): the operation comes with an empty `title`.
+ */
 @Serializable(with = UnreadReason.Serializer::class)
 enum class UnreadReason(override val code: String) : ApiCode {
-    BAD_AMOUNT("bad_amount"), BAD_DATE("bad_date"), NO_DATE("no_date"), NO_DESCRIPTION("no_description"),
-    TRUNCATED("truncated"), UNKNOWN("?");
+    BAD_AMOUNT("bad_amount"), BAD_DATE("bad_date"), NO_DATE("no_date"), TRUNCATED("truncated"), UNKNOWN("?");
 
     object Serializer : OpenEnumSerializer<UnreadReason>("UnreadReason", entries, UNKNOWN)
 }

@@ -78,6 +78,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `statement.csv` | `CSV_NOT_ACCEPTED` |
   | `notes.txt` | `WRONG_FORMAT` |
 | `unreadable.ofx` | no readable operation, 2 unread lines (`EMPTY_STATEMENT`, `unread_count = 2`) |
+  | `no-description.ofx` | 1 new operation without a description (7 October 2026): «Без описания» in the feed, no unread line |
   | `other-bank.ofx` | `WRONG_BANK` |
 
 - **Control link.** `pfe2e://config?…` changes state from a flow (`E2eControlActivity`). Open it through the subflow,
@@ -182,6 +183,7 @@ were.
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
 | `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
+| `statements/upload_no_description` | a line without a description is imported (no unread notice) and shown as «Без описания» in the feed and on the operation |
 | `profile/theme_and_logout` | dark theme; logout cancel / confirm with the notice |
 | `profile/delete_account` | passcode (wrong, right) → «Удалить аккаунт?» over the profile → «Удаляем…» ignores Back → «Аккаунт удалён» |
 | `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |

@@ -94,6 +94,18 @@ class OperationFormatTest {
         status = OperationStatus.POSTED, sourceName = "Выписка Т-Банка",
     )
 
+    @Test fun `an operation without a description is shown as «Без описания»`() {
+        assertEquals("Без описания", OperationFormat.row(op("a", at(2026, 9, 24)).copy(title = "")).title)
+        assertEquals("Без описания", OperationFormat.title("  "))
+        assertEquals("Самокат", OperationFormat.row(op("a", at(2026, 9, 24))).title)
+        assertEquals("Без описания", OperationFormat.searchGroups(listOf(op("a", at(2026, 9, 24)).copy(title = "")), zone, today)[0].second[0].title)
+    }
+
+    @Test fun `a blank description gives no statement row`() {
+        val rows = OperationFormat.statementRows(details(OperationKind.EXPENSE).copy(description = "", bankCategory = "Фастфуд")) { "x" }
+        assertEquals(listOf("Категория банка"), rows.map { it.label })
+    }
+
     private val current = ru.finassist.pf.core.api.model.Account("Текущий", "··4821", "текущий счёт, последние цифры 4821")
     private val saving = ru.finassist.pf.core.api.model.Account("Накопительный", "··0734")
 

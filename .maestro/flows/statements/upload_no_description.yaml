@@ -1,0 +1,63 @@
+appId: ru.finassist.pf.mock.e2e
+name: Загрузка — операция без описания принимается и видна в ленте как «Без описания»
+tags:
+  - statements
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+
+# One debit without <NAME> (FIN-67): an operation with an empty title, not an unread line.
+- tapOn:
+    id: "e2e.picker.no-description.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.new"
+- assertNotVisible:
+    id: "statements.result.unread"
+
+# 7 October is the day before the pinned «now»: the operation tops the feed.
+- scrollUntilVisible:
+    element:
+      id: "statements.result.done"
+- tapOn:
+    id: "statements.result.done"
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- assertVisible: "Вчера"
+- assertVisible: "Без описания"
+- tapOn: "Без описания"
+- extendedWaitUntil:
+    visible:
+      id: "operations.detail.title"
+      text: "Без описания"
+    timeout: 10000
+# No description in the statement: no «Описание в выписке» row; the bank's category is still there.
+- assertNotVisible: "Описание в выписке"
+- assertVisible: "Фастфуд"

@@ -371,7 +371,7 @@ class AnalyticsEngine(
     private fun regularItems(mode: TransferMode, visible: List<Operation>, base: List<YearMonth>, periodRange: DateRange): List<RegularPayment> {
         val window = base.take(3)
         val debits = window.flatMap { m -> scope.inDays(visible, m.atDay(1), m.plusMonths(1).atDay(1)) }
-            .filter { it.isDebit && !it.isOwnTransferCategory && it.category.id != catalog.transfers.id }
+            .filter { it.isDebit && !it.isOwnTransferCategory && it.category.id != catalog.transfers.id && it.name.isNotBlank() }
         val dismissed = dismissedPayments()
         return debits.groupBy { it.name }.mapNotNull { (name, list) ->
             val perMonth = list.groupBy { YearMonth.from(scope.dayOf(it)) }
@@ -440,7 +440,8 @@ class AnalyticsEngine(
         val fees = scope.expenses(ops).filter { it.category?.id == catalog.bankFees.id }
         val total = fees.sumOf { it.signedMinor }
         if (fees.isEmpty() || total <= 0) return BankFeesCard(status = MetricStatus.NONE)
-        val kinds = fees.map { it.op.name.lowercase() }.distinct().take(3).joinToString(", ")
+        // Fees without a description name no kind; none named — no kinds line at all (FIN-67).
+        val kinds = fees.map { it.op.name.lowercase() }.filter { it.isNotBlank() }.distinct().take(3).joinToString(", ").ifEmpty { null }
         return BankFeesCard(
             status = MetricStatus.READY, value = Money(total), kindsName = kinds,
             filters = OperationsFilter(from = periodRange.from, to = periodRange.to, transferMode = mode, selection = SELECTION_BANK_FEES, selectionName = "Комиссии и проценты банку"),
@@ -449,7 +450,7 @@ class AnalyticsEngine(
 
     private fun smallFrequent(mode: TransferMode, ops: List<Operation>, base: List<YearMonth>, basis: MetricBasis?, periodRange: DateRange, month: YearMonth): SmallFrequentCard {
         if (base.isEmpty()) return SmallFrequentCard(status = MetricStatus.LOCKED, lock = MetricLock(LockReason.NEED_FULL_MONTHS, 1, 0))
-        val groups = ops.filter { it.isDebit && !it.isOwnTransferCategory && it.amountMinor <= SMALL_MAX_MINOR && it.category.id != catalog.transfers.id }
+        val groups = ops.filter { it.isDebit && !it.isOwnTransferCategory && it.amountMinor <= SMALL_MAX_MINOR && it.category.id != catalog.transfers.id && it.name.isNotBlank() }
             .groupBy { it.name }
             .filter { (_, l) -> l.size >= SMALL_MIN_COUNT }
             .map { (name, l) ->

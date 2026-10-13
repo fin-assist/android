@@ -79,7 +79,7 @@ class OperationViews(private val ledger: Ledger, private val zone: ZoneId) {
                 occurredAt = op.occurredAt, amount = Money(op.amountMinor), currency = op.currency, title = op.name,
                 categoryId = op.category.id, categoryName = op.category.name, categoryIcon = op.category.icon,
                 isCategoryManual = op.isManual, note = note(op), status = OperationStatus.POSTED,
-                account = account(op.account, spoken = true), description = op.name, noteDetails = noteDetails(op),
+                account = account(op.account, spoken = true), description = op.name.ifBlank { null }, noteDetails = noteDetails(op),
                 bankCategory = op.bankCategory, sourceName = ru.finassist.pf.mock.MockBackend.SOURCE_NAME,
             )
         }

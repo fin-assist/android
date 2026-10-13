@@ -30,6 +30,10 @@ data class RowModel(
 )
 
 object OperationFormat {
+    const val NO_TITLE = "Без описания"
+
+    /** The operation's name for display; an empty `title` (no description in the statement, FIN-67) — «Без описания». */
+    fun title(title: String): String = title.ifBlank { NO_TITLE }
 
     fun account(a: Account?): String? = a?.let { listOfNotNull(it.typeName, it.mask).joinToString(" ") }
 
@@ -66,7 +70,7 @@ object OperationFormat {
         return RowModel(
             id = item.id,
             icon = item.categoryIcon,
-            title = item.title,
+            title = title(item.title),
             subtitle = subtitleParts.joinToString(" · "),
             amount = amount,
             income = item.kind == OperationKind.INCOME,
@@ -119,7 +123,7 @@ object OperationFormat {
         } else {
             account("Счёт", op.account)
         }
-        op.description?.let { add(StatementRow("Описание в выписке", it)) }
+        op.description?.takeIf { it.isNotBlank() }?.let { add(StatementRow("Описание в выписке", it)) }
         op.bankCategory?.let {
             add(if (op.kind == OperationKind.OWN_TRANSFER) StatementRow("В выписке", it) else StatementRow("Категория банка", it, sublabel = "как в выписке"))
         }
