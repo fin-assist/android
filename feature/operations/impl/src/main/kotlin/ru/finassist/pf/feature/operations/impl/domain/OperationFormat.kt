@@ -48,6 +48,11 @@ object OperationFormat {
      * Row: expense `−2 340 ₽`, income `+15 000 ₽` (positive colour), own transfer without sign and muted, unknown
      * kind — no sign, no colour (api.md 4.1). Pending holds get «холд» in the subtitle.
      */
+    /** The operation's name for display; an empty `title` (no description in the statement, FIN-67) — «Без описания». */
+    fun title(title: String): String = title.ifBlank { NO_TITLE }
+
+    const val NO_TITLE = "Без описания"
+
     fun row(item: OperationItem): RowModel {
         val amount = when (item.kind) {
             OperationKind.EXPENSE -> money(-item.amount, item.currency, Money.Sign.AUTO)
@@ -66,7 +71,7 @@ object OperationFormat {
         return RowModel(
             id = item.id,
             icon = item.categoryIcon,
-            title = item.title,
+            title = title(item.title),
             subtitle = subtitleParts.joinToString(" · "),
             amount = amount,
             income = item.kind == OperationKind.INCOME,
@@ -119,7 +124,7 @@ object OperationFormat {
         } else {
             account("Счёт", op.account)
         }
-        op.description?.let { add(StatementRow("Описание в выписке", it)) }
+        op.description?.takeIf { it.isNotBlank() }?.let { add(StatementRow("Описание в выписке", it)) }
         op.bankCategory?.let {
             add(if (op.kind == OperationKind.OWN_TRANSFER) StatementRow("В выписке", it) else StatementRow("Категория банка", it, sublabel = "как в выписке"))
         }

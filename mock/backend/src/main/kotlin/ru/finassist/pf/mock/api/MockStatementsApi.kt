@@ -306,7 +306,6 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             "bad_amount" -> "не распознали сумму"
             "bad_date" -> "не распознали дату"
             "no_date" -> "нет даты"
-            "no_description" -> "нет описания"
             else -> "строка оборвана"
         },
     )
