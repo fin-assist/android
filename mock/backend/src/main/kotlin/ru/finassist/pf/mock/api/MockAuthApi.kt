@@ -8,6 +8,7 @@ import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.model.ConsentDocument
 import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.ErrorCodes
+import ru.finassist.pf.core.api.model.FieldErrorCodes
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.PhoneVerification
 import ru.finassist.pf.core.api.model.PhoneVerificationStatusEvent
@@ -45,7 +46,12 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
 
     override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification {
         backend.simulateNetwork()
-        if (!PHONE.matches(phone)) throw AppError.Api(ErrorCodes.INVALID_PHONE, 400)
+        if (!PHONE.matches(phone)) {
+            throw AppError.Api(
+                ErrorCodes.VALIDATION_ERROR, 400,
+                details = listOf(AppError.FieldError(PHONE_FIELD, FieldErrorCodes.INVALID_FORMAT, "Номер — +7 и 10 цифр")),
+            )
+        }
         return backend.idempotent("auth.phone:${key.value}") {
             val now = backend.now()
             val token = secret("vt_")
@@ -140,6 +146,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
 
     private companion object {
         val PHONE = Regex("""^\+7\d{10}$""")
+        const val PHONE_FIELD = "phone"
         const val CALLBACK_NUMBER = "+78001234567"
     }
 }

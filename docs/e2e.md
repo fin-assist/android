@@ -194,3 +194,6 @@ fingerprint), custom date ranges in search,
 links inside a sentence — the registration terms and privacy policy, «Как мы защищаем данные», «разобрать» and
 «Подробнее» on the import result, «Подробнее» on «Аналитика» (a link inside a text node has no own view or
 resource id for Maestro to tap, and the first three open an external browser the flow cannot check).
+The server's own check of the phone number (400 `VALIDATION_ERROR` at `phone`, FIN-68) cannot be reached either:
+the app sends only `+7` and 10 digits, the very rule the server checks, so neither a real build nor the mock gets
+that error; `PhoneViewModelTest` covers the branch, `auth/phone_validation` the app's own check of a short number.

@@ -23,10 +23,16 @@ data class ApiErrorDetail(
     val message: String,
 )
 
+/** Codes of `VALIDATION_ERROR` violations (`details[].code`); an unknown one is a generic field error. */
+object FieldErrorCodes {
+    const val REQUIRED = "REQUIRED"
+    const val INVALID_FORMAT = "INVALID_FORMAT"
+    const val OUT_OF_RANGE = "OUT_OF_RANGE"
+}
+
 /** Error codes from api.md §8 that screens branch on. Unknown codes are handled by HTTP status. */
 object ErrorCodes {
     const val VALIDATION_ERROR = "VALIDATION_ERROR"
-    const val INVALID_PHONE = "INVALID_PHONE"
     const val INVALID_TOKEN = "INVALID_TOKEN"
     const val TOKEN_EXPIRED = "TOKEN_EXPIRED"
     const val TOKEN_REVOKED = "TOKEN_REVOKED"
