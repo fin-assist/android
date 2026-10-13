@@ -199,6 +199,23 @@ class EncryptedTokenStoreTest {
         withTimeout(5_000) { store.session.first { it == next } }
     }
 
+    @Test
+    fun `a failed first read is retried, not left waiting for the next write`() = runBlocking<Unit> {
+        store.save(SESSION)
+        // The store's own collection (the first) gets the data; the read it starts (the second) fails.
+        val collections = java.util.concurrent.atomic.AtomicInteger()
+        val flaky = object : DataStore<Preferences> {
+            override val data: Flow<Preferences> = flow {
+                if (collections.incrementAndGet() == 2) throw IOException("disk read failed")
+                emitAll(dataStore.data)
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val fresh = EncryptedTokenStore(context, flaky)
+
+        assertEquals(SESSION, withTimeout(5_000) { fresh.session.first() })
+    }
+
     private companion object {
         val SESSION = TokenStore.Session("user-1", TokenPair("access-1", "refresh-1"))
         val BLOB = stringPreferencesKey("session.blob")

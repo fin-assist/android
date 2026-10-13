@@ -95,7 +95,9 @@ class EncryptedTokenStore @Inject constructor(
         scope.launch {
             dataStore.data.map { it[KEY_BLOB] }.distinctUntilChanged()
                 .retryWhen { e, _ -> (e !is CancellationException).also { if (it) delay(READ_RETRY_MS) } }
-                .collect { refresh() }
+                // Until a first read lands, [session] has nothing to give its subscribers: retried, not left waiting
+                // for the next write.
+                .collect { while (!refresh() && stored.value == null) delay(READ_RETRY_MS) }
         }
     }
 
@@ -113,9 +115,9 @@ class EncryptedTokenStore @Inject constructor(
     /**
      * NonCancellable: a write that has landed is published even if its caller has gone away meanwhile. A failed
      * read keeps the last value and does not throw: it runs after every own write, where it would replace the
-     * write's own outcome, and in the trigger, which would stop.
+     * write's own outcome, and in the trigger, which would stop. Returns whether the read landed.
      */
-    private suspend fun refresh() = withContext(NonCancellable) {
+    private suspend fun refresh(): Boolean = withContext(NonCancellable) {
         reads.withLock {
             stored.value = try {
                 Stored(read())
@@ -123,8 +125,9 @@ class EncryptedTokenStore @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "session could not be read, the last one stays", e)
-                return@withLock
+                return@withLock false
             }
+            true
         }
     }
 
