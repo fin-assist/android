@@ -134,13 +134,35 @@ internal class AppLockImpl @Inject constructor(
         while (!refresh()) delay(READ_RETRY_MS)
     }
 
-    /** The background retry of [refreshAfterWrite]; one at a time, however many writes fail to read back. */
-    private var retry: Job? = null
-
     /** After an own write: a failed read is retried in the background, the writer gets its own outcome now. */
     private suspend fun refreshAfterWrite() {
-        if (!refresh()) synchronized(this) {
-            if (retry?.isActive != true) retry = scope.launch { refreshUntilRead() }
+        if (!refresh()) scheduleRetry()
+    }
+
+    /** The background retry after a write that failed to read back; one at a time, however many writes fail. */
+    private var retry: Job? = null
+
+    /** A write failed to read back while [retry] was running: it reads again once more before it ends. */
+    private var retryAgain = false
+
+    /**
+     * Starts the retry, or has the running one read once more. Both sides decide under the same lock: a retry that
+     * has just read cannot end while a later failed write counts on it.
+     */
+    private fun scheduleRetry() = synchronized(this) {
+        if (retry != null) retryAgain = true else retry = scope.launch { retryUntilCurrent() }
+    }
+
+    private suspend fun retryUntilCurrent() {
+        while (true) {
+            refreshUntilRead()
+            synchronized(this) {
+                if (!retryAgain) {
+                    retry = null
+                    return
+                }
+                retryAgain = false
+            }
         }
     }
 

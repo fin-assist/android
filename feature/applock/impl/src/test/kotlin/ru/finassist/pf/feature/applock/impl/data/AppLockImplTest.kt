@@ -353,6 +353,7 @@ class AppLockImplTest {
 
     @Test
     fun `writes that fail to read back share one retry`() = runBlocking<Unit> {
+        biometrics(available = true, fingerprint = true)
         val reads = java.util.concurrent.atomic.AtomicInteger()
         val flaky = object : DataStore<Preferences> {
             @Volatile var failReads = false
@@ -369,13 +370,15 @@ class AppLockImplTest {
         lock.setPasscode("1234")
         lock.state.await(LockState.Unlocked)
         flaky.failReads = true
-        repeat(10) { lock.setBiometricEnabled(it % 2 == 0) }
+        repeat(10) { lock.setBiometricEnabled(it % 2 == 1) }
 
         // A second of retries: one background retry and the lock's own trigger read about once each (two flows per
         // read), ten separate retries would read at least ten times.
         reads.set(0)
         delay(1_100)
         assertTrue(reads.get() <= 6, "reads in a second: ${reads.get()}")
-        flaky.failReads = false
+
+        flaky.failReads = false // the retry ends on the last write's value
+        lock.biometricEnabled.await(true)
     }
 }
