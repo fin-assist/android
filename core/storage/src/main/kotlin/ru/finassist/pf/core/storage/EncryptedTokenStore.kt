@@ -95,9 +95,7 @@ class EncryptedTokenStore @Inject constructor(
         scope.launch {
             dataStore.data.map { it[KEY_BLOB] }.distinctUntilChanged()
                 .retryWhen { e, _ -> (e !is CancellationException).also { if (it) delay(READ_RETRY_MS) } }
-                // Until a first read lands, [session] has nothing to give its subscribers: retried, not left waiting
-                // for the next write.
-                .collect { while (!refresh() && stored.value == null) delay(READ_RETRY_MS) }
+                .collect { refreshUntilRead() }
         }
     }
 
@@ -131,11 +129,22 @@ class EncryptedTokenStore @Inject constructor(
         }
     }
 
-    /** Runs an own write of the session and publishes the store's state after it, whether the write landed or not. */
+    /**
+     * Until a read lands, [session] is behind the store (or has nothing for its subscribers yet), and no later
+     * change may come to fix it: a failed read is retried, not left waiting for the next write.
+     */
+    private suspend fun refreshUntilRead() {
+        while (!refresh()) delay(READ_RETRY_MS)
+    }
+
+    /**
+     * Runs an own write of the session and publishes the store's state after it, whether the write landed or not.
+     * A failed read is retried in the background: the writer gets its own outcome now.
+     */
     private suspend fun <T> writing(write: suspend () -> T): T = try {
         write()
     } finally {
-        refresh()
+        if (!refresh()) scope.launch { refreshUntilRead() }
     }
 
     /** Encryption failures surface as [AppError.Unknown], which every sign-in screen already handles. */

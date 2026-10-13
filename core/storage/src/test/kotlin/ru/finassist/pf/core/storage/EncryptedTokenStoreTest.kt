@@ -175,7 +175,7 @@ class EncryptedTokenStoreTest {
     }
 
     @Test
-    fun `a failed read after a write neither fails the write nor stops the session updates`() = runBlocking<Unit> {
+    fun `a failed read after a write neither fails the write nor leaves the session behind`() = runBlocking<Unit> {
         val flaky = object : DataStore<Preferences> {
             @Volatile var failReads = false
             override val data: Flow<Preferences> = flow {
@@ -191,12 +191,10 @@ class EncryptedTokenStoreTest {
         flaky.failReads = true
         store.clear() // the write lands; the read after it fails and must not surface here
         assertNull(rawBlob())
-        assertEquals(SESSION, withTimeout(5_000) { store.session.first() }, "the last read stays")
+        assertEquals(SESSION, withTimeout(5_000) { store.session.first() }, "the last read stays while reads fail")
 
-        flaky.failReads = false
-        val next = TokenStore.Session("user-2", TokenPair("access-2", "refresh-2"))
-        store.save(next)
-        withTimeout(5_000) { store.session.first { it == next } }
+        flaky.failReads = false // no further write: the retried read publishes the sign-out
+        withTimeout(5_000) { store.session.first { it == null } }
     }
 
     @Test
