@@ -64,7 +64,8 @@ python3 scripts/coverage-diff.py --base origin/main
 
 - Changed lines: at least **80 %** covered. Lines left uncovered are listed in the PR («Проверка») with the
   reason (e.g. platform glue that only an instrumented test can reach).
-- Project: the baseline on 2026-10-09 is 35.6 % of lines, 27.3 % of branches. It should only go up.
+- Project: 85.8 % of lines, 62.4 % of branches on 2026-10-13 (FIN-47; 35.6 % / 27.3 % on 2026-10-09). It should
+  only go up.
 
 ### In CI
 
