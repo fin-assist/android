@@ -20,6 +20,7 @@ import ru.finassist.pf.core.network.di.NetworkModule
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
@@ -99,8 +100,9 @@ class NetworkModuleTest {
         val (failed, refresh, retried) = requests
         assertEquals("Bearer old-access", failed.getHeader("Authorization"))
         assertNull(refresh.getHeader("Authorization"))
-        // Known gap (FIN-73): the refresh client has no AuthInterceptor, so the X-Pf-No-Auth marker reaches the server.
         assertTrue(refresh.getHeader(HEADER_IDEMPOTENCY_KEY)!!.isNotBlank())
+        // Known gap (FIN-73): the refresh client has no AuthInterceptor, so the marker reaches the server. Enable once fixed:
+        // assertNull(refresh.getHeader(NoAuth.HEADER))
         assertEquals("""{"refresh_token":"old-refresh"}""", refresh.body.readUtf8())
         assertEquals("Bearer new-access", retried.getHeader("Authorization"))
         assertNotEquals(failed.getHeader(HEADER_REQUEST_ID), retried.getHeader(HEADER_REQUEST_ID))
@@ -113,13 +115,15 @@ class NetworkModuleTest {
         // of the main dispatcher is held by a request blocked in TokenAuthenticator while the refresh is enqueued.
         val parallel = 5
         val allInFlight = CountDownLatch(parallel)
+        // Without it a request that never joined the others would let the latch time out and the test pass vacuously.
+        val allSlotsHeld = AtomicBoolean(true)
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when {
                 request.path == "/v1/auth/token" -> json("""{"access_token":"new-access","refresh_token":"new-refresh"}""")
                 request.getHeader("Authorization") == "Bearer new-access" -> json(PROFILE_JSON)
                 else -> {
                     allInFlight.countDown()
-                    allInFlight.await(5, TimeUnit.SECONDS)
+                    if (!allInFlight.await(5, TimeUnit.SECONDS)) allSlotsHeld.set(false)
                     json("""{"error":{"code":"TOKEN_EXPIRED","message":"x"}}""", 401)
                 }
             }
@@ -129,6 +133,7 @@ class NetworkModuleTest {
             List(parallel) { async(Dispatchers.IO) { stack.api.profile.getProfile() } }.awaitAll()
         }
 
+        assertTrue(allSlotsHeld.get(), "all $parallel requests were in flight at once")
         assertEquals(List(parallel) { "u1" }, profiles.map { it.userId })
         assertEquals(1, server.requestCount - 2 * parallel, "exactly one refresh call")
     }
