@@ -9,6 +9,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -119,9 +120,14 @@ class LocalFeatureFlags @Inject constructor(
         reload()
     }
 
+    /** The background retry of [reloadAfterWrite]; one at a time, however many writes fail to read back. */
+    private var retry: Job? = null
+
     /** A failed read is retried in the background: the writer gets its own outcome now. */
     private suspend fun reloadAfterWrite() {
-        if (!reload()) scope.launch { reloadUntilRead() }
+        if (!reload()) synchronized(this) {
+            if (retry?.isActive != true) retry = scope.launch { reloadUntilRead() }
+        }
     }
 
     /**

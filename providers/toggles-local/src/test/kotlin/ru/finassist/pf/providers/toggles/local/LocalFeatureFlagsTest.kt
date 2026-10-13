@@ -183,4 +183,31 @@ class LocalFeatureFlagsTest {
         flaky.failReads = false // no further write: the retried read publishes the override
         withTimeout(5_000) { while (flags.isEnabled(Flag.ASSISTANT)) delay(10) }
     }
+
+    @Test
+    fun `writes that fail to read back share one retry`() = runBlocking<Unit> {
+        val store = dataStore()
+        val reads = java.util.concurrent.atomic.AtomicInteger()
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) {
+                    reads.incrementAndGet()
+                    throw IOException("disk read failed")
+                }
+                emitAll(store.data)
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = store.updateData(transform)
+        }
+        val flags = LocalFeatureFlags(context, flaky).also { it.awaitReady() }
+        flaky.failReads = true
+        repeat(10) { flags.set(Flag.ASSISTANT, it % 2 == 0) }
+
+        // A second of retries: one background retry and the store's own trigger read about once each, ten separate
+        // retries would read at least ten times.
+        reads.set(0)
+        delay(1_100)
+        assertTrue(reads.get() <= 4, "reads in a second: ${reads.get()}")
+        flaky.failReads = false
+    }
 }
