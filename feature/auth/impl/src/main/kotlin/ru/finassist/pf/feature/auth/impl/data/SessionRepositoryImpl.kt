@@ -16,7 +16,6 @@ import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.ProfileApi
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.IdempotencyKey
-import ru.finassist.pf.core.api.model.ProfileUpdate
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.toggles.FeatureFlags
@@ -28,7 +27,6 @@ import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import ru.finassist.pf.feature.auth.api.SessionState
 import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
-import java.util.TimeZone
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -96,8 +94,8 @@ class SessionRepositoryImpl @Inject constructor(
                 }
                 if (signedInUser == null && signedIn) {
                     // Also on a cold start with a restored session: flags targeting and analytics need the user.
+                    // The profile time zone is kept by the profile feature's `TimeZoneSync` (FIN-91).
                     applyIdentity(s!!.userId)
-                    syncTimeZone()
                 }
                 signedInUser = if (signedIn) s!!.userId else null
             }
@@ -196,16 +194,6 @@ class SessionRepositoryImpl @Inject constructor(
         flags.setUser(null)
         tracker.setUserId(null)
         crashReporter.setUserId(null)
-    }
-
-    /** api.md 2.2: the client sends the device time zone when it changed — checked once per signed-in start. */
-    private fun syncTimeZone() {
-        scope.launch {
-            runCatching {
-                val tz = TimeZone.getDefault().id
-                if (profileApi.getProfile().timezone != tz) profileApi.updateProfile(ProfileUpdate(timezone = tz))
-            }
-        }
     }
 
     override fun consumeSignOutReason(): String? = signOutReason.getAndSet(null)

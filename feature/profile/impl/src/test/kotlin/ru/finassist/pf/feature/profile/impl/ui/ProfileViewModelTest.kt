@@ -69,7 +69,7 @@ import kotlin.test.assertTrue
 
 /**
  * [AppPreferences] is a final class, so the tests use a real one over a temp-file DataStore.
- * The device time zone is pinned to Moscow for the time zone sync.
+ * The device time zone is pinned to Moscow, so a profile in another zone differs from the device.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileViewModelTest {
@@ -294,20 +294,10 @@ class ProfileViewModelTest {
         assertEquals(Theme.SYSTEM, vm().state.value.theme)
     }
 
-    @Test fun `a changed device time zone is pushed and the answer shown`() {
+    @Test fun `opening the profile does not send another device time zone (FIN-91, TimeZoneSync does after 72 h)`() {
         profileApi.profile = profile(timezone = "Asia/Yekaterinburg")
         val vm = loaded()
-        assertEquals(listOf(ProfileUpdate(timezone = MOSCOW)), profileApi.updates)
-        assertEquals(MOSCOW, vm.state.value.profile?.timezone)
-    }
-
-    @Test fun `the same time zone is not pushed, and a failed push keeps the profile`() {
-        loaded()
         assertEquals(emptyList(), profileApi.updates)
-
-        profileApi.profile = profile(timezone = "Asia/Yekaterinburg")
-        profileApi.updateFailure = AppError.Offline()
-        val vm = loaded()
         assertEquals("Asia/Yekaterinburg", vm.state.value.profile?.timezone)
     }
 
