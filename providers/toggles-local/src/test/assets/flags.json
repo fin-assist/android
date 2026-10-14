@@ -1,0 +1,6 @@
+{
+  "auth.registration": false,
+  "assistant": true,
+  "search.filter.kind": "off",
+  "no.such.flag": false
+}
