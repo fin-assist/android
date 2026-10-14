@@ -29,6 +29,8 @@ internal class FakeProfileApi(@Volatile var timezone: String = "Europe/Moscow") 
     @Volatile var userId: String = "u1"
     /** Runs inside each GET, before the answer: lets a test switch the session while a request is in flight. */
     @Volatile var onGet: () -> Unit = {}
+    /** Runs inside each PATCH, before the answer. */
+    @Volatile var onUpdate: () -> Unit = {}
     val gets = java.util.concurrent.atomic.AtomicInteger()
     val updates: MutableList<ProfileUpdate> = Collections.synchronizedList(mutableListOf())
 
@@ -47,6 +49,7 @@ internal class FakeProfileApi(@Volatile var timezone: String = "Europe/Moscow") 
 
     override suspend fun updateProfile(update: ProfileUpdate): Profile {
         updates += update
+        onUpdate()
         updateFailure?.let { throw it }
         update.timezone?.let { timezone = it }
         return profile()

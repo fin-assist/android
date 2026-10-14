@@ -174,6 +174,17 @@ class TimeZoneCheckerTest {
         assertTrue(api.updates.isEmpty())
     }
 
+    @Test fun `a PATCH answered with another user's profile keeps the record`() {
+        device.zone = NOVOSIBIRSK
+        check()
+        clock.advance(Duration.ofHours(72))
+        // Another user signed in after the session check: the PATCH went out with their token.
+        api.onUpdate = { api.userId = "u2" }
+        check()
+        assertEquals(1, api.updates.size)
+        assertEquals(NOVOSIBIRSK, pending("u1")?.zone, "the record of u1 waits for u1")
+    }
+
     @Test fun `a record of another user is not counted`() {
         runBlocking { store.set("u0", PendingZone(NOVOSIBIRSK, now.minus(Duration.ofDays(10)))) }
         device.zone = NOVOSIBIRSK
