@@ -225,9 +225,9 @@ commands: `docs/testing.md`.
 
 - Branches: `<kind>/<slug>` — `fix/…`, `feature/…`, `tooling/…`, `design-check/…` (historically `stage-N/…`).
   `release/<version>` (`release/0.2.5`) is the release branch of a version, cut from `main`; CI runs on pushes to it.
+  Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
 - A PR targets the current release branch (the newest `release/<version>`), not `main`; the owner merges the release
   branch into `main` with its own PR. Without an open release branch, target `main`.
-  Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
 - PR title and description in Russian: what changed and why, deviations from mockups/docs, how it was checked.
   A PR for a single YouTrack issue starts its title with the issue key (`FIN-42 Краш при открытии поиска`);
   a PR for several issues lists all of them in the description, each linked

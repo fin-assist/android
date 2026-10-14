@@ -101,8 +101,8 @@ python3 design-check/compare.py build/design-check/mockups build/design-check/ap
 - SSIM — только для сортировки: ниже 0.9 почти всегда есть заметные отличия, выше 0.95 — обычно мелочи.
 - Расхождения в отчёте делятся на: вёрстка (отступы, размеры, порядок блоков), содержимое (тексты, набор
   строк и плиток), цвет и состояния. Для каждого — экран, что на макете, что в приложении, файл для правки.
-- По умолчанию прав макет. Если приложение следует контракту API (`api.md`), а макет ему противоречит, —
-  это отмечается в отчёте, решает человек.
+- По умолчанию прав макет. Если приложение следует контракту API (`docs/api.md` в fin-assist/contracts),
+  а макет ему противоречит, — это отмечается в отчёте, решает человек.
 
 ## Добавить экран
 
@@ -172,7 +172,8 @@ at main. Write the report, the YouTrack issue, the PR comment and your final ans
 7. Look at every pair in build/design-check/compare/ (worst SSIM first) and list the differences per screen:
    layout, content, colour, states — where, mockup vs app, the file to change. Skip differences in data the
    fixture does not control, and two snapshot artefacts of dialogs: no dim behind a dialog, dialog window width.
-   The mockup is right by default; if the app follows api.md and the mockup contradicts it, say so. Snapshots
+   The mockup is right by default; if the app follows docs/api.md (fin-assist/contracts) and the mockup
+   contradicts it, say so. Snapshots
    without a mockup (scores.json entries with "missing": "mockup") go into a separate list «нет макета в Figma»,
    not into the differences. Entries with "missing": "same width …" are a real problem (the snapshot width
    differs from the mockup), report them as differences. For a difference you need to measure, the Figma
