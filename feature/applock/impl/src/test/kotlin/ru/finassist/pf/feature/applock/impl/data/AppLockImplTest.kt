@@ -3,11 +3,11 @@ package ru.finassist.pf.feature.applock.impl.data
 import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.biometrics.BiometricManager
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
@@ -16,11 +16,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -46,6 +46,7 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.time.Duration
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.createTempDirectory
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -59,7 +60,22 @@ class AppLockImplTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val dir: File = createTempDirectory("applock").toFile()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val dataStore = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") }
+    private val realStore = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") }
+
+    /** Collections of [dataStore] that have received their first value (see [appLock]). */
+    private val firstValues = AtomicInteger()
+    private val dataStore = object : DataStore<Preferences> by realStore {
+        override val data: Flow<Preferences> = flow {
+            var first = true
+            realStore.data.collect {
+                emit(it)
+                if (first) {
+                    first = false
+                    firstValues.incrementAndGet()
+                }
+            }
+        }
+    }
     private val crypto = FakePasscodeCrypto()
     private val store = PasscodeStore(dataStore, crypto)
 
@@ -90,7 +106,17 @@ class AppLockImplTest {
         dir.deleteRecursively()
     }
 
-    private fun appLock() = AppLockImpl(context, store, session, tracker)
+    /**
+     * The lock re-reads the store after every change its trigger collections report. A DataStore collector that
+     * starts while a write is in flight can miss that write for good (FIN-86, FIN-87), so a test that writes behind the
+     * lock's back starts only after both trigger collections (isConfigured, biometric flag) have taken their first value.
+     */
+    private fun appLock(): AppLockImpl {
+        val before = firstValues.get()
+        val lock = AppLockImpl(context, store, session, tracker)
+        runBlocking { withTimeout(5_000) { while (firstValues.get() < before + LOCK_COLLECTIONS) delay(5) } }
+        return lock
+    }
 
     private fun <T> StateFlow<T>.await(value: T) = runBlocking { withTimeout(5_000) { first { it == value } } }
 
@@ -208,6 +234,7 @@ class AppLockImplTest {
     fun `five minutes in the background lock the app, less does not`() = runBlocking<Unit> {
         val lock = appLock()
         val owner = ProcessLifecycleOwner.get()
+        lock.state.await(LockState.NotConfigured)
         lock.setPasscode("1234")
         lock.state.await(LockState.Unlocked)
 
@@ -233,6 +260,7 @@ class AppLockImplTest {
     @Test
     fun `a sign-out from anywhere forgets the passcode`() = runBlocking<Unit> {
         val lock = appLock()
+        lock.state.await(LockState.NotConfigured)
         lock.setPasscode("1234")
         lock.state.await(LockState.Unlocked)
         session.state.value = SessionState.SignedOut
@@ -413,5 +441,10 @@ class AppLockImplTest {
         release.complete(Unit)
 
         lock.biometricEnabled.await(true)
+    }
+
+    private companion object {
+        /** Store collections the lock opens eagerly on creation. */
+        const val LOCK_COLLECTIONS = 2
     }
 }

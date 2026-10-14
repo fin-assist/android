@@ -1,8 +1,12 @@
 package ru.finassist.pf.feature.statements.impl.data
 
 import app.cash.turbine.test
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Test
 import ru.finassist.pf.feature.statements.api.StatementsEvent
 import ru.finassist.pf.feature.statements.impl.FakeTokens
@@ -18,9 +22,14 @@ class StatementsRepositoryImplTest {
     private val tokens = FakeTokens(userId = "user-1")
     private val repository = StatementsRepositoryImpl(store, tokens)
 
-    /** The hints flag is written off the caller's thread: wait for it to land. */
-    private suspend fun awaitHintsWritten() {
-        store.data.first { it.asMap().isNotEmpty() }
+    /**
+     * The hints flag is written off the caller's thread: wait for it to land. Polls fresh reads in real time: a
+     * DataStore collector that starts while a write is in flight can miss that write and never emit it (FIN-86).
+     */
+    private suspend fun awaitHintsWritten() = withContext(Dispatchers.Default) {
+        withTimeout(10_000) {
+            while (store.data.first().asMap().isEmpty()) delay(10)
+        }
     }
 
     @Test fun `a finished import is kept for the result screen and announced`() = runTest {
