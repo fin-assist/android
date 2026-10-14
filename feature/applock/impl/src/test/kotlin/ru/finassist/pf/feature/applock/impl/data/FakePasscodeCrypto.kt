@@ -11,6 +11,8 @@ import javax.crypto.spec.SecretKeySpec
 internal class FakePasscodeCrypto : PasscodeCrypto {
     /** Makes [seal] throw, as a Keystore failure while the record is written would. */
     @Volatile var failSeal = false
+    /** Makes [isCommitted] throw, as a Keystore that cannot be read would. */
+    @Volatile var failCommitCheck = false
     var macKey = ByteArray(32) { 1 }
     val aesKey = SecretKeySpec(ByteArray(32) { 2 }, "AES")
     var resets = 0
@@ -20,7 +22,10 @@ internal class FakePasscodeCrypto : PasscodeCrypto {
         return Mac.getInstance("HmacSHA256").run { init(SecretKeySpec(macKey, "HmacSHA256")); doFinal(data) }
     }
 
-    override fun isCommitted() = committed
+    override fun isCommitted(): Boolean {
+        if (failCommitCheck) throw GeneralSecurityException("keystore unavailable")
+        return committed
+    }
 
     override fun markCommitted() {
         committed = true

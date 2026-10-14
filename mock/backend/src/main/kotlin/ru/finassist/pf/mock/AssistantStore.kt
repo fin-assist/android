@@ -11,12 +11,22 @@ import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.Chip
 import ru.finassist.pf.core.api.model.Message
 import ru.finassist.pf.core.api.model.MessageRole
+import ru.finassist.pf.core.api.model.TransferMode
 import java.time.LocalDate
 import java.time.OffsetDateTime
 
 /** Dialogue history, per-answer event logs and the daily limit of the fake assistant service. */
 class AssistantStore {
-    class Answer(val id: String, val questionId: String, val createdAt: OffsetDateTime) {
+    /**
+     * One answer to [questionId]. [transferMode] is the mode the question was asked with: a retry regenerates
+     * the answer in it, not in the default (FIN-76).
+     */
+    class Answer(
+        val id: String,
+        val questionId: String,
+        val createdAt: OffsetDateTime,
+        val transferMode: TransferMode = TransferMode.WITH,
+    ) {
         /** Every event emitted so far, in order; a late subscriber replays them into a snapshot. */
         val log = ArrayList<AnswerEvent>()
         val version = MutableStateFlow(0)

@@ -1,5 +1,6 @@
 package ru.finassist.pf.mock.api
 
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -48,12 +49,14 @@ import ru.finassist.pf.mock.ofx.OfxDocument
 import ru.finassist.pf.mock.ofx.OfxParser
 import java.time.OffsetDateTime
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /** Uploads, progress stream, history, unread lines (api.md 3). Import runs in the background like the real one. */
 class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
 
-    private val jobs = HashMap<String, Job>()
-    private val cancelled = HashSet<String>()
+    // Touched by request coroutines and by the import jobs, on different threads.
+    private val jobs = ConcurrentHashMap<String, Job>()
+    private val cancelled: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     override suspend fun getImportConfig(): ImportConfig {
         backend.simulateNetwork()
@@ -115,7 +118,13 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         if (instant) {
             process(upload, doc, stepDelay = 0)
         } else {
-            jobs[upload.id] = backend.scope.launch { process(upload, doc, backend.config.importStepDelayMs) }
+            // ATOMIC: the job runs [process] even when cancelled before it started, so a cancelled upload is
+            // always discarded and its progress stream ends with CANCELLED (FIN-76). A job cancelled under the
+            // default start would never run, leaving the upload PROCESSING for good.
+            val job = backend.scope.launch(start = CoroutineStart.ATOMIC) { process(upload, doc, backend.config.importStepDelayMs) }
+            jobs[upload.id] = job
+            // Removed only once registered: a job that finishes before this line still leaves no entry behind.
+            job.invokeOnCompletion { jobs.remove(upload.id, job) }
         }
         return upload
     }
@@ -145,7 +154,6 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             discard(upload)
             upload.events.value = ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, e.message ?: "failed")
         } finally {
-            jobs.remove(upload.id)
             cancelled.remove(upload.id)
         }
     }

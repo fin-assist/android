@@ -16,7 +16,6 @@ import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.ProfileApi
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.IdempotencyKey
-import ru.finassist.pf.core.api.model.ProfileUpdate
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.toggles.FeatureFlags
@@ -28,7 +27,6 @@ import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import ru.finassist.pf.feature.auth.api.SessionState
 import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
-import java.util.TimeZone
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -53,8 +51,17 @@ class SessionRepositoryImpl @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val signOutReason = AtomicReference<String?>(null)
 
-    /** Set while [clearLocal] runs, so the observer below does not report our own sign-out as an expiry. */
-    @Volatile private var signingOut = false
+    /**
+     * User id of a session we are clearing ourselves, so the observer below does not report that sign-out as an
+     * expiry. A flag held only while [clearLocalNow] runs is not enough (FIN-74): the observer collects on its own
+     * coroutine and may get the resulting `null` after the sign-out returned and the reason was consumed. The
+     * observer takes the mark off on every `null` it sees, and [start] drops it once the final session is saved: a
+     * stalled observer may never see the `null` of a sign-out followed by a quick sign-in (the state flow
+     * conflates it), and a mark left over would hide the next real expiry of that user. If instead the observer
+     * sees our own `null` only after the new sign-in dropped the mark, it records «expired»; that is harmless,
+     * since the next own sign-out overwrites the reason ([clearLocalNow] sets it) and a real expiry means the same.
+     */
+    private val ownSignOut = AtomicReference<String?>(null)
 
     override val state: Flow<SessionState> = tokenStore.session.map { session ->
         // A session without a user id exists only for the moment the profile is being fetched after sign-in.
@@ -63,7 +70,7 @@ class SessionRepositoryImpl @Inject constructor(
 
     init {
         scope.launch {
-            var wasSignedIn = false
+            var signedInUser: String? = null
             tokenStore.session.collect { s ->
                 val signedIn = s != null && s.userId.isNotEmpty()
                 // Breadcrumb (logcat in mock, crash context in prod): `PfApp` switches graphs on this value, so a
@@ -77,17 +84,20 @@ class SessionRepositoryImpl @Inject constructor(
                         },
                     ),
                 )
-                if (wasSignedIn && s == null && !signingOut) {
-                    // The network layer dropped the session (refresh rejected): same cleanup as a sign-out.
-                    signOutReason.compareAndSet(null, AuthRoutes.Phone.REASON_EXPIRED)
+                val ownedBy = if (s == null) ownSignOut.getAndSet(null) else null
+                if (signedInUser != null && s == null) {
+                    // Not ours: the network layer dropped the session (refresh rejected).
+                    if (ownedBy != signedInUser) signOutReason.compareAndSet(null, AuthRoutes.Phone.REASON_EXPIRED)
+                    // Ours too: [clearLocalNow] has reset the identity already, but an [applyIdentity] of this
+                    // collector still running then (a slow flags provider) set the user again after it.
                     resetIdentity()
                 }
-                if (!wasSignedIn && signedIn) {
+                if (signedInUser == null && signedIn) {
                     // Also on a cold start with a restored session: flags targeting and analytics need the user.
+                    // The profile time zone is kept by the profile feature's `TimeZoneSync` (FIN-91).
                     applyIdentity(s!!.userId)
-                    syncTimeZone()
                 }
-                wasSignedIn = signedIn
+                signedInUser = if (signedIn) s!!.userId else null
             }
         }
     }
@@ -113,6 +123,10 @@ class SessionRepositoryImpl @Inject constructor(
         if (registered) dataStore.edit { it[KEY_PENDING_FIRST_UPLOAD] = true }
         signInFlow.reset()
         tokenStore.save(TokenStore.Session(id, tokens))
+        // Once the final session is stored, not earlier: a mark from an earlier sign-out must not outlive this session,
+        // but a sign-in that fails on the way (the profile request, the save itself) leaves no session, and the
+        // observer may still be due the earlier sign-out's `null`: without the mark it would read as an expiry.
+        ownSignOut.set(null)
         applyIdentity(id)
         tracker.track(if (registered) Events.AUTH_REGISTERED else Events.AUTH_VERIFIED)
     }
@@ -138,15 +152,19 @@ class SessionRepositoryImpl @Inject constructor(
     override suspend fun clearLocal(reason: String?): Unit = detached { clearLocalNow(reason) }
 
     private suspend fun clearLocalNow(reason: String?) {
-        signingOut = true
+        // Marked before the clear, so the observer finds the mark whenever it sees the `null`. A pending sign-in
+        // (empty user id) leaves an empty mark, which matches no signed-in user and so hides nothing.
+        val mark = tokenStore.current()?.userId?.also(ownSignOut::set)
+        signOutReason.set(reason)
         try {
-            signOutReason.set(reason)
             tokenStore.clear()
-            dataStore.edit { it.remove(KEY_PENDING_FIRST_UPLOAD) }
-            resetIdentity()
-        } finally {
-            signingOut = false
+        } catch (e: Throwable) {
+            // The session stays: a mark left behind would swallow its later expiry as our own sign-out.
+            if (mark != null) ownSignOut.compareAndSet(mark, null)
+            throw e
         }
+        dataStore.edit { it.remove(KEY_PENDING_FIRST_UPLOAD) }
+        resetIdentity()
     }
 
     /**
@@ -176,16 +194,6 @@ class SessionRepositoryImpl @Inject constructor(
         flags.setUser(null)
         tracker.setUserId(null)
         crashReporter.setUserId(null)
-    }
-
-    /** api.md 2.2: the client sends the device time zone when it changed — checked once per signed-in start. */
-    private fun syncTimeZone() {
-        scope.launch {
-            runCatching {
-                val tz = TimeZone.getDefault().id
-                if (profileApi.getProfile().timezone != tz) profileApi.updateProfile(ProfileUpdate(timezone = tz))
-            }
-        }
     }
 
     override fun consumeSignOutReason(): String? = signOutReason.getAndSet(null)

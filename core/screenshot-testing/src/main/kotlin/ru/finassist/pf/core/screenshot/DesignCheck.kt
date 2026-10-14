@@ -36,9 +36,9 @@ import java.time.Duration
 import kotlin.math.ceil
 
 /**
- * Design check: renders a screen the way the mockups draw it, for comparison with the Claude Design artboards.
+ * Design check: renders a screen the way the mockups draw it, for comparison with the Figma artboards.
  *
- * - 390 dp wide at xxhdpi (×3): the same 1170 px as the mockup render.
+ * - 390 dp wide at xxhdpi (×3): the same 1170 px as the mockup export (scale 3).
  * - System bars as in the mockups: 24 dp status bar and 24 dp gesture bar, supplied through
  *   [LocalPfSystemBars] (Robolectric does not deliver window insets to Compose).
  * - Main-graph screens get the tab bar the app draws around them (`MainLayer`, the same [PfMainTabs]), because the
@@ -59,7 +59,7 @@ object DesignCheck {
         get() = File(System.getProperty("pf.designcheck.dir") ?: "build/design-check")
 
     /**
-     * @param name artboard name in the canvas (`Main`, `MainDark`…): the output file is matched to it by name.
+     * @param name artboard (top-level frame) name in Figma (`Main`, `MainDark`…): the output file is matched to it by name.
      * @param heightDp artboard height: the window height, and the minimum snapshot height with [fullHeight].
      * @param tab active tab for main-graph screens, null for screens without the tab bar.
      * @param fullHeight grow the window until the content no longer scrolls, so blocks below the artboard's

@@ -22,13 +22,14 @@ orientation map: read it first, then open only the files the task touches.
   (https://finassist.atlassian.net/wiki/spaces/PF) — «Состав MVP», «Архитектура», «План Android-приложения»,
   «Продуктовые решения» and their child pages.
 - Mockups and design system: Figma «Понятные финансы — макеты»
-  (https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv); the design check still renders the former Claude
-  Design canvas (`design-check/README.md`) until it is moved to Figma.
+  (https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv, link also in `design-check/README.md`).
 - Version 0.2 (API, mockups, docs) is crystallized; every change goes through a YouTrack issue (`FIN-<n>`,
   finassist.youtrack.cloud) and is referenced in the PR. Release notes live in Confluence.
 - There is no backend yet: the `mock` flavor is the working product, `prod` is the HTTP client for later.
 - Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) + the latest
   decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
+- API extensibility (decision of 13.10.2026): the contract grows by addition and keeps `deprecated` for
+  exceptional cases — `architecture.md` («Расширяемость API») and «Нотация» in `api.md`. Client-side rules: Code.
 
 ## Repository map
 
@@ -45,7 +46,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Feature flags | `core/toggles/…/Flag.kt` (registry + defaults), `docs/flags.md` (meaning); mock overrides `app/src/mock/assets/flags.json` |
 | Events / crashes | `core/tracking/…/Tracker.kt`, `CrashReporter.kt` (typed context, no free-form strings); providers in `providers/*` (only `:app` depends on them; Tracer keys — README) |
 | Tokens, preferences, idempotency keys | `core/storage` |
-| Screens vs mockups (snapshot comparison) | `design-check/README.md`, `*DesignCheckTest.kt` in feature `:impl` modules |
+| Screens vs mockups (snapshot comparison) | `design-check/README.md` (mockups: Figma, exported by `design-check/export.py`), `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks, native gaps, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/qase-*` |
 | Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
 | UI test coverage: JaCoCo on the e2e build, scenario coverage of the flows | `docs/testing.md` («UI test coverage»); `:e2eCoverageReport` in root `build.gradle.kts`, `app/src/mockE2e/…/E2eCoverage.kt`, `scripts/ui-coverage.py` |
@@ -88,7 +89,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:core:toggles` | `pf.jvm.library` | unit |
 | `:core:tracking` | `pf.jvm.library` | unit |
 | `:providers:crash-tracer` | `pf.android.library`, `pf.hilt` | unit |
-| `:providers:toggles-local` | `pf.android.library`, `pf.hilt` | - |
+| `:providers:toggles-local` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:toggles-rustore` | `pf.android.library`, `pf.hilt` | - |
 | `:providers:tracking-log` | `pf.android.library`, `pf.hilt` | - |
 | `:providers:tracking-mytracker` | `pf.android.library`, `pf.hilt` | - |
@@ -167,6 +168,17 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - A screen is a thin ViewModel wrapper around `…Content(state, handlers)`; design-check tests render the
   content from mockup data (`design-check/README.md`).
 - Flags are read at the screen boundary (view model init or `FeatureEntry`), never mid-screen.
+- Parsing of API responses tolerates what the client does not know yet (rules for new code; existing gaps — FIN-84):
+  - unknown fields are ignored (`ApiJson`: `ignoreUnknownKeys`);
+  - an open code is an `ApiCode` enum with `UNKNOWN` and an `OpenEnumSerializer`; what `UNKNOWN` means (hide, fall
+    back to another value, show the server's text) is the rule of that field, written in the field's KDoc (or the
+    enum's, when every field using the enum follows the same rule);
+  - a closed `enum` in a DTO only for a set that cannot grow (today `Theme`, `OperationKindFilter`);
+  - a broken element of a list is skipped, not allowed to fail the whole response;
+  - a new DTO or open code comes with a unit test that parses an unknown field and an unknown code.
+- When the server sends a ready text for a code (`*_name`, lock texts), the UI shows that text for a code it does not
+  know instead of building one itself.
+- A new block type or code value changes both `:core:api` and the fake backend `:mock:backend` in the same PR.
 - A PR that adds or changes a user scenario covers it with a UI test in the same PR (docs/e2e.md, «When a change
   needs a UI test»). A scenario is what the user does and sees: a new screen or state, a step between screens, an
   error, empty or offline path they can reach, a flag that changes behaviour, a user-visible bug fix (the flow
@@ -238,6 +250,8 @@ commands: `docs/testing.md`.
 - Check that a new or changed user scenario comes with a UI test (or a «Not covered yet» entry with a technical
   reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md
   (see Code).
+- Check that new DTOs and mappers follow the extensibility rules (see Code): no closed `enum` for a set that grows,
+  no failure on an unknown field or code, and a unit test that parses an unknown value.
 - Check that new functionality comes with tests (see Tests) and that the tests would fail if the behaviour
   broke; flag changed lines the «Unit test coverage» comment of the PR (posted by CI) shows as uncovered when
   the PR gives no reason for them.

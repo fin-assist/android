@@ -10,6 +10,10 @@ import ru.finassist.pf.core.api.model.TokenPair
  * sign-in and clears it on sign-out. `userId` is kept so flags/analytics can be keyed before the profile loads.
  */
 interface TokenStore {
+    /**
+     * The stored session, null when signed out. A subscriber gets the current value at once and every later change,
+     * whenever it subscribes, also while a [save] or [clear] is in flight (`PfApp` switches graphs on it).
+     */
     val session: Flow<Session?>
     suspend fun current(): Session?
     suspend fun save(session: Session)

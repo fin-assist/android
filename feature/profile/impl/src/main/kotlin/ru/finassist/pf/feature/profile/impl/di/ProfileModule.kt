@@ -13,6 +13,10 @@ import ru.finassist.pf.core.navigation.Navigator
 import ru.finassist.pf.feature.applock.api.AppLockRoutes
 import ru.finassist.pf.feature.assistant.api.AssistantRoutes
 import ru.finassist.pf.feature.profile.api.ProfileRoutes
+import ru.finassist.pf.feature.profile.api.TimeZoneSync
+import ru.finassist.pf.feature.profile.impl.data.DeviceZone
+import ru.finassist.pf.feature.profile.impl.data.SystemDeviceZone
+import ru.finassist.pf.feature.profile.impl.data.TimeZoneSyncImpl
 import ru.finassist.pf.feature.profile.impl.ui.ProfileActions
 import ru.finassist.pf.feature.profile.impl.ui.ProfileScreen
 import ru.finassist.pf.feature.statements.api.StatementsRoutes
@@ -46,4 +50,8 @@ class ProfileEntry @Inject constructor() : FeatureEntry {
 internal abstract class ProfileModule {
     @Binds @IntoSet
     abstract fun entry(impl: ProfileEntry): FeatureEntry
+
+    @Binds abstract fun timeZoneSync(impl: TimeZoneSyncImpl): TimeZoneSync
+
+    @Binds abstract fun deviceZone(impl: SystemDeviceZone): DeviceZone
 }

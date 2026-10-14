@@ -81,6 +81,9 @@ class UploadViewModel @Inject constructor(
     val state: StateFlow<UploadUiState> = _state
     private var config: ImportConfig? = null
     private var uploadJob: Job? = null
+
+    /** A picked file is still being sent: another pick meanwhile is ignored. Tests wait on it before picking again. */
+    internal val uploadInFlight: Boolean get() = uploadJob?.isActive == true
     private var progressJob: Job? = null
 
     /**
@@ -129,7 +132,7 @@ class UploadViewModel @Inject constructor(
     fun showFallback(show: Boolean) = _state.update { it.copy(fallbackOpen = show) }
 
     fun onFilePicked(uri: Uri) {
-        if (uploadJob?.isActive == true) return
+        if (uploadInFlight) return
         lastPicked = uri
         _state.update { it.copy(uploadOffline = false, config = it.config ?: fallbackConfig()) }
         uploadJob = viewModelScope.launch {

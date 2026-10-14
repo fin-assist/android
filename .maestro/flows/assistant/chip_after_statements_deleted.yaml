@@ -1,0 +1,93 @@
+appId: ru.finassist.pf.mock.e2e
+name: Помощник — чип ответа после удаления всех выписок
+tags:
+  - assistant
+---
+# FIN-76: the operations chip of an answer about a merchant, opened after every statement was deleted. The
+# merchant's selection is stale: the search drops it with a notice instead of failing.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Krabsbir"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- tapOn:
+    id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.chip.operations"
+    timeout: 20000
+
+# Delete the only statement (the preloaded one): the ledger is empty.
+- tapOn:
+    id: "ds.back"
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- assertVisible: "Удалить загрузку .*\\?"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.empty"
+    timeout: 10000
+
+# The answer stays in the history; its chip opens the search without the stale selection.
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "profile.assistant"
+    timeout: 10000
+- tapOn:
+    id: "profile.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.chip.operations"
+    timeout: 10000
+- tapOn:
+    id: "assistant.answer.chip.operations"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search"
+    timeout: 10000
+- extendedWaitUntil:
+    visible: "Выборка с «Аналитики» больше не действует — ищем без неё"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.empty"
+    timeout: 10000
+- assertNotVisible:
+    id: "operations.row"
