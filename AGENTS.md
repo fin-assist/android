@@ -24,6 +24,8 @@ orientation map: read it first, then open only the files the task touches.
 - There is no backend yet: the `mock` flavor is the working product, `prod` is the HTTP client for later.
 - Mismatches between mockups, docs and API are expected. Resolve them in favour of `api.md` + the latest
   decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
+- API extensibility (decision of 13.10.2026): the contract grows by addition and keeps `deprecated` for
+  exceptional cases — `architecture.md` («Расширяемость API») and «Нотация» in `api.md`. Client-side rules: Code.
 
 ## Repository map
 
@@ -162,6 +164,15 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - A screen is a thin ViewModel wrapper around `…Content(state, handlers)`; design-check tests render the
   content from mockup data (`design-check/README.md`).
 - Flags are read at the screen boundary (view model init or `FeatureEntry`), never mid-screen.
+- Parsing of API responses tolerates what the client does not know yet (rules for new code; existing gaps — FIN-84):
+  - unknown fields are ignored (`ApiJson`: `ignoreUnknownKeys`);
+  - an open code is an `ApiCode` enum with `UNKNOWN` and an `OpenEnumSerializer`; what `UNKNOWN` means (hide, fall
+    back to another value, show the server's text) is the rule of that field, written in its KDoc;
+  - a closed `enum` in a DTO only for a set that cannot grow (today `Theme`, `OperationKindFilter`);
+  - a broken element of a list is skipped, not allowed to fail the whole response.
+- When the server sends a ready text for a code (`*_name`, lock texts), the UI shows that text for a code it does not
+  know instead of building one itself.
+- A new block type or code value changes both `:core:api` and the fake backend `:mock:backend` in the same PR.
 - A PR that adds or changes a user scenario covers it with a UI test in the same PR (docs/e2e.md, «When a change
   needs a UI test»). A scenario is what the user does and sees: a new screen or state, a step between screens, an
   error, empty or offline path they can reach, a flag that changes behaviour, a user-visible bug fix (the flow
@@ -233,6 +244,8 @@ commands: `docs/testing.md`.
 - Check that a new or changed user scenario comes with a UI test (or a «Not covered yet» entry with a technical
   reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md
   (see Code).
+- Check that new DTOs and mappers follow the extensibility rules (see Code): no closed `enum` for a set that grows,
+  no failure on an unknown field or code, and a unit test that parses an unknown value.
 - Check that new functionality comes with tests (see Tests) and that the tests would fail if the behaviour
   broke; flag changed lines the «Unit test coverage» comment of the PR (posted by CI) shows as uncovered when
   the PR gives no reason for them.
