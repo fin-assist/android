@@ -16,7 +16,6 @@ import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionState
 import ru.finassist.pf.feature.auth.impl.SessionHarness
 import ru.finassist.pf.feature.auth.impl.eventually
-import java.util.TimeZone
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -350,31 +349,15 @@ class SessionRepositoryImplTest {
         eventually { h.repo.consumeSignOutReason() == AuthRoutes.Phone.REASON_EXPIRED }
     }
 
-    @Test fun `a restored session applies the identity and syncs a changed time zone`() {
+    @Test fun `a restored session applies the identity and leaves the time zone alone`() {
         val h = harness(TokenStore.Session("u1", pair))
         h.profile.timezone = "Asia/Vladivostok-not-this-device"
-        eventually { h.profile.updates.isNotEmpty() }
-        assertTrue("flags.user:u1" in h.log.all())
-        assertEquals(TimeZone.getDefault().id, h.profile.updates.single().timezone)
-    }
-
-    @Test fun `an unchanged time zone is not sent`() {
-        val h = harness()
-        h.profile.timezone = TimeZone.getDefault().id
-        h.tokens.flow.value = TokenStore.Session("u1", pair)
-        eventually { "getProfile" in h.log.all() }
-        Thread.sleep(100)
-        assertTrue(h.profile.updates.isEmpty())
-    }
-
-    @Test fun `a failed time zone check is silent`() {
-        val h = harness()
-        h.profile.failure = AppError.Offline()
-        h.tokens.flow.value = TokenStore.Session("u1", pair)
         eventually { "crash.user:u1" in h.log.all() }
         Thread.sleep(100)
+        assertTrue("flags.user:u1" in h.log.all())
+        // FIN-91: the profile feature's TimeZoneSync sends the zone once it has held for 72 h, not every sign-in.
+        assertTrue("getProfile" !in h.log.all())
         assertTrue(h.profile.updates.isEmpty())
-        assertNull(h.repo.consumeSignOutReason())
     }
 
     @Test fun `session changes leave breadcrumbs without user data`() {

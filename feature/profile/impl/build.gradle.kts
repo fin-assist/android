@@ -8,7 +8,7 @@ dependencies {
     implementation(projects.feature.applock.api)
     implementation(projects.feature.statements.api)
     implementation(projects.feature.assistant.api)
-
-    // A real AppPreferences over a temp-file DataStore in ProfileViewModelTest.
-    testImplementation(libs.androidx.datastore.preferences)
+    // TimeZoneSync: the pending zone record and the return-from-background trigger (FIN-91).
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.lifecycle.process)
 }
