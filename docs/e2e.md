@@ -93,6 +93,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `offline=true\|false` | every backend request fails with «нет сети» | process |
   | `call_delay_ms=<n>` | how long the sign-in call takes | process |
   | `network_delay_ms=<n>` | latency of every backend request (a «busy» state stays up for that long) | process |
+  | `assistant_model_errors=<n>` | the next n assistant answers fail with MODEL_ERROR («Повторить» under them) | process (counts down) |
 
   Flags are read when a screen opens: set them before the screen (usually right after `clear_state.yaml`, before
   `launchApp`). Process-scoped values are set after `launchApp`.
@@ -183,6 +184,7 @@ were.
 | `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
 | `assistant/daily_limit` | unanswerable question is free; five questions exhaust the day |
 | `assistant/offline_retry` | no network: the notice replaces the input; «Повторить» sends the question once the network is back |
+| `assistant/answer_retry` | `assistant_model_errors=1`: the answer fails, not spent; a double tap on «Повторить» while the request is on its way sends it once: one answer, no «Не получилось отправить вопрос», 4 of 5 — FIN-75 |
 | `statements/upload_errors` | CSV, not a statement, another bank; leaving the picker |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
 | `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
@@ -201,6 +203,10 @@ resource id for Maestro to tap, and the first three open an external browser the
 The server's own check of the phone number (400 `VALIDATION_ERROR` at `phone`, FIN-68) cannot be reached either:
 the app sends only `+7` and 10 digits, the very rule the server checks, so neither a real build nor the mock gets
 that error; `PhoneViewModelTest` covers the branch, `auth/phone_validation` the app's own check of a short number.
+An answer stream ending in an error other than the network (404 for an answer the server no longer has) while the
+answer is still generating (FIN-75): neither a real server nor the mock answers 404 for an answer it is still
+generating, only for an unknown or replaced one, which the chat never watches — the state needs a server that lost
+the answer mid-generation; `ChatViewModelBehaviourTest` covers the re-read of the history after such an error.
 A screen that stays put after a sign-in or a sign-out (FIN-88; the FIN-63 stall on the call screen) cannot be forced
 either: it needs a subscriber of the session to start while the token store is being written, a timing the emulator
 does not reproduce on demand (about 5 % of such starts on the JVM). `EncryptedTokenStoreRaceTest` repeats both writes
