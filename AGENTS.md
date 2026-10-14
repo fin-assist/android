@@ -83,7 +83,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:core:toggles` | `pf.jvm.library` | unit |
 | `:core:tracking` | `pf.jvm.library` | unit |
 | `:providers:crash-tracer` | `pf.android.library`, `pf.hilt` | unit |
-| `:providers:toggles-local` | `pf.android.library`, `pf.hilt` | - |
+| `:providers:toggles-local` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:toggles-rustore` | `pf.android.library`, `pf.hilt` | - |
 | `:providers:tracking-log` | `pf.android.library`, `pf.hilt` | - |
 | `:providers:tracking-mytracker` | `pf.android.library`, `pf.hilt` | - |
