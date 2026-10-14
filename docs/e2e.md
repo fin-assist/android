@@ -218,3 +218,7 @@ cleared while the lock is starting (FIN-87) cannot be forced either: the flow ca
 window, and the stale state needs a DataStore collector to start while the reset is being written, a timing the
 emulator does not reproduce on demand (about 8 % of starts on the JVM). `AppLockStoreRaceTest` repeats that start
 200 times; `profile/theme_and_logout` covers the plain sign-out.
+A screen that stays put after a sign-in or a sign-out (FIN-88; the FIN-63 stall on the call screen) cannot be forced
+either: it needs a subscriber of the session to start while the token store is being written, a timing the emulator
+does not reproduce on demand (about 5 % of such starts on the JVM). `EncryptedTokenStoreRaceTest` repeats both writes
+200 times against the real store; `auth/sign_in_existing_user` and `profile/theme_and_logout` cover the plain paths.
