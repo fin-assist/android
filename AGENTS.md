@@ -167,7 +167,8 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - Parsing of API responses tolerates what the client does not know yet (rules for new code; existing gaps — FIN-84):
   - unknown fields are ignored (`ApiJson`: `ignoreUnknownKeys`);
   - an open code is an `ApiCode` enum with `UNKNOWN` and an `OpenEnumSerializer`; what `UNKNOWN` means (hide, fall
-    back to another value, show the server's text) is the rule of that field, written in its KDoc;
+    back to another value, show the server's text) is the rule of that field, written in the field's KDoc (or the
+    enum's, when every field using the enum follows the same rule);
   - a closed `enum` in a DTO only for a set that cannot grow (today `Theme`, `OperationKindFilter`);
   - a broken element of a list is skipped, not allowed to fail the whole response.
   - a new DTO or open code comes with a unit test that parses an unknown field and an unknown code.
