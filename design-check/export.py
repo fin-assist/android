@@ -2,15 +2,19 @@
 
     FIGMA_TOKEN=… python3 design-check/export.py <out dir> [Artboard ...]
 
-An artboard is a top-level frame of the Figma file (a direct child of a page or of a section on it) whose name is
-a snapshot name: Latin letters and digits starting with a capital (`Main`, `SearchPeriod`, `MainDark`). Frames
+An artboard is a top-level frame of the Figma file (a direct child of a page or of a top-level section on it) whose
+name is a snapshot name: Latin letters and digits starting with a capital (`Main`, `SearchPeriod`, `MainDark`). Frames
 named otherwise (the design-system sheets, archived drafts with Russian names) are not artboards.
 
 Without artboard names, exports every name that has an app snapshot in build/design-check/app. Output:
-`<out>/<Artboard>.png` at scale 3 (a 390 wide frame gives 1170 px, the same as the app snapshots) and
+`<out>/<Artboard>.png` at scale 3 (an old file of that name is removed first, so a frame that is gone or failed to
+render leaves no stale mockup) (a 390 wide frame gives 1170 px, the same as the app snapshots) and
 `<out>/coverage.json`: every artboard of the file, whether a *DesignCheckTest captures it (`covered`: the name is
 the first argument of a `capture("…"` call in the test sources) and whether this run has its snapshot
 (`rendered`). The artboards with covered: false are the screens still to add.
+
+Exit code 1 when an artboard named on the command line is missing or does not render; without names (every
+snapshot) such artboards are only reported: a snapshot may have no mockup yet.
 
 Environment: FIGMA_TOKEN (a personal access token with read access to file content), FIGMA_FILE_KEY (defaults to
 the file «Понятные финансы — макеты»). Standard library only.
@@ -38,7 +42,8 @@ ROOT = Path(__file__).resolve().parent.parent
 def artboards(document):
     """Top-level frames named like snapshots: {name, page, section, node, w, h}, in file order.
 
-    Sections are walked (they may nest), frames are not: a frame inside a frame is part of a screen.
+    Sections are walked, frames are not: a frame inside a frame is part of a screen. The file is fetched with
+    depth=3, so only frames of top-level sections arrive; deeper sections come back empty.
     """
     found = []
 
@@ -86,7 +91,7 @@ def batches(items, size=BATCH):
 
 
 def request(url, token=None, opener=urllib.request.urlopen, sleep=time.sleep, attempts=5):
-    """GET with retries on 429 and 5xx (Retry-After when the API sends it, else 2, 4, 8… s)."""
+    """GET with retries on 429, 5xx and network errors (Retry-After when the API sends it, else 2, 4, 8… s)."""
     headers = {"X-Figma-Token": token} if token else {}
     for attempt in range(attempts):
         try:
@@ -97,6 +102,10 @@ def request(url, token=None, opener=urllib.request.urlopen, sleep=time.sleep, at
                 raise
             retry_after = e.headers.get("Retry-After") if e.headers else None
             sleep(int(retry_after) if retry_after and retry_after.isdigit() else 2 ** (attempt + 1))
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if attempt == attempts - 1:
+                raise
+            sleep(2 ** (attempt + 1))
     raise AssertionError("unreachable")
 
 
@@ -125,11 +134,13 @@ def main(argv):
     print(f"coverage: {sum(b['covered'] for b in cov)} of {len(cov)} artboards have a design-check test")
 
     by_name = {b["name"]: b for b in boards}
-    todo = []
+    todo, failed = [], []
     for name in wanted:
+        (out / f"{name}.png").unlink(missing_ok=True)
         b = by_name.get(name)
         if not b:
             print(name, "MISSING in Figma")
+            failed.append(name)
         else:
             if b["w"] != WIDTH:
                 print(name, f"width {b['w']} ≠ {WIDTH}: the pair will not be compared")
@@ -144,10 +155,13 @@ def main(argv):
             url = reply["images"].get(b["node"])
             if not url:
                 print(b["name"], "Figma did not render the frame")
+                failed.append(b["name"])
                 continue
             # The image URLs are pre-signed: no token for them.
             (out / f"{b['name']}.png").write_bytes(request(url))
             print(b["name"], f"{b['w']}x{b['h']}")
+    if names and failed:
+        sys.exit(f"no mockup for: {', '.join(failed)}")
 
 
 if __name__ == "__main__":

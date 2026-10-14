@@ -1,11 +1,15 @@
 """Tests for design-check/export.py: python3 -m unittest discover -s scripts -p 'test_*.py'"""
 
+import contextlib
 import importlib.util
 import io
+import json
+import os
 import tempfile
 import unittest
 import urllib.error
 from pathlib import Path
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parent.parent / "design-check" / "export.py"
 _spec = importlib.util.spec_from_file_location("design_check_export", SCRIPT)
@@ -160,10 +164,63 @@ class RequestTest(unittest.TestCase):
             self.run_request([http_error(403), b"never"])
         self.assertEqual(e.exception.code, 403)
 
+    def test_retries_network_errors(self):
+        result, calls, sleeps = self.run_request(
+            [urllib.error.URLError("reset"), TimeoutError(), ConnectionResetError(), b"ok"])
+        self.assertEqual(result, b"ok")
+        self.assertEqual(sleeps, [2, 4, 8])
+
+    def test_network_error_on_the_last_attempt_is_raised(self):
+        with self.assertRaises(TimeoutError):
+            self.run_request([TimeoutError(), TimeoutError()], attempts=2)
+
     def test_gives_up_after_the_last_attempt(self):
         with self.assertRaises(urllib.error.HTTPError) as e:
             self.run_request([http_error(429), http_error(429)], attempts=2)
         self.assertEqual(e.exception.code, 429)
+
+
+
+class MainTest(unittest.TestCase):
+    """main() against a fake Figma: one artboard, Main, that renders."""
+
+    def run_main(self, out, *names):
+        document = {"document": {"children": [page("1:1", "MVP", [frame("5:2", "Main")])]}}
+
+        def fake_request(url, token=None, *args, **kwargs):
+            if "/files/" in url:
+                return json.dumps(document).encode()
+            if "/images/" in url:
+                return json.dumps({"err": None, "images": {"5:2": "https://s3/main"}}).encode()
+            return b"png:" + url.encode()
+
+        original, export.request = export.request, fake_request
+        try:
+            with mock.patch.dict(os.environ, {"FIGMA_TOKEN": "t"}), contextlib.redirect_stdout(io.StringIO()):
+                export.main([str(out), *names])
+        finally:
+            export.request = original
+
+    def test_writes_the_artboard_and_coverage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.run_main(tmp, "Main")
+            self.assertEqual(Path(tmp, "Main.png").read_bytes(), b"png:https://s3/main")
+            self.assertEqual([b["name"] for b in json.loads(Path(tmp, "coverage.json").read_text())], ["Main"])
+
+    def test_named_artboard_missing_in_figma_fails_and_leaves_no_stale_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "Chat.png").write_bytes(b"old")
+            with self.assertRaises(SystemExit) as e:
+                self.run_main(tmp, "Main", "Chat")
+            self.assertIn("Chat", str(e.exception.code))
+            self.assertFalse(Path(tmp, "Chat.png").exists())
+            self.assertTrue(Path(tmp, "Main.png").exists())
+
+    def test_without_token_stops_before_any_request(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(SystemExit) as e:
+                export.main([tmp, "Main"])
+            self.assertIn("FIGMA_TOKEN", str(e.exception.code))
 
 
 if __name__ == "__main__":
