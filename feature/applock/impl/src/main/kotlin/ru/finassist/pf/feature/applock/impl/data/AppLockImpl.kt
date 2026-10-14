@@ -10,15 +10,21 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -62,22 +68,105 @@ internal class AppLockImpl @Inject constructor(
      */
     private val writes = Mutex()
 
-    override val state: StateFlow<LockState> = combine(store.isConfigured, unlocked) { configured, open ->
+    /**
+     * What the store holds, as last read by [refresh]; null until the first read. DataStore collectors cannot be
+     * trusted with it: one that starts while a write is in flight can miss that write for good (FIN-87), e.g. the
+     * sign-out reset racing the lock's own start. So nothing here publishes a collected value: every value is a
+     * fresh read of the store, taken after each own write and whenever the store reports a change.
+     */
+    private val stored = MutableStateFlow<Stored?>(null)
+
+    /** Serializes [refresh]: a read is published only after every read started before it. */
+    private val reads = Mutex()
+
+    override val state: StateFlow<LockState> = combine(stored, unlocked) { s, open ->
         when {
-            !configured -> LockState.NotConfigured
+            s == null -> LockState.Locked
+            !s.configured -> LockState.NotConfigured
             open -> LockState.Unlocked
             else -> LockState.Locked
         }
     }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, LockState.Locked)
 
-    override val biometricEnabled: StateFlow<Boolean> = combine(store.biometricEnabled, store.isConfigured) { on, configured ->
-        on && configured && biometricAvailability() != BiometricAvailability.NONE
+    override val biometricEnabled: StateFlow<Boolean> = stored.map { s ->
+        s != null && s.biometric && s.configured && biometricAvailability() != BiometricAvailability.NONE
     }.stateIn(scope, SharingStarted.Eagerly, false)
 
     init {
         scope.launch(Dispatchers.Main.immediate) { ProcessLifecycleOwner.get().lifecycle.addObserver(this@AppLockImpl) }
+        // A trigger only (its values may be stale, see [stored]); it also takes the first read. A failed read
+        // (I/O, Keystore) would end the collection for good, so it starts over: a store that can be read again is
+        // picked up without waiting for the next write.
+        scope.launch {
+            merge(store.isConfigured, store.biometricEnabled)
+                .retryWhen { e, _ -> (e !is CancellationException).also { if (it) delay(READ_RETRY_MS) } }
+                .collect { refreshUntilRead() }
+        }
         scope.launch {
             session.state.collect { s -> if (s is SessionState.SignedOut) reset() }
+        }
+    }
+
+    /**
+     * NonCancellable: a write that has landed is published even if its caller has gone away meanwhile. A failed
+     * read keeps the last value (none yet reads as Locked) and does not throw: it runs in `finally` of the writes,
+     * where it would replace their own exception, and in the trigger, which would stop. Returns whether the read
+     * landed.
+     */
+    private suspend fun refresh(): Boolean = withContext(NonCancellable) {
+        reads.withLock {
+            stored.value = try {
+                Stored(store.isConfigured.first(), store.biometricEnabled.first())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return@withLock false
+            }
+            true
+        }
+    }
+
+    /**
+     * Until a read lands, [stored] is behind the store, and no later change may come to fix it: a failed read is
+     * retried, not left waiting for the next write.
+     */
+    private suspend fun refreshUntilRead() {
+        while (!refresh()) delay(READ_RETRY_MS)
+    }
+
+    /** After an own write: a failed read is retried in the background, the writer gets its own outcome now. */
+    private suspend fun refreshAfterWrite() {
+        if (!refresh()) scheduleRetry()
+    }
+
+    /** The background retry after a write that failed to read back; one at a time, however many writes fail. */
+    private var retry: Job? = null
+
+    /** A write failed to read back while [retry] was running: it reads again once more before it ends. */
+    private var retryAgain = false
+
+    /**
+     * Starts the retry, or has the running one read once more. Both sides decide under the same lock: a retry that
+     * has just read cannot end while a later failed write counts on it.
+     */
+    private fun scheduleRetry() = synchronized(this) {
+        if (retry != null) retryAgain = true else retry = scope.launch { retryUntilCurrent() }
+    }
+
+    /** Test hook: runs after a retry's read, before it decides whether to end. */
+    internal var afterRetryRead: suspend () -> Unit = {}
+
+    private suspend fun retryUntilCurrent() {
+        while (true) {
+            refreshUntilRead()
+            afterRetryRead()
+            synchronized(this) {
+                if (!retryAgain) {
+                    retry = null
+                    return
+                }
+                retryAgain = false
+            }
         }
     }
 
@@ -120,13 +209,15 @@ internal class AppLockImpl @Inject constructor(
             } catch (e: Throwable) {
                 unlocked.value = false
                 throw e
+            } finally {
+                refreshAfterWrite()
             }
         }
         tracker.track(Events.APPLOCK_PASSCODE_SET)
     }
 
     override suspend fun verify(code: String): VerifyResult {
-        if (store.matches(code)) {
+        if (matches(code)) {
             store.setWrongAttempts(0)
             unlocked.value = true
             return VerifyResult.Ok
@@ -141,10 +232,15 @@ internal class AppLockImpl @Inject constructor(
         return VerifyResult.Wrong(MAX_WRONG_ATTEMPTS - attempts)
     }
 
-    override suspend fun matches(code: String): Boolean = store.matches(code)
+    /** A right code refreshes: one of a legacy install is re-saved as a sealed record, which turns biometrics on. */
+    override suspend fun matches(code: String): Boolean = store.matches(code).also { if (it) refreshAfterWrite() }
 
     override suspend fun setBiometricEnabled(enabled: Boolean) {
-        store.setBiometricEnabled(enabled)
+        try {
+            store.setBiometricEnabled(enabled)
+        } finally {
+            refreshAfterWrite()
+        }
         if (enabled) tracker.track(Events.APPLOCK_BIOMETRIC_ENABLED)
     }
 
@@ -164,11 +260,18 @@ internal class AppLockImpl @Inject constructor(
     }
 
     override suspend fun reset() = writes.withLock {
-        store.clear()
-        unlocked.value = false
+        try {
+            store.clear()
+            unlocked.value = false
+        } finally {
+            refreshAfterWrite()
+        }
     }
+
+    private data class Stored(val configured: Boolean, val biometric: Boolean)
 
     private companion object {
         const val BACKGROUND_LOCK_MS = 5 * 60 * 1000L
+        const val READ_RETRY_MS = 1_000L
     }
 }

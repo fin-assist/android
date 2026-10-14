@@ -71,8 +71,12 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
     private fun searchPage(query: OperationsQuery): OperationsList {
         val f = query.filter
         f.selection?.let { sel ->
-            runCatching { search.validateSelection(sel) }.onFailure {
-                if (it is Search.UnknownSelection) throw AppError.Api(ErrorCodes.SELECTION_NOT_FOUND, 422)
+            // A selection the ledger cannot resolve (also an empty ledger: every statement deleted) is stale:
+            // SELECTION_NOT_FOUND, and the client searches again without it.
+            try {
+                search.validateSelection(sel)
+            } catch (e: Search.UnknownSelection) {
+                throw AppError.Api(ErrorCodes.SELECTION_NOT_FOUND, 422)
             }
         }
         val today = backend.now().atZoneSameInstant(zone).toLocalDate()

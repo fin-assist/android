@@ -183,6 +183,173 @@ class SessionRepositoryImplTest {
         assertEquals(AuthRoutes.Phone.REASON_EXPIRED, h.repo.consumeSignOutReason())
     }
 
+    @Test fun `our own sign-out seen late by the session observer is not reported as expired`() = runBlocking {
+        // FIN-74: the observer runs on its own coroutine and may get the `null` only after the sign-out returned
+        // and the phone screen already consumed the reason.
+        val h = harness(TokenStore.Session("u1", pair))
+        eventually { "flags.user:u1" in h.log.all() }
+        val deliverNull = CompletableDeferred<Unit>()
+        h.tokens.beforeDeliver = { if (it == null) deliverNull.await() }
+
+        h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
+        assertEquals(AuthRoutes.Phone.REASON_LOGGED_OUT, h.repo.consumeSignOutReason())
+        deliverNull.complete(Unit)
+        // The observer handles values in order: once the next session is applied, the late `null` has been handled.
+        h.tokens.flow.value = TokenStore.Session("u2", pair)
+        eventually { "flags.user:u2" in h.log.all() }
+
+        assertNull(h.repo.consumeSignOutReason(), "the next phone screen must not show «session expired»")
+    }
+
+    @Test fun `a sign-out during a slow identity setup leaves the identity reset`() = runBlocking {
+        // The observer is still applying the restored user (a slow flags provider) when the user signs out:
+        // the sign-out resets the identity first, then the observer finishes and sets the user again.
+        val h = harness()
+        val applying = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        h.flags.beforeSetUser = { if (it == "u1") { applying.complete(Unit); release.await() } }
+        h.tokens.flow.value = TokenStore.Session("u1", pair)
+        withTimeout(5_000) { applying.await() }
+
+        h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
+        release.complete(Unit)
+        eventually { "tracker.user:u1" in h.log.all() } // the stalled setup has finished
+
+        eventually { h.log.all().lastOrNull { it.startsWith("tracker.user:") } == "tracker.user:null" }
+        eventually { h.log.all().lastOrNull { it.startsWith("flags.user:") } == "flags.user:null" }
+        assertEquals(AuthRoutes.Phone.REASON_LOGGED_OUT, h.repo.consumeSignOutReason(), "not reported as expired")
+    }
+
+    @Test fun `a local clearing seen late without a reason is not reported as expired`() = runBlocking {
+        val h = harness(TokenStore.Session("u1", pair))
+        eventually { "flags.user:u1" in h.log.all() }
+        val deliverNull = CompletableDeferred<Unit>()
+        h.tokens.beforeDeliver = { if (it == null) deliverNull.await() }
+
+        h.repo.clearLocal(reason = null)
+        deliverNull.complete(Unit)
+        h.tokens.flow.value = TokenStore.Session("u2", pair)
+        eventually { "flags.user:u2" in h.log.all() }
+
+        assertNull(h.repo.consumeSignOutReason())
+    }
+
+    @Test fun `a session dropped by the network after an own sign-out is still reported as expired`() = runBlocking {
+        val h = harness(TokenStore.Session("u1", pair))
+        eventually { "flags.user:u1" in h.log.all() }
+        h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
+        h.repo.consumeSignOutReason()
+        h.tokens.flow.value = TokenStore.Session("u1", TokenPair("a2", "r2")) // signed in again
+        // Handled in order: once the new sign-in is applied, the sign-out's `null` has been handled too.
+        eventually { h.log.all().count { it == "flags.user:u1" } == 2 }
+        val resetsBefore = h.log.all().count { it == "flags.user:null" }
+
+        h.tokens.flow.value = null // the refresh was rejected
+
+        eventually { h.log.all().count { it == "flags.user:null" } == resetsBefore + 1 }
+        assertEquals(AuthRoutes.Phone.REASON_EXPIRED, h.repo.consumeSignOutReason())
+    }
+
+    @Test fun `a sign-out absorbed by a quick sign-in of the same user does not hide a later expiry`() = runBlocking {
+        val h = harness(TokenStore.Session("u1", pair))
+        eventually { "flags.user:u1" in h.log.all() }
+        // The observer stalls on a value it is handling (as in a slow `applyIdentity`) while the user signs out and
+        // back in with the same account: the `null` in between is conflated away and never reaches it.
+        val refreshed = TokenStore.Session("u1", TokenPair("a2", "r2"))
+        val stalled = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        h.tokens.beforeDeliver = { if (it == refreshed) { stalled.complete(Unit); release.await() } }
+        h.tokens.flow.value = refreshed
+        withTimeout(5_000) { stalled.await() }
+
+        h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
+        assertEquals(AuthRoutes.Phone.REASON_LOGGED_OUT, h.repo.consumeSignOutReason())
+        h.repo.start(userId = "u1", tokens = TokenPair("a3", "r3"), registered = false)
+        release.complete(Unit)
+        eventually { h.crash.crumbs.size >= 3 } // restored, refreshed, signed in again — no `null` in between
+        val resetsBefore = h.log.all().count { it == "flags.user:null" }
+
+        h.tokens.flow.value = null // the refresh was rejected
+        eventually { h.crash.crumbs.size >= 4 }
+        // Handled in order: once the next session is applied, the `null` has been handled.
+        h.tokens.flow.value = TokenStore.Session("u2", pair)
+        eventually { "flags.user:u2" in h.log.all() }
+
+        assertEquals(AuthRoutes.Phone.REASON_EXPIRED, h.repo.consumeSignOutReason())
+        assertEquals(resetsBefore + 1, h.log.all().count { it == "flags.user:null" }, "identity reset on the expiry")
+    }
+
+    @Test fun `a failed sign-in after an own sign-out seen late is not reported as expired`() = runBlocking {
+        val h = harness(TokenStore.Session("u1", pair))
+        eventually { "flags.user:u1" in h.log.all() }
+        // The observer stalls on a value it is handling while the user signs out and a new sign-in fails on the
+        // profile request: the placeholder it saved is cleared again.
+        val refreshed = TokenStore.Session("u1", TokenPair("a2", "r2"))
+        val stalled = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        h.tokens.beforeDeliver = { if (it == refreshed) { stalled.complete(Unit); release.await() } }
+        h.tokens.flow.value = refreshed
+        withTimeout(5_000) { stalled.await() }
+
+        h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
+        assertEquals(AuthRoutes.Phone.REASON_LOGGED_OUT, h.repo.consumeSignOutReason())
+        h.profile.failure = java.io.IOException("no network")
+        assertFailsWith<java.io.IOException> { h.repo.start(userId = null, tokens = TokenPair("a3", "r3"), registered = false) }
+        val resetsBefore = h.log.all().count { it == "flags.user:null" }
+        release.complete(Unit)
+        // The observer resets the identity after it has decided on the reason: once it has, the late `null` is handled.
+        eventually { h.log.all().count { it == "flags.user:null" } == resetsBefore + 1 }
+
+        assertNull(h.repo.consumeSignOutReason(), "the next phone screen must not show «session expired»")
+    }
+
+    @Test fun `a sign-in whose session failed to save after an own sign-out seen late is not reported as expired`() = runBlocking {
+        val h = harness(TokenStore.Session("u1", pair))
+        eventually { "flags.user:u1" in h.log.all() }
+        val refreshed = TokenStore.Session("u1", TokenPair("a2", "r2"))
+        val stalled = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        h.tokens.beforeDeliver = { if (it == refreshed) { stalled.complete(Unit); release.await() } }
+        h.tokens.flow.value = refreshed
+        withTimeout(5_000) { stalled.await() }
+
+        h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
+        assertEquals(AuthRoutes.Phone.REASON_LOGGED_OUT, h.repo.consumeSignOutReason())
+        h.tokens.onSave = { if (it.tokens.accessToken == "a3") throw java.io.IOException("disk full") }
+        assertFailsWith<java.io.IOException> { h.repo.start(userId = "u1", tokens = TokenPair("a3", "r3"), registered = false) }
+        val resetsBefore = h.log.all().count { it == "flags.user:null" }
+        release.complete(Unit)
+        // The observer resets the identity after it has decided on the reason: once it has, the late `null` is handled.
+        eventually { h.log.all().count { it == "flags.user:null" } == resetsBefore + 1 }
+
+        assertNull(h.repo.consumeSignOutReason(), "the next phone screen must not show «session expired»")
+    }
+
+    @Test fun `clearing a pending sign-in does not hide a later expiry`() = runBlocking {
+        val h = harness()
+        h.tokens.flow.value = TokenStore.Session("", pair) // profile is being fetched
+        h.repo.clearLocal(reason = null)
+        h.tokens.flow.value = TokenStore.Session("u1", pair)
+        eventually { "flags.user:u1" in h.log.all() }
+
+        h.tokens.flow.value = null // the refresh was rejected
+
+        eventually { h.repo.consumeSignOutReason() == AuthRoutes.Phone.REASON_EXPIRED }
+    }
+
+    @Test fun `a sign-out that failed to clear the session does not hide its later expiry`() = runBlocking {
+        val h = harness(TokenStore.Session("u1", pair))
+        eventually { "flags.user:u1" in h.log.all() }
+        h.tokens.beforeClear = { throw java.io.IOException("disk full") }
+        assertFailsWith<java.io.IOException> { h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT) }
+        h.repo.consumeSignOutReason()
+        h.tokens.beforeClear = {}
+
+        h.tokens.flow.value = null // the refresh was rejected later
+
+        eventually { h.repo.consumeSignOutReason() == AuthRoutes.Phone.REASON_EXPIRED }
+    }
+
     @Test fun `a restored session applies the identity and syncs a changed time zone`() {
         val h = harness(TokenStore.Session("u1", pair))
         h.profile.timezone = "Asia/Vladivostok-not-this-device"

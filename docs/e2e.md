@@ -184,6 +184,8 @@ were.
 | `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
 | `assistant/daily_limit` | unanswerable question is free; five questions exhaust the day |
 | `assistant/offline_retry` | no network: the notice replaces the input; «Повторить» sends the question once the network is back |
+| `assistant/chip_after_statements_deleted` | every statement deleted: the operations chip of an earlier answer opens the search without its stale selection (notice, empty result) — FIN-76 |
+| `assistant/retry_without_transfers` | `assistant_model_errors=1`: a question asked «Без переводов» fails, not spent; «Повторить» answers it still «без переводов» — FIN-76 |
 | `assistant/answer_retry` | `assistant_model_errors=1`: the answer fails, not spent; a double tap on «Повторить» while the request is on its way sends it once: one answer, no «Не получилось отправить вопрос», 4 of 5 — FIN-75 |
 | `statements/upload_errors` | CSV, not a statement, another bank; leaving the picker |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
@@ -207,6 +209,15 @@ An answer stream ending in an error other than the network (404 for an answer th
 answer is still generating (FIN-75): neither a real server nor the mock answers 404 for an answer it is still
 generating, only for an unknown or replaced one, which the chat never watches — the state needs a server that lost
 the answer mid-generation; `ChatViewModelBehaviourTest` covers the re-read of the history after such an error.
+A false «сессия истекла» after the user's own sign-out (FIN-74) needs the session observer's coroutine to get the
+`null` only after the sign-out returned and the phone screen read the reason — a thread interleaving neither the
+emulator nor the mock can force; `SessionRepositoryImplTest` reproduces it with a token store that delivers the
+`null` late.
+A passcode left behind by a signed-out session (the process died between the sign-out and the passcode reset) and
+cleared while the lock is starting (FIN-87) cannot be forced either: the flow cannot kill the process inside that
+window, and the stale state needs a DataStore collector to start while the reset is being written, a timing the
+emulator does not reproduce on demand (about 8 % of starts on the JVM). `AppLockStoreRaceTest` repeats that start
+200 times; `profile/theme_and_logout` covers the plain sign-out.
 A screen that stays put after a sign-in or a sign-out (FIN-88; the FIN-63 stall on the call screen) cannot be forced
 either: it needs a subscriber of the session to start while the token store is being written, a timing the emulator
 does not reproduce on demand (about 5 % of such starts on the JVM). `EncryptedTokenStoreRaceTest` repeats both writes

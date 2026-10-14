@@ -1,8 +1,12 @@
 package ru.finassist.pf.mock
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Test
@@ -105,8 +109,9 @@ class MockAssistantApiTest {
 
     @Test
     fun `a question the data cannot answer fails with CANNOT_ANSWER and is refunded`() = runBlocking<Unit> {
-        // The ask response may already include the refund: generation runs right away with zero latency.
         val response = ask("Какая погода на Марсе?")
+        // The response counts the question; the refund comes with the terminal event.
+        assertEquals(4, response.remainingLimit)
         val error = assertIs<AnswerEvent.Error>(finish(response.answerId).last()).event
         assertEquals(AnswerErrorCode.CANNOT_ANSWER, error.code)
         assertEquals(5, error.remainingLimit)
@@ -215,9 +220,14 @@ class MockAssistantApiTest {
     }
 
     /** The engine never fails with MODEL_ERROR; a model failure is put into the store the way generation would. */
-    private fun failedAnswer(text: String, code: AnswerErrorCode = AnswerErrorCode.MODEL_ERROR): AssistantStore.Answer {
+    private fun failedAnswer(
+        text: String,
+        code: AnswerErrorCode = AnswerErrorCode.MODEL_ERROR,
+        mode: TransferMode = TransferMode.WITH,
+        backend: MockBackend = this.backend,
+    ): AssistantStore.Answer {
         val question = Message(id = "q-$text", role = MessageRole.USER, text = text, createdAt = clock.at)
-        val answer = AssistantStore.Answer("a-$text", question.id, clock.at)
+        val answer = AssistantStore.Answer("a-$text", question.id, clock.at, mode)
         answer.append(AnswerEvent.Error(AnswerErrorEvent(code, "model failed", 5)))
         backend.assistant.questions += question
         backend.assistant.answers[answer.id] = answer
@@ -242,6 +252,66 @@ class MockAssistantApiTest {
 
         // The replaced answer cannot be retried again.
         assertEquals(ErrorCodes.RETRY_NOT_ALLOWED, assertFailsWith<AppError.Api> { api.retry(key("r2"), failed.id) }.code)
+    }
+
+    @Test
+    fun `retry regenerates the answer in the transfer mode of the question`() = runBlocking<Unit> {
+        // FIN-76: asked «без переводов», the model fails; the retried answer is still without transfers.
+        val stored = failedAnswer("Сколько уходит на рестораны", mode = TransferMode.WITHOUT)
+        val again = api.retry(key("r1"), stored.id)
+        assertEquals(TransferMode.WITHOUT, finalSnapshot(again.answerId).source?.transferMode)
+
+        // The same through ask: the mode is stored with the question's answer.
+        backend.config = backend.config.copy(assistantModelErrors = 1)
+        val response = ask("Сколько я трачу на Krabsbir?", mode = TransferMode.WITHOUT)
+        val error = assertIs<AnswerEvent.Error>(finish(response.answerId).last()).event
+        assertEquals(AnswerErrorCode.MODEL_ERROR, error.code)
+        // A model failure is not charged, and the switch counts down.
+        assertEquals(4, error.remainingLimit)
+        assertEquals(0, backend.config.assistantModelErrors)
+
+        val retry = api.retry(key("r2"), response.answerId)
+        assertIs<AnswerEvent.Done>(finish(retry.answerId).last())
+        assertEquals(TransferMode.WITHOUT, finalSnapshot(retry.answerId).source?.transferMode)
+        assertEquals(TransferMode.WITHOUT, api.listMessages().messages.last().source?.transferMode)
+    }
+
+    @Test
+    fun `the remaining limit of ask and retry counts the question even when the refund comes first`() = runBlocking<Unit> {
+        // FIN-76: an unconfined generation job runs to its CANNOT_ANSWER refund before ask/retry return.
+        val eager = testBackend(clock, assistantConsent = true, dispatcher = Dispatchers.Unconfined)
+        val api = MockAssistantApi(eager)
+        val response = api.ask(key("e"), AskRequest("Какая погода на Марсе?"))
+        val error = assertIs<AnswerEvent.Error>(eager.assistant.answers.getValue(response.answerId).log.last()).event
+        assertEquals(AnswerErrorCode.CANNOT_ANSWER, error.code)
+        assertEquals(4, response.remainingLimit)
+        assertEquals(5, error.remainingLimit)
+        assertEquals(5, api.getLimit().remaining)
+
+        val failed = failedAnswer("Погода", backend = eager)
+        val retry = api.retry(key("r"), failed.id)
+        assertIs<AnswerEvent.Error>(eager.assistant.answers.getValue(retry.answerId).log.last())
+        assertEquals(4, retry.remainingLimit)
+        assertEquals(5, api.getLimit().remaining)
+    }
+
+    @Test
+    fun `two questions at the last remaining one get one answer`() = runBlocking<Unit> {
+        // The limit is checked under the lock with the charge. Racing pairs, many times: with the check outside the
+        // lock both questions of a pair could pass it and the day would end at 6 of 5.
+        repeat(200) { i ->
+            val racing = testBackend(clock, assistantConsent = true).apply { load(doc) }
+            racing.assistant.usage[clock.at.toLocalDate()] = 4 // one question of five left
+            val api = MockAssistantApi(racing)
+            val start = CompletableDeferred<Unit>()
+            val results = List(2) { n ->
+                async(Dispatchers.Default) { start.await(); runCatching { api.ask(key("q$i-$n"), AskRequest("Сколько я трачу на Krabsbir?")) } }
+            }
+            start.complete(Unit)
+            val outcomes = results.awaitAll()
+            assertEquals(1, outcomes.count { it.isSuccess }, "pair $i")
+            assertEquals(ErrorCodes.LIMIT_EXCEEDED, (outcomes.single { it.isFailure }.exceptionOrNull() as AppError.Api).code)
+        }
     }
 
     @Test
