@@ -67,7 +67,7 @@ class TimeZoneChecker @Inject constructor(
         }
         if (currentUser() != userId) return
         val updated = quietly { profileApi.updateProfile(ProfileUpdate(timezone = zone)) } ?: return
-        known = userId to updated.timezone
+        if (updated.userId == userId) known = userId to updated.timezone
         store.clear()
     }
 
