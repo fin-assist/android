@@ -1,8 +1,9 @@
 # Понятные финансы — Android
 
 Клиент приложения «Понятные финансы»: импорт OFX-выписки Т-Банка, операции, аналитика, LLM-помощник.
-Контракт API, состав MVP и макеты — в проекте «Финансовый консультант» (`api.md`, `openapi.yaml`,
-`mvp-scope.md`, холст Claude Design).
+Контракт API — репозиторий [fin-assist/contracts](https://github.com/fin-assist/contracts) (`docs/api.md`,
+`openapi/openapi.yaml`); состав MVP и решения — Confluence PF (https://finassist.atlassian.net/wiki/spaces/PF);
+макеты — Figma (https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv).
 
 ## Стек
 

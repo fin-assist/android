@@ -27,7 +27,7 @@ orientation map: read it first, then open only the files the task touches.
 - Version 0.2 (API, mockups, docs) is crystallized; every change goes through a YouTrack issue (`FIN-<n>`,
   finassist.youtrack.cloud) and is referenced in the PR. Release notes live in Confluence.
 - There is no backend yet: the `mock` flavor is the working product, `prod` is the HTTP client for later.
-- Mismatches between mockups, docs and API are expected. Resolve them in favour of `api.md` + the latest
+- Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) + the latest
   decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
 
 ## Repository map
