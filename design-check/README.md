@@ -84,8 +84,8 @@ mkdir -p build/design-check
 # App snapshots -> build/design-check/app/<Artboard>.png (all screens)
 ANDROID_HOME=/opt/android-sdk ./gradlew -Ppf.designcheck testDebugUnitTest
 
-# Or only the screens a change can affect
-git diff --name-only origin/main...HEAD > build/design-check/changed.txt
+# Or only the screens a change can affect (<base> — the PR's base branch: the current release/<version>, or main)
+git diff --name-only origin/<base>...HEAD > build/design-check/changed.txt
 ANDROID_HOME=/opt/android-sdk ./gradlew -Ppf.designcheck \
   -Ppf.designcheck.changed=build/design-check/changed.txt testDebugUnitTest
 

@@ -8,8 +8,8 @@ and composables (excluded from the report, see build.gradle.kts) do not.
 
 Usage:
   ./gradlew :koverXmlReportUnit
-  python3 scripts/coverage-diff.py --base origin/main                 # Markdown to stdout
-  python3 scripts/coverage-diff.py --base origin/main --min 80        # exit 1 below 80 %
+  python3 scripts/coverage-diff.py --base origin/<base>               # Markdown to stdout; <base> = PR base branch
+  python3 scripts/coverage-diff.py --base origin/<base> --min 80      # exit 1 below 80 %
   python3 scripts/coverage-diff.py --base … --summary "$GITHUB_STEP_SUMMARY" --full
   python3 scripts/coverage-diff.py                                    # project totals only (no diff)
 
