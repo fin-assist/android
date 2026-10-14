@@ -31,7 +31,7 @@ class TimeZoneSyncImplTest {
     private val store = tempPendingStore()
     private val clock = FakeClock()
     private val device = FakeDeviceZone("Europe/Moscow")
-    private val sync = TimeZoneSyncImpl(context, TimeZoneChecker(api, session, store, clock, device), session)
+    private val sync = TimeZoneSyncImpl(context, TimeZoneChecker(api, session, store, clock, device), session, device)
 
     private fun eventually(condition: suspend () -> Boolean) = runBlocking {
         withTimeout(5_000) {
@@ -72,7 +72,8 @@ class TimeZoneSyncImplTest {
         eventually { api.gets.get() > 0 }
         assertNull(runBlocking { store.get("u1") })
 
-        device.zone = "Asia/Yekaterinburg"
+        // The cached default zone is still the old one when the broadcast arrives: the receiver must re-read it.
+        device.pending = "Asia/Yekaterinburg"
         context.sendBroadcast(Intent(Intent.ACTION_TIMEZONE_CHANGED))
         eventually { store.get("u1") != null }
         assertEquals("Asia/Yekaterinburg", runBlocking { store.get("u1") }?.zone)

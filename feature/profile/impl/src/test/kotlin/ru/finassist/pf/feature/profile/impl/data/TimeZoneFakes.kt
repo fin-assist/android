@@ -67,7 +67,15 @@ internal class FakeClock(@Volatile var current: OffsetDateTime = OffsetDateTime.
 }
 
 internal class FakeDeviceZone(@Volatile var zone: String = "Europe/Moscow") : DeviceZone {
+    /** The zone the system has switched to but this process has not re-read yet (see [DeviceZone.reset]). */
+    @Volatile var pending: String? = null
+
     override fun id(): String = zone
+
+    override fun reset() {
+        pending?.let { zone = it }
+        pending = null
+    }
 }
 
 internal fun tempPendingStore(): PendingZoneStore {

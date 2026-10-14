@@ -30,6 +30,7 @@ internal class TimeZoneSyncImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val checker: TimeZoneChecker,
     private val session: SessionRepository,
+    private val deviceZone: DeviceZone,
 ) : TimeZoneSync, DefaultLifecycleObserver {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -37,7 +38,9 @@ internal class TimeZoneSyncImpl @Inject constructor(
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == Intent.ACTION_TIMEZONE_CHANGED) launchCheck()
+            if (intent.action != Intent.ACTION_TIMEZONE_CHANGED) return
+            deviceZone.reset()
+            launchCheck()
         }
     }
 
