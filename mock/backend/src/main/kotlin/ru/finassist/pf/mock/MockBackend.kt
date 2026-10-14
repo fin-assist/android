@@ -3,11 +3,13 @@ package ru.finassist.pf.mock
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.model.AssistantConsent
 import ru.finassist.pf.core.api.model.ErrorCodes
@@ -100,13 +102,36 @@ class MockBackend(
         if (config.networkDelayMs > 0) delay(config.networkDelayMs)
     }
 
-    /** Runs [block] once per key; a repeat with the same key returns the cached result (api.md, idempotency). */
-    suspend fun <T : Any> idempotent(key: String, block: suspend () -> T): T {
-        @Suppress("UNCHECKED_CAST")
-        mutex.withLock { idempotency[key] as? T }?.let { return it }
-        val result = block()
-        mutex.withLock { idempotency[key] = result }
-        return result
+    /** Keys whose first request is still running. */
+    private val inFlight = HashSet<String>()
+
+    /**
+     * Runs [block] once per key; a repeat with the same key returns the cached result, and a repeat while the
+     * first request is still running gets 409 REQUEST_IN_PROGRESS (api.md, idempotency). A failed [block] is not
+     * stored: the key can be used again. [onRepeat] runs before a cached result is returned: a [block] that
+     * simulates the network itself passes the same checks here, so a repeat still meets offline and a lost session.
+     */
+    suspend fun <T : Any> idempotent(key: String, onRepeat: suspend () -> Unit = {}, block: suspend () -> T): T {
+        val cached = mutex.withLock {
+            @Suppress("UNCHECKED_CAST")
+            (idempotency[key] as? T) ?: run {
+                if (!inFlight.add(key)) throw AppError.InProgress(retryAfterSeconds = 1)
+                null
+            }
+        }
+        if (cached != null) {
+            onRepeat()
+            return cached
+        }
+        try {
+            val result = block()
+            mutex.withLock { idempotency[key] = result }
+            return result
+        } finally {
+            // Also when the caller was cancelled mid-request: the lock may be busy, and a cancellable wait for it
+            // would leave the key «in progress» for good.
+            withContext(NonCancellable) { mutex.withLock { inFlight.remove(key) } }
+        }
     }
 
     fun requireSession() {
