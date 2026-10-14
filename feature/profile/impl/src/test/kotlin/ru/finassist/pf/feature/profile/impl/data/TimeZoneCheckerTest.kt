@@ -151,6 +151,29 @@ class TimeZoneCheckerTest {
         assertEquals(2, api.gets.get(), "the profile zone is read again after a sign-in")
     }
 
+    @Test fun `a sign-in as another user during the check does not move their zone`() {
+        device.zone = NOVOSIBIRSK
+        check()
+        clock.advance(Duration.ofHours(72))
+        // The profile read before the PATCH already goes out with the token of u2.
+        api.onGet = {
+            api.userId = "u2"
+            session.state.value = SessionState.SignedIn("u2")
+        }
+        check()
+        assertTrue(api.updates.isEmpty())
+        assertEquals(NOVOSIBIRSK, pending("u1")?.zone, "the record of u1 waits for u1")
+    }
+
+    @Test fun `a sign-out between the profile read and the PATCH sends nothing`() {
+        device.zone = NOVOSIBIRSK
+        check()
+        clock.advance(Duration.ofHours(72))
+        api.onGet = { session.state.value = SessionState.SignedOut }
+        check()
+        assertTrue(api.updates.isEmpty())
+    }
+
     @Test fun `a record of another user is not counted`() {
         runBlocking { store.set("u0", PendingZone(NOVOSIBIRSK, now.minus(Duration.ofDays(10)))) }
         device.zone = NOVOSIBIRSK

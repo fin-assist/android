@@ -25,17 +25,22 @@ import kotlin.io.path.createTempDirectory
 internal class FakeProfileApi(@Volatile var timezone: String = "Europe/Moscow") : ProfileApi {
     @Volatile var getFailure: AppError? = null
     @Volatile var updateFailure: AppError? = null
+    /** Whose profile the server returns: the user of the token the request went out with. */
+    @Volatile var userId: String = "u1"
+    /** Runs inside each GET, before the answer: lets a test switch the session while a request is in flight. */
+    @Volatile var onGet: () -> Unit = {}
     val gets = java.util.concurrent.atomic.AtomicInteger()
     val updates: MutableList<ProfileUpdate> = Collections.synchronizedList(mutableListOf())
 
     private fun profile() = Profile(
-        userId = "u1", phone = "+79161234567", theme = Theme.SYSTEM, timezone = timezone,
+        userId = userId, phone = "+79161234567", theme = Theme.SYSTEM, timezone = timezone,
         assistantConsent = AssistantConsent(granted = false, version = null, currentVersion = "ai-1"),
         createdAt = OffsetDateTime.parse("2026-09-01T10:00:00+03:00"),
     )
 
     override suspend fun getProfile(): Profile {
         gets.incrementAndGet()
+        onGet()
         getFailure?.let { throw it }
         return profile()
     }

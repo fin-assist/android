@@ -22,6 +22,10 @@ import javax.inject.Singleton
  * must not cost a request. Before sending, the profile is
  * read again, so a zone that already reached the server another way is not sent twice. Failures are silent and
  * keep the record: the next trigger tries again.
+ *
+ * Requests carry the token of whoever is signed in when they go out, not of the user the check started for: a
+ * profile of another user is ignored, and the session is checked again right before the PATCH, so a sign-in as
+ * someone else during a slow check never moves their zone.
  */
 @Singleton
 class TimeZoneChecker @Inject constructor(
@@ -37,7 +41,7 @@ class TimeZoneChecker @Inject constructor(
     private var known: Pair<String, String>? = null
 
     suspend fun check(): Unit = mutex.withLock {
-        val userId = (session.state.first() as? SessionState.SignedIn)?.userId ?: return
+        val userId = currentUser() ?: return
         val device = deviceZone.id()
         val profileZone = known?.takeIf { it.first == userId }?.second ?: fetch(userId) ?: return
         when (val step = TimeZoneRule.next(profileZone, device, store.get(userId), clock.now().toInstant())) {
@@ -61,13 +65,16 @@ class TimeZoneChecker @Inject constructor(
             store.clear()
             return
         }
+        if (currentUser() != userId) return
         val updated = quietly { profileApi.updateProfile(ProfileUpdate(timezone = zone)) } ?: return
         known = userId to updated.timezone
         store.clear()
     }
 
     private suspend fun fetch(userId: String): String? =
-        quietly { profileApi.getProfile() }?.timezone?.also { known = userId to it }
+        quietly { profileApi.getProfile() }?.takeIf { it.userId == userId }?.timezone?.also { known = userId to it }
+
+    private suspend fun currentUser(): String? = (session.state.first() as? SessionState.SignedIn)?.userId
 
     private suspend fun <T> quietly(block: suspend () -> T): T? = try {
         block()
