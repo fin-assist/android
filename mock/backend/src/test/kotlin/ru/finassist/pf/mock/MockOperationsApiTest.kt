@@ -13,6 +13,7 @@ import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.mock.api.MockOperationsApi
+import ru.finassist.pf.mock.api.MockStatementsApi
 import ru.finassist.pf.mock.domain.AnalyticsEngine
 import java.time.OffsetDateTime
 import kotlin.test.assertEquals
@@ -121,6 +122,23 @@ class MockOperationsApiTest {
         }
         // A well-formed regular selection whose card has no payments matches nothing rather than failing.
         assertTrue(search(OperationsFilter(selection = "s_regular_all_2026-09_with")).items.isEmpty())
+    }
+
+    @Test
+    fun `with every statement deleted a merchant selection is SELECTION_NOT_FOUND, a fixed one matches nothing`() = runBlocking<Unit> {
+        // FIN-76: an assistant chip about a merchant, opened after the user deleted all statements.
+        assertEquals(setOf("buy", "back"), found(OperationsFilter(selection = "s_merchant_ozon")))
+        MockStatementsApi(backend).deleteStatement(backend.uploads.single().id)
+        assertTrue(backend.ledger.all.isEmpty())
+
+        for (selection in listOf("s_merchant_ozon", "s_regular_rp_ozon", "s_whatever")) {
+            val e = assertFailsWith<AppError.Api>(selection) { search(OperationsFilter(selection = selection)) }
+            assertEquals(ErrorCodes.SELECTION_NOT_FOUND to 422, e.code to e.httpStatus, selection)
+        }
+        // Selections that do not name anything in the ledger stay valid: nothing to show.
+        for (selection in listOf(AnalyticsEngine.SELECTION_BANK_FEES, AnalyticsEngine.SELECTION_UNCATEGORIZED)) {
+            assertEquals(0, search(OperationsFilter(selection = selection)).totalCount, selection)
+        }
     }
 
     @Test

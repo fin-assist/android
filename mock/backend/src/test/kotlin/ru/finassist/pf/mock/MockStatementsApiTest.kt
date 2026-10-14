@@ -11,6 +11,7 @@ import ru.finassist.pf.core.api.model.AnalyticsFeature
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.ImportNotice
+import ru.finassist.pf.core.api.model.ImportProgress
 import ru.finassist.pf.core.api.model.ImportStage
 import ru.finassist.pf.core.api.model.ImportTotalsScope
 import ru.finassist.pf.core.api.model.UnreadReason
@@ -149,6 +150,26 @@ class MockStatementsApiTest {
         api.deleteStatement(accepted.uploadId)
         val error = assertIs<ImportEvent.Error>(withTimeout(10_000) { stream.toList() }.last())
         assertEquals(ErrorCodes.CANCELLED, error.code)
+        assertTrue(api.listStatements().uploads.isEmpty())
+        assertTrue(backend.ledger.all.isEmpty())
+    }
+
+    @Test
+    fun `deleting an upload whose import job has not started yet still cancels and discards it`() = runBlocking<Unit> {
+        // FIN-76: with zero latency the deletion can come before the background job ran a single line.
+        val jobs = ManualDispatcher()
+        val backend = testBackend(clock, dispatcher = jobs)
+        val api = MockStatementsApi(backend)
+        val accepted = api.uploadStatement(key("k"), file("a.ofx", ofx(line("1", "20260905120000", "-100.00"))))
+        val upload = backend.uploads.single()
+        val stream = api.streamProgress(accepted.uploadId)
+        assertEquals(ImportEvent.Progress(ImportProgress(ImportStage.PARSING, 0)), upload.events.value)
+
+        api.deleteStatement(accepted.uploadId)
+        jobs.runAll()
+
+        assertEquals(ErrorCodes.CANCELLED, assertIs<ImportEvent.Error>(upload.events.value).code)
+        assertEquals(ErrorCodes.CANCELLED, assertIs<ImportEvent.Error>(withTimeout(10_000) { stream.toList() }.last()).code)
         assertTrue(api.listStatements().uploads.isEmpty())
         assertTrue(backend.ledger.all.isEmpty())
     }

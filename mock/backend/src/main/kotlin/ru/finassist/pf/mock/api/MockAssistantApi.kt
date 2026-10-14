@@ -31,6 +31,7 @@ import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.mock.AssistantStore
 import ru.finassist.pf.mock.MockBackend
+import ru.finassist.pf.mock.MockConfig
 import ru.finassist.pf.mock.domain.AssistantEngine
 import java.time.LocalDate
 import java.util.UUID
@@ -63,15 +64,19 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
         if (request.text.isBlank() || request.text.length > 2000) throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400)
         if (request.transferMode == TransferMode.UNKNOWN) throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400)
         return backend.idempotent("assistant.ask:${key.value}") {
-            checkConsentAndLimit()
             val question = Message(id = UUID.randomUUID().toString(), role = MessageRole.USER, text = request.text, createdAt = backend.now())
-            val answer = backend.mutex.withLock {
+            val mode = request.transferMode ?: TransferMode.WITH
+            val (answer, remainingLimit) = backend.mutex.withLock {
+                // Checked under the lock with the charge: two questions at the last remaining one get one answer.
+                checkConsentAndLimit()
                 store.questions += question
                 store.usage[moscowToday()] = (store.usage[moscowToday()] ?: 0) + 1
-                AssistantStore.Answer(UUID.randomUUID().toString(), question.id, backend.now()).also { store.answers[it.id] = it }
+                // Read with the charge, before generation starts: a refund (CANNOT_ANSWER, not charged) is
+                // reported by the answer's own terminal event, never by this response (FIN-76).
+                AssistantStore.Answer(UUID.randomUUID().toString(), question.id, backend.now(), mode).also { store.answers[it.id] = it } to remaining()
             }
-            generate(answer, request.text, request.transferMode ?: TransferMode.WITH)
-            AskResponse(question = question, answerId = answer.id, remainingLimit = remaining())
+            generate(answer, request.text)
+            AskResponse(question = question, answerId = answer.id, remainingLimit = remainingLimit)
         }
     }
 
@@ -80,22 +85,28 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
         if (remaining() <= 0) throw AppError.Api(ErrorCodes.LIMIT_EXCEEDED, 403, resetsAt = resetsAt())
     }
 
-    /** Generation runs on the backend scope: the client can drop the stream and reconnect. */
-    private fun generate(answer: AssistantStore.Answer, text: String, mode: TransferMode) {
+    /**
+     * Generation runs on the backend scope: the client can drop the stream and reconnect. The engine never fails
+     * like a model; [MockConfig.assistantModelErrors] makes the next answers fail with MODEL_ERROR (refunded).
+     */
+    private fun generate(answer: AssistantStore.Answer, text: String) {
+        val mode = answer.transferMode
         backend.scope.launch {
             delay(backend.config.networkDelayMs * 2)
-            val modelError = backend.mutex.withLock {
-                val left = backend.config.assistantModelErrors
-                if (left > 0) backend.config = backend.config.copy(assistantModelErrors = left - 1)
-                left > 0
+            val outcome = backend.mutex.withLock {
+                val modelErrors = backend.config.assistantModelErrors
+                if (modelErrors > 0) {
+                    backend.config = backend.config.copy(assistantModelErrors = modelErrors - 1)
+                    null
+                } else {
+                    engine.answer(text, mode, moscowToday())
+                }
             }
-            if (modelError) {
-                refund()
-                answer.append(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "model unavailable", remaining())))
-                return@launch
-            }
-            val outcome = backend.mutex.withLock { engine.answer(text, mode, moscowToday()) }
             when (outcome) {
+                null -> {
+                    refund()
+                    answer.append(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "model failed", remaining())))
+                }
                 AssistantEngine.Outcome.CannotAnswer -> {
                     refund()
                     answer.append(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.CANNOT_ANSWER, "cannot answer from data", remaining())))
@@ -164,19 +175,24 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
         }
         return backend.idempotent("assistant.retry:${key.value}", onRepeat = network) {
             network()
-            val old = backend.mutex.withLock { store.answers[answerId] } ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
-            if (old.replaced || old.status != AnswerStatus.FAILED || old.errorCode != AnswerErrorCode.MODEL_ERROR) {
-                throw AppError.Api(ErrorCodes.RETRY_NOT_ALLOWED, 422)
-            }
-            checkConsentAndLimit()
-            val question = store.questions.first { it.id == old.questionId }
-            val fresh = backend.mutex.withLock {
+            val (fresh, remainingLimit, question) = backend.mutex.withLock {
+                // One critical section from the checks to the charge, as in [ask]: two retries of the same answer
+                // replace it once, and the last remaining question is not spent twice.
+                val old = store.answers[answerId] ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+                if (old.replaced || old.status != AnswerStatus.FAILED || old.errorCode != AnswerErrorCode.MODEL_ERROR) {
+                    throw AppError.Api(ErrorCodes.RETRY_NOT_ALLOWED, 422)
+                }
+                checkConsentAndLimit()
+                val question = store.questions.first { it.id == old.questionId }
                 old.replaced = true
                 store.usage[moscowToday()] = (store.usage[moscowToday()] ?: 0) + 1
-                AssistantStore.Answer(UUID.randomUUID().toString(), old.questionId, backend.now()).also { store.answers[it.id] = it }
+                // Same question, same transfer mode; the limit is read with the charge, as in [ask].
+                val fresh = AssistantStore.Answer(UUID.randomUUID().toString(), old.questionId, backend.now(), old.transferMode)
+                    .also { store.answers[it.id] = it }
+                Triple(fresh, remaining(), question)
             }
-            generate(fresh, question.text.orEmpty(), TransferMode.WITH)
-            RetryResponse(answerId = fresh.id, remainingLimit = remaining())
+            generate(fresh, question.text.orEmpty())
+            RetryResponse(answerId = fresh.id, remainingLimit = remainingLimit)
         }
     }
 
