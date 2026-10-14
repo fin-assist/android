@@ -23,6 +23,11 @@ data class MockConfig(
     val maxFileSizeBytes: Long = 10L * 1024 * 1024,
     /** When true every request fails with Offline — to check "нет сети" states. */
     val offline: Boolean = false,
+    /**
+     * How many of the next assistant answers fail with MODEL_ERROR (refunded, «Повторить» offered); each failure
+     * counts it down. The engine itself never fails like a model — this is how the retry path is reached.
+     */
+    val assistantModelErrors: Int = 0,
 ) {
     companion object {
         /** Git-ignored: `app/src/mock/assets/private/statement.ofx`. */

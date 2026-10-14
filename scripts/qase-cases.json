@@ -23,6 +23,7 @@
     ".maestro/flows/assistant/offline_retry.yaml": 20,
     ".maestro/flows/statements/upload_offline_retry.yaml": 21,
     ".maestro/flows/statements/upload_unreadable.yaml": 22,
-    ".maestro/flows/statements/upload_no_description.yaml": 23
+    ".maestro/flows/statements/upload_no_description.yaml": 23,
+    ".maestro/flows/assistant/answer_retry.yaml": 26
   }
 }

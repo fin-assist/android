@@ -91,6 +91,8 @@ class ChatViewModel @Inject constructor(
     val state: StateFlow<ChatUiState> = _state
     private val streams = HashMap<String, Job>()
     private val retryKeys = HashMap<String, IdempotencyKey>()
+    /** Failed answers whose «Повторить» is in flight: a second tap must not send the same key again (FIN-75). */
+    private val retrying = HashSet<String>()
 
     /**
      * Text + key of the question being sent, until a final response. «Задать этот вопрос» is one action per
@@ -115,14 +117,21 @@ class ChatViewModel @Inject constructor(
         load()
     }
 
-    fun load() {
+    fun load() = reload(skipStream = null)
+
+    /**
+     * Reads the latest page of the thread; on failure a shown thread stays as it is. [skipStream] is an answer
+     * whose stream has just failed for good: it is not re-opened from here even if the history still says it is
+     * generating, or a server that keeps answering the stream with 404 would loop (the next resume tries again).
+     */
+    private fun reload(skipStream: String?) {
         viewModelScope.launch {
             _state.update { it.copy(loading = it.items.isEmpty(), loadFailed = false) }
             try {
                 val list = api.listMessages(limit = PAGE)
                 _state.update { it.copy(loading = false, items = list.messages.mapNotNull(::toItem).distinctById(), hasOlder = list.hasOlder, offline = false) }
                 refreshLimit()
-                resumeStreams()
+                watchGenerating(skip = skipStream)
             } catch (e: AppError) {
                 _state.update { it.copy(loading = false, loadFailed = it.items.isEmpty(), offline = e is AppError.Offline) }
             }
@@ -149,8 +158,12 @@ class ChatViewModel @Inject constructor(
     }
 
     /** Called on resume: re-open streams of answers still generating. */
-    fun resumeStreams() {
-        _state.value.items.filterIsInstance<ChatItem.Answer>().filter { it.status == AnswerStatus.GENERATING }.forEach { watch(it.id) }
+    fun resumeStreams() = watchGenerating(skip = null)
+
+    private fun watchGenerating(skip: String?) {
+        _state.value.items.filterIsInstance<ChatItem.Answer>()
+            .filter { it.status == AnswerStatus.GENERATING && it.id != skip }
+            .forEach { watch(it.id) }
     }
 
     fun pauseStreams() {
@@ -170,7 +183,7 @@ class ChatViewModel @Inject constructor(
         _state.update { it.copy(sending = true, draft = text, sendFailed = false) }
         viewModelScope.launch {
             try {
-                val r = askWithRetry(key, AskRequest(text = text, transferMode = transferMode))
+                val r = whileInProgress { api.ask(key, AskRequest(text = text, transferMode = transferMode)) }
                 pending = null
                 tracker.track(Events.ASSISTANT_QUESTION_SENT)
                 val question = ChatItem.Question(r.question.id, r.question.createdAt, r.question.text ?: text)
@@ -200,16 +213,19 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    /** 409 REQUEST_IN_PROGRESS: the first request with this key is still running — wait and repeat it. */
-    private suspend fun askWithRetry(key: IdempotencyKey, request: AskRequest): ru.finassist.pf.core.api.model.AskResponse {
+    /**
+     * 409 REQUEST_IN_PROGRESS: the first request with this key is still running — wait `Retry-After` and repeat
+     * [request] (with the same key). Still in progress after the retries — the last 409 is thrown.
+     */
+    private suspend fun <T> whileInProgress(request: suspend () -> T): T {
         repeat(IN_PROGRESS_RETRIES) {
             try {
-                return api.ask(key, request)
+                return request()
             } catch (e: AppError.InProgress) {
                 delay((e.retryAfterSeconds ?: 2).coerceIn(1, 30) * 1000L)
             }
         }
-        return api.ask(key, request)
+        return request()
     }
 
     /**
@@ -233,11 +249,13 @@ class ChatViewModel @Inject constructor(
 
     /** «Повторить» after MODEL_ERROR: a new answer replaces the failed one (api.md 7.4). */
     fun retry(answerId: String) {
+        // A double tap: the first request is still on its way, a second one with its key would only get 409.
+        if (!retrying.add(answerId)) return
         // One logical action per failed answer: the same key until a final response (a lost 201 is replayed).
         val key = retryKeys.getOrPut(answerId) { IdempotencyKey.random() }
         viewModelScope.launch {
             try {
-                val r = api.retry(key, answerId)
+                val r = whileInProgress { api.retry(key, answerId) }
                 retryKeys.remove(answerId)
                 _state.update { s ->
                     s.copy(
@@ -260,6 +278,8 @@ class ChatViewModel @Inject constructor(
                     e is AppError.Offline -> _state.update { it.copy(offline = true) }
                     else -> _state.update { it.copy(sendFailed = true) }
                 }
+            } finally {
+                retrying.remove(answerId)
             }
         }
     }
@@ -270,6 +290,7 @@ class ChatViewModel @Inject constructor(
             // The answer keeps generating on the server; a dropped stream is simply re-opened (the first event is a
             // full snapshot) with backoff, until a terminal event or the screen stops.
             var backoff = 1_000L
+            var reload = false
             try {
                 while (true) {
                     var terminal = false
@@ -283,7 +304,11 @@ class ChatViewModel @Inject constructor(
                         // Closed without `done` / `error` (server restart): the answer is still generating.
                         if (terminal) break
                     } catch (e: AppError) {
-                        if (e !is AppError.Offline && e !is AppError.Server) break
+                        // Not the network (404 and the like): the stream will not recover by itself.
+                        if (e !is AppError.Offline && e !is AppError.Server) {
+                            reload = true
+                            break
+                        }
                     }
                     delay(backoff)
                     backoff = (backoff * 2).coerceAtMost(15_000L)
@@ -291,6 +316,9 @@ class ChatViewModel @Inject constructor(
             } finally {
                 if (streams[answerId] === coroutineContext[Job]) streams.remove(answerId)
             }
+            // The answer would stay «generating» and block the composer until the screen is reopened (FIN-75): the
+            // history holds its real status.
+            if (reload) reload(skipStream = answerId)
         }
     }
 
