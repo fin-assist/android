@@ -170,6 +170,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
     back to another value, show the server's text) is the rule of that field, written in its KDoc;
   - a closed `enum` in a DTO only for a set that cannot grow (today `Theme`, `OperationKindFilter`);
   - a broken element of a list is skipped, not allowed to fail the whole response.
+  - a new DTO or open code comes with a unit test that parses an unknown field and an unknown code.
 - When the server sends a ready text for a code (`*_name`, lock texts), the UI shows that text for a code it does not
   know instead of building one itself.
 - A new block type or code value changes both `:core:api` and the fake backend `:mock:backend` in the same PR.
