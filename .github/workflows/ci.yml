@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Test the scripts (agent-docs parsers, Qase report and case map, UI coverage)
+      - name: Test the scripts (agent-docs parsers, Qase report and case map, UI coverage, design-check export)
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
       # Which screens and test tags the Maestro flows refer to (docs/testing.md, «UI test coverage»). Static, no
@@ -61,8 +61,44 @@ jobs:
       - name: Configure
         run: ./gradlew help --no-daemon --stacktrace 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
+      # Robolectric fetches the Android framework jars (android-all-instrumented, one per SDK) into ~/.m2 the first time
+      # a test needs them; setup-gradle caches ~/.gradle only. Without this cache every job downloads them from Maven
+      # Central, and a failed download fails every Robolectric test of the run (FIN-90). The jars depend on the
+      # Robolectric version and the SDK levels the tests run on (`@Config(sdk = …)`, `robolectric.properties`, else
+      # targetSdk), so both are in the key; a new key starts from the previous version's jars (restore-keys).
+      - name: Robolectric cache key
+        id: robolectric
+        run: |
+          version=$(sed -n 's/^robolectric = "\(.*\)"$/\1/p' gradle/libs.versions.toml)
+          sdks=$( {
+            grep -rhoE 'sdk *= *(\[[^]]*\]|[0-9][0-9, ]*)' --include='*.kt' --include=robolectric.properties --exclude-dir=build --exclude-dir=.git .
+            grep -E '^(compileSdk|targetSdk) =' gradle/libs.versions.toml
+          } | sort -u | sha256sum | cut -c1-12)
+          echo "prefix=robolectric-$version-" >> "$GITHUB_OUTPUT"
+          echo "key=robolectric-$version-$sdks" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Robolectric jars
+        id: robolectric-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: ${{ steps.robolectric.outputs.key }}
+          restore-keys: ${{ steps.robolectric.outputs.prefix }}
+
       - name: Unit tests
+        id: unit-tests
         run: ./gradlew testMockDebugUnitTest testDebugUnitTest test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      # Saved from main and release branches only, like the Gradle cache: their caches are the ones every PR can read.
+      # Only after green tests: then every jar a test needed has been fetched, and an entry, once saved, never changes.
+      - name: Save Robolectric jars
+        if: >-
+          steps.unit-tests.outcome == 'success' && steps.robolectric-cache.outputs.cache-hit != 'true' &&
+          github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: ${{ steps.robolectric.outputs.key }}
 
       # Kover instruments the test runs above; the report reuses them (docs/testing.md). Root tasks only (`:…`): an
       # unqualified name would also build a separate report in every module. Informational for now: the numbers go

@@ -10,7 +10,7 @@
 # Usage:
 #   scripts/agent-setup.sh                 # SDK + local.properties + Central mirror
 #   scripts/agent-setup.sh --no-mirror     # keep repo.maven.apache.org as is
-#   scripts/agent-setup.sh --design-check  # also Roboto + Python libs for design-check/ (render and compare)
+#   scripts/agent-setup.sh --design-check  # also Python libs for design-check/compare.py
 #   ANDROID_HOME=/path scripts/agent-setup.sh
 set -euo pipefail
 
@@ -100,20 +100,12 @@ else
     log "Maven Central mirror: off"
 fi
 
-# --- design check: Roboto for the mockup renderer, Python libs for the comparison -----------------------
+# --- design check: Python libs for the comparison (the mockups come from Figma as PNG) ---------------
 if (( DESIGN_CHECK )); then
-    if [[ "$(fc-match -f "%{family}" Roboto 2>/dev/null)" != *Roboto* ]]; then
-        log "installing Roboto (google/fonts, OFL) into ~/.fonts"
-        mkdir -p "$HOME/.fonts"
-        curl -sSfL -o "$HOME/.fonts/Roboto-wght.ttf" \
-            "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto%5Bwdth%2Cwght%5D.ttf"
-        fc-cache -f >/dev/null 2>&1 || true
-    fi
     # `python3 -m pip`, not `pip`: on PATH they can belong to different interpreters, and compare.py runs on python3.
     python3 -c "import numpy, PIL, skimage" 2>/dev/null \
         || python3 -m pip install -q --break-system-packages numpy pillow scikit-image
-    node -e "require('playwright')" 2>/dev/null || NODE_PATH="$(npm root -g)" node -e "require('playwright')" \
-        || log "playwright for Node is missing: npm i -g playwright (Chromium must be installed for it)"
+    [[ -n "${FIGMA_TOKEN:-}" ]] || log "FIGMA_TOKEN is not set: design-check/export.py needs it (design-check/README.md)"
 fi
 
 log "ready: ANDROID_HOME=$ANDROID_HOME (android-$COMPILE_SDK, build-tools $BUILD_TOOLS)"

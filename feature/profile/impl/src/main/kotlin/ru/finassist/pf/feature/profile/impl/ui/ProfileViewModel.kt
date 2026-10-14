@@ -27,7 +27,6 @@ import ru.finassist.pf.feature.applock.api.BiometricAvailability
 import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import ru.finassist.pf.feature.statements.api.StatementsRepository
-import java.util.TimeZone
 import javax.inject.Inject
 
 data class ProfileFlags(val assistant: Boolean, val deleteAccount: Boolean, val upload: Boolean)
@@ -109,12 +108,11 @@ class ProfileViewModel @Inject constructor(
 
     /**
      * The local theme drives rendering (works before sign-in and offline); the server copy is adopted only
-     * when there is no local choice yet. The device time zone is pushed when it changed (api.md 2.2).
+     * when there is no local choice yet. The time zone is not sent from here: `TimeZoneSync` sends it once a
+     * new device zone has held for 72 hours (FIN-91).
      */
     private suspend fun syncFromServer(p: Profile) {
         if (preferences.theme.first() == null) preferences.setTheme(p.theme.name.lowercase())
-        val tz = TimeZone.getDefault().id
-        if (p.timezone != tz) runCatching { profileApi.updateProfile(ProfileUpdate(timezone = tz)) }.onSuccess { np -> _state.update { it.copy(profile = np) } }
     }
 
     fun openThemeSheet(open: Boolean) = _state.update { it.copy(themeSheet = open) }

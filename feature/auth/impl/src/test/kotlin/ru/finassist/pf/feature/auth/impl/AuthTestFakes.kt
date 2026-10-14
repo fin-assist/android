@@ -11,6 +11,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import ru.finassist.pf.core.api.AuthApi
@@ -64,7 +65,9 @@ class FakeTokenStore(private val log: Log, initial: TokenStore.Session? = null) 
     var onSave: (TokenStore.Session) -> Unit = {}
     /** Suspends inside [clear] before the session is dropped — lets a test hold a sign-out half-way. */
     var beforeClear: suspend () -> Unit = {}
-    override val session: Flow<TokenStore.Session?> = flow
+    /** Suspends a collector of [session] before it gets a value — lets a test deliver a change late. */
+    @Volatile var beforeDeliver: suspend (TokenStore.Session?) -> Unit = {}
+    override val session: Flow<TokenStore.Session?> = flow.onEach { beforeDeliver(it) }
     override suspend fun current(): TokenStore.Session? = flow.value
     override suspend fun save(session: TokenStore.Session) {
         onSave(session)
@@ -136,7 +139,12 @@ class RecordingFlags(private val log: Log, private val values: Map<Flag, Boolean
     override fun isEnabled(flag: Flag): Boolean = values[flag] ?: flag.defaultValue
     override val changes: Flow<Unit> = emptyFlow()
     override val version: String = "test"
-    override suspend fun setUser(userId: String?) { log += "flags.user:$userId" }
+    /** Suspends inside [setUser] before it is recorded — lets a test hold an identity change half-way. */
+    @Volatile var beforeSetUser: suspend (String?) -> Unit = {}
+    override suspend fun setUser(userId: String?) {
+        beforeSetUser(userId)
+        log += "flags.user:$userId"
+    }
     override suspend fun refresh() = Unit
 }
 

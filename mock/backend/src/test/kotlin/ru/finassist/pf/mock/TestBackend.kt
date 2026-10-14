@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import ru.finassist.pf.core.api.model.AssistantConsent
 import ru.finassist.pf.core.common.time.Clock
@@ -11,6 +13,7 @@ import ru.finassist.pf.mock.ofx.OfxTransaction
 import java.io.File
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import kotlin.coroutines.CoroutineContext
 
 /** Shared helpers of the fake backend tests: a movable clock, a fast config and a tiny statement builder. */
 internal class TestClock(var at: OffsetDateTime) : Clock {
@@ -33,14 +36,18 @@ internal const val NOW = "2026-10-06T12:00:00+03:00"
 
 internal val fixtureText: String by lazy { File("src/main/assets/statements/fixture.ofx").readText() }
 
-/** A ready backend; [userId] non-empty = a signed-in user, [assistantConsent] = consent to the assistant given. */
+/**
+ * A ready backend; [userId] non-empty = a signed-in user, [assistantConsent] = consent to the assistant given,
+ * [dispatcher] — where its background jobs run ([ManualDispatcher] to decide when they do).
+ */
 internal fun testBackend(
     clock: Clock = TestClock(NOW),
     config: MockConfig = FAST,
     userId: String = "u1",
     assistantConsent: Boolean = false,
+    dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ): MockBackend {
-    val backend = MockBackend(config, clock)
+    val backend = MockBackend(config, clock, dispatcher)
     backend.ready.complete(Unit)
     backend.profile = backend.emptyProfile("+79160000000", userId).let {
         if (assistantConsent) it.copy(assistantConsent = AssistantConsent(true, MockBackend.CONSENT_VERSION_ASSISTANT, MockBackend.CONSENT_VERSION_ASSISTANT)) else it
@@ -84,3 +91,23 @@ internal fun statement(from: String, to: String, vararg transactions: OfxTransac
     coverageFrom = OffsetDateTime.parse("${from}T00:00:00+03:00"),
     coverageTo = OffsetDateTime.parse("${to}T23:59:59+03:00"),
 )
+
+/**
+ * Holds dispatched work until [runAll]: a test decides when a background job (import, answer generation) gets to
+ * run, so races of the zero-latency config are reproduced deterministically.
+ */
+internal class ManualDispatcher : CoroutineDispatcher() {
+    private val queue = ArrayDeque<Runnable>()
+
+    override fun dispatch(context: CoroutineContext, block: Runnable) {
+        synchronized(queue) { queue.addLast(block) }
+    }
+
+    /** Runs everything queued, including what the work queues meanwhile, on the calling thread. */
+    fun runAll() {
+        while (true) {
+            val next = synchronized(queue) { queue.removeFirstOrNull() } ?: return
+            next.run()
+        }
+    }
+}

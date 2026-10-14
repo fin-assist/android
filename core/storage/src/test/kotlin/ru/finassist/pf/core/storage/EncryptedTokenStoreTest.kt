@@ -11,7 +11,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -25,6 +29,7 @@ import org.robolectric.annotation.Config
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.TokenPair
 import java.io.File
+import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
@@ -167,6 +172,108 @@ class EncryptedTokenStoreTest {
 
         assertEquals(SESSION, fresh.current())
         assertNotEquals("not a keyset", keysetPrefs().getString(KEYSET_NAME, null))
+    }
+
+    @Test
+    fun `a failed read after a write neither fails the write nor leaves the session behind`() = runBlocking<Unit> {
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) throw IOException("disk read failed")
+                emitAll(dataStore.data)
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val store = EncryptedTokenStore(context, flaky)
+        store.save(SESSION)
+        withTimeout(5_000) { store.session.first { it == SESSION } }
+
+        flaky.failReads = true
+        store.clear() // the write lands; the read after it fails and must not surface here
+        assertNull(rawBlob())
+        assertEquals(SESSION, withTimeout(5_000) { store.session.first() }, "the last read stays while reads fail")
+
+        flaky.failReads = false // no further write: the retried read publishes the sign-out
+        withTimeout(5_000) { store.session.first { it == null } }
+    }
+
+    @Test
+    fun `a failed first read is retried, not left waiting for the next write`() = runBlocking<Unit> {
+        store.save(SESSION)
+        // The store's own collection (the first) gets the data; the read it starts (the second) fails.
+        val collections = java.util.concurrent.atomic.AtomicInteger()
+        val flaky = object : DataStore<Preferences> {
+            override val data: Flow<Preferences> = flow {
+                if (collections.incrementAndGet() == 2) throw IOException("disk read failed")
+                emitAll(dataStore.data)
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val fresh = EncryptedTokenStore(context, flaky)
+
+        assertEquals(SESSION, withTimeout(5_000) { fresh.session.first() })
+    }
+
+    @Test
+    fun `writes that fail to read back share one retry`() = runBlocking<Unit> {
+        val reads = java.util.concurrent.atomic.AtomicInteger()
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) {
+                    reads.incrementAndGet()
+                    throw IOException("disk read failed")
+                }
+                emitAll(dataStore.data)
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val store = EncryptedTokenStore(context, flaky)
+        store.save(SESSION)
+        withTimeout(5_000) { store.session.first { it == SESSION } }
+        flaky.failReads = true
+        repeat(10) { if (it % 2 == 1) store.clear() else store.save(SESSION) }
+
+        // A second of retries: one background retry and the store's own trigger read about once each, ten separate
+        // retries would read at least ten times.
+        reads.set(0)
+        kotlinx.coroutines.delay(1_100)
+        assertTrue(reads.get() <= 4, "reads in a second: ${reads.get()}")
+
+        flaky.failReads = false // the retry ends on the last write's value
+        withTimeout(5_000) { store.session.first { it == null } }
+    }
+
+    @Test
+    fun `a write that fails to read back while a retry ends is read by that retry`() = runBlocking<Unit> {
+        // Reads see the store; the long-lived collection sees only its first value, as one that missed the writes.
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) throw IOException("disk read failed")
+                emit(dataStore.data.first())
+                kotlinx.coroutines.awaitCancellation()
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val store = EncryptedTokenStore(context, flaky)
+        store.save(SESSION)
+        withTimeout(5_000) { store.session.first { it == SESSION } }
+        val read = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        store.afterRetryRead = { if (!read.isCompleted) { read.complete(Unit); release.await() } }
+
+        flaky.failReads = true
+        store.clear() // fails to read back: a retry starts
+        flaky.failReads = false
+        withTimeout(5_000) { read.await() } // the retry has read the sign-out and is about to end
+
+        flaky.failReads = true
+        store.save(SESSION) // fails to read back while that retry is still running
+        flaky.failReads = false
+        release.complete(Unit)
+
+        withTimeout(5_000) { store.session.first { it == SESSION } }
     }
 
     private companion object {

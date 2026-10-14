@@ -189,6 +189,7 @@ class UploadViewModelTest {
         await("the offline notice") { it.uploadOffline }
 
         api.offline = false
+        awaitIdle()
         vm.retryUpload()
         await("the accepted upload") { (it.phase as? UploadPhase.Busy)?.uploadId == "u1" }
         assertFalse(vm.state.value.uploadOffline)
@@ -228,6 +229,18 @@ class UploadViewModelTest {
 
     private fun awaitAccepted() = await("the accepted upload") { (it.phase as? UploadPhase.Busy)?.uploadId == "u1" }
 
+    /**
+     * Waits until the previous attempt has finished. Its job ends on the IO thread just after the last state update,
+     * and a pick before that is ignored on purpose as «still sending» (in the app both run on the main thread).
+     */
+    private fun awaitIdle() {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (vm.uploadInFlight) {
+            check(System.currentTimeMillis() < deadline) { "timed out waiting for the upload job to end: ${vm.state.value}" }
+            Thread.sleep(20)
+        }
+    }
+
     /** A progress stream the test emits into once the view model listens. */
     private fun liveStream(): MutableSharedFlow<ImportEvent> {
         val live = MutableSharedFlow<ImportEvent>(extraBufferCapacity = 8)
@@ -235,6 +248,10 @@ class UploadViewModelTest {
         return live
     }
 
+    /**
+     * The view model listens from the IO thread the upload resumed on: an event is not always handled inside
+     * `tryEmit`, so the test waits for its effect.
+     */
     private fun MutableSharedFlow<ImportEvent>.awaitSubscribed() {
         val deadline = System.currentTimeMillis() + 10_000
         while (subscriptionCount.value == 0) {
@@ -287,6 +304,7 @@ class UploadViewModelTest {
 
         vm.backToGuide()
         assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
+        awaitIdle()
         vm.onFilePicked(uri)
         awaitAccepted()
         assertTrue(api.keys[0] != api.keys[1])
@@ -299,6 +317,7 @@ class UploadViewModelTest {
         assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, name, config), vm.state.value.phase)
 
         vm.backToGuide()
+        awaitIdle()
         vm.onFilePicked(uri)
         awaitAccepted()
         assertEquals(api.keys[0], api.keys[1])
@@ -308,6 +327,7 @@ class UploadViewModelTest {
         vm.onFilePicked(uri)
         awaitAccepted()
         assertTrue(Events.STATEMENTS_UPLOAD_STARTED in tracker.names())
+        awaitIdle()
         vm.onFilePicked(uri)
         await("the second upload") { api.keys.size == 2 }
         assertTrue(api.keys[0] != api.keys[1])
@@ -343,14 +363,14 @@ class UploadViewModelTest {
         live.awaitSubscribed()
 
         live.tryEmit(ImportEvent.Progress(ImportProgress(ImportStage.DEDUP, 40)))
-        assertEquals(0.4f, assertIs<UploadPhase.Busy>(vm.state.value.phase).progress)
+        await("40 %") { (it.phase as? UploadPhase.Busy)?.progress == 0.4f }
         // The bar never goes back to empty.
         live.tryEmit(ImportEvent.Progress(ImportProgress(ImportStage.PARSING, 1)))
-        assertEquals(0.05f, assertIs<UploadPhase.Busy>(vm.state.value.phase).progress)
+        await("the floor of the bar") { (it.phase as? UploadPhase.Busy)?.progress == 0.05f }
 
         val result = importResult(newCount = 7)
         live.tryEmit(ImportEvent.Complete(result))
-        assertEquals("u1", vm.state.value.doneUploadId)
+        await("the result") { it.doneUploadId == "u1" }
         assertEquals(result, repository.lastResult("u1"))
         assertEquals(mapOf("new_count" to "7"), tracker.events.single { it.first == Events.STATEMENTS_UPLOAD_COMPLETED }.second)
 
@@ -482,7 +502,7 @@ class UploadViewModelTest {
         val result = importResult()
         live.tryEmit(ImportEvent.Complete(result))
         gate.complete(Unit)
-        assertEquals("u1", vm.state.value.doneUploadId)
+        await("the result") { it.doneUploadId == "u1" }
         assertEquals(result, repository.lastResult("u1"))
     }
 

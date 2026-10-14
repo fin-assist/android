@@ -80,7 +80,12 @@ internal object NetworkModule {
         // main dispatcher (5 per host), and a refresh queued behind them would never start.
         // The total-time limit belongs here: a stuck refresh blocks every request waiting in the authenticator.
         // The main client has none — a 10 MB statement on a slow mobile link legitimately takes minutes.
-        val refreshClient = plain.newBuilder().dispatcher(Dispatcher()).callTimeout(30, TimeUnit.SECONDS).build()
+        // AuthInterceptor here only strips the NoAuth marker (every auth endpoint carries it), so it never reaches the server.
+        val refreshClient = plain.newBuilder()
+            .dispatcher(Dispatcher())
+            .callTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(AuthInterceptor(tokenStore))
+            .build()
         val refreshApi = HttpAuthApi(retrofit(refreshClient, baseUrl).create(AuthService::class.java), SseRequests(baseUrl, refreshClient))
         return plain.newBuilder()
             .addInterceptor(AuthInterceptor(tokenStore))
