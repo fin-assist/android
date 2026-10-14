@@ -218,7 +218,7 @@ internal fun ChatContent(
             PfNotice(
                 "Не получилось отправить вопрос",
                 tone = NoticeTone.WARNING,
-                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2),
+                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(AssistantTags.SEND_FAILED),
                 action = { PfNoticeLink("Повторить", onClick = actions.onRetryAfterFailure) },
             )
         }
@@ -276,7 +276,7 @@ private fun Answer(
                 PfChatStatus("Не получилось ответить — недостаточно данных, переформулируйте вопрос. Вопрос не потрачен", tone = ChatStatusTone.ERROR, modifier = Modifier.testTag(AssistantTags.ANSWER_CANNOT))
             } else {
                 PfChatStatus(
-                    "Не получилось ответить. Вопрос не потрачен", tone = ChatStatusTone.ERROR, action = { PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.GHOST) },
+                    "Не получилось ответить. Вопрос не потрачен", tone = ChatStatusTone.ERROR, action = { PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.GHOST, modifier = Modifier.testTag(AssistantTags.ANSWER_FAILED_RETRY)) },
                     modifier = Modifier.testTag(AssistantTags.ANSWER_FAILED),
                 )
             }
@@ -413,6 +413,10 @@ internal object AssistantTags {
     const val ANSWER_GENERATING = "assistant.answer.generating"
     const val ANSWER_CANNOT = "assistant.answer.cannot"
     const val ANSWER_FAILED = "assistant.answer.failed"
+    /** «Повторить» under a failed answer (MODEL_ERROR). */
+    const val ANSWER_FAILED_RETRY = "assistant.answer.failed.retry"
+    /** «Не получилось отправить вопрос» above the composer. */
+    const val SEND_FAILED = "assistant.chat.send_failed"
     /** `assistant.answer.chip.operations`, `assistant.answer.chip.analytics`. */
     fun chip(screen: String) = "assistant.answer.chip.$screen"
 
