@@ -16,13 +16,17 @@ orientation map: read it first, then open only the files the task touches.
 
 ## Where things are decided
 
-- Contract, MVP scope, architecture, mockup decisions: docs of the claude.ai project «Финансовый
-  консультант» (`api.md`, `openapi.yaml`, `mvp-scope.md`, `architecture.md`, `android-plan.md`). Mockups:
-  the Figma file «Понятные финансы — макеты» (link in `design-check/README.md`).
-- Alpha 0.1 (API, mockups, docs) is frozen; every change goes through a YouTrack issue (`FIN-<n>`,
+- Contract: repo [fin-assist/contracts](https://github.com/fin-assist/contracts) — `docs/api.md` (meaning of
+  fields), `openapi/openapi.yaml`, `docs/grpc-api.md`, `proto/`.
+- MVP scope, architecture, Android plan, product and mockup-review decisions: Confluence space PF
+  (https://finassist.atlassian.net/wiki/spaces/PF) — «Состав MVP», «Архитектура», «План Android-приложения»,
+  «Продуктовые решения» and their child pages.
+- Mockups and design system: Figma «Понятные финансы — макеты»
+  (https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv, link also in `design-check/README.md`).
+- Version 0.2 (API, mockups, docs) is crystallized; every change goes through a YouTrack issue (`FIN-<n>`,
   finassist.youtrack.cloud) and is referenced in the PR. Release notes live in Confluence.
 - There is no backend yet: the `mock` flavor is the working product, `prod` is the HTTP client for later.
-- Mismatches between mockups, docs and API are expected. Resolve them in favour of `api.md` + the latest
+- Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) + the latest
   decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
 - API extensibility (decision of 13.10.2026): the contract grows by addition and keeps `deprecated` for
   exceptional cases — `architecture.md` («Расширяемость API») and «Нотация» in `api.md`. Client-side rules: Code.
@@ -236,7 +240,7 @@ commands: `docs/testing.md`.
 
 - Write all review comments in Russian (summary and inline comments). Code identifiers, API field names and
   quotes from the code stay as they are.
-- Contract: `api.md` / `openapi.yaml` in the claude.ai project «Финансовый консультант»; in this repo the
+- Contract: `docs/api.md` / `openapi/openapi.yaml` in fin-assist/contracts; in this repo the
   rules are mirrored in KDoc of `core/api` and `core/network`. Toggles: `docs/flags.md`. Modules: `docs/modules.md`.
 - Report only verified problems with a concrete failure scenario; skip style nits.
 - Post each finding as an inline comment on the changed line (a review conversation that can be resolved),
