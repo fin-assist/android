@@ -236,8 +236,11 @@ commands: `docs/testing.md`.
 - After the PR is open and all planned changes are pushed, request a review with one PR comment in Russian
   addressed to both `@codex` and `@claude`, asking for comments in Russian. `@claude` runs from
   `.github/workflows/claude.yml` (default branch), `@codex` is the Codex GitHub integration.
-- Poll for review comments 2 minutes after requesting a review, then every 2 minutes until both reviewers have
-  answered and no thread is open; longer pauses only stretch the cycle (Codex answers irregularly).
+- Waiting for the review: when the session receives the PR's GitHub events (reviews, comments, CI), react to them
+  instead of polling. Otherwise check 3 minutes after the request, then every 2 minutes. A reviewer has answered when
+  it posted its review or summary for the latest commit; for Codex «Didn't find any major issues» or a 👍 reaction
+  without a comment also counts. If a reviewer has not answered within 15 minutes of the last request, say so in the
+  PR and to the owner and stop waiting for it.
 - Address review findings in follow-up commits on the same branch, reply in the conversation and resolve it;
   then request a review again and keep polling the same way.
   Agents never merge a PR (into a release branch or `main`); the owner does.
