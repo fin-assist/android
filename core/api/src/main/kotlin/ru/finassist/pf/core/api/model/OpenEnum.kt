@@ -13,8 +13,9 @@ import kotlinx.serialization.encoding.Encoder
  * keeps the raw value in [ApiCode.code] semantics out of the way of the UI.
  *
  * What `UNKNOWN` means is the rule of each field (hide it, fall back to another value, show the server's ready
- * text) and is written in the field's KDoc, or in the enum's when every field using it follows the same rule. A closed `enum` is only for a set that cannot grow; anything the
- * server may extend is an open code (architecture.md, «Расширяемость API»).
+ * text) and is written in the field's KDoc, or in the enum's when every field using it follows the same rule. A
+ * closed `enum` is only for a set that cannot grow; anything the server may extend is an open code
+ * (architecture.md, «Расширяемость API»).
  */
 interface ApiCode {
     val code: String
