@@ -1,6 +1,8 @@
 package ru.finassist.pf.mock
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -310,6 +312,60 @@ class MockAssistantApiTest {
             assertEquals(1, outcomes.count { it.isSuccess }, "pair $i")
             assertEquals(ErrorCodes.LIMIT_EXCEEDED, (outcomes.single { it.isFailure }.exceptionOrNull() as AppError.Api).code)
         }
+    }
+
+    @Test
+    fun `the next answers set to fail end with MODEL_ERROR, free, and the retry after them is answered`() = runBlocking<Unit> {
+        backend.config = backend.config.copy(assistantModelErrors = 1)
+        val asked = ask("Сколько я трачу на Krabsbir?")
+        val error = assertIs<AnswerEvent.Error>(finish(asked.answerId).last()).event
+        assertEquals(AnswerErrorCode.MODEL_ERROR, error.code)
+        assertEquals(5, error.remainingLimit)
+        val failed = api.listMessages().messages.last()
+        assertEquals(AnswerStatus.FAILED to AnswerErrorCode.MODEL_ERROR, failed.status to failed.errorCode)
+        assertEquals(0, backend.config.assistantModelErrors)
+
+        val retry = api.retry(key("r1"), asked.answerId)
+        assertIs<AnswerEvent.Done>(finish(retry.answerId).last())
+    }
+
+    @Test
+    fun `a retry repeated while the first one is on its way is REQUEST_IN_PROGRESS, then gets the same response`() = runBlocking<Unit> {
+        val slow = testBackend(clock, config = FAST.copy(networkDelayMs = 200), assistantConsent = true).apply { load(doc) }
+        val slowApi = MockAssistantApi(slow)
+        val question = Message(id = "q1", role = MessageRole.USER, text = "Сколько я трачу на Krabsbir?", createdAt = clock.at)
+        val failed = AssistantStore.Answer("a1", question.id, clock.at).apply {
+            append(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "model failed", 5)))
+        }
+        slow.assistant.questions += question
+        slow.assistant.answers[failed.id] = failed
+
+        // The first request holds the key through its latency.
+        val first = async(start = CoroutineStart.UNDISPATCHED) { slowApi.retry(key("r1"), failed.id) }
+        val busy = assertFailsWith<AppError.InProgress> { slowApi.retry(key("r1"), failed.id) }
+        assertEquals(1, busy.retryAfterSeconds)
+        val response = first.await()
+        assertEquals(response, slowApi.retry(key("r1"), failed.id))
+        assertEquals(4, slowApi.getLimit().remaining)
+    }
+
+    @Test
+    fun `a repeated retry still goes through the network`() = runBlocking<Unit> {
+        val failed = failedAnswer("Сколько я трачу на Krabsbir?")
+        val response = api.retry(key("r1"), failed.id)
+        backend.config = backend.config.copy(offline = true)
+        assertFailsWith<AppError.Offline> { api.retry(key("r1"), failed.id) }
+        backend.config = backend.config.copy(offline = false)
+        assertEquals(response, api.retry(key("r1"), failed.id))
+    }
+
+    @Test
+    fun `a request that failed frees its key`() = runBlocking<Unit> {
+        val failed = failedAnswer("Сколько я трачу на Krabsbir?")
+        backend.config = backend.config.copy(offline = true)
+        assertFailsWith<AppError.Offline> { api.retry(key("r1"), failed.id) }
+        backend.config = backend.config.copy(offline = false)
+        assertIs<AnswerEvent.Done>(finish(api.retry(key("r1"), failed.id).answerId).last())
     }
 
     @Test
