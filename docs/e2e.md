@@ -207,3 +207,7 @@ An answer stream ending in an error other than the network (404 for an answer th
 answer is still generating (FIN-75): neither a real server nor the mock answers 404 for an answer it is still
 generating, only for an unknown or replaced one, which the chat never watches — the state needs a server that lost
 the answer mid-generation; `ChatViewModelBehaviourTest` covers the re-read of the history after such an error.
+A false «сессия истекла» after the user's own sign-out (FIN-74) needs the session observer's coroutine to get the
+`null` only after the sign-out returned and the phone screen read the reason — a thread interleaving neither the
+emulator nor the mock can force; `SessionRepositoryImplTest` reproduces it with a token store that delivers the
+`null` late.
