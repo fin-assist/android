@@ -35,8 +35,9 @@ root project merges them into one report.
 # XML report (input for the script below) and the total in the console
 ./gradlew :koverXmlReportUnit :koverLogUnit
 
-# Coverage of the lines this branch changes, compared with its base branch
-python3 scripts/coverage-diff.py --base origin/main
+# Coverage of the lines this branch changes, compared with its base branch (the PR's base: the current
+# release/<version>, or main)
+python3 scripts/coverage-diff.py --base origin/<base>
 ```
 
 - Variant `unit`: the JVM tests of pure Kotlin modules, `debug` unit tests of Android libraries, `mockDebug` of

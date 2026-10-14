@@ -28,8 +28,8 @@ Naming: `<feature>.<object>[.<detail>]`, lowercase, dot-separated. Same prefix i
 | `profile.delete_account` | `true` | Hides "Удалить аккаунт и все данные" |
 
 A filter that is hidden but arrives pre-filled from Analytics or an assistant chip is shown as a single
-non-editable chip ("Как на „Аналитике“" / `selection_name`), as api.md describes for filters without
-their own chip.
+non-editable chip ("Как на „Аналитике“" / `selection_name`), as `docs/api.md` (fin-assist/contracts) describes
+for filters without their own chip.
 
 ## Adding a flag
 

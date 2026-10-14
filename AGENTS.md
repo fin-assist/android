@@ -26,10 +26,11 @@ orientation map: read it first, then open only the files the task touches.
 - Version 0.2 (API, mockups, docs) is crystallized; every change goes through a YouTrack issue (`FIN-<n>`,
   finassist.youtrack.cloud) and is referenced in the PR. Release notes live in Confluence.
 - There is no backend yet: the `mock` flavor is the working product, `prod` is the HTTP client for later.
-- Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) + the latest
-  decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
+- Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) +
+  the latest decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
 - API extensibility (decision of 13.10.2026): the contract grows by addition and keeps `deprecated` for
-  exceptional cases — `architecture.md` («Расширяемость API») and «Нотация» in `api.md`. Client-side rules: Code.
+  exceptional cases — «Архитектура» in Confluence PF («Расширяемость API») and «Нотация» in `docs/api.md`
+  (contracts). Client-side rules: Code.
 
 ## Repository map
 
@@ -140,8 +141,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   `local.properties`, a Maven Central mirror in `~/.gradle/init.d`). Needs JDK 21 and network access to
   Google Maven, Gradle and Maven Central.
 - Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug testMockDebugUnitTest` — the same checks as CI.
-- UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally, the `UI tests` workflow in CI
-  (after a merge to `main`, or started by hand for a branch; PRs never run them by themselves). Their coverage: `./gradlew :e2eCoverageReport` after a run, then
+- UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally, the `UI tests`
+  workflow in CI (after a merge to `main`, or started by hand for a branch; PRs never run them by themselves).
+  Their coverage: `./gradlew :e2eCoverageReport` after a run, then
   `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml`; the scenario part
   (`python3 scripts/ui-coverage.py summary`) needs no device (docs/testing.md).
 - `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
@@ -161,10 +163,11 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   `OffsetDateTime.now()`: the e2e build pins that clock, and the whole app has to live on the same date.
 - A PR that adds a screen, a new state of a screen, a bottom sheet or a dialog wires it into the design check in
   the same PR: a `…Content` the test can render, and a `*DesignCheckTest` capturing it under the artboard name
-  (`popups = true` for a sheet or dialog). Capture every artboard the canvas has for it, `…Dark` ones included;
-  without artboards, capture the base state in light and dark and other states in light, as the canvas does.
-  No artboard on the canvas yet — capture it under the name the artboard should get and say in the PR that the
-  mockup is missing. Steps: `design-check/README.md`, «Добавить экран».
+  (`popups = true` for a sheet or dialog). An artboard is a top-level screen frame in Figma, named like `Main`
+  or `MainDark`. Capture every artboard Figma has for the screen, `…Dark` ones included; without artboards,
+  capture the base state in light and dark and other states in light, as the mockups do. No artboard in Figma
+  yet — capture it under the name the artboard should get and say in the PR that the mockup is missing.
+  Steps: `design-check/README.md`, «Добавить экран».
 - A screen is a thin ViewModel wrapper around `…Content(state, handlers)`; design-check tests render the
   content from mockup data (`design-check/README.md`).
 - Flags are read at the screen boundary (view model init or `FeatureEntry`), never mid-screen.
@@ -221,8 +224,11 @@ commands: `docs/testing.md`.
 ## Workflow
 
 - Branches: `<kind>/<slug>` — `fix/…`, `feature/…`, `tooling/…`, `design-check/…` (historically `stage-N/…`).
-  `release/<version>` (`release/0.2`) is the release branch of a version, cut from `main`; CI runs on pushes to it.
+  `release/<version>` (`release/0.2.5`) is the release branch of a version, cut from `main`; CI runs on pushes to it.
   Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
+- A PR targets the current release branch — the newest `release/<version>` not yet merged into `main` — not `main`;
+  the owner merges the release branch into `main` with its own PR. When every release branch is already merged, target
+  `main`.
 - PR title and description in Russian: what changed and why, deviations from mockups/docs, how it was checked.
   A PR for a single YouTrack issue starts its title with the issue key (`FIN-42 Краш при открытии поиска`);
   a PR for several issues lists all of them in the description, each linked
@@ -230,11 +236,15 @@ commands: `docs/testing.md`.
 - After the PR is open and all planned changes are pushed, request a review with one PR comment in Russian
   addressed to both `@codex` and `@claude`, asking for comments in Russian. `@claude` runs from
   `.github/workflows/claude.yml` (default branch), `@codex` is the Codex GitHub integration.
-- Poll for review comments 2 minutes after requesting a review, then every 2 minutes until both reviewers have
-  answered and no thread is open; longer pauses only stretch the cycle (Codex answers irregularly).
+- Waiting for the review: when the session receives the PR's GitHub events (reviews, comments, CI), react to them
+  instead of polling. Otherwise check 3 minutes after the request, then every 2 minutes. A reviewer has answered when
+  it posted its review or summary for the latest commit; for Codex «Didn't find any major issues» or a 👍 reaction
+  without a comment also counts. If a reviewer has not answered within 15 minutes of the last request, say so in the
+  PR and to the owner and stop waiting for it. The cycle ends when both reviewers have answered the latest request and
+  no review thread is open.
 - Address review findings in follow-up commits on the same branch, reply in the conversation and resolve it;
-  then request a review again and keep polling the same way.
-  Agents never merge a PR into `main`; the owner does.
+  then request a review again and wait the same way.
+  Agents never merge a PR (into a release branch or `main`); the owner does.
 
 ## Review guidelines
 
