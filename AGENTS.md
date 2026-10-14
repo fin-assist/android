@@ -29,7 +29,8 @@ orientation map: read it first, then open only the files the task touches.
 - Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) + the latest
   decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
 - API extensibility (decision of 13.10.2026): the contract grows by addition and keeps `deprecated` for
-  exceptional cases — «Архитектура» in Confluence PF («Расширяемость API») and «Нотация» in `docs/api.md` (contracts). Client-side rules: Code.
+  exceptional cases — «Архитектура» in Confluence PF («Расширяемость API») and «Нотация» in `docs/api.md`
+  (contracts). Client-side rules: Code.
 
 ## Repository map
 
@@ -161,10 +162,10 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   `OffsetDateTime.now()`: the e2e build pins that clock, and the whole app has to live on the same date.
 - A PR that adds a screen, a new state of a screen, a bottom sheet or a dialog wires it into the design check in
   the same PR: a `…Content` the test can render, and a `*DesignCheckTest` capturing it under the artboard name
-  (`popups = true` for a sheet or dialog). Capture every frame Figma has for it, `…Dark` ones included;
-  without artboards, capture the base state in light and dark and other states in light, as the mockups do.
-  No frame in Figma yet — capture it under the name the artboard should get and say in the PR that the
-  mockup is missing. Steps: `design-check/README.md`, «Добавить экран».
+  (`popups = true` for a sheet or dialog). An artboard is a top-level screen frame in Figma, named like `Main`
+  or `MainDark`. Capture every artboard Figma has for the screen, `…Dark` ones included; without artboards,
+  capture the base state in light and dark and other states in light, as the mockups do. No artboard in Figma
+  yet — capture it under the name the artboard should get and say in the PR that the mockup is missing. Steps: `design-check/README.md`, «Добавить экран».
 - A screen is a thin ViewModel wrapper around `…Content(state, handlers)`; design-check tests render the
   content from mockup data (`design-check/README.md`).
 - Flags are read at the screen boundary (view model init or `FeatureEntry`), never mid-screen.
