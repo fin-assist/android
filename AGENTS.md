@@ -165,7 +165,8 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   (`popups = true` for a sheet or dialog). An artboard is a top-level screen frame in Figma, named like `Main`
   or `MainDark`. Capture every artboard Figma has for the screen, `…Dark` ones included; without artboards,
   capture the base state in light and dark and other states in light, as the mockups do. No artboard in Figma
-  yet — capture it under the name the artboard should get and say in the PR that the mockup is missing. Steps: `design-check/README.md`, «Добавить экран».
+  yet — capture it under the name the artboard should get and say in the PR that the mockup is missing.
+  Steps: `design-check/README.md`, «Добавить экран».
 - A screen is a thin ViewModel wrapper around `…Content(state, handlers)`; design-check tests render the
   content from mockup data (`design-check/README.md`).
 - Flags are read at the screen boundary (view model init or `FeatureEntry`), never mid-screen.
