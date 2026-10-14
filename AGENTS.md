@@ -26,8 +26,8 @@ orientation map: read it first, then open only the files the task touches.
 - Version 0.2 (API, mockups, docs) is crystallized; every change goes through a YouTrack issue (`FIN-<n>`,
   finassist.youtrack.cloud) and is referenced in the PR. Release notes live in Confluence.
 - There is no backend yet: the `mock` flavor is the working product, `prod` is the HTTP client for later.
-- Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) + the latest
-  decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
+- Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) +
+  the latest decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
 - API extensibility (decision of 13.10.2026): the contract grows by addition and keeps `deprecated` for
   exceptional cases — «Архитектура» in Confluence PF («Расширяемость API») and «Нотация» in `docs/api.md`
   (contracts). Client-side rules: Code.
@@ -141,8 +141,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   `local.properties`, a Maven Central mirror in `~/.gradle/init.d`). Needs JDK 21 and network access to
   Google Maven, Gradle and Maven Central.
 - Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug testMockDebugUnitTest` — the same checks as CI.
-- UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally, the `UI tests` workflow in CI
-  (after a merge to `main`, or started by hand for a branch; PRs never run them by themselves). Their coverage: `./gradlew :e2eCoverageReport` after a run, then
+- UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally, the `UI tests`
+  workflow in CI (after a merge to `main`, or started by hand for a branch; PRs never run them by themselves).
+  Their coverage: `./gradlew :e2eCoverageReport` after a run, then
   `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml`; the scenario part
   (`python3 scripts/ui-coverage.py summary`) needs no device (docs/testing.md).
 - `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
@@ -223,7 +224,9 @@ commands: `docs/testing.md`.
 ## Workflow
 
 - Branches: `<kind>/<slug>` — `fix/…`, `feature/…`, `tooling/…`, `design-check/…` (historically `stage-N/…`).
-  `release/<version>` (`release/0.2`) is the release branch of a version, cut from `main`; CI runs on pushes to it.
+  `release/<version>` (`release/0.2.5`) is the release branch of a version, cut from `main`; CI runs on pushes to it.
+- A PR targets the current release branch (the newest `release/<version>`), not `main`; the owner merges the release
+  branch into `main` with its own PR. Without an open release branch, target `main`.
   Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
 - PR title and description in Russian: what changed and why, deviations from mockups/docs, how it was checked.
   A PR for a single YouTrack issue starts its title with the issue key (`FIN-42 Краш при открытии поиска`);
@@ -236,7 +239,7 @@ commands: `docs/testing.md`.
   answered and no thread is open; longer pauses only stretch the cycle (Codex answers irregularly).
 - Address review findings in follow-up commits on the same branch, reply in the conversation and resolve it;
   then request a review again and keep polling the same way.
-  Agents never merge a PR into `main`; the owner does.
+  Agents never merge a PR (into a release branch or `main`); the owner does.
 
 ## Review guidelines
 
