@@ -36,7 +36,7 @@ class DetailDesignCheckTest {
     @Test fun detailTransfer() = capture("DetailTransfer", detailState(transfer))
 
     /**
-     * No artboard on the canvas yet (FIN-67): an operation whose statement line had no description — «Без описания»
+     * No artboard in Figma yet (FIN-67): an operation whose statement line had no description — «Без описания»
      * as the title, no «Описание в выписке» row. The purchase of `Detail` with an empty title.
      */
     @Test fun detailNoDescription() = capture("DetailNoDescription", detailState(purchase.copy(title = "", description = null)))

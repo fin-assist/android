@@ -18,7 +18,7 @@ orientation map: read it first, then open only the files the task touches.
 
 - Contract, MVP scope, architecture, mockup decisions: docs of the claude.ai project «Финансовый
   консультант» (`api.md`, `openapi.yaml`, `mvp-scope.md`, `architecture.md`, `android-plan.md`). Mockups:
-  the Claude Design canvas (link in `design-check/README.md`).
+  the Figma file «Понятные финансы — макеты» (link in `design-check/README.md`).
 - Alpha 0.1 (API, mockups, docs) is frozen; every change goes through a YouTrack issue (`FIN-<n>`,
   finassist.youtrack.cloud) and is referenced in the PR. Release notes live in Confluence.
 - There is no backend yet: the `mock` flavor is the working product, `prod` is the HTTP client for later.
@@ -40,7 +40,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Feature flags | `core/toggles/…/Flag.kt` (registry + defaults), `docs/flags.md` (meaning); mock overrides `app/src/mock/assets/flags.json` |
 | Events / crashes | `core/tracking/…/Tracker.kt`, `CrashReporter.kt` (typed context, no free-form strings); providers in `providers/*` (only `:app` depends on them; Tracer keys — README) |
 | Tokens, preferences, idempotency keys | `core/storage` |
-| Screens vs mockups (snapshot comparison) | `design-check/README.md`, `*DesignCheckTest.kt` in feature `:impl` modules |
+| Screens vs mockups (snapshot comparison) | `design-check/README.md` (mockups: Figma, exported by `design-check/export.py`), `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks, native gaps, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/qase-*` |
 | Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
 | UI test coverage: JaCoCo on the e2e build, scenario coverage of the flows | `docs/testing.md` («UI test coverage»); `:e2eCoverageReport` in root `build.gradle.kts`, `app/src/mockE2e/…/E2eCoverage.kt`, `scripts/ui-coverage.py` |

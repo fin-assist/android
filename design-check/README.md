@@ -1,7 +1,7 @@
-# Design check: экраны приложения против макетов Claude Design
+# Design check: экраны приложения против макетов Figma
 
-Сравнивает экраны приложения с артбордами холста «Понятные финансы» в Claude Design
-(https://claude.ai/artifact/8ndjPbEdsxZKHPTxNWhePR). Запускается агентом (routine на мерж в `main` или по
+Сравнивает экраны приложения с макетами файла Figma «Понятные финансы — макеты»
+(https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv/, страница MVP). Запускается агентом (routine на мерж в `main` или по
 просьбе), в обычный CI не входит. Проверка неблокирующая: результат — отчёт и задача в YouTrack, а не красный
 статус.
 
@@ -10,15 +10,23 @@
 | Шаг | Что | Где |
 |---|---|---|
 | 1 | Снимки экранов приложения с данными как на макете, 390 dp × xxhdpi | `./gradlew -Ppf.designcheck testDebugUnitTest` |
-| 2 | Файлы холста (`project/*` + `artifact-type/dc-runtime.js` → `support.js`) | читает агент инструментом Artifact в `build/design-check/site/` |
-| 3 | Рендер артбордов в PNG 1170 px (390 css px × 3), шрифт Roboto; список покрытия | `node design-check/render.js` |
-| 4 | Пары «макет / приложение / отличия», SSIM, сортировка от худших | `python3 design-check/compare.py` |
-| 5 | Разбор пар и отчёт | агент |
+| 2 | Экспорт артбордов из Figma в PNG 1170 px (scale 3); список покрытия | `python3 design-check/export.py`, нужен `FIGMA_TOKEN` |
+| 3 | Пары «макет / приложение / отличия», SSIM, сортировка от худших | `python3 design-check/compare.py` |
+| 4 | Разбор пар и отчёт | агент |
+
+Артборд — фрейм верхнего уровня файла Figma (прямо на странице или в секции на ней), имя которого — имя снимка:
+латиница и цифры с заглавной буквы (`Main`, `SearchPeriod`, `MainDark`). Ширина — 390, высота — как у экрана на
+макете. Остальные фреймы (листы дизайн-системы, черновики с русскими именами) артбордами не считаются. Имя
+артборда в файле уникально: при повторе `export.py` останавливается и пишет, где оба. Экраны вне MVP лежат на
+странице «Вне MVP» под теми же правилами; снимков у них пока нет, в покрытии они `covered: false`.
+
+Токен — личный токен Figma (Settings → Security → Personal access tokens) с правом чтения содержимого файлов, в
+переменной среды `FIGMA_TOKEN`. Коннектор Figma для экспорта не годится: он отдаёт картинку не крупнее 1×.
 
 Снимки (шаг 1) — тесты `*DesignCheckTest` в `src/test` модулей фич с плагином `pf.screenshots`. Каждый
 тест рисует содержимое экрана (`FeedContent`, `ProfileContent`, …) из готового состояния, без ViewModel,
 через `DesignCheck.capture("<Артборд>", dark, heightDp, tab)` из `:core:screenshot-testing`. Имя снимка
-совпадает с именем артборда — по нему находится пара. Системные панели — 24 dp сверху и снизу, как на
+совпадает с именем артборда в Figma — по нему находится пара. Системные панели — 24 dp сверху и снизу, как на
 макетах (`LocalPfSystemBars`); у экранов вкладок рисуется нижняя панель, как в приложении.
 
 Шторки (`PfBottomSheet`) и диалоги (`PfDialog`, выбор даты) открываются в отдельном окне, и снимок окна
@@ -53,18 +61,20 @@
 Задачи тестов в режиме `-Ppf.designcheck` не бывают `UP-TO-DATE` и не берутся из build cache: снимки
 пишутся в общий каталог в обход выходов задачи, и пропущенный прогон оставил бы его пустым.
 
-Изменения самого холста в репозитории не видны. После правок макетов — полный прогон (без списка).
+Изменения макетов в Figma в репозитории не видны. После правок макетов — полный прогон (без списка).
 
 ### Покрытие
 
-`render.js` пишет `build/design-check/mockups/coverage.json`: все артборды холста, есть ли тест, который
-их снимает (`covered` — имя артборда первым аргументом `capture("…")` в каком-нибудь `*DesignCheckTest.kt`), и снят ли артборд в
-этом прогоне (`rendered`). Артборды с `covered: false` — экраны, которые ещё предстоит добавить.
+`export.py` пишет `build/design-check/mockups/coverage.json`: все артборды файла Figma (имя, страница, секция,
+node id, размер), есть ли тест, который их снимает (`covered` — имя артборда первым аргументом `capture("…")` в
+каком-нибудь `*DesignCheckTest.kt`), и снят ли артборд в этом прогоне (`rendered`). Артборды с `covered: false`
+— экраны, которые ещё предстоит добавить. Ссылка на артборд —
+`https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv/?node-id=<node, «:» → «-»>`.
 
 ## Запуск вручную
 
 ```bash
-# Container prerequisites: SDK, Maven mirror, Roboto, Python libs
+# Container prerequisites: SDK, Maven mirror, Python libs
 scripts/agent-setup.sh --design-check
 
 # Start clean: compare.py pairs whatever PNGs are in the app dir
@@ -79,8 +89,8 @@ git diff --name-only origin/main...HEAD > build/design-check/changed.txt
 ANDROID_HOME=/opt/android-sdk ./gradlew -Ppf.designcheck \
   -Ppf.designcheck.changed=build/design-check/changed.txt testDebugUnitTest
 
-# Mockups for the same artboards + coverage.json -> build/design-check/mockups (canvas files in build/design-check/site)
-NODE_PATH="$(npm root -g)" node design-check/render.js build/design-check/site build/design-check/mockups
+# Mockups for the same artboards + coverage.json -> build/design-check/mockups (FIGMA_TOKEN in the environment)
+python3 design-check/export.py build/design-check/mockups
 
 # Pairs and scores -> build/design-check/compare/<Artboard>.png, scores.json
 python3 design-check/compare.py build/design-check/mockups build/design-check/app build/design-check/compare
@@ -100,21 +110,21 @@ python3 design-check/compare.py build/design-check/mockups build/design-check/ap
 в коде (правило в `AGENTS.md`).
 
 1. Найти артборды экрана в `coverage.json` (`covered: false`) и снять каждый, тёмные `…Dark` тоже.
-   Если артборда на холсте ещё нет:
+   Если артборда в Figma ещё нет:
    - имя — то, которое он получит, по образцу существующих: `Search`, `SearchPeriod`, `SearchDark`,
      `DeleteAccountDialog`. Тёмный — с суффиксом `Dark`; имя уникально среди снимков и буквально совпадает с
-     аргументом `capture("…")`, иначе после появления артборда пара не найдётся;
-   - темы — базовое состояние в светлой и тёмной, остальные состояния в светлой, как на холсте;
+     аргументом `capture("…")`, иначе после появления артборда пара не найдётся. Дизайнер называет фрейм так же;
+   - темы — базовое состояние в светлой и тёмной, остальные состояния в светлой, как в Figma;
    - данные — реалистичные, как в фикстурах мока; высота — по умолчанию (`PHONE_HEIGHT_DP`). У экрана с
      прокруткой — `fullHeight = true`, иначе снимок обрежется на 844 dp: при высоте по умолчанию окно само не
      растёт. В KDoc теста — что макета нет; после появления артборда фикстура и высота переводятся на его данные;
-   - в PR — что макета нет. `render.js` пропустит такой снимок (`MISSING in canvas`), `compare.py` запишет в
+   - в PR — что макета нет. `export.py` пропустит такой снимок (`MISSING in Figma`), `compare.py` запишет в
      `scores.json` `"missing": "mockup"`.
 2. Разделить экран на обёртку с ViewModel и `…Content(state, обработчики)`.
 3. В `src/test` модуля — `<Экран>DesignCheckTest` с состоянием по данным артборда (числа, тексты, даты как
    на макете) и вызовом `DesignCheck.capture` для каждого артборда; имя артборда — буквальный первый
    аргумент `capture("…")`, по нему `coverage.json` считает покрытие. Даты — фиксированные, не `now()`.
-   Высота — `h` артборда из `canvas.json`.
+   Высота — высота фрейма в Figma (`h` в `coverage.json`).
 4. Если состояния артборда в приложении нет (экран устроен иначе), тест снимает ближайшее реальное
    состояние того же экрана и пишет об этом в KDoc; несуществующий в приложении экран не подключается.
 5. В `build.gradle.kts` модуля — `id("pf.screenshots")`.
@@ -131,8 +141,9 @@ python3 design-check/compare.py build/design-check/mockups build/design-check/ap
 
 - **Репозиторий:** `fin-assist/android`.
 - **Триггер:** GitHub event → Pull request → `closed`, фильтры «Is merged = true», «Base branch = main».
-- **Окружение:** Network access → Custom, «Also include default list of common package managers» и
-  `dl.google.com` в Allowed domains (или Full). Setup script: `scripts/agent-setup.sh --design-check`.
+- **Окружение:** Network access → Custom, «Also include default list of common package managers» и в Allowed
+  domains `dl.google.com`, `api.figma.com`, `figma-alpha-api.s3.us-west-2.amazonaws.com` (или Full). Переменная
+  среды `FIGMA_TOKEN` — токен Figma (см. «Как устроено»). Setup script: `scripts/agent-setup.sh --design-check`.
 - **Коннекторы:** YouTrack.
 - **Промпт:**
 
@@ -149,18 +160,19 @@ at main. Write the report, the YouTrack issue and the PR comment in Russian.
 3. ANDROID_HOME=/opt/android-sdk ./gradlew -Ppf.designcheck -Ppf.designcheck.changed=build/design-check/changed.txt testDebugUnitTest
    PNGs land in build/design-check/app/. If there are none (no screen affected), comment on the pull request
    «Design check: изменения не затрагивают экраны с макетами» and stop.
-4. With the Artifact tool, read the published files of https://claude.ai/artifact/8ndjPbEdsxZKHPTxNWhePR into
-   build/design-check/site/: every project/<Name>.dc.html that has a PNG in build/design-check/app/, plus
-   project/canvas.json, project/ds/pf/tokens.css, project/ds/pf/components/bundle.css,
-   project/ds/pf/components/bundle.js, and artifact-type/dc-runtime.js saved as support.js. Keep the
-   project/ layout flattened (site/<Name>.dc.html, site/ds/...).
-5. NODE_PATH="$(npm root -g)" node design-check/render.js build/design-check/site build/design-check/mockups
+4. python3 design-check/export.py build/design-check/mockups
+   It exports from Figma file u8paWRq6KAT73UJ1x2jXLv every artboard (top-level frame) named like a PNG in
+   build/design-check/app/, at scale 3, plus coverage.json. It needs FIGMA_TOKEN in the environment. If the
+   token is missing or the Figma API keeps failing, comment on the pull request «Design check: не удалось
+   выгрузить макеты из Figma (<причина>)» and stop.
+5. Note what export.py printed: names "MISSING in Figma" go into the list «нет макета в Figma» (step 7);
+   "width … ≠ 390" is a mockup problem, report it as a difference.
 6. python3 design-check/compare.py build/design-check/mockups build/design-check/app build/design-check/compare
 7. Look at every pair in build/design-check/compare/ (worst SSIM first) and list the differences per screen:
    layout, content, colour, states — where, mockup vs app, the file to change. Skip differences in data the
    fixture does not control, and two snapshot artefacts of dialogs: no dim behind a dialog, dialog window width. The mockup is right by default; if the app follows api.md and the mockup
    contradicts it, say so. Snapshots without a mockup (scores.json entries with "missing": "mockup") go into a
-   separate list «нет макета на холсте», not into the differences. Entries with "missing": "same width …" are a
+   separate list «нет макета в Figma», not into the differences. Entries with "missing": "same width …" are a
    real problem (the snapshot width differs from the mockup), report them as differences.
 8. In YouTrack project FIN, read the open issues with «Design check» in the summary
    (query: project: FIN #Unresolved "design check"). Drop every difference they already describe.
@@ -175,5 +187,5 @@ at main. Write the report, the YouTrack issue and the PR comment in Russian.
 Do not change application code.
 ```
 
-Полный прогон после правок холста — та же routine, запущенная вручную (без PR в событии), или отдельная по
+Полный прогон после правок макетов в Figma — та же routine, запущенная вручную (без PR в событии), или отдельная по
 расписанию с тем же промптом.
