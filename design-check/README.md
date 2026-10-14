@@ -150,7 +150,7 @@ python3 design-check/compare.py build/design-check/mockups build/design-check/ap
 
 ```text
 Design check for fin-assist/android after a pull request was merged into main. Work in the cloned repository
-at main. Write the report, the YouTrack issue and the PR comment in Russian.
+at main. Write the report, the YouTrack issue, the PR comment and your final answer in Russian.
 
 1. Run scripts/agent-setup.sh --design-check.
 2. mkdir -p build/design-check, then list the files the merged pull request changed, one path per line, into
@@ -177,6 +177,9 @@ at main. Write the report, the YouTrack issue and the PR comment in Russian.
    not into the differences. Entries with "missing": "same width …" are a real problem (the snapshot width
    differs from the mockup), report them as differences. For a difference you need to measure, the Figma
    connector (get_design_context on the frame from coverage.json) gives the exact sizes and tokens.
+   Leave out differences under 2 dp unless they are in a shared design-system component (core/designsystem),
+   repeat on several screens or are visible to the user; skip line breaks that differ only because Figma and
+   Skia render the font differently. For every difference you keep, say whether the user would notice it.
 8. In YouTrack project FIN, read the open issues with «Design check» in the summary
    (query: project: FIN #Unresolved "design check"). Drop every difference they already describe.
 9. Push the comparison images to the branch design-check/reports (create it as an orphan branch if it does
@@ -186,16 +189,13 @@ at main. Write the report, the YouTrack issue and the PR comment in Russian.
     description: the merged pull request, the screens checked with SSIM, the new differences as a checklist
     per screen, links to the images on the design-check/reports branch and to the Figma frame
     (https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv/?node-id=<node from coverage.json, «:» → «-»>).
-10a. Для каждого расхождения вырежи из листа сравнения фрагмент (слева макет, справа приложение, один и тот же
-    участок экрана). Загрузи фрагменты во вложения созданной задачи:
-    curl -H "Authorization: Bearer $YOUTRACK_TOKEN" -F "file=@<файл>.png" https://finassist.youtrack.cloud/api/issues/<id>/attachments
-    Вставь каждый под своим пунктом чек-листа как ![](<имя файла>.png).
+10a. For every difference, crop the same area of the screen from its comparison sheet (mockup on the left, app
+    on the right; PIL is installed). Attach the crops to the new issue:
+    curl -H "Authorization: Bearer $YOUTRACK_TOKEN" -F "file=@<file>.png" https://finassist.youtrack.cloud/api/issues/<id>/attachments
+    and put each under its checklist item as ![](<file name>.png). If an upload fails (no token, 401), keep only
+    the links to design-check/reports in the issue and say in the PR comment that the crops were not attached.
 11. Comment on the merged pull request: screens checked, SSIM, and either the new YouTrack issue or «новых
     расхождений нет» with the open «Design check» issues that still apply.
-12. Не заводи расхождения меньше 2 dp, если они не в общем компоненте дизайн-системы (core/designsystem), не
-    повторяются на нескольких экранах и не заметны для пользователя; переносы строк из-за разницы в отрисовке
-    шрифта между Figma и Skia пропускай. У каждого пункта укажи, заметен ли он пользователю.
-13. Ответ печатай на русском языке.
 Do not change application code.
 ```
 
