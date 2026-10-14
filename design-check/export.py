@@ -7,8 +7,8 @@ name is a snapshot name: Latin letters and digits starting with a capital (`Main
 named otherwise (the design-system sheets, archived drafts with Russian names) are not artboards.
 
 Without artboard names, exports every name that has an app snapshot in build/design-check/app. Output:
-`<out>/<Artboard>.png` at scale 3 (an old file of that name is removed first, so a frame that is gone or failed to
-render leaves no stale mockup) (a 390 wide frame gives 1170 px, the same as the app snapshots) and
+`<out>/<Artboard>.png` at scale 3: a 390 wide frame gives 1170 px, the same as the app snapshots. An old file of
+that name is removed first, so a frame that is gone or failed to render leaves no stale mockup. Also
 `<out>/coverage.json`: every artboard of the file, whether a *DesignCheckTest captures it (`covered`: the name is
 the first argument of a `capture("…"` call in the test sources) and whether this run has its snapshot
 (`rendered`). The artboards with covered: false are the screens still to add.

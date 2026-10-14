@@ -142,9 +142,10 @@ python3 design-check/compare.py build/design-check/mockups build/design-check/ap
 - **Репозиторий:** `fin-assist/android`.
 - **Триггер:** GitHub event → Pull request → `closed`, фильтры «Is merged = true», «Base branch = main».
 - **Окружение:** Network access → Custom, «Also include default list of common package managers» и в Allowed
-  domains `dl.google.com`, `api.figma.com`, `figma-alpha-api.s3.us-west-2.amazonaws.com` (или Full). Переменная
-  среды `FIGMA_TOKEN` — токен Figma (см. «Как устроено»). Setup script: `scripts/agent-setup.sh --design-check`.
-- **Коннекторы:** YouTrack.
+  domains `dl.google.com`, `api.figma.com`, `figma-alpha-api.s3.us-west-2.amazonaws.com`,
+  `finassist.youtrack.cloud` (или Full). Переменные среды: `FIGMA_TOKEN` — токен Figma (см. «Как устроено»),
+  `YOUTRACK_TOKEN` — для вложений в задачу (шаг 10a). Setup script: `scripts/agent-setup.sh --design-check`.
+- **Коннекторы:** YouTrack, Figma (для замеров при разборе отличий; картинки берёт `export.py`).
 - **Промпт:**
 
 ```text
@@ -170,10 +171,12 @@ at main. Write the report, the YouTrack issue and the PR comment in Russian.
 6. python3 design-check/compare.py build/design-check/mockups build/design-check/app build/design-check/compare
 7. Look at every pair in build/design-check/compare/ (worst SSIM first) and list the differences per screen:
    layout, content, colour, states — where, mockup vs app, the file to change. Skip differences in data the
-   fixture does not control, and two snapshot artefacts of dialogs: no dim behind a dialog, dialog window width. The mockup is right by default; if the app follows api.md and the mockup
-   contradicts it, say so. Snapshots without a mockup (scores.json entries with "missing": "mockup") go into a
-   separate list «нет макета в Figma», not into the differences. Entries with "missing": "same width …" are a
-   real problem (the snapshot width differs from the mockup), report them as differences.
+   fixture does not control, and two snapshot artefacts of dialogs: no dim behind a dialog, dialog window width.
+   The mockup is right by default; if the app follows api.md and the mockup contradicts it, say so. Snapshots
+   without a mockup (scores.json entries with "missing": "mockup") go into a separate list «нет макета в Figma»,
+   not into the differences. Entries with "missing": "same width …" are a real problem (the snapshot width
+   differs from the mockup), report them as differences. For a difference you need to measure, the Figma
+   connector (get_design_context on the frame from coverage.json) gives the exact sizes and tokens.
 8. In YouTrack project FIN, read the open issues with «Design check» in the summary
    (query: project: FIN #Unresolved "design check"). Drop every difference they already describe.
 9. Push the comparison images to the branch design-check/reports (create it as an orphan branch if it does
@@ -181,9 +184,18 @@ at main. Write the report, the YouTrack issue and the PR comment in Russian.
 10. If new differences remain, create one YouTrack issue in FIN: summary «[Android] Design check <short sha>:
     расхождения с макетами», Type Bug, Priority Normal, Subsystem android, Stage Backlog;
     description: the merged pull request, the screens checked with SSIM, the new differences as a checklist
-    per screen, links to the images on the design-check/reports branch.
+    per screen, links to the images on the design-check/reports branch and to the Figma frame
+    (https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv/?node-id=<node from coverage.json, «:» → «-»>).
+10a. Для каждого расхождения вырежи из листа сравнения фрагмент (слева макет, справа приложение, один и тот же
+    участок экрана). Загрузи фрагменты во вложения созданной задачи:
+    curl -H "Authorization: Bearer $YOUTRACK_TOKEN" -F "file=@<файл>.png" https://finassist.youtrack.cloud/api/issues/<id>/attachments
+    Вставь каждый под своим пунктом чек-листа как ![](<имя файла>.png).
 11. Comment on the merged pull request: screens checked, SSIM, and either the new YouTrack issue or «новых
     расхождений нет» with the open «Design check» issues that still apply.
+12. Не заводи расхождения меньше 2 dp, если они не в общем компоненте дизайн-системы (core/designsystem), не
+    повторяются на нескольких экранах и не заметны для пользователя; переносы строк из-за разницы в отрисовке
+    шрифта между Figma и Skia пропускай. У каждого пункта укажи, заметен ли он пользователю.
+13. Ответ печатай на русском языке.
 Do not change application code.
 ```
 
