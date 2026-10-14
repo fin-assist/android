@@ -5,6 +5,9 @@ import android.content.pm.PackageManager
 import android.hardware.biometrics.BiometricManager
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
@@ -16,8 +19,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -38,6 +42,8 @@ import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import ru.finassist.pf.feature.auth.api.SessionState
 import java.io.File
+import java.io.IOException
+import java.security.MessageDigest
 import java.time.Duration
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
@@ -101,9 +107,9 @@ class AppLockImplTest {
     }
 
     /**
-     * The lock observes the store through eager state flows. A DataStore collector that starts while a write is in
-     * flight can miss that write for good (FIN-86, FIN-87), so a test writes only after the lock's collections have
-     * taken their first value: `state` (isConfigured) and `biometricEnabled` (biometric flag, isConfigured).
+     * The lock re-reads the store after every change its trigger collections report. A DataStore collector that
+     * starts while a write is in flight can miss that write for good (FIN-86, FIN-87), so a test that writes behind the
+     * lock's back starts only after both trigger collections (isConfigured, biometric flag) have taken their first value.
      */
     private fun appLock(): AppLockImpl {
         val before = firstValues.get()
@@ -218,8 +224,8 @@ class AppLockImplTest {
         lock.verify("0000")
         lock.unlockByBiometric()
         lock.state.await(LockState.Unlocked)
-        // Fresh reads, not a new collector racing the write (see appLock()).
-        runBlocking { withTimeout(5_000) { while (store.wrongAttempts.first() != 0) delay(10) } }
+        // A fresh read each time: a collector started while the write is in flight can miss it for good (FIN-87).
+        withTimeout(5_000) { while (store.wrongAttempts.first() != 0) delay(10) }
         lock.lock()
         lock.state.await(LockState.Locked)
     }
@@ -314,8 +320,131 @@ class AppLockImplTest {
         assertFalse(lock.biometricEnabled.value)
     }
 
+    @Test
+    fun `a failed read keeps the last state and the writer's own outcome, and the lock picks the store up again`() =
+        runBlocking<Unit> {
+            val lock = appLock()
+            lock.state.await(LockState.NotConfigured)
+            crypto.failCommitCheck = true
+
+            lock.setBiometricEnabled(true) // the write lands; the read after it fails and must not surface here
+            settle()
+            assertEquals(LockState.NotConfigured, lock.state.value)
+
+            // A record makes the store readable again without the Keystore check; the trigger picks it up.
+            store.save("1234")
+            lock.state.await(LockState.Locked)
+        }
+
+    @Test
+    fun `the right code of a legacy install turns biometric unlock on`() = runBlocking<Unit> {
+        biometrics(available = true, fingerprint = true)
+        val salt = "abcd"
+        val hash = MessageDigest.getInstance("SHA-256").digest("$salt:1234".toByteArray()).joinToString("") { "%02x".format(it) }
+        dataStore.edit {
+            it[stringPreferencesKey("applock.salt")] = salt
+            it[stringPreferencesKey("applock.hash")] = hash
+            it[booleanPreferencesKey("applock.biometric")] = true
+        }
+        val lock = appLock()
+        lock.state.await(LockState.Locked)
+        assertFalse(lock.biometricEnabled.value)
+
+        assertFalse(lock.matches("0000"))
+        assertFalse(lock.biometricEnabled.value)
+        assertTrue(lock.matches("1234"))
+        lock.biometricEnabled.await(true)
+    }
+
+    @Test
+    fun `a read that failed after an own write is retried until the lock shows the write`() = runBlocking<Unit> {
+        // Only new reads fail: the lock's own long-lived collection keeps working and reports the change.
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) throw IOException("disk read failed")
+                emitAll(dataStore.data)
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val lock = AppLockImpl(context, PasscodeStore(flaky, crypto), session, tracker)
+        lock.state.await(LockState.NotConfigured)
+
+        flaky.failReads = true
+        lock.setPasscode("1234") // the record lands; the reads after it fail
+        settle()
+        assertEquals(LockState.NotConfigured, lock.state.value, "the last read stays while reads fail")
+
+        flaky.failReads = false // no further write: the retried read publishes the passcode
+        lock.state.await(LockState.Unlocked)
+    }
+
+    @Test
+    fun `writes that fail to read back share one retry`() = runBlocking<Unit> {
+        biometrics(available = true, fingerprint = true)
+        val reads = java.util.concurrent.atomic.AtomicInteger()
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) {
+                    reads.incrementAndGet()
+                    throw IOException("disk read failed")
+                }
+                emitAll(dataStore.data)
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val lock = AppLockImpl(context, PasscodeStore(flaky, crypto), session, tracker)
+        lock.setPasscode("1234")
+        lock.state.await(LockState.Unlocked)
+        flaky.failReads = true
+        repeat(10) { lock.setBiometricEnabled(it % 2 == 1) }
+
+        // A second of retries: one background retry and the lock's own trigger read about once each (two flows per
+        // read), ten separate retries would read at least ten times.
+        reads.set(0)
+        delay(1_100)
+        assertTrue(reads.get() <= 6, "reads in a second: ${reads.get()}")
+
+        flaky.failReads = false // the retry ends on the last write's value
+        lock.biometricEnabled.await(true)
+    }
+
+    @Test
+    fun `a write that fails to read back while a retry ends is read by that retry`() = runBlocking<Unit> {
+        biometrics(available = true, fingerprint = true)
+        // Reads see the store; the long-lived collections see only their first value, as ones that missed the writes.
+        val flaky = object : DataStore<Preferences> {
+            @Volatile var failReads = false
+            override val data: Flow<Preferences> = flow {
+                if (failReads) throw IOException("disk read failed")
+                emit(dataStore.data.first())
+                kotlinx.coroutines.awaitCancellation()
+            }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences) = dataStore.updateData(transform)
+        }
+        val lock = AppLockImpl(context, PasscodeStore(flaky, crypto), session, tracker)
+        lock.setPasscode("1234")
+        lock.state.await(LockState.Unlocked)
+        val read = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        lock.afterRetryRead = { if (!read.isCompleted) { read.complete(Unit); release.await() } }
+
+        flaky.failReads = true
+        lock.setBiometricEnabled(false) // fails to read back: a retry starts
+        flaky.failReads = false
+        withTimeout(5_000) { read.await() } // the retry has read «off» and is about to end
+
+        flaky.failReads = true
+        lock.setBiometricEnabled(true) // fails to read back while that retry is still running
+        flaky.failReads = false
+        release.complete(Unit)
+
+        lock.biometricEnabled.await(true)
+    }
+
     private companion object {
         /** Store collections the lock opens eagerly on creation. */
-        const val LOCK_COLLECTIONS = 3
+        const val LOCK_COLLECTIONS = 2
     }
 }

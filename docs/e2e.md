@@ -213,3 +213,8 @@ A false «сессия истекла» after the user's own sign-out (FIN-74) n
 `null` only after the sign-out returned and the phone screen read the reason — a thread interleaving neither the
 emulator nor the mock can force; `SessionRepositoryImplTest` reproduces it with a token store that delivers the
 `null` late.
+A passcode left behind by a signed-out session (the process died between the sign-out and the passcode reset) and
+cleared while the lock is starting (FIN-87) cannot be forced either: the flow cannot kill the process inside that
+window, and the stale state needs a DataStore collector to start while the reset is being written, a timing the
+emulator does not reproduce on demand (about 8 % of starts on the JVM). `AppLockStoreRaceTest` repeats that start
+200 times; `profile/theme_and_logout` covers the plain sign-out.
