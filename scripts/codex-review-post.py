@@ -30,6 +30,9 @@ API = "https://api.github.com"
 _HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 # Marker the agents look for when waiting for the Codex review (AGENTS.md, Workflow).
 MARKER = "<!-- codex-review-workflow -->"
+# GitHub attaches a review posted without commit_id to the PR's head at that moment, which may be a newer commit.
+FALLBACK_NOTE = ("<sub>Опубликовано без привязки к коммиту: GitHub отклонил исходный review. Проверен коммит "
+                 "`{commit}`, а не тот, к которому GitHub прикрепил это review.</sub>")
 
 
 @dataclass(frozen=True)
@@ -119,10 +122,12 @@ def fallback_review(text: str, review: dict, model: str, commit: str) -> dict:
     moved = [Finding(c["path"], c["line"], c["body"]) for c in review.get("comments", [])]
     parsed = parse_result(text)
     if parsed is None:
-        return {"event": "COMMENT", "body": review["body"]}
-    summary, findings = parsed
-    outside = [f for f in findings if f not in moved] + moved
-    return {"event": "COMMENT", "body": review_body(summary, outside, model, commit)}
+        body = review["body"]
+    else:
+        summary, findings = parsed
+        outside = [f for f in findings if f not in moved] + moved
+        body = review_body(summary, outside, model, commit)
+    return {"event": "COMMENT", "body": body + "\n\n" + FALLBACK_NOTE.format(commit=commit[:7])}
 
 
 # --- GitHub REST ----------------------------------------------------------------------------------------------

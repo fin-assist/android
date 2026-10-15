@@ -148,6 +148,7 @@ class MainTest(unittest.TestCase):
         self.assertNotIn("comments", payload)
         self.assertNotIn("commit_id", payload)  # a force-pushed commit would be rejected again
         self.assertIn("`abc1234`", payload["body"])  # the body still names the reviewed commit
+        self.assertIn("без привязки к коммиту", payload["body"])
         for text in ("Строка в диффе", "Путь с ./", "Строка вне диффа", "Файл вне PR", "Скрытый каталог"):
             self.assertIn(text, payload["body"])
 
@@ -172,7 +173,10 @@ class MainTest(unittest.TestCase):
     def test_unexpected_output_fallback_keeps_raw_body(self):
         review = post.build_review("plain text", {}, "m", "abc1234")
         retry = post.fallback_review("plain text", review, "m", "abc1234")
-        self.assertEqual(retry, {"event": "COMMENT", "body": review["body"]})
+        self.assertEqual(set(retry), {"event", "body"})
+        self.assertTrue(retry["body"].startswith(review["body"]))
+        self.assertIn("без привязки к коммиту", retry["body"])
+        self.assertIn("`abc1234`", retry["body"])
 
     def test_pages_through_files(self):
         page1 = [{"filename": f"f{i}", "patch": None} for i in range(100)]

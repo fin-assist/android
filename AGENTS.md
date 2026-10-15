@@ -265,7 +265,8 @@ commands: `docs/testing.md`.
   it posted its review or summary for the latest commit; for Codex that is a review or comment of
   `github-actions[bot]` with the `<!-- codex-review-workflow -->` marker for the latest commit, a failure comment
   naming that commit or the latest request included (then say in the PR and to the owner that the Codex review did
-  not run). If a reviewer has not answered within 15 minutes of the last request, say so in the
+  not run). The reviewed commit is the one named in its body («Коммит …»), not the review's `commit_id`: a review
+  posted after a rejection is attached to whatever the head was then. If they differ, request the review again. If a reviewer has not answered within 15 minutes of the last request, say so in the
   PR and to the owner and stop waiting for it. The cycle ends when both reviewers have answered the latest request and
   no review thread is open.
 - Address review findings in follow-up commits on the same branch, reply in the conversation and resolve it;
