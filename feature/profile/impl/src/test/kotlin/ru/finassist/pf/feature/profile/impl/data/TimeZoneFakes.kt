@@ -88,7 +88,8 @@ internal class FakeDeviceZone(@Volatile var zone: String = "Europe/Moscow") : De
 
 internal fun tempPendingStore(): PendingZoneStore {
     val dir = createTempDirectory("tz-sync").toFile().apply { deleteOnExit() }
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // On the calling thread: a write never resumes a view model on Main after the test reset it.
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     return PendingZoneStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") })
 }
 
@@ -104,6 +105,7 @@ internal class FailingDataStore : androidx.datastore.core.DataStore<androidx.dat
 
 internal fun tempKnownStore(): KnownZoneStore {
     val dir = createTempDirectory("tz-known").toFile().apply { deleteOnExit() }
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // On the calling thread: a write never resumes a view model on Main after the test reset it.
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     return KnownZoneStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") })
 }

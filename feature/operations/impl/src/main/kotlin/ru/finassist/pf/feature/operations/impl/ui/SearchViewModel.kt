@@ -9,6 +9,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.api.OperationsApi
@@ -21,6 +24,7 @@ import ru.finassist.pf.core.api.model.OperationsQuery
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
+import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.core.navigation.PfNavTypes
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
@@ -84,6 +88,7 @@ class SearchViewModel @Inject constructor(
     operations: OperationsRepositoryImpl,
     flags: FeatureFlags,
     private val tracker: Tracker,
+    reportZone: ReportZone,
 ) : ViewModel() {
     private val preset = savedState.toRoute<OperationsRoutes.Search>(PfNavTypes.MAP).filter
 
@@ -106,6 +111,11 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch { runCatching { categoriesRepository.categories() }.onSuccess { c -> _state.update { it.copy(categories = c) } } }
         // A category changed in the detail screen: refresh the visible result so the row moves out/in.
         viewModelScope.launch { operations.categoryChanges.collect { if (_state.value.hasFilters) search(debounce = false) } }
+        // The 12-month window without a period is counted in the profile zone: a zone that changes the effective one
+        // (the device's until the profile is known) asks again (FIN-92).
+        viewModelScope.launch {
+            reportZone.profile.map { reportZone.current }.distinctUntilChanged().drop(1).collect { if (_state.value.hasFilters) search(debounce = false) }
+        }
     }
 
     fun setQuery(q: String) = updateFilter(debounce = true) { it.copy(q = q.ifEmpty { null }) }

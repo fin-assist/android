@@ -48,6 +48,7 @@ class SearchViewModelTest {
     private val categories = FakeCategories(listOf(category("cat_taxi")))
     private val operations = OperationsRepositoryImpl()
     private val tracker = FakeTracker()
+    private val reportZone = ru.finassist.pf.core.common.time.ReportZone { java.time.ZoneId.of("Europe/Moscow") }
 
     private val window = DateRange(OffsetDateTime.parse("2025-10-01T00:00:00+03:00"), OffsetDateTime.parse("2026-10-01T00:00:00+03:00"))
 
@@ -57,7 +58,7 @@ class SearchViewModelTest {
 
     private fun vm(preset: OperationsFilter? = null, flags: StaticFlags = StaticFlags()): SearchViewModel {
         val args = preset?.let { mapOf("filter" to PfNavTypes.operationsFilter.serializeAsValue(it)) }.orEmpty()
-        return SearchViewModel(SavedStateHandle(args), api, categories, operations, flags, tracker)
+        return SearchViewModel(SavedStateHandle(args), api, categories, operations, flags, tracker, reportZone)
     }
 
     private fun found(vararg ids: String, total: Int? = null, range: DateRange? = window, older: Boolean? = null) =
@@ -264,6 +265,15 @@ class SearchViewModelTest {
         api.lists += found("op_1")
         vm(OperationsFilter(categoryId = "cat_taxi"))
         operations.notifyCategoryChanged()
+        assertEquals(2, api.queries.size)
+    }
+
+    @Test fun `a new profile zone asks the visible result again, the first known zone does not (FIN-92)`() {
+        api.lists += found("op_1")
+        vm(OperationsFilter(categoryId = "cat_taxi"))
+        reportZone.set("Europe/Moscow")
+        assertEquals(1, api.queries.size)
+        reportZone.set("Asia/Vladivostok")
         assertEquals(2, api.queries.size)
     }
 
