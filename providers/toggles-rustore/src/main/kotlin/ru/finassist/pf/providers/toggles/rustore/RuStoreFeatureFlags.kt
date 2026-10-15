@@ -52,8 +52,10 @@ class RuStoreFeatureFlags @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val changesFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
-    @Volatile private var values: Map<String, Boolean> = emptyMap()
-    @Volatile private var variants: Map<String, String> = emptyMap()
+    /** One immutable snapshot: a reader never sees new flags with old variants. */
+    private class Config(val values: Map<String, Boolean> = emptyMap(), val variants: Map<String, String> = emptyMap())
+
+    @Volatile private var config = Config()
     @Volatile private var account: String? = null
 
     private val client: RemoteConfigClient? = appId.takeIf { it.isNotBlank() }?.let { id ->
@@ -82,13 +84,13 @@ class RuStoreFeatureFlags @Inject constructor(
         }.onFailure { Log.w(TAG, "Remote Config disabled", it) }.getOrNull()
     }
 
-    override fun isEnabled(flag: Flag): Boolean = values[flag.key] ?: flag.defaultValue
+    override fun isEnabled(flag: Flag): Boolean = config.values[flag.key] ?: flag.defaultValue
 
-    override fun variant(experiment: Experiment): String = experiment.variantOf(variants[experiment.key])
+    override fun variant(experiment: Experiment): String = experiment.variantOf(config.variants[experiment.key])
 
     override val changes: Flow<Unit> = changesFlow
 
-    override val version: String get() = flagsVersion(values)
+    override val version: String get() = config.let { flagsVersion(it.values, it.variants) }
 
     override suspend fun setUser(userId: String?) {
         if (account == userId) return
@@ -113,15 +115,16 @@ class RuStoreFeatureFlags @Inject constructor(
 
     /** Only known keys of boolean type are read; a wrong type in the console falls back to the code default. */
     private fun snapshot(config: RemoteConfig) {
-        values = Flag.entries.mapNotNull { flag ->
+        val values = Flag.entries.mapNotNull { flag ->
             if (!config.containsKey(flag.key)) return@mapNotNull null
             runCatching { flag.key to config.getBoolean(flag.key) }.getOrNull()
         }.toMap()
         // Experiment variants are strings (FIN-9); a missing or unknown one is the default variant.
-        variants = Experiment.entries.mapNotNull { e ->
+        val variants = Experiment.entries.mapNotNull { e ->
             if (!config.containsKey(e.key)) return@mapNotNull null
             runCatching { e.key to config.getString(e.key) }.getOrNull()
         }.toMap()
+        this.config = Config(values, variants)
         changesFlow.tryEmit(Unit)
     }
 

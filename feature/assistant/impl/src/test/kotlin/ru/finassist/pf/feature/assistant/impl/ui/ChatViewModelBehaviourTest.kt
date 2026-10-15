@@ -275,6 +275,17 @@ class ChatViewModelBehaviourTest {
         assertFalse(vm.state.value.generating)
     }
 
+    @Test fun `the answer keeps the currency of its amounts, from the history and from the stream (FIN-82)`() {
+        api.pages[null] = MessagesList(
+            listOf(question("q1"), answer("a1").copy(currency = "USD"), question("q2"), answer("a2", status = AnswerStatus.GENERATING)),
+            hasOlder = false,
+        )
+        api.script("a2", events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Готово")), emptyList(), currency = "EUR"))))
+        val vm = newVm()
+        assertEquals("USD", vm.answerItem("a1").currency)
+        assertEquals("EUR", vm.answerItem("a2").currency)
+    }
+
     // ---- composer and sending ----
 
     @Test fun `the draft is cut to 2000 characters`() {

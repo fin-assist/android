@@ -250,6 +250,7 @@ private object AnalyticsBlockTags : BlockTags("analytics") {
         "income_categories" -> AnalyticsTags.INCOME_CATEGORY
         else -> "analytics.$blockId.item"
     }
+    override fun block(id: String) = AnalyticsTags.block(id)
     override fun more(blockId: String) = if (blockId == "expense_categories") AnalyticsTags.ALL_CATEGORIES else "analytics.$blockId.more"
     override fun chart(blockId: String) = when (blockId) {
         "monthly_chart" -> "analytics.expense.monthly"
@@ -268,7 +269,8 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
     val d = PfTheme.dimens
     val hidden = state.blocks.hidden
     val prepared = remember(a.blocks, hidden) {
-        registry.prepareAll(BlockLayout.visible(a.blocks) { b -> b.id != null && b.id in hidden })
+        // Prepared first: a heading over blocks that did not decode goes as well.
+        BlockLayout.visible(registry.prepareAll(a.blocks), { it.block }) { p -> p.block.id != null && p.block.id in hidden }
     }
     val navigate: (BlockAction) -> Unit = { action ->
         when (action.type) {
@@ -303,6 +305,7 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
                 else -> d.space6
             }
         },
+        exposureKey = state.response,
         onShown = vm::onBlockShown,
     )
 }
@@ -388,6 +391,8 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
 
 /** Test tags of the analytics screen (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object AnalyticsTags {
+    /** A block of the screen by its id (`analytics.block.tiles`): the ids are the server's (FIN-4). */
+    fun block(id: String) = "analytics.block.$id"
     const val SCREEN = "analytics.screen"
     const val EMPTY = "analytics.empty"
     const val OFFLINE = "analytics.offline"

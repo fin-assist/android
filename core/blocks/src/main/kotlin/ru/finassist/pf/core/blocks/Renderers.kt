@@ -284,7 +284,7 @@ private fun RankedList(block: Block, data: RankedListData?, ctx: BlockContext) {
                     BlockFormat.value(item.value, item.valueKind, ctx.currency, showPlus = item.showPlus).orEmpty(),
                     sublabel = item.note,
                     tone = if (item.showPlus && item.value > 0) ValueTone.POSITIVE else ValueTone.DEFAULT,
-                    onClick = ctx.clickOf(block, item.action),
+                    onClick = ctx.clickOf(block, BlockLayout.rowAction(item.action)),
                     divider = i < data.items.lastIndex,
                     modifier = Modifier.testTag(ctx.tags.item(block.id.orEmpty())),
                 )
@@ -322,7 +322,7 @@ private fun RankedList(block: Block, data: RankedListData?, ctx: BlockContext) {
                             percent = if (item.value > 0) (item.value / maxPositive).toFloat() else 0f,
                             share = item.share?.let { "${(it * 100).toInt()}%" },
                             spoken = listOfNotNull(item.title, amount, item.note).joinToString(", "),
-                            onClick = ctx.clickOf(block, item.action),
+                            onClick = ctx.clickOf(block, BlockLayout.rowAction(item.action)),
                             modifier = Modifier.testTag(ctx.tags.item(id)),
                         )
                     }
@@ -372,7 +372,7 @@ private fun InsightCard(block: Block, data: InsightCardData, ctx: BlockContext) 
                 Column(Modifier.padding(top = d.space2)) {
                     PfDivider()
                     data.items.forEach { item ->
-                        PfDataRow(item.title, itemValue(item, ctx).orEmpty(), sublabel = item.sublabel, onClick = ctx.clickOf(block, item.action), divider = false)
+                        PfDataRow(item.title, itemValue(item, ctx).orEmpty(), sublabel = item.sublabel, onClick = ctx.clickOf(block, BlockLayout.rowAction(item.action)), divider = false)
                         item.button?.takeIf { it.type != ActionType.UNKNOWN }?.let { a ->
                             Box(Modifier.offset(x = -d.space4)) {
                                 val label = a.label ?: "Скрыть"
@@ -390,7 +390,7 @@ private fun InsightCard(block: Block, data: InsightCardData, ctx: BlockContext) 
                 }
             } else {
                 data.items.forEach { item ->
-                    PfDataRow(item.title, itemValue(item, ctx).orEmpty(), sublabel = item.sublabel, onClick = ctx.clickOf(block, item.action), divider = false)
+                    PfDataRow(item.title, itemValue(item, ctx).orEmpty(), sublabel = item.sublabel, onClick = ctx.clickOf(block, BlockLayout.rowAction(item.action)), divider = false)
                 }
             }
         }),

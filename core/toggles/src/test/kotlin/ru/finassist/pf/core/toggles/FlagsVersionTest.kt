@@ -31,4 +31,13 @@ class FlagsVersionTest {
     @Test fun `static flags are versioned by flag key`() {
         assertEquals(flagsVersion(mapOf("assistant" to false)), StaticFlags(mapOf(Flag.ASSISTANT to false)).version)
     }
+
+    @Test fun `an experiment variant changes the version, none keeps the version of the flags (FIN-9 review)`() {
+        val flags = mapOf("assistant" to false)
+        assertEquals(flagsVersion(flags), flagsVersion(flags, emptyMap()))
+        val a = flagsVersion(flags, mapOf("analytics_order" to "a"))
+        assertNotEquals(a, flagsVersion(flags, mapOf("analytics_order" to "b")))
+        assertNotEquals(flagsVersion(flags), a)
+        assertNotEquals(FLAGS_VERSION_DEFAULTS, flagsVersion(emptyMap(), mapOf("analytics_order" to "b")))
+    }
 }

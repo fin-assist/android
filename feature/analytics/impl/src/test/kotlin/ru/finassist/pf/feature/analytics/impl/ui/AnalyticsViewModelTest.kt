@@ -122,7 +122,7 @@ class AnalyticsViewModelTest {
 
     private class FakeFlags(
         private val values: MutableMap<Flag, Boolean> = mutableMapOf(),
-        private val variants: MutableMap<Experiment, String> = mutableMapOf(),
+        val variants: MutableMap<Experiment, String> = mutableMapOf(),
     ) : FeatureFlags {
         override val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
         override fun isEnabled(flag: Flag): Boolean = values[flag] ?: flag.defaultValue
@@ -132,6 +132,11 @@ class AnalyticsViewModelTest {
         override suspend fun refresh() = Unit
         fun set(flag: Flag, on: Boolean) {
             values[flag] = on
+            changes.tryEmit(Unit)
+        }
+
+        fun set(experiment: Experiment, variant: String) {
+            variants[experiment] = variant
             changes.tryEmit(Unit)
         }
     }
@@ -537,5 +542,39 @@ class AnalyticsViewModelTest {
 
     private companion object {
         fun at(day: Int): OffsetDateTime = OffsetDateTime.parse("2026-09-%02dT00:00:00+03:00".format(day))
+    }
+
+    @Test fun `exposures report the variants the shown screen was asked with, a new variant asks again (FIN-9 review)`() {
+        api.answers += data()
+        api.answers += data()
+        val flags = FakeFlags()
+        val vm = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker)
+        vm.init(null)
+        assertEquals(1, vm.state.value.response)
+        val tiles = Block(id = "tiles", type = BlockType.TILE_GROUP)
+
+        // The variant changes before the drawn blocks are reported: they still belong to the screen of variant a.
+        val onScreen = vm.state.value.data
+        flags.variants[Experiment.ANALYTICS_ORDER] = "b"
+        vm.onBlockShown(tiles)
+        assertEquals("analytics_order:a", tracker.events.last { it.first == Events.ANALYTICS_BLOCK_EXPOSED }.second["exp"])
+        assertTrue(onScreen === vm.state.value.data, "no reload without a config change event")
+
+        // The config change event: the screen is composed anew for b, and its blocks are a new exposure.
+        flags.changes.tryEmit(Unit)
+        assertEquals("analytics_order:b", api.extras.last().second)
+        assertEquals(2, vm.state.value.response)
+        vm.onBlockShown(tiles)
+        assertEquals("analytics_order:b", tracker.events.last { it.first == Events.ANALYTICS_BLOCK_EXPOSED }.second["exp"])
+    }
+
+    @Test fun `a config change with the same variants does not ask again`() {
+        api.answers += data()
+        val flags = FakeFlags()
+        val vm = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker)
+        vm.init(null)
+        flags.set(Flag.ANALYTICS_BLOCK_BANK_FEES, false)
+        assertEquals(1, api.extras.size)
+        assertEquals(1, vm.state.value.response)
     }
 }

@@ -62,6 +62,8 @@ data class AnalyticsUiState(
     val snackbar: String? = null,
     val hint: AnalyticsHint? = null,
     val periodsFailed: Boolean = false,
+    /** Number of the response on screen: the blocks of each one are exposed anew (FIN-9). */
+    val response: Int = 0,
 )
 
 /**
@@ -101,6 +103,9 @@ class AnalyticsViewModel @Inject constructor(
     /** Blocks already reported as shown for the data on screen: one exposure per block and response. */
     private val exposed = HashSet<String>()
 
+    /** [experiments] the data on screen was asked with: its exposures report these, not what the config says now. */
+    private var shownExperiments: String? = null
+
     /** Set by the `Period` route (assistant chip); the tab root starts with the server's default period. */
     fun init(params: AnalyticsParams?) {
         if (_state.value.data != null || loadJob != null) return
@@ -120,10 +125,14 @@ class AnalyticsViewModel @Inject constructor(
             flags.changes.collect {
                 _state.update { it.copy(blocks = readBlocks(flags)) }
                 // The transfers filter was switched off remotely: from now on requests use `with` (docs/flags.md).
+                var reload = false
                 if (!_state.value.blocks.transfersFilter && transferMode != TransferMode.WITH) {
                     transferMode = TransferMode.WITH
-                    if (_state.value.data != null) load(quiet = true)
+                    reload = true
                 }
+                // A new experiment variant: the server composes the screen anew (FIN-9).
+                if (shownExperiments != null && shownExperiments != experiments) reload = true
+                if (reload && _state.value.data != null) load(quiet = true)
             }
         }
     }
@@ -133,14 +142,16 @@ class AnalyticsViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             if (!quiet) _state.update { it.copy(loading = it.data == null, offline = false) }
             try {
-                val a = api.getAnalytics(period, date, transferMode, supports = supports, exp = experiments)
+                val exp = experiments
+                val a = api.getAnalytics(period, date, transferMode, supports = supports, exp = exp)
                 exposed.clear()
+                shownExperiments = exp
                 a.params?.let { p ->
                     period = p.period
                     date = p.date
                     transferMode = allowedMode(p.transferMode)
                 }
-                _state.update { it.copy(loading = false, offline = false, data = a) }
+                _state.update { it.copy(loading = false, offline = false, data = a, response = it.response + 1) }
                 if (a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
                     _state.update { it.copy(hint = AnalyticsHint.CATEGORIES) }
                 }
@@ -246,8 +257,9 @@ class AnalyticsViewModel @Inject constructor(
     /** Exposure (FIN-9): the block was drawn — once per block id and response. */
     override fun onBlockShown(block: Block) {
         val id = block.id ?: return
+        val exp = shownExperiments ?: return
         if (!exposed.add(id)) return
-        tracker.track(Events.ANALYTICS_BLOCK_EXPOSED, mapOf("block" to id, "exp" to experiments))
+        tracker.track(Events.ANALYTICS_BLOCK_EXPOSED, mapOf("block" to id, "exp" to exp))
     }
 
     /** «Не подписка» (api.md 6.3): the payment disappears and the total is recalculated. */

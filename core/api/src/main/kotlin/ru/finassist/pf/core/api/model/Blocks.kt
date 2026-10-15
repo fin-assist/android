@@ -173,7 +173,7 @@ enum class ChartKind(override val code: String) : ApiCode {
 data class ChartData(
     val kind: ChartKind,
     val valueKind: ValueKind,
-    val points: List<ChartPoint>,
+    @Serializable(with = ChartPointList::class) val points: List<ChartPoint>,
     val highlightIndex: Int? = null,
     val showValues: Boolean? = null,
     val summary: BlockValue? = null,
@@ -192,6 +192,8 @@ data class ChartPoint(
     val note: String? = null,
 )
 
+object ChartPointList : TolerantListSerializer<ChartPoint>(ChartPoint.serializer())
+
 @Serializable(with = NoteTone.Serializer::class)
 enum class NoteTone(override val code: String) : ApiCode {
     PRIMARY("primary"), MUTED("muted"), UNKNOWN("?");
@@ -203,7 +205,9 @@ enum class NoteTone(override val code: String) : ApiCode {
 data class ChartNote(val text: String, val tone: NoteTone = NoteTone.MUTED)
 
 @Serializable
-data class TileGroupData(val tiles: List<Tile>)
+data class TileGroupData(@Serializable(with = TileList::class) val tiles: List<Tile>)
+
+object TileList : TolerantListSerializer<Tile>(Tile.serializer())
 
 @Serializable
 data class Tile(
@@ -274,7 +278,7 @@ data class InsightItem(
     /** «в месяц» after the value. */
     val valueSuffix: String? = null,
     val muted: Boolean = false,
-    /** Tap on the row (`open_operations`). */
+    /** Tap on the row: only `open_*` — anything else on a row is ignored (`BlockLayout.rowAction`). */
     val action: BlockAction? = null,
     /** A button under the row with its `label` («Не подписка»); a row may have both. */
     val button: BlockAction? = null,

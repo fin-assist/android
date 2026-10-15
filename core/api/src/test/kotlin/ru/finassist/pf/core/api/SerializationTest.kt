@@ -224,4 +224,18 @@ class SerializationTest {
         assertEquals(ru.finassist.pf.core.api.model.ActionType.OPEN_OPERATIONS, item.action?.type)
         assertEquals("rp", item.button?.paymentId)
     }
+
+    @Test
+    fun `a broken tile or chart point is skipped, not the whole block (FIN-4 review)`() {
+        val tiles = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.TileGroupData.serializer(),
+            """{"tiles":[{"title":"без id"},{"id":"income","title":"Доходы","value":100,"value_kind":"amount"}]}""",
+        )
+        assertEquals(listOf("income"), tiles.tiles.map { it.id })
+        val chart = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.ChartData.serializer(),
+            """{"kind":"bar","value_kind":"amount","points":[{"value":1},{"range":{"from":"2026-09-01T00:00:00+03:00","to":"2026-10-01T00:00:00+03:00"},"value":2,"coverage":"complete"}]}""",
+        )
+        assertEquals(listOf(2.0), chart.points.map { it.value })
+    }
 }

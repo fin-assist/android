@@ -1,6 +1,8 @@
 package ru.finassist.pf.core.blocks
 
+import ru.finassist.pf.core.api.model.ActionType
 import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.BlockAction
 import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.ChartPoint
 import ru.finassist.pf.core.api.model.Coverage
@@ -75,5 +77,22 @@ class BlockFormatTest {
         assertEquals("screen.x.item", tags.item("x"))
         assertEquals("screen.x.more", tags.more("x"))
         assertEquals("screen.chart.x", tags.chart("x"))
+    }
+
+    @Test fun `a heading over blocks that did not decode goes with them (FIN-4 review)`() {
+        val registry = CatalogV1.registry()
+        val heading = Block(type = BlockType.HEADING, title = "Наблюдения")
+        val broken = Block(id = "x", type = BlockType.CHART, v = 1, data = kotlinx.serialization.json.buildJsonObject { put("kind", kotlinx.serialization.json.JsonPrimitive("bar")) })
+        val unknown = Block(id = "y", type = BlockType.UNKNOWN, v = 1)
+        assertTrue(BlockLayout.visible(registry.prepareAll(listOf(heading, broken, unknown)), { it.block }).isEmpty())
+    }
+
+    @Test fun `a row tap only navigates, a data-changing action works only from its button (FIN-4 review)`() {
+        val open = BlockAction(ActionType.OPEN_OPERATIONS)
+        assertEquals(open, BlockLayout.rowAction(open))
+        assertEquals(ActionType.OPEN_ASSISTANT, BlockLayout.rowAction(BlockAction(ActionType.OPEN_ASSISTANT))?.type)
+        assertNull(BlockLayout.rowAction(BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = "rp", label = "Не подписка")))
+        assertNull(BlockLayout.rowAction(BlockAction(ActionType.UNKNOWN)))
+        assertNull(BlockLayout.rowAction(null))
     }
 }

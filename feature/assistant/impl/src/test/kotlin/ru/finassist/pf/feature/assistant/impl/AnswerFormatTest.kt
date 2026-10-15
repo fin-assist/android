@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.assistant.impl
 
+import kotlin.test.assertTrue
 import ru.finassist.pf.core.api.model.ValueKind
 import ru.finassist.pf.core.api.model.ChartKind
 import ru.finassist.pf.core.api.model.ChartData
@@ -63,6 +64,10 @@ class AnswerFormatTest {
         assertEquals("46%", AnswerFormat.rowValue(BlockRow("Доля", value = 0.46, valueKind = ValueKind.PERCENT)))
         assertEquals("быстро", AnswerFormat.rowValue(BlockRow("Скорость", value = 3.0, valueKind = ValueKind.UNKNOWN, text = "быстро")))
         assertNull(AnswerFormat.rowValue(BlockRow("Пусто")))
+        // The answer's currency (FIN-82): the same minor units in dollars.
+        val usd = AnswerFormat.rowValue(BlockRow("Средний чек", value = 80000.0, valueKind = ValueKind.AMOUNT), "USD")!!.plain()
+        assertEquals(ru.finassist.pf.core.common.money.Money(80000).format("USD").plain(), usd)
+        assertTrue(!usd.contains("₽"), usd)
     }
 
     @Test

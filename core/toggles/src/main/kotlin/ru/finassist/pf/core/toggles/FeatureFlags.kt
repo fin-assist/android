@@ -49,9 +49,11 @@ const val FLAGS_VERSION_DEFAULTS = "defaults"
  * Short stable fingerprint of a set of flag values, by flag key: the same values give the same version on every
  * device and launch, whatever the map order. Eight hex digits (CRC32) — it identifies a config, it is not a secret.
  */
-fun flagsVersion(values: Map<String, Boolean>): String {
-    if (values.isEmpty()) return FLAGS_VERSION_DEFAULTS
+fun flagsVersion(values: Map<String, Boolean>, variants: Map<String, String> = emptyMap()): String {
+    if (values.isEmpty() && variants.isEmpty()) return FLAGS_VERSION_DEFAULTS
     val crc = CRC32()
     values.toSortedMap().forEach { (key, value) -> crc.update("$key=$value;".toByteArray(Charsets.UTF_8)) }
+    // Experiment variants (FIN-9) count too; none — the version of the flags alone stays as it was.
+    variants.toSortedMap().forEach { (key, value) -> crc.update("exp:$key=$value;".toByteArray(Charsets.UTF_8)) }
     return "%08x".format(crc.value)
 }
