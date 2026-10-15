@@ -276,7 +276,8 @@ internal fun HistoryContent(
 
 /**
  * A row of the uploads card: the file, «1 апреля — 25 сентября · 1 086 операций», «Загружено 25 сентября 2026»,
- * a ghost delete button; unread lines get a link under it.
+ * a ghost delete button; unread lines get a link under it, lines read by a later upload — «Строки дочитаны в загрузке
+ * от 12 октября» (FIN-79).
  */
 @Composable
 private fun UploadRow(u: Upload, divider: Boolean, onDelete: () -> Unit, onOpenUnread: () -> Unit) {
@@ -300,6 +301,14 @@ private fun UploadRow(u: Upload, divider: Boolean, onDelete: () -> Unit, onOpenU
                     if (u.status == UploadStatus.PROCESSING) "Разбираем…" else "Загружено ${RussianDates.day(u.uploadedAt.toLocalDate())}\u00A0${u.uploadedAt.year}",
                     style = PfTheme.type.caption, color = c.textMuted,
                 )
+                // Lines of this upload that a later upload has read (FIN-79): no longer in the link's count.
+                if (u.resolvedUnreadCount > 0 && u.resolvedByUploadedAt != null) {
+                    Text(
+                        "Строки дочитаны в загрузке от ${RussianDates.day(u.resolvedByUploadedAt!!.toLocalDate())}",
+                        style = PfTheme.type.caption, color = c.textMuted,
+                        modifier = Modifier.testTag(StatementsTags.HISTORY_RESOLVED),
+                    )
+                }
                 if (u.unreadCount > 0) {
                     PfLink(
                         "Не прочитали ${countWithNoun(u.unreadCount, "строку", "строки", "строк")}", onClick = onOpenUnread,

@@ -24,6 +24,8 @@ import ru.finassist.pf.mock.domain.Catalog
 import ru.finassist.pf.mock.domain.Coverage
 import ru.finassist.pf.mock.domain.Ledger
 import ru.finassist.pf.mock.domain.Scope
+import ru.finassist.pf.mock.domain.UnreadResolver
+import ru.finassist.pf.mock.ofx.StatementPeriod
 import ru.finassist.pf.mock.ofx.UnreadLine
 import java.time.OffsetDateTime
 import java.util.UUID
@@ -48,6 +50,7 @@ class MockBackend(
     val catalog = Catalog()
     val ledger = Ledger(catalog)
     val operationScope = Scope(ledger, catalog, Clock.MOSCOW)
+    val unreadResolver = UnreadResolver(ledger) { operationScope.zone }
 
     class Upload(
         val id: String,
@@ -56,12 +59,20 @@ class MockBackend(
         val coverageFrom: OffsetDateTime,
         val coverageTo: OffsetDateTime,
         val unreadLines: List<UnreadLine>,
+        /** `DTSTART`/`DTEND` per account (FIN-79). */
+        val accountPeriods: Map<String, StatementPeriod> = emptyMap(),
         var operationCount: Int = 0,
         var firstOperationAt: OffsetDateTime? = null,
         var lastOperationAt: OffsetDateTime? = null,
         var result: ImportResult? = null,
         val events: MutableStateFlow<ImportEvent> = MutableStateFlow(ImportEvent.Progress(ru.finassist.pf.core.api.model.ImportProgress(ru.finassist.pf.core.api.model.ImportStage.PARSING, 0))),
     ) {
+        /** Line number → id of the later upload that read the line (api.md 3.6, «Закрытие строк»; FIN-79). */
+        val resolvedBy: MutableMap<Int, String> = HashMap()
+
+        /** Unread lines no later upload has read: the only ones the API shows. */
+        val openUnreadLines: List<UnreadLine> get() = unreadLines.filter { it.lineNumber !in resolvedBy }
+
         val isDone: Boolean get() = result != null
         val isFailed: Boolean get() = events.value is ImportEvent.Error
         val isProcessing: Boolean get() = !isDone && !isFailed
@@ -96,7 +107,8 @@ class MockBackend(
         now().atZoneSameInstant(Clock.MOSCOW).toLocalDate(),
     )
 
-    fun unreadLines(): List<UnreadLine> = uploads.filter { it.isDone }.flatMap { it.unreadLines }
+    /** Open unread lines of every finished upload (FIN-79: closed ones are not counted). */
+    fun unreadLines(): List<UnreadLine> = uploads.filter { it.isDone }.flatMap { it.openUnreadLines }
 
     /** Simulated latency + the "offline" switch. Called at the top of every API method. */
     suspend fun simulateNetwork() {
