@@ -3,9 +3,11 @@ package ru.finassist.pf.feature.profile.impl.data
 import kotlinx.coroutines.runBlocking
 import ru.finassist.pf.core.api.model.ProfileUpdate
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.feature.auth.api.SessionState
 import ru.finassist.pf.feature.profile.impl.domain.PendingZone
 import java.time.Duration
+import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -17,7 +19,9 @@ class TimeZoneCheckerTest {
     private val store = tempPendingStore()
     private val clock = FakeClock()
     private val device = FakeDeviceZone(MOSCOW)
-    private val checker = TimeZoneChecker(api, session, store, clock, device)
+    private val reportZone = ReportZone { ZoneId.of(device.zone) }
+    private val known = tempKnownStore()
+    private val checker = TimeZoneChecker(api, session, store, clock, device, reportZone, known)
 
     private fun check() = runBlocking { checker.check() }
     private fun pending(user: String = "u1") = runBlocking { store.get(user) }
@@ -194,9 +198,59 @@ class TimeZoneCheckerTest {
         assertNull(pending("u0"))
     }
 
+    @Test fun `the profile zone read by the check becomes the report zone and is stored`() {
+        api.timezone = VLADIVOSTOK
+        check()
+        assertEquals(ZoneId.of(VLADIVOSTOK), reportZone.current)
+        assertEquals(VLADIVOSTOK, runBlocking { known.get("u1") })
+    }
+
+    @Test fun `offline at start, the stored profile zone is the report zone`() {
+        runBlocking { known.set("u1", VLADIVOSTOK) }
+        api.getFailure = AppError.Offline()
+        check()
+        assertEquals(ZoneId.of(VLADIVOSTOK), reportZone.current)
+    }
+
+    @Test fun `a stored zone of another user is not restored`() {
+        runBlocking { known.set("u0", VLADIVOSTOK) }
+        api.getFailure = AppError.Offline()
+        check()
+        assertNull(reportZone.profile.value)
+        assertEquals(ZoneId.of(MOSCOW), reportZone.current, "the device zone")
+    }
+
+    @Test fun `a sent zone becomes the report zone`() {
+        device.zone = NOVOSIBIRSK
+        check()
+        assertEquals(ZoneId.of(MOSCOW), reportZone.current, "the profile is still in Moscow")
+        clock.advance(Duration.ofHours(72))
+        check()
+        assertEquals(ZoneId.of(NOVOSIBIRSK), reportZone.current)
+        assertEquals(NOVOSIBIRSK, runBlocking { known.get("u1") })
+    }
+
+    @Test fun `a profile read elsewhere moves the report zone, one of another user does not`() {
+        check()
+        runBlocking { checker.observed(api.getProfile().copy(timezone = VLADIVOSTOK)) }
+        assertEquals(ZoneId.of(VLADIVOSTOK), reportZone.current)
+
+        runBlocking { checker.observed(api.getProfile().copy(userId = "u2", timezone = NOVOSIBIRSK)) }
+        assertEquals(ZoneId.of(VLADIVOSTOK), reportZone.current)
+    }
+
+    @Test fun `sign-out returns to the device zone and forgets the stored one`() {
+        api.timezone = VLADIVOSTOK
+        check()
+        runBlocking { checker.signedOut() }
+        assertNull(reportZone.profile.value)
+        assertNull(runBlocking { known.get("u1") })
+    }
+
     private companion object {
         const val MOSCOW = "Europe/Moscow"
         const val NOVOSIBIRSK = "Asia/Novosibirsk"
         const val YEKATERINBURG = "Asia/Yekaterinburg"
+        const val VLADIVOSTOK = "Asia/Vladivostok"
     }
 }

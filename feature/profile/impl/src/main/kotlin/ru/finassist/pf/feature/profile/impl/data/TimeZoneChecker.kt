@@ -5,8 +5,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import ru.finassist.pf.core.api.ProfileApi
+import ru.finassist.pf.core.api.model.Profile
 import ru.finassist.pf.core.api.model.ProfileUpdate
 import ru.finassist.pf.core.common.time.Clock
+import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import ru.finassist.pf.feature.auth.api.SessionState
 import ru.finassist.pf.feature.profile.impl.domain.TimeZoneRule
@@ -19,7 +21,9 @@ import javax.inject.Singleton
  * the injected [Clock], so the e2e build (pinned clock) counts the threshold the same way as the app.
  *
  * The profile zone is fetched once per process and user and then kept in memory: a return from the background
- * must not cost a request. Before sending, the profile is
+ * must not cost a request. Every zone read from or written to the server — here or by the profile screen
+ * ([observed]) — also becomes the [ReportZone] the app counts days in, and is stored for the next start (FIN-92).
+ * Before sending, the profile is
  * read again, so a zone that already reached the server another way is not sent twice. Failures are silent and
  * keep the record: the next trigger tries again.
  *
@@ -34,6 +38,8 @@ class TimeZoneChecker @Inject constructor(
     private val store: PendingZoneStore,
     private val clock: Clock,
     private val deviceZone: DeviceZone,
+    private val reportZone: ReportZone,
+    private val knownStore: KnownZoneStore,
 ) {
     private val mutex = Mutex()
 
@@ -43,7 +49,11 @@ class TimeZoneChecker @Inject constructor(
     suspend fun check(): Unit = mutex.withLock {
         val userId = currentUser() ?: return
         val device = deviceZone.id()
-        val profileZone = known?.takeIf { it.first == userId }?.second ?: fetch(userId) ?: return
+        val profileZone = known?.takeIf { it.first == userId }?.second ?: run {
+            // Until the profile answers (or offline), the zone it had last time.
+            knownStore.get(userId)?.let(reportZone::set)
+            fetch(userId)
+        } ?: return
         when (val step = TimeZoneRule.next(profileZone, device, store.get(userId), clock.now().toInstant())) {
             TimeZoneStep.Clear -> store.clear()
             is TimeZoneStep.Record -> store.set(userId, step.pending)
@@ -56,6 +66,13 @@ class TimeZoneChecker @Inject constructor(
     suspend fun signedOut(): Unit = mutex.withLock {
         known = null
         store.clear()
+        knownStore.clear()
+        reportZone.clear()
+    }
+
+    /** A profile read elsewhere (the profile screen): its zone may have changed on the server since [check] read it. */
+    suspend fun observed(profile: Profile): Unit = mutex.withLock {
+        if (currentUser() == profile.userId) remember(profile.userId, profile.timezone)
     }
 
     private suspend fun send(userId: String, zone: String) {
@@ -69,12 +86,18 @@ class TimeZoneChecker @Inject constructor(
         val updated = quietly { profileApi.updateProfile(ProfileUpdate(timezone = zone)) } ?: return
         // Went out with the token of someone who signed in after the session check: the record of this user waits.
         if (updated.userId != userId) return
-        known = userId to updated.timezone
+        remember(userId, updated.timezone)
         store.clear()
     }
 
     private suspend fun fetch(userId: String): String? =
-        quietly { profileApi.getProfile() }?.takeIf { it.userId == userId }?.timezone?.also { known = userId to it }
+        quietly { profileApi.getProfile() }?.takeIf { it.userId == userId }?.timezone?.also { remember(userId, it) }
+
+    private suspend fun remember(userId: String, zone: String) {
+        known = userId to zone
+        reportZone.set(zone)
+        knownStore.set(userId, zone)
+    }
 
     private suspend fun currentUser(): String? = (session.state.first() as? SessionState.SignedIn)?.userId
 

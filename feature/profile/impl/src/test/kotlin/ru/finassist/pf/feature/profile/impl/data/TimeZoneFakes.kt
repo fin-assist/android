@@ -91,3 +91,9 @@ internal fun tempPendingStore(): PendingZoneStore {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     return PendingZoneStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") })
 }
+
+internal fun tempKnownStore(): KnownZoneStore {
+    val dir = createTempDirectory("tz-known").toFile().apply { deleteOnExit() }
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    return KnownZoneStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") })
+}

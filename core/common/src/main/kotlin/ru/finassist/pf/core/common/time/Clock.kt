@@ -9,6 +9,9 @@ import java.time.ZoneId
 /**
  * Injectable clock so view models, screens, the mock backend and tests agree on "now". Never `LocalDate.now()` or
  * `OffsetDateTime.now()` in app code: the e2e build pins this clock (`E2E_NOW`), not the device's (FIN-71).
+ *
+ * In the app [zone] is the report zone ([ReportZone]): `profile.timezone` once known, so days, months and "today"
+ * match analytics, not the device (FIN-92). It may change while the process lives; read it when needed, do not keep it.
  */
 interface Clock {
     fun now(): OffsetDateTime
@@ -22,7 +25,11 @@ interface Clock {
     }
 }
 
-class SystemClock(override val zone: ZoneId = ZoneId.systemDefault()) : Clock {
+/** [zoneOf] is read on every call: the zone may change while the process lives. */
+class SystemClock(private val zoneOf: () -> ZoneId = ZoneId::systemDefault) : Clock {
+    constructor(zone: ZoneId) : this({ zone })
+
+    override val zone: ZoneId get() = zoneOf()
     override fun now(): OffsetDateTime = OffsetDateTime.now(zone)
 }
 
@@ -33,10 +40,26 @@ class SystemClock(override val zone: ZoneId = ZoneId.systemDefault()) : Clock {
  */
 class ShiftedClock(
     start: OffsetDateTime,
-    override val zone: ZoneId = ZoneId.systemDefault(),
+    private val zoneOf: () -> ZoneId = ZoneId::systemDefault,
     private val realNow: () -> Instant = Instant::now,
 ) : Clock {
+    constructor(start: OffsetDateTime, zone: ZoneId, realNow: () -> Instant = Instant::now) : this(start, { zone }, realNow)
+
     private val offset: Duration = Duration.between(realNow(), start.toInstant())
 
+    override val zone: ZoneId get() = zoneOf()
+
     override fun now(): OffsetDateTime = OffsetDateTime.ofInstant(realNow().plus(offset), zone)
+}
+
+/**
+ * The same "now" in a fixed [zone]. Composables get the clock this way (`LocalPfClock`): a new zone gives a new
+ * value of the composition local, so what was grouped by day is regrouped.
+ */
+fun Clock.withZone(zone: ZoneId): Clock {
+    val base = this
+    return object : Clock {
+        override val zone: ZoneId = zone
+        override fun now(): OffsetDateTime = base.now().atZoneSameInstant(zone).toOffsetDateTime()
+    }
 }
