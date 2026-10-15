@@ -102,6 +102,7 @@ class BlockFormatTest {
         assertNull(BlockLayout.usable(dismiss.copy(paymentId = null)))
         assertNull(BlockLayout.usable(dismiss.copy(label = "")))
         assertNull(BlockLayout.usable(BlockAction(ActionType.OPEN_OPERATIONS)))
+        assertNull(BlockLayout.usable(BlockAction(ActionType.OPEN_OPERATIONS, filter = ru.finassist.pf.core.api.model.OperationsFilter())))
         assertNull(BlockLayout.tapAction(BlockAction(ActionType.OPEN_OPERATIONS)))
         assertEquals(ActionType.OPEN_ASSISTANT, BlockLayout.usable(BlockAction(ActionType.OPEN_ASSISTANT))?.type)
     }
