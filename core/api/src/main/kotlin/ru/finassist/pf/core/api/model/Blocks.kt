@@ -278,7 +278,7 @@ data class InsightItem(
     /** «в месяц» after the value. */
     val valueSuffix: String? = null,
     val muted: Boolean = false,
-    /** Tap on the row: only `open_*` — anything else on a row is ignored (`BlockLayout.rowAction`). */
+    /** Tap on the row: only `open_*` — anything else on a row is ignored (`BlockLayout.tapAction`). */
     val action: BlockAction? = null,
     /** A button under the row with its `label` («Не подписка»); a row may have both. */
     val button: BlockAction? = null,

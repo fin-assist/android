@@ -87,12 +87,12 @@ class BlockFormatTest {
         assertTrue(BlockLayout.visible(registry.prepareAll(listOf(heading, broken, unknown)), { it.block }).isEmpty())
     }
 
-    @Test fun `a row tap only navigates, a data-changing action works only from its button (FIN-4 review)`() {
+    @Test fun `a tap on a block, tile or row only navigates, a data-changing action works only from a button (FIN-4 review)`() {
         val open = BlockAction(ActionType.OPEN_OPERATIONS)
-        assertEquals(open, BlockLayout.rowAction(open))
-        assertEquals(ActionType.OPEN_ASSISTANT, BlockLayout.rowAction(BlockAction(ActionType.OPEN_ASSISTANT))?.type)
-        assertNull(BlockLayout.rowAction(BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = "rp", label = "Не подписка")))
-        assertNull(BlockLayout.rowAction(BlockAction(ActionType.UNKNOWN)))
-        assertNull(BlockLayout.rowAction(null))
+        assertEquals(open, BlockLayout.tapAction(open))
+        assertEquals(ActionType.OPEN_ASSISTANT, BlockLayout.tapAction(BlockAction(ActionType.OPEN_ASSISTANT))?.type)
+        assertNull(BlockLayout.tapAction(BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = "rp", label = "Не подписка")))
+        assertNull(BlockLayout.tapAction(BlockAction(ActionType.UNKNOWN)))
+        assertNull(BlockLayout.tapAction(null))
     }
 }

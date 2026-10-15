@@ -37,10 +37,11 @@ object BlockLayout {
     }
 
     /**
-     * The action of a tap on a list row: only navigation (`open_*`). A row is tapped by accident easily, so an action
-     * that changes data (`dismiss_regular_payment`) works only from its button, even if a server puts it on the row.
+     * The action of a tap on a block, a tile or a row: only navigation (`open_*`). Such a tap happens by accident
+     * easily, so an action that changes data (`dismiss_regular_payment`) works only from a button, even if a server
+     * puts it on the element; an unknown one does nothing.
      */
-    fun rowAction(action: BlockAction?): BlockAction? =
+    fun tapAction(action: BlockAction?): BlockAction? =
         action?.takeIf { it.type == ActionType.OPEN_OPERATIONS || it.type == ActionType.OPEN_ASSISTANT }
 }
 
