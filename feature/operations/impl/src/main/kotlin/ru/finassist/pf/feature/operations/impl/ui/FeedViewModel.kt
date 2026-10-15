@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -15,6 +18,7 @@ import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.api.model.OperationsQuery
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.ApiDateTime
+import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.tracking.Events
@@ -41,7 +45,8 @@ data class FeedUiState(
 
 /**
  * Feed «Операции» (api.md 4.1, feed mode): three-month portions, newest first; the next portion by
- * `next_before`. Reloads from the top when a statement is imported/deleted or a category changes.
+ * `next_before`. Reloads from the top when a statement is imported/deleted, a category changes or the profile zone
+ * changes — portions, month totals and `next_before` are counted in it on the server (FIN-92).
  */
 @HiltViewModel
 class FeedViewModel @Inject constructor(
@@ -50,6 +55,7 @@ class FeedViewModel @Inject constructor(
     operations: OperationsRepositoryImpl,
     private val flags: FeatureFlags,
     private val tracker: Tracker,
+    reportZone: ReportZone,
 ) : ViewModel() {
     private val _state = MutableStateFlow(FeedUiState(uploadEnabled = flags.isEnabled(Flag.STATEMENTS_UPLOAD)))
     val state: StateFlow<FeedUiState> = _state
@@ -60,6 +66,8 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             merge(statements.events, operations.categoryChanges).collect { refresh() }
         }
+        // The first known zone is not a change: the first portion was asked for already.
+        viewModelScope.launch { reportZone.profile.drop(1).filterNotNull().distinctUntilChanged().collect { refresh() } }
         viewModelScope.launch { flags.changes.collect { _state.update { it.copy(uploadEnabled = flags.isEnabled(Flag.STATEMENTS_UPLOAD)) } } }
     }
 

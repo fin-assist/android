@@ -7,6 +7,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -24,6 +27,7 @@ import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.blocks.CatalogV1
 import ru.finassist.pf.core.common.time.PeriodKey
+import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.core.toggles.Experiment
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
@@ -68,7 +72,8 @@ data class AnalyticsUiState(
 
 /**
  * Analytics (api.md 6.1–6.3). Parameters live here: period type, period key and transfer mode; every change
- * re-requests the server. Data changes elsewhere (import, delete, category edit) reload the current params.
+ * re-requests the server. Data changes elsewhere (import, delete, category edit) and a new profile zone (months
+ * and periods are counted in it on the server, FIN-92) reload the current params.
  */
 @HiltViewModel
 class AnalyticsViewModel @Inject constructor(
@@ -78,6 +83,7 @@ class AnalyticsViewModel @Inject constructor(
     operations: OperationsRepository,
     private val flags: FeatureFlags,
     private val tracker: Tracker,
+    reportZone: ReportZone,
 ) : ViewModel(), AnalyticsHandlers {
     private var period: PeriodTypeCode = PeriodTypeCode.MONTH
     private var date: PeriodKey? = null
@@ -120,6 +126,9 @@ class AnalyticsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { merge(statements.events, operations.categoryChanges).collect { load(quiet = true) } }
+        viewModelScope.launch {
+            reportZone.profile.drop(1).filterNotNull().distinctUntilChanged().collect { if (_state.value.data != null) load(quiet = true) }
+        }
         // Remote config can land after the screen opened (first launch, background sync): re-read the blocks.
         viewModelScope.launch {
             flags.changes.collect {

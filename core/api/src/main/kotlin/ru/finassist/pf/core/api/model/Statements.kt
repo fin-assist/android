@@ -164,10 +164,15 @@ data class Upload(
     val status: UploadStatus,
     val uploadedAt: ApiDateTime,
     val operationCount: Int,
+    /** Open unread lines only: lines a later upload has read are not counted (api.md 3.4, FIN-79). */
     val unreadCount: Int,
     val firstOperationAt: ApiDateTime? = null,
     val lastOperationAt: ApiDateTime? = null,
     val sourceName: String,
+    /** Lines of this upload that later uploads have read (FIN-79); 0 when none. */
+    val resolvedUnreadCount: Int = 0,
+    /** When the latest of the uploads that read them was uploaded: «Строки дочитаны в загрузке от 12 октября». */
+    val resolvedByUploadedAt: ApiDateTime? = null,
 )
 
 @Serializable

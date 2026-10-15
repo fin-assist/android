@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.profile.impl.data
 
+
 import android.content.Context
 import android.content.Intent
 import android.os.Looper
@@ -14,6 +15,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import ru.finassist.pf.core.api.model.ProfileUpdate
+import ru.finassist.pf.core.common.time.Clock
+import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.feature.auth.api.SessionState
 import ru.finassist.pf.feature.profile.impl.domain.PendingZone
 import java.time.Duration
@@ -31,7 +34,7 @@ class TimeZoneSyncImplTest {
     private val store = tempPendingStore()
     private val clock = FakeClock()
     private val device = FakeDeviceZone("Europe/Moscow")
-    private val sync = TimeZoneSyncImpl(context, TimeZoneChecker(api, session, store, clock, device), session, device)
+    private val sync = TimeZoneSyncImpl(context, TimeZoneChecker(api, session, store, clock, device, ReportZone { Clock.MOSCOW }, tempKnownStore()), session, device)
 
     private fun eventually(condition: suspend () -> Boolean) = runBlocking {
         withTimeout(5_000) {

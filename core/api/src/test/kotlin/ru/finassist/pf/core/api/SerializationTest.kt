@@ -238,4 +238,20 @@ class SerializationTest {
         )
         assertEquals(listOf(2.0), chart.points.map { it.value })
     }
+
+    @Test
+    fun `an upload with lines read by a later upload decodes, and without the fields they default to none (FIN-79)`() {
+        val withResolved = """{"upload_id":"u1","file_name":"sep.ofx","status":"done","uploaded_at":"2026-10-10T10:00:00+03:00",
+          "operation_count":210,"unread_count":0,"resolved_unread_count":2,"resolved_by_uploaded_at":"2026-10-12T10:05:00+03:00",
+          "source_name":"Выписка Т-Банка","brand_new_field":1}"""
+        val u = ApiJson.decodeFromString(ru.finassist.pf.core.api.model.Upload.serializer(), withResolved)
+        assertEquals(2, u.resolvedUnreadCount)
+        assertEquals(12, u.resolvedByUploadedAt?.dayOfMonth)
+
+        val old = """{"upload_id":"u1","file_name":"sep.ofx","status":"done","uploaded_at":"2026-10-10T10:00:00+03:00",
+          "operation_count":210,"unread_count":3,"source_name":"Выписка Т-Банка"}"""
+        val o = ApiJson.decodeFromString(ru.finassist.pf.core.api.model.Upload.serializer(), old)
+        assertEquals(0, o.resolvedUnreadCount)
+        assertNull(o.resolvedByUploadedAt)
+    }
 }

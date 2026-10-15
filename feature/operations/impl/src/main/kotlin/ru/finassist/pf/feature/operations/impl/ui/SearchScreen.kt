@@ -187,7 +187,7 @@ internal fun SearchContent(
                     PfButton("Сбросить фильтры", onClick = actions.reset, variant = ButtonVariant.SECONDARY, modifier = Modifier.testTag(OperationsTags.SEARCH_RESET))
                 }
             } else {
-                val months = remember(r.items, today) { OperationFormat.searchGroups(r.items, zone, today) }
+                val months = remember(r.items, zone, today) { OperationFormat.searchGroups(r.items, zone, today) }
                 LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space4, bottom = d.space6)) {
                     item(key = "count") {
                         Text(

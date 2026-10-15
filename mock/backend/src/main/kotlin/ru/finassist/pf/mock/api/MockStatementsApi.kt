@@ -64,11 +64,12 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     override suspend fun getImportConfig(): ImportConfig {
         backend.simulateNetwork()
         backend.requireSession()
-        val now = backend.now()
-        val zone = now.offset
-        val tomorrow = now.toLocalDate().plusDays(1).atStartOfDay().atOffset(zone)
+        // Calendar days in the profile zone (FIN-92), each bound with its own offset (DST).
+        val zone = backend.profileZone()
+        val today = backend.now().atZoneSameInstant(zone).toLocalDate()
+        val tomorrow = today.plusDays(1).atStartOfDay(zone).toOffsetDateTime()
         val lastOp = backend.ledger.all.maxOfOrNull { it.occurredAt }
-        val from = lastOp?.toLocalDate()?.atStartOfDay()?.atOffset(zone) ?: now.minusMonths(12).toLocalDate().atStartOfDay().atOffset(zone)
+        val from = (lastOp?.atZoneSameInstant(zone)?.toLocalDate() ?: today.minusMonths(12)).atStartOfDay(zone).toOffsetDateTime()
         val count = backend.ledger.all.size
         return ImportConfig(
             downloadUrl = "https://www.tbank-online.com/mybank/api/operations/timeline/public/legacy/v1/export_operations" +
@@ -113,6 +114,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             coverageFrom = doc.coverageFrom ?: doc.transactions.minOfOrNull { it.postedAt } ?: now,
             coverageTo = doc.coverageTo ?: doc.transactions.maxOfOrNull { it.postedAt } ?: now,
             unreadLines = doc.unreadLines,
+            accountPeriods = doc.accountPeriods,
             operationCount = doc.transactions.size,
             firstOperationAt = doc.transactions.minOfOrNull { it.postedAt },
             lastOperationAt = doc.transactions.maxOfOrNull { it.postedAt },
@@ -146,6 +148,9 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
                 val isFirst = backend.uploads.none { it.isDone }
                 val (added, duplicates) = backend.ledger.importUpload(upload.id, doc.accounts, doc.transactions)
                 stage(ImportStage.RULES, 85)
+                // In the same transaction, after the last point a cancellation can stop it: unread lines are closed
+                // both ways — earlier uploads' against this one, this one's against later finished ones (FIN-79).
+                backend.unreadResolver.recompute(backend.uploads, committing = upload)
                 upload.result = buildResult(upload, doc, added, duplicates, isFirst, before)
                 upload.result!!
             }
@@ -166,6 +171,8 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         backend.mutex.withLock {
             backend.ledger.removeUpload(upload.id)
             backend.uploads.remove(upload)
+            // Whatever it may have closed is checked again (FIN-79).
+            backend.unreadResolver.recompute(backend.uploads)
         }
     }
 
@@ -265,6 +272,11 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     override suspend fun listStatements(): StatementsList {
         backend.simulateNetwork()
         backend.requireSession()
+        // Built under the mutex: an import or a deletion recomputes the closures meanwhile (FIN-79).
+        return backend.mutex.withLock { statementsSnapshot() }
+    }
+
+    private fun statementsSnapshot(): StatementsList {
         val done = backend.uploads.filter { it.isDone }
         // A completed empty statement leaves the ledger empty: no summary then (api.md 3.4 `summary?`).
         val summary = if (done.isEmpty() || backend.ledger.all.isEmpty()) null else StatementsSummary(
@@ -280,7 +292,10 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
                 Upload(
                     uploadId = u.id, fileName = u.fileName,
                     status = if (u.isDone) UploadStatus.DONE else UploadStatus.PROCESSING,
-                    uploadedAt = u.uploadedAt, operationCount = u.operationCount, unreadCount = u.unreadLines.size,
+                    uploadedAt = u.uploadedAt, operationCount = u.operationCount, unreadCount = u.openUnreadLines.size,
+                    resolvedUnreadCount = u.readClosures.size,
+                    resolvedByUploadedAt = u.readClosures.map { it.uploadId }.toSet()
+                        .mapNotNull { id -> backend.uploads.firstOrNull { it.id == id }?.uploadedAt }.maxOrNull(),
                     firstOperationAt = u.firstOperationAt, lastOperationAt = u.lastOperationAt,
                     sourceName = MockBackend.SOURCE_NAME,
                 )
@@ -300,24 +315,30 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         backend.mutex.withLock {
             backend.ledger.removeUpload(uploadId)
             backend.uploads.remove(upload)
+            // Lines this upload closed are checked again against the uploads that remain (FIN-79).
+            backend.unreadResolver.recompute(backend.uploads)
         }
     }
 
     override suspend fun listUnreadLines(uploadId: String): UnreadLinesList {
         backend.simulateNetwork()
         backend.requireSession()
-        val upload = backend.uploads.firstOrNull { it.id == uploadId } ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
-        return UnreadLinesList(upload.unreadLines.map { toDto(upload, it) })
+        return backend.mutex.withLock {
+            val upload = backend.uploads.firstOrNull { it.id == uploadId } ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+            UnreadLinesList(upload.openUnreadLines.map { toDto(upload, it) })
+        }
     }
 
     override suspend fun listUnreadLines(from: OffsetDateTime, to: OffsetDateTime): UnreadLinesList {
         backend.simulateNetwork()
         backend.requireSession()
-        return UnreadLinesList(
-            backend.uploads.filter { it.isDone }.flatMap { u ->
-                u.unreadLines.filter { it.date != null && !it.date.isBefore(from) && it.date.isBefore(to) }.map { toDto(u, it) }
-            },
-        )
+        return backend.mutex.withLock {
+            UnreadLinesList(
+                backend.uploads.filter { it.isDone }.flatMap { u ->
+                    u.openUnreadLines.filter { it.date != null && !it.date.isBefore(from) && it.date.isBefore(to) }.map { toDto(u, it) }
+                },
+            )
+        }
     }
 
     private fun toDto(upload: MockBackend.Upload, line: ru.finassist.pf.mock.ofx.UnreadLine) = UnreadLine(

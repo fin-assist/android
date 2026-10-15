@@ -118,15 +118,15 @@ internal fun FeedContent(
                 }
             }
             else -> {
-                val groups = remember(state.items) { OperationFormat.groupByDay(state.items, zone, today) }
+                val groups = remember(state.items, zone, today) { OperationFormat.groupByDay(state.items, zone, today) }
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space2, bottom = d.space6),
                 ) {
                     val feedState = state.state
-                    val lastOperation = feedState?.lastOperationAt?.toLocalDate()
-                    state.summary.firstOrNull()?.let { s -> item(key = "summary") { SummaryCard(s, today) } }
+                    val lastOperation = feedState?.lastOperationAt?.atZoneSameInstant(zone)?.toLocalDate()
+                    state.summary.firstOrNull()?.let { s -> item(key = "summary") { SummaryCard(s, today, zone) } }
                     if (feedState?.stale == true && lastOperation != null) {
                         item(key = "stale") {
                             PfNotice(
@@ -199,10 +199,10 @@ internal fun OperationRow(row: RowModel, onClick: () -> Unit, divider: Boolean =
  * (mockup `Main`, api.md 4.1 summary).
  */
 @Composable
-private fun SummaryCard(s: MonthSummary, today: LocalDate) {
+private fun SummaryCard(s: MonthSummary, today: LocalDate, zone: ZoneId) {
     val month = runCatching { YearMonth.parse(s.month) }.getOrNull()
     val name = month?.let { RussianDates.monthNominative(it.month).replaceFirstChar { c -> c.uppercase() } + if (it.year != today.year) " ${it.year}" else "" } ?: s.month
-    val title = s.dataTo?.let { "$name · по ${RussianDates.day(it.toLocalDate())}" } ?: name
+    val title = s.dataTo?.let { "$name · по ${RussianDates.day(it.atZoneSameInstant(zone).toLocalDate())}" } ?: name
     val balance = s.income - s.expense
     val share = if (s.income.minor > 0) (balance.minor * 100.0 / s.income.minor).roundToInt() else null
     PfMonthSummary(

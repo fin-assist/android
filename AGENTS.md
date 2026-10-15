@@ -163,6 +163,8 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   directly: design-check snapshots replace them with the mockups' fixed bars.
 - "Now" and "today" come from the injected `Clock` (`LocalPfClock` in composables), never `LocalDate.now()` /
   `OffsetDateTime.now()`: the e2e build pins that clock, and the whole app has to live on the same date.
+  `Clock.zone` is the profile zone (`ReportZone`, kept by the profile feature), not the device's: days and months
+  on the client match analytics (FIN-92). It can change while the process lives — read it when needed, do not keep it.
 - A PR that adds a screen, a new state of a screen, a bottom sheet or a dialog wires it into the design check in
   the same PR: a `…Content` the test can render, and a `*DesignCheckTest` capturing it under the artboard name
   (`popups = true` for a sheet or dialog). An artboard is a top-level screen frame in Figma, named like `Main`
@@ -241,8 +243,11 @@ commands: `docs/testing.md`.
   a PR for several issues lists all of them in the description, each linked
   (`https://finassist.youtrack.cloud/issue/FIN-<n>`). No issue — no key in the title.
 - After the PR is open and all planned changes are pushed, request a review with one PR comment in Russian
-  addressed to both `@codex` and `@claude`, asking for comments in Russian. `@claude` runs from
-  `.github/workflows/claude.yml` (default branch), `@codex` is the Codex GitHub integration.
+  addressed to both reviewers: it contains `@codex review` (the exact phrase the Codex integration reacts to) and
+  `@claude`, asks for comments in Russian and points to Code Review Rules (security, test coverage of use cases).
+  `@claude` runs from `.github/workflows/claude.yml` (default branch) on Claude Fable 5.1 (`claude-fable-5-1`, set in
+  `claude_args`). `@codex` is the Codex GitHub integration; this repository cannot pin its model (target: GPT-6 Astra,
+  `gpt-6-astra`; open question in FIN-95).
 - Waiting for the review: when the session receives the PR's GitHub events (reviews, comments, CI), react to them
   instead of polling. Otherwise check 3 minutes after the request, then every 2 minutes. A reviewer has answered when
   it posted its review or summary for the latest commit; for Codex «Didn't find any major issues» or a 👍 reaction
@@ -253,7 +258,12 @@ commands: `docs/testing.md`.
   then request a review again and wait the same way.
   Agents never merge a PR (into a release branch or `main`); the owner does.
 
-## Review guidelines
+## Code Review Rules
+
+Read by `@claude` (through `CLAUDE.md`) and by the Codex integration, which looks for this heading. Two areas
+get a dedicated pass on every PR: Security and Test coverage of use cases (below).
+
+### General
 
 - Write all review comments in Russian (summary and inline comments). Code identifiers, API field names and
   quotes from the code stay as they are.
@@ -261,8 +271,70 @@ commands: `docs/testing.md`.
   rules are mirrored in KDoc of `core/api` and `core/network`. Toggles: `docs/flags.md`. Modules: `docs/modules.md`.
 - Report only verified problems with a concrete failure scenario; skip style nits.
 - Post each finding as an inline comment on the changed line (a review conversation that can be resolved),
-  not only in a summary comment; the summary lists what was checked.
+  not only in a summary comment. The summary lists what was checked, with a «Безопасность» part and a «Покрытие
+  сценариев» part (see below); «not affected» is a valid answer for either, with one line why.
 - Check that the PR updates this file and `docs/` when it changes what they describe.
+
+### Security
+
+The app holds a user's bank operations, phone number and app-lock secrets (personal data under 152-ФЗ). A finding
+names what leaks or breaks and how an attacker or another app gets to it. Check the changed code for:
+
+- Personal and financial data (phone, amounts, counterparties, operation descriptions, statement content, assistant
+  dialogue) leaving the device or the app's private storage other than through the API client: logs, crash reports
+  (Tracer), analytics events, Remote Config parameters (only our opaque `user_id` / device id go there), exception
+  messages, clipboard, notifications, files in shared storage.
+- Secrets: auth tokens, the passcode and keys are stored encrypted with a Keystore-backed key (as the passcode in
+  `feature/applock`), never in plain preferences, files, `BuildConfig`, resources or source; no real keys or tokens
+  in the repository.
+- Network: HTTPS only, no cleartext exceptions, no custom `TrustManager` / `HostnameVerifier` that weakens checks;
+  auth headers not logged.
+- Untrusted input — the OFX file the user picks (read and uploaded by the app, parsed today by the fake backend
+  `mock/ofx`) and every API response: size and depth limits, no XML external entities or DTD expansion in OFX 2.x,
+  malformed or hostile data ends in a handled error, not a crash or a hang.
+- Android surface: a new exported component, intent filter or deep link validates its input and does not act on
+  behalf of the caller without checks; `PendingIntent`s are immutable unless they must not be; no WebView with
+  JavaScript bridges to app data.
+- Backup and data extraction: new stores (databases, DataStore, files) stay covered by
+  `allowBackup="false"` / `data_extraction_rules.xml`.
+- Build separation: mock, e2e and debug hooks (`app/src/mock*`, `E2eControlActivity`, the control link, test
+  flags) stay out of the `prod` flavor and release builds.
+- Trust boundaries: limits, quotas and permissions are enforced by the backend; the client only shows them.
+  Client-side checks are not the security control — flag code that relies on them.
+- Consent: user data goes to the LLM assistant only after the assistant consent; an account is registered
+  (created) only after the personal data consent. Sending the phone number for call verification before that is
+  allowed: only the server's answer tells a new number from an existing user, and the consent screen is shown for a
+  new number.
+- New dependencies: flag a new library or SDK that gets data access (network, storage, analytics) so the owner
+  decides on it.
+
+### Test coverage of use cases
+
+The criterion is not a percentage of lines but whether the use cases of the changed functionality are covered.
+For each feature or behaviour the PR adds or changes:
+
+1. List its use cases from the code, the mockups and the issue: the main path; alternative paths; every error the
+   user can reach (no network, server error, unknown code, invalid or hostile input); empty, first-run and
+   loading states; boundary values (zero, negative, very large amounts, currency, dates at month and year
+   boundaries, time zones, long texts); each flag state that changes behaviour; repeated actions (double tap,
+   retry), back navigation, configuration change and process death where state must survive.
+2. Map each case to the test that covers it: unit test, design check or UI flow (see Code and Tests).
+3. Post a finding for an uncovered case only when the case is reachable in the changed code and its behaviour is
+   added or changed by the PR; name the concrete case and the layer that should cover it. The list in step 1 is a
+   prompt, not a checklist to report item by item. A case not worth a test (covered by a lower layer, not
+   reproducible in the mock) is fine when the PR or the summary says why.
+
+The 80 % changed-line threshold in Tests is the author's minimum; meeting it does not settle this check.
+
+Also check:
+
+- A test counts only if it asserts the behaviour of that case and would fail if the case broke; a test that only
+  runs lines, asserts on a mock it set up itself or snapshots without a check is not coverage.
+- A bug fix has a test that fails without the fix and reproduces the user's case, not a neighbouring one.
+- Security-relevant behaviour (consent gates, app lock, hostile OFX, unknown codes) has negative tests: what must not
+  happen is asserted, not only what must.
+
+### Checklist
 - Check that a new screen, screen state, bottom sheet or dialog comes with its `*DesignCheckTest` (see Code).
 - Check that a new or changed user scenario comes with a UI test (or a «Not covered yet» entry with a technical
   reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md
