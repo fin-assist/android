@@ -128,6 +128,17 @@ class ImportResultDesignCheckTest {
         notices = listOf(ImportNotice(ImportNoticeCode.NO_EXPENSES, "В выписке нет расходов — возможно, выгружен не тот счёт")),
     )
 
+    /** The server's texts for what this client does not know (FIN-83): a new notice above, a new locked feature below. */
+    private val unknownCodes = first.copy(
+        notices = listOf(ImportNotice(ImportNoticeCode.UNKNOWN, "Часть операций пришла из нового источника — проверьте категории")),
+        coverage = first.coverage.copy(
+            features = first.coverage.features + FeatureAvailability(
+                AnalyticsFeature.UNKNOWN, open = false, openedNow = false, requiredFullMonths = 6,
+                featureName = "Новая метрика", text = "Новая метрика — нужно 6 полных месяцев",
+            ),
+        ),
+    )
+
     private fun capture(name: String, result: ImportResult, heightDp: Int, dark: Boolean = false) =
         DesignCheck.capture(name, dark = dark, heightDp = heightDp) {
             ResultContent(
@@ -152,6 +163,8 @@ class ImportResultDesignCheckTest {
     @Test fun importResultShort() = capture("ImportResultShort", short, 1044)
 
     @Test fun importResultUnlocked() = capture("ImportResultUnlocked", unlocked, 1044)
+
+    @Test fun importResultUnknownCodes() = capture("ImportResultUnknownCodes", unknownCodes, 1042)
 
     @Test fun importResultNoExpenses() = capture("ImportResultNoExpenses", noExpenses, 844)
 

@@ -214,5 +214,9 @@ class ResultTextsTest {
         assertEquals("Часть аналитики пока закрыта", notice.title)
         assertEquals("Новая метрика — нужно 12 полных месяцев.", notice.text)
         assertNull(ResultTexts.coverageNotice(result()), "known features alone need no notice")
+        // A later import that completed no month: the same text (FIN-83 review).
+        val later = r.copy(isFirstImport = false, coverage = r.coverage.copy(newlyFullMonths = emptyList()))
+        assertEquals("Новая метрика — нужно 12 полных месяцев.", ResultTexts.coverageNotice(later)!!.text)
+        assertNull(ResultTexts.coverageNotice(result().copy(isFirstImport = false, coverage = coverage.copy(newlyFullMonths = emptyList()))))
     }
 }

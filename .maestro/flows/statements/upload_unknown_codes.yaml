@@ -1,0 +1,48 @@
+appId: ru.finassist.pf.mock.e2e
+name: Загрузка — серверные тексты для неизвестного уведомления и неизвестной закрытой функции
+tags:
+  - statements
+---
+# FIN-83. With `unknown_codes=true` the import result carries a notice code and an analytics feature the client does
+# not know: the screen shows the server's texts for both instead of dropping them.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?unknown_codes=true"
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+# The unknown notice is above everything else.
+- assertVisible:
+    id: "statements.result.notice"
+- assertVisible: "Часть операций пришла из нового источника — проверьте категории"
+# The unknown locked feature: its server text, whichever of the coverage notices carries it.
+- scrollUntilVisible:
+    element: ".*Новая метрика — нужно 6 полных месяцев\\..*"
