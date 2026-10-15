@@ -57,7 +57,10 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00"
+                            }
                         }
                     }
                 ]
@@ -188,7 +191,10 @@
                     "value_kind": "amount",
                     "action": {
                         "type": "open_operations",
-                        "filter": {}
+                        "filter": {
+                            "from": "2026-09-01T00:00:00+03:00",
+                            "to": "2026-10-01T00:00:00+03:00"
+                        }
                     }
                 },
                 "items": [
@@ -201,7 +207,11 @@
                         "share": 0.37,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Супермаркеты"
+                            }
                         }
                     },
                     {
@@ -213,7 +223,11 @@
                         "share": 0.2,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Различные товары"
+                            }
                         }
                     },
                     {
@@ -225,7 +239,11 @@
                         "share": 0.07,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Заправки"
+                            }
                         }
                     },
                     {
@@ -237,7 +255,11 @@
                         "share": 0.06,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Переводы"
+                            }
                         }
                     },
                     {
@@ -249,7 +271,11 @@
                         "share": 0.06,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Кафе и рестораны"
+                            }
                         }
                     }
                 ],
@@ -273,7 +299,11 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Финансы"
+                            }
                         }
                     },
                     {
@@ -285,7 +315,11 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Переводы"
+                            }
                         }
                     },
                     {
@@ -297,7 +331,11 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Дивиденды и купоны"
+                            }
                         }
                     }
                 ],

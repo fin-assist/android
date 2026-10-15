@@ -42,8 +42,17 @@ object AnalyticsDesignFixtures {
     fun day(m: Int, d: Int) = OffsetDateTime.of(2026, m, d, 0, 0, 0, 0, ZoneOffset.ofHours(3))
     fun month(m: Int) = DateRange(day(m, 1), if (m == 12) OffsetDateTime.of(2027, 1, 1, 0, 0, 0, 0, ZoneOffset.ofHours(3)) else day(m + 1, 1))
     fun rub(v: Long) = Money(v * 100)
-    val f = OperationsFilter()
     val sep = month(9)
+
+    /**
+     * Filter of the operations behind a figure: the period it covers, plus the category for a category row. Never
+     * empty — a client treats `open_operations` with an empty filter as no action (api.md «Действия»), and the rows
+     * would lose their chevrons in the design check (FIN-100).
+     */
+    fun filter(range: DateRange = sep, categoryId: String? = null) =
+        OperationsFilter(from = range.from, to = range.to, categoryId = categoryId)
+    val f = filter()
+    val year = DateRange(day(1, 1), OffsetDateTime.of(2027, 1, 1, 0, 0, 0, 0, ZoneOffset.ofHours(3)))
     val basis = MetricBasis(DateRange(day(4, 1), day(9, 1)), fullMonths = 5)
 
     fun ready(value: Long, comparison: Metric? = null, typical: Metric? = null, share: Double? = null) =
@@ -52,8 +61,11 @@ object AnalyticsDesignFixtures {
     fun locked(reason: LockReason, required: Int? = null, available: Int? = null) =
         Metric(MetricStatus.LOCKED, lock = MetricLock(reason, required, available))
 
-    fun cat(name: String, icon: String, amount: Long, share: Double, count: Int, note: String? = null) =
-        CategoryAmount(categoryId = "c_$name", categoryName = name, categoryIcon = icon, note = note, amount = rub(amount), share = share, operationCount = count, filters = f)
+    fun cat(name: String, icon: String, amount: Long, share: Double, count: Int, note: String? = null, range: DateRange = sep) =
+        CategoryAmount(
+            categoryId = "c_$name", categoryName = name, categoryIcon = icon, note = note, amount = rub(amount), share = share,
+            operationCount = count, filters = filter(range, "c_$name"),
+        )
 
     fun point(m: Int, expense: Long?, kept: Double?) = MonthlyPoint(
         month = "2026-%02d".format(m), range = month(m),
@@ -165,7 +177,7 @@ object AnalyticsDesignFixtures {
             hasData = true,
             params = AnalyticsParams(PeriodTypeCode.YEAR, PeriodKey("2026"), TransferMode.WITH),
             period = AnalyticsPeriodInfo(
-                range = DateRange(day(1, 1), OffsetDateTime.of(2027, 1, 1, 0, 0, 0, 0, ZoneOffset.ofHours(3))),
+                range = year,
                 isCurrent = true, coverage = Coverage.PARTIAL, dataFrom = day(4, 1), dataTo = day(9, 25), gaps = emptyList(),
             ),
             navigation = AnalyticsNavigation(),
@@ -179,19 +191,19 @@ object AnalyticsDesignFixtures {
             expenseCategories = CategoryBreakdown(
                 BreakdownStatus.READY,
                 listOf(
-                    cat("Супермаркеты", "cart", 196_400, 0.37, 128),
-                    cat("Различные товары", "package", 104_800, 0.20, 51),
-                    cat("Заправки", "car", 38_600, 0.07, 24),
-                    cat("Переводы", "users", 33_900, 0.06, 17),
-                    cat("Кафе и рестораны", "coffee", 31_200, 0.06, 80),
+                    cat("Супермаркеты", "cart", 196_400, 0.37, 128, range = year),
+                    cat("Различные товары", "package", 104_800, 0.20, 51, range = year),
+                    cat("Заправки", "car", 38_600, 0.07, 24, range = year),
+                    cat("Переводы", "users", 33_900, 0.06, 17, range = year),
+                    cat("Кафе и рестораны", "coffee", 31_200, 0.06, 80, range = year),
                 ),
             ),
             incomeCategories = CategoryBreakdown(
                 BreakdownStatus.READY,
                 listOf(
-                    cat("Финансы", "percent", 851_900, 0.92, 18),
-                    cat("Переводы", "users", 62_300, 0.07, 27),
-                    cat("Дивиденды и купоны", "bar-chart", 7_200, 0.01, 4),
+                    cat("Финансы", "percent", 851_900, 0.92, 18, range = year),
+                    cat("Переводы", "users", 62_300, 0.07, 27, range = year),
+                    cat("Дивиденды и купоны", "bar-chart", 7_200, 0.01, 4, range = year),
                 ),
             ),
             monthlyChart = MonthlyChart(MetricStatus.READY, basis = basis, points = (1..12).map { m -> point(m, spend[m], kept[m]) }),

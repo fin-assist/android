@@ -41,7 +41,10 @@
                         "caption": "1–25 сентября",
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00"
+                            }
                         }
                     },
                     {
@@ -59,7 +62,10 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00"
+                            }
                         }
                     }
                 ]
@@ -149,7 +155,10 @@
                     "value_kind": "amount",
                     "action": {
                         "type": "open_operations",
-                        "filter": {}
+                        "filter": {
+                            "from": "2026-09-01T00:00:00+03:00",
+                            "to": "2026-10-01T00:00:00+03:00"
+                        }
                     }
                 },
                 "items": [
@@ -162,7 +171,11 @@
                         "share": 0.38,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Супермаркеты"
+                            }
                         }
                     },
                     {
@@ -174,7 +187,11 @@
                         "share": 0.21,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Различные товары"
+                            }
                         }
                     },
                     {
@@ -186,7 +203,11 @@
                         "share": 0.09,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Заправки"
+                            }
                         }
                     },
                     {
@@ -198,7 +219,11 @@
                         "share": 0.07,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Переводы"
+                            }
                         }
                     },
                     {
@@ -210,7 +235,11 @@
                         "share": 0.12,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Кафе и рестораны"
+                            }
                         }
                     },
                     {
@@ -222,7 +251,11 @@
                         "share": 0.06,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Транспорт"
+                            }
                         }
                     },
                     {
@@ -234,7 +267,11 @@
                         "share": 0.04,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Связь"
+                            }
                         }
                     },
                     {
@@ -246,7 +283,11 @@
                         "share": 0.03,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Аптеки"
+                            }
                         }
                     }
                 ],
@@ -271,7 +312,11 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Финансы"
+                            }
                         }
                     },
                     {
@@ -284,7 +329,11 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Переводы"
+                            }
                         }
                     },
                     {
@@ -297,7 +346,11 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Дивиденды и купоны"
+                            }
                         }
                     }
                 ],
@@ -363,7 +416,10 @@
             },
             "action": {
                 "type": "open_operations",
-                "filter": {}
+                "filter": {
+                    "from": "2026-09-01T00:00:00+03:00",
+                    "to": "2026-10-01T00:00:00+03:00"
+                }
             }
         },
         {
@@ -379,7 +435,10 @@
             },
             "action": {
                 "type": "open_operations",
-                "filter": {}
+                "filter": {
+                    "from": "2026-09-01T00:00:00+03:00",
+                    "to": "2026-10-01T00:00:00+03:00"
+                }
             }
         },
         {
@@ -395,7 +454,10 @@
             },
             "action": {
                 "type": "open_operations",
-                "filter": {}
+                "filter": {
+                    "from": "2026-09-01T00:00:00+03:00",
+                    "to": "2026-10-01T00:00:00+03:00"
+                }
             }
         },
         {
@@ -412,7 +474,10 @@
             },
             "action": {
                 "type": "open_operations",
-                "filter": {}
+                "filter": {
+                    "from": "2026-09-01T00:00:00+03:00",
+                    "to": "2026-10-01T00:00:00+03:00"
+                }
             }
         },
         {
