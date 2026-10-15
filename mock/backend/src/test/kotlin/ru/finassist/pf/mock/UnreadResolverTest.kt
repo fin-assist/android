@@ -13,7 +13,8 @@ import kotlin.test.assertTrue
 
 /** Unread lines closed by a later upload (api.md 3.6, «Закрытие строк»; FIN-79). */
 class UnreadResolverTest {
-    private val backend = testBackend()
+    private val clock = TestClock(NOW)
+    private val backend = testBackend(clock)
     private val api = MockStatementsApi(backend)
 
     private fun at(s: String) = OffsetDateTime.parse("${s}:00+03:00")
@@ -156,5 +157,54 @@ class UnreadResolverTest {
         assertEquals(0, row(old).unreadCount)
         runBlocking { api.deleteStatement(new.id) }
         assertEquals(1, row(old).unreadCount)
+    }
+
+    @Test fun `of two later uploads covering a line the earlier one closes it, after a deletion too`() {
+        val old = upload("old.ofx", doc("2026-09-01", "2026-09-30", unread = listOf(line(10, "2026-09-05T10:00", "truncated"))))
+        val b = upload("b.ofx", doc("2026-09-01", "2026-09-30"))
+        clock.at = clock.at.plusDays(1)
+        val c = upload("c.ofx", doc("2026-09-01", "2026-09-30"))
+        clock.at = clock.at.plusDays(1)
+        upload("d.ofx", doc("2026-09-01", "2026-09-30"))
+        assertEquals(b.uploadedAt, row(old).resolvedByUploadedAt)
+
+        runBlocking { api.deleteStatement(b.id) }
+        assertEquals(c.uploadedAt, row(old).resolvedByUploadedAt, "C, not the newest D")
+    }
+
+    @Test fun `a later upload that finished first still closes the earlier upload's line`() {
+        // `late` was started after `early` but finishes first: `early` commits last and still gets its line closed.
+        val early = MockBackend.Upload(
+            id = "early", fileName = "early.ofx", uploadedAt = at("2026-10-01T10:00"),
+            coverageFrom = at("2026-09-01T00:00"), coverageTo = at("2026-09-30T23:59"),
+            unreadLines = listOf(line(10, "2026-09-05T10:00", "truncated")),
+            accountPeriods = mapOf(Acc.CURRENT.id to period("2026-09-01", "2026-09-30")),
+        )
+        val late = MockBackend.Upload(
+            id = "late", fileName = "late.ofx", uploadedAt = at("2026-10-01T10:05"),
+            coverageFrom = at("2026-09-01T00:00"), coverageTo = at("2026-09-30T23:59"), unreadLines = emptyList(),
+            accountPeriods = mapOf(Acc.CURRENT.id to period("2026-09-01", "2026-09-30")),
+        )
+        val uploads = listOf(late, early) // newest first, as started
+        val resolver = ru.finassist.pf.mock.domain.UnreadResolver(backend.ledger) { java.time.ZoneId.of("Europe/Moscow") }
+        late.result = doneResult()
+        resolver.recompute(uploads, committing = late)
+        resolver.recompute(uploads, committing = early)
+        assertEquals("late", early.closedBy[10]?.uploadId)
+    }
+
+    @Test fun `an undated line is closed by a statement with a DTEND without time covering the same days`() {
+        val oldPeriod = StatementPeriod(at("2026-09-01T00:00"), at("2026-09-30T15:00"))
+        val old = upload("old.ofx", doc("2026-09-01", "2026-09-30").copy(
+            unreadLines = listOf(line(10, null, "no_date")), accountPeriods = mapOf(Acc.CURRENT.id to oldPeriod),
+        ))
+        val dateOnly = StatementPeriod(at("2026-09-01T00:00"), at("2026-09-30T00:00"))
+        upload("new.ofx", doc("2026-09-01", "2026-09-30").copy(accountPeriods = mapOf(Acc.CURRENT.id to dateOnly)))
+        assertEquals(0, row(old).unreadCount)
+    }
+
+    private fun doneResult() = runBlocking {
+        // Any finished result marks an upload done; the content does not matter here.
+        api.startUpload("x.ofx", doc("2026-09-01", "2026-09-30"), clock.at, instant = true).result!!
     }
 }

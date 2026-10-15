@@ -12,26 +12,19 @@ import java.time.ZoneId
  */
 class UnreadResolver(private val ledger: Ledger, private val zone: () -> ZoneId) {
 
-    /** Runs inside the import of [newer], after its operations are in the ledger; [older] — the uploads before it. */
-    fun close(newer: Upload, older: List<Upload>) {
-        for (upload in older) {
-            for (line in upload.openUnreadLines) {
-                outcome(newer, upload, line)?.let { read -> upload.closedBy[line.lineNumber] = Closure(newer.id, read) }
-            }
-        }
-    }
-
     /**
-     * [deleted] is gone (its operations already removed from the ledger): the lines it closed are checked again against
-     * the later uploads that remain. [uploads] — the remaining ones, newest first.
+     * Recomputes every closure from scratch: a line of an upload is closed by the earliest later finished upload that
+     * covers it. Run when an upload commits (pass it as [committing]: not marked done yet) and after one is deleted or
+     * discarded. The result depends neither on the order uploads finish in nor on what was deleted before.
+     * [uploads] — all of them, newest first (the order they were started in).
      */
-    fun reopen(deleted: String, uploads: List<Upload>) {
-        uploads.forEachIndexed { i, upload ->
-            val reopened = upload.closedBy.filterValues { it.uploadId == deleted }.keys
-            if (reopened.isEmpty()) return@forEachIndexed
-            reopened.forEach(upload.closedBy::remove)
-            val later = uploads.subList(0, i).filter { it.isDone }
-            upload.unreadLines.filter { it.lineNumber in reopened }.forEach { line ->
+    fun recompute(uploads: List<Upload>, committing: Upload? = null) {
+        val done = uploads.filter { it.isDone || it === committing }
+        done.forEachIndexed { i, upload ->
+            upload.closedBy.clear()
+            // Later uploads, the earliest first.
+            val later = done.subList(0, i).asReversed()
+            for (line in upload.unreadLines) {
                 for (newer in later) {
                     val read = outcome(newer, upload, line) ?: continue
                     upload.closedBy[line.lineNumber] = Closure(newer.id, read)
@@ -59,13 +52,20 @@ class UnreadResolver(private val ledger: Ledger, private val zone: () -> ZoneId)
         if (date != null) {
             // 2. By date: the newer statement of the account covers the day; read unless it has an unread line that day.
             // Days, not moments: a `DTEND` without time parses to midnight and still covers its whole day.
-            val day = date.atZoneSameInstant(zone()).toLocalDate()
-            if (day !in period.from.atZoneSameInstant(zone()).toLocalDate()..period.to.atZoneSameInstant(zone()).toLocalDate()) return null
-            return newerUnread.none { it.date?.atZoneSameInstant(zone())?.toLocalDate() == day }
+            val day = day(date)
+            if (day !in days(period)) return null
+            return newerUnread.none { it.date?.let(::day) == day }
         }
         // 3. No date, no FITID: the newer statement covers the whole period of the old one; read unless unread lines there.
+        // By days, like rule 2.
         val oldPeriod = old.accountPeriods[account] ?: return null
-        if (!period.covers(oldPeriod)) return null
-        return newerUnread.none { it.date == null || it.date in oldPeriod }
+        val oldDays = days(oldPeriod)
+        val newDays = days(period)
+        if (newDays.start > oldDays.start || newDays.endInclusive < oldDays.endInclusive) return null
+        return newerUnread.none { it.date == null || day(it.date) in oldDays }
     }
+
+    private fun day(at: java.time.OffsetDateTime) = at.atZoneSameInstant(zone()).toLocalDate()
+
+    private fun days(p: ru.finassist.pf.mock.ofx.StatementPeriod) = day(p.from)..day(p.to)
 }

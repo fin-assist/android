@@ -22,10 +22,7 @@ data class OfxDocument(
     val accountPeriods: Map<String, StatementPeriod> = emptyMap(),
 )
 
-data class StatementPeriod(val from: OffsetDateTime, val to: OffsetDateTime) {
-    operator fun contains(at: OffsetDateTime): Boolean = !at.isBefore(from) && !at.isAfter(to)
-    fun covers(other: StatementPeriod): Boolean = !from.isAfter(other.from) && !to.isBefore(other.to)
-}
+data class StatementPeriod(val from: OffsetDateTime, val to: OffsetDateTime)
 
 data class OfxAccount(
     /** Full `ACCTID`; the mock keeps it only to key transactions and derive the mask. */
