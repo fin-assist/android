@@ -1,0 +1,86 @@
+[
+  {
+    "name": "AnalyticsTransfers",
+    "ssim": 0.9386,
+    "changed": 0.0328,
+    "mockup_h": 2532,
+    "app_h": 2532
+  },
+  {
+    "name": "AnalyticsEarly",
+    "ssim": 0.9452,
+    "changed": 0.0298,
+    "mockup_h": 6288,
+    "app_h": 6288
+  },
+  {
+    "name": "AnalyticsStale",
+    "ssim": 0.9567,
+    "changed": 0.025,
+    "mockup_h": 8856,
+    "app_h": 8856
+  },
+  {
+    "name": "AnalyticsHintAsk",
+    "ssim": 0.9569,
+    "changed": 0.0251,
+    "mockup_h": 8544,
+    "app_h": 8544
+  },
+  {
+    "name": "AnalyticsHintCategories",
+    "ssim": 0.9572,
+    "changed": 0.0248,
+    "mockup_h": 8544,
+    "app_h": 8544
+  },
+  {
+    "name": "AnalyticsPartial",
+    "ssim": 0.9575,
+    "changed": 0.0246,
+    "mockup_h": 8700,
+    "app_h": 8700
+  },
+  {
+    "name": "AnalyticsDark",
+    "ssim": 0.9588,
+    "changed": 0.0234,
+    "mockup_h": 8544,
+    "app_h": 8544
+  },
+  {
+    "name": "Analytics",
+    "ssim": 0.9594,
+    "changed": 0.0238,
+    "mockup_h": 8544,
+    "app_h": 8544
+  },
+  {
+    "name": "AnalyticsLimit",
+    "ssim": 0.9597,
+    "changed": 0.0237,
+    "mockup_h": 8616,
+    "app_h": 8616
+  },
+  {
+    "name": "AnalyticsNoTransfers",
+    "ssim": 0.9597,
+    "changed": 0.0236,
+    "mockup_h": 8376,
+    "app_h": 8376
+  },
+  {
+    "name": "AnalyticsYear",
+    "ssim": 0.9621,
+    "changed": 0.0219,
+    "mockup_h": 5100,
+    "app_h": 5100
+  },
+  {
+    "name": "AnalyticsEmpty",
+    "ssim": 0.9865,
+    "changed": 0.0095,
+    "mockup_h": 2532,
+    "app_h": 2532
+  }
+]
