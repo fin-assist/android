@@ -250,26 +250,23 @@ commands: `docs/testing.md`.
   a PR for several issues lists all of them in the description, each linked
   (`https://finassist.youtrack.cloud/issue/FIN-<n>`). No issue — no key in the title.
 - After the PR is open and all planned changes are pushed, request a review with one PR comment in Russian
-  addressed to both reviewers. The first line is `@codex review` (the exact phrase the Codex integration reacts to),
-  the second is `@claude`; every instruction below them is addressed to both (never «@claude, …» alone — Codex reads
-  the same comment):
+  addressed to both reviewers: it starts with `@codex @claude`, and the text after them is addressed to both (never
+  «@claude, …» alone — Codex reads the same comment):
 
   ```
-  @codex review
-  @claude
-  Ревьюеры, проведите ревью этого PR по Code Review Rules в AGENTS.md, включая разделы Security и Test coverage of
-  use cases. Замечания — на русском, inline на изменённых строках. Особое внимание: <что именно и почему>.
+  @codex @claude проведите ревью этого PR по Code Review Rules в AGENTS.md, включая разделы Security и Test coverage
+  of use cases. Замечания — на русском, inline на изменённых строках. Особое внимание: <что именно и почему>.
   ```
 
   - `@claude` — `.github/workflows/claude.yml` (runs from the default branch), Claude Fable 5.1 (`claude-fable-5-1`,
     set in `claude_args`);
-  - `@codex review` — the Codex GitHub integration, under the owner's ChatGPT subscription. Its model is chosen by
+  - `@codex` — the Codex GitHub integration, under the owner's ChatGPT subscription. Its model is chosen by
     OpenAI and cannot be pinned from here; a pinned model would need the OpenAI API with per-token billing, which was
     declined (FIN-103).
 - Waiting for the review: when the session receives the PR's GitHub events (reviews, comments, CI), react to them
   instead of polling. Otherwise check 3 minutes after the request, then every 2 minutes. A reviewer has answered when
-  it posted its review or summary for the latest commit; for Codex «Didn't find any major issues» or a 👍 reaction
-  without a comment also counts. If a reviewer has not answered within 15 minutes of the last request, say so in the
+  it posted its review or summary for the latest commit; for Codex (`chatgpt-codex-connector[bot]`) «Didn't find any
+  major issues» or a 👍 reaction without a comment also counts. If a reviewer has not answered within 15 minutes of the last request, say so in the
   PR and to the owner and stop waiting for it. The cycle ends when both reviewers have answered the latest request and
   no review thread is open.
 - Address review findings in follow-up commits on the same branch, reply in the conversation and resolve it;
