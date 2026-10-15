@@ -115,7 +115,8 @@ object ResultTexts {
     /**
      * After a later upload that completed months: what opened and what is still to come («Теперь есть 1 полный
      * месяц — август»). Without a full month: what is closed and when it opens («Часть аналитики пока закрыта»).
-     * Otherwise nothing — the first import of a long statement needs no explanation.
+     * Otherwise nothing — the first import of a long statement needs no explanation, except for features this client
+     * does not know: their server texts.
      */
     fun coverageNotice(r: ImportResult): CoverageNotice? {
         val c = r.coverage
@@ -155,6 +156,12 @@ object ResultTexts {
             }
             if (phrases.isNotEmpty()) lines += phrases.joinToString(", ") + "."
             return CoverageNotice(positive = false, title = "Часть аналитики пока закрыта", text = lines.joinToString(" "))
+        }
+        // The first import with full months says nothing about the known features, but a feature this client does not
+        // know is explained only by the server's text (FIN-82).
+        val unknown = locked.filter { featureForms(it.feature) == null }
+        if (r.isFirstImport && unknown.isNotEmpty()) {
+            return CoverageNotice(positive = false, title = "Часть аналитики пока закрыта", text = unknown.joinToString(" ") { it.text!!.sentence() })
         }
         return null
     }

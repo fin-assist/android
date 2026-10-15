@@ -202,4 +202,17 @@ class ResultTextsTest {
         )
         assertEquals("Новая метрика — нужно 6 полных месяцев. Прогноз на год появится с 1 полным месяцем.", ResultTexts.coverageNotice(r)!!.text)
     }
+
+    @Test
+    fun `the first import with full months shows only the server texts of unknown locked features (FIN-83 review)`() {
+        val unknown = FeatureAvailability(
+            AnalyticsFeature.UNKNOWN, open = false, openedNow = false, requiredFullMonths = 12,
+            featureName = "Новая метрика", text = "Новая метрика — нужно 12 полных месяцев",
+        )
+        val r = result().copy(coverage = coverage.copy(features = coverage.features + unknown))
+        val notice = ResultTexts.coverageNotice(r)!!
+        assertEquals("Часть аналитики пока закрыта", notice.title)
+        assertEquals("Новая метрика — нужно 12 полных месяцев.", notice.text)
+        assertNull(ResultTexts.coverageNotice(result()), "known features alone need no notice")
+    }
 }
