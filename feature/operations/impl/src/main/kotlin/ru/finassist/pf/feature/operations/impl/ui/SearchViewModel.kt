@@ -125,11 +125,16 @@ class SearchViewModel @Inject constructor(
         updateFilter { it.copy(amountFrom = from, amountTo = to) }
     }
 
-    /** «Только расходы» toggles `kind=expense`; a preset `income` is cleared by the same chip. */
-    fun toggleKind() = updateFilter { it.copy(kind = if (it.kind == null) OperationKindFilter.EXPENSE else null) }
+    /**
+     * «Только расходы» toggles `kind=expense`; a preset `income` is cleared by the same chip. A kind this client does not
+     * know belongs to the «Как на „Аналитике“» chip: this one replaces it with `expense`.
+     */
+    fun toggleKind() = updateFilter { it.copy(kind = if (it.kind?.isKnown == true) null else OperationKindFilter.EXPENSE) }
 
-    /** Removes the «Как на „Аналитике“» chip: drops `transfer_mode` and `selection`. */
-    fun clearAnalyticsScope() = updateFilter { it.copy(transferMode = null, selection = null, selectionName = null) }
+    /** Removes the «Как на „Аналитике“» chip: drops `transfer_mode`, `selection` and a `kind` this client does not know. */
+    fun clearAnalyticsScope() = updateFilter {
+        it.copy(transferMode = null, selection = null, selectionName = null, kind = it.kind?.takeIf { k -> k.isKnown })
+    }
 
     fun searchAllTime() {
         _state.update { it.copy(allTime = true) }

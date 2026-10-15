@@ -20,6 +20,7 @@ import ru.finassist.pf.core.api.model.ImportAccount
 import ru.finassist.pf.core.api.model.ImportConfig
 import ru.finassist.pf.core.api.model.ImportCoverage
 import ru.finassist.pf.core.api.model.ImportNotice
+import ru.finassist.pf.core.api.model.ImportNoticeCode
 import ru.finassist.pf.core.api.model.ImportProgress
 import ru.finassist.pf.core.api.model.ImportResult
 import ru.finassist.pf.core.api.model.ImportStage
@@ -41,9 +42,11 @@ import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.core.common.time.toApiMonth
 import ru.finassist.pf.mock.MockBackend
+import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.mock.domain.AnalyticsEngine
 import ru.finassist.pf.mock.domain.Coverage
 import ru.finassist.pf.mock.domain.Operation
+import ru.finassist.pf.mock.domain.ServerTexts
 import ru.finassist.pf.mock.ofx.OfxCheck
 import ru.finassist.pf.mock.ofx.OfxDocument
 import ru.finassist.pf.mock.ofx.OfxParser
@@ -182,7 +185,9 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
 
         fun feature(f: AnalyticsFeature, openNow: Boolean, openBefore: Boolean, requiredFull: Int? = null, requiredWithData: Int? = null) =
             FeatureAvailability(f, open = openNow, openedNow = openNow && !openBefore,
-                requiredFullMonths = requiredFull.takeIf { !openNow }, requiredMonthsWithData = requiredWithData.takeIf { !openNow })
+                requiredFullMonths = requiredFull.takeIf { !openNow }, requiredMonthsWithData = requiredWithData.takeIf { !openNow },
+                featureName = ServerTexts.featureName(f),
+                text = ServerTexts.lockedFeature(f, requiredFull, requiredWithData, fullAfter.size, after.monthsWithData.size).takeIf { !openNow })
 
         val features = listOf(
             feature(AnalyticsFeature.COMPARISON, fullAfter.isNotEmpty(), fullBefore.isNotEmpty(), requiredFull = 1),
@@ -192,6 +197,12 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             feature(AnalyticsFeature.NOTABLE_SPENDING, fullAfter.size >= 3, fullBefore.size >= 3, requiredFull = 3),
             feature(AnalyticsFeature.SMALL_FREQUENT, fullAfter.isNotEmpty(), fullBefore.isNotEmpty(), requiredFull = 1),
             feature(AnalyticsFeature.YEAR_FORECAST, fullAfter.size >= 12, fullBefore.size >= 12, requiredFull = 12),
+        ) + listOfNotNull(
+            // A feature the client does not know: it shows the server's name and text (FIN-83).
+            FeatureAvailability(
+                AnalyticsFeature.UNKNOWN, open = false, openedNow = false, requiredFullMonths = 6,
+                featureName = MockCodes.FEATURE_UNKNOWN_NAME, text = MockCodes.FEATURE_UNKNOWN_TEXT,
+            ).takeIf { backend.config.unknownCodes },
         )
         val incomplete = after.monthsWithData.filter { !after.isFullMonth(it) }.map { m ->
             val from = m.atDay(1)
@@ -207,8 +218,10 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             )
         }
         val notices = buildList {
-            if (doc.transactions.isEmpty()) add(ImportNotice.EMPTY_STATEMENT)
-            else if (doc.transactions.none { it.isDebit }) add(ImportNotice.NO_EXPENSES)
+            if (doc.transactions.isEmpty()) add(ImportNotice(ImportNoticeCode.EMPTY_STATEMENT, ServerTexts.EMPTY_STATEMENT))
+            else if (doc.transactions.none { it.isDebit }) add(ImportNotice(ImportNoticeCode.NO_EXPENSES, ServerTexts.NO_EXPENSES))
+            // The real server sends the raw code; the fake one parses its own events, so the e2e code arrives as UNKNOWN.
+            if (backend.config.unknownCodes) add(ImportNotice(ImportNoticeCode.UNKNOWN, MockCodes.NOTICE_UNKNOWN_TEXT))
         }
         val totalsOps = if (isFirst) added else newVisible
         return ImportResult(

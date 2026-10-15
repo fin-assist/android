@@ -30,6 +30,7 @@ import javax.inject.Inject
  * - `call_delay_ms=<n>` — how long the sign-in call takes to «arrive» (keeps the call screen up).
  * - `network_delay_ms=<n>` — latency of every backend request (keeps a «busy» state up long enough to act on it).
  * - `assistant_model_errors=<n>` — the next n assistant answers fail with MODEL_ERROR («Повторить» under them).
+ * - `unknown_codes=true|false` — the fake server sends codes the client does not know (`MockCodes`, FIN-83).
  *
  * Backend values live until the process dies: set them after `launchApp`.
  *
@@ -65,6 +66,7 @@ class E2eControlActivity : ComponentActivity() {
                 name == "call_delay_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(callVerifyDelayMs = it) }
                 name == "network_delay_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(networkDelayMs = it) }
                 name == "assistant_model_errors" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(assistantModelErrors = it) }
+                name == "unknown_codes" -> backend.config = backend.config.copy(unknownCodes = value.toBoolean())
                 else -> Log.w(TAG, "unknown parameter $name in $uri")
             }
         }

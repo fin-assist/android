@@ -99,4 +99,51 @@ class SerializationTest {
         assertEquals(filter, ApiJson.decodeFromString(OperationsFilter.serializer(), json))
         assertFalse(filter.isEmpty)
     }
+
+    @Test
+    fun `an unknown theme is the system one and does not break the profile (FIN-83)`() {
+        val json = """{"user_id":"u1","phone":"+79161234567","theme":"sepia","timezone":"Europe/Moscow",
+          "consents":[{"type":"assistant","granted":true,"version":"1","current_version":"1"},
+                      {"type":"marketing","granted":true,"current_version":"3"}],
+          "created_at":"2026-10-04T20:00:00+03:00","brand_new_field":1}"""
+        val p = ApiJson.decodeFromString(ru.finassist.pf.core.api.model.Profile.serializer(), json)
+        assertEquals(ru.finassist.pf.core.api.model.Theme.SYSTEM, p.theme)
+        assertEquals(true, p.assistantConsent?.granted)
+        assertEquals(ru.finassist.pf.core.api.model.ConsentType.UNKNOWN, p.consents[1].type)
+
+        val none = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.Profile.serializer(),
+            """{"user_id":"u1","phone":"+7","theme":"dark","timezone":"Europe/Moscow","consents":[],"created_at":"2026-10-04T20:00:00+03:00"}""",
+        )
+        assertNull(none.assistantConsent, "no element - no consent")
+    }
+
+    @Test
+    fun `a filter kind this client does not know is kept and sent back as is (FIN-83)`() {
+        val f = ApiJson.decodeFromString(OperationsFilter.serializer(), """{"kind":"expense_v2","transfer_mode":"with"}""")
+        assertEquals("expense_v2", f.kind?.code)
+        assertFalse(f.kind!!.isKnown)
+        assertTrue(ru.finassist.pf.core.api.model.OperationKindFilter.EXPENSE.isKnown)
+        assertTrue(ApiJson.encodeToString(OperationsFilter.serializer(), f).contains("\"kind\":\"expense_v2\""))
+    }
+
+    @Test
+    fun `import notices and features carry server texts, an unknown code decodes with its text (FIN-83)`() {
+        val n = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.ImportNotice.serializer(), """{"code":"partial_import","text":"Часть операций не загрузилась"}""",
+        )
+        assertEquals(ru.finassist.pf.core.api.model.ImportNoticeCode.UNKNOWN, n.code)
+        assertEquals("Часть операций не загрузилась", n.text)
+        val f = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.FeatureAvailability.serializer(),
+            """{"feature":"weekly_chart","feature_name":"Графики по неделям","open":false,"opened_now":false,"text":"Графики по неделям — нужно 4 недели"}""",
+        )
+        assertEquals(ru.finassist.pf.core.api.model.AnalyticsFeature.UNKNOWN, f.feature)
+        assertEquals("Графики по неделям — нужно 4 недели", f.text)
+        val s = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.AnswerSource.serializer(),
+            """{"calculated_at":"2026-09-25T19:11:00+03:00","transfer_mode":"with","changed_since":["rules"],"changed_since_text":"с тех пор менялись правила"}""",
+        )
+        assertEquals("с тех пор менялись правила", s.changedSinceText)
+    }
 }

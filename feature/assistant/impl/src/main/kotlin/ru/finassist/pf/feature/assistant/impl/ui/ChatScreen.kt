@@ -287,7 +287,7 @@ private fun Answer(
                 // A finished answer gets its own tag, so tests can wait for the end of the stream.
                 modifier = Modifier.testTag(if (item.status == AnswerStatus.COMPLETE) AssistantTags.ANSWER else AssistantTags.ANSWER_GENERATING),
                 source = item.source?.let { AnswerFormat.source(it, zone) },
-                staleText = item.source?.let { AnswerFormat.changedSince(it.changedSince) },
+                staleText = item.source?.let { AnswerFormat.changedSince(it.changedSince, it.changedSinceText) },
             ) {
                 AnswerFormat.groupBlocks(item.blocks).forEachIndexed { i, group -> BlockGroupView(group, chartId = "assistant.${item.id}.$i") }
             }

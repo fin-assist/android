@@ -117,6 +117,18 @@ class ResultTextsTest {
     }
 
     @Test
+    fun `a closed feature this client does not know is told by the server's text (FIN-83)`() {
+        val unknown = FeatureAvailability(
+            AnalyticsFeature.UNKNOWN, open = false, openedNow = false, requiredFullMonths = 6,
+            featureName = "Новая метрика", text = "Новая метрика — нужно 6 полных месяцев",
+        )
+        val r = result(new = 30, total = 30).copy(
+            coverage = ImportCoverage(0, 0, emptyList(), emptyList(), listOf(locked(AnalyticsFeature.YEAR_FORECAST, 1), unknown)),
+        )
+        assertEquals("Новая метрика — нужно 6 полных месяцев. Прогноз на год появится с 1 полным месяцем.", ResultTexts.coverageNotice(r)!!.text)
+    }
+
+    @Test
     fun `a closed feature without a month in progress`() {
         val r = result(new = 30, total = 30).copy(
             coverage = ImportCoverage(0, 0, emptyList(), emptyList(), listOf(locked(AnalyticsFeature.YEAR_FORECAST, 1), locked(AnalyticsFeature.UNKNOWN, 3))),

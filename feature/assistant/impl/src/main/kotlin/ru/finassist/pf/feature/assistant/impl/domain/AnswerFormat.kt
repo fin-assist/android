@@ -88,10 +88,14 @@ object AnswerFormat {
         ).joinToString(" · ")
     }
 
-    /** «с тех пор категории менялись» / «…загружали выписки» / generic for unknown codes; null when nothing changed. */
-    fun changedSince(list: List<ChangedSince>): String? {
+    /**
+     * «с тех пор категории менялись» / «…загружали выписки»; with a code this client does not know — the server's
+     * [serverText] (FIN-82), or a generic line without it; null when nothing changed.
+     */
+    fun changedSince(list: List<ChangedSince>, serverText: String? = null): String? {
         if (list.isEmpty()) return null
-        if (list.any { it == ChangedSince.UNKNOWN } || list.size > 1) return "С тех пор данные менялись"
+        if (list.any { it == ChangedSince.UNKNOWN }) return serverText?.replaceFirstChar { it.uppercase() } ?: "С тех пор данные менялись"
+        if (list.size > 1) return "С тех пор данные менялись"
         return when (list.single()) {
             ChangedSince.CATEGORIES -> "С тех пор категории менялись"
             ChangedSince.UPLOADS -> "С тех пор загружали или удаляли выписки"

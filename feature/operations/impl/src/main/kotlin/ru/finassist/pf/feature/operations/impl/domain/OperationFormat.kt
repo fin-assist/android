@@ -41,12 +41,7 @@ object OperationFormat {
      * Money in the operation's currency (api.md: `currency`, ISO 4217). Rubles keep the design-system «₽»;
      * other currencies get their symbol or code.
      */
-    fun money(amount: Money, currency: String, sign: Money.Sign): String {
-        val text = amount.format(sign)
-        if (currency == "RUB") return text
-        val symbol = runCatching { java.util.Currency.getInstance(currency).getSymbol(java.util.Locale("ru")) }.getOrDefault(currency)
-        return text.removeSuffix("₽").trimEnd() + Money.NBSP + symbol
-    }
+    fun money(amount: Money, currency: String, sign: Money.Sign): String = amount.format(currency, sign)
 
     /**
      * Row: expense `−2 340 ₽`, income `+15 000 ₽` (positive colour), own transfer without sign and muted, unknown

@@ -9,6 +9,7 @@ import ru.finassist.pf.core.api.model.FeatureAvailability
 import ru.finassist.pf.core.api.model.ImportAccount
 import ru.finassist.pf.core.api.model.ImportCoverage
 import ru.finassist.pf.core.api.model.ImportNotice
+import ru.finassist.pf.core.api.model.ImportNoticeCode
 import ru.finassist.pf.core.api.model.ImportResult
 import ru.finassist.pf.core.api.model.ImportTotals
 import ru.finassist.pf.core.api.model.ImportTotalsScope
@@ -82,7 +83,7 @@ class ImportResultDesignCheckTest {
         operationCount = 0, newCount = 0, duplicateCount = 0, unreadCount = 0, isFirstImport = true,
         accounts = emptyList(), categorizedCount = 0, ownTransferCount = 0, uncategorizedCount = 0,
         coverage = ImportCoverage(0, 0, emptyList(), emptyList(), emptyList()),
-        notices = listOf(ImportNotice.EMPTY_STATEMENT),
+        notices = listOf(ImportNotice(ImportNoticeCode.EMPTY_STATEMENT, "В выписке нет операций")),
     )
 
     /** First import of 1–25 September only: no full month yet, comparison and regular payments closed. */
@@ -124,7 +125,7 @@ class ImportResultDesignCheckTest {
         accounts = listOf(ImportAccount("Накопительный", "··0734", false)),
         categorizedCount = 12, ownTransferCount = 0, uncategorizedCount = 0, uncategorizedFilters = null,
         coverage = short.coverage.copy(features = emptyList()),
-        notices = listOf(ImportNotice.NO_EXPENSES),
+        notices = listOf(ImportNotice(ImportNoticeCode.NO_EXPENSES, "В выписке нет расходов — возможно, выгружен не тот счёт")),
     )
 
     private fun capture(name: String, result: ImportResult, heightDp: Int, dark: Boolean = false) =

@@ -42,7 +42,7 @@ import androidx.lifecycle.ViewModel
 import androidx.navigation.toRoute
 import androidx.hilt.navigation.compose.hiltViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
-import ru.finassist.pf.core.api.model.ImportNotice
+import ru.finassist.pf.core.api.model.ImportNoticeCode
 import ru.finassist.pf.core.api.model.ImportResult
 import ru.finassist.pf.core.api.model.ImportTotalsScope
 import ru.finassist.pf.core.api.model.OperationsFilter
@@ -136,7 +136,7 @@ internal fun ResultContent(
                 .heightIn(min = viewport)
                 .padding(start = d.space5, end = d.space5, top = d.space6, bottom = d.space4),
         ) {
-            if (r != null && (r.operationCount == 0 || ImportNotice.EMPTY_STATEMENT in r.notices)) {
+            if (r != null && (r.operationCount == 0 || r.has(ImportNoticeCode.EMPTY_STATEMENT))) {
                 Column(Modifier.weight(1f).fillMaxWidth().testTag(StatementsTags.RESULT_EMPTY), verticalArrangement = Arrangement.Center) {
                     PfEmptyState(
                         PfIcons.FILE_TEXT, "В выписке нет операций",
@@ -221,8 +221,8 @@ private fun ColumnScope.Summary(
             Text(it, style = PfTheme.type.hint, color = c.textMuted, modifier = Modifier.padding(top = d.space5))
         }
         Row(Modifier.padding(top = d.space2).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(d.space4)) {
-            TotalTile("Расходы", (Money.ZERO - t.expense).format(), positive = false, Modifier.weight(1f).fillMaxHeight())
-            TotalTile("Доходы", t.income.format(Money.Sign.ALWAYS), positive = true, Modifier.weight(1f).fillMaxHeight())
+            TotalTile("Расходы", (Money.ZERO - t.expense).format(r.currency), positive = false, Modifier.weight(1f).fillMaxHeight())
+            TotalTile("Доходы", t.income.format(r.currency, Money.Sign.ALWAYS), positive = true, Modifier.weight(1f).fillMaxHeight())
         }
     }
     Text(
@@ -239,7 +239,12 @@ private fun ColumnScope.Summary(
     PfCard(flush = true) {
         rows.forEachIndexed { i, f -> FindingRow(f, divider = i < rows.lastIndex, onSort = r.uncategorizedFilters?.let { filters -> { onOpenSearch(filters) } }) }
     }
-    if (ImportNotice.NO_EXPENSES in r.notices) {
+    // A special case this client does not know: the server's text (FIN-82).
+    r.notices.filter { it.code == ImportNoticeCode.UNKNOWN }.forEach { n ->
+        Spacer(Modifier.height(d.space4))
+        PfNotice(n.text, tone = NoticeTone.WARNING, modifier = Modifier.testTag(StatementsTags.RESULT_NOTICE))
+    }
+    if (r.has(ImportNoticeCode.NO_EXPENSES)) {
         Spacer(Modifier.height(d.space4))
         PfNotice(
             "В выписке нет расходов — возможно, выгружен не тот счёт",

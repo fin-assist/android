@@ -159,7 +159,7 @@ internal fun ProfileContent(
                                 onClick = actions.openChat,
                                 modifier = Modifier.testTag(ProfileTags.ASSISTANT),
                             )
-                            val granted = p.assistantConsent.granted && !p.assistantConsent.needsRenewal
+                            val granted = p.assistantConsent?.let { it.granted && !it.needsRenewal } == true
                             PfListRow(
                                 "Передавать данные помощнику",
                                 icon = PfIcons.SEND,

@@ -133,7 +133,7 @@ class ProfileViewModel @Inject constructor(
             try {
                 profileApi.revokeAssistantConsent()
                 tracker.track(Events.ASSISTANT_CONSENT_REVOKED)
-                _state.update { s -> s.copy(consentBusy = false, profile = s.profile?.let { it.copy(assistantConsent = it.assistantConsent.copy(granted = false)) }) }
+                _state.update { s -> s.copy(consentBusy = false, profile = s.profile?.let { p -> p.assistantConsent?.let { c -> p.withConsent(c.copy(granted = false)) } ?: p }) }
             } catch (e: AppError) {
                 _state.update { it.copy(consentBusy = false, snackbar = if (e is AppError.Offline) "Нет сети — согласие не отозвано" else "Не получилось. Попробуйте ещё раз") }
             }

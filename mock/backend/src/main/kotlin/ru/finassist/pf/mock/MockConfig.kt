@@ -28,6 +28,8 @@ data class MockConfig(
      * counts it down. The engine itself never fails like a model — this is how the retry path is reached.
      */
     val assistantModelErrors: Int = 0,
+    /** Send codes the client does not know ([MockCodes]) where the contract allows new ones (FIN-83). */
+    val unknownCodes: Boolean = false,
 ) {
     companion object {
         /** Git-ignored: `app/src/mock/assets/private/statement.ofx`. */

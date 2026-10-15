@@ -272,4 +272,25 @@ class SearchViewModelTest {
         operations.notifyCategoryChanged()
         assertEquals(emptyList(), api.queries)
     }
+
+    @Test fun `a kind this client does not know is searched as is and goes with the analytics chip (FIN-83)`() {
+        val unknown = ru.finassist.pf.core.api.model.OperationKindFilter("expense_v2")
+        val preset = OperationsFilter(kind = unknown, transferMode = TransferMode.WITH)
+        api.lists += found("op_1")
+        api.lists += found("op_1")
+        val vm = vm(preset)
+        assertEquals(listOf(OperationsQuery(filter = preset)), api.queries, "not dropped: the search is not widened")
+
+        vm.clearAnalyticsScope()
+        assertEquals(OperationsFilter(), vm.state.value.filter, "the chip takes the unknown kind with it")
+    }
+
+    @Test fun `«Только расходы» replaces a kind this client does not know (FIN-83)`() {
+        val preset = OperationsFilter(kind = ru.finassist.pf.core.api.model.OperationKindFilter("expense_v2"))
+        api.lists += found("op_1")
+        api.lists += found("op_1")
+        val vm = vm(preset)
+        vm.toggleKind()
+        assertEquals(ru.finassist.pf.core.api.model.OperationKindFilter.EXPENSE, api.queries.last().filter.kind)
+    }
 }

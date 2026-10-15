@@ -10,7 +10,7 @@ import ru.finassist.pf.core.api.UploadFile
 import ru.finassist.pf.core.api.model.AnalyticsFeature
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.IdempotencyKey
-import ru.finassist.pf.core.api.model.ImportNotice
+import ru.finassist.pf.core.api.model.ImportNoticeCode
 import ru.finassist.pf.core.api.model.ImportProgress
 import ru.finassist.pf.core.api.model.ImportStage
 import ru.finassist.pf.core.api.model.ImportTotalsScope
@@ -233,7 +233,7 @@ class MockStatementsApiTest {
         val backend = testBackend(clock)
         val api = MockStatementsApi(backend)
         val result = assertNotNull(backend.load(statement("2026-09-01", "2026-09-30")).result)
-        assertEquals(listOf(ImportNotice.EMPTY_STATEMENT), result.notices)
+        assertEquals(listOf(ImportNoticeCode.EMPTY_STATEMENT), result.notices.map { it.code })
         assertNull(result.totals)
         assertNull(api.listStatements().summary)
         assertEquals(UploadStatus.DONE, api.listStatements().uploads.single().status)
@@ -243,7 +243,7 @@ class MockStatementsApiTest {
     fun `a statement with credits only notes that it has no expenses`() {
         val backend = testBackend(clock)
         val result = assertNotNull(backend.load(statement("2026-09-01", "2026-09-30", trn("s", "2026-09-05T10:00", 1_000, "ООО", "Зарплата", debit = false))).result)
-        assertEquals(listOf(ImportNotice.NO_EXPENSES), result.notices)
+        assertEquals(listOf(ImportNoticeCode.NO_EXPENSES), result.notices.map { it.code })
         assertEquals(0L, result.totals?.expense?.minor)
     }
 
@@ -380,4 +380,21 @@ class MockStatementsApiTest {
         assertEquals(3, result.newCount)
         assertEquals(3, backend.ledger.all.size)
     }
+
+    @Test
+    fun `with unknown codes on, the import result carries a notice and a feature the client does not know (FIN-83)`() = runBlocking<Unit> {
+        val backend = testBackend(clock, config = FAST.copy(unknownCodes = true))
+        val api = MockStatementsApi(backend)
+        val upload = api.startUpload("a.ofx", statement("2026-09-01", "2026-09-30", trn("1", "2026-09-05T12:00", 100, "Магазин", "Супермаркеты")), clock.at, instant = true)
+        val result = assertNotNull(upload.result)
+        assertEquals(MockCodes.NOTICE_UNKNOWN_TEXT, result.notices.single { it.code == ru.finassist.pf.core.api.model.ImportNoticeCode.UNKNOWN }.text)
+        val feature = result.features().single { it.feature == AnalyticsFeature.UNKNOWN }
+        assertEquals(MockCodes.FEATURE_UNKNOWN_TEXT, feature.text)
+        // Known features come with the server's texts as well.
+        assertEquals("Сравнение с прошлым месяцем", result.features().single { it.feature == AnalyticsFeature.COMPARISON }.featureName)
+        val forecast = result.features().single { it.feature == AnalyticsFeature.YEAR_FORECAST }
+        assertEquals("Прогноз на год — нужно 12 полных месяцев, есть 1", forecast.text)
+    }
+
+    private fun ru.finassist.pf.core.api.model.ImportResult.features() = coverage.features
 }

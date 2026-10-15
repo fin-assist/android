@@ -49,6 +49,9 @@ class AnswerFormatTest {
         assertNull(AnswerFormat.changedSince(emptyList()))
         assertEquals("С тех пор категории менялись", AnswerFormat.changedSince(listOf(ChangedSince.CATEGORIES)))
         assertEquals("С тех пор данные менялись", AnswerFormat.changedSince(listOf(ChangedSince.UNKNOWN)))
+        // FIN-83: an unknown code shows the server's text when there is one.
+        assertEquals("С тех пор менялись правила", AnswerFormat.changedSince(listOf(ChangedSince.UNKNOWN), "с тех пор менялись правила"))
+        assertEquals("С тех пор категории менялись", AnswerFormat.changedSince(listOf(ChangedSince.CATEGORIES), "не нужен"))
     }
 
     @Test

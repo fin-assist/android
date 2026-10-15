@@ -323,4 +323,10 @@ class MockOperationsApiTest {
         assertFailsWith<AppError.Unauthorized> { signedOut.changeCategory("x", ChangeCategoryRequest("cat_clothes")) }
         assertFailsWith<AppError.Unauthorized> { signedOut.listCategories() }
     }
+
+    @Test
+    fun `the fake server's own unknown kind searches like expense (FIN-83)`() = runBlocking<Unit> {
+        val known = found(OperationsFilter(kind = OperationKindFilter.EXPENSE, transferMode = TransferMode.WITH))
+        assertEquals(known, found(OperationsFilter(kind = MockCodes.EXPENSE_UNKNOWN, transferMode = TransferMode.WITH)))
+    }
 }

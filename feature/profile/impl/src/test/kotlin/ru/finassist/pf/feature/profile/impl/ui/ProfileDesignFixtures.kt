@@ -1,6 +1,7 @@
 package ru.finassist.pf.feature.profile.impl.ui
 
-import ru.finassist.pf.core.api.model.AssistantConsent
+import ru.finassist.pf.core.api.model.Consent
+import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.AssistantLimit
 import ru.finassist.pf.core.api.model.Profile
 import ru.finassist.pf.core.api.model.StatementsSummary
@@ -15,7 +16,7 @@ internal object ProfileDesignFixtures {
         loading = false,
         profile = Profile(
             userId = "u1", phone = "+79161234567", theme = Theme.SYSTEM, timezone = "Europe/Moscow",
-            assistantConsent = AssistantConsent(granted = true, version = "1", currentVersion = "1"), createdAt = now,
+            consents = listOf(Consent(ConsentType.ASSISTANT, granted = true, version = "1", currentVersion = "1")), createdAt = now,
         ),
         statements = StatementsSummary(
             uploadCount = 3, operationCount = 1086,
