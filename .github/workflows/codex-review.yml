@@ -65,10 +65,14 @@ jobs:
             xargs -0 -r git checkout "$BASE_SHA" --
           rm -rf .codex .agents
 
-      # Title and description go to Codex as a file, never through the prompt or a shell expression.
+      # Title and description go to Codex as a file, never through the prompt or a shell expression. The directory is
+      # recreated first: a PR could ship `.codex-review` or `pr.md` as a symlink, and writing through it could reach
+      # files outside the checkout (e.g. ~/.npmrc, read when the action installs Codex with npm). `rm -rf` removes a
+      # symlink itself, not its target. A project `.npmrc` from the PR goes too.
       - name: Write the PR description for Codex
         run: |
-          mkdir -p .codex-review
+          rm -rf .codex-review .npmrc
+          mkdir .codex-review
           jq -r '"# " + .title + "\n\n" + (.body // "")' "$RUNNER_TEMP/pr.json" > .codex-review/pr.md
 
       - name: Run Codex
@@ -165,7 +169,10 @@ jobs:
   # A failed run still answers the review request, so the agent waiting for it does not time out silently.
   report-failure:
     needs: [review, post]
-    if: always() && (needs.review.result == 'failure' || needs.post.result == 'failure')
+    # Any outcome but success, a timeout or cancellation (`cancelled`) included; not when the request did not match.
+    if: >-
+      always() && needs.review.result != 'skipped' &&
+      (needs.review.result != 'success' || needs.post.result != 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
