@@ -258,6 +258,11 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     override suspend fun listStatements(): StatementsList {
         backend.simulateNetwork()
         backend.requireSession()
+        // Built under the mutex: an import or a deletion recomputes the closures meanwhile (FIN-79).
+        return backend.mutex.withLock { statementsSnapshot() }
+    }
+
+    private fun statementsSnapshot(): StatementsList {
         val done = backend.uploads.filter { it.isDone }
         // A completed empty statement leaves the ledger empty: no summary then (api.md 3.4 `summary?`).
         val summary = if (done.isEmpty() || backend.ledger.all.isEmpty()) null else StatementsSummary(
@@ -304,18 +309,22 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     override suspend fun listUnreadLines(uploadId: String): UnreadLinesList {
         backend.simulateNetwork()
         backend.requireSession()
-        val upload = backend.uploads.firstOrNull { it.id == uploadId } ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
-        return UnreadLinesList(upload.openUnreadLines.map { toDto(upload, it) })
+        return backend.mutex.withLock {
+            val upload = backend.uploads.firstOrNull { it.id == uploadId } ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+            UnreadLinesList(upload.openUnreadLines.map { toDto(upload, it) })
+        }
     }
 
     override suspend fun listUnreadLines(from: OffsetDateTime, to: OffsetDateTime): UnreadLinesList {
         backend.simulateNetwork()
         backend.requireSession()
-        return UnreadLinesList(
-            backend.uploads.filter { it.isDone }.flatMap { u ->
-                u.openUnreadLines.filter { it.date != null && !it.date.isBefore(from) && it.date.isBefore(to) }.map { toDto(u, it) }
-            },
-        )
+        return backend.mutex.withLock {
+            UnreadLinesList(
+                backend.uploads.filter { it.isDone }.flatMap { u ->
+                    u.openUnreadLines.filter { it.date != null && !it.date.isBefore(from) && it.date.isBefore(to) }.map { toDto(u, it) }
+                },
+            )
+        }
     }
 
     private fun toDto(upload: MockBackend.Upload, line: ru.finassist.pf.mock.ofx.UnreadLine) = UnreadLine(
