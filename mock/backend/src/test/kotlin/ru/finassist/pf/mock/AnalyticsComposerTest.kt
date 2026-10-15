@@ -90,4 +90,15 @@ class AnalyticsComposerTest {
         assertEquals(listOf("expense_categories", "income_categories", "tiles"), a.blocks.map { it.id })
         assertEquals(BlockStatus.UNAVAILABLE, a.blocks.last().status)
     }
+
+    @Test fun `with unknown codes the fake API adds a block of an unknown type and a card locked for an unknown reason`() = runBlocking<Unit> {
+        val backend = testBackend(config = FAST.copy(unknownCodes = true)).apply { load(fixtureDoc()) }
+        val a = MockAnalyticsApi(backend).getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+        val ids = a.blocks.map { it.id }
+        assertEquals(ids.indexOf("tiles") + 1, ids.indexOf("e2e_unknown"))
+        assertEquals(MockCodes.BLOCK_UNKNOWN_TEXT, a.blocks.single { it.id == "e2e_unknown" }.altText)
+        val locked = a.blocks.single { it.id == "e2e_locked" }
+        assertEquals(ru.finassist.pf.core.api.model.LockReason.UNKNOWN, locked.lock?.reason)
+        assertEquals(MockCodes.LOCK_UNKNOWN_TEXT, locked.lock?.text)
+    }
 }

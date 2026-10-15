@@ -67,4 +67,13 @@ class BlockFormatTest {
         assertEquals(listOf(h2, b), BlockLayout.visible(all) { it.id == "a" })
         assertTrue(BlockLayout.visible(all) { it.id != null }.isEmpty())
     }
+
+    @Test fun `default tags of a screen prefix`() {
+        val tags = BlockTags("screen")
+        assertEquals("screen.block.x", tags.block("x"))
+        assertEquals("screen.tile.t", tags.tile("t"))
+        assertEquals("screen.x.item", tags.item("x"))
+        assertEquals("screen.x.more", tags.more("x"))
+        assertEquals("screen.chart.x", tags.chart("x"))
+    }
 }
