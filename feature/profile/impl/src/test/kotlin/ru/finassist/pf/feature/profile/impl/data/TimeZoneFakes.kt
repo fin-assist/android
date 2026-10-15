@@ -92,6 +92,16 @@ internal fun tempPendingStore(): PendingZoneStore {
     return PendingZoneStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") })
 }
 
+/** Every read and write fails, as with a full disk or a broken preferences file. */
+internal class FailingDataStore : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+    override val data: kotlinx.coroutines.flow.Flow<androidx.datastore.preferences.core.Preferences> =
+        kotlinx.coroutines.flow.flow { throw java.io.IOException("disk full") }
+
+    override suspend fun updateData(
+        transform: suspend (t: androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences,
+    ): androidx.datastore.preferences.core.Preferences = throw java.io.IOException("disk full")
+}
+
 internal fun tempKnownStore(): KnownZoneStore {
     val dir = createTempDirectory("tz-known").toFile().apply { deleteOnExit() }
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

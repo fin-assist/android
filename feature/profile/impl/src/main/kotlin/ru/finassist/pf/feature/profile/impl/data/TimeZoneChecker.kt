@@ -23,6 +23,7 @@ import javax.inject.Singleton
  * The profile zone is fetched once per process and user and then kept in memory: a return from the background
  * must not cost a request. Every zone read from or written to the server — here or by the profile screen
  * ([observed]) — also becomes the [ReportZone] the app counts days in, and is stored for the next start (FIN-92).
+ * The stored copy is a cache: a failing store is ignored, and an id Java does not know is neither applied nor stored.
  * Before sending, the profile is
  * read again, so a zone that already reached the server another way is not sent twice. Failures are silent and
  * keep the record: the next trigger tries again.
@@ -43,15 +44,15 @@ class TimeZoneChecker @Inject constructor(
 ) {
     private val mutex = Mutex()
 
-    /** `(user id, profile zone)` as last read from or written to the server. */
-    private var known: Pair<String, String>? = null
+    /** `(user id, profile zone)` as last read from or written to the server. Also written by [observed], outside [mutex]. */
+    @Volatile private var known: Pair<String, String>? = null
 
     suspend fun check(): Unit = mutex.withLock {
         val userId = currentUser() ?: return
         val device = deviceZone.id()
         val profileZone = known?.takeIf { it.first == userId }?.second ?: run {
             // Until the profile answers (or offline), the zone it had last time.
-            knownStore.get(userId)?.let(reportZone::set)
+            quietly { knownStore.get(userId) }?.let(reportZone::set)
             fetch(userId)
         } ?: return
         when (val step = TimeZoneRule.next(profileZone, device, store.get(userId), clock.now().toInstant())) {
@@ -65,14 +66,18 @@ class TimeZoneChecker @Inject constructor(
     /** The record and the remembered zone belong to the user who left. */
     suspend fun signedOut(): Unit = mutex.withLock {
         known = null
-        store.clear()
-        knownStore.clear()
         reportZone.clear()
+        store.clear()
+        quietly { knownStore.clear() }
     }
 
-    /** A profile read elsewhere (the profile screen): its zone may have changed on the server since [check] read it. */
-    suspend fun observed(profile: Profile): Unit = mutex.withLock {
-        if (currentUser() == profile.userId) remember(profile.userId, profile.timezone)
+    /**
+     * A profile read or written elsewhere (the profile screen, a theme change): its zone may have changed on the server
+     * since [check] read it. Does not wait for a running [check] — that one holds [mutex] across network calls — and
+     * never throws.
+     */
+    suspend fun observed(profile: Profile) {
+        if (quietly { currentUser() } == profile.userId) remember(profile.userId, profile.timezone)
     }
 
     private suspend fun send(userId: String, zone: String) {
@@ -95,8 +100,7 @@ class TimeZoneChecker @Inject constructor(
 
     private suspend fun remember(userId: String, zone: String) {
         known = userId to zone
-        reportZone.set(zone)
-        knownStore.set(userId, zone)
+        if (reportZone.set(zone)) quietly { knownStore.set(userId, zone) }
     }
 
     private suspend fun currentUser(): String? = (session.state.first() as? SessionState.SignedIn)?.userId

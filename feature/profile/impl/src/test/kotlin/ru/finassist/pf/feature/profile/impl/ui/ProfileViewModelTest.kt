@@ -312,6 +312,13 @@ class ProfileViewModelTest {
         assertEquals("Asia/Yekaterinburg", vm.state.value.profile?.timezone)
     }
 
+    @Test fun `the answer to a theme change carries the profile zone into the report zone (FIN-92)`() {
+        val vm = vm()
+        profileApi.profile = profile(timezone = "Asia/Vladivostok")
+        vm.setTheme(Theme.DARK)
+        assertEquals(ZoneId.of("Asia/Vladivostok"), reportZone.current)
+    }
+
     @Test fun `the zone of the opened profile becomes the report zone (FIN-92)`() {
         profileApi.profile = profile(timezone = "Asia/Vladivostok")
         loaded()

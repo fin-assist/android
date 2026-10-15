@@ -247,6 +247,28 @@ class TimeZoneCheckerTest {
         assertNull(runBlocking { known.get("u1") })
     }
 
+    @Test fun `a zone id Java does not know is neither applied nor stored`() {
+        api.timezone = VLADIVOSTOK
+        check()
+        runBlocking { checker.observed(api.getProfile().copy(timezone = "Mars/Olympus_Mons")) }
+        assertEquals(ZoneId.of(VLADIVOSTOK), reportZone.current)
+        assertEquals(VLADIVOSTOK, runBlocking { known.get("u1") }, "an offline start still restores the last usable zone")
+    }
+
+    @Test fun `a failing zone store does not fail the check, the profile screen or the sign-out`() {
+        val failing = KnownZoneStore(FailingDataStore())
+        val checker = TimeZoneChecker(api, session, store, clock, device, reportZone, failing)
+        api.timezone = VLADIVOSTOK
+        runBlocking { checker.check() }
+        assertEquals(ZoneId.of(VLADIVOSTOK), reportZone.current)
+
+        runBlocking { checker.observed(api.getProfile().copy(timezone = NOVOSIBIRSK)) }
+        assertEquals(ZoneId.of(NOVOSIBIRSK), reportZone.current)
+
+        runBlocking { checker.signedOut() }
+        assertNull(reportZone.profile.value)
+    }
+
     private companion object {
         const val MOSCOW = "Europe/Moscow"
         const val NOVOSIBIRSK = "Asia/Novosibirsk"

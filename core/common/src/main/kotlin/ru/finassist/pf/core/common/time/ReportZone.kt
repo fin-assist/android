@@ -21,14 +21,18 @@ class ReportZone(private val device: () -> ZoneId = ZoneId::systemDefault) {
 
     val current: ZoneId get() = profileZone.value ?: device()
 
-    /** An id Java does not know (a newer tzdb on the server) is ignored: the last known zone stays. */
-    fun set(id: String) {
+    /**
+     * An id Java does not know (a newer tzdb on the server) is ignored: the last known zone stays. Returns whether the
+     * zone was taken.
+     */
+    fun set(id: String): Boolean {
         val zone = try {
             ZoneId.of(id)
         } catch (e: DateTimeException) {
-            return
+            return false
         }
         profileZone.value = zone
+        return true
     }
 
     fun clear() {

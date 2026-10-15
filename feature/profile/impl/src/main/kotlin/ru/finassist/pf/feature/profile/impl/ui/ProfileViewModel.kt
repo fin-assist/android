@@ -126,7 +126,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             preferences.setTheme(theme.name.lowercase())
             tracker.track(Events.PROFILE_THEME_CHANGED, mapOf("theme" to theme.name.lowercase()))
-            runCatching { profileApi.updateProfile(ProfileUpdate(theme = theme)) }
+            runCatching { profileApi.updateProfile(ProfileUpdate(theme = theme)) }.onSuccess { zoneChecker.observed(it) }
         }
     }
 
