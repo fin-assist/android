@@ -277,6 +277,27 @@ class SearchViewModelTest {
         assertEquals(2, api.queries.size)
     }
 
+    @Test fun `a new zone keeps the shown result while asking again (FIN-92 review)`() {
+        api.lists += found("op_1")
+        api.lists += found("op_1", "op_2")
+        val vm = vm(OperationsFilter(categoryId = "cat_taxi"))
+        val shown = vm.state.value.result
+        api.gate = kotlinx.coroutines.CompletableDeferred()
+        reportZone.set("Asia/Vladivostok")
+        assertEquals(shown, vm.state.value.result, "no spinner over the shown result")
+        api.gate!!.complete(Unit)
+        assertEquals(2, (vm.state.value.result as SearchResult.Found).items.size)
+    }
+
+    @Test fun `an explicit period does not depend on the zone and is not asked again (FIN-92 review)`() {
+        api.lists += found("op_1")
+        val period = vm(OperationsFilter(categoryId = "cat_taxi", from = window.from, to = window.to))
+        val asked = api.queries.size
+        reportZone.set("Europe/Kaliningrad")
+        assertEquals(asked, api.queries.size)
+        assertEquals(SearchResult.Found::class, period.state.value.result::class)
+    }
+
     @Test fun `a category change on a blank search asks nothing`() {
         vm()
         operations.notifyCategoryChanged()
