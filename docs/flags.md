@@ -10,7 +10,7 @@ Naming: `<feature>.<object>[.<detail>]`, lowercase, dot-separated. Same prefix i
 | Flag | Default | What `false` does |
 |---|---|---|
 | `auth.registration` | `true` | New phone number after the call: instead of the consent screen, "Регистрация пока закрыта". Existing users still sign in. In `mock` the only "existing" number is the one in the mock config, and `app/src/mock/assets/flags.json` sets this flag to `false` (only that number signs in). The code default stays `true` on purpose: with RuStore unreachable and no cached config, registration is open (decision 06.10.2026). |
-| `analytics.block.tiles` | `true` | Hides the tiles row (expense, income, balance, daily expense, forecast) |
+| `analytics.block.tiles` | `true` | Hides the tiles block (expense, income, balance, daily expense, forecast) |
 | `analytics.block.expense_categories` | `true` | Hides "Расходы по категориям" and the "Все категории" screen for expenses |
 | `analytics.block.income_categories` | `true` | Hides "Доходы по категориям" |
 | `analytics.block.monthly_chart` | `true` | Hides the monthly charts |
@@ -26,6 +26,21 @@ Naming: `<feature>.<object>[.<detail>]`, lowercase, dot-separated. Same prefix i
 | `search.filter.kind` | `true` | Hides the "Только расходы" chip in Search |
 | `statements.upload` | `true` | Hides the upload screen and every link to it (empty states, "Загрузить новую выписку", profile → only history). |
 | `profile.delete_account` | `true` | Hides "Удалить аккаунт и все данные" |
+
+`analytics.block.<id>` switches off the Analytics block with that `id` (api.md 6.1 «Блоки экрана», FIN-4): the server
+composes the screen, the client drops the blocks switched off here. A block id without a flag in `Flag` (a new block
+on the server, `balance`) stays on — add a flag here and in `Flag` to be able to switch it off. A section heading goes
+together with the last of its blocks.
+
+## Experiments
+
+Variants of experiments over server-composed screens (FIN-9): a string under the key in the same provider (RuStore
+Remote Config); registry — `Experiment` in `core/toggles`. The client sends the variant with the request (api.md 6.1
+`exp=key:variant`) because the server composes the screen, and reports an exposure when a block is actually drawn
+(`analytics.block.exposed` with `block` and `exp`), not when the config arrives. A value outside the list is the
+default (first) variant. In `mock` the provider has no variants: the default one is in effect.
+
+- `analytics_order` — variants `a` (default) and `b`: `b` puts the categories before the tiles on «Аналитика».
 
 A filter that is hidden but arrives pre-filled from Analytics or an assistant chip is shown as a single
 non-editable chip ("Как на „Аналитике“" / `selection_name`), as `docs/api.md` (fin-assist/contracts) describes

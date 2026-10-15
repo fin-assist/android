@@ -48,6 +48,7 @@ class SearchViewModelTest {
     private val categories = FakeCategories(listOf(category("cat_taxi")))
     private val operations = OperationsRepositoryImpl()
     private val tracker = FakeTracker()
+    private val reportZone = ru.finassist.pf.core.common.time.ReportZone { java.time.ZoneId.of("Europe/Moscow") }
 
     private val window = DateRange(OffsetDateTime.parse("2025-10-01T00:00:00+03:00"), OffsetDateTime.parse("2026-10-01T00:00:00+03:00"))
 
@@ -57,7 +58,7 @@ class SearchViewModelTest {
 
     private fun vm(preset: OperationsFilter? = null, flags: StaticFlags = StaticFlags()): SearchViewModel {
         val args = preset?.let { mapOf("filter" to PfNavTypes.operationsFilter.serializeAsValue(it)) }.orEmpty()
-        return SearchViewModel(SavedStateHandle(args), api, categories, operations, flags, tracker)
+        return SearchViewModel(SavedStateHandle(args), api, categories, operations, flags, tracker, reportZone)
     }
 
     private fun found(vararg ids: String, total: Int? = null, range: DateRange? = window, older: Boolean? = null) =
@@ -267,9 +268,72 @@ class SearchViewModelTest {
         assertEquals(2, api.queries.size)
     }
 
+    @Test fun `a new profile zone asks the visible result again, the first known zone does not (FIN-92)`() {
+        api.lists += found("op_1")
+        vm(OperationsFilter(categoryId = "cat_taxi"))
+        reportZone.set("Europe/Moscow")
+        assertEquals(1, api.queries.size)
+        reportZone.set("Asia/Vladivostok")
+        assertEquals(2, api.queries.size)
+    }
+
+    @Test fun `a new zone keeps the shown result while asking again (FIN-92 review)`() {
+        api.lists += found("op_1")
+        api.lists += found("op_1", "op_2")
+        val vm = vm(OperationsFilter(categoryId = "cat_taxi"))
+        val shown = vm.state.value.result
+        api.gate = kotlinx.coroutines.CompletableDeferred()
+        reportZone.set("Asia/Vladivostok")
+        assertEquals(shown, vm.state.value.result, "no spinner over the shown result")
+        api.gate!!.complete(Unit)
+        assertEquals(2, (vm.state.value.result as SearchResult.Found).items.size)
+    }
+
+    @Test fun `a new zone during a pending search for a changed filter does not keep the old result (FIN-92 review)`() {
+        api.lists += found("op_1")
+        val vm = vm(OperationsFilter(categoryId = "cat_taxi"))
+        vm.setQuery("такси")
+        api.gate = kotlinx.coroutines.CompletableDeferred()
+        reportZone.set("Asia/Vladivostok")
+        // Asked by the new filter, and the old filter's result is not shown meanwhile.
+        assertEquals("такси", api.queries.last().filter.q)
+        assertEquals(SearchResult.Loading, vm.state.value.result)
+        api.gate!!.complete(Unit)
+    }
+
+    @Test fun `an explicit period does not depend on the zone and is not asked again (FIN-92 review)`() {
+        api.lists += found("op_1")
+        val period = vm(OperationsFilter(categoryId = "cat_taxi", from = window.from, to = window.to))
+        val asked = api.queries.size
+        reportZone.set("Europe/Kaliningrad")
+        assertEquals(asked, api.queries.size)
+        assertEquals(SearchResult.Found::class, period.state.value.result::class)
+    }
+
     @Test fun `a category change on a blank search asks nothing`() {
         vm()
         operations.notifyCategoryChanged()
         assertEquals(emptyList(), api.queries)
+    }
+
+    @Test fun `a kind this client does not know is searched as is and goes with the analytics chip (FIN-83)`() {
+        val unknown = ru.finassist.pf.core.api.model.OperationKindFilter("expense_v2")
+        val preset = OperationsFilter(kind = unknown, transferMode = TransferMode.WITH)
+        api.lists += found("op_1")
+        api.lists += found("op_1")
+        val vm = vm(preset)
+        assertEquals(listOf(OperationsQuery(filter = preset)), api.queries, "not dropped: the search is not widened")
+
+        vm.clearAnalyticsScope()
+        assertEquals(OperationsFilter(), vm.state.value.filter, "the chip takes the unknown kind with it")
+    }
+
+    @Test fun `«Только расходы» replaces a kind this client does not know (FIN-83)`() {
+        val preset = OperationsFilter(kind = ru.finassist.pf.core.api.model.OperationKindFilter("expense_v2"))
+        api.lists += found("op_1")
+        api.lists += found("op_1")
+        val vm = vm(preset)
+        vm.toggleKind()
+        assertEquals(ru.finassist.pf.core.api.model.OperationKindFilter.EXPENSE, api.queries.last().filter.kind)
     }
 }

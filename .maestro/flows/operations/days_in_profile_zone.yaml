@@ -1,0 +1,28 @@
+appId: ru.finassist.pf.mock.e2e
+name: Лента группирует по дням в поясе профиля, а не устройства
+tags:
+  - operations
+---
+# FIN-92. The emulator is in Moscow. The last fixture operation is 30 September 17:53 MSK — already 1 October in
+# Vladivostok. Once the profile zone is Vladivostok, the feed shows it under «1 октября».
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- assertVisible: "30 сентября"
+- assertNotVisible: "1 октября"
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?profile_timezone=Asia/Vladivostok"
+# The profile screen reads the profile: its zone becomes the zone of days in the app.
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.screen"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.operations"
+- extendedWaitUntil:
+    visible: "1 октября"
+    timeout: 10000

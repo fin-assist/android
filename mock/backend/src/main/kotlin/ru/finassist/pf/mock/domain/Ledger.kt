@@ -54,6 +54,7 @@ class Ledger(private val catalog: Catalog) {
     val pairCount: Int get() = pairs.size
 
     fun byId(id: String): Operation? = byId[id]
+    fun byKey(accountId: String, fitId: String): Operation? = operations["$accountId|$fitId"]
     fun pair(id: String): OwnTransferPair? = pairs[id]
     fun pairOf(op: Operation): OwnTransferPair? = op.pairId?.let { pairs[it] }
 

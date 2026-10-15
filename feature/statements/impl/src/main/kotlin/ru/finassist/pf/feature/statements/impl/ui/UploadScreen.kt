@@ -422,6 +422,8 @@ internal object StatementsTags {
     const val RESULT_UNREAD = "statements.result.unread"
     const val RESULT_ANALYTICS = "statements.result.analytics"
     const val RESULT_UPLOAD_ANOTHER = "statements.result.upload_another"
+    /** A special case of the import the client does not know: the server's text (FIN-83). */
+    const val RESULT_NOTICE = "statements.result.notice"
     const val RESULT_UPLOAD_MORE = "statements.result.upload_more"
     const val RESULT_HISTORY = "statements.result.history"
     const val RESULT_UNCATEGORIZED = "statements.result.uncategorized"
@@ -432,6 +434,7 @@ internal object StatementsTags {
     const val HISTORY_ROW = "statements.history.row"
     const val HISTORY_DELETE = "statements.history.delete"
     const val HISTORY_UNREAD = "statements.history.unread"
+    const val HISTORY_RESOLVED = "statements.history.resolved"
     const val HISTORY_UPLOAD = "statements.history.upload"
 
     const val UNREAD = "statements.unread"

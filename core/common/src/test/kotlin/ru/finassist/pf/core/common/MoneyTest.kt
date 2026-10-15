@@ -28,4 +28,14 @@ class MoneyTest {
         assertEquals("20${nbsp}000${nbsp}₽", Money(-2_000_000).format(Money.Sign.NONE))
         assertEquals("0${nbsp}₽", Money.ZERO.format(Money.Sign.ALWAYS))
     }
+
+    @Test
+    fun `money in a currency - rubles keep the sign, other currencies get their symbol, an unknown code stays a code`() {
+        val nbsp = Money.NBSP
+        assertEquals("1${nbsp}250${nbsp}₽", Money.ofRubles(1250).format("RUB"))
+        assertEquals("+1${nbsp}250${nbsp}₽", Money.ofRubles(1250).format("RUB", Money.Sign.ALWAYS))
+        assertEquals("${Money.MINUS}12,50${nbsp}€", Money(-1250).format("EUR"))
+        assertEquals("100${nbsp}$", Money.ofRubles(100).format("USD"))
+        assertEquals("100${nbsp}XXX1", Money.ofRubles(100).format("XXX1"))
+    }
 }

@@ -9,7 +9,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -23,7 +22,8 @@ import ru.finassist.pf.core.api.UploadFile
 import ru.finassist.pf.core.api.model.AnswerEvent
 import ru.finassist.pf.core.api.model.AskRequest
 import ru.finassist.pf.core.api.model.AskResponse
-import ru.finassist.pf.core.api.model.AssistantConsent
+import ru.finassist.pf.core.api.model.Consent
+import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.AssistantConsentGrant
 import ru.finassist.pf.core.api.model.AssistantLimit
 import ru.finassist.pf.core.api.model.IdempotencyKey
@@ -39,6 +39,7 @@ import ru.finassist.pf.core.api.model.Theme
 import ru.finassist.pf.core.api.model.UnreadLinesList
 import ru.finassist.pf.core.api.model.UploadAccepted
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.core.storage.AppPreferences
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
@@ -52,12 +53,18 @@ import ru.finassist.pf.feature.applock.api.VerifyResult
 import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import ru.finassist.pf.feature.auth.api.SessionState
+import ru.finassist.pf.feature.profile.impl.data.FakeClock
+import ru.finassist.pf.feature.profile.impl.data.FakeDeviceZone
+import ru.finassist.pf.feature.profile.impl.data.TimeZoneChecker
+import ru.finassist.pf.feature.profile.impl.data.tempKnownStore
+import ru.finassist.pf.feature.profile.impl.data.tempPendingStore
 import ru.finassist.pf.feature.statements.api.StatementsEvent
 import ru.finassist.pf.feature.statements.api.StatementsRepository
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.util.TimeZone
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -134,7 +141,7 @@ class ProfileViewModelTest {
     private class FakeSession : SessionRepository {
         val signOuts = mutableListOf<String?>()
         var gate: CompletableDeferred<Unit>? = null
-        override val state: Flow<SessionState> = emptyFlow()
+        override val state: Flow<SessionState> = MutableStateFlow(SessionState.SignedIn("u_1"))
         override suspend fun consumeJustRegistered() = false
         override suspend fun signOut(reason: String?) {
             signOuts += reason
@@ -206,7 +213,12 @@ class ProfileViewModelTest {
         TimeZone.setDefault(deviceZone)
     }
 
-    private fun vm() = ProfileViewModel(profileApi, statementsApi, assistant, preferences, session, statements, flags, tracker, appLock)
+    private val reportZone = ReportZone { ZoneId.of(MOSCOW) }
+    private val zoneChecker by lazy {
+        TimeZoneChecker(profileApi, session, tempPendingStore(), FakeClock(), FakeDeviceZone(MOSCOW), reportZone, tempKnownStore())
+    }
+
+    private fun vm() = ProfileViewModel(profileApi, statementsApi, assistant, preferences, session, statements, flags, tracker, appLock, zoneChecker)
 
     private fun loaded() = vm().apply { load() }
 
@@ -299,6 +311,19 @@ class ProfileViewModelTest {
         val vm = loaded()
         assertEquals(emptyList(), profileApi.updates)
         assertEquals("Asia/Yekaterinburg", vm.state.value.profile?.timezone)
+    }
+
+    @Test fun `the answer to a theme change carries the profile zone into the report zone (FIN-92)`() {
+        val vm = vm()
+        profileApi.profile = profile(timezone = "Asia/Vladivostok")
+        vm.setTheme(Theme.DARK)
+        assertEquals(ZoneId.of("Asia/Vladivostok"), reportZone.current)
+    }
+
+    @Test fun `the zone of the opened profile becomes the report zone (FIN-92)`() {
+        profileApi.profile = profile(timezone = "Asia/Vladivostok")
+        loaded()
+        assertEquals(ZoneId.of("Asia/Vladivostok"), reportZone.current)
     }
 
     @Test fun `a chosen theme closes the sheet, is saved locally and on the server`() {
@@ -406,7 +431,7 @@ class ProfileViewModelTest {
 
         fun profile(theme: Theme = Theme.SYSTEM, timezone: String = MOSCOW) = Profile(
             userId = "u_1", phone = "+79161234567", theme = theme, timezone = timezone,
-            assistantConsent = AssistantConsent(granted = true, version = "v2", currentVersion = "v2"),
+            consents = listOf(Consent(ConsentType.ASSISTANT, granted = true, version = "v2", currentVersion = "v2")),
             createdAt = OffsetDateTime.parse("2026-09-01T10:00:00+03:00"),
         )
 

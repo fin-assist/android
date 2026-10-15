@@ -52,7 +52,6 @@ import ru.finassist.pf.core.api.model.ImportProgress
 import ru.finassist.pf.core.api.model.ImportResult
 import ru.finassist.pf.core.api.model.MessagesList
 import ru.finassist.pf.core.api.model.OperationDetails
-import ru.finassist.pf.core.api.model.OperationKindFilter
 import ru.finassist.pf.core.api.model.OperationsList
 import ru.finassist.pf.core.api.model.OperationsQuery
 import ru.finassist.pf.core.api.model.PeriodTypeCode
@@ -201,7 +200,8 @@ internal class HttpOperationsApi(private val service: OperationsService) : Opera
             allTime = query.allTime.takeIf { it },
             q = f.q?.takeIf { it.isNotBlank() },
             categoryId = f.categoryId,
-            kind = f.kind?.let { if (it == OperationKindFilter.EXPENSE) "expense" else "income" },
+            // Sent as received, a kind this client does not know included (FIN-82).
+            kind = f.kind?.code,
             amountFrom = f.amountFrom?.minor,
             amountTo = f.amountTo?.minor,
             // api.md: an unknown transfer_mode coming from a response is handled as `with`.
@@ -220,8 +220,8 @@ internal class HttpOperationsApi(private val service: OperationsService) : Opera
 }
 
 internal class HttpAnalyticsApi(private val service: AnalyticsService) : AnalyticsApi {
-    override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?): Analytics =
-        call { service.getAnalytics(period?.code, date?.value, transferMode?.code) }
+    override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?, supports: String?, exp: String?): Analytics =
+        call { service.getAnalytics(period?.code, date?.value, transferMode?.code, supports, exp?.takeIf { it.isNotEmpty() }) }
 
     override suspend fun listPeriods(period: PeriodTypeCode?): AnalyticsPeriodsList =
         call { service.listPeriods(period?.code) }

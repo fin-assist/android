@@ -20,6 +20,7 @@ import ru.finassist.pf.core.api.model.ImportAccount
 import ru.finassist.pf.core.api.model.ImportConfig
 import ru.finassist.pf.core.api.model.ImportCoverage
 import ru.finassist.pf.core.api.model.ImportNotice
+import ru.finassist.pf.core.api.model.ImportNoticeCode
 import ru.finassist.pf.core.api.model.ImportProgress
 import ru.finassist.pf.core.api.model.ImportResult
 import ru.finassist.pf.core.api.model.ImportStage
@@ -41,9 +42,11 @@ import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.core.common.time.toApiMonth
 import ru.finassist.pf.mock.MockBackend
+import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.mock.domain.AnalyticsEngine
 import ru.finassist.pf.mock.domain.Coverage
 import ru.finassist.pf.mock.domain.Operation
+import ru.finassist.pf.mock.domain.ServerTexts
 import ru.finassist.pf.mock.ofx.OfxCheck
 import ru.finassist.pf.mock.ofx.OfxDocument
 import ru.finassist.pf.mock.ofx.OfxParser
@@ -61,11 +64,12 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     override suspend fun getImportConfig(): ImportConfig {
         backend.simulateNetwork()
         backend.requireSession()
-        val now = backend.now()
-        val zone = now.offset
-        val tomorrow = now.toLocalDate().plusDays(1).atStartOfDay().atOffset(zone)
+        // Calendar days in the profile zone (FIN-92), each bound with its own offset (DST).
+        val zone = backend.profileZone()
+        val today = backend.now().atZoneSameInstant(zone).toLocalDate()
+        val tomorrow = today.plusDays(1).atStartOfDay(zone).toOffsetDateTime()
         val lastOp = backend.ledger.all.maxOfOrNull { it.occurredAt }
-        val from = lastOp?.toLocalDate()?.atStartOfDay()?.atOffset(zone) ?: now.minusMonths(12).toLocalDate().atStartOfDay().atOffset(zone)
+        val from = (lastOp?.atZoneSameInstant(zone)?.toLocalDate() ?: today.minusMonths(12)).atStartOfDay(zone).toOffsetDateTime()
         val count = backend.ledger.all.size
         return ImportConfig(
             downloadUrl = "https://www.tbank-online.com/mybank/api/operations/timeline/public/legacy/v1/export_operations" +
@@ -110,6 +114,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             coverageFrom = doc.coverageFrom ?: doc.transactions.minOfOrNull { it.postedAt } ?: now,
             coverageTo = doc.coverageTo ?: doc.transactions.maxOfOrNull { it.postedAt } ?: now,
             unreadLines = doc.unreadLines,
+            accountPeriods = doc.accountPeriods,
             operationCount = doc.transactions.size,
             firstOperationAt = doc.transactions.minOfOrNull { it.postedAt },
             lastOperationAt = doc.transactions.maxOfOrNull { it.postedAt },
@@ -143,6 +148,9 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
                 val isFirst = backend.uploads.none { it.isDone }
                 val (added, duplicates) = backend.ledger.importUpload(upload.id, doc.accounts, doc.transactions)
                 stage(ImportStage.RULES, 85)
+                // In the same transaction, after the last point a cancellation can stop it: unread lines are closed
+                // both ways — earlier uploads' against this one, this one's against later finished ones (FIN-79).
+                backend.unreadResolver.recompute(backend.uploads, committing = upload)
                 upload.result = buildResult(upload, doc, added, duplicates, isFirst, before)
                 upload.result!!
             }
@@ -163,6 +171,8 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         backend.mutex.withLock {
             backend.ledger.removeUpload(upload.id)
             backend.uploads.remove(upload)
+            // Whatever it may have closed is checked again (FIN-79).
+            backend.unreadResolver.recompute(backend.uploads)
         }
     }
 
@@ -182,7 +192,9 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
 
         fun feature(f: AnalyticsFeature, openNow: Boolean, openBefore: Boolean, requiredFull: Int? = null, requiredWithData: Int? = null) =
             FeatureAvailability(f, open = openNow, openedNow = openNow && !openBefore,
-                requiredFullMonths = requiredFull.takeIf { !openNow }, requiredMonthsWithData = requiredWithData.takeIf { !openNow })
+                requiredFullMonths = requiredFull.takeIf { !openNow }, requiredMonthsWithData = requiredWithData.takeIf { !openNow },
+                featureName = ServerTexts.featureName(f),
+                text = ServerTexts.lockedFeature(f, requiredFull, requiredWithData, fullAfter.size, after.monthsWithData.size).takeIf { !openNow })
 
         val features = listOf(
             feature(AnalyticsFeature.COMPARISON, fullAfter.isNotEmpty(), fullBefore.isNotEmpty(), requiredFull = 1),
@@ -192,6 +204,12 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             feature(AnalyticsFeature.NOTABLE_SPENDING, fullAfter.size >= 3, fullBefore.size >= 3, requiredFull = 3),
             feature(AnalyticsFeature.SMALL_FREQUENT, fullAfter.isNotEmpty(), fullBefore.isNotEmpty(), requiredFull = 1),
             feature(AnalyticsFeature.YEAR_FORECAST, fullAfter.size >= 12, fullBefore.size >= 12, requiredFull = 12),
+        ) + listOfNotNull(
+            // A feature the client does not know: it shows the server's name and text (FIN-83).
+            FeatureAvailability(
+                AnalyticsFeature.UNKNOWN, open = false, openedNow = false, requiredFullMonths = 6,
+                featureName = MockCodes.FEATURE_UNKNOWN_NAME, text = MockCodes.FEATURE_UNKNOWN_TEXT,
+            ).takeIf { backend.config.unknownCodes },
         )
         val incomplete = after.monthsWithData.filter { !after.isFullMonth(it) }.map { m ->
             val from = m.atDay(1)
@@ -207,8 +225,10 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             )
         }
         val notices = buildList {
-            if (doc.transactions.isEmpty()) add(ImportNotice.EMPTY_STATEMENT)
-            else if (doc.transactions.none { it.isDebit }) add(ImportNotice.NO_EXPENSES)
+            if (doc.transactions.isEmpty()) add(ImportNotice(ImportNoticeCode.EMPTY_STATEMENT, ServerTexts.EMPTY_STATEMENT))
+            else if (doc.transactions.none { it.isDebit }) add(ImportNotice(ImportNoticeCode.NO_EXPENSES, ServerTexts.NO_EXPENSES))
+            // The real server sends the raw code; the fake one parses its own events, so the e2e code arrives as UNKNOWN.
+            if (backend.config.unknownCodes) add(ImportNotice(ImportNoticeCode.UNKNOWN, MockCodes.NOTICE_UNKNOWN_TEXT))
         }
         val totalsOps = if (isFirst) added else newVisible
         return ImportResult(
@@ -252,6 +272,11 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     override suspend fun listStatements(): StatementsList {
         backend.simulateNetwork()
         backend.requireSession()
+        // Built under the mutex: an import or a deletion recomputes the closures meanwhile (FIN-79).
+        return backend.mutex.withLock { statementsSnapshot() }
+    }
+
+    private fun statementsSnapshot(): StatementsList {
         val done = backend.uploads.filter { it.isDone }
         // A completed empty statement leaves the ledger empty: no summary then (api.md 3.4 `summary?`).
         val summary = if (done.isEmpty() || backend.ledger.all.isEmpty()) null else StatementsSummary(
@@ -267,7 +292,10 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
                 Upload(
                     uploadId = u.id, fileName = u.fileName,
                     status = if (u.isDone) UploadStatus.DONE else UploadStatus.PROCESSING,
-                    uploadedAt = u.uploadedAt, operationCount = u.operationCount, unreadCount = u.unreadLines.size,
+                    uploadedAt = u.uploadedAt, operationCount = u.operationCount, unreadCount = u.openUnreadLines.size,
+                    resolvedUnreadCount = u.readClosures.size,
+                    resolvedByUploadedAt = u.readClosures.map { it.uploadId }.toSet()
+                        .mapNotNull { id -> backend.uploads.firstOrNull { it.id == id }?.uploadedAt }.maxOrNull(),
                     firstOperationAt = u.firstOperationAt, lastOperationAt = u.lastOperationAt,
                     sourceName = MockBackend.SOURCE_NAME,
                 )
@@ -287,24 +315,30 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         backend.mutex.withLock {
             backend.ledger.removeUpload(uploadId)
             backend.uploads.remove(upload)
+            // Lines this upload closed are checked again against the uploads that remain (FIN-79).
+            backend.unreadResolver.recompute(backend.uploads)
         }
     }
 
     override suspend fun listUnreadLines(uploadId: String): UnreadLinesList {
         backend.simulateNetwork()
         backend.requireSession()
-        val upload = backend.uploads.firstOrNull { it.id == uploadId } ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
-        return UnreadLinesList(upload.unreadLines.map { toDto(upload, it) })
+        return backend.mutex.withLock {
+            val upload = backend.uploads.firstOrNull { it.id == uploadId } ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+            UnreadLinesList(upload.openUnreadLines.map { toDto(upload, it) })
+        }
     }
 
     override suspend fun listUnreadLines(from: OffsetDateTime, to: OffsetDateTime): UnreadLinesList {
         backend.simulateNetwork()
         backend.requireSession()
-        return UnreadLinesList(
-            backend.uploads.filter { it.isDone }.flatMap { u ->
-                u.unreadLines.filter { it.date != null && !it.date.isBefore(from) && it.date.isBefore(to) }.map { toDto(u, it) }
-            },
-        )
+        return backend.mutex.withLock {
+            UnreadLinesList(
+                backend.uploads.filter { it.isDone }.flatMap { u ->
+                    u.openUnreadLines.filter { it.date != null && !it.date.isBefore(from) && it.date.isBefore(to) }.map { toDto(u, it) }
+                },
+            )
+        }
     }
 
     private fun toDto(upload: MockBackend.Upload, line: ru.finassist.pf.mock.ofx.UnreadLine) = UnreadLine(

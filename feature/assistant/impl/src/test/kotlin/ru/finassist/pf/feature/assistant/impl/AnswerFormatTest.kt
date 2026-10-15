@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.assistant.impl
 
+import kotlin.test.assertTrue
+import ru.finassist.pf.core.api.model.ValueKind
+import ru.finassist.pf.core.api.model.ChartKind
+import ru.finassist.pf.core.api.model.ChartData
 import ru.finassist.pf.core.api.model.AnswerSource
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockRow
@@ -7,7 +11,6 @@ import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.ChangedSince
 import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.api.model.TransferMode
-import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.feature.assistant.impl.domain.AnswerFormat
 import ru.finassist.pf.feature.assistant.impl.domain.TextPart
@@ -49,14 +52,22 @@ class AnswerFormatTest {
         assertNull(AnswerFormat.changedSince(emptyList()))
         assertEquals("С тех пор категории менялись", AnswerFormat.changedSince(listOf(ChangedSince.CATEGORIES)))
         assertEquals("С тех пор данные менялись", AnswerFormat.changedSince(listOf(ChangedSince.UNKNOWN)))
+        // FIN-83: an unknown code shows the server's text when there is one.
+        assertEquals("С тех пор менялись правила", AnswerFormat.changedSince(listOf(ChangedSince.UNKNOWN), "с тех пор менялись правила"))
+        assertEquals("С тех пор категории менялись", AnswerFormat.changedSince(listOf(ChangedSince.CATEGORIES), "не нужен"))
     }
 
     @Test
     fun `row values`() {
-        assertEquals("800 ₽", AnswerFormat.rowValue(BlockRow("Средний чек", amount = Money(80000)))!!.plain())
-        assertEquals("9", AnswerFormat.rowValue(BlockRow("Операций", count = 9)))
-        assertEquals("46%", AnswerFormat.rowValue(BlockRow("Доля", percent = 0.46)))
+        assertEquals("800 ₽", AnswerFormat.rowValue(BlockRow("Средний чек", value = 80000.0, valueKind = ValueKind.AMOUNT))!!.plain())
+        assertEquals("9", AnswerFormat.rowValue(BlockRow("Операций", value = 9.0, valueKind = ValueKind.COUNT)))
+        assertEquals("46%", AnswerFormat.rowValue(BlockRow("Доля", value = 0.46, valueKind = ValueKind.PERCENT)))
+        assertEquals("быстро", AnswerFormat.rowValue(BlockRow("Скорость", value = 3.0, valueKind = ValueKind.UNKNOWN, text = "быстро")))
         assertNull(AnswerFormat.rowValue(BlockRow("Пусто")))
+        // The answer's currency (FIN-82): the same minor units in dollars.
+        val usd = AnswerFormat.rowValue(BlockRow("Средний чек", value = 80000.0, valueKind = ValueKind.AMOUNT), "USD")!!.plain()
+        assertEquals(ru.finassist.pf.core.common.money.Money(80000).format("USD").plain(), usd)
+        assertTrue(!usd.contains("₽"), usd)
     }
 
     @Test
@@ -70,28 +81,13 @@ class AnswerFormatTest {
 
     @Test
     fun `a chart followed by rows is one group`() {
-        val text = Block(BlockType.TEXT, text = "a")
-        val chart = Block(BlockType.CHART)
-        val rows = Block(BlockType.ROWS)
+        val text = Block.text("a")
+        val chart = Block(type = BlockType.CHART)
+        val rows = Block(type = BlockType.ROWS)
         assertEquals(listOf(listOf(text), listOf(chart, rows)), AnswerFormat.groupBlocks(listOf(text, chart, rows)))
         assertEquals(listOf(listOf(rows), listOf(chart)), AnswerFormat.groupBlocks(listOf(rows, chart)))
         assertEquals(listOf(listOf(chart), listOf(text), listOf(rows)), AnswerFormat.groupBlocks(listOf(chart, text, rows)))
         assertEquals(emptyList(), AnswerFormat.groupBlocks(emptyList()))
-    }
-
-    @Test
-    fun `a partial month is filled by its days with data`() {
-        val september = DateRange(OffsetDateTime.parse("2026-09-01T00:00:00+03:00"), OffsetDateTime.parse("2026-10-01T00:00:00+03:00"))
-        fun point(coverage: Coverage, from: String? = null, to: String? = null) = ru.finassist.pf.core.api.model.ChartPoint(
-            september, value = 1.0, coverage = coverage,
-            dataFrom = from?.let(OffsetDateTime::parse), dataTo = to?.let(OffsetDateTime::parse),
-        )
-        assertEquals(25f / 30, AnswerFormat.partialFill(point(Coverage.PARTIAL, to = "2026-09-25T21:40:00+03:00")))
-        // A statement that starts late in the month: six days, not thirty.
-        assertEquals(6f / 30, AnswerFormat.partialFill(point(Coverage.PARTIAL, from = "2026-09-25T09:00:00+03:00", to = "2026-09-30T23:59:59+03:00")))
-        assertEquals(1f, AnswerFormat.partialFill(point(Coverage.PARTIAL)))  // no bounds: the whole month
-        assertNull(AnswerFormat.partialFill(point(Coverage.COMPLETE, to = "2026-09-25T21:40:00+03:00")))
-        assertNull(AnswerFormat.partialFill(point(Coverage.NO_DATA)))
     }
 
     @Test
@@ -100,14 +96,12 @@ class AnswerFormatTest {
             DateRange(OffsetDateTime.parse("2026-09-01T00:00:00+03:00"), OffsetDateTime.parse("2026-10-01T00:00:00+03:00")),
             value = 1.0, coverage = ru.finassist.pf.core.api.model.Coverage.COMPLETE,
         )
-        val bar = Block(
-            BlockType.CHART, kind = ru.finassist.pf.core.api.model.ChartKind.BAR,
-            valueKind = ru.finassist.pf.core.api.model.ChartValueKind.AMOUNT, points = listOf(point),
-        )
-        assertEquals(true, AnswerFormat.isDrawableChart(bar))
-        assertEquals(false, AnswerFormat.isDrawableChart(bar.copy(kind = ru.finassist.pf.core.api.model.ChartKind.UNKNOWN)))
-        assertEquals(false, AnswerFormat.isDrawableChart(bar.copy(valueKind = null)))
-        assertEquals(false, AnswerFormat.isDrawableChart(bar.copy(valueKind = ru.finassist.pf.core.api.model.ChartValueKind.UNKNOWN)))
-        assertEquals(false, AnswerFormat.isDrawableChart(bar.copy(points = emptyList())))
+        val data = ChartData(kind = ChartKind.BAR, valueKind = ValueKind.AMOUNT, points = listOf(point))
+        fun chart(d: ChartData) = Block.of(BlockType.CHART, ChartData.serializer(), d)
+        assertEquals(data, AnswerFormat.drawableChart(chart(data)))
+        assertNull(AnswerFormat.drawableChart(chart(data.copy(kind = ChartKind.UNKNOWN))))
+        assertNull(AnswerFormat.drawableChart(chart(data.copy(valueKind = ValueKind.UNKNOWN))))
+        assertNull(AnswerFormat.drawableChart(chart(data.copy(points = emptyList()))))
+        assertNull(AnswerFormat.drawableChart(Block(type = BlockType.CHART)), "no data")
     }
 }

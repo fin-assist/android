@@ -2,7 +2,8 @@ package ru.finassist.pf.mock.api
 
 import kotlinx.coroutines.sync.withLock
 import ru.finassist.pf.core.api.ProfileApi
-import ru.finassist.pf.core.api.model.AssistantConsent
+import ru.finassist.pf.core.api.model.Consent
+import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.AssistantConsentGrant
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.Profile
@@ -40,8 +41,8 @@ class MockProfileApi(private val backend: MockBackend) : ProfileApi {
         backend.requireSession()
         if (grant.version != MockBackend.CONSENT_VERSION_ASSISTANT) throw AppError.Api(ErrorCodes.CONSENT_OUTDATED, 422)
         return backend.mutex.withLock {
-            backend.profile = backend.profile.copy(
-                assistantConsent = AssistantConsent(granted = true, version = grant.version, currentVersion = MockBackend.CONSENT_VERSION_ASSISTANT),
+            backend.profile = backend.profile.withConsent(
+                Consent(ConsentType.ASSISTANT, granted = true, version = grant.version, currentVersion = MockBackend.CONSENT_VERSION_ASSISTANT),
             )
             backend.profile
         }
@@ -51,8 +52,8 @@ class MockProfileApi(private val backend: MockBackend) : ProfileApi {
         backend.simulateNetwork()
         backend.requireSession()
         backend.mutex.withLock {
-            backend.profile = backend.profile.copy(
-                assistantConsent = AssistantConsent(granted = false, version = null, currentVersion = MockBackend.CONSENT_VERSION_ASSISTANT),
+            backend.profile = backend.profile.withConsent(
+                Consent(ConsentType.ASSISTANT, granted = false, version = null, currentVersion = MockBackend.CONSENT_VERSION_ASSISTANT),
             )
         }
     }

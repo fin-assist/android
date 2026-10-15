@@ -8,10 +8,10 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.ProfileApi
-import ru.finassist.pf.core.api.model.AssistantConsent
+import ru.finassist.pf.core.api.model.Consent
+import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.AssistantConsentGrant
 import ru.finassist.pf.core.api.model.ConsentDocument
-import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.PhoneVerification
@@ -57,7 +57,7 @@ class AiConsentViewModelTest {
             grants += grant.version
             return Profile(
                 userId = "u1", phone = "+79161234567", theme = Theme.SYSTEM, timezone = "Europe/Moscow",
-                assistantConsent = AssistantConsent(granted = true, version = grant.version, currentVersion = grant.version),
+                consents = listOf(Consent(ConsentType.ASSISTANT, granted = true, version = grant.version, currentVersion = grant.version)),
                 createdAt = OffsetDateTime.parse("2026-09-01T00:00:00+03:00"),
             )
         }

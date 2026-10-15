@@ -3,7 +3,8 @@ package ru.finassist.pf.mock
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import ru.finassist.pf.core.api.model.AssistantConsent
+import ru.finassist.pf.core.api.model.Consent
+import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.mock.api.MockStatementsApi
 import ru.finassist.pf.mock.ofx.OfxAccount
@@ -50,7 +51,7 @@ internal fun testBackend(
     val backend = MockBackend(config, clock, dispatcher)
     backend.ready.complete(Unit)
     backend.profile = backend.emptyProfile("+79160000000", userId).let {
-        if (assistantConsent) it.copy(assistantConsent = AssistantConsent(true, MockBackend.CONSENT_VERSION_ASSISTANT, MockBackend.CONSENT_VERSION_ASSISTANT)) else it
+        if (assistantConsent) it.copy(consents = listOf(Consent(ConsentType.ASSISTANT, true, MockBackend.CONSENT_VERSION_ASSISTANT, MockBackend.CONSENT_VERSION_ASSISTANT))) else it
     }
     return backend
 }

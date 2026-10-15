@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import androidx.compose.runtime.getValue
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import androidx.compose.foundation.layout.Arrangement
 import ru.finassist.pf.core.designsystem.components.PfTestTags
@@ -25,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -42,18 +42,16 @@ import ru.finassist.pf.core.api.model.AnswerErrorCode
 import ru.finassist.pf.core.api.model.AnswerStatus
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockType
-import ru.finassist.pf.core.api.model.ChartKind
-import ru.finassist.pf.core.api.model.ChartValueKind
+import ru.finassist.pf.core.api.model.ChartData
+import ru.finassist.pf.core.api.model.RowsData
+import ru.finassist.pf.core.blocks.BlockChartBars
 import ru.finassist.pf.core.api.model.ChipScreen
-import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.RussianDates
-import ru.finassist.pf.core.designsystem.components.BarPoint
 import ru.finassist.pf.core.designsystem.components.ChatStatusTone
 import ru.finassist.pf.core.designsystem.components.ComposerState
 import ru.finassist.pf.core.designsystem.components.PfAssistantMessage
-import ru.finassist.pf.core.designsystem.components.PfBarChart
 import ru.finassist.pf.core.designsystem.components.PfCard
 import ru.finassist.pf.core.designsystem.components.PfChatComposer
 import ru.finassist.pf.core.designsystem.components.PfChatDay
@@ -73,10 +71,7 @@ import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.assistant.impl.domain.AnswerFormat
 import ru.finassist.pf.feature.assistant.impl.domain.TextPart
 import java.time.LocalDate
-import java.time.YearMonth
 import java.time.ZoneId
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
 @Composable
 fun ChatScreen(
@@ -287,9 +282,9 @@ private fun Answer(
                 // A finished answer gets its own tag, so tests can wait for the end of the stream.
                 modifier = Modifier.testTag(if (item.status == AnswerStatus.COMPLETE) AssistantTags.ANSWER else AssistantTags.ANSWER_GENERATING),
                 source = item.source?.let { AnswerFormat.source(it, zone) },
-                staleText = item.source?.let { AnswerFormat.changedSince(it.changedSince) },
+                staleText = item.source?.let { AnswerFormat.changedSince(it.changedSince, it.changedSinceText) },
             ) {
-                AnswerFormat.groupBlocks(item.blocks).forEachIndexed { i, group -> BlockGroupView(group, chartId = "assistant.${item.id}.$i") }
+                AnswerFormat.groupBlocks(item.blocks).forEachIndexed { i, group -> BlockGroupView(group, chartId = "assistant.${item.id}.$i", currency = item.currency) }
             }
             // The chips follow the message and its source line, across the full width (mockup `Chat`).
             val chips = item.chips.filter { it.screen != ChipScreen.UNKNOWN }
@@ -312,13 +307,15 @@ private fun Answer(
 
 /** A chart followed by its rows is one card (mockup `Chat`); other blocks stand alone. */
 @Composable
-private fun BlockGroupView(group: List<Block>, chartId: String) {
-    val chart = group.firstOrNull { it.type == BlockType.CHART }
-    val rows = group.firstOrNull { it.type == BlockType.ROWS }
-    if (chart != null && rows != null && AnswerFormat.isDrawableChart(chart)) {
-        val rowValues = rows.rows.orEmpty().mapNotNull { r -> AnswerFormat.rowValue(r)?.let { r to it } }
+private fun BlockGroupView(group: List<Block>, chartId: String, currency: String) {
+    val chartBlock = group.firstOrNull { it.type == BlockType.CHART }
+    val chart = chartBlock?.let(AnswerFormat::drawableChart)
+    val rowsBlock = group.firstOrNull { it.type == BlockType.ROWS }
+    val rows = rowsBlock?.decode(RowsData.serializer())
+    if (chartBlock != null && chart != null && rowsBlock != null && rows != null) {
+        val rowValues = rows.rows.mapNotNull { r -> AnswerFormat.rowValue(r, currency)?.let { r to it } }
         PfCard {
-            ChartBody(chart, chartId)
+            ChartBody(chartBlock, chart, chartId, currency)
             if (rowValues.isNotEmpty()) {
                 Spacer(Modifier.height(PfTheme.dimens.space3))
                 PfDivider()
@@ -326,65 +323,45 @@ private fun BlockGroupView(group: List<Block>, chartId: String) {
             }
         }
     } else {
-        group.forEachIndexed { i, block -> BlockView(block, chartId = if (i == 0) chartId else "$chartId.$i") }
+        group.forEachIndexed { i, block -> BlockView(block, chartId = if (i == 0) chartId else "$chartId.$i", currency = currency) }
     }
 }
 
 @Composable
-private fun BlockView(block: Block, chartId: String) {
+private fun BlockView(block: Block, chartId: String, currency: String) {
     val c = PfTheme.colors
     when (block.type) {
         // `.pf-msg-body`: 15/20 (`lead`), `<strong>` is 700.
         BlockType.TEXT -> Text(markdown(block.text.orEmpty()), style = PfTheme.type.lead, color = c.text)
         BlockType.CHART -> {
-            if (!AnswerFormat.isDrawableChart(block)) {
+            val chart = AnswerFormat.drawableChart(block)
+            if (chart == null) {
                 Text(block.altText.orEmpty(), style = PfTheme.type.lead, color = c.text)
             } else {
-                PfCard { ChartBody(block, chartId) }
+                PfCard { ChartBody(block, chart, chartId, currency) }
             }
         }
         BlockType.ROWS -> {
-            val rows = block.rows.orEmpty().mapNotNull { r -> AnswerFormat.rowValue(r)?.let { r to it } }
+            val rows = block.decode(RowsData.serializer())?.rows.orEmpty().mapNotNull { r -> AnswerFormat.rowValue(r, currency)?.let { r to it } }
             if (rows.isNotEmpty()) {
                 PfCard {
                     rows.forEachIndexed { i, (r, value) -> PfDataRow(r.label, value, sublabel = r.sublabel, divider = i < rows.lastIndex) }
                 }
+            } else {
+                block.altText?.let { Text(it, style = PfTheme.type.lead, color = c.text) }
             }
         }
-        BlockType.UNKNOWN -> block.altText?.let { Text(it, style = PfTheme.type.lead, color = c.text) }
+        // A type this client does not draw in an answer: its text version (api.md «Блоки»).
+        else -> block.altText?.let { Text(it, style = PfTheme.type.lead, color = c.text) }
     }
 }
 
-/** The bars of a chart block, 64 dp high (mockup `Chat`); a partial month is filled by its days with data. */
+/** The title and the bars of a chart block, 64 dp high (mockup `Chat`) — the bars are the shared renderer's (FIN-7). */
 @Composable
-private fun ChartBody(block: Block, chartId: String) {
-    val c = PfTheme.colors
-    val points = block.points.orEmpty()
-    val max = points.mapNotNull { it.value?.let(::abs) }.maxOrNull()?.takeIf { it > 0 } ?: 1.0
-    block.title?.let { Text(it, style = PfTheme.type.bodyStrong, color = c.text) }
-    PfBarChart(
-        chartId = chartId,
-        points = points.map { p ->
-            val ym = YearMonth.from(p.range.from.atZoneSameInstant(LocalPfClock.current.zone))
-            val display = p.value?.let { v ->
-                if (block.valueKind == ChartValueKind.PERCENT) "${(v * 100).roundToInt()}%" else Money(v.toLong()).format()
-            } ?: "нет данных"
-            val partial = p.coverage.effective == Coverage.PARTIAL
-            BarPoint(
-                key = p.range.from.toString(),
-                label = RussianDates.monthShort(ym.month),
-                spokenLabel = RussianDates.monthTitle(ym),
-                // Signed: refunds can make a period negative; the chart draws a centred baseline then.
-                value = p.value?.let { (it / max).toFloat() },
-                display = display,
-                partial = partial,
-                partialFill = AnswerFormat.partialFill(p) ?: 0.5f,
-                note = p.dataTo?.takeIf { partial }?.let { "по ${it.dayOfMonth}-е" },
-            )
-        },
-        highlight = block.highlightIndex ?: points.lastIndex,
-        height = 64.dp,
-    )
+private fun ChartBody(block: Block, chart: ChartData, chartId: String, currency: String) {
+    block.title?.let { Text(it, style = PfTheme.type.bodyStrong, color = PfTheme.colors.text) }
+    // Without a highlight from the server the last point is the one the answer is about.
+    BlockChartBars(chart.copy(highlightIndex = chart.highlightIndex ?: chart.points.lastIndex), chartId, height = 64.dp, currency = currency)
 }
 
 private fun markdown(text: String): AnnotatedString = buildAnnotatedString {

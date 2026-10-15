@@ -1,0 +1,33 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — блок, который не удалось посчитать, не ломает экран
+tags:
+  - analytics
+---
+# FIN-5: a block that fails on the server comes as `unavailable` with its text; the other blocks are shown as usual.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?failing_blocks=expense_categories"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+# "Now" is pinned to 8 October 2026; September holds the operations.
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible: "Сентябрь 2026"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.expense_categories"
+- assertVisible: "Не получилось посчитать — обновите экран позже"
+- assertNotVisible:
+    id: "analytics.expense_category"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.income_categories"

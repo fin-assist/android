@@ -5,8 +5,8 @@ import org.junit.Test
 import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.Coverage as ApiCoverage
 import ru.finassist.pf.core.api.model.LockReason
-import ru.finassist.pf.core.api.model.MetricLock
-import ru.finassist.pf.core.api.model.MetricStatus
+import ru.finassist.pf.mock.domain.MetricLock
+import ru.finassist.pf.mock.domain.MetricStatus
 import ru.finassist.pf.core.api.model.OperationKindFilter
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.OperationsQuery
@@ -126,7 +126,7 @@ class FixtureTest {
         val (backend, _) = backend()
         val engine = AssistantEngine(backend.ledger, backend.catalog, backend.operationScope, backend::coverage)
         val answer = assertIs<AssistantEngine.Outcome.Answered>(engine.answer("Krabsbir", TransferMode.WITH, LocalDate.parse("2026-10-06"))).answer
-        val points = answer.blocks.first { it.type == BlockType.CHART }.points!!
+        val points = answer.blocks.first { it.type == BlockType.CHART }.decode(ru.finassist.pf.core.api.model.ChartData.serializer())!!.points
         val partial = points.filter { it.coverage == ApiCoverage.PARTIAL }
         assertTrue(partial.isNotEmpty())
         for (p in partial) {
@@ -135,6 +135,8 @@ class FixtureTest {
             // (the start of which the mock used to send); the chart reads `dayOfMonth` from it.
             val lastDay = assertNotNull(backend.coverage().dataBounds(p.range.from.toLocalDate(), p.range.to.toLocalDate())).second
             assertEquals(lastDay, to.atZoneSameInstant(Clock.MOSCOW).toLocalDate())
+            // The server's caption of the partial bar (FIN-4): «по 25-е».
+            assertEquals("по ${lastDay.dayOfMonth}-е", p.note)
         }
     }
 

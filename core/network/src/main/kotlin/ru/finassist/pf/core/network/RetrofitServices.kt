@@ -148,6 +148,8 @@ internal interface AnalyticsService {
         @Query("period") period: String?,
         @Query("date") date: String?,
         @Query("transfer_mode") transferMode: String?,
+        @Query("supports") supports: String?,
+        @Query("exp") exp: String?,
     ): Response<Analytics>
 
     @GET("v1/analytics/periods")

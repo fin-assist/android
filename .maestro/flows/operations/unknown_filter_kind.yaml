@@ -1,0 +1,35 @@
+appId: ru.finassist.pf.mock.e2e
+name: Поиск — фильтр с неизвестным kind не теряется, а показывается чипом «Как на „Аналитике“»
+tags:
+  - operations
+---
+# FIN-83. With `unknown_codes=true` the expense tile of «Аналитика» sends a `kind` the client does not know. The search
+# keeps it (only expenses, no incomes such as «Зачисление кэшбэка» on 28 September) under the analytics chip.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?unknown_codes=true"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+# "Now" is pinned to 8 October 2026; September holds the operations.
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible: "Сентябрь 2026"
+    timeout: 10000
+- tapOn:
+    id: "analytics.tile.expense"
+- extendedWaitUntil:
+    visible:
+      id: "operations.row"
+    timeout: 15000
+- assertVisible:
+    id: "operations.search.chip.scope"
+- assertVisible: "Как на «Аналитике».*"
+- assertNotVisible: "Зачисление кэшбэка"

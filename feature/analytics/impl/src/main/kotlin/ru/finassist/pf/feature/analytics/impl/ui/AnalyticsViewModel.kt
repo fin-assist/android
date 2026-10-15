@@ -7,19 +7,28 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.api.AnalyticsApi
 import ru.finassist.pf.core.api.AssistantApi
+import ru.finassist.pf.core.api.model.ActionType
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.AnalyticsParams
 import ru.finassist.pf.core.api.model.AnalyticsPeriodItem
 import ru.finassist.pf.core.api.model.AssistantLimit
+import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.BlockAction
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.blocks.CatalogV1
 import ru.finassist.pf.core.common.time.PeriodKey
+import ru.finassist.pf.core.common.time.ReportZone
+import ru.finassist.pf.core.toggles.Experiment
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.tracking.Events
@@ -28,19 +37,15 @@ import ru.finassist.pf.feature.operations.api.OperationsRepository
 import ru.finassist.pf.feature.statements.api.StatementsRepository
 import javax.inject.Inject
 
-/** Which blocks of the screen are on (toggles `analytics.block.*`, `analytics.filter.transfers`, `assistant`). */
+/**
+ * Switches read at the screen boundary: blocks switched off by `analytics.block.<id>` (FIN-4: a block id the client has
+ * no flag for stays on), the transfers chip, the assistant card, the upload links.
+ */
 data class AnalyticsBlocks(
-    val tiles: Boolean,
-    val expenseCategories: Boolean,
-    val incomeCategories: Boolean,
-    val monthlyChart: Boolean,
-    val regularPayments: Boolean,
-    val notableSpending: Boolean,
-    val bankFees: Boolean,
-    val smallFrequent: Boolean,
-    val transfersFilter: Boolean,
-    val assistant: Boolean,
-    val upload: Boolean,
+    val hidden: Set<String> = emptySet(),
+    val transfersFilter: Boolean = true,
+    val assistant: Boolean = true,
+    val upload: Boolean = true,
 )
 
 enum class AnalyticsSheet { PERIODS, TRANSFERS }
@@ -56,15 +61,19 @@ data class AnalyticsUiState(
     val sheet: AnalyticsSheet? = null,
     val periods: List<AnalyticsPeriodItem>? = null,
     val limit: AssistantLimit? = null,
-    val allExpenseCategories: Boolean = false,
+    /** Ids of lists shown in full («Все категории»). */
+    val expanded: Set<String> = emptySet(),
     val snackbar: String? = null,
     val hint: AnalyticsHint? = null,
     val periodsFailed: Boolean = false,
+    /** Number of the response on screen: the blocks of each one are exposed anew (FIN-9). */
+    val response: Int = 0,
 )
 
 /**
  * Analytics (api.md 6.1–6.3). Parameters live here: period type, period key and transfer mode; every change
- * re-requests the server. Data changes elsewhere (import, delete, category edit) reload the current params.
+ * re-requests the server. Data changes elsewhere (import, delete, category edit) and a new profile zone (months
+ * and periods are counted in it on the server, FIN-92) reload the current params.
  */
 @HiltViewModel
 class AnalyticsViewModel @Inject constructor(
@@ -74,6 +83,7 @@ class AnalyticsViewModel @Inject constructor(
     operations: OperationsRepository,
     private val flags: FeatureFlags,
     private val tracker: Tracker,
+    reportZone: ReportZone,
 ) : ViewModel(), AnalyticsHandlers {
     private var period: PeriodTypeCode = PeriodTypeCode.MONTH
     private var date: PeriodKey? = null
@@ -85,18 +95,22 @@ class AnalyticsViewModel @Inject constructor(
     private var periodsJob: Job? = null
 
     private fun readBlocks(flags: FeatureFlags) = AnalyticsBlocks(
-                tiles = flags.isEnabled(Flag.ANALYTICS_BLOCK_TILES),
-                expenseCategories = flags.isEnabled(Flag.ANALYTICS_BLOCK_EXPENSE_CATEGORIES),
-                incomeCategories = flags.isEnabled(Flag.ANALYTICS_BLOCK_INCOME_CATEGORIES),
-                monthlyChart = flags.isEnabled(Flag.ANALYTICS_BLOCK_MONTHLY_CHART),
-                regularPayments = flags.isEnabled(Flag.ANALYTICS_BLOCK_REGULAR_PAYMENTS),
-                notableSpending = flags.isEnabled(Flag.ANALYTICS_BLOCK_NOTABLE_SPENDING),
-                bankFees = flags.isEnabled(Flag.ANALYTICS_BLOCK_BANK_FEES),
-                smallFrequent = flags.isEnabled(Flag.ANALYTICS_BLOCK_SMALL_FREQUENT),
-                transfersFilter = flags.isEnabled(Flag.ANALYTICS_FILTER_TRANSFERS),
-                assistant = flags.isEnabled(Flag.ASSISTANT),
-                upload = flags.isEnabled(Flag.STATEMENTS_UPLOAD),
-            )
+        hidden = Flag.entries.filter { it.key.startsWith(BLOCK_FLAG_PREFIX) && !flags.isEnabled(it) }
+            .map { it.key.removePrefix(BLOCK_FLAG_PREFIX) }.toSet(),
+        transfersFilter = flags.isEnabled(Flag.ANALYTICS_FILTER_TRANSFERS),
+        assistant = flags.isEnabled(Flag.ASSISTANT),
+        upload = flags.isEnabled(Flag.STATEMENTS_UPLOAD),
+    )
+
+    /** `key:variant,…` of the experiments over the composition (FIN-9), sent with every request. */
+    private val experiments: String
+        get() = Experiment.entries.joinToString(",") { "${it.key}:${flags.variant(it)}" }
+
+    /** Blocks already reported as shown for the data on screen: one exposure per block and response. */
+    private val exposed = HashSet<String>()
+
+    /** [experiments] the data on screen was asked with: its exposures report these, not what the config says now. */
+    private var shownExperiments: String? = null
 
     /** Set by the `Period` route (assistant chip); the tab root starts with the server's default period. */
     fun init(params: AnalyticsParams?) {
@@ -112,15 +126,22 @@ class AnalyticsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { merge(statements.events, operations.categoryChanges).collect { load(quiet = true) } }
+        viewModelScope.launch {
+            reportZone.profile.drop(1).filterNotNull().distinctUntilChanged().collect { if (_state.value.data != null) load(quiet = true) }
+        }
         // Remote config can land after the screen opened (first launch, background sync): re-read the blocks.
         viewModelScope.launch {
             flags.changes.collect {
                 _state.update { it.copy(blocks = readBlocks(flags)) }
                 // The transfers filter was switched off remotely: from now on requests use `with` (docs/flags.md).
+                var reload = false
                 if (!_state.value.blocks.transfersFilter && transferMode != TransferMode.WITH) {
                     transferMode = TransferMode.WITH
-                    if (_state.value.data != null) load(quiet = true)
+                    reload = true
                 }
+                // A new experiment variant: the server composes the screen anew (FIN-9).
+                if (shownExperiments != null && shownExperiments != experiments) reload = true
+                if (reload && _state.value.data != null) load(quiet = true)
             }
         }
     }
@@ -130,13 +151,16 @@ class AnalyticsViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             if (!quiet) _state.update { it.copy(loading = it.data == null, offline = false) }
             try {
-                val a = api.getAnalytics(period, date, transferMode)
+                val exp = experiments
+                val a = api.getAnalytics(period, date, transferMode, supports = supports, exp = exp)
+                exposed.clear()
+                shownExperiments = exp
                 a.params?.let { p ->
                     period = p.period
                     date = p.date
                     transferMode = allowedMode(p.transferMode)
                 }
-                _state.update { it.copy(loading = false, offline = false, data = a) }
+                _state.update { it.copy(loading = false, offline = false, data = a, response = it.response + 1) }
                 if (a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
                     _state.update { it.copy(hint = AnalyticsHint.CATEGORIES) }
                 }
@@ -222,10 +246,33 @@ class AnalyticsViewModel @Inject constructor(
         }
     }
 
-    override fun toggleAllCategories() = _state.update { it.copy(allExpenseCategories = !it.allExpenseCategories) }
+    override fun toggleExpanded(id: String) = _state.update { s ->
+        s.copy(expanded = if (id in s.expanded) s.expanded - id else s.expanded + id)
+    }
+
+    /** An action of a block (api.md «Действия»); `open_*` navigate, so the screen passes them on with [navigate]. */
+    override fun onAction(block: Block, action: BlockAction, navigate: (BlockAction) -> Unit) {
+        when (action.type) {
+            ActionType.DISMISS_REGULAR_PAYMENT -> action.paymentId?.let(::dismissRegular)
+            ActionType.OPEN_OPERATIONS -> {
+                if (block.id == TILES_ID) tracker.track(Events.ANALYTICS_TILE_OPENED, mapOf("block" to TILES_ID))
+                navigate(action)
+            }
+            ActionType.OPEN_ASSISTANT -> navigate(action)
+            ActionType.UNKNOWN -> Unit
+        }
+    }
+
+    /** Exposure (FIN-9): the block was drawn — once per block id and response. */
+    override fun onBlockShown(block: Block) {
+        val id = block.id ?: return
+        val exp = shownExperiments ?: return
+        if (!exposed.add(id)) return
+        tracker.track(Events.ANALYTICS_BLOCK_EXPOSED, mapOf("block" to id, "exp" to exp))
+    }
 
     /** «Не подписка» (api.md 6.3): the payment disappears and the total is recalculated. */
-    override fun dismissRegular(id: String) {
+    fun dismissRegular(id: String) {
         viewModelScope.launch {
             try {
                 api.dismissRegularPayment(id)
@@ -240,9 +287,12 @@ class AnalyticsViewModel @Inject constructor(
 
     override fun consumeSnackbar() = _state.update { it.copy(snackbar = null) }
 
-    override fun onTileOpened(tile: String) = tracker.track(Events.ANALYTICS_TILE_OPENED, mapOf("tile" to tile))
-
     private companion object {
         const val RECALC_POLL_MS = 3_000L
+        const val BLOCK_FLAG_PREFIX = "analytics.block."
+        const val TILES_ID = "tiles"
+
+        /** What this client draws (api.md 6.1 `supports`), from the renderer registry (FIN-7). */
+        val supports: String = CatalogV1.registry().supports
     }
 }

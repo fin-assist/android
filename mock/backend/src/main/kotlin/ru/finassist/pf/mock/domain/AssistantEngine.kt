@@ -6,7 +6,9 @@ import ru.finassist.pf.core.api.model.BlockRow
 import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.ChartKind
 import ru.finassist.pf.core.api.model.ChartPoint
-import ru.finassist.pf.core.api.model.ChartValueKind
+import ru.finassist.pf.core.api.model.ChartData
+import ru.finassist.pf.core.api.model.RowsData
+import ru.finassist.pf.core.api.model.ValueKind
 import ru.finassist.pf.core.api.model.Chip
 import ru.finassist.pf.core.api.model.ChipScreen
 import ru.finassist.pf.core.api.model.Coverage as ApiCoverage
@@ -99,7 +101,7 @@ class AssistantEngine(
         if (count == 0) {
             val text = "За $periodLabel операций «$title» не нашли. Возможно, они проходят под другим названием — " +
                 "посмотрите «Операции» или уточните вопрос."
-            return Outcome.Answered(Answer(text, listOf(Block(type = BlockType.TEXT, text = text)), emptyList(), range, charged = false))
+            return Outcome.Answered(Answer(text, listOf(Block.text(text)), emptyList(), range, charged = false))
         }
         val firstMonthWithOps = perMonth.first { it.second != 0L }.first
         val peak = perMonth.maxBy { it.second }
@@ -121,23 +123,31 @@ class AssistantEngine(
                 dataFrom = bounds?.first?.atStartOfDay(scope.zone)?.toOffsetDateTime(),
                 // api.md 7: `data_to` is the last moment with data («сентябрь по 25-е»), not an exclusive boundary.
                 dataTo = bounds?.second?.plusDays(1)?.atStartOfDay(scope.zone)?.minusSeconds(1)?.toOffsetDateTime(),
+                // Server text of a partial bar (api.md «Блоки» → `chart`): «по 25-е».
+                note = bounds?.second?.takeIf { cov.coverageOf(mFrom, mTo) == "partial" && it.isBefore(mTo.minusDays(1)) }?.let { "по ${it.dayOfMonth}-е" },
             )
         }
-        val chart = Block(
-            type = BlockType.CHART, kind = ChartKind.BAR, title = "$title по месяцам", valueKind = ChartValueKind.AMOUNT,
-            points = points, highlightIndex = perMonth.indexOf(peak),
+        val chart = Block.of(
+            BlockType.CHART, ChartData.serializer(),
+            ChartData(kind = ChartKind.BAR, valueKind = ValueKind.AMOUNT, points = points, highlightIndex = perMonth.indexOf(peak)),
+        ).copy(
+            title = "$title по месяцам",
             altText = "$title по месяцам: " + perMonth.joinToString(", ") { (m, v) -> "${RussianDates.monthNominative(m.month)} ${Money(v).format()}" },
         )
-        val rows = Block(
-            type = BlockType.ROWS,
-            altText = "Операций: $count. Средний чек: ${Money(total / count).format()}",
-            rows = listOf(BlockRow(label = "Операций", count = count), BlockRow(label = "Средний чек", amount = Money(total / count))),
-        )
+        val rows = Block.of(
+            BlockType.ROWS, RowsData.serializer(),
+            RowsData(
+                listOf(
+                    BlockRow(label = "Операций", value = count.toDouble(), valueKind = ValueKind.COUNT),
+                    BlockRow(label = "Средний чек", value = (total / count).toDouble(), valueKind = ValueKind.AMOUNT),
+                ),
+            ),
+        ).copy(altText = "Операций: $count. Средний чек: ${Money(total / count).format()}")
         val chips = listOf(
             Chip(label = "$title · ${countWithNoun(count, "операция", "операции", "операций")}", screen = ChipScreen.OPERATIONS, filters = filter),
             Chip(label = "Аналитика за ${RussianDates.monthNominative(lastMonth.month)}", screen = ChipScreen.ANALYTICS, params = AnalyticsParams(PeriodTypeCode.MONTH, PeriodKey.ofMonth(lastMonth), mode)),
         )
-        return Outcome.Answered(Answer(text, listOf(Block(type = BlockType.TEXT, text = text), chart, rows), chips, range, charged = true))
+        return Outcome.Answered(Answer(text, listOf(Block.text(text), chart, rows), chips, range, charged = true))
     }
 
     private companion object {

@@ -26,6 +26,7 @@ import ru.finassist.pf.feature.applock.api.AppLock
 import ru.finassist.pf.feature.applock.api.BiometricAvailability
 import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionRepository
+import ru.finassist.pf.feature.profile.impl.data.TimeZoneChecker
 import ru.finassist.pf.feature.statements.api.StatementsRepository
 import javax.inject.Inject
 
@@ -60,6 +61,7 @@ class ProfileViewModel @Inject constructor(
     private val featureFlags: FeatureFlags,
     private val tracker: Tracker,
     appLock: AppLock,
+    private val zoneChecker: TimeZoneChecker,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ProfileUiState(flags = readFlags()))
 
@@ -109,10 +111,12 @@ class ProfileViewModel @Inject constructor(
     /**
      * The local theme drives rendering (works before sign-in and offline); the server copy is adopted only
      * when there is no local choice yet. The time zone is not sent from here: `TimeZoneSync` sends it once a
-     * new device zone has held for 72 hours (FIN-91).
+     * new device zone has held for 72 hours (FIN-91). The zone read here becomes the report zone (FIN-92): it may
+     * have changed on the server since the start of the process.
      */
     private suspend fun syncFromServer(p: Profile) {
         if (preferences.theme.first() == null) preferences.setTheme(p.theme.name.lowercase())
+        zoneChecker.observed(p)
     }
 
     fun openThemeSheet(open: Boolean) = _state.update { it.copy(themeSheet = open) }
@@ -122,7 +126,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             preferences.setTheme(theme.name.lowercase())
             tracker.track(Events.PROFILE_THEME_CHANGED, mapOf("theme" to theme.name.lowercase()))
-            runCatching { profileApi.updateProfile(ProfileUpdate(theme = theme)) }
+            runCatching { profileApi.updateProfile(ProfileUpdate(theme = theme)) }.onSuccess { zoneChecker.observed(it) }
         }
     }
 
@@ -133,7 +137,7 @@ class ProfileViewModel @Inject constructor(
             try {
                 profileApi.revokeAssistantConsent()
                 tracker.track(Events.ASSISTANT_CONSENT_REVOKED)
-                _state.update { s -> s.copy(consentBusy = false, profile = s.profile?.let { it.copy(assistantConsent = it.assistantConsent.copy(granted = false)) }) }
+                _state.update { s -> s.copy(consentBusy = false, profile = s.profile?.let { p -> p.assistantConsent?.let { c -> p.withConsent(c.copy(granted = false)) } ?: p }) }
             } catch (e: AppError) {
                 _state.update { it.copy(consentBusy = false, snackbar = if (e is AppError.Offline) "Нет сети — согласие не отозвано" else "Не получилось. Попробуйте ещё раз") }
             }

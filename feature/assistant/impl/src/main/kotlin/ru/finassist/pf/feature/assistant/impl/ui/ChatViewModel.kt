@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.AssistantApi
 import ru.finassist.pf.core.api.model.AnswerErrorCode
@@ -20,7 +21,6 @@ import ru.finassist.pf.core.api.model.AnswerStatus
 import ru.finassist.pf.core.api.model.AskRequest
 import ru.finassist.pf.core.api.model.AssistantLimit
 import ru.finassist.pf.core.api.model.Block
-import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.Chip
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.IdempotencyKey
@@ -49,6 +49,7 @@ sealed interface ChatItem {
         val chips: List<Chip> = emptyList(),
         val source: AnswerSource? = null,
         val errorCode: AnswerErrorCode? = null,
+        val currency: String = Money.RUB,
     ) : ChatItem
 }
 
@@ -332,7 +333,7 @@ class ChatViewModel @Inject constructor(
         val items = s.items.map { item ->
             if (item !is ChatItem.Answer || item.id != answerId) return@map item
             when (event) {
-                is AnswerEvent.Snapshot -> item.copy(status = event.event.status.effective, blocks = event.event.blocks, chips = event.event.chips, source = event.event.source)
+                is AnswerEvent.Snapshot -> item.copy(status = event.event.status.effective, blocks = event.event.blocks, chips = event.event.chips, source = event.event.source, currency = event.event.currency)
                 is AnswerEvent.Chunk -> item.copy(blocks = appendChunk(item.blocks, event.event.index, event.event.text))
                 is AnswerEvent.BlockAdded -> item.copy(blocks = item.blocks.take(event.event.index) + event.event.block)
                 is AnswerEvent.Source -> item.copy(source = event.event)
@@ -363,6 +364,7 @@ class ChatViewModel @Inject constructor(
             chips = m.chips.orEmpty(),
             source = m.source,
             errorCode = m.errorCode?.effective,
+            currency = m.currency,
         )
         MessageRole.UNKNOWN -> null
     }
@@ -382,8 +384,8 @@ class ChatViewModel @Inject constructor(
          * that block's text.
          */
         fun appendChunk(blocks: List<Block>, index: Int, text: String): List<Block> = when {
-            index >= blocks.size -> blocks + Block(type = BlockType.TEXT, text = text)
-            else -> blocks.mapIndexed { i, b -> if (i == index) b.copy(text = b.text.orEmpty() + text) else b }
+            index >= blocks.size -> blocks + Block.text(text)
+            else -> blocks.mapIndexed { i, b -> if (i == index) Block.text(b.text.orEmpty() + text) else b }
         }
     }
 }

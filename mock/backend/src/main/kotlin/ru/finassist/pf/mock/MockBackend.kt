@@ -12,7 +12,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.api.ImportEvent
-import ru.finassist.pf.core.api.model.AssistantConsent
+import ru.finassist.pf.core.api.model.Consent
+import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.ImportResult
 import ru.finassist.pf.core.api.model.Profile
@@ -24,8 +25,12 @@ import ru.finassist.pf.mock.domain.Catalog
 import ru.finassist.pf.mock.domain.Coverage
 import ru.finassist.pf.mock.domain.Ledger
 import ru.finassist.pf.mock.domain.Scope
+import ru.finassist.pf.mock.domain.UnreadResolver
+import ru.finassist.pf.mock.ofx.StatementPeriod
 import ru.finassist.pf.mock.ofx.UnreadLine
+import java.time.DateTimeException
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -47,7 +52,9 @@ class MockBackend(
 
     val catalog = Catalog()
     val ledger = Ledger(catalog)
-    val operationScope = Scope(ledger, catalog, Clock.MOSCOW)
+    val operationScope = Scope(ledger, catalog) { profileZone() }
+    /** Days of lines and statement periods are compared in the profile zone at the time of the check (FIN-79, FIN-92). */
+    val unreadResolver = UnreadResolver(ledger) { profileZone() }
 
     class Upload(
         val id: String,
@@ -56,16 +63,33 @@ class MockBackend(
         val coverageFrom: OffsetDateTime,
         val coverageTo: OffsetDateTime,
         val unreadLines: List<UnreadLine>,
+        /** `DTSTART`/`DTEND` per account (FIN-79). */
+        val accountPeriods: Map<String, StatementPeriod> = emptyMap(),
         var operationCount: Int = 0,
         var firstOperationAt: OffsetDateTime? = null,
         var lastOperationAt: OffsetDateTime? = null,
         var result: ImportResult? = null,
         val events: MutableStateFlow<ImportEvent> = MutableStateFlow(ImportEvent.Progress(ru.finassist.pf.core.api.model.ImportProgress(ru.finassist.pf.core.api.model.ImportStage.PARSING, 0))),
     ) {
+        /**
+         * Index of the record in [unreadLines] → the later upload that closed it (api.md 3.6, «Закрытие строк»; FIN-79).
+         * Not the line number: several `<STMTTRN>` of a compact OFX may start on one physical line.
+         */
+        val closedBy: MutableMap<Int, Closure> = HashMap()
+
+        /** Unread lines no later upload has closed: the only ones the API shows. */
+        val openUnreadLines: List<UnreadLine> get() = unreadLines.filterIndexed { i, _ -> i !in closedBy }
+
+        /** Closures where the line was read, not replaced by a record of the later upload. */
+        val readClosures: List<Closure> get() = closedBy.values.filter { it.read }
+
         val isDone: Boolean get() = result != null
         val isFailed: Boolean get() = events.value is ImportEvent.Error
         val isProcessing: Boolean get() = !isDone && !isFailed
     }
+
+    /** [uploadId] closed an unread line: it read it ([read]), or failed to read it again and its record replaces it. */
+    data class Closure(val uploadId: String, val read: Boolean)
 
     /** Uploads newest first. Failed/cancelled ones are dropped from the list. */
     val uploads = ArrayList<Upload>()
@@ -85,18 +109,33 @@ class MockBackend(
         dismissedPayments = { dismissedPayments },
         unreadLinesIn = { from, to -> unreadLines().count { l -> l.date != null && !l.date.isBefore(from) && l.date.isBefore(to) } },
         now = clock::now,
+        expenseKind = { if (config.unknownCodes) MockCodes.EXPENSE_UNKNOWN else ru.finassist.pf.core.api.model.OperationKindFilter.EXPENSE },
     )
 
     fun now(): OffsetDateTime = clock.now()
 
-    /** [including] — an upload whose import is finishing right now (not yet marked done). */
-    fun coverage(including: Upload? = null): Coverage = Coverage(
-        uploads.filter { it.isDone || it === including }.map { it.coverageFrom to it.coverageTo },
-        Clock.MOSCOW,
-        now().atZoneSameInstant(Clock.MOSCOW).toLocalDate(),
-    )
+    /**
+     * Days, months and "today" of the analytics and the feed are counted in `profile.timezone` (api.md 2.2, FIN-92);
+     * Moscow before sign-in and for an id Java does not know.
+     */
+    fun profileZone(): ZoneId = try {
+        ZoneId.of(profile.timezone)
+    } catch (e: DateTimeException) {
+        Clock.MOSCOW
+    }
 
-    fun unreadLines(): List<UnreadLine> = uploads.filter { it.isDone }.flatMap { it.unreadLines }
+    /** [including] — an upload whose import is finishing right now (not yet marked done). */
+    fun coverage(including: Upload? = null): Coverage {
+        val zone = profileZone()
+        return Coverage(
+            uploads.filter { it.isDone || it === including }.map { it.coverageFrom to it.coverageTo },
+            zone,
+            now().atZoneSameInstant(zone).toLocalDate(),
+        )
+    }
+
+    /** Open unread lines of every finished upload (FIN-79: closed ones are not counted). */
+    fun unreadLines(): List<UnreadLine> = uploads.filter { it.isDone }.flatMap { it.openUnreadLines }
 
     /** Simulated latency + the "offline" switch. Called at the top of every API method. */
     suspend fun simulateNetwork() {
@@ -148,7 +187,7 @@ class MockBackend(
         phone = phone,
         theme = Theme.SYSTEM,
         timezone = "Europe/Moscow",
-        assistantConsent = AssistantConsent(granted = false, currentVersion = CONSENT_VERSION_ASSISTANT),
+        consents = listOf(Consent(ConsentType.ASSISTANT, granted = false, currentVersion = CONSENT_VERSION_ASSISTANT)),
         createdAt = now(),
     )
 

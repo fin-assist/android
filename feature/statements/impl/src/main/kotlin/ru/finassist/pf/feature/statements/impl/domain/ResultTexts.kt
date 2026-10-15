@@ -115,22 +115,26 @@ object ResultTexts {
     /**
      * After a later upload that completed months: what opened and what is still to come («Теперь есть 1 полный
      * месяц — август»). Without a full month: what is closed and when it opens («Часть аналитики пока закрыта»).
-     * Otherwise nothing — the first import of a long statement needs no explanation.
+     * Otherwise nothing about the known features — the first import of a long statement needs no explanation; features
+     * this client does not know still get their server texts, after any import.
      */
     fun coverageNotice(r: ImportResult): CoverageNotice? {
         val c = r.coverage
-        val locked = c.features.filter { !it.open && it.feature != AnalyticsFeature.UNKNOWN && it.requiredFullMonths != null }
+        // A feature this client does not know comes with the server's name and text (FIN-82).
+        val locked = c.features.filter {
+            !it.open && if (it.feature == AnalyticsFeature.UNKNOWN) it.text != null else it.requiredFullMonths != null
+        }
         if (!r.isFirstImport && c.newlyFullMonths.isNotEmpty()) {
             val title = newlyFull(c) ?: return null
-            val opened = c.features.filter { it.openedNow }.mapNotNull { featureForms(it.feature)?.name }
+            val opened = c.features.filter { it.openedNow }.mapNotNull { featureForms(it.feature)?.name ?: it.featureName?.lowercaseFirst() }
             val parts = mutableListOf<String>()
             if (opened.isNotEmpty()) {
                 val verb = if (opened.size == 1) "открылось:" else "открылись"
                 parts += "На «Аналитике» $verb ${joinAnd(opened)}."
             }
             locked.forEach { f ->
-                val forms = featureForms(f.feature) ?: return@forEach
-                parts += "${forms.name.replaceFirstChar { it.uppercase() }} ${forms.appears} с ${withFullMonths(f.requiredFullMonths!!)}."
+                val forms = featureForms(f.feature)
+                parts += if (forms == null) f.text!!.sentence() else "${forms.name.replaceFirstChar { it.uppercase() }} ${forms.appears} с ${withFullMonths(f.requiredFullMonths!!)}."
             }
             return CoverageNotice(positive = true, title = title, text = parts.joinToString(" "))
         }
@@ -138,8 +142,10 @@ object ResultTexts {
             val current = c.incompleteMonths.firstOrNull { it.inProgress }
             val lines = mutableListOf<String>()
             current?.let { lines += incomplete(it) + "." }
-            val phrases = locked.mapIndexedNotNull { i, f ->
-                val forms = featureForms(f.feature) ?: return@mapIndexedNotNull null
+            locked.filter { featureForms(it.feature) == null }.forEach { lines += it.text!!.sentence() }
+            // «First» is the first known feature: an unknown one may come first, the server keeps no order.
+            val phrases = locked.filter { featureForms(it.feature) != null }.mapIndexed { i, f ->
+                val forms = featureForms(f.feature)!!
                 val previous = current?.let { runCatching { YearMonth.parse(it.month).minusMonths(1) }.getOrNull() }
                 val condition = if (f.feature == AnalyticsFeature.COMPARISON && f.requiredFullMonths == 1 && previous != null) {
                     "с выпиской за ${RussianDates.monthNominative(previous.month)}"
@@ -150,6 +156,12 @@ object ResultTexts {
             }
             if (phrases.isNotEmpty()) lines += phrases.joinToString(", ") + "."
             return CoverageNotice(positive = false, title = "Часть аналитики пока закрыта", text = lines.joinToString(" "))
+        }
+        // With full months and nothing newly full the known features need no words, but a feature this client does not
+        // know is explained only by the server's text (FIN-82) — after the first import and a later one alike.
+        val unknown = locked.filter { featureForms(it.feature) == null }
+        if (unknown.isNotEmpty()) {
+            return CoverageNotice(positive = false, title = "Часть аналитики пока закрыта", text = unknown.joinToString(" ") { it.text!!.sentence() })
         }
         return null
     }
@@ -167,6 +179,11 @@ object ResultTexts {
         AnalyticsFeature.YEAR_FORECAST -> FeatureForms("прогноз на год", "появится")
         AnalyticsFeature.UNKNOWN -> null
     }
+
+    private fun String.lowercaseFirst() = replaceFirstChar { it.lowercase() }
+
+    /** A server line as a sentence of the notice: trailing full stop added once. */
+    private fun String.sentence() = trimEnd().trimEnd('.') + "."
 
     /** «1 полным месяцем», «2 полными месяцами». */
     private fun withFullMonths(n: Int): String = if (n % 10 == 1 && n % 100 != 11) "$n полным месяцем" else "$n полными месяцами"

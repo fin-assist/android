@@ -141,11 +141,13 @@ internal fun SearchContent(
             if (state.chips.amount || amount) {
                 PfChip(amountLabel(f), onClick = { actions.openSheet(SearchSheet.AMOUNT) }, selected = amount, dropdown = state.chips.amount, enabled = state.chips.amount, modifier = Modifier.testTag(OperationsTags.CHIP_AMOUNT))
             }
-            if (state.chips.kind || f.kind != null) {
-                PfChip(if (f.kind == OperationKindFilter.INCOME) "Только доходы" else "Только расходы", onClick = actions.toggleKind, selected = f.kind != null, enabled = state.chips.kind, modifier = Modifier.testTag(OperationsTags.CHIP_KIND))
+            val knownKind = f.kind?.takeIf { it.isKnown }
+            if (state.chips.kind || knownKind != null) {
+                PfChip(if (knownKind == OperationKindFilter.INCOME) "Только доходы" else "Только расходы", onClick = actions.toggleKind, selected = knownKind != null, enabled = state.chips.kind, modifier = Modifier.testTag(OperationsTags.CHIP_KIND))
             }
-            // Filters without their own chip (api.md: one chip, removed by tap or «Сбросить»).
-            if (f.selection != null || f.transferMode != null) {
+            // Filters without their own chip (api.md: one chip, removed by tap or «Сбросить»), a kind this client does
+            // not know included (FIN-82).
+            if (f.selection != null || f.transferMode != null || (f.kind != null && knownKind == null)) {
                 PfChip((f.selectionName ?: "Как на «Аналитике»") + "  ✕", onClick = actions.clearAnalyticsScope, selected = true, modifier = Modifier.testTag(OperationsTags.CHIP_SCOPE))
             }
             if (!state.onlyQuery) {
@@ -185,7 +187,7 @@ internal fun SearchContent(
                     PfButton("Сбросить фильтры", onClick = actions.reset, variant = ButtonVariant.SECONDARY, modifier = Modifier.testTag(OperationsTags.SEARCH_RESET))
                 }
             } else {
-                val months = remember(r.items, today) { OperationFormat.searchGroups(r.items, zone, today) }
+                val months = remember(r.items, zone, today) { OperationFormat.searchGroups(r.items, zone, today) }
                 LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space4, bottom = d.space6)) {
                     item(key = "count") {
                         Text(
@@ -235,7 +237,7 @@ internal fun SearchContent(
                 kinds = when (f.kind) {
                     OperationKindFilter.EXPENSE -> setOf(CategoryKind.EXPENSE)
                     OperationKindFilter.INCOME -> setOf(CategoryKind.INCOME)
-                    null -> setOf(CategoryKind.EXPENSE, CategoryKind.INCOME)
+                    else -> setOf(CategoryKind.EXPENSE, CategoryKind.INCOME)
                 },
                 selectedId = f.categoryId,
                 onSelect = { actions.setCategory(it.id) },

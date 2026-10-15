@@ -31,7 +31,9 @@ sealed interface Record {
 }
 
 /** DTO mapping shared by the operations and statements APIs. */
-class OperationViews(private val ledger: Ledger, private val zone: ZoneId) {
+class OperationViews(private val ledger: Ledger, private val zoneOf: () -> ZoneId) {
+    private val zone: ZoneId get() = zoneOf()
+
 
     /** Every record, newest first: pairs as one record, everything else as singles. */
     fun records(): List<Record> {

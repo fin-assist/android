@@ -7,7 +7,6 @@ import ru.finassist.pf.core.api.model.AnswerSnapshotEvent
 import ru.finassist.pf.core.api.model.AnswerSource
 import ru.finassist.pf.core.api.model.AnswerStatus
 import ru.finassist.pf.core.api.model.Block
-import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.Chip
 import ru.finassist.pf.core.api.model.Message
 import ru.finassist.pf.core.api.model.MessageRole
@@ -56,9 +55,9 @@ class AssistantStore {
                     is AnswerEvent.Chunk -> {
                         if (e.event.index < blocks.size) {
                             val b = blocks[e.event.index]
-                            blocks[e.event.index] = b.copy(text = (b.text ?: "") + e.event.text)
+                            blocks[e.event.index] = Block.text((b.text ?: "") + e.event.text)
                         } else {
-                            blocks += Block(type = BlockType.TEXT, text = e.event.text)
+                            blocks += Block.text(e.event.text)
                         }
                     }
                     is AnswerEvent.BlockAdded -> blocks += e.event.block

@@ -11,7 +11,11 @@ import java.time.ZoneId
  * also drops the «Переводы» category (both directions). A refund is a negative expense in the category it
  * reduces (or in «Без категории»), never an income.
  */
-class Scope(private val ledger: Ledger, private val catalog: Catalog, val zone: ZoneId) {
+class Scope(private val ledger: Ledger, private val catalog: Catalog, private val zoneOf: () -> ZoneId) {
+    constructor(ledger: Ledger, catalog: Catalog, zone: ZoneId) : this(ledger, catalog, { zone })
+
+    /** The profile zone: days and months are counted in it (FIN-92). Read on every call, the profile may change. */
+    val zone: ZoneId get() = zoneOf()
 
     /** Expense line: category (null = «Без категории») and signed kopecks (refunds negative). */
     data class ExpenseEntry(val op: Operation, val category: Category?, val signedMinor: Long)
