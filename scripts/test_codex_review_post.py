@@ -94,6 +94,7 @@ class BuildReviewTest(unittest.TestCase):
         self.assertNotIn("Строка в диффе", body)
         self.assertIn("`gpt-6-astra`", body)
         self.assertIn("`abcdef1`", body)
+        self.assertNotIn("без привязки к коммиту", body)  # the note belongs to the 422 fallback only
 
     def test_no_findings_posts_summary_without_comments(self):
         review = post.build_review(json.dumps({"summary": "Замечаний нет.", "findings": []}), {}, "m", "c" * 40)
@@ -139,6 +140,8 @@ class MainTest(unittest.TestCase):
         method, url, payload = calls[1]
         self.assertEqual((method, url), ("POST", f"{post.API}/repos/o/r/pulls/7/reviews"))
         self.assertEqual(len(payload["comments"]), 2)
+        self.assertEqual(payload["commit_id"], "abc1234")
+        self.assertNotIn("без привязки к коммиту", payload["body"])
 
     def test_rejected_positions_fall_back_to_body_without_losing_findings(self):
         files = [{"filename": "app/A.kt", "patch": PATCH}]
