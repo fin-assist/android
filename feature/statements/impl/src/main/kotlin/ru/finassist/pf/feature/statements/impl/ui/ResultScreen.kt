@@ -240,9 +240,9 @@ private fun ColumnScope.Summary(
         rows.forEachIndexed { i, f -> FindingRow(f, divider = i < rows.lastIndex, onSort = r.uncategorizedFilters?.let { filters -> { onOpenSearch(filters) } }) }
     }
     // A special case this client does not know: the server's text (FIN-82).
-    r.notices.filter { it.code == ImportNoticeCode.UNKNOWN }.forEach { n ->
+    r.notices.filter { it.code == ImportNoticeCode.UNKNOWN }.mapNotNull { it.text?.takeIf(String::isNotBlank) }.forEach { text ->
         Spacer(Modifier.height(d.space4))
-        PfNotice(n.text, tone = NoticeTone.WARNING, modifier = Modifier.testTag(StatementsTags.RESULT_NOTICE))
+        PfNotice(text, tone = NoticeTone.WARNING, modifier = Modifier.testTag(StatementsTags.RESULT_NOTICE))
     }
     if (r.has(ImportNoticeCode.NO_EXPENSES)) {
         Spacer(Modifier.height(d.space4))

@@ -142,8 +142,9 @@ object ResultTexts {
             val lines = mutableListOf<String>()
             current?.let { lines += incomplete(it) + "." }
             locked.filter { featureForms(it.feature) == null }.forEach { lines += it.text!!.sentence() }
-            val phrases = locked.mapIndexedNotNull { i, f ->
-                val forms = featureForms(f.feature) ?: return@mapIndexedNotNull null
+            // «First» is the first known feature: an unknown one may come first, the server keeps no order.
+            val phrases = locked.filter { featureForms(it.feature) != null }.mapIndexed { i, f ->
+                val forms = featureForms(f.feature)!!
                 val previous = current?.let { runCatching { YearMonth.parse(it.month).minusMonths(1) }.getOrNull() }
                 val condition = if (f.feature == AnalyticsFeature.COMPARISON && f.requiredFullMonths == 1 && previous != null) {
                     "с выпиской за ${RussianDates.monthNominative(previous.month)}"

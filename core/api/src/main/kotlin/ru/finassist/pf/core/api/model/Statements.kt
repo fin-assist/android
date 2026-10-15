@@ -115,9 +115,12 @@ enum class ImportNoticeCode(override val code: String) : ApiCode {
     object Serializer : OpenEnumSerializer<ImportNoticeCode>("ImportNoticeCode", entries, UNKNOWN)
 }
 
-/** A special case of the import (api.md 3.3, FIN-82): known codes are laid out by the client, unknown ones show [text]. */
+/**
+ * A special case of the import (api.md 3.3, FIN-82): known codes are laid out by the client, unknown ones show [text].
+ * A missing [text] must not fail the whole result: an unknown notice without it is simply not shown.
+ */
 @Serializable
-data class ImportNotice(val code: ImportNoticeCode, val text: String)
+data class ImportNotice(val code: ImportNoticeCode, val text: String? = null)
 
 /** Terminal `complete` event of the import progress stream: everything the import result screen shows. */
 @Serializable

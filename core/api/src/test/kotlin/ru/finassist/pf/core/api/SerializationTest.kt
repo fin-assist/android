@@ -146,4 +146,11 @@ class SerializationTest {
         )
         assertEquals("с тех пор менялись правила", s.changedSinceText)
     }
+
+    @Test
+    fun `a notice without text does not fail the import result (FIN-83 review)`() {
+        val n = ApiJson.decodeFromString(ru.finassist.pf.core.api.model.ImportNotice.serializer(), """{"code":"no_expenses"}""")
+        assertEquals(ru.finassist.pf.core.api.model.ImportNoticeCode.NO_EXPENSES, n.code)
+        assertNull(n.text)
+    }
 }

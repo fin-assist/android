@@ -190,4 +190,16 @@ class ResultTextsTest {
             ResultTexts.incomplete(IncompleteMonth("2026-06", jun, t("2026-06-29T10:00:00+03:00"), t("2026-06-30T20:00:00+03:00"), emptyList(), false)).plain(),
         )
     }
+
+    @Test
+    fun `an unknown feature first does not take the capital letter and verb from the first known one (FIN-83 review)`() {
+        val unknown = FeatureAvailability(
+            AnalyticsFeature.UNKNOWN, open = false, openedNow = false, requiredFullMonths = 6,
+            featureName = "Новая метрика", text = "Новая метрика — нужно 6 полных месяцев",
+        )
+        val r = result(new = 30, total = 30).copy(
+            coverage = ImportCoverage(0, 0, emptyList(), emptyList(), listOf(unknown, locked(AnalyticsFeature.YEAR_FORECAST, 1))),
+        )
+        assertEquals("Новая метрика — нужно 6 полных месяцев. Прогноз на год появится с 1 полным месяцем.", ResultTexts.coverageNotice(r)!!.text)
+    }
 }
