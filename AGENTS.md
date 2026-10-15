@@ -237,21 +237,36 @@ commands: `docs/testing.md`.
   Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
 - A PR targets the current release branch — the newest `release/<version>` not yet merged into `main` — not `main`;
   the owner merges the release branch into `main` with its own PR. When every release branch is already merged, target
-  `main`.
+  `main`. A release branch counts as merged only when both hold: a merged PR from it into `main` exists
+  (`gh api 'repos/fin-assist/android/pulls?state=closed&base=main&head=fin-assist:release/<version>'`, an entry with
+  `merged_at`) and `git merge-base --is-ancestor origin/release/<version> origin/main` exits 0. The ancestor check
+  alone is not enough: a branch just cut from `main` points at the same commit and passes it.
+  Fetch both refs first, with explicit refspecs (a single-branch or shallow clone has no `origin/release/*`):
+  `git fetch --depth=500 origin '+refs/heads/main:refs/remotes/origin/main'
+  '+refs/heads/release/*:refs/remotes/origin/release/*'` (no `--depth` in a full clone). Exit 1 means «not an
+  ancestor»; any other code means a missing ref — fetch and run again, never take it as an answer.
 - PR title and description in Russian: what changed and why, deviations from mockups/docs, how it was checked.
   A PR for a single YouTrack issue starts its title with the issue key (`FIN-42 Краш при открытии поиска`);
   a PR for several issues lists all of them in the description, each linked
   (`https://finassist.youtrack.cloud/issue/FIN-<n>`). No issue — no key in the title.
 - After the PR is open and all planned changes are pushed, request a review with one PR comment in Russian
-  addressed to both reviewers: it contains `@codex review` (the exact phrase the Codex integration reacts to) and
-  `@claude`, asks for comments in Russian and points to Code Review Rules (security, test coverage of use cases).
-  `@claude` runs from `.github/workflows/claude.yml` (default branch) on Claude Fable 5.1 (`claude-fable-5-1`, set in
-  `claude_args`). `@codex` is the Codex GitHub integration; this repository cannot pin its model (target: GPT-6 Astra,
-  `gpt-6-astra`; open question in FIN-95).
+  addressed to both reviewers: it starts with `@codex @claude`, and the text after them is addressed to both (never
+  «@claude, …» alone — Codex reads the same comment):
+
+  ```
+  @codex @claude проведите ревью этого PR по Code Review Rules в AGENTS.md, включая разделы Security и Test coverage
+  of use cases. Замечания — на русском, inline на изменённых строках. Особое внимание: <что именно и почему>.
+  ```
+
+  - `@claude` — `.github/workflows/claude.yml` (runs from the default branch), Claude Fable 5.1 (`claude-fable-5-1`,
+    set in `claude_args`);
+  - `@codex` — the Codex GitHub integration, under the owner's ChatGPT subscription. Its model is chosen by
+    OpenAI and cannot be pinned from here; a pinned model would need the OpenAI API with per-token billing, which was
+    declined (FIN-103).
 - Waiting for the review: when the session receives the PR's GitHub events (reviews, comments, CI), react to them
   instead of polling. Otherwise check 3 minutes after the request, then every 2 minutes. A reviewer has answered when
-  it posted its review or summary for the latest commit; for Codex «Didn't find any major issues» or a 👍 reaction
-  without a comment also counts. If a reviewer has not answered within 15 minutes of the last request, say so in the
+  it posted its review or summary for the latest commit; for Codex (`chatgpt-codex-connector[bot]`) «Didn't find any
+  major issues» or a 👍 reaction without a comment also counts. If a reviewer has not answered within 15 minutes of the last request, say so in the
   PR and to the owner and stop waiting for it. The cycle ends when both reviewers have answered the latest request and
   no review thread is open.
 - Address review findings in follow-up commits on the same branch, reply in the conversation and resolve it;
@@ -260,8 +275,8 @@ commands: `docs/testing.md`.
 
 ## Code Review Rules
 
-Read by `@claude` (through `CLAUDE.md`) and by the Codex integration, which looks for this heading. Two areas
-get a dedicated pass on every PR: Security and Test coverage of use cases (below).
+Read by `@claude` (through `CLAUDE.md`) and by the Codex integration, which looks for this heading. Two areas get a
+dedicated pass on every PR: Security and Test coverage of use cases (below).
 
 ### General
 
