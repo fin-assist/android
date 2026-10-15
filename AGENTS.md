@@ -243,8 +243,17 @@ commands: `docs/testing.md`.
   a PR for several issues lists all of them in the description, each linked
   (`https://finassist.youtrack.cloud/issue/FIN-<n>`). No issue — no key in the title.
 - After the PR is open and all planned changes are pushed, request a review with one PR comment in Russian
-  addressed to both reviewers: its first line starts with `/codex-review`, then `@claude`; it asks for comments in
-  Russian and points to Code Review Rules (security, test coverage of use cases). Both run from the default branch:
+  addressed to both reviewers. The first line starts with `/codex-review`, the second is `@claude`; every instruction
+  below them is addressed to both (never «@claude, …» alone — Codex reads the same text, `.codex-review/request.md`):
+
+  ```
+  /codex-review
+  @claude
+  Ревьюеры, проведите ревью этого PR по Code Review Rules в AGENTS.md, включая разделы Security и Test coverage of
+  use cases. Замечания — на русском, inline на изменённых строках. Особое внимание: <что именно и почему>.
+  ```
+
+  Both run from the default branch:
   - `@claude` — `.github/workflows/claude.yml`, Claude Fable 5.1 (`claude-fable-5-1`, set in `claude_args`);
   - `/codex-review` — `.github/workflows/codex-review.yml`, GPT-6 Astra (`gpt-6-astra`, `CODEX_MODEL` there),
     posted by `github-actions[bot]` as a review with inline comments (findings outside the diff are in its body;
