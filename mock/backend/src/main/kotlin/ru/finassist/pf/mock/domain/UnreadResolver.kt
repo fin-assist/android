@@ -24,10 +24,10 @@ class UnreadResolver(private val ledger: Ledger, private val zone: () -> ZoneId)
             upload.closedBy.clear()
             // Later uploads, the earliest first.
             val later = done.subList(0, i).asReversed()
-            for (line in upload.unreadLines) {
+            upload.unreadLines.forEachIndexed { index, line ->
                 for (newer in later) {
                     val read = outcome(newer, upload, line) ?: continue
-                    upload.closedBy[line.lineNumber] = Closure(newer.id, read)
+                    upload.closedBy[index] = Closure(newer.id, read)
                     break
                 }
             }

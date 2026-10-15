@@ -190,7 +190,21 @@ class UnreadResolverTest {
         late.result = doneResult()
         resolver.recompute(uploads, committing = late)
         resolver.recompute(uploads, committing = early)
-        assertEquals("late", early.closedBy[10]?.uploadId)
+        assertEquals("late", early.closedBy[0]?.uploadId)
+    }
+
+    @Test fun `records on one physical line are closed one by one (compact OFX)`() {
+        val old = upload(
+            "old.ofx",
+            doc(
+                "2026-09-01", "2026-09-30",
+                unread = listOf(line(3, "2026-09-05T10:00", "bad_amount", fitId = "f1"), line(3, "2026-09-06T10:00", "bad_amount", fitId = "f2")),
+            ),
+        )
+        upload("new.ofx", doc("2026-09-01", "2026-09-30", listOf(trn("f1", "2026-09-05T10:00", 300, "OZON", "Маркетплейсы"))))
+        assertEquals(1, row(old).unreadCount)
+        assertEquals(1, row(old).resolvedUnreadCount)
+        assertEquals(listOf(3), openLines(old))
     }
 
     @Test fun `an undated line is closed by a statement with a DTEND without time covering the same days`() {

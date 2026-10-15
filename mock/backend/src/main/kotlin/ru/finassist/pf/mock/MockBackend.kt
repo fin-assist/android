@@ -67,11 +67,14 @@ class MockBackend(
         var result: ImportResult? = null,
         val events: MutableStateFlow<ImportEvent> = MutableStateFlow(ImportEvent.Progress(ru.finassist.pf.core.api.model.ImportProgress(ru.finassist.pf.core.api.model.ImportStage.PARSING, 0))),
     ) {
-        /** Line number → the later upload that closed the line (api.md 3.6, «Закрытие строк»; FIN-79). */
+        /**
+         * Index of the record in [unreadLines] → the later upload that closed it (api.md 3.6, «Закрытие строк»; FIN-79).
+         * Not the line number: several `<STMTTRN>` of a compact OFX may start on one physical line.
+         */
         val closedBy: MutableMap<Int, Closure> = HashMap()
 
         /** Unread lines no later upload has closed: the only ones the API shows. */
-        val openUnreadLines: List<UnreadLine> get() = unreadLines.filter { it.lineNumber !in closedBy }
+        val openUnreadLines: List<UnreadLine> get() = unreadLines.filterIndexed { i, _ -> i !in closedBy }
 
         /** Closures where the line was read, not replaced by a record of the later upload. */
         val readClosures: List<Closure> get() = closedBy.values.filter { it.read }
