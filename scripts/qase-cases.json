@@ -10,6 +10,7 @@
     ".maestro/flows/applock/change_passcode.yaml": 7,
     ".maestro/flows/operations/feed_and_detail.yaml": 8,
     ".maestro/flows/operations/search_filters.yaml": 9,
+    ".maestro/flows/operations/days_in_profile_zone.yaml": 27,
     ".maestro/flows/analytics/overview.yaml": 10,
     ".maestro/flows/analytics/blocks_switched_off.yaml": 11,
     ".maestro/flows/assistant/ask_question.yaml": 12,

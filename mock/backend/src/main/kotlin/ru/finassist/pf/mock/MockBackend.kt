@@ -27,7 +27,9 @@ import ru.finassist.pf.mock.domain.Scope
 import ru.finassist.pf.mock.domain.UnreadResolver
 import ru.finassist.pf.mock.ofx.StatementPeriod
 import ru.finassist.pf.mock.ofx.UnreadLine
+import java.time.DateTimeException
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -49,8 +51,9 @@ class MockBackend(
 
     val catalog = Catalog()
     val ledger = Ledger(catalog)
-    val operationScope = Scope(ledger, catalog, Clock.MOSCOW)
-    val unreadResolver = UnreadResolver(ledger) { operationScope.zone }
+    val operationScope = Scope(ledger, catalog) { profileZone() }
+    /** Days of lines and statement periods are compared in the profile zone at the time of the check (FIN-79, FIN-92). */
+    val unreadResolver = UnreadResolver(ledger) { profileZone() }
 
     class Upload(
         val id: String,
@@ -109,12 +112,25 @@ class MockBackend(
 
     fun now(): OffsetDateTime = clock.now()
 
+    /**
+     * Days, months and "today" of the analytics and the feed are counted in `profile.timezone` (api.md 2.2, FIN-92);
+     * Moscow before sign-in and for an id Java does not know.
+     */
+    fun profileZone(): ZoneId = try {
+        ZoneId.of(profile.timezone)
+    } catch (e: DateTimeException) {
+        Clock.MOSCOW
+    }
+
     /** [including] — an upload whose import is finishing right now (not yet marked done). */
-    fun coverage(including: Upload? = null): Coverage = Coverage(
-        uploads.filter { it.isDone || it === including }.map { it.coverageFrom to it.coverageTo },
-        Clock.MOSCOW,
-        now().atZoneSameInstant(Clock.MOSCOW).toLocalDate(),
-    )
+    fun coverage(including: Upload? = null): Coverage {
+        val zone = profileZone()
+        return Coverage(
+            uploads.filter { it.isDone || it === including }.map { it.coverageFrom to it.coverageTo },
+            zone,
+            now().atZoneSameInstant(zone).toLocalDate(),
+        )
+    }
 
     /** Open unread lines of every finished upload (FIN-79: closed ones are not counted). */
     fun unreadLines(): List<UnreadLine> = uploads.filter { it.isDone }.flatMap { it.openUnreadLines }

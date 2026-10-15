@@ -5,9 +5,14 @@ import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.fragment.app.FragmentActivity
 import dagger.hilt.android.AndroidEntryPoint
 import ru.finassist.pf.core.common.time.Clock
+import ru.finassist.pf.core.common.time.ReportZone
+import ru.finassist.pf.core.common.time.withZone
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.navigation.FeatureEntry
 import ru.finassist.pf.core.storage.AppPreferences
@@ -35,6 +40,7 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var flags: FeatureFlags
     @Inject lateinit var crashContext: CrashContextSync
     @Inject lateinit var clock: Clock
+    @Inject lateinit var reportZone: ReportZone
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,7 +48,10 @@ class MainActivity : FragmentActivity() {
         if (!BuildConfig.DEBUG) window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         setContent {
-            CompositionLocalProvider(LocalPfClock provides clock) {
+            // A new profile zone regroups what is on screen by day (FIN-92).
+            val profileZone by reportZone.profile.collectAsState()
+            val shownClock = remember(profileZone) { clock.withZone(reportZone.current) }
+            CompositionLocalProvider(LocalPfClock provides shownClock) {
                 PfApp(
                     entries = entries,
                     session = session,
