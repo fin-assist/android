@@ -56,7 +56,12 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "kind": "income",
+                                "transfer_mode": "without"
+                            }
                         }
                     }
                 ]
@@ -146,7 +151,12 @@
                     "value_kind": "amount",
                     "action": {
                         "type": "open_operations",
-                        "filter": {}
+                        "filter": {
+                            "from": "2026-09-01T00:00:00+03:00",
+                            "to": "2026-10-01T00:00:00+03:00",
+                            "kind": "expense",
+                            "transfer_mode": "without"
+                        }
                     }
                 },
                 "items": [
@@ -159,7 +169,13 @@
                         "share": 0.41,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Супермаркеты",
+                                "kind": "expense",
+                                "transfer_mode": "without"
+                            }
                         }
                     },
                     {
@@ -171,7 +187,13 @@
                         "share": 0.23,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Различные товары",
+                                "kind": "expense",
+                                "transfer_mode": "without"
+                            }
                         }
                     },
                     {
@@ -183,7 +205,13 @@
                         "share": 0.09,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Заправки",
+                                "kind": "expense",
+                                "transfer_mode": "without"
+                            }
                         }
                     },
                     {
@@ -195,7 +223,13 @@
                         "share": 0.06,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Фастфуд",
+                                "kind": "expense",
+                                "transfer_mode": "without"
+                            }
                         }
                     },
                     {
@@ -207,7 +241,13 @@
                         "share": 0.05,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Кафе и рестораны",
+                                "kind": "expense",
+                                "transfer_mode": "without"
+                            }
                         }
                     },
                     {
@@ -219,7 +259,13 @@
                         "share": 0.04,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Транспорт",
+                                "kind": "expense",
+                                "transfer_mode": "without"
+                            }
                         }
                     },
                     {
@@ -231,7 +277,13 @@
                         "share": 0.04,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Связь",
+                                "kind": "expense",
+                                "transfer_mode": "without"
+                            }
                         }
                     },
                     {
@@ -243,7 +295,13 @@
                         "share": 0.03,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Аптеки",
+                                "kind": "expense",
+                                "transfer_mode": "without"
+                            }
                         }
                     }
                 ],
@@ -268,7 +326,13 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Финансы",
+                                "kind": "income",
+                                "transfer_mode": "without"
+                            }
                         }
                     },
                     {
@@ -281,7 +345,13 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "category_id": "c_Дивиденды и купоны",
+                                "kind": "income",
+                                "transfer_mode": "without"
+                            }
                         }
                     }
                 ],
@@ -347,7 +417,13 @@
             },
             "action": {
                 "type": "open_operations",
-                "filter": {}
+                "filter": {
+                    "from": "2026-09-01T00:00:00+03:00",
+                    "to": "2026-10-01T00:00:00+03:00",
+                    "transfer_mode": "without",
+                    "selection": "s_regular_all_2026-08_without",
+                    "selection_name": "Регулярные платежи"
+                }
             }
         },
         {
@@ -363,7 +439,13 @@
             },
             "action": {
                 "type": "open_operations",
-                "filter": {}
+                "filter": {
+                    "from": "2026-09-01T00:00:00+03:00",
+                    "to": "2026-10-01T00:00:00+03:00",
+                    "category_id": "c_fuel",
+                    "kind": "expense",
+                    "transfer_mode": "without"
+                }
             }
         },
         {
@@ -379,7 +461,13 @@
             },
             "action": {
                 "type": "open_operations",
-                "filter": {}
+                "filter": {
+                    "from": "2026-09-01T00:00:00+03:00",
+                    "to": "2026-10-01T00:00:00+03:00",
+                    "transfer_mode": "without",
+                    "selection": "s_bank_fees",
+                    "selection_name": "Комиссии и проценты банку"
+                }
             }
         },
         {
@@ -396,7 +484,14 @@
             },
             "action": {
                 "type": "open_operations",
-                "filter": {}
+                "filter": {
+                    "from": "2026-09-01T00:00:00+03:00",
+                    "to": "2026-10-01T00:00:00+03:00",
+                    "q": "Кофе и перекусы",
+                    "kind": "expense",
+                    "amount_to": 50000,
+                    "transfer_mode": "without"
+                }
             }
         },
         {

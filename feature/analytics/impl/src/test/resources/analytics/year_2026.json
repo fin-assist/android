@@ -57,7 +57,12 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "kind": "income",
+                                "transfer_mode": "with"
+                            }
                         }
                     }
                 ]
@@ -188,7 +193,12 @@
                     "value_kind": "amount",
                     "action": {
                         "type": "open_operations",
-                        "filter": {}
+                        "filter": {
+                            "from": "2026-01-01T00:00:00+03:00",
+                            "to": "2027-01-01T00:00:00+03:00",
+                            "kind": "expense",
+                            "transfer_mode": "with"
+                        }
                     }
                 },
                 "items": [
@@ -201,7 +211,13 @@
                         "share": 0.37,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Супермаркеты",
+                                "kind": "expense",
+                                "transfer_mode": "with"
+                            }
                         }
                     },
                     {
@@ -213,7 +229,13 @@
                         "share": 0.2,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Различные товары",
+                                "kind": "expense",
+                                "transfer_mode": "with"
+                            }
                         }
                     },
                     {
@@ -225,7 +247,13 @@
                         "share": 0.07,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Заправки",
+                                "kind": "expense",
+                                "transfer_mode": "with"
+                            }
                         }
                     },
                     {
@@ -237,7 +265,13 @@
                         "share": 0.06,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Переводы",
+                                "kind": "expense",
+                                "transfer_mode": "with"
+                            }
                         }
                     },
                     {
@@ -249,7 +283,13 @@
                         "share": 0.06,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Кафе и рестораны",
+                                "kind": "expense",
+                                "transfer_mode": "with"
+                            }
                         }
                     }
                 ],
@@ -273,7 +313,13 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Финансы",
+                                "kind": "income",
+                                "transfer_mode": "with"
+                            }
                         }
                     },
                     {
@@ -285,7 +331,13 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Переводы",
+                                "kind": "income",
+                                "transfer_mode": "with"
+                            }
                         }
                     },
                     {
@@ -297,7 +349,13 @@
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
-                            "filter": {}
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "c_Дивиденды и купоны",
+                                "kind": "income",
+                                "transfer_mode": "with"
+                            }
                         }
                     }
                 ],

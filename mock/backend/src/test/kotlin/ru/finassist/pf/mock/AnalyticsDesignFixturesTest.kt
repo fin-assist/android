@@ -4,8 +4,14 @@ import org.junit.Test
 import ru.finassist.pf.core.api.ApiJson
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.mock.domain.AnalyticsComposer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Golden responses of 6.1 for the client's design check (`feature/analytics/impl/src/test/resources/analytics/`):
@@ -25,6 +31,40 @@ class AnalyticsDesignFixturesTest {
         "early" to f.early,
         "stale" to f.stale,
     )
+
+    /**
+     * Every `open_operations` in the golden responses carries a filter with a condition: with an empty one the client
+     * drops the action (`BlockLayout.usable`), and the design check renders the rows without chevrons (FIN-100). The
+     * filter opens the response's own period and transfer mode, as `AnalyticsEngine` builds it.
+     */
+    @Test
+    fun `open_operations actions of the golden responses have a filter`() {
+        golden.forEach { (name, snapshot) ->
+            val actions = mutableListOf<JsonObject>()
+            fun walk(e: JsonElement) {
+                when (e) {
+                    is JsonObject -> {
+                        if ((e["type"] as? JsonPrimitive)?.contentOrNull == "open_operations") actions += e
+                        e.values.forEach(::walk)
+                    }
+                    is JsonArray -> e.forEach(::walk)
+                    else -> Unit
+                }
+            }
+            val response = json.encodeToJsonElement(Analytics.serializer(), AnalyticsComposer.compose(snapshot)) as JsonObject
+            walk(response)
+            assertTrue(actions.isNotEmpty(), "$name.json has no open_operations")
+            val range = (response["period"] as JsonObject)["range"] as JsonObject
+            val mode = (response["params"] as JsonObject)["transfer_mode"]
+            actions.forEach { action ->
+                val filter = (action["filter"] as? JsonObject).orEmpty()
+                assertTrue((filter.keys - "transfer_mode").isNotEmpty(), "$name.json: open_operations without a filter condition: $action")
+                assertEquals(range["from"], filter["from"], "$name.json: filter outside the period: $action")
+                assertEquals(range["to"], filter["to"], "$name.json: filter outside the period: $action")
+                assertEquals(mode, filter["transfer_mode"], "$name.json: filter in another transfer mode: $action")
+            }
+        }
+    }
 
     @Test
     fun `golden responses of the design check are up to date`() {
