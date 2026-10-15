@@ -155,6 +155,28 @@ class MockStatementsApiTest {
     }
 
     @Test
+    fun `an import cancelled after its operations are in leaves the unread lines of earlier uploads open (FIN-79)`() = runBlocking<Unit> {
+        // Each stage pauses 5 s: long enough to cancel inside the rules stage, short enough to get there.
+        val backend = testBackend(clock, config = FAST.copy(importStepDelayMs = 5_000))
+        val api = MockStatementsApi(backend)
+        val old = backend.load(
+            statement("2026-09-01", "2026-09-30").copy(
+                unreadLines = listOf(ru.finassist.pf.mock.ofx.UnreadLine(7, dt("2026-09-05T12:00:00+03:00"), "bad_amount", "40817810000000001111", "1")),
+            ),
+        )
+        val accepted = api.uploadStatement(key("k"), file("fixed.ofx", ofx(line("1", "20260905120000", "-100.00"))))
+        // The operations are in the ledger; the import pauses in the rules stage.
+        withTimeout(30_000) { api.streamProgress(accepted.uploadId).first { (it as? ImportEvent.Progress)?.progress?.percent == 85 } }
+        val stream = api.streamProgress(accepted.uploadId)
+        api.deleteStatement(accepted.uploadId)
+        assertEquals(ErrorCodes.CANCELLED, assertIs<ImportEvent.Error>(withTimeout(10_000) { stream.toList() }.last()).code)
+
+        val row = api.listStatements().uploads.single { it.uploadId == old.id }
+        assertEquals(1, row.unreadCount)
+        assertEquals(0, row.resolvedUnreadCount)
+    }
+
+    @Test
     fun `deleting an upload whose import job has not started yet still cancels and discards it`() = runBlocking<Unit> {
         // FIN-76: with zero latency the deletion can come before the background job ran a single line.
         val jobs = ManualDispatcher()

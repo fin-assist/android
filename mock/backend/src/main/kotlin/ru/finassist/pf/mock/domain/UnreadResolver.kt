@@ -45,10 +45,11 @@ class UnreadResolver(private val ledger: Ledger, private val zone: () -> ZoneId)
     private fun outcome(newer: Upload, old: Upload, line: UnreadLine): Boolean? {
         val account = line.accountId ?: return null
         val newerUnread = newer.unreadLines.filter { it.accountId == account }
-        // 1. By FITID: the operation with this pair is in the ledger, or the newer upload fails to read it again.
+        // 1. By FITID: [newer] has the operation with this pair (saved now or already there), or fails to read it again.
+        // An operation another upload brought does not count: the closing upload is the one that read the line.
         if (line.fitId != null) {
             return when {
-                ledger.byKey(account, line.fitId) != null -> true
+                ledger.byKey(account, line.fitId)?.uploadIds?.contains(newer.id) == true -> true
                 newerUnread.any { it.fitId == line.fitId } -> false
                 else -> null
             }
@@ -57,8 +58,9 @@ class UnreadResolver(private val ledger: Ledger, private val zone: () -> ZoneId)
         val date = line.date
         if (date != null) {
             // 2. By date: the newer statement of the account covers the day; read unless it has an unread line that day.
-            if (date !in period) return null
+            // Days, not moments: a `DTEND` without time parses to midnight and still covers its whole day.
             val day = date.atZoneSameInstant(zone()).toLocalDate()
+            if (day !in period.from.atZoneSameInstant(zone()).toLocalDate()..period.to.atZoneSameInstant(zone()).toLocalDate()) return null
             return newerUnread.none { it.date?.atZoneSameInstant(zone())?.toLocalDate() == day }
         }
         // 3. No date, no FITID: the newer statement covers the whole period of the old one; read unless unread lines there.

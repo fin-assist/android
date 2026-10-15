@@ -143,9 +143,10 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
                 val before = backend.coverage()
                 val isFirst = backend.uploads.none { it.isDone }
                 val (added, duplicates) = backend.ledger.importUpload(upload.id, doc.accounts, doc.transactions)
-                // In the same transaction: lines of earlier uploads that this one has read are closed (FIN-79).
-                backend.unreadResolver.close(upload, backend.uploads.filter { it !== upload && it.isDone })
                 stage(ImportStage.RULES, 85)
+                // In the same transaction, after the last point a cancellation can stop it: lines of earlier uploads
+                // that this one covers are closed (FIN-79).
+                backend.unreadResolver.close(upload, backend.uploads.filter { it !== upload && it.isDone })
                 upload.result = buildResult(upload, doc, added, duplicates, isFirst, before)
                 upload.result!!
             }
@@ -166,6 +167,8 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         backend.mutex.withLock {
             backend.ledger.removeUpload(upload.id)
             backend.uploads.remove(upload)
+            // Whatever it may have closed opens again (FIN-79).
+            backend.unreadResolver.reopen(upload.id, backend.uploads)
         }
     }
 

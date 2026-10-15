@@ -44,6 +44,22 @@ class UnreadResolverTest {
         assertTrue(openLines(old).isEmpty())
     }
 
+    @Test fun `a line with FITID is not closed by an upload that does not have the operation, even if another one has`() {
+        // The operation came with `first`, before the line was unread in `old`; `unrelated` has nothing to do with it.
+        upload("first.ofx", doc("2026-09-01", "2026-09-30", listOf(trn("f1", "2026-09-05T10:00", 300, "OZON", "Маркетплейсы"))))
+        val old = upload("old.ofx", doc("2026-09-01", "2026-09-30", unread = listOf(line(10, "2026-09-05T10:00", "bad_amount", fitId = "f1"))))
+        upload("unrelated.ofx", doc("2026-09-01", "2026-09-30", listOf(trn("f7", "2026-09-07T10:00", 100, "OZON", "Маркетплейсы"))))
+        assertEquals(1, row(old).unreadCount)
+    }
+
+    @Test fun `a line on the last day of the period is covered by a DTEND without time`() {
+        val old = upload("old.ofx", doc("2026-09-01", "2026-09-30", unread = listOf(line(10, "2026-09-30T14:00", "truncated"))))
+        val dateOnly = StatementPeriod(at("2026-09-01T00:00"), at("2026-09-30T00:00"))
+        upload("new.ofx", doc("2026-09-01", "2026-09-30").copy(accountPeriods = mapOf(Acc.CURRENT.id to dateOnly)))
+        assertEquals(0, row(old).unreadCount)
+        assertEquals(1, row(old).resolvedUnreadCount)
+    }
+
     @Test fun `a line with FITID stays open when the later upload does not have it`() {
         val old = upload("old.ofx", doc("2026-09-01", "2026-09-30", unread = listOf(line(10, "2026-09-05T10:00", "bad_amount", fitId = "f1"))))
         upload("new.ofx", doc("2026-09-01", "2026-09-30", listOf(trn("f2", "2026-09-05T10:00", 300, "OZON", "Маркетплейсы"))))
