@@ -21,7 +21,8 @@ data class Profile(
     val phone: String,
     val theme: Theme,
     val timezone: String,
-    /** One element per type (api.md 2.1, FIN-82); an element of an unknown type is kept but not used. */
+    /** One element per type (api.md 2.1, FIN-82); an element of an unknown type is kept but not used, a broken one dropped. */
+    @Serializable(with = ConsentList::class)
     val consents: List<Consent> = emptyList(),
     val createdAt: ApiDateTime,
 ) {
@@ -52,3 +53,5 @@ data class ProfileUpdate(
 
 @Serializable
 data class AssistantConsentGrant(val version: String)
+
+object ConsentList : TolerantListSerializer<Consent>(Consent.serializer())

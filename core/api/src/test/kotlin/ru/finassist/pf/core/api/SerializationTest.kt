@@ -153,4 +153,21 @@ class SerializationTest {
         assertEquals(ru.finassist.pf.core.api.model.ImportNoticeCode.NO_EXPENSES, n.code)
         assertNull(n.text)
     }
+
+    @Test
+    fun `a broken consent or notice is dropped, the rest of the response stays (FIN-83 review)`() {
+        val p = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.Profile.serializer(),
+            """{"user_id":"u1","phone":"+7","theme":"dark","timezone":"Europe/Moscow",
+              "consents":[{"type":"marketing","granted":true},{"type":"assistant","granted":true,"current_version":"1"}],
+              "created_at":"2026-10-04T20:00:00+03:00"}""",
+        )
+        assertEquals(listOf(ru.finassist.pf.core.api.model.ConsentType.ASSISTANT), p.consents.map { it.type })
+
+        val notices = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.ImportNoticeList,
+            """[{"text":"без кода"},{"code":"no_expenses","text":"нет расходов"}]""",
+        )
+        assertEquals(listOf(ru.finassist.pf.core.api.model.ImportNoticeCode.NO_EXPENSES), notices.map { it.code })
+    }
 }

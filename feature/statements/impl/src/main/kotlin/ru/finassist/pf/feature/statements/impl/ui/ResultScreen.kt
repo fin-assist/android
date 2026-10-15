@@ -136,6 +136,11 @@ internal fun ResultContent(
                 .heightIn(min = viewport)
                 .padding(start = d.space5, end = d.space5, top = d.space6, bottom = d.space4),
         ) {
+            // Special cases this client does not know (FIN-83): above everything, so an empty statement or a file with
+            // nothing new does not lose them.
+            r?.notices?.filter { it.code == ImportNoticeCode.UNKNOWN }?.mapNotNull { it.text?.takeIf(String::isNotBlank) }?.forEach { text ->
+                PfNotice(text, tone = NoticeTone.WARNING, modifier = Modifier.padding(bottom = d.space4).testTag(StatementsTags.RESULT_NOTICE))
+            }
             if (r != null && (r.operationCount == 0 || r.has(ImportNoticeCode.EMPTY_STATEMENT))) {
                 Column(Modifier.weight(1f).fillMaxWidth().testTag(StatementsTags.RESULT_EMPTY), verticalArrangement = Arrangement.Center) {
                     PfEmptyState(
@@ -238,11 +243,6 @@ private fun ColumnScope.Summary(
     }
     PfCard(flush = true) {
         rows.forEachIndexed { i, f -> FindingRow(f, divider = i < rows.lastIndex, onSort = r.uncategorizedFilters?.let { filters -> { onOpenSearch(filters) } }) }
-    }
-    // A special case this client does not know: the server's text (FIN-82).
-    r.notices.filter { it.code == ImportNoticeCode.UNKNOWN }.mapNotNull { it.text?.takeIf(String::isNotBlank) }.forEach { text ->
-        Spacer(Modifier.height(d.space4))
-        PfNotice(text, tone = NoticeTone.WARNING, modifier = Modifier.testTag(StatementsTags.RESULT_NOTICE))
     }
     if (r.has(ImportNoticeCode.NO_EXPENSES)) {
         Spacer(Modifier.height(d.space4))

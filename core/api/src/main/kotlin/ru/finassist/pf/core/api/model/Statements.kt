@@ -122,6 +122,8 @@ enum class ImportNoticeCode(override val code: String) : ApiCode {
 @Serializable
 data class ImportNotice(val code: ImportNoticeCode, val text: String? = null)
 
+object ImportNoticeList : TolerantListSerializer<ImportNotice>(ImportNotice.serializer())
+
 /** Terminal `complete` event of the import progress stream: everything the import result screen shows. */
 @Serializable
 data class ImportResult(
@@ -139,6 +141,8 @@ data class ImportResult(
     val uncategorizedCount: Int,
     val uncategorizedFilters: OperationsFilter? = null,
     val coverage: ImportCoverage,
+    /** A broken notice is dropped, not the whole result. */
+    @Serializable(with = ImportNoticeList::class)
     val notices: List<ImportNotice>,
     /** Currency of every amount of the event (FIN-82); always RUB today. */
     val currency: String = "RUB",
