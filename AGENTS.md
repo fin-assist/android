@@ -250,30 +250,23 @@ commands: `docs/testing.md`.
   a PR for several issues lists all of them in the description, each linked
   (`https://finassist.youtrack.cloud/issue/FIN-<n>`). No issue — no key in the title.
 - After the PR is open and all planned changes are pushed, request a review with one PR comment in Russian
-  addressed to both reviewers. The first line starts with `/codex-review`, the second is `@claude`; every instruction
-  below them is addressed to both (never «@claude, …» alone — Codex reads the same text, `.codex-review/request.md`):
+  addressed to both reviewers: it starts with `@codex @claude`, and the text after them is addressed to both (never
+  «@claude, …» alone — Codex reads the same comment):
 
   ```
-  /codex-review
-  @claude
-  Ревьюеры, проведите ревью этого PR по Code Review Rules в AGENTS.md, включая разделы Security и Test coverage of
-  use cases. Замечания — на русском, inline на изменённых строках. Особое внимание: <что именно и почему>.
+  @codex @claude проведите ревью этого PR по Code Review Rules в AGENTS.md, включая разделы Security и Test coverage
+  of use cases. Замечания — на русском, inline на изменённых строках. Особое внимание: <что именно и почему>.
   ```
 
-  Both run from the default branch:
-  - `@claude` — `.github/workflows/claude.yml`, Claude Fable 5.1 (`claude-fable-5-1`, set in `claude_args`);
-  - `/codex-review` — `.github/workflows/codex-review.yml`, GPT-6 Astra (`gpt-6-astra`, `CODEX_MODEL` there),
-    posted by `github-actions[bot]` as a review with inline comments (findings outside the diff are in its body;
-    posting: `scripts/codex-review-post.py`). Needs the `OPENAI_API_KEY` secret.
-  - The Codex GitHub integration (`@codex review`, model not pinnable) is not the Codex reviewer of this process. If
-    it still posts on a PR, handle its findings like any other, but its answer does not stand in for `/codex-review`.
+  - `@claude` — `.github/workflows/claude.yml` (runs from the default branch), Claude Fable 5.1 (`claude-fable-5-1`,
+    set in `claude_args`);
+  - `@codex` — the Codex GitHub integration, under the owner's ChatGPT subscription. Its model is chosen by
+    OpenAI and cannot be pinned from here; a pinned model would need the OpenAI API with per-token billing, which was
+    declined (FIN-103).
 - Waiting for the review: when the session receives the PR's GitHub events (reviews, comments, CI), react to them
   instead of polling. Otherwise check 3 minutes after the request, then every 2 minutes. A reviewer has answered when
-  it posted its review or summary for the latest commit; for Codex that is a review or comment of
-  `github-actions[bot]` with the `<!-- codex-review-workflow -->` marker for the latest commit, a failure comment
-  naming that commit or the latest request included (then say in the PR and to the owner that the Codex review did
-  not run). The reviewed commit is the one named in its body («Коммит …»), not the review's `commit_id`: a review
-  posted after a rejection is attached to whatever the head was then. If they differ, request the review again. If a reviewer has not answered within 15 minutes of the last request, say so in the
+  it posted its review or summary for the latest commit; for Codex (`chatgpt-codex-connector[bot]`) «Didn't find any
+  major issues» or a 👍 reaction without a comment also counts. If a reviewer has not answered within 15 minutes of the last request, say so in the
   PR and to the owner and stop waiting for it. The cycle ends when both reviewers have answered the latest request and
   no review thread is open.
 - Address review findings in follow-up commits on the same branch, reply in the conversation and resolve it;
@@ -282,9 +275,8 @@ commands: `docs/testing.md`.
 
 ## Code Review Rules
 
-Read by `@claude` (through `CLAUDE.md`), by the Codex review workflow and by the Codex integration, which looks for
-this heading. Two areas
-get a dedicated pass on every PR: Security and Test coverage of use cases (below).
+Read by `@claude` (through `CLAUDE.md`) and by the Codex integration, which looks for this heading. Two areas get a
+dedicated pass on every PR: Security and Test coverage of use cases (below).
 
 ### General
 
