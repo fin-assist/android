@@ -1,0 +1,97 @@
+appId: ru.finassist.pf.mock.e2e
+name: Загрузка — исправленный файл дочитывает непрочитанные строки прошлой загрузки
+tags:
+  - statements
+---
+# FIN-79. `unreadable.ofx` leaves two unread lines; `unreadable-fixed.ofx` has the same operations read correctly
+# (same account and FITID). After it, the old upload's row says the lines were read and has no «Не прочитали» link.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.unreadable.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result.empty"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+
+# The fixed file, from the history again.
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.unread"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.unreadable-fixed.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+# The pinned date of the e2e build is 8 October; the date and the month are joined by a no-break space.
+- assertVisible:
+    id: "statements.history.resolved"
+- assertVisible: "Строки дочитаны в загрузке от 8.октября"
+- assertNotVisible:
+    id: "statements.history.unread"
