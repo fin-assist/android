@@ -237,7 +237,14 @@ commands: `docs/testing.md`.
   Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
 - A PR targets the current release branch — the newest `release/<version>` not yet merged into `main` — not `main`;
   the owner merges the release branch into `main` with its own PR. When every release branch is already merged, target
-  `main`.
+  `main`. A release branch counts as merged only when both hold: a merged PR from it into `main` exists
+  (`gh api 'repos/fin-assist/android/pulls?state=closed&base=main&head=fin-assist:release/<version>'`, an entry with
+  `merged_at`) and `git merge-base --is-ancestor origin/release/<version> origin/main` exits 0. The ancestor check
+  alone is not enough: a branch just cut from `main` points at the same commit and passes it.
+  Fetch both refs first, with explicit refspecs (a single-branch or shallow clone has no `origin/release/*`):
+  `git fetch --depth=500 origin '+refs/heads/main:refs/remotes/origin/main'
+  '+refs/heads/release/*:refs/remotes/origin/release/*'` (no `--depth` in a full clone). Exit 1 means «not an
+  ancestor»; any other code means a missing ref — fetch and run again, never take it as an answer.
 - PR title and description in Russian: what changed and why, deviations from mockups/docs, how it was checked.
   A PR for a single YouTrack issue starts its title with the issue key (`FIN-42 Краш при открытии поиска`);
   a PR for several issues lists all of them in the description, each linked
