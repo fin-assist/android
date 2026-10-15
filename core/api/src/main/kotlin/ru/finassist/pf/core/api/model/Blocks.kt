@@ -56,7 +56,8 @@ enum class LockReason(override val code: String) : ApiCode {
 @Serializable
 data class BlockLock(
     val reason: LockReason,
-    val text: String,
+    /** Empty or missing in a nested lock (a tile) — the client shows `BlockFormat.LOCKED_FALLBACK` (api.md «Блоки»). */
+    val text: String = "",
     val required: Int? = null,
     val available: Int? = null,
     val availableFrom: ApiDateTime? = null,

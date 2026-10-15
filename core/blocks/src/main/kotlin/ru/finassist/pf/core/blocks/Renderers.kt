@@ -147,7 +147,7 @@ private fun ChartState(block: Block, ctx: BlockContext) {
         PfIcons.BAR_CHART, block.altText ?: block.title.orEmpty(),
         description = block.emptyText.takeIf { !locked },
         state = if (locked) InsightState.LOCKED else InsightState.EMPTY,
-        lockedText = block.lock?.text,
+        lockedText = BlockFormat.lockText(block.lock),
     )
 }
 
@@ -243,7 +243,7 @@ private fun Tiles(block: Block, data: TileGroupData, ctx: BlockContext) {
 private fun TileView(block: Block, tile: Tile, ctx: BlockContext, modifier: Modifier) {
     val tag = ctx.tags.tile(tile.id)
     if (!tile.status.hasData) {
-        PfStatTile(tile.title, modifier.testTag(tag), locked = true, lockedText = tile.lock?.text, chartId = tag)
+        PfStatTile(tile.title, modifier.testTag(tag), locked = true, lockedText = BlockFormat.lockText(tile.lock), chartId = tag)
         return
     }
     PfStatTile(
@@ -273,7 +273,7 @@ private fun RankedList(block: Block, data: RankedListData?, ctx: BlockContext) {
         Spacer(Modifier.height(d.space2))
     }
     if (data == null || data.items.isEmpty()) {
-        (data?.emptyText ?: block.emptyText ?: block.lock?.text)?.let { Text(it, style = PfTheme.type.body, color = c.textMuted) }
+        (data?.emptyText ?: block.emptyText ?: BlockFormat.lockText(block.lock))?.let { Text(it, style = PfTheme.type.body, color = c.textMuted) }
         return
     }
     if (data.style == ListStyle.PLAIN) {
@@ -363,7 +363,7 @@ private fun InsightCard(block: Block, data: InsightCardData, ctx: BlockContext) 
         amount = BlockFormat.value(data.value, data.valueKind, ctx.currency, data.approx).takeIf { status.hasData },
         description = if (state == InsightState.EMPTY) block.emptyText else data.description,
         state = state,
-        lockedText = block.lock?.text,
+        lockedText = BlockFormat.lockText(block.lock),
         chartId = ctx.tags.chart(block.id ?: data.title),
         onClick = ctx.clickOf(block, block.action),
         content = if (!status.hasData || data.items.isEmpty() && data.itemsMore == null) null else ({

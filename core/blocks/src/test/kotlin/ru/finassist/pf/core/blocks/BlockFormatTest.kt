@@ -109,4 +109,16 @@ class BlockFormatTest {
         assertNull(BlockLayout.tapAction(BlockAction(ActionType.OPEN_OPERATIONS)))
         assertEquals(ActionType.OPEN_ASSISTANT, BlockLayout.usable(BlockAction(ActionType.OPEN_ASSISTANT))?.type)
     }
+
+    @Test fun `a lock without text shows the shared one (contracts review)`() {
+        val lock = ru.finassist.pf.core.api.model.BlockLock(ru.finassist.pf.core.api.model.LockReason.UNKNOWN)
+        assertEquals("Пока недоступно", BlockFormat.lockText(lock))
+        assertEquals("Нужно 1 полный месяц", BlockFormat.lockText(lock.copy(text = "Нужно 1 полный месяц")))
+        assertNull(BlockFormat.lockText(null))
+        val tiles = ru.finassist.pf.core.api.ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.TileGroupData.serializer(),
+            """{"tiles":[{"id":"daily_expense","title":"Расходы в день","status":"locked","lock":{"reason":"need_full_months"}}]}""",
+        )
+        assertEquals("Пока недоступно", BlockFormat.lockText(tiles.tiles.single().lock))
+    }
 }

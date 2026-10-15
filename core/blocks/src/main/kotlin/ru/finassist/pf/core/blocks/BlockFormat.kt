@@ -9,6 +9,12 @@ import kotlin.math.roundToInt
 
 /** Formatting of block values (api.md «Блоки» → «Значения»). Pure functions — unit-tested. */
 object BlockFormat {
+    /** The shared text of a lock the service left empty (grpc-api.md 5.3, api.md «Блоки»). */
+    const val LOCKED_FALLBACK = "Пока недоступно"
+
+    /** Text of [lock]: the server's, or [LOCKED_FALLBACK] when it is empty; null without a lock. */
+    fun lockText(lock: ru.finassist.pf.core.api.model.BlockLock?): String? = lock?.text?.ifBlank { LOCKED_FALLBACK }
+
 
     /**
      * `value` of [kind]: an amount in [currency] («−84 320 ₽»), a share («46%», «−12%»), a count; null for an unknown
