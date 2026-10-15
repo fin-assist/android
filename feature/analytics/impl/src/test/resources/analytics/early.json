@@ -1,0 +1,330 @@
+{
+    "has_data": true,
+    "params": {
+        "period": "month",
+        "date": "2026-09",
+        "transfer_mode": "with"
+    },
+    "period": {
+        "range": {
+            "from": "2026-09-01T00:00:00+03:00",
+            "to": "2026-10-01T00:00:00+03:00"
+        },
+        "is_current": true,
+        "coverage": "partial",
+        "data_from": "2026-09-01T00:00:00+03:00",
+        "data_to": "2026-09-25T00:00:00+03:00",
+        "gaps": []
+    },
+    "navigation": {},
+    "blocks": [
+        {
+            "id": "tiles",
+            "type": "tile_group",
+            "alt_text": "Доходы минус расходы 72 580 ₽, Прогноз расходов 101 200 ₽, Расходы в день 3 370 ₽, Доходы 156 900 ₽",
+            "data": {
+                "tiles": [
+                    {
+                        "id": "balance",
+                        "title": "Доходы минус расходы",
+                        "value": 7258000.0,
+                        "value_kind": "amount",
+                        "caption": "46% дохода · по выписке"
+                    },
+                    {
+                        "id": "forecast",
+                        "title": "Прогноз расходов",
+                        "value": 1.012E7,
+                        "value_kind": "amount",
+                        "approx": true,
+                        "caption": "на сентябрь"
+                    },
+                    {
+                        "id": "daily_expense",
+                        "title": "Расходы в день",
+                        "value": 337000.0,
+                        "value_kind": "amount"
+                    },
+                    {
+                        "id": "income",
+                        "title": "Доходы",
+                        "value": 1.569E7,
+                        "value_kind": "amount",
+                        "show_plus": true,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "id": "expense_categories",
+            "type": "ranked_list",
+            "title": "Расходы по категориям",
+            "alt_text": "Расходы по категориям: Супермаркеты 32 400 ₽, Различные товары 18 100 ₽, Заправки 7 200 ₽, Переводы 5 600 ₽, Кафе и рестораны 9 800 ₽, Транспорт 5 400 ₽, Связь 3 420 ₽, Аптеки 2 400 ₽",
+            "data": {
+                "total": {
+                    "label": "Всего · 1–25 сентября",
+                    "value": 8432000.0,
+                    "value_kind": "amount",
+                    "action": {
+                        "type": "open_operations",
+                        "filter": {}
+                    }
+                },
+                "items": [
+                    {
+                        "id": "c_Супермаркеты",
+                        "icon": "cart",
+                        "title": "Супермаркеты",
+                        "value": 3240000.0,
+                        "value_kind": "amount",
+                        "share": 0.38,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Различные товары",
+                        "icon": "package",
+                        "title": "Различные товары",
+                        "value": 1810000.0,
+                        "value_kind": "amount",
+                        "share": 0.21,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Заправки",
+                        "icon": "car",
+                        "title": "Заправки",
+                        "value": 720000.0,
+                        "value_kind": "amount",
+                        "share": 0.09,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Переводы",
+                        "icon": "users",
+                        "title": "Переводы",
+                        "value": 560000.0,
+                        "value_kind": "amount",
+                        "share": 0.07,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Кафе и рестораны",
+                        "icon": "coffee",
+                        "title": "Кафе и рестораны",
+                        "value": 980000.0,
+                        "value_kind": "amount",
+                        "share": 0.12,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Транспорт",
+                        "icon": "car",
+                        "title": "Транспорт",
+                        "value": 540000.0,
+                        "value_kind": "amount",
+                        "share": 0.06,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Связь",
+                        "icon": "repeat",
+                        "title": "Связь",
+                        "value": 342000.0,
+                        "value_kind": "amount",
+                        "share": 0.04,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Аптеки",
+                        "icon": "package",
+                        "title": "Аптеки",
+                        "value": 240000.0,
+                        "value_kind": "amount",
+                        "share": 0.03,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    }
+                ],
+                "visible_count": 4,
+                "more_label": "Все категории"
+            }
+        },
+        {
+            "id": "income_categories",
+            "type": "ranked_list",
+            "title": "Доходы",
+            "alt_text": "Доходы: Финансы 142 140 ₽, Переводы 13 510 ₽, Дивиденды и купоны 1 250 ₽",
+            "data": {
+                "items": [
+                    {
+                        "id": "c_Финансы",
+                        "icon": "percent",
+                        "title": "Финансы",
+                        "note": "зарплата и проценты",
+                        "value": 1.4214E7,
+                        "value_kind": "amount",
+                        "show_plus": true,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Переводы",
+                        "icon": "users",
+                        "title": "Переводы",
+                        "note": "5 переводов",
+                        "value": 1351000.0,
+                        "value_kind": "amount",
+                        "show_plus": true,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Дивиденды и купоны",
+                        "icon": "bar-chart",
+                        "title": "Дивиденды и купоны",
+                        "note": "по акциям и облигациям",
+                        "value": 125000.0,
+                        "value_kind": "amount",
+                        "show_plus": true,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    }
+                ],
+                "style": "plain"
+            }
+        },
+        {
+            "type": "heading",
+            "data": {
+                "text": "Регулярные платежи и заметные траты"
+            }
+        },
+        {
+            "id": "regular_payments",
+            "type": "insight_card",
+            "status": "locked",
+            "lock": {
+                "reason": "need_full_months",
+                "text": "Нужно 2 полных месяца — пока есть только 1–25 сентября",
+                "required": 2,
+                "available": 0
+            },
+            "alt_text": "Подписки и регулярные платежи: Регулярных платежей не нашли",
+            "data": {
+                "icon": "repeat",
+                "title": "Подписки и регулярные платежи",
+                "value_kind": "amount"
+            }
+        },
+        {
+            "id": "notable_spending",
+            "type": "insight_card",
+            "status": "locked",
+            "lock": {
+                "reason": "need_full_months",
+                "text": "Нужно 3 полных месяца — пока есть только 1–25 сентября",
+                "required": 3,
+                "available": 0
+            },
+            "alt_text": "Заметные траты: Заметных трат не нашли — расходы по категориям в пределах обычного",
+            "data": {
+                "icon": "bar-chart",
+                "title": "Заметные траты"
+            }
+        },
+        {
+            "id": "bank_fees",
+            "type": "insight_card",
+            "alt_text": "Комиссии и проценты банку: 1 240 ₽: за сентябрь · обслуживание, переводы, снятие наличных",
+            "data": {
+                "icon": "percent",
+                "title": "Комиссии и проценты банку",
+                "value": 124000.0,
+                "value_kind": "amount",
+                "description": "за сентябрь · обслуживание, переводы, снятие наличных"
+            },
+            "action": {
+                "type": "open_operations",
+                "filter": {}
+            }
+        },
+        {
+            "id": "small_frequent",
+            "type": "insight_card",
+            "status": "locked",
+            "lock": {
+                "reason": "need_full_months",
+                "text": "Нужно 1 полный месяц — пока есть только 1–25 сентября",
+                "required": 1,
+                "available": 0
+            },
+            "alt_text": "Мелкие частые траты: Мелких частых трат не нашли",
+            "data": {
+                "icon": "coffee",
+                "title": "Мелкие частые траты",
+                "value_kind": "amount",
+                "approx": true
+            }
+        },
+        {
+            "id": "balance",
+            "type": "chart",
+            "title": "Доходы минус расходы",
+            "alt_text": "Доходы минус расходы: 72 580 ₽",
+            "data": {
+                "kind": "bar",
+                "value_kind": "percent",
+                "points": [],
+                "show_values": true,
+                "summary": {
+                    "value": 7258000.0,
+                    "value_kind": "amount"
+                },
+                "caption": "46% дохода: на столько доходы по выписке больше расходов. График по месяцам появится, когда в выписке будет хотя бы один полный месяц"
+            }
+        }
+    ],
+    "state": {
+        "stale": false,
+        "last_operation_at": "2026-09-25T00:00:00+03:00",
+        "data_from": "2026-09-01T00:00:00+03:00",
+        "data_to": "2026-09-25T00:00:00+03:00",
+        "full_months": 0,
+        "unread_lines_count": 0,
+        "calculated_at": "2026-09-26T00:00:00+03:00",
+        "recalculating": false
+    }
+}

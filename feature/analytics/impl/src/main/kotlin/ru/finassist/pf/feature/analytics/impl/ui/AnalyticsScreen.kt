@@ -1,15 +1,23 @@
 package ru.finassist.pf.feature.analytics.impl.ui
 
+import androidx.compose.runtime.getValue
+import ru.finassist.pf.core.api.model.ActionType
+import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.BlockAction
+import ru.finassist.pf.core.api.model.BlockType
+import ru.finassist.pf.core.blocks.BlockContext
+import ru.finassist.pf.core.blocks.BlockLayout
+import ru.finassist.pf.core.blocks.BlockTags
+import ru.finassist.pf.core.blocks.BlocksColumn
+import ru.finassist.pf.core.blocks.CatalogV1
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,11 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -33,57 +37,36 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.AnalyticsParams
-import ru.finassist.pf.core.api.model.BreakdownStatus
-import ru.finassist.pf.core.api.model.CategoryBreakdown
 import ru.finassist.pf.core.api.model.Coverage
-import ru.finassist.pf.core.api.model.LockReason
-import ru.finassist.pf.core.api.model.Metric
-import ru.finassist.pf.core.api.model.MetricLike
-import ru.finassist.pf.core.api.model.MetricStatus
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
-import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.common.time.RussianDates
-import ru.finassist.pf.core.common.time.countWithNoun
 import ru.finassist.pf.core.common.time.toApiString
-import ru.finassist.pf.core.designsystem.components.BarPoint
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
-import ru.finassist.pf.core.designsystem.components.InsightState
 import ru.finassist.pf.core.designsystem.components.NoticeTone
-import ru.finassist.pf.core.designsystem.components.PfAmountText
 import ru.finassist.pf.core.designsystem.components.PfAskCard
-import ru.finassist.pf.core.designsystem.components.PfBarChart
 import ru.finassist.pf.core.designsystem.components.PfBottomSheet
 import ru.finassist.pf.core.designsystem.components.PfButton
-import ru.finassist.pf.core.designsystem.components.PfCard
-import ru.finassist.pf.core.designsystem.components.PfCategoryBar
 import ru.finassist.pf.core.designsystem.components.PfChip
 import ru.finassist.pf.core.designsystem.components.PfCoachmark
 import ru.finassist.pf.core.designsystem.components.TextPart
 import ru.finassist.pf.core.designsystem.components.PfLinkedText
-import ru.finassist.pf.core.designsystem.components.PfDivider
-import ru.finassist.pf.core.designsystem.components.PfDataRow
 import ru.finassist.pf.core.designsystem.components.PfEmptyState
-import ru.finassist.pf.core.designsystem.components.PfInsightCard
 import ru.finassist.pf.core.designsystem.components.PfLink
 import ru.finassist.pf.core.designsystem.components.PfNoticeLink
 import ru.finassist.pf.core.designsystem.components.PfNotice
 import ru.finassist.pf.core.designsystem.components.PfOptionRow
 import ru.finassist.pf.core.designsystem.components.PfPageHeader
 import ru.finassist.pf.core.designsystem.components.PfPeriodNav
-import ru.finassist.pf.core.designsystem.components.PfSectionTitle
 import ru.finassist.pf.core.designsystem.components.PfSegmentedControl
 import ru.finassist.pf.core.designsystem.components.PfSnackbar
 import ru.finassist.pf.core.designsystem.components.PfStatTile
 import ru.finassist.pf.core.designsystem.components.PfTabHeader
-import ru.finassist.pf.core.designsystem.components.ValueTone
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.analytics.impl.domain.AnalyticsTexts
-import java.time.YearMonth
-import kotlin.math.roundToInt
 
 /** Navigation callbacks of the Analytics screen. */
 class AnalyticsActions(
@@ -114,11 +97,11 @@ interface AnalyticsHandlers {
     fun goTo(key: PeriodKey)
     fun openSheet(sheet: AnalyticsSheet?)
     fun nextHint(stop: Boolean)
-    fun onTileOpened(tile: String)
-    fun dismissRegular(id: String)
     fun setTransferMode(mode: TransferMode)
     fun currentTransferMode(): TransferMode
-    fun toggleAllCategories()
+    fun toggleExpanded(id: String)
+    fun onAction(block: Block, action: BlockAction, navigate: (BlockAction) -> Unit)
+    fun onBlockShown(block: Block)
 }
 
 @Composable
@@ -253,33 +236,79 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
     }
 
-    if (blocks.tiles && a.tiles != null) {
-        Gap(if (coverageCaption != null) d.space2 else d.space4)
-        Block(AnalyticsTags.BLOCK_TILES) { Tiles(a, vm, actions) }
+    Blocks(a, state, vm, actions, afterCaption = coverageCaption != null)
+}
+
+/** Registry of the renderers (FIN-7): the catalog version this client draws. */
+private val registry = CatalogV1.registry()
+
+/** Test tags of the blocks — the ones the UI tests have used since before FIN-4. */
+private object AnalyticsBlockTags : BlockTags("analytics") {
+    override fun tile(id: String) = if (id == "daily_expense") AnalyticsTags.TILE_DAILY else "analytics.tile.$id"
+    override fun item(blockId: String) = when (blockId) {
+        "expense_categories" -> AnalyticsTags.EXPENSE_CATEGORY
+        "income_categories" -> AnalyticsTags.INCOME_CATEGORY
+        else -> "analytics.$blockId.item"
     }
+    override fun more(blockId: String) = if (blockId == "expense_categories") AnalyticsTags.ALL_CATEGORIES else "analytics.$blockId.more"
+    override fun chart(blockId: String) = when (blockId) {
+        "monthly_chart" -> "analytics.expense.monthly"
+        "balance" -> "analytics.balance.monthly"
+        "expense_categories" -> "analytics.expense.categories"
+        else -> "analytics.insight.$blockId"
+    }
+}
 
-    // While the statement covers only part of one month there is nothing to chart by month (mockup `AnalyticsEarly`).
-    if (blocks.monthlyChart && !early) a.monthlyChart?.let { chart -> Block(AnalyticsTags.BLOCK_MONTHLY_CHART) { ExpenseChart(a, chart) } }
-
-    if (blocks.expenseCategories) a.expenseCategories?.let { b ->
-        Gap(d.space6)
-        Block(AnalyticsTags.BLOCK_EXPENSE_CATEGORIES) {
-            ExpenseBreakdown(b, a.tiles?.expense?.value, periodCaption(period), AnalyticsTexts.totalCaption(params.period, period), state, vm, actions.openSearch)
+/**
+ * The blocks of the response in the server's order (FIN-4): without the ones switched off by `analytics.block.<id>`,
+ * drawn by the registry; a block it cannot draw is skipped. Spacing follows the mockups by the kind of block.
+ */
+@Composable
+private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers, actions: AnalyticsActions, afterCaption: Boolean) {
+    val d = PfTheme.dimens
+    val hidden = state.blocks.hidden
+    val prepared = remember(a.blocks, hidden) {
+        registry.prepareAll(BlockLayout.visible(a.blocks) { b -> b.id != null && b.id in hidden })
+    }
+    val navigate: (BlockAction) -> Unit = { action ->
+        when (action.type) {
+            ActionType.OPEN_OPERATIONS -> action.filter?.let(actions.openSearch)
+            ActionType.OPEN_ASSISTANT -> actions.openChat(vm.currentTransferMode())
+            else -> Unit
         }
     }
-    if (blocks.incomeCategories) a.incomeCategories?.let { b ->
-        Gap(d.space4)
-        Block(AnalyticsTags.BLOCK_INCOME_CATEGORIES) { IncomeBreakdown(b, params.period, period, actions.openSearch) }
-    }
-    a.insights?.let { insights -> Insights(insights, a, blocks, vm, actions) }
-    if (blocks.monthlyChart && params.period != PeriodTypeCode.YEAR) BalanceSection(a)
+    val ctx = BlockContext(
+        currency = a.currency,
+        tags = AnalyticsBlockTags,
+        onAction = { block, action -> vm.onAction(block, action, navigate) },
+        expanded = state.expanded,
+        onToggleExpanded = vm::toggleExpanded,
+        decorate = { block, content ->
+            // The coachmark lies over the card (mockup `AnalyticsHintCategories`).
+            if (block.id == "expense_categories") {
+                WithCoachmark(show = state.hint == AnalyticsHint.CATEGORIES, text = "Категории проставили мы — любую можно поправить в операции", vm = vm) { content() }
+            } else {
+                content()
+            }
+        },
+    )
+    BlocksColumn(
+        prepared, ctx,
+        spacing = { previous, next ->
+            when {
+                previous == null -> if (afterCaption) d.space2 else d.space4
+                next.type == BlockType.INSIGHT_CARD && previous.type == BlockType.HEADING -> d.space2
+                next.type == BlockType.INSIGHT_CARD && previous.type == BlockType.INSIGHT_CARD -> d.space3
+                next.type == BlockType.RANKED_LIST && previous.type == BlockType.RANKED_LIST -> d.space4
+                else -> d.space6
+            }
+        },
+        onShown = vm::onBlockShown,
+    )
 }
 
 @Composable
 private fun Gap(height: androidx.compose.ui.unit.Dp) = Spacer(Modifier.height(height))
-
-/** Partial bar fill when a point does not say which days it covers. */
-private const val DEFAULT_PARTIAL_FILL = 0.5f
 
 /**
  * [content] with a coachmark laid over its top, 12 dp down (mockups: `position: absolute; top: space-3`): the
@@ -299,450 +328,6 @@ private fun WithCoachmark(show: Boolean, text: String, vm: AnalyticsHandlers, co
             onNever = { vm.nextHint(stop = true) },
             modifier = Modifier.padding(top = PfTheme.dimens.space3).zIndex(1f),
         )
-    }
-}
-
-/** A screen block under one test tag — the tags match the `analytics.block.*` flags that switch the blocks off. */
-@Composable
-private fun Block(tag: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().testTag(tag), content = content)
-}
-
-/** 2×2 tiles as on the mockup: «Доходы минус расходы», forecast, «Расходы в день», «Доходы». */
-@Composable
-private fun Tiles(a: Analytics, vm: AnalyticsHandlers, actions: AnalyticsActions) {
-    val tiles = a.tiles ?: return
-    val params = a.params ?: return
-    val period = a.period ?: return
-    val d = PfTheme.dimens
-    fun open(tile: String, f: OperationsFilter?): (() -> Unit)? = f?.let { { vm.onTileOpened(tile); actions.openSearch(it) } }
-    val balance: @Composable (Modifier) -> Unit = { m ->
-        Tile("Доходы минус расходы", tiles.balance, a, m, note = AnalyticsTexts.share(tiles.balance).let { if (tiles.balance.shareOfIncome != null && it.endsWith("дохода")) "$it · по выписке" else it }, chartId = AnalyticsTags.TILE_BALANCE)
-    }
-    val forecast: (@Composable (Modifier) -> Unit)? = tiles.forecast?.let { f ->
-        { m ->
-            // With stale data the forecast is replaced by the fact (api.md 6.1 `stale_data`).
-            val staleFact = f.status.effective == MetricStatus.LOCKED && f.lock?.reason == LockReason.STALE_DATA
-            if (staleFact) {
-                PfStatTile("Расходы", m.testTag(AnalyticsTags.TILE_FORECAST), value = tiles.expense.value?.format(), note = periodCaption(period), chartId = AnalyticsTags.TILE_FORECAST, onClick = open("expense", tiles.expense.filters))
-            } else {
-                Tile(
-                    AnalyticsTexts.forecastLabel(params.period), f, a, m, note = AnalyticsTexts.forecastNote(params.date),
-                    approx = true, chartId = AnalyticsTags.TILE_FORECAST,
-                )
-            }
-        }
-    }
-    val daily: @Composable (Modifier) -> Unit = { m ->
-        val note = if (params.period == PeriodTypeCode.MONTH) AnalyticsTexts.dailyComparison(tiles.dailyExpense.comparison) else AnalyticsTexts.dailyAverageOver(period)
-        Tile("Расходы в день", tiles.dailyExpense, a, m, note = note, chartId = AnalyticsTags.TILE_DAILY)
-    }
-    val income: @Composable (Modifier) -> Unit = { m ->
-        Tile("Доходы", tiles.income, a, m, sign = Money.Sign.ALWAYS, onClick = open("income", tiles.income.filters), chartId = AnalyticsTags.TILE_INCOME)
-    }
-    // Without a forecast (past periods) the expense of the period takes its place, so the grid stays 2×2.
-    val second: @Composable (Modifier) -> Unit = forecast ?: { m ->
-        Tile("Расходы", tiles.expense, a, m, note = periodCaption(period), onClick = open("expense", tiles.expense.filters), chartId = AnalyticsTags.TILE_EXPENSE)
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(d.space4)) {
-        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(d.space4)) {
-            balance(Modifier.weight(1f).fillMaxHeight())
-            second(Modifier.weight(1f).fillMaxHeight())
-        }
-        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(d.space4)) {
-            daily(Modifier.weight(1f).fillMaxHeight())
-            income(Modifier.weight(1f).fillMaxHeight())
-        }
-    }
-}
-
-@Composable
-private fun Tile(
-    label: String,
-    metric: MetricLike,
-    a: Analytics,
-    modifier: Modifier = Modifier,
-    note: String? = null,
-    sign: Money.Sign = Money.Sign.AUTO,
-    approx: Boolean = false,
-    onClick: (() -> Unit)? = null,
-    chartId: String,
-) {
-    val value = (metric as? Metric)?.value
-    // The chart id doubles as the test tag («analytics.tile.income» …).
-    if (!metric.isReady) {
-        PfStatTile(label, modifier.testTag(chartId), locked = true, lockedText = AnalyticsTexts.lock(metric.lock, a.state), chartId = chartId)
-    } else {
-        val shown = value?.format(sign)
-        PfStatTile(
-            label, modifier.testTag(chartId),
-            value = shown?.let { if (approx) "≈$it" else it },
-            valueLabel = shown?.let { if (approx) "около $it" else it },
-            note = note, chartId = chartId, onClick = onClick,
-        )
-    }
-}
-
-/** «Расходы по месяцам» right after the tiles, with the comparison and the average under the bars. */
-@Composable
-private fun ExpenseChart(a: Analytics, chart: ru.finassist.pf.core.api.model.MonthlyChart) {
-    val params = a.params ?: return
-    val d = PfTheme.dimens
-    Gap(d.space6)
-    PfSectionTitle("Расходы по месяцам")
-    Gap(d.space2)
-    if (!chart.isReady || chart.points.isNullOrEmpty()) {
-        PfInsightCard(PfIcons.BAR_CHART, "График по месяцам", state = InsightState.LOCKED, lockedText = AnalyticsTexts.lock(chart.lock, a.state))
-        return
-    }
-    val points = chart.points!!
-    // Expenses are signed (refunds can exceed purchases): scale by the largest magnitude, keep the sign.
-    val maxValue = points.mapNotNull { it.expense?.minor?.let { m -> kotlin.math.abs(m) } }.maxOrNull()?.coerceAtLeast(1) ?: 1
-    // Month mode highlights the selected month, a quarter its last month; a year highlights none (mockup `AnalyticsYear`).
-    val selected = points.indexOfFirst { it.month == params.date.value }
-    val highlight = when {
-        selected >= 0 -> selected
-        params.period == PeriodTypeCode.YEAR -> -1
-        else -> points.lastIndex
-    }
-    PfCard {
-        PfBarChart(
-            chartId = "analytics.expense.monthly",
-            points = points.map { p ->
-                val ym = YearMonth.parse(p.month)
-                val note = AnalyticsTexts.barNote(p)
-                BarPoint(
-                    key = p.month,
-                    label = RussianDates.monthShort(ym.month),
-                    spokenLabel = RussianDates.monthTitle(ym) + (note?.let { ", $it" } ?: ""),
-                    value = p.expense?.minor?.toFloat()?.div(maxValue),
-                    display = p.expense?.format() ?: "нет данных",
-                    partial = p.coverage.effective == Coverage.PARTIAL,
-                    partialFill = AnalyticsTexts.partialFill(p) ?: DEFAULT_PARTIAL_FILL,
-                    note = note,
-                )
-            },
-            highlight = highlight,
-            height = 96.dp,
-        )
-        val expense = a.tiles?.expense
-        val main = if (params.period == PeriodTypeCode.MONTH) {
-            expense?.value?.let { AnalyticsTexts.comparison(it, expense.comparison, params.period, params.date) }
-        } else {
-            AnalyticsTexts.peakMonth(points)
-        }
-        main?.let { Text(it, style = PfTheme.type.body, color = PfTheme.colors.text, modifier = Modifier.padding(top = d.space4)) }
-        val secondary = if (params.period == PeriodTypeCode.YEAR) {
-            AnalyticsTexts.yearChartNote(points, a.period?.isCurrent == true)
-        } else {
-            AnalyticsTexts.typical(expense?.typical)
-        }
-        secondary?.let {
-            Text(it, style = PfTheme.type.hint, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = d.space1))
-        }
-    }
-}
-
-/** The closing section: «Доходы минус расходы» as an amount, an explanation and the share of income by month. */
-@Composable
-private fun BalanceSection(a: Analytics) {
-    val balance = a.tiles?.balance?.takeIf { it.isReady } ?: return
-    val params = a.params ?: return
-    val d = PfTheme.dimens
-    val points = a.monthlyChart?.takeIf { it.isReady }?.points.orEmpty()
-    val withChart = points.isNotEmpty()
-    Gap(d.space6)
-    PfSectionTitle(if (withChart) "Доходы минус расходы по месяцам" else "Доходы минус расходы")
-    Gap(d.space2)
-    PfCard {
-        balance.value?.let { PfAmountText(it.format(), style = PfTheme.type.amountLg, color = PfTheme.colors.text) }
-        Text(AnalyticsTexts.balanceExplained(balance, withChart), style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = d.space1))
-        if (withChart) {
-            // Share of income kept per month (api.md 6.1); a month where more was spent than earned goes below the baseline.
-            val shares = points.map { AnalyticsTexts.balanceShare(it) }
-            val maxShare = shares.filterNotNull().maxOfOrNull { kotlin.math.abs(it) }?.takeIf { it > 0 } ?: 1.0
-            val selected = points.indexOfFirst { it.month == params.date.value }
-            Gap(d.space4)
-            PfBarChart(
-                chartId = "analytics.balance.monthly",
-                points = points.mapIndexed { i, p ->
-                    val ym = YearMonth.parse(p.month)
-                    val share = shares[i]
-                    BarPoint(
-                        key = p.month,
-                        label = RussianDates.monthShort(ym.month),
-                        spokenLabel = RussianDates.monthTitle(ym),
-                        value = share?.let { (it / maxShare).toFloat() },
-                        display = share?.let { "${if (it < 0) Money.MINUS else ""}${kotlin.math.abs((it * 100).roundToInt())}%" } ?: "нет данных",
-                        partial = p.coverage.effective == Coverage.PARTIAL,
-                        partialFill = AnalyticsTexts.partialFill(p) ?: DEFAULT_PARTIAL_FILL,
-                        note = AnalyticsTexts.barNote(p),
-                    )
-                },
-                highlight = if (selected >= 0) selected else points.lastIndex,
-                height = 64.dp,
-                showValues = true,
-            )
-        }
-    }
-}
-
-private fun periodCaption(p: ru.finassist.pf.core.api.model.AnalyticsPeriodInfo): String {
-    val from = p.dataFrom?.toLocalDate() ?: p.range.from.toLocalDate()
-    val to = p.dataTo?.toLocalDate() ?: RussianDates.lastDayOf(p.range)
-    return RussianDates.dayRange(from, to)
-}
-
-private const val TOP_CATEGORIES = 4
-
-/**
- * «Расходы по категориям»: «Всего · 1–25 сентября» with the amount above the card, top 4 bars, «Все категории»
- * under the card. Bar length is relative to the largest positive amount (api.md 6.1).
- */
-@Composable
-private fun ExpenseBreakdown(
-    b: CategoryBreakdown,
-    total: Money?,
-    caption: String,
-    totalCaption: String,
-    state: AnalyticsUiState,
-    vm: AnalyticsHandlers,
-    openSearch: (OperationsFilter) -> Unit,
-) {
-    val d = PfTheme.dimens
-    PfSectionTitle("Расходы по категориям")
-    Gap(d.space2)
-    if (b.status != BreakdownStatus.READY || b.items.isEmpty()) {
-        Text("Расходов за $caption нет", style = PfTheme.type.body, color = PfTheme.colors.textMuted)
-        return
-    }
-    if (total != null) {
-        // Mockup: `align-items: baseline` — the caption (14/20) and the amount (20/24) share a baseline.
-        Row(horizontalArrangement = Arrangement.spacedBy(d.space3)) {
-            Text("Всего · $totalCaption", style = PfTheme.type.body, color = PfTheme.colors.textMuted, modifier = Modifier.weight(1f).alignByBaseline())
-            PfAmountText(total.format(), style = PfTheme.type.amountMd, color = PfTheme.colors.text, modifier = Modifier.alignByBaseline())
-        }
-    }
-    // The coachmark lies over the card (mockup `AnalyticsHintCategories`): its 12 dp offset counts from the «Всего»
-    // row, so the 8 dp gap to the card is inside the wrapper.
-    WithCoachmark(show = state.hint == AnalyticsHint.CATEGORIES, text = "Категории проставили мы — любую можно поправить в операции", vm = vm) {
-        Gap(d.space2)
-        CategoryCard(b, state, openSearch)
-    }
-    if (b.items.size > TOP_CATEGORIES) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            PfLink(if (state.allExpenseCategories) "Свернуть" else "Все категории", onClick = vm::toggleAllCategories, modifier = Modifier.testTag(AnalyticsTags.ALL_CATEGORIES))
-        }
-    }
-}
-
-@Composable
-private fun CategoryCard(b: CategoryBreakdown, state: AnalyticsUiState, openSearch: (OperationsFilter) -> Unit) {
-    val d = PfTheme.dimens
-    val maxPositive = b.items.maxOf { it.amount.minor }.coerceAtLeast(1)
-    val expanded = state.allExpenseCategories
-    val visible = if (expanded) b.items else b.items.take(TOP_CATEGORIES)
-    PfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(d.space2)) {
-            visible.forEachIndexed { i, item ->
-                PfCategoryBar(
-                    chartId = "analytics.expense.categories",
-                    index = i,
-                    icon = item.categoryIcon,
-                    label = item.categoryName + (item.note?.let { " · $it" } ?: ""),
-                    amount = item.amount.format(),
-                    percent = if (item.amount.minor > 0) item.amount.minor.toFloat() / maxPositive else 0f,
-                    share = item.share?.let { "${(it * 100).toInt()}%" },
-                    spoken = "${item.categoryName}: ${item.amount.format()}, ${countWithNoun(item.operationCount, "операция", "операции", "операций")}",
-                    onClick = { openSearch(item.filters) },
-                    modifier = Modifier.testTag(AnalyticsTags.EXPENSE_CATEGORY),
-                )
-            }
-        }
-    }
-}
-
-/** «Доходы»: plain rows with the note under the name, no bars or shares (mockup). */
-@Composable
-private fun IncomeBreakdown(
-    b: CategoryBreakdown,
-    periodType: PeriodTypeCode,
-    period: ru.finassist.pf.core.api.model.AnalyticsPeriodInfo,
-    openSearch: (OperationsFilter) -> Unit,
-) {
-    val d = PfTheme.dimens
-    val months = if (periodType != PeriodTypeCode.MONTH) {
-        val from = period.dataFrom?.let(YearMonth::from)
-        val to = period.dataTo?.let { YearMonth.from(it.minusSeconds(1)) }
-        if (from != null && to != null) " · ${RussianDates.monthRange(from, to)}" else ""
-    } else ""
-    PfSectionTitle("Доходы$months")
-    Gap(d.space2)
-    if (b.status != BreakdownStatus.READY || b.items.isEmpty()) {
-        Text("Доходов за ${periodCaption(period)} нет", style = PfTheme.type.body, color = PfTheme.colors.textMuted)
-        return
-    }
-    PfCard {
-        b.items.forEachIndexed { i, item ->
-            PfDataRow(
-                item.categoryName,
-                item.amount.format(Money.Sign.ALWAYS),
-                sublabel = item.note.takeIf { periodType == PeriodTypeCode.MONTH },
-                tone = ValueTone.POSITIVE,
-                onClick = { openSearch(item.filters) },
-                divider = i < b.items.lastIndex,
-                modifier = Modifier.testTag(AnalyticsTags.INCOME_CATEGORY),
-            )
-        }
-    }
-}
-
-@Composable
-private fun Insights(
-    insights: ru.finassist.pf.core.api.model.Insights,
-    a: Analytics,
-    blocks: AnalyticsBlocks,
-    vm: AnalyticsHandlers,
-    actions: AnalyticsActions,
-) {
-    val anyOn = blocks.regularPayments || blocks.notableSpending || blocks.bankFees || blocks.smallFrequent
-    if (!anyOn) return
-    val d = PfTheme.dimens
-    val period = a.period ?: return
-    Gap(d.space6)
-    PfSectionTitle("Регулярные платежи и заметные траты")
-    Gap(d.space2)
-    fun stateOf(m: MetricLike) = when (m.status.effective) {
-        MetricStatus.READY -> InsightState.READY
-        MetricStatus.TENTATIVE -> InsightState.TENTATIVE
-        MetricStatus.NONE -> InsightState.EMPTY
-        else -> InsightState.LOCKED
-    }
-    val basisMonths: (MetricLike) -> String? = { m ->
-        m.basis?.range?.let { r -> RussianDates.monthRange(YearMonth.from(r.from), YearMonth.from(r.to.minusDays(1))) }
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(d.space3)) {
-        if (blocks.regularPayments) {
-            val r = insights.regularPayments
-            PfInsightCard(
-                icon = PfIcons.REPEAT,
-                title = "Подписки и регулярные платежи",
-                amount = r.value?.format(),
-                description = when (stateOf(r)) {
-                    InsightState.EMPTY -> listOfNotNull("Регулярных платежей не нашли", basisMonths(r)?.let { "за $it" }).joinToString(" ")
-                    else -> listOfNotNull(
-                        "в месяц",
-                        r.count?.let { countWithNoun(it, "списание", "списания", "списаний") + " каждый месяц" + (r.basis?.range?.let { b -> " с ${RussianDates.monthGenitive(b.from.month)}" } ?: "") },
-                    ).joinToString(" · ")
-                },
-                state = stateOf(r),
-                lockedText = AnalyticsTexts.lock(r.lock, a.state),
-                chartId = "analytics.insight.regular",
-                onClick = r.filters?.let { f -> { actions.openSearch(f) } },
-                modifier = Modifier.testTag(AnalyticsTags.BLOCK_REGULAR_PAYMENTS),
-            ) {
-                // Mockup `Analytics`: the payments under the title, a line above the list and between the rows; each
-                // row is plain (the card opens the search) with its own «Не подписка» under it.
-                val shown = r.items.orEmpty().take(3)
-                val rest = r.items.orEmpty().drop(3)
-                if (shown.isNotEmpty()) {
-                    Column(Modifier.padding(top = d.space2)) {
-                        PfDivider()
-                        shown.forEach { p ->
-                            PfDataRow(p.title, p.amount.format(), sublabel = p.scheduleName, divider = false)
-                            Box(Modifier.offset(x = -d.space4)) {
-                                PfButton(
-                                    "Не подписка", onClick = { vm.dismissRegular(p.id) }, variant = ButtonVariant.GHOST,
-                                    modifier = Modifier.semantics { contentDescription = "Не подписка — ${p.title}" },
-                                )
-                            }
-                            PfDivider()
-                        }
-                        if (rest.isNotEmpty()) {
-                            val sum = rest.fold(Money.ZERO) { acc, p -> acc + p.monthlyAmount }
-                            PfDataRow("Ещё ${rest.size}", sum.format(), tone = ValueTone.MUTED, divider = false)
-                        }
-                    }
-                }
-            }
-        }
-        if (blocks.notableSpending) {
-            val n = insights.notableSpending
-            val items = n.items.orEmpty()
-            if (stateOf(n) == InsightState.READY && items.isNotEmpty()) {
-                // One card per category, as on the mockup («Заправки 7 200 ₽ · В 2,3 раза больше обычного…»).
-                items.forEach { item ->
-                    PfInsightCard(
-                        icon = item.categoryIcon,
-                        title = item.categoryName,
-                        amount = item.amount.format(),
-                        description = AnalyticsTexts.notable(item.amount, item.typicalAmount, n.basis?.range),
-                        chartId = "analytics.insight.notable",
-                        onClick = { actions.openSearch(item.filters) },
-                        modifier = Modifier.testTag(AnalyticsTags.BLOCK_NOTABLE_SPENDING),
-                    )
-                }
-            } else {
-                PfInsightCard(
-                    icon = PfIcons.BAR_CHART,
-                    title = "Заметные траты",
-                    description = if (stateOf(n) == InsightState.EMPTY) {
-                        "Заметных трат не нашли — расходы по категориям в пределах обычного" + (basisMonths(n)?.let { " за $it" } ?: "")
-                    } else null,
-                    state = stateOf(n),
-                    lockedText = AnalyticsTexts.lock(n.lock, a.state),
-                    chartId = "analytics.insight.notable",
-                    modifier = Modifier.testTag(AnalyticsTags.BLOCK_NOTABLE_SPENDING),
-                )
-            }
-        }
-        if (blocks.bankFees) {
-            val f = insights.bankFees
-            // Month names have the same accusative and nominative form: «за сентябрь».
-            val forPeriod = "за ${RussianDates.monthNominative(period.range.from.month)}"
-            PfInsightCard(
-                icon = PfIcons.PERCENT,
-                title = "Комиссии и проценты банку",
-                amount = f.value?.format(),
-                description = if (stateOf(f) == InsightState.EMPTY) "Комиссий $forPeriod нет" else listOfNotNull(forPeriod, f.kindsName).joinToString(" · "),
-                state = stateOf(f),
-                lockedText = AnalyticsTexts.lock(f.lock, a.state),
-                chartId = "analytics.insight.fees",
-                onClick = f.filters?.let { filter -> { actions.openSearch(filter) } },
-                modifier = Modifier.testTag(AnalyticsTags.BLOCK_BANK_FEES),
-            )
-        }
-        if (blocks.smallFrequent) {
-            val s = insights.smallFrequent
-            val groups = s.items.orEmpty()
-            val first = groups.firstOrNull()
-            PfInsightCard(
-                icon = "coffee",
-                title = "Мелкие частые траты",
-                amount = s.value?.let { "≈${it.format()}" },
-                description = when {
-                    stateOf(s) == InsightState.EMPTY -> "Мелких частых трат не нашли"
-                    first != null -> AnalyticsTexts.smallFrequent(first.title, first.count, first.averageAmount, first.yearlyAmount)
-                    else -> null
-                },
-                state = stateOf(s),
-                lockedText = AnalyticsTexts.lock(s.lock, a.state),
-                chartId = "analytics.insight.small",
-                // The card shows the first group, so it opens that group; the other groups have their own rows.
-                onClick = first?.let { g -> { actions.openSearch(g.filters) } },
-                modifier = Modifier.testTag(AnalyticsTags.BLOCK_SMALL_FREQUENT),
-            ) {
-                // The first group is the description; any further groups stay as rows.
-                groups.drop(1).forEach { g ->
-                    PfDataRow(
-                        g.title, "${g.monthlyAmount.format()} в месяц",
-                        sublabel = "${countWithNoun(g.count, "раз", "раза", "раз")} в месяц · по ${g.averageAmount.format()}",
-                        onClick = { actions.openSearch(g.filters) },
-                        divider = false,
-                    )
-                }
-            }
-        }
     }
 }
 

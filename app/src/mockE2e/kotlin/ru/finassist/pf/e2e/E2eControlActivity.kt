@@ -31,6 +31,7 @@ import javax.inject.Inject
  * - `network_delay_ms=<n>` — latency of every backend request (keeps a «busy» state up long enough to act on it).
  * - `assistant_model_errors=<n>` — the next n assistant answers fail with MODEL_ERROR («Повторить» under them).
  * - `unknown_codes=true|false` — the fake server sends codes the client does not know (`MockCodes`, FIN-83).
+ * - `failing_blocks=<id>,<id>` — those Analytics blocks fail to build and come as `unavailable` (FIN-5); empty — none.
  *
  * Backend values live until the process dies: set them after `launchApp`.
  *
@@ -67,6 +68,7 @@ class E2eControlActivity : ComponentActivity() {
                 name == "network_delay_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(networkDelayMs = it) }
                 name == "assistant_model_errors" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(assistantModelErrors = it) }
                 name == "unknown_codes" -> backend.config = backend.config.copy(unknownCodes = value.toBoolean())
+                name == "failing_blocks" -> backend.config = backend.config.copy(failingBlocks = value.split(',').map(String::trim).filter(String::isNotEmpty).toSet())
                 else -> Log.w(TAG, "unknown parameter $name in $uri")
             }
         }

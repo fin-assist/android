@@ -220,8 +220,8 @@ internal class HttpOperationsApi(private val service: OperationsService) : Opera
 }
 
 internal class HttpAnalyticsApi(private val service: AnalyticsService) : AnalyticsApi {
-    override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?): Analytics =
-        call { service.getAnalytics(period?.code, date?.value, transferMode?.code) }
+    override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?, supports: String?, exp: String?): Analytics =
+        call { service.getAnalytics(period?.code, date?.value, transferMode?.code, supports, exp?.takeIf { it.isNotEmpty() }) }
 
     override suspend fun listPeriods(period: PeriodTypeCode?): AnalyticsPeriodsList =
         call { service.listPeriods(period?.code) }

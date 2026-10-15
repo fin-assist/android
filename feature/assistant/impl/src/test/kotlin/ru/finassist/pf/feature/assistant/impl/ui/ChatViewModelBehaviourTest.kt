@@ -74,7 +74,7 @@ class ChatViewModelBehaviourTest {
     private fun answer(id: String, status: AnswerStatus = AnswerStatus.COMPLETE, errorCode: AnswerErrorCode? = null) =
         Message(id = id, role = MessageRole.ASSISTANT, status = status, errorCode = errorCode, blocks = listOf(text("Ответ $id")), createdAt = now)
 
-    private fun text(t: String) = Block(type = BlockType.TEXT, text = t)
+    private fun text(t: String) = Block.text(t)
 
     private fun askResponse(answerId: String = "a1", remaining: Int = 3) =
         AskResponse(question = question("q-$answerId", "Сколько я трачу на такси?"), answerId = answerId, remainingLimit = remaining)

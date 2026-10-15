@@ -20,7 +20,6 @@ import ru.finassist.pf.core.api.model.AnswerStatus
 import ru.finassist.pf.core.api.model.AskRequest
 import ru.finassist.pf.core.api.model.AssistantLimit
 import ru.finassist.pf.core.api.model.Block
-import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.Chip
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.IdempotencyKey
@@ -382,8 +381,8 @@ class ChatViewModel @Inject constructor(
          * that block's text.
          */
         fun appendChunk(blocks: List<Block>, index: Int, text: String): List<Block> = when {
-            index >= blocks.size -> blocks + Block(type = BlockType.TEXT, text = text)
-            else -> blocks.mapIndexed { i, b -> if (i == index) b.copy(text = b.text.orEmpty() + text) else b }
+            index >= blocks.size -> blocks + Block.text(text)
+            else -> blocks.mapIndexed { i, b -> if (i == index) Block.text(b.text.orEmpty() + text) else b }
         }
     }
 }

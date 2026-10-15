@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import ru.finassist.pf.core.toggles.Experiment
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.toggles.flagsVersion
@@ -52,6 +53,7 @@ class RuStoreFeatureFlags @Inject constructor(
     private val changesFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     @Volatile private var values: Map<String, Boolean> = emptyMap()
+    @Volatile private var variants: Map<String, String> = emptyMap()
     @Volatile private var account: String? = null
 
     private val client: RemoteConfigClient? = appId.takeIf { it.isNotBlank() }?.let { id ->
@@ -81,6 +83,8 @@ class RuStoreFeatureFlags @Inject constructor(
     }
 
     override fun isEnabled(flag: Flag): Boolean = values[flag.key] ?: flag.defaultValue
+
+    override fun variant(experiment: Experiment): String = experiment.variantOf(variants[experiment.key])
 
     override val changes: Flow<Unit> = changesFlow
 
@@ -112,6 +116,11 @@ class RuStoreFeatureFlags @Inject constructor(
         values = Flag.entries.mapNotNull { flag ->
             if (!config.containsKey(flag.key)) return@mapNotNull null
             runCatching { flag.key to config.getBoolean(flag.key) }.getOrNull()
+        }.toMap()
+        // Experiment variants are strings (FIN-9); a missing or unknown one is the default variant.
+        variants = Experiment.entries.mapNotNull { e ->
+            if (!config.containsKey(e.key)) return@mapNotNull null
+            runCatching { e.key to config.getString(e.key) }.getOrNull()
         }.toMap()
         changesFlow.tryEmit(Unit)
     }

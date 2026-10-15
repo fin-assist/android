@@ -13,6 +13,8 @@
     ".maestro/flows/operations/unknown_filter_kind.yaml": 29,
     ".maestro/flows/analytics/overview.yaml": 10,
     ".maestro/flows/analytics/blocks_switched_off.yaml": 11,
+    ".maestro/flows/analytics/block_unavailable.yaml": 30,
+    ".maestro/flows/analytics/unknown_blocks.yaml": 31,
     ".maestro/flows/assistant/ask_question.yaml": 12,
     ".maestro/flows/assistant/daily_limit.yaml": 13,
     ".maestro/flows/statements/upload_and_history.yaml": 14,

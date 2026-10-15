@@ -12,6 +12,7 @@ core/common               Money, dates/periods, AppError, Result helpers (JVM)
 core/api                  client API contract: DTOs + service interfaces from openapi.yaml (JVM)
 core/network              HTTP implementation of core/api: OkHttp, Retrofit, SSE, auth, idempotency (prod)
 core/designsystem         tokens, theme, components, chart animation (Compose)
+core/blocks               renderers of the block catalog (api.md «Блоки»): registry, `supports`, Analytics and assistant (Compose, FIN-7)
 core/navigation           FeatureEntry, Navigator, shared route arguments
 core/toggles              FeatureFlags interface + flag registry with code defaults (JVM)
 core/tracking             Tracker / CrashReporter interfaces, event naming, typed crash context (JVM)

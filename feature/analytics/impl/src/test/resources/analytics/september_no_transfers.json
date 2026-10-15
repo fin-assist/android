@@ -1,0 +1,482 @@
+{
+    "has_data": true,
+    "params": {
+        "period": "month",
+        "date": "2026-09",
+        "transfer_mode": "without"
+    },
+    "period": {
+        "range": {
+            "from": "2026-09-01T00:00:00+03:00",
+            "to": "2026-10-01T00:00:00+03:00"
+        },
+        "is_current": true,
+        "coverage": "partial",
+        "data_from": "2026-09-01T00:00:00+03:00",
+        "data_to": "2026-09-25T00:00:00+03:00",
+        "gaps": []
+    },
+    "navigation": {
+        "previous": "2026-08"
+    },
+    "blocks": [
+        {
+            "id": "tiles",
+            "type": "tile_group",
+            "alt_text": "Доходы минус расходы 64 670 ₽, Прогноз расходов 94 500 ₽, Расходы в день 3 150 ₽, Доходы 143 390 ₽",
+            "data": {
+                "tiles": [
+                    {
+                        "id": "balance",
+                        "title": "Доходы минус расходы",
+                        "value": 6467000.0,
+                        "value_kind": "amount",
+                        "caption": "45% дохода · по выписке"
+                    },
+                    {
+                        "id": "forecast",
+                        "title": "Прогноз расходов",
+                        "value": 9450000.0,
+                        "value_kind": "amount",
+                        "approx": true,
+                        "caption": "на сентябрь"
+                    },
+                    {
+                        "id": "daily_expense",
+                        "title": "Расходы в день",
+                        "value": 315000.0,
+                        "value_kind": "amount",
+                        "caption": "в августе — 2 690 ₽"
+                    },
+                    {
+                        "id": "income",
+                        "title": "Доходы",
+                        "value": 1.4339E7,
+                        "value_kind": "amount",
+                        "show_plus": true,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "id": "monthly_chart",
+            "type": "chart",
+            "title": "Расходы по месяцам",
+            "alt_text": "Расходы по месяцам: апрель 85 100 ₽, май 73 000 ₽, июнь 82 600 ₽, июль 89 800 ₽, август 83 400 ₽, сентябрь 78 720 ₽",
+            "data": {
+                "kind": "bar",
+                "value_kind": "amount",
+                "points": [
+                    {
+                        "range": {
+                            "from": "2026-04-01T00:00:00+03:00",
+                            "to": "2026-05-01T00:00:00+03:00"
+                        },
+                        "value": 8510000.0,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-05-01T00:00:00+03:00",
+                            "to": "2026-06-01T00:00:00+03:00"
+                        },
+                        "value": 7300000.0,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-06-01T00:00:00+03:00",
+                            "to": "2026-07-01T00:00:00+03:00"
+                        },
+                        "value": 8260000.0,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-07-01T00:00:00+03:00",
+                            "to": "2026-08-01T00:00:00+03:00"
+                        },
+                        "value": 8980000.0,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-08-01T00:00:00+03:00",
+                            "to": "2026-09-01T00:00:00+03:00"
+                        },
+                        "value": 8340000.0,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-09-01T00:00:00+03:00",
+                            "to": "2026-10-01T00:00:00+03:00"
+                        },
+                        "value": 7872000.0,
+                        "coverage": "partial",
+                        "data_to": "2026-09-25T00:00:00+03:00",
+                        "note": "по 25-е"
+                    }
+                ],
+                "highlight_index": 5,
+                "notes": [
+                    {
+                        "text": "Сентябрь к 25-му — 78 720 ₽, на 16% больше, чем август к этому дню",
+                        "tone": "primary"
+                    },
+                    {
+                        "text": "Среднее за апрель — август — 82 800 ₽"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "expense_categories",
+            "type": "ranked_list",
+            "title": "Расходы по категориям",
+            "alt_text": "Расходы по категориям: Супермаркеты 32 400 ₽, Различные товары 18 100 ₽, Заправки 7 200 ₽, Фастфуд 4 900 ₽, Кафе и рестораны 4 000 ₽, Транспорт 3 400 ₽, Связь 3 420 ₽, Аптеки 2 400 ₽",
+            "data": {
+                "total": {
+                    "label": "Всего · 1–25 сентября",
+                    "value": 7872000.0,
+                    "value_kind": "amount",
+                    "action": {
+                        "type": "open_operations",
+                        "filter": {}
+                    }
+                },
+                "items": [
+                    {
+                        "id": "c_Супермаркеты",
+                        "icon": "cart",
+                        "title": "Супермаркеты",
+                        "value": 3240000.0,
+                        "value_kind": "amount",
+                        "share": 0.41,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Различные товары",
+                        "icon": "package",
+                        "title": "Различные товары",
+                        "value": 1810000.0,
+                        "value_kind": "amount",
+                        "share": 0.23,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Заправки",
+                        "icon": "car",
+                        "title": "Заправки",
+                        "value": 720000.0,
+                        "value_kind": "amount",
+                        "share": 0.09,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Фастфуд",
+                        "icon": "bike",
+                        "title": "Фастфуд",
+                        "value": 490000.0,
+                        "value_kind": "amount",
+                        "share": 0.06,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Кафе и рестораны",
+                        "icon": "coffee",
+                        "title": "Кафе и рестораны",
+                        "value": 400000.0,
+                        "value_kind": "amount",
+                        "share": 0.05,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Транспорт",
+                        "icon": "car",
+                        "title": "Транспорт",
+                        "value": 340000.0,
+                        "value_kind": "amount",
+                        "share": 0.04,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Связь",
+                        "icon": "repeat",
+                        "title": "Связь",
+                        "value": 342000.0,
+                        "value_kind": "amount",
+                        "share": 0.04,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Аптеки",
+                        "icon": "package",
+                        "title": "Аптеки",
+                        "value": 240000.0,
+                        "value_kind": "amount",
+                        "share": 0.03,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    }
+                ],
+                "visible_count": 4,
+                "more_label": "Все категории"
+            }
+        },
+        {
+            "id": "income_categories",
+            "type": "ranked_list",
+            "title": "Доходы",
+            "alt_text": "Доходы: Финансы 142 140 ₽, Дивиденды и купоны 1 250 ₽",
+            "data": {
+                "items": [
+                    {
+                        "id": "c_Финансы",
+                        "icon": "percent",
+                        "title": "Финансы",
+                        "note": "зарплата и проценты",
+                        "value": 1.4214E7,
+                        "value_kind": "amount",
+                        "show_plus": true,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Дивиденды и купоны",
+                        "icon": "bar-chart",
+                        "title": "Дивиденды и купоны",
+                        "note": "по акциям и облигациям",
+                        "value": 125000.0,
+                        "value_kind": "amount",
+                        "show_plus": true,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    }
+                ],
+                "style": "plain"
+            }
+        },
+        {
+            "type": "heading",
+            "data": {
+                "text": "Регулярные платежи и заметные траты"
+            }
+        },
+        {
+            "id": "regular_payments",
+            "type": "insight_card",
+            "alt_text": "Подписки и регулярные платежи: 4 200 ₽: в месяц · 7 списаний каждый месяц с апреля",
+            "data": {
+                "icon": "repeat",
+                "title": "Подписки и регулярные платежи",
+                "value": 420000.0,
+                "value_kind": "amount",
+                "description": "в месяц · 7 списаний каждый месяц с апреля",
+                "items": [
+                    {
+                        "title": "Спортзал",
+                        "sublabel": "1-го числа",
+                        "value": 290000.0,
+                        "value_kind": "amount",
+                        "action": {
+                            "type": "dismiss_regular_payment",
+                            "payment_id": "r1",
+                            "label": "Не подписка"
+                        }
+                    },
+                    {
+                        "title": "Яндекс Плюс",
+                        "sublabel": "12-го числа",
+                        "value": 39900.0,
+                        "value_kind": "amount",
+                        "action": {
+                            "type": "dismiss_regular_payment",
+                            "payment_id": "r2",
+                            "label": "Не подписка"
+                        }
+                    },
+                    {
+                        "title": "Облачное хранилище",
+                        "sublabel": "3-го числа",
+                        "value": 29900.0,
+                        "value_kind": "amount",
+                        "action": {
+                            "type": "dismiss_regular_payment",
+                            "payment_id": "r3",
+                            "label": "Не подписка"
+                        }
+                    }
+                ],
+                "items_more": {
+                    "label": "Ещё 4",
+                    "value": 60200.0,
+                    "value_kind": "amount"
+                }
+            },
+            "action": {
+                "type": "open_operations",
+                "filter": {}
+            }
+        },
+        {
+            "id": "notable_spending",
+            "type": "insight_card",
+            "alt_text": "Заправки: 7 200 ₽: В 2,3 раза больше обычного — обычно около 3 100 ₽ (апрель — август)",
+            "data": {
+                "icon": "car",
+                "title": "Заправки",
+                "value": 720000.0,
+                "value_kind": "amount",
+                "description": "В 2,3 раза больше обычного — обычно около 3 100 ₽ (апрель — август)"
+            },
+            "action": {
+                "type": "open_operations",
+                "filter": {}
+            }
+        },
+        {
+            "id": "bank_fees",
+            "type": "insight_card",
+            "alt_text": "Комиссии и проценты банку: 1 240 ₽: за сентябрь · обслуживание, переводы, снятие наличных",
+            "data": {
+                "icon": "percent",
+                "title": "Комиссии и проценты банку",
+                "value": 124000.0,
+                "value_kind": "amount",
+                "description": "за сентябрь · обслуживание, переводы, снятие наличных"
+            },
+            "action": {
+                "type": "open_operations",
+                "filter": {}
+            }
+        },
+        {
+            "id": "small_frequent",
+            "type": "insight_card",
+            "alt_text": "Мелкие частые траты: 6 400 ₽: в месяц · кофе и перекусы: 23 раза по 280 ₽ — около 77 000 ₽ в год",
+            "data": {
+                "icon": "coffee",
+                "title": "Мелкие частые траты",
+                "value": 640000.0,
+                "value_kind": "amount",
+                "approx": true,
+                "description": "в месяц · кофе и перекусы: 23 раза по 280 ₽ — около 77 000 ₽ в год"
+            },
+            "action": {
+                "type": "open_operations",
+                "filter": {}
+            }
+        },
+        {
+            "id": "balance",
+            "type": "chart",
+            "title": "Доходы минус расходы по месяцам",
+            "alt_text": "Доходы минус расходы по месяцам: 64 670 ₽, апрель 36%, май 46%, июнь 40%, июль 39%, август 40%, сентябрь 45%",
+            "data": {
+                "kind": "bar",
+                "value_kind": "percent",
+                "points": [
+                    {
+                        "range": {
+                            "from": "2026-04-01T00:00:00+03:00",
+                            "to": "2026-05-01T00:00:00+03:00"
+                        },
+                        "value": 0.3599963901088984,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-05-01T00:00:00+03:00",
+                            "to": "2026-06-01T00:00:00+03:00"
+                        },
+                        "value": 0.4599992602729593,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-06-01T00:00:00+03:00",
+                            "to": "2026-07-01T00:00:00+03:00"
+                        },
+                        "value": 0.3999970944169221,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-07-01T00:00:00+03:00",
+                            "to": "2026-08-01T00:00:00+03:00"
+                        },
+                        "value": 0.38999952449851577,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-08-01T00:00:00+03:00",
+                            "to": "2026-09-01T00:00:00+03:00"
+                        },
+                        "value": 0.4,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-09-01T00:00:00+03:00",
+                            "to": "2026-10-01T00:00:00+03:00"
+                        },
+                        "value": 0.44999895197971035,
+                        "coverage": "partial",
+                        "data_to": "2026-09-25T00:00:00+03:00",
+                        "note": "по 25-е"
+                    }
+                ],
+                "highlight_index": 5,
+                "show_values": true,
+                "summary": {
+                    "value": 6467000.0,
+                    "value_kind": "amount"
+                },
+                "caption": "45% дохода: на столько доходы по выписке больше расходов. На графике — та же доля по месяцам"
+            }
+        }
+    ],
+    "state": {
+        "stale": false,
+        "last_operation_at": "2026-09-25T00:00:00+03:00",
+        "data_from": "2026-04-01T00:00:00+03:00",
+        "data_to": "2026-09-25T00:00:00+03:00",
+        "full_months": 5,
+        "unread_lines_count": 0,
+        "calculated_at": "2026-09-26T00:00:00+03:00",
+        "recalculating": false
+    }
+}

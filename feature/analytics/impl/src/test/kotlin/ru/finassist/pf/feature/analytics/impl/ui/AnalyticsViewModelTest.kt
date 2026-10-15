@@ -1,5 +1,12 @@
 package ru.finassist.pf.feature.analytics.impl.ui
 
+import ru.finassist.pf.core.api.model.ActionType
+import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.BlockAction
+import ru.finassist.pf.core.api.model.BlockType
+import ru.finassist.pf.core.api.model.OperationsFilter
+import ru.finassist.pf.core.blocks.CatalogV1
+import ru.finassist.pf.core.toggles.Experiment
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -62,8 +69,12 @@ class AnalyticsViewModelTest {
         val dismissed = mutableListOf<String>()
         var dismissFailure: AppError? = null
 
-        override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?): Analytics {
+        /** `supports` and `exp` of every request (FIN-4, FIN-9). */
+        val extras = mutableListOf<Pair<String?, String?>>()
+
+        override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?, supports: String?, exp: String?): Analytics {
             requests += Request(period, date, transferMode)
+            extras += supports to exp
             val next = if (answers.size > 1) answers.removeFirst() else answers.first()
             if (next is AppError) throw next
             return next as Analytics
@@ -109,9 +120,13 @@ class AnalyticsViewModelTest {
         override val categoryChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     }
 
-    private class FakeFlags(private val values: MutableMap<Flag, Boolean> = mutableMapOf()) : FeatureFlags {
+    private class FakeFlags(
+        private val values: MutableMap<Flag, Boolean> = mutableMapOf(),
+        private val variants: MutableMap<Experiment, String> = mutableMapOf(),
+    ) : FeatureFlags {
         override val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
         override fun isEnabled(flag: Flag): Boolean = values[flag] ?: flag.defaultValue
+        override fun variant(experiment: Experiment): String = variants[experiment] ?: experiment.defaultVariant
         override val version: String = "test"
         override suspend fun setUser(userId: String?) = Unit
         override suspend fun refresh() = Unit
@@ -206,18 +221,26 @@ class AnalyticsViewModelTest {
     @Test fun `the blocks follow their flags`() {
         val off = Flag.entries.associateWith { false }.toMutableMap()
         val vm = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(off), tracker)
-        assertEquals(AnalyticsBlocks(false, false, false, false, false, false, false, false, false, false, false), vm.state.value.blocks)
+        assertEquals(
+            AnalyticsBlocks(
+                hidden = setOf(
+                    "tiles", "expense_categories", "income_categories", "monthly_chart",
+                    "regular_payments", "notable_spending", "bank_fees", "small_frequent",
+                ),
+                transfersFilter = false, assistant = false, upload = false,
+            ),
+            vm.state.value.blocks,
+        )
 
         val on = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(Flag.entries.associateWith { true }.toMutableMap()), tracker)
-        assertEquals(AnalyticsBlocks(true, true, true, true, true, true, true, true, true, true, true), on.state.value.blocks)
+        assertEquals(AnalyticsBlocks(), on.state.value.blocks)
     }
 
     @Test fun `a single block switched off remotely disappears from the open screen`() {
         api.answers += data()
         val vm = opened()
         flags.set(Flag.ANALYTICS_BLOCK_BANK_FEES, false)
-        assertFalse(vm.state.value.blocks.bankFees)
-        assertTrue(vm.state.value.blocks.smallFrequent)
+        assertEquals(setOf("bank_fees"), vm.state.value.blocks.hidden)
         assertEquals(1, api.requests.size) // a block is not a request parameter
     }
 
@@ -434,12 +457,12 @@ class AnalyticsViewModelTest {
         assertNull(vm.state.value.periods)
     }
 
-    @Test fun `all expense categories toggle`() {
+    @Test fun `a list is shown in full and folded back by its id`() {
         val vm = vm()
-        vm.toggleAllCategories()
-        assertTrue(vm.state.value.allExpenseCategories)
-        vm.toggleAllCategories()
-        assertFalse(vm.state.value.allExpenseCategories)
+        vm.toggleExpanded("expense_categories")
+        assertEquals(setOf("expense_categories"), vm.state.value.expanded)
+        vm.toggleExpanded("expense_categories")
+        assertEquals(emptySet(), vm.state.value.expanded)
     }
 
     @Test fun `a dismissed regular payment is reported and the analytics recalculated`() {
@@ -465,9 +488,51 @@ class AnalyticsViewModelTest {
         assertTrue(tracker.events.none { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
     }
 
-    @Test fun `an opened tile is reported with its name`() {
-        vm().onTileOpened("expense")
-        assertEquals(Events.ANALYTICS_TILE_OPENED to mapOf("tile" to "expense"), tracker.events.single())
+    @Test fun `a tile opening the operations is reported and navigates`() {
+        val navigated = mutableListOf<BlockAction>()
+        val action = BlockAction(ActionType.OPEN_OPERATIONS, filter = OperationsFilter(categoryId = "c"))
+        vm().onAction(Block(id = "tiles", type = BlockType.TILE_GROUP), action) { navigated += it }
+        assertEquals(Events.ANALYTICS_TILE_OPENED to mapOf("block" to "tiles"), tracker.events.single())
+        assertEquals(listOf(action), navigated)
+    }
+
+    @Test fun `«Не подписка» of a block dismisses the payment, an unknown action does nothing`() {
+        api.answers += data()
+        val vm = opened()
+        val navigated = mutableListOf<BlockAction>()
+        val card = Block(id = "regular_payments", type = BlockType.INSIGHT_CARD)
+        vm.onAction(card, BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = "rp_1", label = "Не подписка")) { navigated += it }
+        vm.onAction(card, BlockAction(ActionType.UNKNOWN)) { navigated += it }
+        assertEquals(listOf("rp_1"), api.dismissed)
+        assertTrue(navigated.isEmpty())
+    }
+
+    @Test fun `every request says which blocks this client draws and the experiment variants (FIN-4, FIN-9)`() {
+        api.answers += data()
+        opened()
+        val (supports, exp) = api.extras.single()
+        assertEquals(CatalogV1.registry().supports, supports)
+        assertTrue(supports!!.contains("tile_group@1") && supports.contains("insight_card@1"))
+        assertEquals("analytics_order:a", exp)
+
+        val b = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(variants = mutableMapOf(Experiment.ANALYTICS_ORDER to "b")), tracker)
+        b.init(null)
+        assertEquals("analytics_order:b", api.extras.last().second)
+    }
+
+    @Test fun `a drawn block is exposed once per response with the experiment variants (FIN-9)`() {
+        api.answers += data()
+        val vm = opened()
+        val tiles = Block(id = "tiles", type = BlockType.TILE_GROUP)
+        vm.onBlockShown(tiles)
+        vm.onBlockShown(tiles)
+        vm.onBlockShown(Block(type = BlockType.HEADING))
+        val exposures = tracker.events.filter { it.first == Events.ANALYTICS_BLOCK_EXPOSED }
+        assertEquals(listOf(mapOf("block" to "tiles", "exp" to "analytics_order:a")), exposures.map { it.second })
+
+        vm.load()
+        vm.onBlockShown(tiles)
+        assertEquals(2, tracker.events.count { it.first == Events.ANALYTICS_BLOCK_EXPOSED }, "a new response is a new exposure")
     }
 
     private companion object {

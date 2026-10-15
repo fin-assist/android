@@ -14,4 +14,8 @@ object MockCodes {
     const val FEATURE_UNKNOWN = "e2e_feature"
     const val FEATURE_UNKNOWN_NAME = "Новая метрика"
     const val FEATURE_UNKNOWN_TEXT = "Новая метрика — нужно 6 полных месяцев"
+    /** A block of a type the client cannot draw: shown by its alt text (FIN-4). */
+    const val BLOCK_UNKNOWN_TEXT = "Карта расходов по районам — обновите приложение, чтобы её увидеть"
+    /** A card locked for a reason the client does not know: shown with the server's lock text (FIN-83). */
+    const val LOCK_UNKNOWN_TEXT = "Откроется, когда подключите второй банк"
 }

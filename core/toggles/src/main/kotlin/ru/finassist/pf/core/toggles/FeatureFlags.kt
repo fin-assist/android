@@ -30,6 +30,9 @@ interface FeatureFlags {
 
     /** Fetches the newest config; errors are swallowed — defaults or the cached config stay in effect. */
     suspend fun refresh()
+
+    /** Variant of [experiment] in effect (FIN-9); its default variant when the provider has none. */
+    fun variant(experiment: Experiment): String = experiment.defaultVariant
 }
 
 /** Debug-only overrides (mock flavor, hidden settings screen). */

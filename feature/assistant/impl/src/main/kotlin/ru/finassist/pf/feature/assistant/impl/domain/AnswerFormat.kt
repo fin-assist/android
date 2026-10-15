@@ -5,16 +5,14 @@ import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockRow
 import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.ChangedSince
+import ru.finassist.pf.core.api.model.ChartData
 import ru.finassist.pf.core.api.model.ChartKind
-import ru.finassist.pf.core.api.model.ChartPoint
-import ru.finassist.pf.core.api.model.ChartValueKind
-import ru.finassist.pf.core.api.model.Coverage
+import ru.finassist.pf.core.api.model.ValueKind
+import ru.finassist.pf.core.blocks.BlockFormat
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.time.RussianDates
-import java.time.OffsetDateTime
 import java.time.YearMonth
 import java.time.ZoneId
-import kotlin.math.roundToInt
 
 /** Parsed `text` block: the narrow Markdown subset of api.md 7.2 — paragraphs, `**bold**`, `- ` lists. */
 sealed interface TextPart {
@@ -103,14 +101,8 @@ object AnswerFormat {
         }
     }
 
-    /** Row value: exactly one of amount / count / percent / text; null — the row is skipped (api.md 7.2). */
-    fun rowValue(r: BlockRow): String? = when {
-        r.amount != null -> r.amount!!.format()
-        r.count != null -> r.count.toString()
-        r.percent != null -> "${(r.percent!! * 100).roundToInt()}%"
-        r.text != null -> r.text
-        else -> null
-    }
+    /** Row value: the value by its kind, or the text; null — the row is skipped (api.md «Блоки» → `rows`). */
+    fun rowValue(r: BlockRow): String? = BlockFormat.value(r.value, r.valueKind) ?: r.text
 
     /**
      * Blocks as the message draws them: a chart immediately followed by rows is one group (one card — the rows
@@ -133,22 +125,7 @@ object AnswerFormat {
         return groups
     }
 
-    /**
-     * Filled share of a partial month's bar: the days from `data_from` to `data_to` (inclusive, api.md 7) over the
-     * days of the month, as the analytics chart does. September with data from the 1st to the 25th → 25/30, from the
-     * 25th to the 30th → 6/30. `null` for a complete month or one without data.
-     */
-    fun partialFill(p: ChartPoint): Float? {
-        if (p.coverage.effective != Coverage.PARTIAL) return null
-        val monthStart = p.range.from.toLocalDate()
-        val monthEnd = p.range.to.toLocalDate().minusDays(1)
-        val from = p.dataFrom?.toLocalDate()?.coerceAtLeast(monthStart) ?: monthStart
-        val to = p.dataTo?.toLocalDate()?.coerceAtMost(monthEnd) ?: monthEnd
-        val covered = (to.toEpochDay() - from.toEpochDay() + 1).coerceIn(0, monthStart.lengthOfMonth().toLong())
-        return covered.toFloat() / monthStart.lengthOfMonth()
-    }
-
-    /** A chart block the app can draw: bars of a known value kind with points; otherwise its alt text is shown. */
-    fun isDrawableChart(block: Block): Boolean =
-        block.kind == ChartKind.BAR && block.valueKind != null && block.valueKind != ChartValueKind.UNKNOWN && !block.points.isNullOrEmpty()
+    /** The data of a chart block the app can draw — bars of a known value kind with points; null — its alt text is shown. */
+    fun drawableChart(block: Block): ChartData? = block.decode(ChartData.serializer())
+        ?.takeIf { it.kind == ChartKind.BAR && it.valueKind != ValueKind.UNKNOWN && it.points.isNotEmpty() }
 }
