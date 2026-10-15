@@ -103,6 +103,9 @@ class BlockFormatTest {
         assertNull(BlockLayout.usable(dismiss.copy(label = "")))
         assertNull(BlockLayout.usable(BlockAction(ActionType.OPEN_OPERATIONS)))
         assertNull(BlockLayout.usable(BlockAction(ActionType.OPEN_OPERATIONS, filter = ru.finassist.pf.core.api.model.OperationsFilter())))
+        val onlyMode = ru.finassist.pf.core.api.model.OperationsFilter(transferMode = ru.finassist.pf.core.api.model.TransferMode.WITHOUT)
+        assertNull(BlockLayout.usable(BlockAction(ActionType.OPEN_OPERATIONS, filter = onlyMode)))
+        assertEquals(ActionType.OPEN_OPERATIONS, BlockLayout.usable(BlockAction(ActionType.OPEN_OPERATIONS, filter = onlyMode.copy(selection = "s")))?.type)
         assertNull(BlockLayout.tapAction(BlockAction(ActionType.OPEN_OPERATIONS)))
         assertEquals(ActionType.OPEN_ASSISTANT, BlockLayout.usable(BlockAction(ActionType.OPEN_ASSISTANT))?.type)
     }

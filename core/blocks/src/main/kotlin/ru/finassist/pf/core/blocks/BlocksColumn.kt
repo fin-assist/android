@@ -51,7 +51,8 @@ object BlockLayout {
      */
     fun usable(action: BlockAction?): BlockAction? = action?.takeIf {
         when (it.type) {
-            ActionType.OPEN_OPERATIONS -> it.filter?.isEmpty == false
+            // `transfer_mode` sets the mode, not the selection: a filter with only it has no condition.
+            ActionType.OPEN_OPERATIONS -> it.filter?.copy(transferMode = null)?.isEmpty == false
             ActionType.OPEN_ASSISTANT -> true
             ActionType.DISMISS_REGULAR_PAYMENT -> !it.paymentId.isNullOrBlank() && !it.label.isNullOrBlank()
             ActionType.UNKNOWN -> false
