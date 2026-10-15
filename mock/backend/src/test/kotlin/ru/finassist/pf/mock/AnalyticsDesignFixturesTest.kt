@@ -34,7 +34,8 @@ class AnalyticsDesignFixturesTest {
 
     /**
      * Every `open_operations` in the golden responses carries a filter with a condition: with an empty one the client
-     * drops the action (`BlockLayout.usable`), and the design check renders the rows without chevrons (FIN-100).
+     * drops the action (`BlockLayout.usable`), and the design check renders the rows without chevrons (FIN-100). The
+     * filter opens the response's own period and transfer mode, as `AnalyticsEngine` builds it.
      */
     @Test
     fun `open_operations actions of the golden responses have a filter`() {
@@ -50,11 +51,17 @@ class AnalyticsDesignFixturesTest {
                     else -> Unit
                 }
             }
-            walk(json.encodeToJsonElement(Analytics.serializer(), AnalyticsComposer.compose(snapshot)))
+            val response = json.encodeToJsonElement(Analytics.serializer(), AnalyticsComposer.compose(snapshot)) as JsonObject
+            walk(response)
             assertTrue(actions.isNotEmpty(), "$name.json has no open_operations")
+            val range = (response["period"] as JsonObject)["range"] as JsonObject
+            val mode = (response["params"] as JsonObject)["transfer_mode"]
             actions.forEach { action ->
-                val conditions = (action["filter"] as? JsonObject).orEmpty().keys - "transfer_mode"
-                assertTrue(conditions.isNotEmpty(), "$name.json: open_operations without a filter condition: $action")
+                val filter = (action["filter"] as? JsonObject).orEmpty()
+                assertTrue((filter.keys - "transfer_mode").isNotEmpty(), "$name.json: open_operations without a filter condition: $action")
+                assertEquals(range["from"], filter["from"], "$name.json: filter outside the period: $action")
+                assertEquals(range["to"], filter["to"], "$name.json: filter outside the period: $action")
+                assertEquals(mode, filter["transfer_mode"], "$name.json: filter in another transfer mode: $action")
             }
         }
     }
