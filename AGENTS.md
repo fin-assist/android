@@ -243,15 +243,19 @@ commands: `docs/testing.md`.
   a PR for several issues lists all of them in the description, each linked
   (`https://finassist.youtrack.cloud/issue/FIN-<n>`). No issue — no key in the title.
 - After the PR is open and all planned changes are pushed, request a review with one PR comment in Russian
-  addressed to both reviewers: it contains `@codex review` (the exact phrase the Codex integration reacts to) and
-  `@claude`, asks for comments in Russian and points to Code Review Rules (security, test coverage of use cases).
-  `@claude` runs from `.github/workflows/claude.yml` (default branch) on Claude Fable 5.1 (`claude-fable-5-1`, set in
-  `claude_args`). `@codex` is the Codex GitHub integration; this repository cannot pin its model (target: GPT-6 Astra,
-  `gpt-6-astra`; open question in FIN-95).
+  addressed to both reviewers: its first line starts with `/codex-review`, then `@claude`; it asks for comments in
+  Russian and points to Code Review Rules (security, test coverage of use cases). Both run from the default branch:
+  - `@claude` — `.github/workflows/claude.yml`, Claude Fable 5.1 (`claude-fable-5-1`, set in `claude_args`);
+  - `/codex-review` — `.github/workflows/codex-review.yml`, GPT-6 Astra (`gpt-6-astra`, `CODEX_MODEL` there),
+    posted by `github-actions[bot]` as a review with inline comments (findings outside the diff are in its body;
+    posting: `scripts/codex-review-post.py`). Needs the `OPENAI_API_KEY` secret.
+  - The Codex GitHub integration (`@codex review`, model not pinnable) is not the Codex reviewer of this process. If
+    it still posts on a PR, handle its findings like any other, but its answer does not stand in for `/codex-review`.
 - Waiting for the review: when the session receives the PR's GitHub events (reviews, comments, CI), react to them
   instead of polling. Otherwise check 3 minutes after the request, then every 2 minutes. A reviewer has answered when
-  it posted its review or summary for the latest commit; for Codex «Didn't find any major issues» or a 👍 reaction
-  without a comment also counts. If a reviewer has not answered within 15 minutes of the last request, say so in the
+  it posted its review or summary for the latest commit; for Codex that is a review or comment of
+  `github-actions[bot]` with the `<!-- codex-review-workflow -->` marker for the latest commit, a failure comment
+  included (then say in the PR and to the owner that the Codex review did not run). If a reviewer has not answered within 15 minutes of the last request, say so in the
   PR and to the owner and stop waiting for it. The cycle ends when both reviewers have answered the latest request and
   no review thread is open.
 - Address review findings in follow-up commits on the same branch, reply in the conversation and resolve it;
@@ -260,7 +264,8 @@ commands: `docs/testing.md`.
 
 ## Code Review Rules
 
-Read by `@claude` (through `CLAUDE.md`) and by the Codex integration, which looks for this heading. Two areas
+Read by `@claude` (through `CLAUDE.md`), by the Codex review workflow and by the Codex integration, which looks for
+this heading. Two areas
 get a dedicated pass on every PR: Security and Test coverage of use cases (below).
 
 ### General
