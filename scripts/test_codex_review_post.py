@@ -101,6 +101,11 @@ class BuildReviewTest(unittest.TestCase):
         self.assertIn("Замечаний нет.", review["body"])
         self.assertNotIn("Замечания вне диффа", review["body"])
 
+    def test_empty_summary_and_empty_output_get_placeholders(self):
+        review = post.build_review(json.dumps({"summary": "  ", "findings": []}), {}, "m", "c" * 40)
+        self.assertIn("Сводка не получена.", review["body"])
+        self.assertIn("(пустой ответ)", post.build_review("  \n", {}, "m", "c" * 40)["body"])
+
     def test_unexpected_output_is_posted_as_is(self):
         review = post.build_review("plain text answer", {}, "m", "c" * 40)
         self.assertNotIn("comments", review)
@@ -148,6 +153,11 @@ class MainTest(unittest.TestCase):
         files = [{"filename": "app/A.kt", "patch": PATCH}]
         with self.assertRaises(urllib.error.HTTPError):
             self._run([files, urllib.error.HTTPError("u", 403, "Forbidden", {}, None)])
+
+    def test_422_without_inline_comments_is_raised_not_retried(self):
+        files = [{"filename": "app/Unrelated.kt", "patch": PATCH}]  # every finding lands outside the diff
+        with self.assertRaises(urllib.error.HTTPError):
+            self._run([files, urllib.error.HTTPError("u", 422, "Unprocessable", {}, None), {}])
 
     def test_pages_through_files(self):
         page1 = [{"filename": f"f{i}", "patch": None} for i in range(100)]

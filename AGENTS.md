@@ -255,7 +255,8 @@ commands: `docs/testing.md`.
   instead of polling. Otherwise check 3 minutes after the request, then every 2 minutes. A reviewer has answered when
   it posted its review or summary for the latest commit; for Codex that is a review or comment of
   `github-actions[bot]` with the `<!-- codex-review-workflow -->` marker for the latest commit, a failure comment
-  included (then say in the PR and to the owner that the Codex review did not run). If a reviewer has not answered within 15 minutes of the last request, say so in the
+  naming that commit or the latest request included (then say in the PR and to the owner that the Codex review did
+  not run). If a reviewer has not answered within 15 minutes of the last request, say so in the
   PR and to the owner and stop waiting for it. The cycle ends when both reviewers have answered the latest request and
   no review thread is open.
 - Address review findings in follow-up commits on the same branch, reply in the conversation and resolve it;
