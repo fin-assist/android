@@ -67,16 +67,22 @@ class MockBackend(
         var result: ImportResult? = null,
         val events: MutableStateFlow<ImportEvent> = MutableStateFlow(ImportEvent.Progress(ru.finassist.pf.core.api.model.ImportProgress(ru.finassist.pf.core.api.model.ImportStage.PARSING, 0))),
     ) {
-        /** Line number → id of the later upload that read the line (api.md 3.6, «Закрытие строк»; FIN-79). */
-        val resolvedBy: MutableMap<Int, String> = HashMap()
+        /** Line number → the later upload that closed the line (api.md 3.6, «Закрытие строк»; FIN-79). */
+        val closedBy: MutableMap<Int, Closure> = HashMap()
 
-        /** Unread lines no later upload has read: the only ones the API shows. */
-        val openUnreadLines: List<UnreadLine> get() = unreadLines.filter { it.lineNumber !in resolvedBy }
+        /** Unread lines no later upload has closed: the only ones the API shows. */
+        val openUnreadLines: List<UnreadLine> get() = unreadLines.filter { it.lineNumber !in closedBy }
+
+        /** Closures where the line was read, not replaced by a record of the later upload. */
+        val readClosures: List<Closure> get() = closedBy.values.filter { it.read }
 
         val isDone: Boolean get() = result != null
         val isFailed: Boolean get() = events.value is ImportEvent.Error
         val isProcessing: Boolean get() = !isDone && !isFailed
     }
+
+    /** [uploadId] closed an unread line: it read it ([read]), or failed to read it again and its record replaces it. */
+    data class Closure(val uploadId: String, val read: Boolean)
 
     /** Uploads newest first. Failed/cancelled ones are dropped from the list. */
     val uploads = ArrayList<Upload>()

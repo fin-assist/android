@@ -1,12 +1,14 @@
 package ru.finassist.pf.mock.domain
 
+import ru.finassist.pf.mock.MockBackend.Closure
 import ru.finassist.pf.mock.MockBackend.Upload
 import ru.finassist.pf.mock.ofx.UnreadLine
 import java.time.ZoneId
 
 /**
- * Closes unread lines of earlier uploads that a later upload has read (api.md 3.6, «Закрытие строк»; FIN-79). A closed
- * line stays with its upload and remembers the upload that closed it; the API shows only open lines.
+ * Closes unread lines of earlier uploads that a later upload covers (api.md 3.6, «Закрытие строк»; FIN-79): the line is
+ * read now, or it is unread again and the later upload's record replaces it. A closed line stays with its upload and
+ * remembers the upload that closed it; the API shows only open lines.
  */
 class UnreadResolver(private val ledger: Ledger, private val zone: () -> ZoneId) {
 
@@ -14,7 +16,7 @@ class UnreadResolver(private val ledger: Ledger, private val zone: () -> ZoneId)
     fun close(newer: Upload, older: List<Upload>) {
         for (upload in older) {
             for (line in upload.openUnreadLines) {
-                if (closes(newer, upload, line)) upload.resolvedBy[line.lineNumber] = newer.id
+                outcome(newer, upload, line)?.let { read -> upload.closedBy[line.lineNumber] = Closure(newer.id, read) }
             }
         }
     }
@@ -25,30 +27,43 @@ class UnreadResolver(private val ledger: Ledger, private val zone: () -> ZoneId)
      */
     fun reopen(deleted: String, uploads: List<Upload>) {
         uploads.forEachIndexed { i, upload ->
-            val reopened = upload.resolvedBy.filterValues { it == deleted }.keys
+            val reopened = upload.closedBy.filterValues { it.uploadId == deleted }.keys
             if (reopened.isEmpty()) return@forEachIndexed
-            reopened.forEach(upload.resolvedBy::remove)
+            reopened.forEach(upload.closedBy::remove)
             val later = uploads.subList(0, i).filter { it.isDone }
             upload.unreadLines.filter { it.lineNumber in reopened }.forEach { line ->
-                later.firstOrNull { closes(it, upload, line) }?.let { upload.resolvedBy[line.lineNumber] = it.id }
+                for (newer in later) {
+                    val read = outcome(newer, upload, line) ?: continue
+                    upload.closedBy[line.lineNumber] = Closure(newer.id, read)
+                    break
+                }
             }
         }
     }
 
-    private fun closes(newer: Upload, old: Upload, line: UnreadLine): Boolean {
-        val account = line.accountId ?: return false
-        // 1. By FITID: the operation with this pair is in the ledger — saved by [newer] or there already.
-        if (line.fitId != null) return ledger.byKey(account, line.fitId) != null
-        val period = newer.accountPeriods[account] ?: return false
+    /** null — [newer] does not cover the line; true — read now; false — unread again, [newer]'s record replaces it. */
+    private fun outcome(newer: Upload, old: Upload, line: UnreadLine): Boolean? {
+        val account = line.accountId ?: return null
         val newerUnread = newer.unreadLines.filter { it.accountId == account }
+        // 1. By FITID: the operation with this pair is in the ledger, or the newer upload fails to read it again.
+        if (line.fitId != null) {
+            return when {
+                ledger.byKey(account, line.fitId) != null -> true
+                newerUnread.any { it.fitId == line.fitId } -> false
+                else -> null
+            }
+        }
+        val period = newer.accountPeriods[account] ?: return null
         val date = line.date
         if (date != null) {
-            // 2. By date: the newer statement of the account covers the day and has no unread line of its own that day.
+            // 2. By date: the newer statement of the account covers the day; read unless it has an unread line that day.
+            if (date !in period) return null
             val day = date.atZoneSameInstant(zone()).toLocalDate()
-            return date in period && newerUnread.none { it.date?.atZoneSameInstant(zone())?.toLocalDate() == day }
+            return newerUnread.none { it.date?.atZoneSameInstant(zone())?.toLocalDate() == day }
         }
-        // 3. No date, no FITID: the newer statement covers the whole period of the old one and reads all of it.
-        val oldPeriod = old.accountPeriods[account] ?: return false
-        return period.covers(oldPeriod) && newerUnread.none { it.date == null || it.date in oldPeriod }
+        // 3. No date, no FITID: the newer statement covers the whole period of the old one; read unless unread lines there.
+        val oldPeriod = old.accountPeriods[account] ?: return null
+        if (!period.covers(oldPeriod)) return null
+        return newerUnread.none { it.date == null || it.date in oldPeriod }
     }
 }

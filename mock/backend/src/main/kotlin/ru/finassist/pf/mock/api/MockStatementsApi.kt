@@ -271,8 +271,8 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
                     uploadId = u.id, fileName = u.fileName,
                     status = if (u.isDone) UploadStatus.DONE else UploadStatus.PROCESSING,
                     uploadedAt = u.uploadedAt, operationCount = u.operationCount, unreadCount = u.openUnreadLines.size,
-                    resolvedUnreadCount = u.resolvedBy.size,
-                    resolvedByUploadedAt = u.resolvedBy.values.toSet()
+                    resolvedUnreadCount = u.readClosures.size,
+                    resolvedByUploadedAt = u.readClosures.map { it.uploadId }.toSet()
                         .mapNotNull { id -> backend.uploads.firstOrNull { it.id == id }?.uploadedAt }.maxOrNull(),
                     firstOperationAt = u.firstOperationAt, lastOperationAt = u.lastOperationAt,
                     sourceName = MockBackend.SOURCE_NAME,

@@ -64,11 +64,25 @@ class UnreadResolverTest {
         assertEquals(1, row(old).unreadCount)
     }
 
-    @Test fun `the same day unread again in the later upload keeps the old line open and shows the new one`() {
+    @Test fun `the same day unread again in the later upload replaces the old line - only the new one shows`() {
         val old = upload("old.ofx", doc("2026-09-01", "2026-09-30", unread = listOf(line(10, "2026-09-05T10:00", "truncated"))))
         val new = upload("new.ofx", doc("2026-09-01", "2026-09-30", unread = listOf(line(12, "2026-09-05T18:00", "truncated"))))
-        assertEquals(1, row(old).unreadCount)
+        assertEquals(0, row(old).unreadCount)
+        assertEquals(0, row(old).resolvedUnreadCount, "replaced, not read")
         assertEquals(listOf(12), openLines(new))
+    }
+
+    @Test fun `re-uploading the same broken file does not grow the counters`() {
+        val broken = doc("2026-09-01", "2026-09-30", unread = listOf(
+            line(10, "2026-09-05T10:00", "bad_amount", fitId = "f1"),
+            line(11, null, "no_date"),
+        ))
+        upload("first.ofx", broken)
+        upload("second.ofx", broken)
+        upload("third.ofx", broken)
+        assertEquals(2, backend.unreadLines().size)
+        val counts = runBlocking { api.listStatements().uploads.map { it.unreadCount } }
+        assertEquals(listOf(2, 0, 0), counts, "newest first: only the last upload keeps the lines")
     }
 
     @Test fun `a statement of another account does not close the line`() {
@@ -86,10 +100,11 @@ class UnreadResolverTest {
         assertEquals(0, row(old).unreadCount)
     }
 
-    @Test fun `a later upload with its own undated unread line does not close an undated line`() {
+    @Test fun `a later upload with its own undated unread line replaces an undated line, not reads it`() {
         val old = upload("old.ofx", doc("2026-09-01", "2026-09-30", unread = listOf(line(10, null, "no_date"))))
         upload("new.ofx", doc("2026-09-01", "2026-09-30", unread = listOf(line(3, null, "no_date"))))
-        assertEquals(1, row(old).unreadCount)
+        assertEquals(0, row(old).unreadCount)
+        assertEquals(0, row(old).resolvedUnreadCount)
     }
 
     @Test fun `only open lines count on analytics and in the period sheet`() {
