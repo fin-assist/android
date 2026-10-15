@@ -114,6 +114,17 @@ def build_review(text: str, files: dict[str, set[int]], model: str, commit: str)
     return review
 
 
+def fallback_review(text: str, review: dict, model: str, commit: str) -> dict:
+    """The review to retry after a 422: no inline comments, no commit_id, every finding in the body."""
+    moved = [Finding(c["path"], c["line"], c["body"]) for c in review.get("comments", [])]
+    parsed = parse_result(text)
+    if parsed is None:
+        return {"event": "COMMENT", "body": review["body"]}
+    summary, findings = parsed
+    outside = [f for f in findings if f not in moved] + moved
+    return {"event": "COMMENT", "body": review_body(summary, outside, model, commit)}
+
+
 # --- GitHub REST ----------------------------------------------------------------------------------------------
 
 def _request(method: str, url: str, token: str, payload: dict | None = None):
@@ -155,14 +166,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         _request("POST", url, token, review)
     except urllib.error.HTTPError as err:
-        # 422 when GitHub rejects a comment position (e.g. the PR moved on): keep every finding in the body.
-        if err.code != 422 or "comments" not in review:
+        # 422: GitHub rejects a comment position or the commit itself (a force-push dropped it from the PR). Retry
+        # once with every finding in the body and without commit_id, so GitHub takes the PR's latest commit; the body
+        # still names the reviewed commit.
+        if err.code != 422:
             raise
-        moved = [Finding(c["path"], c["line"], c["body"]) for c in review.pop("comments")]
-        parsed = parse_result(text)
-        summary = parsed[0] if parsed else ""
-        outside = [f for f in (parsed[1] if parsed else []) if f not in moved] + moved
-        review["body"] = review_body(summary, outside, args.model, args.commit)
+        review = fallback_review(text, review, args.model, args.commit)
         _request("POST", url, token, review)
     print(f"Posted review: {len(review.get('comments', []))} inline comment(s)")
     return 0

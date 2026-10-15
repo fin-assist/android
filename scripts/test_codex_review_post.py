@@ -146,6 +146,8 @@ class MainTest(unittest.TestCase):
         calls = self._run([files, rejected, {}])
         payload = calls[2][2]
         self.assertNotIn("comments", payload)
+        self.assertNotIn("commit_id", payload)  # a force-pushed commit would be rejected again
+        self.assertIn("`abc1234`", payload["body"])  # the body still names the reviewed commit
         for text in ("Строка в диффе", "Путь с ./", "Строка вне диффа", "Файл вне PR", "Скрытый каталог"):
             self.assertIn(text, payload["body"])
 
@@ -154,10 +156,23 @@ class MainTest(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError):
             self._run([files, urllib.error.HTTPError("u", 403, "Forbidden", {}, None)])
 
-    def test_422_without_inline_comments_is_raised_not_retried(self):
+    def test_422_without_inline_comments_retries_without_commit(self):
         files = [{"filename": "app/Unrelated.kt", "patch": PATCH}]  # every finding lands outside the diff
+        calls = self._run([files, urllib.error.HTTPError("u", 422, "Unprocessable", {}, None), {}])
+        self.assertIn("commit_id", calls[1][2])
+        self.assertNotIn("commit_id", calls[2][2])
+        self.assertIn("Файл вне PR", calls[2][2]["body"])
+
+    def test_second_422_is_raised(self):
+        files = [{"filename": "app/A.kt", "patch": PATCH}]
+        rejected = urllib.error.HTTPError("u", 422, "Unprocessable", {}, None)
         with self.assertRaises(urllib.error.HTTPError):
-            self._run([files, urllib.error.HTTPError("u", 422, "Unprocessable", {}, None), {}])
+            self._run([files, rejected, urllib.error.HTTPError("u", 422, "Unprocessable", {}, None)])
+
+    def test_unexpected_output_fallback_keeps_raw_body(self):
+        review = post.build_review("plain text", {}, "m", "abc1234")
+        retry = post.fallback_review("plain text", review, "m", "abc1234")
+        self.assertEqual(retry, {"event": "COMMENT", "body": review["body"]})
 
     def test_pages_through_files(self):
         page1 = [{"filename": f"f{i}", "patch": None} for i in range(100)]
