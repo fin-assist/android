@@ -292,8 +292,10 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
   flags) stay out of the `prod` flavor and release builds.
 - Trust boundaries: limits, quotas and permissions are enforced by the backend; the client only shows them.
   Client-side checks are not the security control — flag code that relies on them.
-- Consent: user data goes to the LLM assistant only after the assistant consent; personal data processing only
-  after the registration consent.
+- Consent: user data goes to the LLM assistant only after the assistant consent; an account is registered
+  (created) only after the personal data consent. Sending the phone number for call verification before that is
+  allowed: only the server's answer tells a new number from an existing user, and the consent screen is shown for a
+  new number.
 - New dependencies: flag a new library or SDK that gets data access (network, storage, analytics) so the owner
   decides on it.
 
@@ -308,8 +310,12 @@ For each feature or behaviour the PR adds or changes:
    boundaries, time zones, long texts); each flag state that changes behaviour; repeated actions (double tap,
    retry), back navigation, configuration change and process death where state must survive.
 2. Map each case to the test that covers it: unit test, design check or UI flow (see Code and Tests).
-3. Post each relevant uncovered case as a finding with the concrete case and the layer that should cover it.
-   A case not worth a test (unreachable, covered by a lower layer) is fine when the PR or the summary says why.
+3. Post a finding for an uncovered case only when the case is reachable in the changed code and its behaviour is
+   added or changed by the PR; name the concrete case and the layer that should cover it. The list in step 1 is a
+   prompt, not a checklist to report item by item. A case not worth a test (covered by a lower layer, not
+   reproducible in the mock) is fine when the PR or the summary says why.
+
+The 80 % changed-line threshold in Tests is the author's minimum; meeting it does not settle this check.
 
 Also check:
 
