@@ -332,7 +332,7 @@ object AnalyticsComposer {
             items = shown.map { p ->
                 InsightItem(
                     p.title, sublabel = p.scheduleName, value = p.amount.minor.toDouble(), valueKind = ValueKind.AMOUNT,
-                    action = BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = p.id, label = "Не подписка"),
+                    button = BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = p.id, label = "Не подписка"),
                 )
             },
             itemsMore = rest.takeIf { it.isNotEmpty() }?.let { list ->

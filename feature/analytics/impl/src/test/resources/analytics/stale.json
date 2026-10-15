@@ -326,7 +326,7 @@
                         "sublabel": "1-го числа",
                         "value": 290000.0,
                         "value_kind": "amount",
-                        "action": {
+                        "button": {
                             "type": "dismiss_regular_payment",
                             "payment_id": "r1",
                             "label": "Не подписка"
@@ -337,7 +337,7 @@
                         "sublabel": "12-го числа",
                         "value": 39900.0,
                         "value_kind": "amount",
-                        "action": {
+                        "button": {
                             "type": "dismiss_regular_payment",
                             "payment_id": "r2",
                             "label": "Не подписка"
@@ -348,7 +348,7 @@
                         "sublabel": "3-го числа",
                         "value": 29900.0,
                         "value_kind": "amount",
-                        "action": {
+                        "button": {
                             "type": "dismiss_regular_payment",
                             "payment_id": "r3",
                             "label": "Не подписка"

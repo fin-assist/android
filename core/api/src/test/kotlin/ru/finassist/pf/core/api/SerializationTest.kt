@@ -200,4 +200,28 @@ class SerializationTest {
         )
         assertEquals(listOf(ru.finassist.pf.core.api.model.ImportNoticeCode.NO_EXPENSES), notices.map { it.code })
     }
+
+    @Test
+    fun `assistant answers carry the currency of their amounts, roubles when absent (FIN-82)`() {
+        val snap = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.AnswerSnapshotEvent.serializer(),
+            """{"status":"generating","blocks":[],"chips":[],"currency":"USD"}""",
+        )
+        assertEquals("USD", snap.currency)
+        val old = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.Message.serializer(),
+            """{"id":"m","role":"assistant","created_at":"2026-10-01T10:00:00+03:00"}""",
+        )
+        assertEquals("RUB", old.currency)
+    }
+
+    @Test
+    fun `an insight card row has its own tap and a separate button (FIN-4 review)`() {
+        val item = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.InsightItem.serializer(),
+            """{"title":"Яндекс Плюс","action":{"type":"open_operations"},"button":{"type":"dismiss_regular_payment","payment_id":"rp","label":"Не подписка"}}""",
+        )
+        assertEquals(ru.finassist.pf.core.api.model.ActionType.OPEN_OPERATIONS, item.action?.type)
+        assertEquals("rp", item.button?.paymentId)
+    }
 }

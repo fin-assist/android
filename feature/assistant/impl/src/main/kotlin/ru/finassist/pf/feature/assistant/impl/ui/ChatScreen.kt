@@ -284,7 +284,7 @@ private fun Answer(
                 source = item.source?.let { AnswerFormat.source(it, zone) },
                 staleText = item.source?.let { AnswerFormat.changedSince(it.changedSince, it.changedSinceText) },
             ) {
-                AnswerFormat.groupBlocks(item.blocks).forEachIndexed { i, group -> BlockGroupView(group, chartId = "assistant.${item.id}.$i") }
+                AnswerFormat.groupBlocks(item.blocks).forEachIndexed { i, group -> BlockGroupView(group, chartId = "assistant.${item.id}.$i", currency = item.currency) }
             }
             // The chips follow the message and its source line, across the full width (mockup `Chat`).
             val chips = item.chips.filter { it.screen != ChipScreen.UNKNOWN }
@@ -307,15 +307,15 @@ private fun Answer(
 
 /** A chart followed by its rows is one card (mockup `Chat`); other blocks stand alone. */
 @Composable
-private fun BlockGroupView(group: List<Block>, chartId: String) {
+private fun BlockGroupView(group: List<Block>, chartId: String, currency: String) {
     val chartBlock = group.firstOrNull { it.type == BlockType.CHART }
     val chart = chartBlock?.let(AnswerFormat::drawableChart)
     val rowsBlock = group.firstOrNull { it.type == BlockType.ROWS }
     val rows = rowsBlock?.decode(RowsData.serializer())
     if (chartBlock != null && chart != null && rowsBlock != null && rows != null) {
-        val rowValues = rows.rows.mapNotNull { r -> AnswerFormat.rowValue(r)?.let { r to it } }
+        val rowValues = rows.rows.mapNotNull { r -> AnswerFormat.rowValue(r, currency)?.let { r to it } }
         PfCard {
-            ChartBody(chartBlock, chart, chartId)
+            ChartBody(chartBlock, chart, chartId, currency)
             if (rowValues.isNotEmpty()) {
                 Spacer(Modifier.height(PfTheme.dimens.space3))
                 PfDivider()
@@ -323,12 +323,12 @@ private fun BlockGroupView(group: List<Block>, chartId: String) {
             }
         }
     } else {
-        group.forEachIndexed { i, block -> BlockView(block, chartId = if (i == 0) chartId else "$chartId.$i") }
+        group.forEachIndexed { i, block -> BlockView(block, chartId = if (i == 0) chartId else "$chartId.$i", currency = currency) }
     }
 }
 
 @Composable
-private fun BlockView(block: Block, chartId: String) {
+private fun BlockView(block: Block, chartId: String, currency: String) {
     val c = PfTheme.colors
     when (block.type) {
         // `.pf-msg-body`: 15/20 (`lead`), `<strong>` is 700.
@@ -338,11 +338,11 @@ private fun BlockView(block: Block, chartId: String) {
             if (chart == null) {
                 Text(block.altText.orEmpty(), style = PfTheme.type.lead, color = c.text)
             } else {
-                PfCard { ChartBody(block, chart, chartId) }
+                PfCard { ChartBody(block, chart, chartId, currency) }
             }
         }
         BlockType.ROWS -> {
-            val rows = block.decode(RowsData.serializer())?.rows.orEmpty().mapNotNull { r -> AnswerFormat.rowValue(r)?.let { r to it } }
+            val rows = block.decode(RowsData.serializer())?.rows.orEmpty().mapNotNull { r -> AnswerFormat.rowValue(r, currency)?.let { r to it } }
             if (rows.isNotEmpty()) {
                 PfCard {
                     rows.forEachIndexed { i, (r, value) -> PfDataRow(r.label, value, sublabel = r.sublabel, divider = i < rows.lastIndex) }
@@ -358,10 +358,10 @@ private fun BlockView(block: Block, chartId: String) {
 
 /** The title and the bars of a chart block, 64 dp high (mockup `Chat`) — the bars are the shared renderer's (FIN-7). */
 @Composable
-private fun ChartBody(block: Block, chart: ChartData, chartId: String) {
+private fun ChartBody(block: Block, chart: ChartData, chartId: String, currency: String) {
     block.title?.let { Text(it, style = PfTheme.type.bodyStrong, color = PfTheme.colors.text) }
     // Without a highlight from the server the last point is the one the answer is about.
-    BlockChartBars(chart.copy(highlightIndex = chart.highlightIndex ?: chart.points.lastIndex), chartId, height = 64.dp, currency = Money.RUB)
+    BlockChartBars(chart.copy(highlightIndex = chart.highlightIndex ?: chart.points.lastIndex), chartId, height = 64.dp, currency = currency)
 }
 
 private fun markdown(text: String): AnnotatedString = buildAnnotatedString {

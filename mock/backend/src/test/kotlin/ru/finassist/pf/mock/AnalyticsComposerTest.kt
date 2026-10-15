@@ -72,8 +72,8 @@ class AnalyticsComposerTest {
         val card = assertNotNull(regular.decode(InsightCardData.serializer()))
         assertEquals(3, card.items.size)
         assertEquals("Ещё 4", card.itemsMore?.label)
-        assertEquals(ActionType.DISMISS_REGULAR_PAYMENT, card.items.first().action?.type)
-        assertEquals("Не подписка", card.items.first().action?.label)
+        assertEquals(ActionType.DISMISS_REGULAR_PAYMENT, card.items.first().button?.type)
+        assertEquals("Не подписка", card.items.first().button?.label)
     }
 
     @Test fun `a locked block carries the server's lock text`() {

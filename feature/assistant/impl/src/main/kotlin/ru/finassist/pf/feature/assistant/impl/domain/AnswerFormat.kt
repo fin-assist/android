@@ -10,6 +10,7 @@ import ru.finassist.pf.core.api.model.ChartKind
 import ru.finassist.pf.core.api.model.ValueKind
 import ru.finassist.pf.core.blocks.BlockFormat
 import ru.finassist.pf.core.api.model.TransferMode
+import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.RussianDates
 import java.time.YearMonth
 import java.time.ZoneId
@@ -102,7 +103,7 @@ object AnswerFormat {
     }
 
     /** Row value: the value by its kind, or the text; null — the row is skipped (api.md «Блоки» → `rows`). */
-    fun rowValue(r: BlockRow): String? = BlockFormat.value(r.value, r.valueKind) ?: r.text
+    fun rowValue(r: BlockRow, currency: String = Money.RUB): String? = BlockFormat.value(r.value, r.valueKind, currency) ?: r.text
 
     /**
      * Blocks as the message draws them: a chart immediately followed by rows is one group (one card — the rows

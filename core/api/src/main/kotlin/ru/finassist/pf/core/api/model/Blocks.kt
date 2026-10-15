@@ -274,7 +274,10 @@ data class InsightItem(
     /** «в месяц» after the value. */
     val valueSuffix: String? = null,
     val muted: Boolean = false,
+    /** Tap on the row (`open_operations`). */
     val action: BlockAction? = null,
+    /** A button under the row with its `label` («Не подписка»); a row may have both. */
+    val button: BlockAction? = null,
 )
 
 object InsightItemList : TolerantListSerializer<InsightItem>(InsightItem.serializer())

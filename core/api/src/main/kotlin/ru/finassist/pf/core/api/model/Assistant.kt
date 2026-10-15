@@ -100,6 +100,8 @@ data class Message(
     val blocks: List<Block>? = null,
     val chips: List<Chip>? = null,
     val source: AnswerSource? = null,
+    /** Currency of the amounts in [blocks] (FIN-82). */
+    val currency: String = "RUB",
     val createdAt: ApiDateTime,
 )
 
@@ -117,6 +119,8 @@ data class AnswerSnapshotEvent(
     val blocks: List<Block>,
     val chips: List<Chip>,
     val source: AnswerSource? = null,
+    /** Currency of the amounts in [blocks] (FIN-82). */
+    val currency: String = "RUB",
 )
 
 @Serializable

@@ -356,7 +356,7 @@ private fun InsightCard(block: Block, data: InsightCardData, ctx: BlockContext) 
         BlockStatus.NONE, BlockStatus.UNAVAILABLE -> InsightState.EMPTY
         else -> InsightState.LOCKED
     }
-    val listed = data.itemsMore != null || data.items.any { it.action?.type == ActionType.DISMISS_REGULAR_PAYMENT }
+    val listed = data.itemsMore != null || data.items.any { it.button != null }
     PfInsightCard(
         icon = data.icon,
         title = data.title,
@@ -372,8 +372,8 @@ private fun InsightCard(block: Block, data: InsightCardData, ctx: BlockContext) 
                 Column(Modifier.padding(top = d.space2)) {
                     PfDivider()
                     data.items.forEach { item ->
-                        PfDataRow(item.title, itemValue(item, ctx).orEmpty(), sublabel = item.sublabel, divider = false)
-                        item.action?.takeIf { it.type == ActionType.DISMISS_REGULAR_PAYMENT }?.let { a ->
+                        PfDataRow(item.title, itemValue(item, ctx).orEmpty(), sublabel = item.sublabel, onClick = ctx.clickOf(block, item.action), divider = false)
+                        item.button?.takeIf { it.type != ActionType.UNKNOWN }?.let { a ->
                             Box(Modifier.offset(x = -d.space4)) {
                                 val label = a.label ?: "Скрыть"
                                 PfButton(
