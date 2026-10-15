@@ -1,0 +1,38 @@
+appId: ru.finassist.pf.mock.e2e
+name: Техработы — экран со временем окончания, после работ приложение открывается само по проверке
+tags:
+  - availability
+---
+# FIN-22. The fake server answers 503 MAINTENANCE ending in 30 minutes of the fake «now» (8 October, 12:00 MSK): the
+# screen promises the end time. Once the maintenance is over, «Проверить сейчас» asks the server and the app opens again.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=30"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "availability.maintenance"
+    timeout: 15000
+- assertVisible: "Идут технические работы"
+- assertVisible: "Закончим примерно к 12:\\d\\d"
+- assertVisible:
+    id: "availability.maintenance.check"
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=off"
+- tapOn:
+    id: "availability.maintenance.check"
+- extendedWaitUntil:
+    notVisible:
+      id: "availability.maintenance"
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 15000

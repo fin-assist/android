@@ -33,6 +33,9 @@ interface FeatureFlags {
 
     /** Variant of [experiment] in effect (FIN-9); its default variant when the provider has none. */
     fun variant(experiment: Experiment): String = experiment.defaultVariant
+
+    /** String value of [key] in effect; its default when the provider has none (FIN-22). */
+    fun value(key: RemoteValue): String = key.defaultValue
 }
 
 /** Debug-only overrides (mock flavor, hidden settings screen). */

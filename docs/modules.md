@@ -7,8 +7,8 @@ implementations (Hilt). The rule is enforced at configuration time by `pf.module
 (`build-logic/convention/src/main/kotlin/ModuleRulesPlugin.kt`); a violation fails the build.
 
 ```
-app                       composition root: Hilt graph, NavHost, tabs, app-lock gate, SDK init, flavors mock/prod
-core/common               Money, dates/periods, AppError, Result helpers (JVM)
+app                       composition root: Hilt graph, NavHost, tabs, app-lock gate, update / maintenance overlay, SDK init, flavors mock/prod
+core/common               Money, dates/periods, AppError, Result helpers, ClientVersion and ServiceGate (FIN-22) (JVM)
 core/api                  client API contract: DTOs + service interfaces from openapi.yaml (JVM)
 core/network              HTTP implementation of core/api: OkHttp, Retrofit, SSE, auth, idempotency (prod)
 core/designsystem         tokens, theme, components, chart animation (Compose)
@@ -28,7 +28,8 @@ feature/<name>/api        public surface of the feature (JVM)
 feature/<name>/impl       data / domain / ui + Hilt bindings (Android, Compose)
 ```
 
-Features: `auth`, `applock`, `operations`, `statements`, `analytics`, `assistant`, `profile`.
+Features: `auth`, `applock`, `availability`, `operations`, `statements`, `analytics`, `assistant`, `profile`.
+`availability` — the update and maintenance screens the app root lays over everything (FIN-22).
 
 ## Dependency rules
 

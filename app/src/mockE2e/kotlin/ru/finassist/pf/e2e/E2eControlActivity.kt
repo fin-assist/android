@@ -35,6 +35,10 @@ import javax.inject.Inject
  * - `failing_blocks=<id>,<id>` — those Analytics blocks fail to build and come as `unavailable` (FIN-5); empty — none.
  * - `profile_timezone=<zone id>` — `profile.timezone` on the server, as if changed from another device; the app
  *   adopts it on the next profile read (opening «Профиль»).
+ * - `min_version=<MAJOR.MINOR.PATCH>` — the server's minimum client version; below it every request gets
+ *   `CLIENT_VERSION_UNSUPPORTED` and the app shows the update screen (FIN-22). Empty — no minimum.
+ * - `maintenance=<minutes>|unknown|off` — every request gets 503 `MAINTENANCE`, ending in that many minutes from the
+ *   fake «now» or at an unknown time; `off` ends it (FIN-22). `Retry-After` is 15 s, the shortest the app waits.
  *
  * Backend values live until the process dies: set them after `launchApp`.
  *
@@ -73,6 +77,12 @@ class E2eControlActivity : ComponentActivity() {
                 name == "unknown_codes" -> backend.config = backend.config.copy(unknownCodes = value.toBoolean())
                 name == "failing_blocks" -> backend.config = backend.config.copy(failingBlocks = value.split(',').map(String::trim).filter(String::isNotEmpty).toSet())
                 name == "profile_timezone" -> backend.mutex.withLock { backend.profile = backend.profile.copy(timezone = value) }
+                name == "min_version" -> backend.config = backend.config.copy(minVersion = value.ifBlank { null })
+                name == "maintenance" -> backend.config = when (value) {
+                    "off" -> backend.config.copy(maintenance = false, maintenanceUntil = null)
+                    "unknown" -> backend.config.copy(maintenance = true, maintenanceUntil = null)
+                    else -> backend.config.copy(maintenance = true, maintenanceUntil = value.toLongOrNull()?.let { backend.now().plusMinutes(it) })
+                }
                 else -> Log.w(TAG, "unknown parameter $name in $uri")
             }
         }

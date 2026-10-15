@@ -46,6 +46,17 @@ A filter that is hidden but arrives pre-filled from Analytics or an assistant ch
 non-editable chip ("Как на „Аналитике“" / `selection_name`), as `docs/api.md` (fin-assist/contracts) describes
 for filters without their own chip.
 
+## Values
+
+String values that are neither switches nor experiment variants; registry — `RemoteValue` in `core/toggles`, read
+with `FeatureFlags.value`. Without a value from the provider the code default is in effect. In `mock` the provider
+has none.
+
+- `app.min_version` — minimum supported version, `MAJOR.MINOR.PATCH`; default empty (no minimum). Checked at start,
+  before the first request, and with every new config (`MinVersionCheck`): below it the app shows the update screen
+  (FIN-22). A duplicate of the server's minimum: `CLIENT_VERSION_UNSUPPORTED` from the API wins, and an empty or
+  malformed value never blocks.
+
 ## Adding a flag
 
 1. Add an entry to the `Flag` enum in `core/toggles` (default `true`, or `defaultValue = false`).

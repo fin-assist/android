@@ -5,15 +5,23 @@ import okhttp3.mockwebserver.MockWebServer
 import retrofit2.Retrofit
 import ru.finassist.pf.core.api.PfApi
 import ru.finassist.pf.core.api.TokenStore
+import ru.finassist.pf.core.common.availability.ClientVersion
+import ru.finassist.pf.core.common.availability.ServiceGate
+import ru.finassist.pf.core.common.time.SystemClock
 import ru.finassist.pf.core.network.di.NetworkModule
 
 /**
  * The production object graph of [NetworkModule] pointed at a [MockWebServer]: the same clients, interceptors,
  * authenticator and Retrofit setup the app gets from Hilt, so tests see what goes over the wire.
  */
-internal class NetworkStack(server: MockWebServer, val tokenStore: TokenStore = InMemoryTokenStore()) {
+internal class NetworkStack(
+    server: MockWebServer,
+    val tokenStore: TokenStore = InMemoryTokenStore(),
+    val gate: ServiceGate = ServiceGate(),
+    val version: ClientVersion = ClientVersion("0.2.7", 41),
+) {
     private val baseUrl = NetworkModule.baseUrl(server.url("/").toString())
-    val plain: OkHttpClient = NetworkModule.plainClient(logging = false)
+    val plain: OkHttpClient = NetworkModule.plainClient(logging = false, version = version, gate = gate, clock = SystemClock())
     val client: OkHttpClient = NetworkModule.client(plain, baseUrl, tokenStore)
     val sseClient: OkHttpClient = NetworkModule.sseClient(client)
     private val retrofit: Retrofit = NetworkModule.retrofit(client, baseUrl)

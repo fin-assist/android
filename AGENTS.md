@@ -40,6 +40,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 |---|---|
 | Composition root, NavHost (auth graph → main tabs), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt` |
 | API contract (service interfaces + DTOs) | `core/api/…/Services.kt`, `core/api/…/model/*.kt` |
+| Client version, update and maintenance (FIN-22): `X-Client-Version`, `CLIENT_VERSION_UNSUPPORTED` / `MAINTENANCE` → `ServiceGate` → screens over the app | `core/common/…/availability/` (`ClientVersion`, `ServiceGate`), `core/network/…/Interceptors.kt`, `core/toggles/…/MinVersionCheck.kt` (`app.min_version`), `feature/availability`; version and build number — `app/build.gradle.kts` |
 | Fake backend (mock flavor): OFX parsing, ledger, analytics, assistant | `mock/backend/…/mock/` — `MockBackend.kt`, `domain/*`, `MockConfig.kt` (existing phone, delays, `offline`) |
 | Feature routes and public interfaces | `feature/<name>/api/…/*Routes.kt` (or `AuthApi.kt`, `AppLock.kt`) |
 | Screen registration | `FeatureEntry` / `Navigator` in `core/navigation/…/Navigation.kt`; each `:impl` binds its entry in `di/` |
@@ -105,6 +106,8 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:feature:assistant:impl` | `pf.feature.impl`, `pf.screenshots` | unit, design-check |
 | `:feature:auth:api` | `pf.feature.api` | - |
 | `:feature:auth:impl` | `pf.feature.impl`, `pf.screenshots` | unit, design-check |
+| `:feature:availability:api` | `pf.feature.api` | - |
+| `:feature:availability:impl` | `pf.feature.impl`, `pf.screenshots` | unit, design-check |
 | `:feature:operations:api` | `pf.feature.api` | - |
 | `:feature:operations:impl` | `pf.feature.impl`, `pf.screenshots` | unit, design-check |
 | `:feature:profile:api` | `pf.feature.api` | - |
