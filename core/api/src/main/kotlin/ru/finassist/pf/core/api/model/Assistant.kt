@@ -144,6 +144,8 @@ data class AnswerSource(
     val dataRange: DateRange? = null,
     val transferMode: TransferMode,
     val changedSince: List<ChangedSince>,
+    /** Ready text about the same; shown when a code is unknown (api.md 7.2, FIN-82). */
+    val changedSinceText: String? = null,
 )
 
 @Serializable

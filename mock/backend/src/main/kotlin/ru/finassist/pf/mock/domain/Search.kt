@@ -1,6 +1,7 @@
 package ru.finassist.pf.mock.domain
 
 import ru.finassist.pf.core.api.model.OperationKindFilter
+import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.SystemCategories
 import ru.finassist.pf.core.api.model.TransferMode
@@ -29,6 +30,9 @@ class Search(private val ledger: Ledger, private val catalog: Catalog, private v
                     is Record.Single -> when (kind) {
                         OperationKindFilter.EXPENSE -> r.op.isDebit || (mode != null && r.op.isRefund)
                         OperationKindFilter.INCOME -> !r.op.isDebit && !(mode != null && r.op.isRefund)
+                        // The fake server's own e2e codes (`MockConfig.unknownCodes`): the same as `expense`.
+                        MockCodes.EXPENSE_UNKNOWN -> r.op.isDebit || (mode != null && r.op.isRefund)
+                        else -> true
                     } && !r.op.isOwnTransferCategory
                 }
             }

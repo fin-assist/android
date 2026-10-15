@@ -22,7 +22,8 @@ import ru.finassist.pf.core.api.UploadFile
 import ru.finassist.pf.core.api.model.AnswerEvent
 import ru.finassist.pf.core.api.model.AskRequest
 import ru.finassist.pf.core.api.model.AskResponse
-import ru.finassist.pf.core.api.model.AssistantConsent
+import ru.finassist.pf.core.api.model.Consent
+import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.AssistantConsentGrant
 import ru.finassist.pf.core.api.model.AssistantLimit
 import ru.finassist.pf.core.api.model.IdempotencyKey
@@ -430,7 +431,7 @@ class ProfileViewModelTest {
 
         fun profile(theme: Theme = Theme.SYSTEM, timezone: String = MOSCOW) = Profile(
             userId = "u_1", phone = "+79161234567", theme = theme, timezone = timezone,
-            assistantConsent = AssistantConsent(granted = true, version = "v2", currentVersion = "v2"),
+            consents = listOf(Consent(ConsentType.ASSISTANT, granted = true, version = "v2", currentVersion = "v2")),
             createdAt = OffsetDateTime.parse("2026-09-01T10:00:00+03:00"),
         )
 

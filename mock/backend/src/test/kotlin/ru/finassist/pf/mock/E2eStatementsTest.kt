@@ -3,7 +3,7 @@ package ru.finassist.pf.mock
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import ru.finassist.pf.core.common.time.Clock
-import ru.finassist.pf.core.api.model.ImportNotice
+import ru.finassist.pf.core.api.model.ImportNoticeCode
 import ru.finassist.pf.mock.api.MockStatementsApi
 import ru.finassist.pf.mock.ofx.OfxCheck
 import ru.finassist.pf.mock.ofx.OfxParser
@@ -79,7 +79,7 @@ class E2eStatementsTest {
             val result = assertNotNull(statements.startUpload("unreadable.ofx", doc, backend.now(), instant = true).result)
             assertEquals(0, result.operationCount)
             assertEquals(2, result.unreadCount)
-            assertTrue(ImportNotice.EMPTY_STATEMENT in result.notices)
+            assertTrue(result.has(ImportNoticeCode.EMPTY_STATEMENT))
         }
     }
 

@@ -93,6 +93,10 @@ data class FeatureAvailability(
     val openedNow: Boolean,
     val requiredFullMonths: Int? = null,
     val requiredMonthsWithData: Int? = null,
+    /** Name for display («Прогноз на год»): the fallback for a [feature] this client does not know (FIN-82). */
+    val featureName: String? = null,
+    /** Ready line for a closed feature («Прогноз на год — нужно 12 полных месяцев, есть 5»), same purpose. */
+    val text: String? = null,
 )
 
 @Serializable
@@ -104,12 +108,21 @@ data class ImportCoverage(
     val features: List<FeatureAvailability>,
 )
 
-@Serializable(with = ImportNotice.Serializer::class)
-enum class ImportNotice(override val code: String) : ApiCode {
+@Serializable(with = ImportNoticeCode.Serializer::class)
+enum class ImportNoticeCode(override val code: String) : ApiCode {
     EMPTY_STATEMENT("empty_statement"), NO_EXPENSES("no_expenses"), UNKNOWN("?");
 
-    object Serializer : OpenEnumSerializer<ImportNotice>("ImportNotice", entries, UNKNOWN)
+    object Serializer : OpenEnumSerializer<ImportNoticeCode>("ImportNoticeCode", entries, UNKNOWN)
 }
+
+/**
+ * A special case of the import (api.md 3.3, FIN-82): known codes are laid out by the client, unknown ones show [text].
+ * A missing [text] must not fail the whole result: an unknown notice without it is simply not shown.
+ */
+@Serializable
+data class ImportNotice(val code: ImportNoticeCode, val text: String? = null)
+
+object ImportNoticeList : TolerantListSerializer<ImportNotice>(ImportNotice.serializer())
 
 /** Terminal `complete` event of the import progress stream: everything the import result screen shows. */
 @Serializable
@@ -128,8 +141,14 @@ data class ImportResult(
     val uncategorizedCount: Int,
     val uncategorizedFilters: OperationsFilter? = null,
     val coverage: ImportCoverage,
+    /** A broken notice is dropped, not the whole result. */
+    @Serializable(with = ImportNoticeList::class)
     val notices: List<ImportNotice>,
-)
+    /** Currency of every amount of the event (FIN-82); always RUB today. */
+    val currency: String = "RUB",
+) {
+    fun has(code: ImportNoticeCode): Boolean = notices.any { it.code == code }
+}
 
 @Serializable(with = UploadStatus.Serializer::class)
 enum class UploadStatus(override val code: String) : ApiCode {

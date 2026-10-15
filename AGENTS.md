@@ -178,11 +178,12 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   - an open code is an `ApiCode` enum with `UNKNOWN` and an `OpenEnumSerializer`; what `UNKNOWN` means (hide, fall
     back to another value, show the server's text) is the rule of that field, written in the field's KDoc (or the
     enum's, when every field using the enum follows the same rule);
-  - a closed `enum` in a DTO only for a set that cannot grow (today `Theme`, `OperationKindFilter`);
+  - a closed `enum` in a DTO only for a set that cannot grow (none in responses today: `Theme` and the filter `kind`
+    became open codes in FIN-83 — `Theme` falls back to `SYSTEM`, `OperationKindFilter` keeps an unknown code as is);
   - a broken element of a list is skipped, not allowed to fail the whole response;
   - a new DTO or open code comes with a unit test that parses an unknown field and an unknown code.
-- When the server sends a ready text for a code (`*_name`, lock texts), the UI shows that text for a code it does not
-  know instead of building one itself.
+- When the server sends a ready text for a code (`*_name`, `text`, lock texts), the UI shows that text for a code it does
+  not know instead of building one itself or skipping it (FIN-83: import features and notices, `changed_since_text`).
 - A new block type or code value changes both `:core:api` and the fake backend `:mock:backend` in the same PR.
 - A PR that adds or changes a user scenario covers it with a UI test in the same PR (docs/e2e.md, «When a change
   needs a UI test»). A scenario is what the user does and sees: a new screen or state, a step between screens, an

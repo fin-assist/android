@@ -101,6 +101,77 @@ class SerializationTest {
     }
 
     @Test
+    fun `an unknown theme is the system one and does not break the profile (FIN-83)`() {
+        val json = """{"user_id":"u1","phone":"+79161234567","theme":"sepia","timezone":"Europe/Moscow",
+          "consents":[{"type":"assistant","granted":true,"version":"1","current_version":"1"},
+                      {"type":"marketing","granted":true,"current_version":"3"}],
+          "created_at":"2026-10-04T20:00:00+03:00","brand_new_field":1}"""
+        val p = ApiJson.decodeFromString(ru.finassist.pf.core.api.model.Profile.serializer(), json)
+        assertEquals(ru.finassist.pf.core.api.model.Theme.SYSTEM, p.theme)
+        assertEquals(true, p.assistantConsent?.granted)
+        assertEquals(ru.finassist.pf.core.api.model.ConsentType.UNKNOWN, p.consents[1].type)
+
+        val none = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.Profile.serializer(),
+            """{"user_id":"u1","phone":"+7","theme":"dark","timezone":"Europe/Moscow","consents":[],"created_at":"2026-10-04T20:00:00+03:00"}""",
+        )
+        assertNull(none.assistantConsent, "no element - no consent")
+    }
+
+    @Test
+    fun `a filter kind this client does not know is kept and sent back as is (FIN-83)`() {
+        val f = ApiJson.decodeFromString(OperationsFilter.serializer(), """{"kind":"expense_v2","transfer_mode":"with"}""")
+        assertEquals("expense_v2", f.kind?.code)
+        assertFalse(f.kind!!.isKnown)
+        assertTrue(ru.finassist.pf.core.api.model.OperationKindFilter.EXPENSE.isKnown)
+        assertTrue(ApiJson.encodeToString(OperationsFilter.serializer(), f).contains("\"kind\":\"expense_v2\""))
+    }
+
+    @Test
+    fun `import notices and features carry server texts, an unknown code decodes with its text (FIN-83)`() {
+        val n = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.ImportNotice.serializer(), """{"code":"partial_import","text":"Часть операций не загрузилась"}""",
+        )
+        assertEquals(ru.finassist.pf.core.api.model.ImportNoticeCode.UNKNOWN, n.code)
+        assertEquals("Часть операций не загрузилась", n.text)
+        val f = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.FeatureAvailability.serializer(),
+            """{"feature":"weekly_chart","feature_name":"Графики по неделям","open":false,"opened_now":false,"text":"Графики по неделям — нужно 4 недели"}""",
+        )
+        assertEquals(ru.finassist.pf.core.api.model.AnalyticsFeature.UNKNOWN, f.feature)
+        assertEquals("Графики по неделям — нужно 4 недели", f.text)
+        val s = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.AnswerSource.serializer(),
+            """{"calculated_at":"2026-09-25T19:11:00+03:00","transfer_mode":"with","changed_since":["rules"],"changed_since_text":"с тех пор менялись правила"}""",
+        )
+        assertEquals("с тех пор менялись правила", s.changedSinceText)
+    }
+
+    @Test
+    fun `a notice without text does not fail the import result (FIN-83 review)`() {
+        val n = ApiJson.decodeFromString(ru.finassist.pf.core.api.model.ImportNotice.serializer(), """{"code":"no_expenses"}""")
+        assertEquals(ru.finassist.pf.core.api.model.ImportNoticeCode.NO_EXPENSES, n.code)
+        assertNull(n.text)
+    }
+
+    @Test
+    fun `a broken consent or notice is dropped, the rest of the response stays (FIN-83 review)`() {
+        val p = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.Profile.serializer(),
+            """{"user_id":"u1","phone":"+7","theme":"dark","timezone":"Europe/Moscow",
+              "consents":[{"type":"marketing","granted":true},{"type":"assistant","granted":true,"current_version":"1"}],
+              "created_at":"2026-10-04T20:00:00+03:00"}""",
+        )
+        assertEquals(listOf(ru.finassist.pf.core.api.model.ConsentType.ASSISTANT), p.consents.map { it.type })
+
+        val notices = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.ImportNoticeList,
+            """[{"text":"без кода"},{"code":"no_expenses","text":"нет расходов"}]""",
+        )
+        assertEquals(listOf(ru.finassist.pf.core.api.model.ImportNoticeCode.NO_EXPENSES), notices.map { it.code })
+    }
+
+    @Test
     fun `an upload with lines read by a later upload decodes, and without the fields they default to none (FIN-79)`() {
         val withResolved = """{"upload_id":"u1","file_name":"sep.ofx","status":"done","uploaded_at":"2026-10-10T10:00:00+03:00",
           "operation_count":210,"unread_count":0,"resolved_unread_count":2,"resolved_by_uploaded_at":"2026-10-12T10:05:00+03:00",

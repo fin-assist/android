@@ -5,7 +5,6 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -389,7 +388,7 @@ class MockAssistantApiTest {
         assertEquals(ErrorCodes.LIMIT_EXCEEDED, assertFailsWith<AppError.Api> { api.retry(key("r"), failed.id) }.code)
 
         backend.assistant.usage.clear()
-        backend.profile = backend.profile.copy(assistantConsent = backend.profile.assistantConsent.copy(granted = false))
+        backend.profile = backend.profile.withConsent(backend.profile.assistantConsent!!.copy(granted = false))
         assertEquals(ErrorCodes.CONSENT_REQUIRED, assertFailsWith<AppError.Api> { api.retry(key("r2"), failed.id) }.code)
         // Nothing was replaced by the rejected retries.
         assertEquals(false, failed.replaced)

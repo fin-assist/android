@@ -422,6 +422,8 @@ internal object StatementsTags {
     const val RESULT_UNREAD = "statements.result.unread"
     const val RESULT_ANALYTICS = "statements.result.analytics"
     const val RESULT_UPLOAD_ANOTHER = "statements.result.upload_another"
+    /** A special case of the import the client does not know: the server's text (FIN-83). */
+    const val RESULT_NOTICE = "statements.result.notice"
     const val RESULT_UPLOAD_MORE = "statements.result.upload_more"
     const val RESULT_HISTORY = "statements.result.history"
     const val RESULT_UNCATEGORIZED = "statements.result.uncategorized"

@@ -141,11 +141,13 @@ internal fun SearchContent(
             if (state.chips.amount || amount) {
                 PfChip(amountLabel(f), onClick = { actions.openSheet(SearchSheet.AMOUNT) }, selected = amount, dropdown = state.chips.amount, enabled = state.chips.amount, modifier = Modifier.testTag(OperationsTags.CHIP_AMOUNT))
             }
-            if (state.chips.kind || f.kind != null) {
-                PfChip(if (f.kind == OperationKindFilter.INCOME) "Только доходы" else "Только расходы", onClick = actions.toggleKind, selected = f.kind != null, enabled = state.chips.kind, modifier = Modifier.testTag(OperationsTags.CHIP_KIND))
+            val knownKind = f.kind?.takeIf { it.isKnown }
+            if (state.chips.kind || knownKind != null) {
+                PfChip(if (knownKind == OperationKindFilter.INCOME) "Только доходы" else "Только расходы", onClick = actions.toggleKind, selected = knownKind != null, enabled = state.chips.kind, modifier = Modifier.testTag(OperationsTags.CHIP_KIND))
             }
-            // Filters without their own chip (api.md: one chip, removed by tap or «Сбросить»).
-            if (f.selection != null || f.transferMode != null) {
+            // Filters without their own chip (api.md: one chip, removed by tap or «Сбросить»), a kind this client does
+            // not know included (FIN-82).
+            if (f.selection != null || f.transferMode != null || (f.kind != null && knownKind == null)) {
                 PfChip((f.selectionName ?: "Как на «Аналитике»") + "  ✕", onClick = actions.clearAnalyticsScope, selected = true, modifier = Modifier.testTag(OperationsTags.CHIP_SCOPE))
             }
             if (!state.onlyQuery) {
@@ -235,7 +237,7 @@ internal fun SearchContent(
                 kinds = when (f.kind) {
                     OperationKindFilter.EXPENSE -> setOf(CategoryKind.EXPENSE)
                     OperationKindFilter.INCOME -> setOf(CategoryKind.INCOME)
-                    null -> setOf(CategoryKind.EXPENSE, CategoryKind.INCOME)
+                    else -> setOf(CategoryKind.EXPENSE, CategoryKind.INCOME)
                 },
                 selectedId = f.categoryId,
                 onSelect = { actions.setCategory(it.id) },

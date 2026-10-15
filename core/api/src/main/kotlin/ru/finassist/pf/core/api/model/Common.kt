@@ -1,6 +1,5 @@
 package ru.finassist.pf.core.api.model
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.ApiDateTime
@@ -39,11 +38,20 @@ enum class TransferMode(override val code: String) : ApiCode {
     val effective: TransferMode get() = if (this == UNKNOWN) WITH else this
 }
 
-/** Closed set: `expense` / `income` filter in Search. */
+/**
+ * `kind` of an [OperationsFilter]: `expense` / `income`. Open code in responses (api.md «operations_filter», FIN-82): a
+ * kind this client does not know is kept as is — shown with the «Как на „Аналитике“» chip and sent back unchanged,
+ * never dropped (dropping it would silently widen the search).
+ */
+@JvmInline
 @Serializable
-enum class OperationKindFilter {
-    @SerialName("expense") EXPENSE,
-    @SerialName("income") INCOME,
+value class OperationKindFilter(val code: String) {
+    val isKnown: Boolean get() = this == EXPENSE || this == INCOME
+
+    companion object {
+        val EXPENSE = OperationKindFilter("expense")
+        val INCOME = OperationKindFilter("income")
+    }
 }
 
 @Serializable(with = Coverage.Serializer::class)

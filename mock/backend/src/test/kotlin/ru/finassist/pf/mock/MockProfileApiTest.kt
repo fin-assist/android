@@ -28,9 +28,9 @@ class MockProfileApiTest {
         assertEquals("u1", profile.userId)
         assertEquals(Theme.SYSTEM, profile.theme)
         assertEquals("Europe/Moscow", profile.timezone)
-        assertFalse(profile.assistantConsent.granted)
-        assertTrue(profile.assistantConsent.needsRenewal)
-        assertEquals(MockBackend.CONSENT_VERSION_ASSISTANT, profile.assistantConsent.currentVersion)
+        assertFalse(profile.assistantConsent!!.granted)
+        assertTrue(profile.assistantConsent!!.needsRenewal)
+        assertEquals(MockBackend.CONSENT_VERSION_ASSISTANT, profile.assistantConsent!!.currentVersion)
     }
 
     @Test
@@ -48,15 +48,15 @@ class MockProfileApiTest {
     fun `the assistant consent is granted for the current version only and can be revoked`() = runBlocking<Unit> {
         val outdated = assertFailsWith<AppError.Api> { api.grantAssistantConsent(AssistantConsentGrant("2000-01-01")) }
         assertEquals(ErrorCodes.CONSENT_OUTDATED to 422, outdated.code to outdated.httpStatus)
-        assertFalse(api.getProfile().assistantConsent.granted)
+        assertFalse(api.getProfile().assistantConsent!!.granted)
 
-        val granted = api.grantAssistantConsent(AssistantConsentGrant(MockBackend.CONSENT_VERSION_ASSISTANT)).assistantConsent
+        val granted = api.grantAssistantConsent(AssistantConsentGrant(MockBackend.CONSENT_VERSION_ASSISTANT)).assistantConsent!!
         assertTrue(granted.granted)
         assertEquals(MockBackend.CONSENT_VERSION_ASSISTANT, granted.version)
         assertFalse(granted.needsRenewal)
 
         api.revokeAssistantConsent()
-        val revoked = api.getProfile().assistantConsent
+        val revoked = api.getProfile().assistantConsent!!
         assertFalse(revoked.granted)
         assertNull(revoked.version)
     }

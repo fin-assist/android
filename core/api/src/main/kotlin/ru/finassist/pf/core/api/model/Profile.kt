@@ -1,15 +1,17 @@
 package ru.finassist.pf.core.api.model
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import ru.finassist.pf.core.common.time.ApiDateTime
 
-/** Closed set. */
-@Serializable
-enum class Theme {
-    @SerialName("system") SYSTEM,
-    @SerialName("light") LIGHT,
-    @SerialName("dark") DARK,
+/**
+ * Open code (api.md 2.1, FIN-82): a theme this client does not know is read as [SYSTEM] — it must not break the whole
+ * profile. The picker offers exactly these three.
+ */
+@Serializable(with = Theme.Serializer::class)
+enum class Theme(override val code: String) : ApiCode {
+    SYSTEM("system"), LIGHT("light"), DARK("dark");
+
+    object Serializer : OpenEnumSerializer<Theme>("Theme", entries, SYSTEM)
 }
 
 @Serializable
@@ -19,12 +21,22 @@ data class Profile(
     val phone: String,
     val theme: Theme,
     val timezone: String,
-    val assistantConsent: AssistantConsent,
+    /** One element per type (api.md 2.1, FIN-82); an element of an unknown type is kept but not used, a broken one dropped. */
+    @Serializable(with = ConsentList::class)
+    val consents: List<Consent> = emptyList(),
     val createdAt: ApiDateTime,
-)
+) {
+    /** The assistant consent; no element — not given. */
+    val assistantConsent: Consent? get() = consents.firstOrNull { it.type == ConsentType.ASSISTANT }
 
+    /** The profile with [consent] in place of the element of its type. */
+    fun withConsent(consent: Consent): Profile = copy(consents = consents.filter { it.type != consent.type } + consent)
+}
+
+/** An element of `profile.consents`; [type] is the same open code as in 1.6, an unknown one is never looked up. */
 @Serializable
-data class AssistantConsent(
+data class Consent(
+    val type: ConsentType,
     val granted: Boolean,
     val version: String? = null,
     val currentVersion: String,
@@ -41,3 +53,5 @@ data class ProfileUpdate(
 
 @Serializable
 data class AssistantConsentGrant(val version: String)
+
+object ConsentList : TolerantListSerializer<Consent>(Consent.serializer())

@@ -117,6 +117,18 @@ class ResultTextsTest {
     }
 
     @Test
+    fun `a closed feature this client does not know is told by the server's text (FIN-83)`() {
+        val unknown = FeatureAvailability(
+            AnalyticsFeature.UNKNOWN, open = false, openedNow = false, requiredFullMonths = 6,
+            featureName = "Новая метрика", text = "Новая метрика — нужно 6 полных месяцев",
+        )
+        val r = result(new = 30, total = 30).copy(
+            coverage = ImportCoverage(0, 0, emptyList(), emptyList(), listOf(locked(AnalyticsFeature.YEAR_FORECAST, 1), unknown)),
+        )
+        assertEquals("Новая метрика — нужно 6 полных месяцев. Прогноз на год появится с 1 полным месяцем.", ResultTexts.coverageNotice(r)!!.text)
+    }
+
+    @Test
     fun `a closed feature without a month in progress`() {
         val r = result(new = 30, total = 30).copy(
             coverage = ImportCoverage(0, 0, emptyList(), emptyList(), listOf(locked(AnalyticsFeature.YEAR_FORECAST, 1), locked(AnalyticsFeature.UNKNOWN, 3))),
@@ -177,5 +189,34 @@ class ResultTextsTest {
             "Июнь — неполный: выписка начинается с 29 июня",
             ResultTexts.incomplete(IncompleteMonth("2026-06", jun, t("2026-06-29T10:00:00+03:00"), t("2026-06-30T20:00:00+03:00"), emptyList(), false)).plain(),
         )
+    }
+
+    @Test
+    fun `an unknown feature first does not take the capital letter and verb from the first known one (FIN-83 review)`() {
+        val unknown = FeatureAvailability(
+            AnalyticsFeature.UNKNOWN, open = false, openedNow = false, requiredFullMonths = 6,
+            featureName = "Новая метрика", text = "Новая метрика — нужно 6 полных месяцев",
+        )
+        val r = result(new = 30, total = 30).copy(
+            coverage = ImportCoverage(0, 0, emptyList(), emptyList(), listOf(unknown, locked(AnalyticsFeature.YEAR_FORECAST, 1))),
+        )
+        assertEquals("Новая метрика — нужно 6 полных месяцев. Прогноз на год появится с 1 полным месяцем.", ResultTexts.coverageNotice(r)!!.text)
+    }
+
+    @Test
+    fun `the first import with full months shows only the server texts of unknown locked features (FIN-83 review)`() {
+        val unknown = FeatureAvailability(
+            AnalyticsFeature.UNKNOWN, open = false, openedNow = false, requiredFullMonths = 12,
+            featureName = "Новая метрика", text = "Новая метрика — нужно 12 полных месяцев",
+        )
+        val r = result().copy(coverage = coverage.copy(features = coverage.features + unknown))
+        val notice = ResultTexts.coverageNotice(r)!!
+        assertEquals("Часть аналитики пока закрыта", notice.title)
+        assertEquals("Новая метрика — нужно 12 полных месяцев.", notice.text)
+        assertNull(ResultTexts.coverageNotice(result()), "known features alone need no notice")
+        // A later import that completed no month: the same text (FIN-83 review).
+        val later = r.copy(isFirstImport = false, coverage = r.coverage.copy(newlyFullMonths = emptyList()))
+        assertEquals("Новая метрика — нужно 12 полных месяцев.", ResultTexts.coverageNotice(later)!!.text)
+        assertNull(ResultTexts.coverageNotice(result().copy(isFirstImport = false, coverage = coverage.copy(newlyFullMonths = emptyList()))))
     }
 }

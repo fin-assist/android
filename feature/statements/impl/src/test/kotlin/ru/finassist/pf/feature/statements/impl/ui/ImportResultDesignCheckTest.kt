@@ -9,6 +9,7 @@ import ru.finassist.pf.core.api.model.FeatureAvailability
 import ru.finassist.pf.core.api.model.ImportAccount
 import ru.finassist.pf.core.api.model.ImportCoverage
 import ru.finassist.pf.core.api.model.ImportNotice
+import ru.finassist.pf.core.api.model.ImportNoticeCode
 import ru.finassist.pf.core.api.model.ImportResult
 import ru.finassist.pf.core.api.model.ImportTotals
 import ru.finassist.pf.core.api.model.ImportTotalsScope
@@ -82,7 +83,7 @@ class ImportResultDesignCheckTest {
         operationCount = 0, newCount = 0, duplicateCount = 0, unreadCount = 0, isFirstImport = true,
         accounts = emptyList(), categorizedCount = 0, ownTransferCount = 0, uncategorizedCount = 0,
         coverage = ImportCoverage(0, 0, emptyList(), emptyList(), emptyList()),
-        notices = listOf(ImportNotice.EMPTY_STATEMENT),
+        notices = listOf(ImportNotice(ImportNoticeCode.EMPTY_STATEMENT, "В выписке нет операций")),
     )
 
     /** First import of 1–25 September only: no full month yet, comparison and regular payments closed. */
@@ -124,7 +125,18 @@ class ImportResultDesignCheckTest {
         accounts = listOf(ImportAccount("Накопительный", "··0734", false)),
         categorizedCount = 12, ownTransferCount = 0, uncategorizedCount = 0, uncategorizedFilters = null,
         coverage = short.coverage.copy(features = emptyList()),
-        notices = listOf(ImportNotice.NO_EXPENSES),
+        notices = listOf(ImportNotice(ImportNoticeCode.NO_EXPENSES, "В выписке нет расходов — возможно, выгружен не тот счёт")),
+    )
+
+    /** The server's texts for what this client does not know (FIN-83): a new notice above, a new locked feature below. */
+    private val unknownCodes = first.copy(
+        notices = listOf(ImportNotice(ImportNoticeCode.UNKNOWN, "Часть операций пришла из нового источника — проверьте категории")),
+        coverage = first.coverage.copy(
+            features = first.coverage.features + FeatureAvailability(
+                AnalyticsFeature.UNKNOWN, open = false, openedNow = false, requiredFullMonths = 6,
+                featureName = "Новая метрика", text = "Новая метрика — нужно 6 полных месяцев",
+            ),
+        ),
     )
 
     private fun capture(name: String, result: ImportResult, heightDp: Int, dark: Boolean = false) =
@@ -151,6 +163,8 @@ class ImportResultDesignCheckTest {
     @Test fun importResultShort() = capture("ImportResultShort", short, 1044)
 
     @Test fun importResultUnlocked() = capture("ImportResultUnlocked", unlocked, 1044)
+
+    @Test fun importResultUnknownCodes() = capture("ImportResultUnknownCodes", unknownCodes, 1042)
 
     @Test fun importResultNoExpenses() = capture("ImportResultNoExpenses", noExpenses, 844)
 

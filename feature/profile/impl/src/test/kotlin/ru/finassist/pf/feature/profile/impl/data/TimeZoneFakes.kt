@@ -6,7 +6,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import ru.finassist.pf.core.api.ProfileApi
-import ru.finassist.pf.core.api.model.AssistantConsent
+import ru.finassist.pf.core.api.model.Consent
+import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.AssistantConsentGrant
 import ru.finassist.pf.core.api.model.Profile
 import ru.finassist.pf.core.api.model.ProfileUpdate
@@ -36,7 +37,7 @@ internal class FakeProfileApi(@Volatile var timezone: String = "Europe/Moscow") 
 
     private fun profile() = Profile(
         userId = userId, phone = "+79161234567", theme = Theme.SYSTEM, timezone = timezone,
-        assistantConsent = AssistantConsent(granted = false, version = null, currentVersion = "ai-1"),
+        consents = listOf(Consent(ConsentType.ASSISTANT, granted = false, version = null, currentVersion = "ai-1")),
         createdAt = OffsetDateTime.parse("2026-09-01T10:00:00+03:00"),
     )
 

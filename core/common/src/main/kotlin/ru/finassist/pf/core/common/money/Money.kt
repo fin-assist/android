@@ -43,11 +43,24 @@ value class Money(val minor: Long) : Comparable<Money> {
         return if (withCurrency) "$prefix$body${NBSP}₽" else "$prefix$body"
     }
 
+    /**
+     * Money in [currency] (ISO 4217, api.md «Валюта»). Rubles keep the design-system «₽»; other currencies get their
+     * symbol or code.
+     */
+    fun format(currency: String, sign: Sign = Sign.AUTO): String {
+        val text = format(sign)
+        if (currency == RUB) return text
+        val symbol = runCatching { java.util.Currency.getInstance(currency).getSymbol(java.util.Locale("ru")) }.getOrDefault(currency)
+        return text.removeSuffix("₽").trimEnd() + NBSP + symbol
+    }
+
     enum class Sign { AUTO, ALWAYS, NONE }
 
     companion object {
         const val MINUS = "−"
         const val NBSP = " "
+
+        const val RUB = "RUB"
 
         val ZERO = Money(0)
 

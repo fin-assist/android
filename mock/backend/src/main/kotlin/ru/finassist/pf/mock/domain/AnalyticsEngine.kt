@@ -57,6 +57,8 @@ class AnalyticsEngine(
     private val dismissedPayments: () -> Set<String>,
     private val unreadLinesIn: (OffsetDateTime, OffsetDateTime) -> Int,
     private val now: () -> OffsetDateTime,
+    /** `kind` of the expense tile's filter: `expense`, or a code the client does not know (`MockConfig.unknownCodes`). */
+    private val expenseKind: () -> OperationKindFilter = { OperationKindFilter.EXPENSE },
 ) {
     private val zone get() = scope.zone
     private fun today(): LocalDate = now().atZoneSameInstant(zone).toLocalDate()
@@ -153,7 +155,7 @@ class AnalyticsEngine(
         val from = key.start()
         val toExcl = key.endExclusive()
         val periodRange = range(from, toExcl)
-        val expenseFilter = OperationsFilter(from = periodRange.from, to = periodRange.to, kind = OperationKindFilter.EXPENSE, transferMode = mode)
+        val expenseFilter = OperationsFilter(from = periodRange.from, to = periodRange.to, kind = expenseKind(), transferMode = mode)
         val incomeFilter = expenseFilter.copy(kind = OperationKindFilter.INCOME)
 
         // Previous full periods of the same type, newest first.

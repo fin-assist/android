@@ -12,7 +12,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.api.ImportEvent
-import ru.finassist.pf.core.api.model.AssistantConsent
+import ru.finassist.pf.core.api.model.Consent
+import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.ImportResult
 import ru.finassist.pf.core.api.model.Profile
@@ -108,6 +109,7 @@ class MockBackend(
         dismissedPayments = { dismissedPayments },
         unreadLinesIn = { from, to -> unreadLines().count { l -> l.date != null && !l.date.isBefore(from) && l.date.isBefore(to) } },
         now = clock::now,
+        expenseKind = { if (config.unknownCodes) MockCodes.EXPENSE_UNKNOWN else ru.finassist.pf.core.api.model.OperationKindFilter.EXPENSE },
     )
 
     fun now(): OffsetDateTime = clock.now()
@@ -185,7 +187,7 @@ class MockBackend(
         phone = phone,
         theme = Theme.SYSTEM,
         timezone = "Europe/Moscow",
-        assistantConsent = AssistantConsent(granted = false, currentVersion = CONSENT_VERSION_ASSISTANT),
+        consents = listOf(Consent(ConsentType.ASSISTANT, granted = false, currentVersion = CONSENT_VERSION_ASSISTANT)),
         createdAt = now(),
     )
 

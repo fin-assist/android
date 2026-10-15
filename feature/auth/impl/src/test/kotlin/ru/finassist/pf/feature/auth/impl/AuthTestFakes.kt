@@ -17,10 +17,10 @@ import kotlinx.coroutines.withTimeout
 import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.ProfileApi
 import ru.finassist.pf.core.api.TokenStore
-import ru.finassist.pf.core.api.model.AssistantConsent
+import ru.finassist.pf.core.api.model.Consent
+import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.AssistantConsentGrant
 import ru.finassist.pf.core.api.model.ConsentDocument
-import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.PhoneVerification
 import ru.finassist.pf.core.api.model.PhoneVerificationStatusEvent
@@ -93,7 +93,7 @@ class FakeProfileApi(private val log: Log) : ProfileApi {
         log += "getProfile"
         return Profile(
             userId = userId, phone = "+79161234567", theme = Theme.SYSTEM, timezone = timezone,
-            assistantConsent = AssistantConsent(granted = false, currentVersion = "1"),
+            consents = listOf(Consent(ConsentType.ASSISTANT, granted = false, currentVersion = "1")),
             createdAt = OffsetDateTime.parse("2026-10-01T10:00:00+03:00"),
         )
     }
