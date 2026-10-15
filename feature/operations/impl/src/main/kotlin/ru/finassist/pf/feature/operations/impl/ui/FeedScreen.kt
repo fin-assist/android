@@ -118,7 +118,7 @@ internal fun FeedContent(
                 }
             }
             else -> {
-                val groups = remember(state.items) { OperationFormat.groupByDay(state.items, zone, today) }
+                val groups = remember(state.items, zone, today) { OperationFormat.groupByDay(state.items, zone, today) }
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.weight(1f),
