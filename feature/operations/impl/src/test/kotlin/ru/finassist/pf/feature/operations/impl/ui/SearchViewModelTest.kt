@@ -289,6 +289,18 @@ class SearchViewModelTest {
         assertEquals(2, (vm.state.value.result as SearchResult.Found).items.size)
     }
 
+    @Test fun `a new zone during a pending search for a changed filter does not keep the old result (FIN-92 review)`() {
+        api.lists += found("op_1")
+        val vm = vm(OperationsFilter(categoryId = "cat_taxi"))
+        vm.setQuery("такси")
+        api.gate = kotlinx.coroutines.CompletableDeferred()
+        reportZone.set("Asia/Vladivostok")
+        // Asked by the new filter, and the old filter's result is not shown meanwhile.
+        assertEquals("такси", api.queries.last().filter.q)
+        assertEquals(SearchResult.Loading, vm.state.value.result)
+        api.gate!!.complete(Unit)
+    }
+
     @Test fun `an explicit period does not depend on the zone and is not asked again (FIN-92 review)`() {
         api.lists += found("op_1")
         val period = vm(OperationsFilter(categoryId = "cat_taxi", from = window.from, to = window.to))

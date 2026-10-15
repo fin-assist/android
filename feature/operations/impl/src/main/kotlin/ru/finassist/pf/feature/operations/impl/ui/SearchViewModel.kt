@@ -166,8 +166,13 @@ class SearchViewModel @Inject constructor(
         search(debounce)
     }
 
-    /** [quiet] — a refresh of the same filter: a shown result stays on screen until the new one, and stays on a failure. */
+    /**
+     * [quiet] — a refresh of the same filter: a shown result stays on screen until the new one, and stays on a failure.
+     * While a search for a changed filter is still pending, the shown result is not that filter's: the refresh is an
+     * ordinary search then.
+     */
     private fun search(debounce: Boolean, quiet: Boolean = false) {
+        val refresh = quiet && searchJob?.isActive != true
         searchJob?.cancel()
         val s = _state.value
         if (!s.hasFilters) {
@@ -176,7 +181,7 @@ class SearchViewModel @Inject constructor(
         }
         searchJob = viewModelScope.launch {
             if (debounce) delay(350)
-            val keep = quiet && _state.value.result is SearchResult.Found
+            val keep = refresh && _state.value.result is SearchResult.Found
             if (!keep) _state.update { it.copy(result = SearchResult.Loading) }
             val filter = _state.value.filter
             try {
