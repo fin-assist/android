@@ -42,7 +42,20 @@ object BlockLayout {
      * puts it on the element; an unknown one does nothing.
      */
     fun tapAction(action: BlockAction?): BlockAction? =
-        action?.takeIf { it.type == ActionType.OPEN_OPERATIONS || it.type == ActionType.OPEN_ASSISTANT }
+        usable(action)?.takeIf { it.type == ActionType.OPEN_OPERATIONS || it.type == ActionType.OPEN_ASSISTANT }
+
+    /**
+     * [action] with the fields its type needs (api.md «Действия»): `filter` for `open_operations`, `payment_id` and
+     * `label` for `dismiss_regular_payment`. Without them, or of an unknown type, the action is unknown — null.
+     */
+    fun usable(action: BlockAction?): BlockAction? = action?.takeIf {
+        when (it.type) {
+            ActionType.OPEN_OPERATIONS -> it.filter != null
+            ActionType.OPEN_ASSISTANT -> true
+            ActionType.DISMISS_REGULAR_PAYMENT -> !it.paymentId.isNullOrBlank() && !it.label.isNullOrBlank()
+            ActionType.UNKNOWN -> false
+        }
+    }
 }
 
 /**

@@ -24,7 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import ru.finassist.pf.core.api.model.ActionType
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockAction
 import ru.finassist.pf.core.api.model.BlockStatus
@@ -374,7 +373,7 @@ private fun InsightCard(block: Block, data: InsightCardData, ctx: BlockContext) 
                     PfDivider()
                     data.items.forEach { item ->
                         PfDataRow(item.title, itemValue(item, ctx).orEmpty(), sublabel = item.sublabel, onClick = ctx.clickOf(block, item.action), divider = false)
-                        item.button?.takeIf { it.type != ActionType.UNKNOWN }?.let { a ->
+                        BlockLayout.usable(item.button)?.let { a ->
                             Box(Modifier.offset(x = -d.space4)) {
                                 val label = a.label ?: "Скрыть"
                                 PfButton(

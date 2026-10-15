@@ -88,11 +88,21 @@ class BlockFormatTest {
     }
 
     @Test fun `a tap on a block, tile or row only navigates, a data-changing action works only from a button (FIN-4 review)`() {
-        val open = BlockAction(ActionType.OPEN_OPERATIONS)
+        val open = BlockAction(ActionType.OPEN_OPERATIONS, filter = ru.finassist.pf.core.api.model.OperationsFilter(categoryId = "c"))
         assertEquals(open, BlockLayout.tapAction(open))
         assertEquals(ActionType.OPEN_ASSISTANT, BlockLayout.tapAction(BlockAction(ActionType.OPEN_ASSISTANT))?.type)
         assertNull(BlockLayout.tapAction(BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = "rp", label = "Не подписка")))
         assertNull(BlockLayout.tapAction(BlockAction(ActionType.UNKNOWN)))
         assertNull(BlockLayout.tapAction(null))
+    }
+
+    @Test fun `an action without the fields of its type is unknown (contracts review)`() {
+        val dismiss = BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = "rp", label = "Не подписка")
+        assertEquals(dismiss, BlockLayout.usable(dismiss))
+        assertNull(BlockLayout.usable(dismiss.copy(paymentId = null)))
+        assertNull(BlockLayout.usable(dismiss.copy(label = "")))
+        assertNull(BlockLayout.usable(BlockAction(ActionType.OPEN_OPERATIONS)))
+        assertNull(BlockLayout.tapAction(BlockAction(ActionType.OPEN_OPERATIONS)))
+        assertEquals(ActionType.OPEN_ASSISTANT, BlockLayout.usable(BlockAction(ActionType.OPEN_ASSISTANT))?.type)
     }
 }
