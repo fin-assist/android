@@ -7,8 +7,9 @@ tags:
 # Vladivostok. Once the profile zone is Vladivostok, the feed shows it under «1 октября».
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/login.yaml
-- assertVisible: "30 сентября"
-- assertNotVisible: "1 октября"
+# The day and the month are joined by a no-break space: any single character between them (FIN-101).
+- assertVisible: "30.сентября"
+- assertNotVisible: "1.октября"
 
 - runFlow:
     file: ../../subflows/config.yaml
@@ -24,5 +25,5 @@ tags:
 - tapOn:
     id: "ds.tab.operations"
 - extendedWaitUntil:
-    visible: "1 октября"
+    visible: "1.октября"
     timeout: 10000
