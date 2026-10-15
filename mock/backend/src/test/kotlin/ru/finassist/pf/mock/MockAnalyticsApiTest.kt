@@ -36,7 +36,7 @@ class MockAnalyticsApiTest {
     private val api = MockAnalyticsApi(backend)
 
     private suspend fun regularTitles() =
-        api.getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH).insights!!.regularPayments.items.orEmpty().map { it.title }
+        backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH).insights!!.regularPayments.items.orEmpty().map { it.title }
 
     @Test
     fun `without parameters the latest month with transfers is shown`() = runBlocking<Unit> {
@@ -74,7 +74,7 @@ class MockAnalyticsApiTest {
 
     @Test
     fun `a dismissed regular payment leaves the card until it is restored`() = runBlocking<Unit> {
-        val card = api.getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH).insights!!.regularPayments
+        val card = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH).insights!!.regularPayments
         val netflix = card.items.orEmpty().single { it.title == "Netflix" }
         assertEquals(49_900L, netflix.monthlyAmount.minor)
         assertEquals("3-го числа", netflix.scheduleName)

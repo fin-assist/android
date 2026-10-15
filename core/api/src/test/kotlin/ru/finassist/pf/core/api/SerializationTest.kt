@@ -4,9 +4,13 @@ import org.junit.Test
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.AskRequest
 import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.ValueKind
+import ru.finassist.pf.core.api.model.TileGroupData
+import ru.finassist.pf.core.api.model.RowsData
+import ru.finassist.pf.core.api.model.ChartData
+import ru.finassist.pf.core.api.model.BlockStatus
 import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.LockReason
-import ru.finassist.pf.core.api.model.MetricStatus
 import ru.finassist.pf.core.api.model.OperationKind
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.OperationsList
@@ -14,6 +18,7 @@ import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.money.Money
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -67,22 +72,47 @@ class SerializationTest {
     }
 
     @Test
-    fun `analytics locked metric and has_data false`() {
-        val locked = """{"has_data":true,"params":{"period":"month","date":"2026-09","transfer_mode":"with"},
-          "tiles":{"expense":{"status":"ready","value":8432000,"comparison":{"status":"locked","lock":{"reason":"need_full_months","required":1,"available":0}}},
-                   "income":{"status":"ready","value":1},"balance":{"status":"ready","value":1,"share_of_income":null},
-                   "daily_expense":{"status":"ready","value":1}},
-          "monthly_chart":{"status":"locked","lock":{"reason":"need_months_with_data","required":2,"available":1}}}"""
-        val analytics = ApiJson.decodeFromString(Analytics.serializer(), locked)
-        assertTrue(analytics.hasData)
-        assertEquals(LockReason.NEED_FULL_MONTHS, analytics.tiles?.expense?.comparison?.lock?.reason)
-        assertEquals(MetricStatus.LOCKED, analytics.monthlyChart?.status)
-        assertNull(analytics.tiles?.balance?.shareOfIncome)
-        assertEquals("2026-09", analytics.params?.date?.value)
+    fun `analytics blocks - locked tile with server text, unknown and broken blocks do not fail the screen (FIN-4)`() {
+        val json = """{"has_data":true,"params":{"period":"month","date":"2026-09","transfer_mode":"with"},"currency":"RUB",
+          "blocks":[
+            {"id":"tiles","type":"tile_group","v":1,"data":{"tiles":[
+              {"id":"daily_expense","title":"Расходы в день","status":"locked",
+               "lock":{"reason":"need_full_months","text":"Нужно 1 полный месяц, есть 0","required":1,"available":0}},
+              {"id":"income","title":"Доходы","value":15690000,"value_kind":"amount","show_plus":true,"brand_new":1}]}},
+            {"id":"spend_map","type":"geo_map","v":1,"alt_text":"Карта расходов"},
+            {"type":42},
+            {"id":"monthly_chart","type":"chart","v":3,"status":"weird","lock":{"reason":"need_more_coffee","text":"Позже"}}
+          ]}"""
+        val a = ApiJson.decodeFromString(Analytics.serializer(), json)
+        assertEquals(listOf("tiles", "spend_map", "monthly_chart"), a.blocks.map { it.id }, "the broken envelope is dropped")
+        val tiles = assertNotNull(a.blocks[0].decode(TileGroupData.serializer())).tiles
+        assertEquals(BlockStatus.LOCKED, tiles[0].status)
+        assertEquals("Нужно 1 полный месяц, есть 0", tiles[0].lock?.text)
+        assertEquals(ValueKind.AMOUNT, tiles[1].valueKind)
+        assertTrue(tiles[1].showPlus)
+        assertEquals(BlockType.UNKNOWN, a.blocks[1].type)
+        assertEquals("Карта расходов", a.blocks[1].altText)
+        assertEquals(BlockStatus.LOCKED, a.blocks[2].status.effective, "an unknown status is locked")
+        assertEquals(LockReason.UNKNOWN, a.blocks[2].lock?.reason)
+        assertEquals(3, a.blocks[2].v)
+        assertNull(a.blocks[2].decode(ChartData.serializer()), "no data — nothing to decode")
 
         val empty = ApiJson.decodeFromString(Analytics.serializer(), """{"has_data":false}""")
         assertFalse(empty.hasData)
-        assertNull(empty.tiles)
+        assertTrue(empty.blocks.isEmpty())
+    }
+
+    @Test
+    fun `block values carry their kind, an unknown kind decodes and a broken row is dropped (FIN-4)`() {
+        val rows = ApiJson.decodeFromString(
+            RowsData.serializer(),
+            """{"rows":[{"label":"Операций","value":9,"value_kind":"count"},{"value":1},{"label":"Скорость","value":3,"value_kind":"km_h"}]}""",
+        )
+        assertEquals(listOf("Операций", "Скорость"), rows.rows.map { it.label })
+        assertEquals(ValueKind.UNKNOWN, rows.rows[1].valueKind)
+        val text = Block.text("**7 200 ₽**")
+        assertEquals("**7 200 ₽**", text.text)
+        assertEquals(BlockType.TEXT, ApiJson.decodeFromString(Block.serializer(), ApiJson.encodeToString(Block.serializer(), text)).type)
     }
 
     @Test
@@ -169,6 +199,44 @@ class SerializationTest {
             """[{"text":"без кода"},{"code":"no_expenses","text":"нет расходов"}]""",
         )
         assertEquals(listOf(ru.finassist.pf.core.api.model.ImportNoticeCode.NO_EXPENSES), notices.map { it.code })
+    }
+
+    @Test
+    fun `assistant answers carry the currency of their amounts, roubles when absent (FIN-82)`() {
+        val snap = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.AnswerSnapshotEvent.serializer(),
+            """{"status":"generating","blocks":[],"chips":[],"currency":"USD"}""",
+        )
+        assertEquals("USD", snap.currency)
+        val old = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.Message.serializer(),
+            """{"id":"m","role":"assistant","created_at":"2026-10-01T10:00:00+03:00"}""",
+        )
+        assertEquals("RUB", old.currency)
+    }
+
+    @Test
+    fun `an insight card row has its own tap and a separate button (FIN-4 review)`() {
+        val item = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.InsightItem.serializer(),
+            """{"title":"Яндекс Плюс","action":{"type":"open_operations"},"button":{"type":"dismiss_regular_payment","payment_id":"rp","label":"Не подписка"}}""",
+        )
+        assertEquals(ru.finassist.pf.core.api.model.ActionType.OPEN_OPERATIONS, item.action?.type)
+        assertEquals("rp", item.button?.paymentId)
+    }
+
+    @Test
+    fun `a broken tile or chart point is skipped, not the whole block (FIN-4 review)`() {
+        val tiles = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.TileGroupData.serializer(),
+            """{"tiles":[{"title":"без id"},{"id":"income","title":"Доходы","value":100,"value_kind":"amount"}]}""",
+        )
+        assertEquals(listOf("income"), tiles.tiles.map { it.id })
+        val chart = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.ChartData.serializer(),
+            """{"kind":"bar","value_kind":"amount","points":[{"value":1},{"range":{"from":"2026-09-01T00:00:00+03:00","to":"2026-10-01T00:00:00+03:00"},"value":2,"coverage":"complete"}]}""",
+        )
+        assertEquals(listOf(2.0), chart.points.map { it.value })
     }
 
     @Test

@@ -1,0 +1,318 @@
+{
+    "has_data": true,
+    "params": {
+        "period": "year",
+        "date": "2026",
+        "transfer_mode": "with"
+    },
+    "period": {
+        "range": {
+            "from": "2026-01-01T00:00:00+03:00",
+            "to": "2027-01-01T00:00:00+03:00"
+        },
+        "is_current": true,
+        "coverage": "partial",
+        "data_from": "2026-04-01T00:00:00+03:00",
+        "data_to": "2026-09-25T00:00:00+03:00",
+        "gaps": []
+    },
+    "navigation": {},
+    "blocks": [
+        {
+            "id": "tiles",
+            "type": "tile_group",
+            "alt_text": "Доходы минус расходы 392 580 ₽, Прогноз на год — Нужно 12 полных месяцев, есть 5, Расходы в день 2 970 ₽, Доходы 921 400 ₽",
+            "data": {
+                "tiles": [
+                    {
+                        "id": "balance",
+                        "title": "Доходы минус расходы",
+                        "value": 3.9258E7,
+                        "value_kind": "amount",
+                        "caption": "43% дохода · по выписке"
+                    },
+                    {
+                        "id": "forecast",
+                        "title": "Прогноз на год",
+                        "status": "locked",
+                        "lock": {
+                            "reason": "need_full_months",
+                            "text": "Нужно 12 полных месяцев, есть 5",
+                            "required": 12,
+                            "available": 5
+                        }
+                    },
+                    {
+                        "id": "daily_expense",
+                        "title": "Расходы в день",
+                        "value": 297000.0,
+                        "value_kind": "amount",
+                        "caption": "в среднем за апрель — сентябрь"
+                    },
+                    {
+                        "id": "income",
+                        "title": "Доходы",
+                        "value": 9.214E7,
+                        "value_kind": "amount",
+                        "show_plus": true,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "id": "monthly_chart",
+            "type": "chart",
+            "title": "Расходы по месяцам",
+            "alt_text": "Расходы по месяцам: январь нет данных, февраль нет данных, март нет данных, апрель 91 200 ₽, май 78 400 ₽, июнь 88 900 ₽, июль 96 300 ₽, август 89 700 ₽, сентябрь 84 320 ₽, октябрь нет данных, ноябрь нет данных, декабрь нет данных",
+            "data": {
+                "kind": "bar",
+                "value_kind": "amount",
+                "points": [
+                    {
+                        "range": {
+                            "from": "2026-01-01T00:00:00+03:00",
+                            "to": "2026-02-01T00:00:00+03:00"
+                        },
+                        "coverage": "no_data"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-02-01T00:00:00+03:00",
+                            "to": "2026-03-01T00:00:00+03:00"
+                        },
+                        "coverage": "no_data"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-03-01T00:00:00+03:00",
+                            "to": "2026-04-01T00:00:00+03:00"
+                        },
+                        "coverage": "no_data"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-04-01T00:00:00+03:00",
+                            "to": "2026-05-01T00:00:00+03:00"
+                        },
+                        "value": 9120000.0,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-05-01T00:00:00+03:00",
+                            "to": "2026-06-01T00:00:00+03:00"
+                        },
+                        "value": 7840000.0,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-06-01T00:00:00+03:00",
+                            "to": "2026-07-01T00:00:00+03:00"
+                        },
+                        "value": 8890000.0,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-07-01T00:00:00+03:00",
+                            "to": "2026-08-01T00:00:00+03:00"
+                        },
+                        "value": 9630000.0,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-08-01T00:00:00+03:00",
+                            "to": "2026-09-01T00:00:00+03:00"
+                        },
+                        "value": 8970000.0,
+                        "coverage": "complete"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-09-01T00:00:00+03:00",
+                            "to": "2026-10-01T00:00:00+03:00"
+                        },
+                        "value": 8432000.0,
+                        "coverage": "partial",
+                        "data_to": "2026-09-25T00:00:00+03:00",
+                        "note": "по 25-е"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-10-01T00:00:00+03:00",
+                            "to": "2026-11-01T00:00:00+03:00"
+                        },
+                        "coverage": "no_data"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-11-01T00:00:00+03:00",
+                            "to": "2026-12-01T00:00:00+03:00"
+                        },
+                        "coverage": "no_data"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-12-01T00:00:00+03:00",
+                            "to": "2027-01-01T00:00:00+03:00"
+                        },
+                        "coverage": "no_data"
+                    }
+                ],
+                "notes": [
+                    {
+                        "text": "Больше всего — в июле: 96 300 ₽",
+                        "tone": "primary"
+                    },
+                    {
+                        "text": "Январь — март: в выписке нет операций. Сентябрь — по 25-е"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "expense_categories",
+            "type": "ranked_list",
+            "title": "Расходы по категориям",
+            "alt_text": "Расходы по категориям: Супермаркеты 196 400 ₽, Различные товары 104 800 ₽, Заправки 38 600 ₽, Переводы 33 900 ₽, Кафе и рестораны 31 200 ₽",
+            "data": {
+                "total": {
+                    "label": "Всего · апрель — сентябрь",
+                    "value": 5.2882E7,
+                    "value_kind": "amount",
+                    "action": {
+                        "type": "open_operations",
+                        "filter": {}
+                    }
+                },
+                "items": [
+                    {
+                        "id": "c_Супермаркеты",
+                        "icon": "cart",
+                        "title": "Супермаркеты",
+                        "value": 1.964E7,
+                        "value_kind": "amount",
+                        "share": 0.37,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Различные товары",
+                        "icon": "package",
+                        "title": "Различные товары",
+                        "value": 1.048E7,
+                        "value_kind": "amount",
+                        "share": 0.2,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Заправки",
+                        "icon": "car",
+                        "title": "Заправки",
+                        "value": 3860000.0,
+                        "value_kind": "amount",
+                        "share": 0.07,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Переводы",
+                        "icon": "users",
+                        "title": "Переводы",
+                        "value": 3390000.0,
+                        "value_kind": "amount",
+                        "share": 0.06,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Кафе и рестораны",
+                        "icon": "coffee",
+                        "title": "Кафе и рестораны",
+                        "value": 3120000.0,
+                        "value_kind": "amount",
+                        "share": 0.06,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    }
+                ],
+                "visible_count": 4,
+                "more_label": "Все категории"
+            }
+        },
+        {
+            "id": "income_categories",
+            "type": "ranked_list",
+            "title": "Доходы · апрель — сентябрь",
+            "alt_text": "Доходы · апрель — сентябрь: Финансы 851 900 ₽, Переводы 62 300 ₽, Дивиденды и купоны 7 200 ₽",
+            "data": {
+                "items": [
+                    {
+                        "id": "c_Финансы",
+                        "icon": "percent",
+                        "title": "Финансы",
+                        "value": 8.519E7,
+                        "value_kind": "amount",
+                        "show_plus": true,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Переводы",
+                        "icon": "users",
+                        "title": "Переводы",
+                        "value": 6230000.0,
+                        "value_kind": "amount",
+                        "show_plus": true,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    },
+                    {
+                        "id": "c_Дивиденды и купоны",
+                        "icon": "bar-chart",
+                        "title": "Дивиденды и купоны",
+                        "value": 720000.0,
+                        "value_kind": "amount",
+                        "show_plus": true,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {}
+                        }
+                    }
+                ],
+                "style": "plain"
+            }
+        }
+    ],
+    "state": {
+        "stale": false,
+        "last_operation_at": "2026-09-25T00:00:00+03:00",
+        "data_from": "2026-04-01T00:00:00+03:00",
+        "data_to": "2026-09-25T00:00:00+03:00",
+        "full_months": 5,
+        "unread_lines_count": 0,
+        "calculated_at": "2026-09-26T00:00:00+03:00",
+        "recalculating": false
+    }
+}

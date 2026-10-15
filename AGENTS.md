@@ -44,6 +44,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Feature routes and public interfaces | `feature/<name>/api/…/*Routes.kt` (or `AuthApi.kt`, `AppLock.kt`) |
 | Screen registration | `FeatureEntry` / `Navigator` in `core/navigation/…/Navigation.kt`; each `:impl` binds its entry in `di/` |
 | Design system: theme, tokens, components, icons | `core/designsystem/…/theme`, `components`, `icons` |
+| Server-composed blocks (Analytics, assistant): catalog models, renderers, registry, `supports` | `core/api/…/model/Blocks.kt`; `core/blocks` (`CatalogV1`, `BlockRegistry`, `BlocksColumn`); composer of the fake server `mock/backend/…/domain/AnalyticsComposer.kt` |
 | Feature flags | `core/toggles/…/Flag.kt` (registry + defaults), `docs/flags.md` (meaning); mock overrides `app/src/mock/assets/flags.json` |
 | Events / crashes | `core/tracking/…/Tracker.kt`, `CrashReporter.kt` (typed context, no free-form strings); providers in `providers/*` (only `:app` depends on them; Tracer keys — README) |
 | Tokens, preferences, idempotency keys | `core/storage` |
@@ -81,6 +82,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 |---|---|---|
 | `:app` | `pf.android.application`, `pf.hilt` | instrumented |
 | `:core:api` | `pf.jvm.library` | unit |
+| `:core:blocks` | `pf.android.library.compose` | unit |
 | `:core:common` | `pf.jvm.library` | unit |
 | `:core:designsystem` | `pf.android.library.compose` | - |
 | `:core:navigation` | `pf.android.library.compose` | - |
@@ -185,6 +187,10 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - When the server sends a ready text for a code (`*_name`, `text`, lock texts), the UI shows that text for a code it does
   not know instead of building one itself or skipping it (FIN-83: import features and notices, `changed_since_text`).
 - A new block type or code value changes both `:core:api` and the fake backend `:mock:backend` in the same PR.
+- The Analytics screen is composed by the server (FIN-4): blocks of the catalog (api.md «Блоки») drawn by the renderers of
+  `core/blocks`; texts of blocks come from the server (in `mock` — `AnalyticsServerTexts`). A new primitive is a renderer in
+  `CatalogV1` (it goes into `supports` by itself) plus the composer of the fake server. Design-check fixtures of the screen
+  are golden responses the composer writes (`AnalyticsDesignFixturesTest`, `UPDATE_GOLDEN=1`).
 - A PR that adds or changes a user scenario covers it with a UI test in the same PR (docs/e2e.md, «When a change
   needs a UI test»). A scenario is what the user does and sees: a new screen or state, a step between screens, an
   error, empty or offline path they can reach, a flag that changes behaviour, a user-visible bug fix (the flow

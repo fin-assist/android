@@ -1,7 +1,6 @@
 package ru.finassist.pf.core.api.model
 
 import kotlinx.serialization.Serializable
-import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.ApiDateTime
 import ru.finassist.pf.core.common.time.DateRange
 
@@ -58,64 +57,6 @@ enum class AnswerErrorCode(override val code: String) : ApiCode {
     val effective: AnswerErrorCode get() = if (this == UNKNOWN) MODEL_ERROR else this
 }
 
-@Serializable(with = BlockType.Serializer::class)
-enum class BlockType(override val code: String) : ApiCode {
-    TEXT("text"), CHART("chart"), ROWS("rows"), UNKNOWN("?");
-
-    object Serializer : OpenEnumSerializer<BlockType>("BlockType", entries, UNKNOWN)
-}
-
-@Serializable(with = ChartKind.Serializer::class)
-enum class ChartKind(override val code: String) : ApiCode {
-    BAR("bar"), UNKNOWN("?");
-
-    object Serializer : OpenEnumSerializer<ChartKind>("ChartKind", entries, UNKNOWN)
-}
-
-@Serializable(with = ChartValueKind.Serializer::class)
-enum class ChartValueKind(override val code: String) : ApiCode {
-    AMOUNT("amount"), PERCENT("percent"), UNKNOWN("?");
-
-    object Serializer : OpenEnumSerializer<ChartValueKind>("ChartValueKind", entries, UNKNOWN)
-}
-
-@Serializable
-data class ChartPoint(
-    val range: DateRange,
-    val value: Double? = null,
-    val coverage: Coverage,
-    val dataFrom: ApiDateTime? = null,
-    val dataTo: ApiDateTime? = null,
-)
-
-/** Row "label — value": exactly one of [amount], [count], [percent], [text]; rows with none are skipped. */
-@Serializable
-data class BlockRow(
-    val label: String,
-    val sublabel: String? = null,
-    val amount: Money? = null,
-    val count: Int? = null,
-    val percent: Double? = null,
-    val text: String? = null,
-)
-
-/**
- * Answer block: flat object whose meaningful fields depend on [type]. Unknown type is rendered as [altText].
- * Numbers in charts and rows come from function results on the server, never from the model's text.
- */
-@Serializable
-data class Block(
-    val type: BlockType,
-    val altText: String? = null,
-    val text: String? = null,
-    val kind: ChartKind? = null,
-    val title: String? = null,
-    val valueKind: ChartValueKind? = null,
-    val points: List<ChartPoint>? = null,
-    val highlightIndex: Int? = null,
-    val rows: List<BlockRow>? = null,
-)
-
 @Serializable(with = ChipScreen.Serializer::class)
 enum class ChipScreen(override val code: String) : ApiCode {
     OPERATIONS("operations"), ANALYTICS("analytics"), UNKNOWN("?");
@@ -159,6 +100,8 @@ data class Message(
     val blocks: List<Block>? = null,
     val chips: List<Chip>? = null,
     val source: AnswerSource? = null,
+    /** Currency of the amounts in [blocks] (FIN-82). */
+    val currency: String = "RUB",
     val createdAt: ApiDateTime,
 )
 
@@ -176,6 +119,8 @@ data class AnswerSnapshotEvent(
     val blocks: List<Block>,
     val chips: List<Chip>,
     val source: AnswerSource? = null,
+    /** Currency of the amounts in [blocks] (FIN-82). */
+    val currency: String = "RUB",
 )
 
 @Serializable

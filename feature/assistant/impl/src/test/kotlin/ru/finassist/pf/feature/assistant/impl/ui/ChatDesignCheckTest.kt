@@ -17,13 +17,14 @@ import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.ChangedSince
 import ru.finassist.pf.core.api.model.ChartKind
 import ru.finassist.pf.core.api.model.ChartPoint
-import ru.finassist.pf.core.api.model.ChartValueKind
+import ru.finassist.pf.core.api.model.ChartData
+import ru.finassist.pf.core.api.model.RowsData
+import ru.finassist.pf.core.api.model.ValueKind
 import ru.finassist.pf.core.api.model.Chip
 import ru.finassist.pf.core.api.model.ChipScreen
 import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.TransferMode
-import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.core.designsystem.theme.ChartIntroRegistry
 import ru.finassist.pf.core.screenshot.DesignCheck
@@ -69,37 +70,38 @@ class ChatDesignCheckTest {
 
     private val samokatRubles = listOf(0, 0, 0, 2880, 2350, 1970)
 
-    private val chart = Block(
-        type = BlockType.CHART,
-        kind = ChartKind.BAR,
-        valueKind = ChartValueKind.AMOUNT,
-        altText = "Самокат по месяцам",
-        points = samokatRubles.mapIndexed { i, rub ->
-            val partial = i == samokatRubles.lastIndex
-            ChartPoint(
-                range = month(4 + i),
-                value = rub * 100.0,
-                coverage = if (partial) Coverage.PARTIAL else Coverage.COMPLETE,
-                dataTo = if (partial) OffsetDateTime.parse("2026-09-25T19:11:00+03:00") else null,
-            )
-        },
-        highlightIndex = 3,
-    )
+    private val chart = Block.of(
+        BlockType.CHART, ChartData.serializer(),
+        ChartData(
+            kind = ChartKind.BAR,
+            valueKind = ValueKind.AMOUNT,
+            points = samokatRubles.mapIndexed { i, rub ->
+                val partial = i == samokatRubles.lastIndex
+                ChartPoint(
+                    range = month(4 + i),
+                    value = rub * 100.0,
+                    coverage = if (partial) Coverage.PARTIAL else Coverage.COMPLETE,
+                    dataTo = if (partial) OffsetDateTime.parse("2026-09-25T19:11:00+03:00") else null,
+                    note = if (partial) "по 25-е" else null,
+                )
+            },
+            highlightIndex = 3,
+        ),
+    ).copy(altText = "Самокат по месяцам")
 
     private fun samokatAnswer(changedSince: List<ChangedSince> = emptyList()) = ChatItem.Answer(
         id = "a1",
         createdAt = calculated,
         status = AnswerStatus.COMPLETE,
         blocks = listOf(
-            Block(
-                type = BlockType.TEXT,
-                text = "За апрель — сентябрь на Самокат ушло **7 200 ₽**, все операции — с июля. " +
+            Block.text(
+                "За апрель — сентябрь на Самокат ушло **7 200 ₽**, все операции — с июля. " +
                     "В среднем 2 400 ₽ в месяц, больше всего в июле: 2 880 ₽.",
             ),
             chart,
-            Block(
-                type = BlockType.ROWS,
-                rows = listOf(BlockRow("Операций", count = 9), BlockRow("Средний чек", amount = Money(80_000))),
+            Block.of(
+                BlockType.ROWS, RowsData.serializer(),
+                RowsData(listOf(BlockRow("Операций", value = 9.0, valueKind = ValueKind.COUNT), BlockRow("Средний чек", value = 80_000.0, valueKind = ValueKind.AMOUNT))),
             ),
         ),
         chips = listOf(

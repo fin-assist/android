@@ -113,10 +113,16 @@ interface CategoriesApi {
 }
 
 interface AnalyticsApi {
+    /**
+     * The Analytics screen as blocks (api.md 6.1, FIN-4). [supports] — `type@v,…` the client draws (from its renderer
+     * registry); [exp] — `key:variant,…` of experiments over the composition (FIN-9).
+     */
     suspend fun getAnalytics(
         period: PeriodTypeCode? = null,
         date: PeriodKey? = null,
         transferMode: TransferMode? = null,
+        supports: String? = null,
+        exp: String? = null,
     ): Analytics
 
     suspend fun listPeriods(period: PeriodTypeCode? = null): AnalyticsPeriodsList

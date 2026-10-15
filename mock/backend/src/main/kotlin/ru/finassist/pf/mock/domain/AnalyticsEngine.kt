@@ -1,37 +1,18 @@
 package ru.finassist.pf.mock.domain
 
-import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.AnalyticsNavigation
 import ru.finassist.pf.core.api.model.AnalyticsParams
 import ru.finassist.pf.core.api.model.AnalyticsPeriodInfo
 import ru.finassist.pf.core.api.model.AnalyticsPeriodItem
 import ru.finassist.pf.core.api.model.AnalyticsPeriodsList
 import ru.finassist.pf.core.api.model.AnalyticsState
-import ru.finassist.pf.core.api.model.AnalyticsTiles
-import ru.finassist.pf.core.api.model.BankFeesCard
-import ru.finassist.pf.core.api.model.BreakdownStatus
 import ru.finassist.pf.core.api.model.Category
-import ru.finassist.pf.core.api.model.CategoryAmount
-import ru.finassist.pf.core.api.model.CategoryBreakdown
 import ru.finassist.pf.core.api.model.Coverage as ApiCoverage
-import ru.finassist.pf.core.api.model.Insights
 import ru.finassist.pf.core.api.model.LockReason
-import ru.finassist.pf.core.api.model.Metric
-import ru.finassist.pf.core.api.model.MetricBasis
-import ru.finassist.pf.core.api.model.MetricLock
-import ru.finassist.pf.core.api.model.MetricStatus
 import ru.finassist.pf.core.api.model.MonthSummary
-import ru.finassist.pf.core.api.model.MonthlyChart
-import ru.finassist.pf.core.api.model.MonthlyPoint
-import ru.finassist.pf.core.api.model.NotableSpendingCard
-import ru.finassist.pf.core.api.model.NotableSpendingItem
 import ru.finassist.pf.core.api.model.OperationKindFilter
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.PeriodTypeCode
-import ru.finassist.pf.core.api.model.RegularPayment
-import ru.finassist.pf.core.api.model.RegularPaymentsCard
-import ru.finassist.pf.core.api.model.SmallFrequentCard
-import ru.finassist.pf.core.api.model.SmallFrequentGroup
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
@@ -83,9 +64,9 @@ class AnalyticsEngine(
 
     // ---- main ----
 
-    fun analytics(period: PeriodTypeCode?, date: PeriodKey?, mode: TransferMode): Analytics {
+    fun analytics(period: PeriodTypeCode?, date: PeriodKey?, mode: TransferMode): AnalyticsSnapshot {
         val cov = coverage()
-        if (cov.isEmpty || ledger.all.isEmpty()) return Analytics(hasData = false)
+        if (cov.isEmpty || ledger.all.isEmpty()) return AnalyticsSnapshot(hasData = false)
         val type = (period ?: PeriodTypeCode.MONTH).toCommon()
         val available = periodsWithData(type)
         val key = when {
@@ -111,7 +92,7 @@ class AnalyticsEngine(
             next = available.getOrNull(navIndex + 1),
         )
 
-        return Analytics(
+        return AnalyticsSnapshot(
             hasData = true,
             params = AnalyticsParams(period ?: PeriodTypeCode.MONTH, key, mode),
             period = AnalyticsPeriodInfo(

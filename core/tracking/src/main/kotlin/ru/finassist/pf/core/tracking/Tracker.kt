@@ -44,6 +44,13 @@ object Events {
     val ANALYTICS_REGULAR_DISMISSED = Event("analytics.regular_payment.dismissed")
     val ANALYTICS_TILE_OPENED = Event("analytics.tile.opened")
 
+    /**
+     * A block of the Analytics screen was actually drawn (FIN-9): params `block` (id) and `exp` (`key:variant,…`).
+     * Sent on drawing, not when the config arrives — a user who never opened the screen or whose block is switched off
+     * is not in the sample.
+     */
+    val ANALYTICS_BLOCK_EXPOSED = Event("analytics.block.exposed")
+
     val ASSISTANT_OPENED = Event("assistant.opened")
     val ASSISTANT_QUESTION_SENT = Event("assistant.question.sent")
     val ASSISTANT_ANSWER_DONE = Event("assistant.answer.done")

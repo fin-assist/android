@@ -94,7 +94,8 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `offline=true\|false` | every backend request fails with «нет сети» | process |
   | `call_delay_ms=<n>` | how long the sign-in call takes | process |
   | `network_delay_ms=<n>` | latency of every backend request (a «busy» state stays up for that long) | process |
-  | `unknown_codes=true\|false` | the fake server sends codes the client does not know (`MockCodes`): a filter `kind` on the expense tile, an import notice, an analytics feature (FIN-83) | process |
+  | `unknown_codes=true\|false` | the fake server sends codes the client does not know (`MockCodes`): a filter `kind` on the expense tile, an import notice, an analytics feature, an Analytics block of an unknown type and a card locked for an unknown reason (FIN-83, FIN-4) | process |
+  | `failing_blocks=<id>,…` | those Analytics blocks fail on the fake server and come as `unavailable` (FIN-5); empty — none | process |
   | `assistant_model_errors=<n>` | the next n assistant answers fail with MODEL_ERROR («Повторить» under them) | process (counts down) |
   | `profile_timezone=<zone id>` | `profile.timezone` on the fake server, as if changed elsewhere; the app adopts it on the next profile read (opening «Профиль») | process |
 
@@ -185,6 +186,8 @@ were.
 | `operations/days_in_profile_zone` | `profile_timezone=Asia/Vladivostok`: after the profile is read, the feed groups days in the profile zone, not the device's — an evening operation in Moscow moves to the next day — FIN-92 |
 | `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card |
 | `analytics/overview` (smoke) | blocks, previous month, month/quarter/year, «Без переводов», category → operations |
+| `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
+| `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
 | `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card and profile) |
 | `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
 | `assistant/daily_limit` | unanswerable question is free; five questions exhaust the day |

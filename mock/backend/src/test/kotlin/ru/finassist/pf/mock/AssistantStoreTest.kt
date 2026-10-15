@@ -39,7 +39,7 @@ class AssistantStoreTest {
         assertEquals(4, seen)
         assertEquals(4, answer.version.value)
         assertEquals(AnswerStatus.GENERATING, snapshot.status)
-        assertEquals(listOf(Block(type = BlockType.TEXT, text = "Ушло 100 ₽"), rows, Block(type = BlockType.TEXT, text = "Итого")), snapshot.blocks)
+        assertEquals(listOf(Block.text("Ушло 100 ₽"), rows, Block.text("Итого")), snapshot.blocks)
     }
 
     @Test
@@ -50,7 +50,7 @@ class AssistantStoreTest {
         assertEquals(source, answer.snapshot().first.source)
         val message = answer.toMessage()
         assertEquals(AnswerStatus.GENERATING, message.status)
-        assertEquals(listOf(Block(type = BlockType.TEXT, text = "Ушло")), message.blocks)
+        assertEquals(listOf(Block.text("Ушло")), message.blocks)
         assertNull(message.charged)
         assertNull(message.chips)
         assertNull(message.source)

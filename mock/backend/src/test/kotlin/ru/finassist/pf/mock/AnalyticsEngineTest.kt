@@ -2,8 +2,8 @@ package ru.finassist.pf.mock
 
 import org.junit.Test
 import ru.finassist.pf.core.api.model.LockReason
-import ru.finassist.pf.core.api.model.MetricLock
-import ru.finassist.pf.core.api.model.MetricStatus
+import ru.finassist.pf.mock.domain.MetricLock
+import ru.finassist.pf.mock.domain.MetricStatus
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.time.PeriodKey
