@@ -434,6 +434,7 @@ internal object StatementsTags {
     const val HISTORY_ROW = "statements.history.row"
     const val HISTORY_DELETE = "statements.history.delete"
     const val HISTORY_UNREAD = "statements.history.unread"
+    const val HISTORY_RESOLVED = "statements.history.resolved"
     const val HISTORY_UPLOAD = "statements.history.upload"
 
     const val UNREAD = "statements.unread"

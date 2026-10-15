@@ -11,7 +11,10 @@ import ru.finassist.pf.core.api.model.UploadStatus
 import ru.finassist.pf.core.screenshot.DesignCheck
 import java.time.OffsetDateTime
 
-/** Artboards `UploadHistory*`: three uploads, delete confirmation, after deletion, no uploads. */
+/**
+ * Artboards `UploadHistory*`: three uploads, delete confirmation, after deletion, no uploads, lines of an upload read
+ * by a later one (FIN-79).
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class UploadHistoryDesignCheckTest {
@@ -53,6 +56,13 @@ class UploadHistoryDesignCheckTest {
         "UploadHistoryDeleted",
         state.copy(list = StatementsList(summary.copy(uploadCount = 2), listOf(all, aug)), snackbar = "Загрузка удалена, аналитика пересчитана"),
     )
+
+    @Test fun uploadHistoryResolved() {
+        val fixed = upload("u4", "operations_sep_fixed.ofx", "2026-10-12", "2026-09-01", "2026-09-30", 212)
+        val sep = upload("u5", "operations_sep.ofx", "2026-10-10", "2026-09-01", "2026-09-30", 210)
+            .copy(resolvedUnreadCount = 2, resolvedByUploadedAt = t("2026-10-12T10:00:00+03:00"))
+        capture("UploadHistoryResolved", state.copy(list = StatementsList(summary, listOf(fixed, sep, q2))))
+    }
 
     @Test fun uploadHistoryEmpty() = capture("UploadHistoryEmpty", HistoryUiState(loading = false, list = StatementsList(null, emptyList())))
 }

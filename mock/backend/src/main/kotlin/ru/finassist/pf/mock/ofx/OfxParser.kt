@@ -18,7 +18,11 @@ data class OfxDocument(
     /** `DTSTART`/`DTEND` of the statement: the period the file covers even when it has no operations. */
     val coverageFrom: OffsetDateTime?,
     val coverageTo: OffsetDateTime?,
+    /** `DTSTART`/`DTEND` of each account's statement, by `ACCTID`: what a later upload closes unread lines with (FIN-79). */
+    val accountPeriods: Map<String, StatementPeriod> = emptyMap(),
 )
+
+data class StatementPeriod(val from: OffsetDateTime, val to: OffsetDateTime)
 
 data class OfxAccount(
     /** Full `ACCTID`; the mock keeps it only to key transactions and derive the mask. */
@@ -48,7 +52,17 @@ data class OfxTransaction(
     val lineNumber: Int,
 )
 
-data class UnreadLine(val lineNumber: Int, val date: OffsetDateTime?, val reason: String)
+/**
+ * [accountId] — the account of the statement block, known even when the line is broken; [fitId] — when it was read.
+ * Both are kept only to close the line once a later upload reads it (api.md 3.6, «Закрытие строк»; FIN-79).
+ */
+data class UnreadLine(
+    val lineNumber: Int,
+    val date: OffsetDateTime?,
+    val reason: String,
+    val accountId: String? = null,
+    val fitId: String? = null,
+)
 
 sealed interface OfxCheck {
     data object Ok : OfxCheck
@@ -90,6 +104,7 @@ object OfxParser {
         val unread = mutableListOf<UnreadLine>()
         var coverageFrom: OffsetDateTime? = null
         var coverageTo: OffsetDateTime? = null
+        val accountPeriods = LinkedHashMap<String, StatementPeriod>()
         val bankId = ACCOUNT_BLOCK.find(text)?.let { fields(it.groupValues[1])["BANKID"] }
 
         for (stmt in STMTTRNRS_BLOCK.findAll(text)) {
@@ -101,6 +116,9 @@ object OfxParser {
             val listFields = fields(body.substringAfter("<BANKTRANLIST>", "").substringBefore("<STMTTRN>"))
             listFields["DTSTART"]?.let(::parseDate)?.let { from -> coverageFrom = minOf(coverageFrom ?: from, from) }
             listFields["DTEND"]?.let(::parseDate)?.let { to -> coverageTo = maxOf(coverageTo ?: to, to) }
+            val periodFrom = listFields["DTSTART"]?.let(::parseDate)
+            val periodTo = listFields["DTEND"]?.let(::parseDate)
+            if (periodFrom != null && periodTo != null) accountPeriods[account.id] = StatementPeriod(periodFrom, periodTo)
 
             for (trn in TRN_BLOCK.findAll(body)) {
                 val lineNumber = lineNumberAt(lineStarts, bodyOffset + trn.range.first)
@@ -108,13 +126,15 @@ object OfxParser {
                 val date = f["DTPOSTED"]?.let(::parseDate)
                 val amount = f["TRNAMT"]?.let { runCatching { BigDecimal(it.trim()) }.getOrNull() }
                 val name = f["NAME"]?.trim()
+                val fitId = f["FITID"]?.trim()?.ifEmpty { null }
+                fun unreadLine(date: OffsetDateTime?, reason: String) = UnreadLine(lineNumber, date, reason, account.id, fitId)
                 when {
-                    date == null -> unread += UnreadLine(lineNumber, null, if (f["DTPOSTED"] == null) "no_date" else "bad_date")
-                    amount == null -> unread += UnreadLine(lineNumber, date, "bad_amount")
-                    f["FITID"].isNullOrBlank() -> unread += UnreadLine(lineNumber, date, "truncated")
+                    date == null -> unread += unreadLine(null, if (f["DTPOSTED"] == null) "no_date" else "bad_date")
+                    amount == null -> unread += unreadLine(date, "bad_amount")
+                    fitId == null -> unread += unreadLine(date, "truncated")
                     else -> transactions += OfxTransaction(
                         accountId = account.id,
-                        fitId = f.getValue("FITID").trim(),
+                        fitId = fitId,
                         isDebit = amount.signum() < 0 || f["TRNTYPE"]?.trim().equals("DEBIT", ignoreCase = true),
                         postedAt = date,
                         amountMinor = amount.abs().movePointRight(2).setScale(0, java.math.RoundingMode.HALF_UP).longValueExact(),
@@ -127,7 +147,7 @@ object OfxParser {
                 }
             }
         }
-        return OfxDocument(bankId, accounts, transactions, unread, coverageFrom, coverageTo)
+        return OfxDocument(bankId, accounts, transactions, unread, coverageFrom, coverageTo, accountPeriods)
     }
 
     private fun fields(block: String): Map<String, String> =

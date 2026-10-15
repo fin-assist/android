@@ -30,6 +30,7 @@ import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.core.common.time.PeriodKey
+import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.tracking.Event
@@ -141,7 +142,7 @@ class AnalyticsViewModelTest {
 
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
-    private fun vm() = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker)
+    private fun vm() = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker, reportZone)
 
     private fun opened(params: AnalyticsParams? = null) = vm().apply { init(params) }
 
@@ -161,6 +162,21 @@ class AnalyticsViewModelTest {
     )
 
     private fun names() = tracker.events.map { it.first.name }
+
+    private val reportZone = ReportZone { java.time.ZoneId.of("Europe/Moscow") }
+
+    @Test fun `a new profile zone re-requests the shown period, the first known zone does not (FIN-92)`() {
+        api.answers += data(date = "2026-09")
+        api.answers += data(date = "2026-09")
+        reportZone.set("Europe/Moscow")
+        val vm = opened()
+        assertEquals(1, api.requests.size)
+
+        reportZone.set("Asia/Vladivostok")
+        assertEquals(2, api.requests.size)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH), api.requests.last())
+        assertFalse(vm.state.value.loading)
+    }
 
     @Test fun `the tab root asks for the server's default period and adopts the answer's parameters`() {
         api.answers += data(date = "2026-09")
@@ -205,10 +221,10 @@ class AnalyticsViewModelTest {
 
     @Test fun `the blocks follow their flags`() {
         val off = Flag.entries.associateWith { false }.toMutableMap()
-        val vm = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(off), tracker)
+        val vm = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(off), tracker, reportZone)
         assertEquals(AnalyticsBlocks(false, false, false, false, false, false, false, false, false, false, false), vm.state.value.blocks)
 
-        val on = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(Flag.entries.associateWith { true }.toMutableMap()), tracker)
+        val on = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(Flag.entries.associateWith { true }.toMutableMap()), tracker, reportZone)
         assertEquals(AnalyticsBlocks(true, true, true, true, true, true, true, true, true, true, true), on.state.value.blocks)
     }
 
