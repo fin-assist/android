@@ -61,11 +61,12 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     override suspend fun getImportConfig(): ImportConfig {
         backend.simulateNetwork()
         backend.requireSession()
-        val now = backend.now()
-        val zone = now.offset
-        val tomorrow = now.toLocalDate().plusDays(1).atStartOfDay().atOffset(zone)
+        // Calendar days in the profile zone (FIN-92), each bound with its own offset (DST).
+        val zone = backend.profileZone()
+        val today = backend.now().atZoneSameInstant(zone).toLocalDate()
+        val tomorrow = today.plusDays(1).atStartOfDay(zone).toOffsetDateTime()
         val lastOp = backend.ledger.all.maxOfOrNull { it.occurredAt }
-        val from = lastOp?.toLocalDate()?.atStartOfDay()?.atOffset(zone) ?: now.minusMonths(12).toLocalDate().atStartOfDay().atOffset(zone)
+        val from = (lastOp?.atZoneSameInstant(zone)?.toLocalDate() ?: today.minusMonths(12)).atStartOfDay(zone).toOffsetDateTime()
         val count = backend.ledger.all.size
         return ImportConfig(
             downloadUrl = "https://www.tbank-online.com/mybank/api/operations/timeline/public/legacy/v1/export_operations" +

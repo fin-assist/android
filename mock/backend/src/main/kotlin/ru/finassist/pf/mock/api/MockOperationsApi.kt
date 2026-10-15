@@ -25,7 +25,7 @@ import java.time.temporal.ChronoUnit
 class MockOperationsApi(private val backend: MockBackend) : OperationsApi, CategoriesApi {
 
     private val zone get() = backend.operationScope.zone
-    private val views = OperationViews(backend.ledger, zone)
+    private val views = OperationViews(backend.ledger) { zone }
     private val search = Search(backend.ledger, backend.catalog, backend.analytics)
 
     override suspend fun listOperations(query: OperationsQuery): OperationsList {

@@ -36,7 +36,21 @@ class FeedViewModelTest {
 
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
-    private fun vm() = FeedViewModel(api, statements, operations, flags, tracker)
+    private val reportZone = ru.finassist.pf.core.common.time.ReportZone { java.time.ZoneId.of("Europe/Moscow") }
+
+    private fun vm() = FeedViewModel(api, statements, operations, flags, tracker, reportZone)
+
+    @Test fun `a new profile zone reloads the feed from the top, the first known zone does not (FIN-92)`() {
+        api.lists += page("op_1", next = 1)
+        api.lists += page("op_2")
+        reportZone.set("Europe/Moscow")
+        val vm = vm()
+        assertEquals(1, api.queries.size)
+
+        reportZone.set("Asia/Vladivostok")
+        assertEquals(listOf(OperationsQuery(), OperationsQuery()), api.queries)
+        assertEquals(listOf("op_2"), vm.state.value.items.map { it.id })
+    }
 
     private fun month(name: String) = MonthSummary(name, DateRange(at(1), at(30)), Money(1_000_00), Money(2_000_00))
 

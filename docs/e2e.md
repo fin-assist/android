@@ -94,6 +94,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `call_delay_ms=<n>` | how long the sign-in call takes | process |
   | `network_delay_ms=<n>` | latency of every backend request (a «busy» state stays up for that long) | process |
   | `assistant_model_errors=<n>` | the next n assistant answers fail with MODEL_ERROR («Повторить» under them) | process (counts down) |
+  | `profile_timezone=<zone id>` | `profile.timezone` on the fake server, as if changed elsewhere; the app adopts it on the next profile read (opening «Профиль») | process |
 
   Flags are read when a screen opens: set them before the screen (usually right after `clear_state.yaml`, before
   `launchApp`). Process-scoped values are set after `launchApp`.
@@ -178,6 +179,7 @@ were.
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |
 | `applock/change_passcode` | current → new → mismatch → new → repeat; the new code unlocks after restart |
 | `operations/feed_and_detail` (smoke) | feed → card → change category → saved as manual |
+| `operations/days_in_profile_zone` | `profile_timezone=Asia/Vladivostok`: after the profile is read, the feed groups days in the profile zone, not the device's — an evening operation in Moscow moves to the next day — FIN-92 |
 | `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card |
 | `analytics/overview` (smoke) | blocks, previous month, month/quarter/year, «Без переводов», category → operations |
 | `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card and profile) |

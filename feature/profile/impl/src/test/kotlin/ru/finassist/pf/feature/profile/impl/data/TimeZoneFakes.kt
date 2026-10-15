@@ -88,6 +88,24 @@ internal class FakeDeviceZone(@Volatile var zone: String = "Europe/Moscow") : De
 
 internal fun tempPendingStore(): PendingZoneStore {
     val dir = createTempDirectory("tz-sync").toFile().apply { deleteOnExit() }
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // On the calling thread: a write never resumes a view model on Main after the test reset it.
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     return PendingZoneStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") })
+}
+
+/** Every read and write fails, as with a full disk or a broken preferences file. */
+internal class FailingDataStore : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+    override val data: kotlinx.coroutines.flow.Flow<androidx.datastore.preferences.core.Preferences> =
+        kotlinx.coroutines.flow.flow { throw java.io.IOException("disk full") }
+
+    override suspend fun updateData(
+        transform: suspend (t: androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences,
+    ): androidx.datastore.preferences.core.Preferences = throw java.io.IOException("disk full")
+}
+
+internal fun tempKnownStore(): KnownZoneStore {
+    val dir = createTempDirectory("tz-known").toFile().apply { deleteOnExit() }
+    // On the calling thread: a write never resumes a view model on Main after the test reset it.
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    return KnownZoneStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") })
 }
