@@ -40,6 +40,7 @@ import ru.finassist.pf.core.designsystem.theme.PfInsets
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.availability.api.AvailabilityTags
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
@@ -62,7 +63,7 @@ internal class AvailabilityScreensImpl @Inject constructor() : AvailabilityScree
         val context = LocalContext.current
         when (val s = state) {
             ServiceGate.State.Open -> Unit
-            ServiceGate.State.UpdateRequired -> UpdateContent(
+            is ServiceGate.State.UpdateRequired -> UpdateContent(
                 onUpdate = { openAppPage(context) },
                 onSupport = { writeToSupport(context, "Обновление приложения") },
             )
@@ -98,7 +99,7 @@ internal fun MaintenanceContent(until: OffsetDateTime?, checking: Boolean, onChe
     tone = HeroTone.WARNING,
     icon = PfIcons.CLOCK,
     title = "Идут технические работы",
-    subtitle = untilText(until, LocalPfClock.current.now()),
+    subtitle = LocalPfClock.current.let { untilText(until, it.now(), it.zone) },
     subtitleTag = AvailabilityTags.MAINTENANCE_UNTIL,
     head = "Ваши данные в сохранности",
     body = "Приложение само проверит, закончились ли работы, и откроется. Держать его открытым не нужно.",
@@ -112,12 +113,14 @@ internal fun MaintenanceContent(until: OffsetDateTime?, checking: Boolean, onChe
 )
 
 /** «Закончим примерно к 14:30»; another day — «Закончим примерно 16 октября к 14:30»; unknown — no promise. */
-internal fun untilText(until: OffsetDateTime?, now: OffsetDateTime): String {
+internal fun untilText(until: OffsetDateTime?, now: OffsetDateTime, zone: ZoneId): String {
     if (until == null) return "Пока не знаем, когда закончим"
-    val local = until.atZoneSameInstant(now.offset)
+    // In the zone of the shown clock (the profile's), not the offset of «now»: the end may be past a DST change.
+    val local = until.atZoneSameInstant(zone)
+    val today = now.atZoneSameInstant(zone).toLocalDate()
     val time = local.format(DateTimeFormatter.ofPattern("HH:mm"))
-    return if (local.toLocalDate() == now.toLocalDate()) "Закончим примерно к $time"
-    else "Закончим примерно ${RussianDates.day(local.toLocalDate(), now.year)} к $time"
+    return if (local.toLocalDate() == today) "Закончим примерно к $time"
+    else "Закончим примерно ${RussianDates.day(local.toLocalDate(), today.year)} к $time"
 }
 
 /** Layout of the mockups: hero, title and subtitle, a short paragraph; the action and the support link at the bottom. */

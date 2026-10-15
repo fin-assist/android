@@ -11,7 +11,7 @@ import ru.finassist.pf.core.screenshot.DesignCheck
 import java.time.OffsetDateTime
 import java.time.ZoneId
 
-/** Artboards `ForceUpdate`, `Maintenance`, `MaintenanceNoTime` (FIN-22). */
+/** Artboards `ForceUpdate`, `Maintenance`, `MaintenanceNoTime` and the dark `ForceUpdateDark`, `MaintenanceDark` (FIN-22). */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class AvailabilityDesignCheckTest {
@@ -21,7 +21,7 @@ class AvailabilityDesignCheckTest {
         override val zone: ZoneId = Clock.MOSCOW
     }
 
-    private fun maintenance(name: String, until: OffsetDateTime?) = DesignCheck.capture(name) {
+    private fun maintenance(name: String, until: OffsetDateTime?, dark: Boolean = false) = DesignCheck.capture(name, dark = dark) {
         CompositionLocalProvider(LocalPfClock provides clock) {
             MaintenanceContent(until = until, checking = false, onCheck = {}, onSupport = {})
         }
@@ -32,4 +32,8 @@ class AvailabilityDesignCheckTest {
     @Test fun maintenance() = maintenance("Maintenance", OffsetDateTime.parse("2026-10-15T14:30:00+03:00"))
 
     @Test fun maintenanceNoTime() = maintenance("MaintenanceNoTime", null)
+
+    @Test fun forceUpdateDark() = DesignCheck.capture("ForceUpdateDark", dark = true) { UpdateContent(onUpdate = {}, onSupport = {}) }
+
+    @Test fun maintenanceDark() = maintenance("MaintenanceDark", OffsetDateTime.parse("2026-10-15T14:30:00+03:00"), dark = true)
 }

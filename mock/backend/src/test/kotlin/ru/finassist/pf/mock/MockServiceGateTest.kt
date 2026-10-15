@@ -21,7 +21,7 @@ class MockServiceGateTest {
         backend(MockConfig(minVersion = "0.2.7")).simulateNetwork()
         assertEquals(ServiceGate.State.Open, gate.state.value)
         assertFailsWith<AppError.UpdateRequired> { backend(MockConfig(minVersion = "0.3.0")).simulateNetwork() }
-        assertEquals(ServiceGate.State.UpdateRequired, gate.state.value)
+        assertEquals(ServiceGate.State.UpdateRequired(), gate.state.value)
     }
 
     @Test fun `maintenance comes first and ends with the first request after it`() = runBlocking<Unit> {

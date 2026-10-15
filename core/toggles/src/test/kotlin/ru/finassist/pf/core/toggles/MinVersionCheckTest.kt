@@ -27,7 +27,26 @@ class MinVersionCheckTest {
         flags.min = "not a version"; check.check()
         assertEquals(ServiceGate.State.Open, gate.state.value, "malformed never blocks")
         flags.min = "0.3.0"; check.check()
-        assertEquals(ServiceGate.State.UpdateRequired, gate.state.value)
+        assertEquals(ServiceGate.State.UpdateRequired(fromServer = false), gate.state.value)
+
+        // A mistaken minimum fixed in the console lifts the screen without a restart (review of #81).
+        flags.min = ""; check.check()
+        assertEquals(ServiceGate.State.Open, gate.state.value)
+
+        // The server's requirement is final: the config does not lift it.
+        gate.updateRequired(); check.check()
+        assertEquals(ServiceGate.State.UpdateRequired(fromServer = true), gate.state.value)
+    }
+
+    @Test fun `a config that arrives right after start is not missed`() {
+        val flags = Flags("")
+        val gate = ServiceGate()
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined)
+        MinVersionCheck(flags, ClientVersion("0.2.7", 41), gate).start(scope)
+        flags.min = "0.3.0"
+        kotlinx.coroutines.runBlocking { flags.changes.emit(Unit) }
+        assertEquals(ServiceGate.State.UpdateRequired(fromServer = false), gate.state.value)
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
     }
 
     @Test fun `without a remote value the default is no minimum`() {

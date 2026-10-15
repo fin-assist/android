@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.common.availability.ServiceGate
@@ -49,13 +50,18 @@ class AvailabilityViewModel @Inject constructor(
         }
     }
 
-    /** «Проверить сейчас». */
+    /** «Проверить сейчас»: replaces the scheduled check (the new state of the gate schedules the next one). */
     fun checkNow() {
         if (_checking.value) return
+        scheduled?.cancel()
         viewModelScope.launch { probe() }
     }
 
+    /** One probe at a time, whoever asked: the button and the timer never send two requests. */
+    private val probing = Mutex()
+
     private suspend fun probe() {
+        if (!probing.tryLock()) return
         _checking.value = true
         try {
             auth.getConsentDocument(ConsentType.PERSONAL_DATA)
@@ -69,6 +75,7 @@ class AvailabilityViewModel @Inject constructor(
             }
         } finally {
             _checking.value = false
+            probing.unlock()
         }
     }
 }

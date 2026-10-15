@@ -55,15 +55,18 @@ internal class ClientVersionInterceptor(private val version: ClientVersion) : In
  */
 internal class ServiceGateInterceptor(private val gate: ServiceGate, private val clock: Clock) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
+        // Only the maintenance known before this call ends with its answer: a maintenance a nested call reported
+        // meanwhile (the refresh of an expired token) stays.
+        val before = gate.state.value as? ServiceGate.State.Maintenance
         val response = chain.proceed(chain.request())
         if (response.code == 400 || response.code == 503) {
             when (val e = response.toAppError()) {
                 is AppError.UpdateRequired -> gate.updateRequired()
                 is AppError.Maintenance -> gate.maintenance(e.until, e.retryAfterSeconds, clock.now())
-                else -> if (response.code != 503) gate.reopen()
+                else -> if (response.code != 503 && before != null) gate.reopen(before)
             }
-        } else if (response.code < 500) {
-            gate.reopen()
+        } else if (response.code < 500 && before != null) {
+            gate.reopen(before)
         }
         return response
     }

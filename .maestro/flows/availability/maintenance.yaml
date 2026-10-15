@@ -1,16 +1,17 @@
 appId: ru.finassist.pf.mock.e2e
-name: Техработы — экран со временем окончания, после работ приложение открывается само по проверке
+name: Техработы — экран со временем окончания; приложение открывается по проверке и само после Retry-After
 tags:
   - availability
 ---
 # FIN-22. The fake server answers 503 MAINTENANCE ending in 30 minutes of the fake «now» (8 October, 12:00 MSK): the
-# screen promises the end time. Once the maintenance is over, «Проверить сейчас» asks the server and the app opens again.
+# screen promises the end time.
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/login.yaml
+# A long Retry-After: the automatic check does not race the button below.
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?maintenance=30"
+      LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=600"
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
@@ -22,6 +23,7 @@ tags:
 - assertVisible:
     id: "availability.maintenance.check"
 
+# The maintenance is over: «Проверить сейчас» asks the server and the app opens again.
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -36,3 +38,23 @@ tags:
     visible:
       id: "operations.feed"
     timeout: 15000
+
+# Again, with the shortest Retry-After: the app leaves the screen by itself, without a tap.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=15"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "availability.maintenance"
+    timeout: 15000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=off"
+- extendedWaitUntil:
+    notVisible:
+      id: "availability.maintenance"
+    timeout: 40000

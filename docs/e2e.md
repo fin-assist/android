@@ -98,7 +98,8 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `failing_blocks=<id>,…` | those Analytics blocks fail on the fake server and come as `unavailable` (FIN-5); empty — none | process |
   | `assistant_model_errors=<n>` | the next n assistant answers fail with MODEL_ERROR («Повторить» under them) | process (counts down) |
   | `min_version=<MAJOR.MINOR.PATCH>` | the fake server's minimum client version; below it every request gets `CLIENT_VERSION_UNSUPPORTED` and the app shows the update screen (FIN-22); empty — none | process |
-  | `maintenance=<minutes>\|unknown\|off` | every request gets 503 `MAINTENANCE` ending in that many minutes of the fake «now» or at an unknown time, `Retry-After` 15 s; `off` ends it (FIN-22) | process |
+  | `maintenance=<minutes>\|unknown\|off` | every request gets 503 `MAINTENANCE` ending in that many minutes of the fake «now» or at an unknown time; `off` ends it (FIN-22) | process |
+  | `maintenance_retry_after=<s>` | `Retry-After` of the maintenance answer, 15 s by default (the shortest the app waits) | process |
   | `profile_timezone=<zone id>` | `profile.timezone` on the fake server, as if changed elsewhere; the app adopts it on the next profile read (opening «Профиль») | process |
 
   Flags are read when a screen opens: set them before the screen (usually right after `clear_state.yaml`, before
@@ -207,7 +208,8 @@ were.
 | `profile/theme_and_logout` | dark theme; logout cancel / confirm with the notice |
 | `profile/delete_account` | passcode (wrong, right) → «Удалить аккаунт?» over the profile → «Удаляем…» ignores Back → «Аккаунт удалён» |
 | `availability/update_required` | `min_version=9.0.0`: the next request gets `CLIENT_VERSION_UNSUPPORTED`, the update screen covers the app — FIN-22 |
-| `availability/maintenance` | `maintenance=30`: the maintenance screen promises the end time; after `maintenance=off` «Проверить сейчас» opens the app again — FIN-22 |
+| `availability/maintenance` | `maintenance=30` with a long `Retry-After`: the screen promises the end time, after `maintenance=off` «Проверить сейчас» opens the app; then with 15 s the app leaves the screen by itself — FIN-22 |
+| `availability/maintenance_on_sign_in` | `maintenance=unknown` before sign-in: «Продолжить» on the phone screen gets the maintenance screen over sign-in, without an end time — FIN-22 |
 | `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
 | native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
 
@@ -236,3 +238,7 @@ A screen that stays put after a sign-in or a sign-out (FIN-88; the FIN-63 stall 
 either: it needs a subscriber of the session to start while the token store is being written, a timing the emulator
 does not reproduce on demand (about 5 % of such starts on the JVM). `EncryptedTokenStoreRaceTest` repeats both writes
 200 times against the real store; `auth/sign_in_existing_user` and `profile/theme_and_logout` cover the plain paths.
+The update or maintenance screen over the passcode screen (FIN-22): while the app is locked no screen sends a request,
+so a server answer can arrive under the lock only from background work (the time zone sync, Remote Config) at a moment
+a flow cannot pick. The overlay is one layer above all others in `PfApp`; `availability/maintenance_on_sign_in`
+checks it over sign-in, the other flows over the main screens.

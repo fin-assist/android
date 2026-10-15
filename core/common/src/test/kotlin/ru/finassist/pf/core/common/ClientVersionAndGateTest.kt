@@ -40,9 +40,17 @@ class ClientVersionAndGateTest {
         gate.reopen()
         assertEquals(1, gate.reopened.value, "an open gate does not reopen again")
 
+        // Only the expected maintenance ends: a newer one set meanwhile stays.
+        gate.maintenance(null, 60, now)
+        val first = gate.state.value as ServiceGate.State.Maintenance
+        gate.maintenance(null, 120, now)
+        gate.reopen(first)
+        assertIs<ServiceGate.State.Maintenance>(gate.state.value)
+        gate.reopen()
+
         gate.updateRequired()
         gate.maintenance(null, 60, now)
         gate.reopen()
-        assertEquals(ServiceGate.State.UpdateRequired, gate.state.value)
+        assertEquals(ServiceGate.State.UpdateRequired(), gate.state.value)
     }
 }

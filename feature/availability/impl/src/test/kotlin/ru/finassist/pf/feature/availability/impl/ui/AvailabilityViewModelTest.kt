@@ -81,9 +81,26 @@ class AvailabilityViewModelTest {
 
     @Test fun `the time of the end reads as a promise for today or another day`() {
         val now = OffsetDateTime.parse("2026-10-15T12:00:00+03:00")
-        assertEquals("Закончим примерно к 14:30", untilText(OffsetDateTime.parse("2026-10-15T11:30:00Z"), now))
-        assertEquals("Закончим примерно 16 октября к 09:00", untilText(OffsetDateTime.parse("2026-10-16T09:00:00+03:00"), now))
-        assertEquals("Пока не знаем, когда закончим", untilText(null, now))
+        val msk = Clock.MOSCOW
+        assertEquals("Закончим примерно к 14:30", untilText(OffsetDateTime.parse("2026-10-15T11:30:00Z"), now, msk))
+        assertEquals("Закончим примерно 16\u00a0октября к 09:00", untilText(OffsetDateTime.parse("2026-10-16T09:00:00+03:00"), now, msk))
+        assertEquals("Пока не знаем, когда закончим", untilText(null, now, msk))
+        // In the zone, not the offset of «now»: New York in summer, the end after the autumn clock change (review of #81).
+        val ny = ZoneId.of("America/New_York")
+        val summer = OffsetDateTime.parse("2026-10-31T12:00:00-04:00")
+        assertEquals("Закончим примерно 2\u00a0ноября к 09:00", untilText(OffsetDateTime.parse("2026-11-02T09:00:00-05:00"), summer, ny))
+    }
+
+    @Test fun `the button during a scheduled check sends one request, not two`() {
+        val vm = AvailabilityViewModel(gate, auth, clock)
+        gate.maintenance(null, 15, clock.now())
+        scheduler.runCurrent()
+        answers += null
+        scheduler.advanceTimeBy(14_999)
+        vm.checkNow()
+        scheduler.advanceTimeBy(5_000); scheduler.runCurrent()
+        assertEquals(1, probes)
+        assertEquals(ServiceGate.State.Open, gate.state.value)
     }
 
     private companion object {

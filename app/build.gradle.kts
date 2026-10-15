@@ -11,10 +11,12 @@ val tracerAppToken = secret("pf.tracerAppToken")
 val tracerPluginToken = secret("pf.tracerPluginToken")
 
 // Version of the app = version of the release branch (`release/0.2.7` → 0.2.7), raised with every release branch.
-// The build number is the CI run number (`GITHUB_RUN_NUMBER`), 1 in local builds. Both go into `X-Client-Version`
+// Build number: `PF_VERSION_CODE` — set by the build that goes to the stores; it must only grow across every published
+// build, which `GITHUB_RUN_NUMBER` does not guarantee (a counter per workflow; a re-run keeps it). Without it — the CI
+// run number (`GITHUB_RUN_NUMBER`, enough to tell builds apart in logs), 1 locally. Both go into `X-Client-Version`
 // (`android/0.2.7+41`, api.md «Заголовки», FIN-20/22).
 val appVersionName = "0.2.7"
-val appVersionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+val appVersionCode = (System.getenv("PF_VERSION_CODE") ?: System.getenv("GITHUB_RUN_NUMBER"))?.toIntOrNull() ?: 1
 
 android {
     namespace = "ru.finassist.pf"

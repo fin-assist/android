@@ -43,12 +43,12 @@ class ServiceGateNetworkTest {
     fun `CLIENT_VERSION_UNSUPPORTED blocks the app until an update`() = runBlocking<Unit> {
         server.enqueue(MockResponse().setResponseCode(400).setBody("""{"error":{"code":"CLIENT_VERSION_UNSUPPORTED","message":"update"}}"""))
         assertFailsWith<AppError.UpdateRequired> { stack.api.profile.getProfile() }
-        assertEquals(ServiceGate.State.UpdateRequired, stack.gate.state.value)
+        assertEquals(ServiceGate.State.UpdateRequired(), stack.gate.state.value)
 
         // A later success does not unblock: only a new version does.
         server.enqueue(MockResponse().setBody(profile))
         stack.api.profile.getProfile()
-        assertEquals(ServiceGate.State.UpdateRequired, stack.gate.state.value)
+        assertEquals(ServiceGate.State.UpdateRequired(), stack.gate.state.value)
     }
 
     @Test
@@ -71,11 +71,26 @@ class ServiceGateNetworkTest {
     }
 
     @Test
-    fun `another 503 keeps the maintenance, another 400 is an ordinary error`() = runBlocking<Unit> {
+    fun `another 5xx keeps the maintenance, an ordinary 400 ends it`() = runBlocking<Unit> {
         server.enqueue(MockResponse().setResponseCode(503).setBody("""{"error":{"code":"MAINTENANCE","message":"m"}}"""))
         runCatching { stack.api.profile.getProfile() }
         server.enqueue(MockResponse().setResponseCode(503))
         assertIs<AppError.Server>(runCatching { stack.api.profile.getProfile() }.exceptionOrNull())
+        server.enqueue(MockResponse().setResponseCode(502))
+        runCatching { stack.api.profile.getProfile() }
+        assertIs<ServiceGate.State.Maintenance>(stack.gate.state.value)
+
+        server.enqueue(MockResponse().setResponseCode(400).setBody("""{"error":{"code":"VALIDATION_ERROR","message":"v"}}"""))
+        assertIs<AppError.Api>(runCatching { stack.api.profile.getProfile() }.exceptionOrNull())
+        assertEquals(ServiceGate.State.Open, stack.gate.state.value)
+    }
+
+    @Test
+    fun `maintenance met by the token refresh stays though the original call ends with 401`() = runBlocking<Unit> {
+        val stack = NetworkStack(server, InMemoryTokenStore(ru.finassist.pf.core.api.TokenStore.Session("u1", ru.finassist.pf.core.api.model.TokenPair("old", "ref"))))
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"code":"INVALID_TOKEN","message":"t"}}"""))
+        server.enqueue(MockResponse().setResponseCode(503).setHeader("Retry-After", "60").setBody("""{"error":{"code":"MAINTENANCE","message":"m"}}"""))
+        runCatching { stack.api.profile.getProfile() }
         assertIs<ServiceGate.State.Maintenance>(stack.gate.state.value)
     }
 }
