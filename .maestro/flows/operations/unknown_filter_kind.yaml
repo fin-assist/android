@@ -31,9 +31,10 @@ tags:
     timeout: 15000
 # The chip row scrolls sideways and the scope chip comes last, after period, category, amount and kind: it starts
 # off screen (FIN-101).
+# The swipe starts at the category chip, as in search_filters and ask_question: from the first chip it is too short.
 - swipe:
     from:
-      id: "operations.search.chip.period"
+      id: "operations.search.chip.category"
     direction: LEFT
 - assertVisible:
     id: "operations.search.chip.scope"
