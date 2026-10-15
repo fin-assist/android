@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Test the scripts (agent-docs parsers, Qase report and case map, UI coverage, design-check export, Codex review posting)
+      - name: Test the scripts (agent-docs parsers, Qase report and case map, UI coverage, design-check export)
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
       # Which screens and test tags the Maestro flows refer to (docs/testing.md, «UI test coverage»). Static, no
