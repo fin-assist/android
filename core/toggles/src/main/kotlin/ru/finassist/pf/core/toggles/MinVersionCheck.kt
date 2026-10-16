@@ -22,7 +22,8 @@ class MinVersionCheck(
     private val last: LastMinVersion,
 ) {
     fun check() {
-        val minimum = if (flags.version == FLAGS_VERSION_DEFAULTS) {
+        // Not by FeatureFlags.version: a config holding only strings has the version of the defaults (review of #81).
+        val minimum = if (!flags.loaded) {
             last.get()
         } else {
             flags.value(RemoteValue.APP_MIN_VERSION).also(last::set)

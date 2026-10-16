@@ -13,11 +13,12 @@ class MinVersionCheckTest {
         override fun set(value: String) { this.value = value }
     }
 
-    /** [loaded] — the provider has read a config (else [FeatureFlags.version] is the defaults). */
-    private class Flags(var min: String, var loaded: Boolean = true) : FeatureFlags {
+    /** [loaded] — the provider has read a config. */
+    private class Flags(var min: String, override var loaded: Boolean = true) : FeatureFlags {
         override fun isEnabled(flag: Flag) = flag.defaultValue
         override val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-        override val version get() = if (loaded) "abcd1234" else FLAGS_VERSION_DEFAULTS
+        // Only strings in the config: the version of the defaults, whether or not it was read.
+        override val version get() = FLAGS_VERSION_DEFAULTS
         override suspend fun setUser(userId: String?) = Unit
         override suspend fun refresh() = Unit
         override fun value(key: RemoteValue) = if (key == RemoteValue.APP_MIN_VERSION) min else key.defaultValue

@@ -56,6 +56,16 @@ class ClientVersionAndGateTest {
         assertIs<ServiceGate.State.Maintenance>(gate.state.value)
         gate.reopen()
 
+        // A maintenance that ended under the config requirement still reloads the screens once it is lifted (review of #81).
+        val before = gate.reopened.value
+        gate.maintenance(null, 60, now)
+        gate.updateRequiredByConfig()
+        gate.reopen()
+        assertEquals(before, gate.reopened.value, "still closed")
+        gate.configAllowsVersion()
+        assertEquals(ServiceGate.State.Open, gate.state.value)
+        assertEquals(before + 1, gate.reopened.value)
+
         gate.updateRequired()
         gate.maintenance(null, 60, now)
         gate.reopen()

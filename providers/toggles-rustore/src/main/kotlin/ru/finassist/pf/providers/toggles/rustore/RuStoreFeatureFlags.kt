@@ -62,6 +62,7 @@ class RuStoreFeatureFlags @Inject constructor(
 
     @Volatile private var config = Config()
     @Volatile private var account: String? = null
+    @Volatile private var snapshotted = false
 
     private val client: RemoteConfigClient? = appId.takeIf { it.isNotBlank() }?.let { id ->
         runCatching {
@@ -98,6 +99,9 @@ class RuStoreFeatureFlags @Inject constructor(
     override val changes: Flow<Unit> = changesFlow
 
     override val version: String get() = config.let { flagsVersion(it.values, it.variants) }
+
+    /** Without an app id there is nothing to wait for: the code defaults are the config. */
+    override val loaded: Boolean get() = client == null || snapshotted
 
     override suspend fun setUser(userId: String?) {
         if (account == userId) return
@@ -136,6 +140,7 @@ class RuStoreFeatureFlags @Inject constructor(
             runCatching { v.key to config.getString(v.key) }.getOrNull()
         }.toMap()
         this.config = Config(values, variants, strings)
+        snapshotted = true
         changesFlow.tryEmit(Unit)
     }
 

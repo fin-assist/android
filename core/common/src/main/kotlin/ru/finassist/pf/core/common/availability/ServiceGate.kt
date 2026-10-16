@@ -3,6 +3,7 @@ package ru.finassist.pf.core.common.availability
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.time.OffsetDateTime
 
 /**
@@ -42,17 +43,28 @@ class ServiceGate {
 
     private val lock = Any()
     private var reasons = Reasons()
+    /** A maintenance ended since the gate was last open: the screens behind it still show its errors. */
+    private var maintenanceEnded = false
     private val _state = MutableStateFlow<State>(State.Open)
     val state: StateFlow<State> = _state.asStateFlow()
 
-    /** How many times the gate reopened after maintenance: the root re-creates the screens to reload them. */
+    /**
+     * How many times the gate opened after a maintenance ended: the root re-creates the screens to reload them. A
+     * maintenance that ended while another reason kept the gate closed counts when that reason is lifted.
+     */
     private val _reopened = MutableStateFlow(0)
     val reopened: StateFlow<Int> = _reopened.asStateFlow()
 
     /** All changes go through here, one at a time: no reason is lost to a concurrent answer. */
-    private inline fun change(block: (Reasons) -> Reasons) = synchronized(lock) {
-        reasons = block(reasons)
-        _state.value = reasons.state
+    private inline fun change(block: (Reasons) -> Reasons) {
+        val opened = synchronized(lock) {
+            val before = reasons
+            reasons = block(before)
+            if (before.maintenance != null && reasons.maintenance == null) maintenanceEnded = true
+            _state.value = reasons.state
+            (_state.value == State.Open && maintenanceEnded).also { if (it) maintenanceEnded = false }
+        }
+        if (opened) _reopened.update { it + 1 }
     }
 
     /** The server's `CLIENT_VERSION_UNSUPPORTED`: final. */
@@ -74,15 +86,9 @@ class ServiceGate {
      * A request went through after maintenance. With [expected], only that very maintenance ends: a newer one (set by a
      * nested refresh, say) stays.
      */
-    fun reopen(expected: State.Maintenance? = null) {
-        val ended = synchronized(lock) {
-            val m = reasons.maintenance
-            if (m == null || (expected != null && m != expected)) return
-            reasons = reasons.copy(maintenance = null)
-            _state.value = reasons.state
-            _state.value == State.Open
-        }
-        if (ended) _reopened.value += 1
+    fun reopen(expected: State.Maintenance? = null) = change {
+        val m = it.maintenance
+        if (m == null || (expected != null && m != expected)) it else it.copy(maintenance = null)
     }
 
     companion object {

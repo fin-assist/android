@@ -35,11 +35,13 @@ class AvailabilityViewModelTest {
     /** Each probe takes the next answer: `null` — success; an [AppError] — thrown (and reported like the network layer). */
     private val answers = ArrayDeque<AppError?>()
     private var probes = 0
+    /** Runs before a successful answer: what happened on the server while the probe was on its way. */
+    private var beforeSuccess: () -> Unit = {}
     private val auth = object : AuthApi by unused() {
         override suspend fun getConsentDocument(type: ConsentType): ConsentDocument {
             probes++
             when (val e = answers.removeFirstOrNull()) {
-                null -> return ConsentDocument(type = ConsentType.PERSONAL_DATA, version = "1", url = "https://plainfin.ru", title = "Согласие")
+                null -> return beforeSuccess().let { ConsentDocument(type = ConsentType.PERSONAL_DATA, version = "1", url = "https://plainfin.ru", title = "Согласие") }
                 is AppError.Maintenance -> { gate.maintenance(e.until, e.retryAfterSeconds, clock.now()); throw e }
                 else -> throw e
             }
@@ -66,6 +68,17 @@ class AvailabilityViewModelTest {
         scheduler.advanceTimeBy(1_000); scheduler.runCurrent()
         assertEquals(2, probes)
         assertEquals(ServiceGate.State.Open, gate.state.value)
+        vm.hashCode()
+    }
+
+    @Test fun `a maintenance that began during the probe stays after its success`() {
+        val vm = AvailabilityViewModel(gate, auth, clock)
+        gate.maintenance(null, 15, clock.now())
+        answers += null
+        beforeSuccess = { gate.maintenance(null, 600, clock.now()) }
+        scheduler.advanceTimeBy(15_000); scheduler.runCurrent()
+        assertEquals(1, probes)
+        assertEquals(ServiceGate.State.Maintenance(null, clock.now().plusSeconds(600)), gate.state.value)
         vm.hashCode()
     }
 

@@ -34,6 +34,12 @@ interface FeatureFlags {
     /** Variant of [experiment] in effect (FIN-9); its default variant when the provider has none. */
     fun variant(experiment: Experiment): String = experiment.defaultVariant
 
+    /**
+     * Whether the provider has read a config (its cache or the network), even an empty one. False only while a provider
+     * that loads asynchronously has read nothing yet: then the values in effect are the code defaults, not the console's.
+     */
+    val loaded: Boolean get() = true
+
     /** String value of [key] in effect; its default when the provider has none (FIN-22). */
     fun value(key: RemoteValue): String = key.defaultValue
 }
