@@ -63,9 +63,12 @@ class AvailabilityViewModel @Inject constructor(
     private suspend fun probe() {
         if (!probing.tryLock()) return
         _checking.value = true
+        // Only the maintenance this probe was sent under ends with its answer: requests of the screens re-created right
+        // after it may have met a new one.
+        val before = gate.state.value as? ServiceGate.State.Maintenance
         try {
             auth.getConsentDocument(ConsentType.PERSONAL_DATA)
-            gate.reopen()
+            gate.reopen(before)
         } catch (e: AppError) {
             // Maintenance again: the gate already holds the new retry moment. Anything else (no network, a server
             // error): the screen stays, the next check after the same pause.

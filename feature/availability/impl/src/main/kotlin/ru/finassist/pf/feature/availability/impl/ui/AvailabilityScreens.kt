@@ -166,13 +166,19 @@ private fun GateScreen(
     }
 }
 
-/**
- * The app's page in the store that handles `market://` — RuStore, Google Play or another; without one, the site.
- */
+/** «Обновить»: [appPageIntent]. */
 private fun openAppPage(context: Context) {
-    val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    runCatching { context.startActivity(market) }
-        .onFailure { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SITE)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+    runCatching { context.startActivity(appPageIntent(context)) }
+}
+
+/**
+ * The app's page in the store that handles `market://` — RuStore, Google Play or another; when no installed app
+ * handles it, the site. (Seeing the stores needs the `market` scheme in `<queries>` of the manifest.)
+ */
+internal fun appPageIntent(context: Context): Intent {
+    val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${context.packageName}"))
+    val target = if (market.resolveActivity(context.packageManager) != null) market else Intent(Intent.ACTION_VIEW, Uri.parse(SITE))
+    return target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }
 
 private fun writeToSupport(context: Context, subject: String) {

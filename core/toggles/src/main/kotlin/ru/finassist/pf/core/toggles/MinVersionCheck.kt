@@ -11,10 +11,23 @@ import ru.finassist.pf.core.common.availability.ServiceGate
  * new config. Below it the [ServiceGate] asks for an update; a later config without that minimum lifts it (a mistaken
  * value in the console must not lock users out for good). The server's `CLIENT_VERSION_UNSUPPORTED` stays the source of
  * truth and is final: an empty or malformed minimum never blocks.
+ *
+ * The provider reads its cached config asynchronously, so at a cold start it may have nothing yet: until it does, the
+ * minimum of the last config seen ([LastMinVersion], read synchronously) is in effect.
  */
-class MinVersionCheck(private val flags: FeatureFlags, private val version: ClientVersion, private val gate: ServiceGate) {
+class MinVersionCheck(
+    private val flags: FeatureFlags,
+    private val version: ClientVersion,
+    private val gate: ServiceGate,
+    private val last: LastMinVersion,
+) {
     fun check() {
-        if (version.isBelow(flags.value(RemoteValue.APP_MIN_VERSION))) gate.updateRequiredByConfig() else gate.configAllowsVersion()
+        val minimum = if (flags.version == FLAGS_VERSION_DEFAULTS) {
+            last.get()
+        } else {
+            flags.value(RemoteValue.APP_MIN_VERSION).also(last::set)
+        }
+        if (version.isBelow(minimum)) gate.updateRequiredByConfig() else gate.configAllowsVersion()
     }
 
     /**
@@ -25,4 +38,10 @@ class MinVersionCheck(private val flags: FeatureFlags, private val version: Clie
         scope.launch(start = CoroutineStart.UNDISPATCHED) { flags.changes.collect { check() } }
         check()
     }
+}
+
+/** The `app.min_version` of the last config the app saw; read synchronously at start (app storage). */
+interface LastMinVersion {
+    fun get(): String?
+    fun set(value: String)
 }

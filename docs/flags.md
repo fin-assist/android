@@ -54,8 +54,10 @@ has none.
 
 - `app.min_version` — minimum supported version, `MAJOR.MINOR.PATCH`; default empty (no minimum). Checked at start,
   before the first request, and with every new config (`MinVersionCheck`): below it the app shows the update screen
-  (FIN-22). A duplicate of the server's minimum: `CLIENT_VERSION_UNSUPPORTED` from the API wins, and an empty or
-  malformed value never blocks.
+  (FIN-22). A later config without that minimum lifts the screen without a restart — a mistaken value in the console
+  does not lock users out; the server's `CLIENT_VERSION_UNSUPPORTED` is final. An empty or malformed value never
+  blocks. Until the provider has read its cached config at a cold start, the minimum of the last config seen is in
+  effect (kept in the app's preferences), so the check still comes before the first request.
 
 ## Adding a flag
 

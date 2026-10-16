@@ -1,8 +1,10 @@
 package ru.finassist.pf.di
 
+import android.content.Context
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import ru.finassist.pf.BuildConfig
 import ru.finassist.pf.core.common.availability.ClientVersion
@@ -38,7 +40,12 @@ object AppModule {
     fun serviceGate(): ServiceGate = ServiceGate()
 
     @Provides
-    fun minVersionCheck(flags: FeatureFlags, version: ClientVersion, gate: ServiceGate): MinVersionCheck = MinVersionCheck(flags, version, gate)
+    fun minVersionCheck(
+        @ApplicationContext context: Context,
+        flags: FeatureFlags,
+        version: ClientVersion,
+        gate: ServiceGate,
+    ): MinVersionCheck = MinVersionCheck(flags, version, gate, LastMinVersionPrefs(context))
 
     /**
      * Days and "today" in the report zone (profile zone, FIN-92). The e2e build pins "now" ([BuildConfig.E2E_NOW]) so

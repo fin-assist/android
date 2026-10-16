@@ -48,6 +48,14 @@ class ClientVersionAndGateTest {
         assertIs<ServiceGate.State.Maintenance>(gate.state.value)
         gate.reopen()
 
+        // A Remote Config requirement over maintenance: lifting it shows the maintenance again (review of #81).
+        gate.maintenance(null, 60, now)
+        gate.updateRequiredByConfig()
+        assertEquals(ServiceGate.State.UpdateRequired(fromServer = false), gate.state.value)
+        gate.configAllowsVersion()
+        assertIs<ServiceGate.State.Maintenance>(gate.state.value)
+        gate.reopen()
+
         gate.updateRequired()
         gate.maintenance(null, 60, now)
         gate.reopen()
