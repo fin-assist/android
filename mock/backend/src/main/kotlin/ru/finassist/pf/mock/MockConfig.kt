@@ -32,6 +32,13 @@ data class MockConfig(
     val unknownCodes: Boolean = false,
     /** Ids of Analytics blocks that fail to build: they come as `unavailable` (FIN-5), the rest of the screen stays. */
     val failingBlocks: Set<String> = emptySet(),
+    /** Minimum supported client version, `MAJOR.MINOR.PATCH`; below it every request gets `CLIENT_VERSION_UNSUPPORTED` (FIN-20). */
+    val minVersion: String? = null,
+    /** Maintenance: every request gets 503 `MAINTENANCE` (FIN-20). [maintenanceUntil] — its expected end, null — unknown. */
+    val maintenance: Boolean = false,
+    val maintenanceUntil: java.time.OffsetDateTime? = null,
+    /** `Retry-After` of the maintenance answer, seconds. */
+    val maintenanceRetryAfterSeconds: Int = 15,
 ) {
     companion object {
         /** Git-ignored: `app/src/mock/assets/private/statement.ofx`. */

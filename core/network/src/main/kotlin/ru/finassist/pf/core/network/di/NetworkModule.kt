@@ -24,7 +24,11 @@ import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.network.AnalyticsService
 import ru.finassist.pf.core.network.AssistantService
+import ru.finassist.pf.core.common.availability.ClientVersion
+import ru.finassist.pf.core.common.availability.ServiceGate
+import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.network.AuthInterceptor
+import ru.finassist.pf.core.network.ClientVersionInterceptor
 import ru.finassist.pf.core.network.AuthService
 import ru.finassist.pf.core.network.HttpAnalyticsApi
 import ru.finassist.pf.core.network.HttpAssistantApi
@@ -36,6 +40,7 @@ import ru.finassist.pf.core.network.HttpStatementsApi
 import ru.finassist.pf.core.network.OperationsService
 import ru.finassist.pf.core.network.ProfileService
 import ru.finassist.pf.core.network.RequestIdInterceptor
+import ru.finassist.pf.core.network.ServiceGateInterceptor
 import ru.finassist.pf.core.network.SseRequests
 import ru.finassist.pf.core.network.StatementsService
 import ru.finassist.pf.core.network.TokenAuthenticator
@@ -44,7 +49,10 @@ import javax.inject.Named
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
-/** Base URL and debug logging are supplied by `:app` (`@Named("apiBaseUrl")`, `@Named("httpLogging")`). */
+/**
+ * Base URL and debug logging are supplied by `:app` (`@Named("apiBaseUrl")`, `@Named("httpLogging")`), and so are the
+ * [ClientVersion], the [ServiceGate] and the [Clock].
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 internal object NetworkModule {
@@ -61,9 +69,17 @@ internal object NetworkModule {
     @Provides
     @Singleton
     @Named("plain")
-    fun plainClient(@Named("httpLogging") logging: Boolean): OkHttpClient = OkHttpClient.Builder()
+    fun plainClient(
+        @Named("httpLogging") logging: Boolean,
+        version: ClientVersion,
+        gate: ServiceGate,
+        clock: Clock,
+    ): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        // FIN-22: the version on every request (refresh included), and what the server says about it and maintenance.
+        .addInterceptor(ClientVersionInterceptor(version))
+        .addInterceptor(ServiceGateInterceptor(gate, clock))
         // Network interceptor: runs per attempt (auth retry, redirect), so every attempt gets a fresh X-Request-Id.
         .addNetworkInterceptor(RequestIdInterceptor())
         .apply { if (logging) addInterceptor(HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BASIC)) }

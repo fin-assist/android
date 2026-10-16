@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock.di
 
+import ru.finassist.pf.core.common.availability.ClientVersion
+import ru.finassist.pf.core.common.availability.ServiceGate
 import android.content.Context
 import dagger.BindsOptionalOf
 import dagger.Module
@@ -29,8 +31,14 @@ import javax.inject.Singleton
 object MockModule {
     /** [config] is bound only by builds that tune the fake backend (the mock e2e build); otherwise defaults. */
     @Provides @Singleton
-    fun mockApi(@ApplicationContext context: Context, clock: Clock, tokenStore: TokenStore, config: Optional<MockConfig>): MockPfApi =
-        MockPfApi(context, clock, tokenStore, config.orElseGet { MockConfig() })
+    fun mockApi(
+        @ApplicationContext context: Context,
+        clock: Clock,
+        tokenStore: TokenStore,
+        config: Optional<MockConfig>,
+        clientVersion: ClientVersion,
+        gate: ServiceGate,
+    ): MockPfApi = MockPfApi(context, clock, tokenStore, config.orElseGet { MockConfig() }, clientVersion, gate)
 
     @Provides @Singleton fun backend(api: MockPfApi): MockBackend = api.backend
     @Provides @Singleton fun pfApi(api: MockPfApi): PfApi = api
