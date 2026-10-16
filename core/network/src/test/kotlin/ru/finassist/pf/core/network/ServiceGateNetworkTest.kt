@@ -71,6 +71,19 @@ class ServiceGateNetworkTest {
     }
 
     @Test
+    fun `a success ends a maintenance hidden under the config minimum`() = runBlocking<Unit> {
+        server.enqueue(MockResponse().setResponseCode(503).setBody("""{"error":{"code":"MAINTENANCE","message":"m"}}"""))
+        runCatching { stack.api.profile.getProfile() }
+        stack.gate.updateRequiredByConfig()
+
+        server.enqueue(MockResponse().setBody(profile))
+        stack.api.profile.getProfile()
+        stack.gate.configAllowsVersion()
+        assertEquals(ServiceGate.State.Open, stack.gate.state.value, "no stale maintenance after the minimum is lifted")
+        assertEquals(1, stack.gate.reopened.value)
+    }
+
+    @Test
     fun `another 5xx keeps the maintenance, an ordinary 400 ends it`() = runBlocking<Unit> {
         server.enqueue(MockResponse().setResponseCode(503).setBody("""{"error":{"code":"MAINTENANCE","message":"m"}}"""))
         runCatching { stack.api.profile.getProfile() }

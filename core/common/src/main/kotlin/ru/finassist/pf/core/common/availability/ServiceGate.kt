@@ -55,6 +55,12 @@ class ServiceGate {
     private val _reopened = MutableStateFlow(0)
     val reopened: StateFlow<Int> = _reopened.asStateFlow()
 
+    /**
+     * The maintenance in effect, also when an update requirement hides it from [state]: what a request that went through
+     * ends with [reopen].
+     */
+    val maintenance: State.Maintenance? get() = synchronized(lock) { reasons.maintenance }
+
     /** All changes go through here, one at a time: no reason is lost to a concurrent answer. */
     private inline fun change(block: (Reasons) -> Reasons) {
         val opened = synchronized(lock) {

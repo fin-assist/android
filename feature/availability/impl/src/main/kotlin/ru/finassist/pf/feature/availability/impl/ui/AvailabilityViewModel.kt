@@ -65,7 +65,7 @@ class AvailabilityViewModel @Inject constructor(
         _checking.value = true
         // Only the maintenance this probe was sent under ends with its answer: requests of the screens re-created right
         // after it may have met a new one.
-        val before = gate.state.value as? ServiceGate.State.Maintenance
+        val before = gate.maintenance
         try {
             auth.getConsentDocument(ConsentType.PERSONAL_DATA)
             gate.reopen(before)
