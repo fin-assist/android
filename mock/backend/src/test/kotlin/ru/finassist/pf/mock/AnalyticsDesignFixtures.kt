@@ -114,7 +114,7 @@ object AnalyticsDesignFixtures {
     )
 
     val analyticsState = AnalyticsState(
-        stale = false, lastOperationAt = day(9, 25), dataFrom = day(4, 1), dataTo = day(9, 25), fullMonths = 5,
+        stale = false, lastOperationAt = day(9, 25), dataFrom = day(4, 1), dataTo = day(9, 26), fullMonths = 5,
         unreadLinesCount = 0, calculatedAt = day(9, 26), recalculating = false,
     )
 
