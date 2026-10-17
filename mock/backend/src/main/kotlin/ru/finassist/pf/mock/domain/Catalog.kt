@@ -9,10 +9,20 @@ import ru.finassist.pf.core.api.model.SystemCategories
  * slugs (`cat_supermarkets`); unknown bank categories get a transliterated slug on first sight, which is what
  * the real `bank-statement-data` will do too ("список открытый — новые категории принимаем как есть").
  */
-class Catalog {
+class Catalog(
+    /**
+     * Known categories in order, system ones included, instead of the built-in list. The calculation fixtures test
+     * passes the registry of the fixtures (`fixtures/calc/categories.json` of fin-assist/contracts, FIN-108).
+     */
+    known: List<Category>? = null,
+) {
     private val byName = LinkedHashMap<String, Category>()
 
     init {
+        if (known != null) known.forEach { byName[it.name] = it } else builtIn()
+    }
+
+    private fun builtIn() {
         byName["Между своими счетами"] = Category(
             id = SystemCategories.OWN_TRANSFER, name = "Между своими счетами", icon = "transfer", isSystem = true,
             kinds = listOf(CategoryKind.EXPENSE, CategoryKind.INCOME), assignable = true, note = "не в тратах",

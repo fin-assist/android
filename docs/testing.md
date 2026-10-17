@@ -22,6 +22,26 @@ What a change needs:
 
 A test asserts behaviour. A test that only runs lines to raise the number is not a test.
 
+## Calculation fixtures
+
+`CalcFixturesTest` (`mock/backend/src/test/…/mock/calc/`, FIN-108) runs the calculation fixtures of
+fin-assist/contracts on the fake backend: the same statements, «now», profile zone and actions as the Go backend
+(`scenario.json`), the same expected responses and comparison rules (`fixtures/calc/README.md` of contracts, ported in
+`CalcCompare.kt`). How the fields are calculated is `docs/calc.md` of contracts.
+
+- **Data.** A copy of `fixtures/calc` lives in `mock/backend/src/test/resources/calc`, with the contracts commit in
+  `VERSION`; the test runs offline. `scripts/sync-calc-fixtures.sh [ref]` (default `main`) replaces the copy. Take a
+  new copy when contracts change the expected responses, in its own PR, and update the known divergences in it.
+- **Known divergences.** `mock/backend/src/test/resources/calc-known-divergences.json` lists the differences the
+  fake backend still has, by cause: what is wrong, the issue that fixes it, «expect file + JSON path». A difference
+  that is not there fails the test; a listed one that is gone fails it too, so the list only shrinks.
+- **Fixing a divergence.** Change the fake backend, then rewrite the list:
+  `CALC_UPDATE_KNOWN=1 ./gradlew :mock:backend:testDebugUnitTest --tests '*CalcFixturesTest'`. The fixed paths go
+  away; anything that lands in a `TODO` group is a new difference — fix it or find its cause before the PR.
+  `CALC_DUMP=<file>` writes every difference with both values and the responses of the fake backend.
+- **Categories.** The fake backend loads the registry of the fixtures (`categories.json`) instead of its built-in one
+  (`Catalog(known)`), as the Go backend does in the same test.
+
 ## Coverage
 
 Unit test coverage is measured by [Kover](https://github.com/Kotlin/kotlinx-kover) (JetBrains, JaCoCo-compatible
