@@ -513,8 +513,8 @@ class AnalyticsEngine(
                 ),
             )
         }
-        if (groups.isEmpty()) return SmallFrequentCard(status = MetricStatus.NONE, basis = basis)
-        return SmallFrequentCard(status = MetricStatus.READY, basis = basis, value = Money(groups.sumOf { it.monthlyAmount.minor }), items = groups)
+        if (groups.isEmpty()) return SmallFrequentCard(status = MetricStatus.NONE, basis = basis, month = m)
+        return SmallFrequentCard(status = MetricStatus.READY, basis = basis, value = Money(groups.sumOf { it.monthlyAmount.minor }), items = groups, month = m)
     }
 
     /**

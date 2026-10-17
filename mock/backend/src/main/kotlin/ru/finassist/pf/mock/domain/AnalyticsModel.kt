@@ -10,6 +10,7 @@ import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.ApiDateTime
 import ru.finassist.pf.core.common.time.DateRange
+import java.time.YearMonth
 
 // What the fake server computes for the Analytics screen before it lays it out as blocks (AnalyticsComposer, FIN-5).
 // Was the API model of 6.1 before FIN-4; now internal to the fake server, as the real `analytics` keeps its metrics.
@@ -104,6 +105,11 @@ data class SmallFrequentCard(
     /** Total per month over all groups. */
     val value: Money? = null,
     val items: List<SmallFrequentGroup>? = null,
+    /**
+     * The month of the calculation (docs/calc.md, section 5): the selected month if it is full, else the last full
+     * month before it, which the card then names. Null while the card is locked.
+     */
+    val month: YearMonth? = null,
 ) : MetricLike
 
 data class AnalyticsTiles(

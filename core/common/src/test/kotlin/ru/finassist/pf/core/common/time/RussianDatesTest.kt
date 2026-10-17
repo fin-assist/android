@@ -1,6 +1,7 @@
 package ru.finassist.pf.core.common.time
 
 import java.time.LocalDate
+import java.time.Month
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -29,5 +30,12 @@ class RussianDatesTest {
         assertEquals("1–25 сентября 2026", range(d(9, 1), d(9, 25), withYear = true))
         assertEquals("1 апреля — 25 сентября 2026", range(d(4, 1), d(9, 25), withYear = true))
         assertEquals("25 сентября 2026", range(d(9, 25), d(9, 25), withYear = true))
+    }
+
+    @Test fun `the dative month form follows «по»`() {
+        assertEquals("январю", RussianDates.monthDative(Month.JANUARY))
+        assertEquals("маю", RussianDates.monthDative(Month.MAY))
+        assertEquals("августу", RussianDates.monthDative(Month.AUGUST))
+        assertEquals("декабрю", RussianDates.monthDative(Month.DECEMBER))
     }
 }
