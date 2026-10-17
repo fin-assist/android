@@ -10,6 +10,9 @@ tags:
 - runFlow: ../../subflows/login.yaml
 - assertNotVisible:
     id: "operations.feed.stale"
+# Fresh data: the caption under the summary is dated by the end of the statement too — the preloaded one runs to
+# 1 October while its last operation is on 30 September.
+- assertVisible: "Данные по 1.октября.*"
 
 # Delete the preloaded statement.
 - tapOn:
