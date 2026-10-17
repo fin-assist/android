@@ -37,11 +37,16 @@ class StaleDataTest {
     )
 
     @Test fun `data_to is read in the profile zone, not in its own offset`() {
-        // Start of 26 September in Vladivostok, sent in UTC: the 25th there is the last covered day. Its own offset
-        // would give 25 September 14:00, and the day before that — the 24th.
+        // Start of 26 September in Vladivostok, sent in UTC: the 25th there is the last covered day. In Moscow that
+        // moment is 17:00 on the 25th, so the data covers the 25th there too.
         val dataTo = t("2026-09-25T14:00:00Z")
         assertEquals(LocalDate.of(2026, 9, 25), StaleData.lastDay(dataTo, null, vladivostok))
-        assertEquals(LocalDate.of(2026, 9, 24), StaleData.lastDay(dataTo, null, moscow))
+        assertEquals(LocalDate.of(2026, 9, 25), StaleData.lastDay(dataTo, null, moscow))
+    }
+
+    @Test fun `an inclusive moment inside the day gives that day`() {
+        // A server sending `data_to` as the last moment with data (like `period.data_to`) still reads as the 25th.
+        assertEquals(LocalDate.of(2026, 9, 25), StaleData.lastDay(t("2026-09-25T21:40:00+03:00"), null, moscow))
     }
 
     @Test fun `the last operation of the fallback is dated in the profile zone`() {

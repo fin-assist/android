@@ -52,8 +52,8 @@ class FeedDesignCheckTest {
                 expense = Money(84_320_00), income = Money(156_900_00), dataTo = at(25, 23),
             ),
         ),
-        // FIN-35: the caption «Операции по 25 сентября · Загрузить новую выписку» needs the last operation date.
-        state = FeedState(stale = false, lastOperationAt = at(25, 18)),
+        // FIN-35, FIN-125: the caption «Данные по 25 сентября · Загрузить новую выписку» is dated by the statement's end.
+        state = FeedState(stale = false, lastOperationAt = at(25, 18), dataTo = at(26, 0)),
         nextBefore = at(1, 0),
     )
 

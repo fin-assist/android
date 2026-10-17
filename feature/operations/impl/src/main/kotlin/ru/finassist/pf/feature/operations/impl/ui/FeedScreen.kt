@@ -126,7 +126,8 @@ internal fun FeedContent(
                     contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space2, bottom = d.space6),
                 ) {
                     val feedState = state.state
-                    val lastOperation = feedState?.lastOperationAt?.atZoneSameInstant(zone)?.toLocalDate()
+                    // Where the statement data ends (`state.data_to`), or the last operation without it (FIN-125).
+                    val lastDataDay = feedState?.let { StaleData.lastDay(it.dataTo, it.lastOperationAt, zone) }
                     // Stale: where the statement data ends (`state.data_to`), not the last operation (FIN-125).
                     val staleText = feedState?.let { StaleData.banner(it.stale, it.dataTo, it.lastOperationAt, zone, today) }
                     state.summary.firstOrNull()?.let { s -> item(key = "summary") { SummaryCard(s, today, zone) } }
@@ -139,12 +140,12 @@ internal fun FeedContent(
                                 action = if (state.uploadEnabled) ({ PfNoticeLink("Загрузить новую выписку", onClick = onUpload, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD_NEW)) }) else null,
                             )
                         }
-                    } else if (lastOperation != null) {
-                        // «Операции по 25 сентября · Загрузить новую выписку» under the summary (mockup `Main`).
+                    } else if (lastDataDay != null) {
+                        // «Данные по 25 сентября · Загрузить новую выписку» under the summary (mockup `Main`).
                         item(key = "fresh") {
                             Row(Modifier.defaultMinSize(minHeight = d.touch), verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    "Операции по ${RussianDates.day(lastOperation, today.year)}" + if (state.uploadEnabled) " · " else "",
+                                    "Данные по ${RussianDates.day(lastDataDay, today.year)}" + if (state.uploadEnabled) " · " else "",
                                     style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
                                 )
                                 if (state.uploadEnabled) PfLink("Загрузить новую выписку", onClick = onUpload, inline = true, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD_NEW))

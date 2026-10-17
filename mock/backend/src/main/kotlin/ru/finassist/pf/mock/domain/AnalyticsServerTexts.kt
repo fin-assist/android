@@ -64,7 +64,7 @@ object AnalyticsServerTexts {
                 val need = "Нужно ${countWithNoun(req, "полный месяц", "полных месяца", "полных месяцев")}"
                 val avail = lock.available ?: 0
                 if (avail == 0 && state != null) {
-                    "$need — пока есть только ${RussianDates.dayRange(state.dataFrom.toLocalDate(), state.dataTo.minusDays(1).toLocalDate())}"
+                    "$need — пока есть только ${RussianDates.dayRange(state.dataFrom.toLocalDate(), state.dataTo.minusNanos(1).toLocalDate())}"
                 } else {
                     "$need, есть $avail"
                 }

@@ -11,12 +11,13 @@ import java.time.ZoneId
  */
 object StaleData {
     /**
-     * Last day the statement data covers, in [zone] (the profile zone): the day before [dataTo] — `state.data_to` is
-     * the start of the day after the last covered day, so `2026-09-26T00:00` is «по 25 сентября». A server that does
+     * Last day the statement data covers, in [zone] (the profile zone): the day of the last instant before [dataTo].
+     * `state.data_to` is the start of the day after the last covered day, so `2026-09-26T00:00` is «по 25 сентября»;
+     * read this way, an inclusive moment inside the day (as `period.data_to`) gives the same day. A server that does
      * not send `data_to` yet falls back to the day of [lastOperationAt]. `null` when neither is known.
      */
     fun lastDay(dataTo: OffsetDateTime?, lastOperationAt: OffsetDateTime?, zone: ZoneId): LocalDate? =
-        dataTo?.atZoneSameInstant(zone)?.toLocalDate()?.minusDays(1)
+        dataTo?.atZoneSameInstant(zone)?.minusNanos(1)?.toLocalDate()
             ?: lastOperationAt?.atZoneSameInstant(zone)?.toLocalDate()
 
     /** Banner text for [lastDay]; the year is named when it is not [currentYear]. */
