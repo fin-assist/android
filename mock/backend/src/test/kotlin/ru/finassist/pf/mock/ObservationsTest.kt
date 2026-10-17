@@ -12,6 +12,7 @@ import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.OperationsQuery
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
+import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.mock.api.MockAnalyticsApi
 import ru.finassist.pf.mock.api.MockOperationsApi
@@ -84,5 +85,10 @@ class ObservationsTest {
         val cards = september().block("notable_spending")
         assertEquals(listOf("Такси"), cards.map { it.data!!.getValue("title").jsonPrimitive.content })
         assertEquals(720_000.0, cards.single().data!!.getValue("value").jsonPrimitive.content.toDouble())
+        // Usual: (2 000 + 3 000 + 4 000) / 3 over June — August; with September in the base it would be 4 050 or 4 733.
+        val notable = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH).insights!!.notableSpending
+        assertEquals(Money(300_000), notable.items!!.single().typicalAmount)
+        assertEquals(java.time.YearMonth.of(2026, 6), java.time.YearMonth.from(notable.basis!!.range.from))
+        assertEquals(3, notable.basis!!.fullMonths)
     }
 }

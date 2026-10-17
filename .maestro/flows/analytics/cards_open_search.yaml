@@ -28,6 +28,11 @@ tags:
     visible:
       id: "operations.search.count"
     timeout: 10000
+# The selection chip comes last in the chip row and starts off screen (FIN-101): bring it in.
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
 - assertVisible:
     id: "operations.search.chip.scope"
 - assertVisible: "Фастфуд.*✕"
@@ -48,6 +53,11 @@ tags:
     visible:
       id: "operations.search.count"
     timeout: 10000
+# The selection chip comes last in the chip row and starts off screen (FIN-101): bring it in.
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
 - assertVisible: "Пятёрочка.*✕"
 - assertVisible:
     id: "operations.row"
@@ -70,6 +80,11 @@ tags:
     visible:
       id: "operations.search.count"
     timeout: 10000
+# The selection chip comes last in the chip row and starts off screen (FIN-101): bring it in.
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
 - assertVisible: "РБК.*✕"
 - assertVisible:
     id: "operations.row"
