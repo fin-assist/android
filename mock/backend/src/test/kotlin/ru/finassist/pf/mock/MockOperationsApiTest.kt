@@ -303,6 +303,43 @@ class MockOperationsApiTest {
     }
 
     @Test
+    fun `a manual refund names the category it reduces in its note and details (FIN-132)`() = runBlocking<Unit> {
+        val backend = testBackend().apply {
+            load(
+                statement(
+                    "2026-08-01", "2026-09-30",
+                    trn("shoes", "2026-08-20T10:00", 700, "Магазин обуви", "Одежда и обувь"),
+                    trn("in", "2026-09-05T10:00", 700, "Иван И.", "Пополнения", debit = false),
+                ),
+            )
+        }
+        val api = MockOperationsApi(backend)
+        val credit = backend.ledger.all.single { it.fitId == "in" }.id
+        assertNull(api.getOperation(credit).note)
+
+        val response = api.changeCategory(credit, ChangeCategoryRequest(SystemCategories.REFUND))
+        assertNull(response.replacedId)
+        val item = response.items.single()
+        assertEquals(OperationKind.INCOME, item.kind)
+        assertEquals(SystemCategories.REFUND, item.categoryId)
+        assertTrue(item.isCategoryManual)
+        assertEquals("возврат · Одежда и обувь", item.note)
+        assertEquals("Уменьшает расходы «Одежда и обувь» в сентябре", item.noteDetails)
+        assertEquals(item, api.getOperation(credit))
+    }
+
+    @Test
+    fun `a manual refund without a target reduces the total expenses`() = runBlocking<Unit> {
+        val response = api.changeCategory(id("salary"), ChangeCategoryRequest(SystemCategories.REFUND))
+        val item = response.items.single()
+        assertEquals(SystemCategories.REFUND, item.categoryId)
+        assertTrue(item.isCategoryManual)
+        assertEquals("возврат", item.note)
+        assertEquals("Уменьшает общие расходы в сентябре", item.noteDetails)
+        assertEquals(item, api.getOperation(id("salary")))
+    }
+
+    @Test
     fun `an unknown, wrong-kind category or an unknown operation is rejected`() = runBlocking<Unit> {
         val unknown = assertFailsWith<AppError.Api> { api.changeCategory(id("buy"), ChangeCategoryRequest("cat_nope")) }
         assertEquals(ErrorCodes.CATEGORY_NOT_ASSIGNABLE to 422, unknown.code to unknown.httpStatus)

@@ -437,4 +437,115 @@ class LedgerTest {
         assertEquals(SystemCategories.UNCATEGORIZED, op("fee").category.id)
         assertEquals(1, catalog.categories.count { it.name == "Возврат" })
     }
+
+    // ---- manual «Возврат» (api.md 4.3): the target follows the chain of docs/calc.md 3.3 (FIN-132) ----
+
+    /** Makes the credit [fitId] a refund by hand and checks it is one: manual, in «Возврат». */
+    private fun markRefund(fitId: String): Operation {
+        ledger.changeCategory(op(fitId).id, catalog.refund)
+        return op(fitId).also {
+            assertTrue(it.isRefund)
+            assertTrue(it.isManual)
+            assertEquals(SystemCategories.REFUND, it.category.id)
+        }
+    }
+
+    @Test
+    fun `a manual refund reduces the final category of the last earlier same-name debit`() {
+        import(
+            "u1",
+            trn("buy", "2026-09-01T10:00", 1_000, "OZON", "Маркетплейсы"),
+            // Same amount on the account: the description goes first.
+            trn("shoes", "2026-09-02T10:00", 400, "Магазин обуви", "Одежда и обувь"),
+            // The last earlier same-name debits, but of the bank category «Переводы»: not counted.
+            trn("sent", "2026-09-04T10:00", 250, "OZON", "Переводы"),
+            // Same name, but after the refund.
+            trn("later", "2026-09-10T10:00", 300, "OZON", "Супермаркеты"),
+            trn("back", "2026-09-05T10:00", 400, "Ozon", "Бонусы", debit = false),
+        )
+        assertEquals("cat_marketplaces", markRefund("back").refundTarget?.id)
+
+        // The purchase was recategorised by hand: the manual refund follows its final category.
+        ledger.changeCategory(op("buy").id, cat("Подарки и творчество"))
+        assertEquals("cat_gifts", op("back").refundTarget?.id)
+    }
+
+    @Test
+    fun `without a same-name debit a manual refund reduces a same-amount debit on that account within 60 days`() {
+        import(
+            "u1",
+            trn("buy", "2026-07-07T10:00", 700, "Магазин обуви", "Одежда и обувь"), // exactly 60 days before
+            trn("other-acc", "2026-09-01T10:00", 700, "Цветы", "Цветы", account = Acc.SAVINGS),
+            trn("sent", "2026-09-02T10:00", 700, "Петр П.", "Переводы"),
+            trn("other-amount", "2026-09-03T10:00", 701, "Кино", "Развлечения"),
+            trn("in", "2026-09-05T10:00", 700, "Иван И.", "Пополнения", debit = false),
+        )
+        // An income-only credit without a matching purchase is no refund by itself.
+        assertFalse(op("in").isRefund)
+        assertEquals("cat_clothes", markRefund("in").refundTarget?.id)
+    }
+
+    @Test
+    fun `the same-amount rule takes the last earlier debit and ignores one after the refund`() {
+        import(
+            "u1",
+            trn("first", "2026-08-10T10:00", 700, "Магазин обуви", "Одежда и обувь"),
+            trn("last", "2026-09-01T10:00", 700, "Супермаркет", "Супермаркеты"),
+            trn("in", "2026-09-05T10:00", 700, "Иван И.", "Пополнения", debit = false),
+            trn("after", "2026-09-06T10:00", 700, "Аптека", "Аптеки"),
+        )
+        assertEquals("cat_supermarkets", markRefund("in").refundTarget?.id)
+    }
+
+    @Test
+    fun `a manual refund with neither match reduces its own expense bank category`() {
+        import(
+            "u1",
+            trn("buy", "2026-09-01T10:00", 1_000, "Супермаркет", "Супермаркеты"),
+            trn("r", "2026-09-05T10:00", 300, "Аптека 36,6", "Аптеки", debit = false),
+        )
+        assertEquals("cat_pharmacy", markRefund("r").refundTarget?.id)
+    }
+
+    @Test
+    fun `a manual refund that matches nothing reduces Без категории`() {
+        import(
+            "u1",
+            trn("same-name", "2026-09-01T10:00", 700, "Иван И.", "Переводы"),
+            trn("too-old", "2026-07-06T09:00", 700, "Магазин обуви", "Одежда и обувь"), // 61 days before
+            trn("other-acc", "2026-09-02T10:00", 700, "Цветы", "Цветы", account = Acc.SAVINGS),
+            trn("in", "2026-09-05T10:00", 700, "Иван И.", "Пополнения", debit = false),
+        )
+        assertFalse(op("in").isRefund)
+        assertEquals(SystemCategories.UNCATEGORIZED, markRefund("in").refundTarget?.id)
+    }
+
+    @Test
+    fun `the target of a manual refund is recomputed when an earlier same-name debit comes later`() {
+        import("u1", trn("back", "2026-09-05T10:00", 400, "OZON", "Пополнения", debit = false))
+        assertEquals(SystemCategories.UNCATEGORIZED, markRefund("back").refundTarget?.id)
+
+        import("u2", trn("buy", "2026-09-01T10:00", 1_000, "OZON", "Маркетплейсы"))
+        assertTrue(op("back").isManual && op("back").isRefund)
+        assertEquals("cat_marketplaces", op("back").refundTarget?.id)
+
+        // Unlike an automatic refund, a manual one stays a refund when the purchase goes away.
+        ledger.removeUpload("u2")
+        assertTrue(op("back").isManual && op("back").isRefund)
+        assertEquals(SystemCategories.UNCATEGORIZED, op("back").refundTarget?.id)
+    }
+
+    @Test
+    fun `a manual refund survives re-import, and its target is recomputed over the new ledger`() {
+        val back = trn("in", "2026-09-05T10:00", 700, "Иван И.", "Пополнения", debit = false)
+        import("u1", back, trn("shoes", "2026-08-20T10:00", 700, "Магазин обуви", "Одежда и обувь"))
+        assertEquals("cat_clothes", markRefund("in").refundTarget?.id)
+
+        ledger.removeUpload("u1")
+        assertTrue(ledger.all.isEmpty())
+        import("u2", back, trn("shop", "2026-09-01T10:00", 1_500, "Иван И.", "Супермаркеты"))
+        assertTrue(op("in").isManual && op("in").isRefund)
+        assertEquals(SystemCategories.REFUND, op("in").category.id)
+        assertEquals("cat_supermarkets", op("in").refundTarget?.id)
+    }
 }
