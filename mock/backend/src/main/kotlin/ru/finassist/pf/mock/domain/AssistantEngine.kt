@@ -79,7 +79,7 @@ class AssistantEngine(
                 filter = OperationsFilter(from = range.from, to = range.to, transferMode = mode, selection = "s_merchant_" + Catalog.slugOf(merchant).take(40), selectionName = merchant)
             }
             category != null -> {
-                subjectOps = scope.inDays(visible, from, toExcl).filter { scope.expenses(listOf(it)).any { e -> e.category?.id == category.id } }
+                subjectOps = scope.inDays(visible, from, toExcl).filter { scope.expenses(listOf(it)).any { e -> e.category.id == category.id } }
                 title = category.name
                 filter = OperationsFilter(from = range.from, to = range.to, transferMode = mode, kind = OperationKindFilter.EXPENSE, categoryId = category.id)
             }

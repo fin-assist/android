@@ -3,12 +3,12 @@ package ru.finassist.pf.mock.api
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.UploadFile
@@ -31,6 +31,7 @@ import ru.finassist.pf.core.api.model.LoadedSummary
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.StatementsList
 import ru.finassist.pf.core.api.model.StatementsSummary
+import ru.finassist.pf.core.api.model.SystemCategories
 import ru.finassist.pf.core.api.model.UnreadLine
 import ru.finassist.pf.core.api.model.UnreadLinesList
 import ru.finassist.pf.core.api.model.UnreadReason
@@ -44,6 +45,7 @@ import ru.finassist.pf.core.common.time.toApiMonth
 import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.mock.domain.AnalyticsEngine
+import ru.finassist.pf.mock.domain.Catalog
 import ru.finassist.pf.mock.domain.Coverage
 import ru.finassist.pf.mock.domain.Operation
 import ru.finassist.pf.mock.domain.ServerTexts
@@ -183,7 +185,10 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         val after = backend.coverage(including = upload)
         val scope = backend.operationScope
         val newVisible = added.filter { it.pairId == null }
-        val uncategorized = added.filter { it.isRefund && it.refundTarget == null }
+        // «Без категории» (docs/calc.md, section 6): new operations in it and refunds without an expense category.
+        val uncategorized = added.filter {
+            it.category.id == SystemCategories.UNCATEGORIZED || (it.isRefund && it.refundTarget?.id == SystemCategories.UNCATEGORIZED)
+        }
         val ownTransfers = added.count { it.pairId != null || it.isOwnTransferCategory }
         val fullAfter = after.fullMonths
         val fullBefore = before.fullMonths
@@ -219,7 +224,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
                 month = m.toApiMonth(),
                 range = DateRange(from.atStartOfDay(zone).toOffsetDateTime(), toExcl.atStartOfDay(zone).toOffsetDateTime()),
                 dataFrom = bounds.first.atStartOfDay(zone).toOffsetDateTime(),
-                dataTo = bounds.second.plusDays(1).atStartOfDay(zone).toOffsetDateTime(),
+                dataTo = backend.analytics.dataEnd(from, toExcl, after)!!,
                 gaps = after.gapsWithin(from, toExcl),
                 inProgress = !m.atEndOfMonth().isBefore(today),
             )
@@ -248,7 +253,14 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             categorizedCount = added.size - uncategorized.size,
             ownTransferCount = ownTransfers,
             uncategorizedCount = uncategorized.size,
-            uncategorizedFilters = if (uncategorized.isEmpty()) null else OperationsFilter(selection = AnalyticsEngine.SELECTION_UNCATEGORIZED, selectionName = "Без категории"),
+            uncategorizedFilters = if (uncategorized.isEmpty()) null else added.map { it.occurredAt.atZoneSameInstant(zone).toLocalDate() }.let { days ->
+                OperationsFilter(
+                    from = days.min().atStartOfDay(zone).toOffsetDateTime(),
+                    to = days.max().plusDays(1).atStartOfDay(zone).toOffsetDateTime(),
+                    selection = AnalyticsEngine.SELECTION_UNCATEGORIZED,
+                    selectionName = Catalog.UNCATEGORIZED_NAME,
+                )
+            },
             coverage = ImportCoverage(
                 fullMonths = fullAfter.size,
                 fullMonthsBefore = fullBefore.size,

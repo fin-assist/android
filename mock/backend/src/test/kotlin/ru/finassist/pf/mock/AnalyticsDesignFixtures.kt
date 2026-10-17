@@ -109,7 +109,7 @@ object AnalyticsDesignFixtures {
             kindsName = "обслуживание, переводы, снятие наличных"),
         smallFrequent = SmallFrequentCard(
             MetricStatus.READY, basis = basis, value = rub(6_400),
-            items = listOf(SmallFrequentGroup("Кофе и перекусы", 23, rub(280), rub(6_400), rub(77_000), s.expense.copy(q = "Кофе и перекусы", amountTo = Money(AnalyticsEngine.SMALL_MAX_MINOR)))),
+            items = listOf(SmallFrequentGroup("Кофе и перекусы", 23, rub(280), rub(6_400), rub(77_000), s.period.copy(selection = "s_small_merchant_2026-08_with_coffee", selectionName = "Кофе и перекусы"))),
         ),
     )
 

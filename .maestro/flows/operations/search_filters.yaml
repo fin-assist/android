@@ -110,3 +110,18 @@ tags:
     id: "ds.back"
 - assertVisible:
     id: "operations.search.count"
+
+# «Без категории» is a system category of the picker (docs/calc.md, 3.1). The fixture has no line without a bank
+# category, so with the query still there the search by it finds nothing.
+- tapOn:
+    id: "operations.search.chip.category"
+- extendedWaitUntil:
+    visible:
+      id: "operations.category.search"
+    timeout: 10000
+- assertVisible: "Системные"
+- tapOn: "Без категории"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.empty"
+    timeout: 10000

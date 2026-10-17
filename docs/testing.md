@@ -22,6 +22,23 @@ What a change needs:
 
 A test asserts behaviour. A test that only runs lines to raise the number is not a test.
 
+## Calculation fixtures
+
+`CalcFixturesTest` (`mock/backend/src/test/…/mock/calc/`, FIN-108) runs the calculation fixtures of
+fin-assist/contracts on the fake backend: the same statements, «now», profile zone and actions as the Go backend
+(`scenario.json`), the same expected responses and comparison rules (`fixtures/calc/README.md` of contracts, ported in
+`CalcCompare.kt`). How the fields are calculated is `docs/calc.md` of contracts.
+
+- **Data.** A copy of `fixtures/calc` lives in `mock/backend/src/test/resources/calc`, with the contracts commit in
+  `VERSION`; the test runs offline. `scripts/sync-calc-fixtures.sh [ref]` (default `main`) replaces the copy and
+  fails if `.gitignore` would keep a file of it out of the commit. Take a new copy when contracts change the
+  expected responses, and bring the fake backend in line in the same PR.
+- **Exact match.** The responses of the fake backend equal the expected ones by the comparison rules; any difference
+  fails the test with its JSON path and both values. `CALC_DUMP=<file>` also writes the fake backend's responses
+  next to it (`./gradlew :mock:backend:testDebugUnitTest --tests '*CalcFixturesTest'`).
+- **Categories.** The fake backend loads the registry of the fixtures (`categories.json`) instead of its built-in one
+  (`Catalog(known)`), as the Go backend does in the same test.
+
 ## Coverage
 
 Unit test coverage is measured by [Kover](https://github.com/Kotlin/kotlinx-kover) (JetBrains, JaCoCo-compatible

@@ -17,7 +17,7 @@ orientation map: read it first, then open only the files the task touches.
 ## Where things are decided
 
 - Contract: repo [fin-assist/contracts](https://github.com/fin-assist/contracts) — `docs/api.md` (meaning of
-  fields), `openapi/openapi.yaml`, `docs/grpc-api.md`, `proto/`.
+  fields), `docs/calc.md` (how the fields are calculated), `openapi/openapi.yaml`, `docs/grpc-api.md`, `proto/`.
 - MVP scope, architecture, Android plan, product and mockup-review decisions: Confluence space PF
   (https://finassist.atlassian.net/wiki/spaces/PF) — «Состав MVP», «Архитектура», «План Android-приложения»,
   «Продуктовые решения» and their child pages.
@@ -41,6 +41,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Composition root, NavHost (auth graph → main tabs), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt` |
 | API contract (service interfaces + DTOs) | `core/api/…/Services.kt`, `core/api/…/model/*.kt` |
 | Fake backend (mock flavor): OFX parsing, ledger, analytics, assistant | `mock/backend/…/mock/` — `MockBackend.kt`, `domain/*`, `MockConfig.kt` (existing phone, delays, `offline`) |
+| Fake backend against the calculation fixtures of contracts | `mock/backend/src/test/…/mock/calc/`, `mock/backend/src/test/resources/calc/` (copy), `scripts/sync-calc-fixtures.sh`; rules — `docs/testing.md`, «Calculation fixtures» |
 | Feature routes and public interfaces | `feature/<name>/api/…/*Routes.kt` (or `AuthApi.kt`, `AppLock.kt`) |
 | Screen registration | `FeatureEntry` / `Navigator` in `core/navigation/…/Navigation.kt`; each `:impl` binds its entry in `di/` |
 | Design system: theme, tokens, components, icons | `core/designsystem/…/theme`, `components`, `icons` |
@@ -224,6 +225,8 @@ commands: `docs/testing.md`.
   docs/e2e.md).
 - A bug fix comes with a test that fails without the fix: a UI flow for a user-visible bug (see Code), plus a
   unit test when the cause is in logic.
+- The fake backend's calculation follows `docs/calc.md` of contracts: `CalcFixturesTest` requires its responses to
+  equal the calculation fixtures, any difference fails CI (`docs/testing.md`, «Calculation fixtures»).
 - The measurable check is coverage of changed lines by unit tests: at least 80 % of changed executable lines
   (Build in an agent container → Coverage). Composables are excluded from the report — they are covered by the
   design check and UI tests, not by this number. Uncovered changed lines are listed in the PR («Проверка») with

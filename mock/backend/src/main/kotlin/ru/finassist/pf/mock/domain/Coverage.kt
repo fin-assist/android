@@ -78,6 +78,13 @@ class Coverage(ranges: List<Pair<OffsetDateTime, OffsetDateTime>>, private val z
         return first?.let { it to last!! }
     }
 
+    /** Number of covered days in `[from, toExclusive)`. */
+    fun countDays(from: LocalDate, toExclusive: LocalDate): Long = days.sumOf { r ->
+        val s = maxOf(r.start, from)
+        val e = minOf(r.endInclusive, toExclusive.minusDays(1))
+        if (s.isAfter(e)) 0L else java.time.temporal.ChronoUnit.DAYS.between(s, e) + 1
+    }
+
     /** `complete` / `partial` / `no_data` for a calendar period: complete only when it has ended and every day is covered. */
     fun coverageOf(from: LocalDate, toExclusive: LocalDate): String {
         dataBounds(from, toExclusive) ?: return "no_data"

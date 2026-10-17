@@ -1,0 +1,171 @@
+{
+  "items": [
+    {
+      "id": "<ignored>",
+      "kind": "expense",
+      "occurred_at": "2026-07-26T08:30:00+03:00",
+      "amount": 25000,
+      "currency": "RUB",
+      "title": "Кофейня у дома",
+      "category_id": "cat_fastfood",
+      "category_name": "Фастфуд",
+      "category_icon": "coffee",
+      "is_category_manual": false,
+      "note": null,
+      "account": {
+        "type_name": "<ignored>",
+        "mask": "··1111"
+      },
+      "status": "posted"
+    },
+    {
+      "id": "<ignored>",
+      "kind": "expense",
+      "occurred_at": "2026-07-23T08:30:00+03:00",
+      "amount": 25000,
+      "currency": "RUB",
+      "title": "Кофейня у дома",
+      "category_id": "cat_fastfood",
+      "category_name": "Фастфуд",
+      "category_icon": "coffee",
+      "is_category_manual": false,
+      "note": null,
+      "account": {
+        "type_name": "<ignored>",
+        "mask": "··1111"
+      },
+      "status": "posted"
+    },
+    {
+      "id": "<ignored>",
+      "kind": "expense",
+      "occurred_at": "2026-07-20T08:30:00+03:00",
+      "amount": 25000,
+      "currency": "RUB",
+      "title": "Кофейня у дома",
+      "category_id": "cat_fastfood",
+      "category_name": "Фастфуд",
+      "category_icon": "coffee",
+      "is_category_manual": false,
+      "note": null,
+      "account": {
+        "type_name": "<ignored>",
+        "mask": "··1111"
+      },
+      "status": "posted"
+    },
+    {
+      "id": "<ignored>",
+      "kind": "expense",
+      "occurred_at": "2026-07-17T08:30:00+03:00",
+      "amount": 25000,
+      "currency": "RUB",
+      "title": "Кофейня у дома",
+      "category_id": "cat_fastfood",
+      "category_name": "Фастфуд",
+      "category_icon": "coffee",
+      "is_category_manual": false,
+      "note": null,
+      "account": {
+        "type_name": "<ignored>",
+        "mask": "··1111"
+      },
+      "status": "posted"
+    },
+    {
+      "id": "<ignored>",
+      "kind": "expense",
+      "occurred_at": "2026-07-14T08:30:00+03:00",
+      "amount": 25000,
+      "currency": "RUB",
+      "title": "Кофейня у дома",
+      "category_id": "cat_fastfood",
+      "category_name": "Фастфуд",
+      "category_icon": "coffee",
+      "is_category_manual": false,
+      "note": null,
+      "account": {
+        "type_name": "<ignored>",
+        "mask": "··1111"
+      },
+      "status": "posted"
+    },
+    {
+      "id": "<ignored>",
+      "kind": "expense",
+      "occurred_at": "2026-07-11T08:30:00+03:00",
+      "amount": 25000,
+      "currency": "RUB",
+      "title": "Кофейня у дома",
+      "category_id": "cat_fastfood",
+      "category_name": "Фастфуд",
+      "category_icon": "coffee",
+      "is_category_manual": false,
+      "note": null,
+      "account": {
+        "type_name": "<ignored>",
+        "mask": "··1111"
+      },
+      "status": "posted"
+    },
+    {
+      "id": "<ignored>",
+      "kind": "expense",
+      "occurred_at": "2026-07-08T08:30:00+03:00",
+      "amount": 25000,
+      "currency": "RUB",
+      "title": "Кофейня у дома",
+      "category_id": "cat_fastfood",
+      "category_name": "Фастфуд",
+      "category_icon": "coffee",
+      "is_category_manual": false,
+      "note": null,
+      "account": {
+        "type_name": "<ignored>",
+        "mask": "··1111"
+      },
+      "status": "posted"
+    },
+    {
+      "id": "<ignored>",
+      "kind": "expense",
+      "occurred_at": "2026-07-05T08:30:00+03:00",
+      "amount": 25000,
+      "currency": "RUB",
+      "title": "Кофейня у дома",
+      "category_id": "cat_fastfood",
+      "category_name": "Фастфуд",
+      "category_icon": "coffee",
+      "is_category_manual": false,
+      "note": null,
+      "account": {
+        "type_name": "<ignored>",
+        "mask": "··1111"
+      },
+      "status": "posted"
+    },
+    {
+      "id": "<ignored>",
+      "kind": "expense",
+      "occurred_at": "2026-07-02T08:30:00+03:00",
+      "amount": 25000,
+      "currency": "RUB",
+      "title": "Кофейня у дома",
+      "category_id": "cat_fastfood",
+      "category_name": "Фастфуд",
+      "category_icon": "coffee",
+      "is_category_manual": false,
+      "note": null,
+      "account": {
+        "type_name": "<ignored>",
+        "mask": "··1111"
+      },
+      "status": "posted"
+    }
+  ],
+  "total_count": 9,
+  "range": {
+    "from": "2026-07-01T00:00:00+03:00",
+    "to": "2026-08-01T00:00:00+03:00"
+  }
+}

@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock.domain
 
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import ru.finassist.pf.core.api.model.ActionType
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.AnalyticsPeriodInfo
@@ -14,10 +16,12 @@ import ru.finassist.pf.core.api.model.ChartData
 import ru.finassist.pf.core.api.model.ChartKind
 import ru.finassist.pf.core.api.model.ChartNote
 import ru.finassist.pf.core.api.model.ChartPoint
+import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.api.model.HeadingData
 import ru.finassist.pf.core.api.model.InsightCardData
 import ru.finassist.pf.core.api.model.InsightItem
 import ru.finassist.pf.core.api.model.ListStyle
+import ru.finassist.pf.core.api.model.LockReason
 import ru.finassist.pf.core.api.model.NoteTone
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.PeriodTypeCode
@@ -65,8 +69,9 @@ object AnalyticsComposer {
         val params = s.params!!
         val period = s.period!!
         val type = params.period
-        val early = type == PeriodTypeCode.MONTH && s.navigation?.previous == null &&
-            period.coverage.effective == ru.finassist.pf.core.api.model.Coverage.PARTIAL
+        // Early state (docs/calc.md, section 4): the only month with data, and it is incomplete — no chart at all.
+        val early = type == PeriodTypeCode.MONTH && period.coverage.effective == ru.finassist.pf.core.api.model.Coverage.PARTIAL &&
+            s.monthlyChart?.lock?.let { it.reason == LockReason.NEED_MONTHS_WITH_DATA && it.available == 1 } == true
 
         fun guarded(id: String, build: () -> List<Block>): List<Block> =
             if (id in failing) listOf(unavailable(id)) else try {
@@ -207,8 +212,10 @@ object AnalyticsComposer {
         )
     }
 
+    /** A bar of a chart; `data_from` / `data_to` only for an incomplete month (api.md 6.1, docs/calc.md 4). */
     private fun point(p: MonthlyPoint, value: Double?): ChartPoint = ChartPoint(
-        range = p.range, value = value, coverage = p.coverage, dataFrom = p.dataFrom, dataTo = p.dataTo,
+        range = p.range, value = value, coverage = p.coverage,
+        dataFrom = p.dataFrom.takeIf { p.coverage == Coverage.PARTIAL }, dataTo = p.dataTo.takeIf { p.coverage == Coverage.PARTIAL },
         note = AnalyticsServerTexts.barNote(p),
     )
 
@@ -245,7 +252,8 @@ object AnalyticsComposer {
             highlightIndex = highlight(points, s),
             notes = listOfNotNull(main?.let { ChartNote(it, NoteTone.PRIMARY) }, secondary?.let { ChartNote(it, NoteTone.MUTED) }),
         )
-        return Block.of(BlockType.CHART, ChartData.serializer(), data).copy(
+        // The lines under the chart are always there, an empty list too (docs/calc.md, section 10).
+        return withEmptyList(Block.of(BlockType.CHART, ChartData.serializer(), data), "notes").copy(
             id = "monthly_chart", title = title,
             altText = "$title: " + points.joinToString(", ") { p ->
                 RussianDates.monthNominative(YearMonth.parse(p.month).month) + " " + (p.expense?.format() ?: "нет данных")
@@ -296,7 +304,7 @@ object AnalyticsComposer {
             items = b.items.map { i ->
                 RankedItem(
                     id = i.categoryId, icon = i.categoryIcon, title = i.categoryName, note = i.note.takeIf { type == PeriodTypeCode.MONTH },
-                    value = i.amount.minor.toDouble(), valueKind = ValueKind.AMOUNT, showPlus = true, action = open(i.filters),
+                    value = i.amount.minor.toDouble(), valueKind = ValueKind.AMOUNT, share = i.share, showPlus = true, action = open(i.filters),
                 )
             },
             style = ListStyle.PLAIN,
@@ -309,7 +317,9 @@ object AnalyticsComposer {
 
     private fun card(id: String, m: MetricLike, data: InsightCardData, s: AnalyticsSnapshot, emptyText: String? = null, action: BlockAction? = null): Block {
         val st = status(m)
-        return Block.of(BlockType.INSIGHT_CARD, InsightCardData.serializer(), data).copy(
+        // A locked or empty card carries only its icon and title; the lock or `empty_text` says the rest.
+        val shown = if (st.hasData) data else InsightCardData(icon = data.icon, title = data.title)
+        return Block.of(BlockType.INSIGHT_CARD, InsightCardData.serializer(), shown).copy(
             id = id, status = st, lock = if (st == BlockStatus.LOCKED) lock(m, s.state) else null, emptyText = emptyText.takeIf { st == BlockStatus.NONE },
             action = action.takeIf { st.hasData },
             altText = listOfNotNull(data.title, data.value?.let { Money(it.toLong()).format() }, data.description ?: emptyText).joinToString(": "),
@@ -332,6 +342,7 @@ object AnalyticsComposer {
             items = shown.map { p ->
                 InsightItem(
                     p.title, sublabel = p.scheduleName, value = p.amount.minor.toDouble(), valueKind = ValueKind.AMOUNT,
+                    action = open(p.filters),
                     button = BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = p.id, label = "Не подписка"),
                 )
             },
@@ -387,7 +398,15 @@ object AnalyticsComposer {
             },
         )
         // The card shows the first group, so it opens that group.
-        return card("small_frequent", sf, data, s, emptyText = "Мелких частых трат не нашли", action = open(first?.filters))
+        val block = card("small_frequent", sf, data, s, emptyText = "Мелких частых трат не нашли", action = open(first?.filters))
+        // One group: `items` is an empty list on the wire, not absent (docs/calc.md, section 10).
+        return if (block.status.hasData) withEmptyList(block, "items") else block
+    }
+
+    /** Writes [key] as `[]` when the model left an empty list out of the block's data (its default is not encoded). */
+    private fun withEmptyList(block: Block, key: String): Block {
+        val data = block.data ?: return block
+        return if (key in data) block else block.copy(data = JsonObject(data + (key to JsonArray(emptyList()))))
     }
 
     private fun balance(s: AnalyticsSnapshot): Block? {

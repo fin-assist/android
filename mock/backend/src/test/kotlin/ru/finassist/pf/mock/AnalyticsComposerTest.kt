@@ -5,6 +5,7 @@ import org.junit.Test
 import ru.finassist.pf.core.api.model.ActionType
 import ru.finassist.pf.core.api.model.BlockStatus
 import ru.finassist.pf.core.api.model.BlockType
+import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.api.model.InsightCardData
 import ru.finassist.pf.core.api.model.ListStyle
 import ru.finassist.pf.core.api.model.PeriodTypeCode
@@ -77,7 +78,9 @@ class AnalyticsComposerTest {
     }
 
     @Test fun `a locked block carries the server's lock text`() {
-        val chart = AnalyticsComposer.compose(f.september().copy(navigation = f.september().navigation, monthlyChart = f.early.monthlyChart)).blocks.single { it.id == "monthly_chart" }
+        // One full month of data: the chart is there, locked (the early state hides it only for an incomplete month).
+        val oneFullMonth = f.september().let { s -> s.copy(period = s.period!!.copy(coverage = Coverage.COMPLETE), monthlyChart = f.early.monthlyChart) }
+        val chart = AnalyticsComposer.compose(oneFullMonth).blocks.single { it.id == "monthly_chart" }
         assertEquals(BlockStatus.LOCKED, chart.status)
         assertEquals("Нужно 2 месяца с данными, есть 1", chart.lock?.text?.replace('\u00A0', ' '))
         assertEquals(BlockType.CHART, chart.type)

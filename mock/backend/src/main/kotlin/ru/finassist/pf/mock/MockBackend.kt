@@ -43,6 +43,7 @@ class MockBackend(
     private val clock: Clock,
     /** Where background work (imports, answer generation) runs; tests pass one they control. */
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    val catalog: Catalog = Catalog(),
 ) {
     val scope = CoroutineScope(SupervisorJob() + dispatcher)
     val mutex = Mutex()
@@ -50,7 +51,6 @@ class MockBackend(
     /** Completed once the preloaded statement is imported; requests wait for it. */
     val ready = CompletableDeferred<Unit>()
 
-    val catalog = Catalog()
     val ledger = Ledger(catalog)
     val operationScope = Scope(ledger, catalog) { profileZone() }
     /** Days of lines and statement periods are compared in the profile zone at the time of the check (FIN-79, FIN-92). */
