@@ -1,0 +1,76 @@
+appId: ru.finassist.pf.mock.e2e
+name: Устаревшая выписка — плашка на «Операциях» и «Аналитике» с датой конца выписки
+tags:
+  - operations
+---
+# FIN-125. The preloaded statement runs to 1 October, fresh on the pinned «now» (8 October). It is replaced by
+# stale.ofx: its period ends on 20 September, its last operation is on the 15th. More than two weeks have passed, so
+# both screens show the banner, dated by the end of the statement (`state.data_to`), not by the last operation.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- assertNotVisible:
+    id: "operations.feed.stale"
+# Fresh data: the caption under the summary is dated by the end of the statement too — the preloaded one runs to
+# 1 October while its last operation is on 30 September.
+- assertVisible: "Данные по 1.октября.*"
+
+# Delete the preloaded statement.
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- assertVisible: "Удалить загрузку .*\\?"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.empty"
+    timeout: 10000
+
+# Upload the old statement.
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.stale.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "statements.result.done"
+- tapOn:
+    id: "statements.result.done"
+
+# The feed: the banner, its date is the statement's end. The day and the month are joined by a no-break space.
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed.stale"
+    timeout: 10000
+- assertVisible: "Данные в приложении по 20.сентября — с тех пор прошло больше двух недель"
+- assertNotVisible: ".*по 15.сентября.*"
+
+# «Аналитика»: the same banner above the period.
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.stale"
+    timeout: 15000
+- assertVisible: "Данные в приложении по 20.сентября — с тех пор прошло больше двух недель"

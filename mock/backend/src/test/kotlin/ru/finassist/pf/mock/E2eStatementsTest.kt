@@ -4,6 +4,11 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.model.ImportNoticeCode
+import ru.finassist.pf.core.api.model.OperationsQuery
+import ru.finassist.pf.core.api.model.PeriodTypeCode
+import ru.finassist.pf.core.api.model.TransferMode
+import ru.finassist.pf.mock.api.MockAnalyticsApi
+import ru.finassist.pf.mock.api.MockOperationsApi
 import ru.finassist.pf.mock.api.MockStatementsApi
 import ru.finassist.pf.mock.ofx.OfxCheck
 import ru.finassist.pf.mock.ofx.OfxParser
@@ -103,6 +108,32 @@ class E2eStatementsTest {
             assertEquals(2, row.resolvedUnreadCount)
             assertEquals(backend.now(), row.resolvedByUploadedAt)
             assertTrue(statements.listUnreadLines(broken.id).lines.isEmpty())
+        }
+    }
+
+    @Test
+    fun `stale alone ends on 20 September past its last operation, more than two weeks before now (FIN-125)`() {
+        val backend = MockBackend(MockConfig(networkDelayMs = 0), FixedClock(OffsetDateTime.parse("2026-10-08T12:00:00+03:00")))
+        backend.ready.complete(Unit)
+        backend.profile = backend.emptyProfile("+79161234567", "u1")
+        val statements = MockStatementsApi(backend)
+        runBlocking {
+            // The flow deletes the preloaded statement first, then picks stale.ofx.
+            val preloaded = statements.startUpload("fixture.ofx", OfxParser.parse(fixture), backend.now().minusDays(1), instant = true)
+            statements.deleteStatement(preloaded.id)
+            val doc = OfxParser.parse(read("stale.ofx"))
+            assertEquals(3, doc.transactions.size)
+            assertEquals(3, statements.startUpload("stale.ofx", doc, backend.now(), instant = true).result?.newCount)
+
+            // The UI flow statement_stale checks «по 20 сентября»: the statement's end, not the last operation (15th).
+            val dataTo = OffsetDateTime.parse("2026-09-21T00:00:00+03:00")
+            val feed = assertNotNull(MockOperationsApi(backend).listOperations(OperationsQuery()).state)
+            assertTrue(feed.stale)
+            assertEquals(dataTo, feed.dataTo)
+            assertEquals(OffsetDateTime.parse("2026-09-15T13:10:00+03:00"), feed.lastOperationAt)
+            val analytics = assertNotNull(MockAnalyticsApi(backend).getAnalytics(PeriodTypeCode.MONTH, null, TransferMode.WITH, null, null).state)
+            assertTrue(analytics.stale)
+            assertEquals(dataTo, analytics.dataTo)
         }
     }
 }

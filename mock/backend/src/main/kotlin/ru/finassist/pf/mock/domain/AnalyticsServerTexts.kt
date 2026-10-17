@@ -54,7 +54,7 @@ object AnalyticsServerTexts {
 
     /**
      * Lock text: «Нужно 3 полных месяца, есть 1»; with no full months at all — «…пока есть только 1–25 сентября»
-     * from `state.data_from` / `data_to`.
+     * from `state.data_from` / `data_to` (`data_to` is the start of the day after the last covered one).
      */
     fun lock(lock: MetricLock?, state: AnalyticsState?): String {
         if (lock == null) return "Пока недоступно"
@@ -64,7 +64,7 @@ object AnalyticsServerTexts {
                 val need = "Нужно ${countWithNoun(req, "полный месяц", "полных месяца", "полных месяцев")}"
                 val avail = lock.available ?: 0
                 if (avail == 0 && state != null) {
-                    "$need — пока есть только ${RussianDates.dayRange(state.dataFrom.toLocalDate(), state.dataTo.toLocalDate())}"
+                    "$need — пока есть только ${RussianDates.dayRange(state.dataFrom.toLocalDate(), state.dataTo.minusNanos(1).toLocalDate())}"
                 } else {
                     "$need, есть $avail"
                 }

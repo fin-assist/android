@@ -26,7 +26,8 @@ class AnalyticsServerTextsTest {
     private fun t(s: String) = OffsetDateTime.parse(s)
 
     private val state = AnalyticsState(
-        stale = false, dataFrom = t("2026-09-01T08:15:00+03:00"), dataTo = t("2026-09-25T21:40:00+03:00"),
+        // `state.data_to` is the start of the day after the last covered day (api.md 6.1).
+        stale = false, dataFrom = t("2026-09-01T00:00:00+03:00"), dataTo = t("2026-09-26T00:00:00+03:00"),
         fullMonths = 0, unreadLinesCount = 0, calculatedAt = t("2026-09-25T21:52:00+03:00"), recalculating = false,
     )
 

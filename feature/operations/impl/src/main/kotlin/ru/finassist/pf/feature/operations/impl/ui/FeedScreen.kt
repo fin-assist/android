@@ -31,6 +31,7 @@ import ru.finassist.pf.core.api.model.MonthSummary
 import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.RussianDates
+import ru.finassist.pf.core.common.time.StaleData
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.NoticeTone
 import ru.finassist.pf.core.designsystem.components.PfButton
@@ -125,23 +126,26 @@ internal fun FeedContent(
                     contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space2, bottom = d.space6),
                 ) {
                     val feedState = state.state
-                    val lastOperation = feedState?.lastOperationAt?.atZoneSameInstant(zone)?.toLocalDate()
+                    // Where the statement data ends (`state.data_to`), or the last operation without it (FIN-125).
+                    val lastDataDay = feedState?.let { StaleData.lastDay(it.dataTo, it.lastOperationAt, zone) }
+                    // Stale: where the statement data ends (`state.data_to`), not the last operation (FIN-125).
+                    val staleText = feedState?.let { StaleData.banner(it.stale, it.dataTo, it.lastOperationAt, zone, today) }
                     state.summary.firstOrNull()?.let { s -> item(key = "summary") { SummaryCard(s, today, zone) } }
-                    if (feedState?.stale == true && lastOperation != null) {
+                    if (staleText != null) {
                         item(key = "stale") {
                             PfNotice(
-                                "Операции в приложении по ${RussianDates.day(lastOperation, today.year)} — с тех пор прошло больше двух недель",
+                                staleText,
                                 tone = NoticeTone.INFO,
-                                modifier = Modifier.padding(top = d.space3),
+                                modifier = Modifier.padding(top = d.space3).testTag(OperationsTags.FEED_STALE),
                                 action = if (state.uploadEnabled) ({ PfNoticeLink("Загрузить новую выписку", onClick = onUpload, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD_NEW)) }) else null,
                             )
                         }
-                    } else if (lastOperation != null) {
-                        // «Операции по 25 сентября · Загрузить новую выписку» under the summary (mockup `Main`).
+                    } else if (lastDataDay != null) {
+                        // «Данные по 25 сентября · Загрузить новую выписку» under the summary (mockup `Main`).
                         item(key = "fresh") {
                             Row(Modifier.defaultMinSize(minHeight = d.touch), verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    "Операции по ${RussianDates.day(lastOperation, today.year)}" + if (state.uploadEnabled) " · " else "",
+                                    "Данные по ${RussianDates.day(lastDataDay, today.year)}" + if (state.uploadEnabled) " · " else "",
                                     style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
                                 )
                                 if (state.uploadEnabled) PfLink("Загрузить новую выписку", onClick = onUpload, inline = true, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD_NEW))
@@ -245,6 +249,8 @@ internal object OperationsTags {
     const val FEED_EMPTY = "operations.feed.empty"
     const val FEED_UPLOAD = "operations.feed.upload"
     const val FEED_UPLOAD_NEW = "operations.feed.upload_new"
+    /** The stale statement banner: «Данные в приложении по … — с тех пор прошло больше двух недель». */
+    const val FEED_STALE = "operations.feed.stale"
     /** A row in the feed or in search results. */
     const val ROW = "operations.row"
 
