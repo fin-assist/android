@@ -388,7 +388,10 @@ object AnalyticsComposer {
         val first = groups.firstOrNull()
         val data = InsightCardData(
             icon = "coffee", title = "Мелкие частые траты", value = amount(sf.value), valueKind = ValueKind.AMOUNT, approx = true,
-            description = first?.let { AnalyticsServerTexts.smallFrequent(it.title, it.count, it.averageAmount, it.yearlyAmount) },
+            description = first?.let {
+                val selected = s.period?.range?.from?.let(YearMonth::from)
+                AnalyticsServerTexts.smallFrequent(it.title, it.count, it.averageAmount, it.yearlyAmount, sf.month, selected)
+            },
             // The first group is the description; any further groups stay as rows.
             items = groups.drop(1).map { g ->
                 InsightItem(

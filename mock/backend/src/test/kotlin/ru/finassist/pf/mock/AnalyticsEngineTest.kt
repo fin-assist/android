@@ -7,7 +7,11 @@ import ru.finassist.pf.mock.domain.MetricStatus
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.time.PeriodKey
+import ru.finassist.pf.core.api.model.InsightCardData
+import ru.finassist.pf.mock.domain.AnalyticsComposer
+import ru.finassist.pf.mock.domain.SmallFrequentCard
 import java.time.OffsetDateTime
+import java.time.YearMonth
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
@@ -44,5 +48,27 @@ class AnalyticsEngineTest {
         assertEquals(MetricLock(LockReason.NEED_FULL_MONTHS, required = 2, available = 1), insights.regularPayments.lock)
         // Notable spending counts full months before the selected one (docs/calc.md, section 5).
         assertEquals(MetricLock(LockReason.NEED_FULL_MONTHS, required = 3, available = 0), insights.notableSpending.lock)
+    }
+
+    @Test
+    fun `small frequent spending of an incomplete month is counted over the last full month and names it`() {
+        // September is full, October runs to the 5th (today is 6 October).
+        val coffee = (1..10).map { trn("s$it", "2026-09-%02dT09:00".format(it * 2), 250, "Кофейня", "Кафе") } +
+            (1..3).map { trn("o$it", "2026-10-0${it}T09:00", 250, "Кофейня", "Кафе") }
+        val backend = testBackend().apply { load(statement("2026-09-01", "2026-10-05", *coffee.toTypedArray())) }
+        fun card(key: PeriodKey): Pair<SmallFrequentCard, String?> {
+            val snapshot = backend.analytics.analytics(PeriodTypeCode.MONTH, key, TransferMode.WITH)
+            val block = AnalyticsComposer.compose(snapshot).blocks.single { it.id == "small_frequent" }
+            return snapshot.insights!!.smallFrequent to block.decode(InsightCardData.serializer())?.description?.replace('\u00A0', ' ')?.replace('\u202F', ' ')
+        }
+        val text = "в месяц · кофейня: 10 раз по 250 ₽ — около 30 000 ₽ в год"
+
+        val (sep, sepText) = card(PeriodKey("2026-09"))
+        assertEquals(YearMonth.of(2026, 9), sep.month)
+        assertEquals(text, sepText)
+
+        val (oct, octText) = card(october)
+        assertEquals(YearMonth.of(2026, 9), oct.month)
+        assertEquals("по сентябрю · $text", octText)
     }
 }

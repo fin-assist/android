@@ -34,6 +34,7 @@ import ru.finassist.pf.mock.domain.RegularPaymentsCard
 import ru.finassist.pf.mock.domain.SmallFrequentCard
 import ru.finassist.pf.mock.domain.SmallFrequentGroup
 import java.time.OffsetDateTime
+import java.time.YearMonth
 import java.time.ZoneOffset
 
 /**
@@ -107,8 +108,9 @@ object AnalyticsDesignFixtures {
         bankFees = BankFeesCard(MetricStatus.READY, basis = basis, value = rub(1_240),
             filters = s.period.copy(selection = AnalyticsEngine.SELECTION_BANK_FEES, selectionName = "Комиссии и проценты банку"),
             kindsName = "обслуживание, переводы, снятие наличных"),
+        // Counted over August, the last full month: September runs to the 25th (docs/calc.md, section 5).
         smallFrequent = SmallFrequentCard(
-            MetricStatus.READY, basis = basis, value = rub(6_400),
+            MetricStatus.READY, basis = basis, value = rub(6_400), month = YearMonth.of(2026, 8),
             items = listOf(SmallFrequentGroup("Кофе и перекусы", 23, rub(280), rub(6_400), rub(77_000), s.period.copy(selection = "s_small_merchant_2026-08_with_coffee", selectionName = "Кофе и перекусы"))),
         ),
     )
