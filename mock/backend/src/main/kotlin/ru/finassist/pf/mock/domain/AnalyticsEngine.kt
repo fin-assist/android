@@ -247,17 +247,16 @@ class AnalyticsEngine(
         val items = grouped.map { (category, list) ->
             val amount = list.sumOf { it.signedMinor }
             CategoryAmount(
-                categoryId = category?.id,
-                categoryName = category?.name ?: "Без категории",
-                categoryIcon = category?.icon ?: "tag",
+                categoryId = category.id,
+                categoryName = category.name,
+                categoryIcon = category.icon,
                 note = note(category, list.map { it.op }),
                 amount = Money(amount),
                 share = if (total > 0 && amount >= 0) amount.toDouble() / total else null,
                 operationCount = list.size,
                 filters = OperationsFilter(
                     from = periodRange.from, to = periodRange.to, kind = OperationKindFilter.EXPENSE, transferMode = mode,
-                    categoryId = category?.id, selection = if (category == null) SELECTION_UNCATEGORIZED else null,
-                    selectionName = if (category == null) "Без категории" else null,
+                    categoryId = category.id,
                 ),
             )
         }.sortedWith(BY_AMOUNT_THEN_NAME)
@@ -431,8 +430,8 @@ class AnalyticsEngine(
         val basis = MetricBasis(range(base.last().atDay(1), base.first().plusMonths(1).atDay(1)), base.size)
 
         fun byCategory(list: List<Operation>): Map<Category, Long> = scope.expenses(list)
-            .filter { e -> e.category != null && e.category.id != SystemCategories.UNCATEGORIZED && e.category.id != catalog.transfers.id && e.category.id != SystemCategories.OWN_TRANSFER }
-            .groupBy { it.category!! }.mapValues { (_, l) -> l.sumOf { it.signedMinor } }
+            .filter { e -> e.category.id != SystemCategories.UNCATEGORIZED && e.category.id != catalog.transfers.id && e.category.id != SystemCategories.OWN_TRANSFER }
+            .groupBy { it.category }.mapValues { (_, l) -> l.sumOf { it.signedMinor } }
 
         val typical = byCategory(base.flatMap { m -> scope.inDays(visible, m.atDay(1), m.plusMonths(1).atDay(1)) })
             .mapValues { (_, sum) -> Math.floorDiv(2 * sum + 3, 6) } // sum / 3, half up

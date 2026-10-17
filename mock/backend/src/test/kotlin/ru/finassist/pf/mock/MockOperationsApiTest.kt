@@ -116,7 +116,11 @@ class MockOperationsApiTest {
 
     @Test
     fun `an unknown or malformed selection is SELECTION_NOT_FOUND`() = runBlocking<Unit> {
-        for (selection in listOf("s_whatever", "s_merchant_nobody", "s_regular_rp_nobody", "s_regular_all_bad", "s_regular_all_2026-13_with")) {
+        val smallSelections = listOf(
+            "s_small_bad", "s_small_merchant_2026-13_with_x", "s_small_merchant_2026-09_sideways_x",
+            "s_small_merchant_2026-09_with_00000000-0000-0000-0000-000000000000",
+        )
+        for (selection in listOf("s_whatever", "s_merchant_nobody", "s_regular_rp_nobody", "s_regular_all_bad", "s_regular_all_2026-13_with") + smallSelections) {
             val e = assertFailsWith<AppError.Api>(selection) { search(OperationsFilter(selection = selection)) }
             assertEquals(ErrorCodes.SELECTION_NOT_FOUND to 422, e.code to e.httpStatus, selection)
         }
@@ -328,5 +332,17 @@ class MockOperationsApiTest {
     fun `the fake server's own unknown kind searches like expense (FIN-83)`() = runBlocking<Unit> {
         val known = found(OperationsFilter(kind = OperationKindFilter.EXPENSE, transferMode = TransferMode.WITH))
         assertEquals(known, found(OperationsFilter(kind = MockCodes.EXPENSE_UNKNOWN, transferMode = TransferMode.WITH)))
+    }
+
+    @Test
+    fun `before is the start of a month in the profile zone, another moment is VALIDATION_ERROR`() = runBlocking<Unit> {
+        backend.profile = backend.profile.copy(timezone = "Asia/Vladivostok")
+        val ok = api.listOperations(OperationsQuery(before = java.time.OffsetDateTime.parse("2026-09-01T00:00:00+10:00")))
+        assertEquals(java.time.OffsetDateTime.parse("2026-06-01T00:00:00+10:00").toInstant(), ok.range?.from?.toInstant())
+        // The start of September in Moscow is 07:00 on 1 September in Vladivostok: not a month start of the profile.
+        for (before in listOf("2026-09-01T00:00:00+03:00", "2026-09-15T00:00:00+10:00")) {
+            val e = assertFailsWith<AppError.Api>(before) { api.listOperations(OperationsQuery(before = java.time.OffsetDateTime.parse(before))) }
+            assertEquals(ErrorCodes.VALIDATION_ERROR to 400, e.code to e.httpStatus, before)
+        }
     }
 }

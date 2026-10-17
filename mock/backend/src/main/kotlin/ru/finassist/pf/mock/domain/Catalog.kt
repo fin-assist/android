@@ -5,7 +5,7 @@ import ru.finassist.pf.core.api.model.CategoryKind
 import ru.finassist.pf.core.api.model.SystemCategories
 
 /**
- * Category directory: T-Bank categories as they come in `MEMO`, plus the two system ones. Ids are stable
+ * Category directory: T-Bank categories as they come in `MEMO`, plus the three system ones. Ids are stable
  * slugs (`cat_supermarkets`); unknown bank categories get a transliterated slug on first sight, which is what
  * the real `bank-statement-data` will do too ("список открытый — новые категории принимаем как есть").
  */

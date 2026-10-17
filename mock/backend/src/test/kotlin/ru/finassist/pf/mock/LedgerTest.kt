@@ -355,4 +355,86 @@ class LedgerTest {
         assertEquals(c, catalog.byId("cat_novaya_kategoriya"))
         assertEquals(SystemCategories.OWN_TRANSFER, catalog.ownTransfer.id)
     }
+
+    // ---- docs/calc.md 3.2, 3.3: branches the calculation fixtures do not reach ----
+
+    @Test
+    fun `at an equal distance the earlier credit pairs, at an equal time the smaller account and FITID`() {
+        import(
+            "u1",
+            trn("d", "2026-09-10T12:00", 5_000, "Между своими счетами", "Переводы"),
+            trn("late", "2026-09-10T12:01", 5_000, "Пополнение", "Переводы", debit = false, account = Acc.SAVINGS),
+            trn("early", "2026-09-10T11:59", 5_000, "Пополнение", "Переводы", debit = false, account = Acc.OTHER_BANK),
+        )
+        assertSame(op("early"), ledger.pairOf(op("d"))?.credit)
+
+        ledger.clear()
+        import(
+            "u1",
+            trn("d", "2026-09-10T12:00", 5_000, "Между своими счетами", "Переводы"),
+            trn("b", "2026-09-10T12:05", 5_000, "Пополнение", "Переводы", debit = false, account = Acc.SAVINGS),
+            trn("a", "2026-09-10T12:05", 5_000, "Пополнение", "Переводы", debit = false, account = Acc.SAVINGS),
+        )
+        assertSame(op("a"), ledger.pairOf(op("d"))?.credit)
+    }
+
+    @Test
+    fun `a transfer to self pairs only with a credit in the same currency`() {
+        import(
+            "u1",
+            trn("d", "2026-09-10T12:00", 5_000, "Между своими счетами", "Переводы"),
+            trn("usd", "2026-09-10T12:01", 5_000, "Пополнение", "Переводы", debit = false, account = Acc.SAVINGS).copy(currency = "USD"),
+        )
+        assertNull(ledger.pairOf(op("d")))
+        assertEquals(SystemCategories.OWN_TRANSFER, op("d").category.id) // a transfer to self by its description
+        assertEquals("cat_transfers", op("usd").category.id)
+    }
+
+    @Test
+    fun `a manual category other than own transfer makes a debit no transfer to self, so it does not pair`() {
+        import("u1", trn("d", "2026-09-10T12:00", 5_000, "Себе в другой банк", "Переводы"))
+        ledger.changeCategory(op("d").id, cat("Подарки и творчество"))
+        import("u2", trn("c", "2026-09-10T12:01", 5_000, "Себе из другого банка", "Переводы", debit = false, account = Acc.SAVINGS))
+        assertNull(ledger.pairOf(op("d")))
+        assertEquals("cat_gifts", op("d").category.id)
+        assertEquals(SystemCategories.OWN_TRANSFER, op("c").category.id)
+    }
+
+    @Test
+    fun `when the last same-name debit is no category to reduce, the refund falls to the same-amount debit`() {
+        import(
+            "u1",
+            trn("first", "2026-09-01T10:00", 1_000, "Магазин", "Супермаркеты"),
+            trn("pharmacy", "2026-09-02T10:00", 500, "Аптека", "Аптеки"),
+            trn("last", "2026-09-03T10:00", 2_000, "Магазин", "Супермаркеты"),
+        )
+        ledger.changeCategory(op("last").id, catalog.ownTransfer)
+        import("u2", trn("back", "2026-09-05T10:00", 500, "Магазин", "Финансы", debit = false))
+        assertTrue(op("back").isRefund)
+        assertEquals("cat_pharmacy", op("back").refundTarget?.id)
+    }
+
+    @Test
+    fun `the same-amount rule skips debits of the bank category Переводы`() {
+        import(
+            "u1",
+            trn("sent", "2026-09-01T10:00", 300, "Петр П.", "Переводы"),
+            trn("back", "2026-09-05T10:00", 300, "Возврат денег", "Финансы", debit = false),
+        )
+        assertTrue(op("back").isRefund)
+        assertEquals(SystemCategories.UNCATEGORIZED, op("back").refundTarget?.id)
+    }
+
+    @Test
+    fun `MEMO Возврат - a credit is a refund, a debit is in Без категории, no category Возврат is added`() {
+        import(
+            "u1",
+            trn("buy", "2026-09-01T10:00", 3_000, "Ozon", "Маркетплейсы"),
+            trn("back", "2026-09-03T10:00", 1_200, "Ozon", "Возврат", debit = false),
+            trn("fee", "2026-09-04T10:00", 500, "Банк", "Возврат"),
+        )
+        assertEquals("cat_marketplaces", op("back").refundTarget?.id)
+        assertEquals(SystemCategories.UNCATEGORIZED, op("fee").category.id)
+        assertEquals(1, catalog.categories.count { it.name == "Возврат" })
+    }
 }

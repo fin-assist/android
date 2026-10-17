@@ -38,7 +38,7 @@ class SerializationTest {
            "status":"posted","brand_new_field":{"x":1}}],
          "summary":[{"month":"2026-09","range":{"from":"2026-09-01T00:00:00+03:00","to":"2026-10-01T00:00:00+03:00"},
                      "expense":8432000,"income":15690000,"data_to":"2026-09-25T21:40:00+03:00"}],
-         "state":{"stale":false,"last_operation_at":"2026-09-25T21:40:00+03:00"},
+         "state":{"stale":false,"last_operation_at":"2026-09-25T21:40:00+03:00","data_to":"2026-09-26T00:00:00+03:00"},
          "range":{"from":"2026-08-01T00:00:00+03:00","to":"2026-11-01T00:00:00+03:00"},
          "next_before":"2026-08-01T00:00:00+03:00"}
         """.trimIndent()
@@ -52,6 +52,10 @@ class SerializationTest {
         assertEquals(Money(8_432_000), list.summary?.single()?.expense)
         assertEquals(8, list.nextBefore?.monthValue)
         assertNull(list.totalCount)
+        assertEquals(26, list.state?.dataTo?.dayOfMonth)
+        // A server without `state.data_to` (before FIN-124) still parses.
+        val old = ApiJson.decodeFromString(OperationsList.serializer(), json.replace(""","data_to":"2026-09-26T00:00:00+03:00"}""", "}"))
+        assertNull(old.state?.dataTo)
     }
 
     @Test

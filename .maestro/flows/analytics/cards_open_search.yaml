@@ -1,0 +1,75 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — карточки наблюдений открывают свои операции
+tags:
+  - analytics
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+# "Now" is pinned to 8 October 2026; September, one step back, is the last full month of the fixture.
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible: "Сентябрь 2026"
+    timeout: 10000
+
+# «Мелкие частые траты» opens its first group — the category «Фастфуд» of September — as a selection: the search
+# shows the group's name on the «как на Аналитике» chip and the operations it is made of (docs/calc.md, section 5).
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.small_frequent"
+- tapOn: "Мелкие частые траты"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+    timeout: 10000
+- assertVisible:
+    id: "operations.search.chip.scope"
+- assertVisible: "Фастфуд.*✕"
+- assertVisible:
+    id: "operations.row"
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.screen"
+    timeout: 10000
+
+# A further group is a row of the card: «Пятёрочка» opens only its own operations.
+- scrollUntilVisible:
+    element: "Пятёрочка"
+- tapOn: "Пятёрочка"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+    timeout: 10000
+- assertVisible: "Пятёрочка.*✕"
+- assertVisible:
+    id: "operations.row"
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.screen"
+    timeout: 10000
+
+# A row of «Подписки и регулярные платежи» opens the charges of that payment in the selected month.
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.regular_payments"
+    direction: UP
+- scrollUntilVisible:
+    element: "РБК"
+- tapOn: "РБК"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+    timeout: 10000
+- assertVisible: "РБК.*✕"
+- assertVisible:
+    id: "operations.row"
