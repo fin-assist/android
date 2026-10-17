@@ -177,11 +177,11 @@ object AnalyticsServerTexts {
      * is not the [selected] one (the selected month is incomplete, docs/calc.md, section 5), the text starts with it:
      * «по августу · в месяц · …», with the year when it differs: «по декабрю 2025 · …».
      */
-    fun smallFrequent(title: String, count: Int, average: Money, yearly: Money, month: YearMonth? = null, selected: YearMonth? = null): String {
+    fun smallFrequent(title: String, count: Int, average: Money, yearly: Money, month: YearMonth?, selected: YearMonth): String {
         val base = "в месяц · ${title.replaceFirstChar { it.lowercase() }}: ${countWithNoun(count, "раз", "раза", "раз")} по ${average.format()} " +
             "${RussianDates.EM_DASH} около ${yearly.format()} в год"
         if (month == null || month == selected) return base
-        val year = if (selected != null && month.year != selected.year) " ${month.year}" else ""
+        val year = if (month.year != selected.year) " ${month.year}" else ""
         return "по ${RussianDates.monthDative(month.month)}$year · $base"
     }
 

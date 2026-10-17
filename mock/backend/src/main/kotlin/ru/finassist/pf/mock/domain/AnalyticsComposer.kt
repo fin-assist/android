@@ -389,7 +389,7 @@ object AnalyticsComposer {
         val data = InsightCardData(
             icon = "coffee", title = "Мелкие частые траты", value = amount(sf.value), valueKind = ValueKind.AMOUNT, approx = true,
             description = first?.let {
-                val selected = s.period?.range?.from?.let(YearMonth::from)
+                val selected = YearMonth.from(s.period!!.range.from)
                 AnalyticsServerTexts.smallFrequent(it.title, it.count, it.averageAmount, it.yearlyAmount, sf.month, selected)
             },
             // The first group is the description; any further groups stay as rows.

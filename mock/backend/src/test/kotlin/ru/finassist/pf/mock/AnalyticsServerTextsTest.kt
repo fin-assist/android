@@ -83,14 +83,14 @@ class AnalyticsServerTextsTest {
         )
         assertEquals(
             "в месяц · кофе и перекусы: 23 раза по 280 ₽ — около 77 000 ₽ в год",
-            AnalyticsTexts.smallFrequent("Кофе и перекусы", 23, Money(28_000), Money(7_700_000)).plain(),
+            AnalyticsTexts.smallFrequent("Кофе и перекусы", 23, Money(28_000), Money(7_700_000), YearMonth.of(2026, 9), YearMonth.of(2026, 9)).plain(),
         )
     }
 
     @Test
     fun `small frequent spending names the month of the calculation only when it is not the selected one`() {
         val text = "в месяц · фастфуд: 10 раз по 442,70 ₽ — около 53 124 ₽ в год"
-        fun sf(month: YearMonth?, selected: YearMonth?) = AnalyticsTexts.smallFrequent("Фастфуд", 10, Money(44_270), Money(5_312_400), month, selected).plain()
+        fun sf(month: YearMonth?, selected: YearMonth) = AnalyticsTexts.smallFrequent("Фастфуд", 10, Money(44_270), Money(5_312_400), month, selected).plain()
         // The selected month is full: it is the month of the calculation, the text stays as it was.
         assertEquals(text, sf(YearMonth.of(2026, 8), YearMonth.of(2026, 8)))
         // September is incomplete: the card counts the last full month before it and names it.
