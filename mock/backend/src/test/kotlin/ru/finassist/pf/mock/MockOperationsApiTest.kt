@@ -73,10 +73,13 @@ class MockOperationsApiTest {
     }
 
     @Test
-    fun `transfer mode alone hides pairs, an unknown mode counts as with`() = runBlocking<Unit> {
+    fun `transfer mode alone hides transfers to self - pairs and single ones, an unknown mode counts as with`() = runBlocking<Unit> {
+        // docs/calc.md section 6, example 21: the search matches the Analytics figure, which counts neither.
         val with = found(OperationsFilter(transferMode = TransferMode.WITH))
         assertFalse("pair" in with)
-        assertTrue("ivan" in with && "abroad" in with)
+        assertFalse("abroad" in with)
+        assertTrue("ivan" in with && "buy" in with)
+        assertTrue("abroad" in found(OperationsFilter()))
         assertEquals(with, found(OperationsFilter(transferMode = TransferMode.UNKNOWN)))
         assertFalse("ivan" in found(OperationsFilter(transferMode = TransferMode.WITHOUT)))
     }
