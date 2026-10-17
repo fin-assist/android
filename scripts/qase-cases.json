@@ -18,6 +18,7 @@
     ".maestro/flows/analytics/block_unavailable.yaml": 30,
     ".maestro/flows/analytics/unknown_blocks.yaml": 31,
     ".maestro/flows/analytics/cards_open_search.yaml": 36,
+    ".maestro/flows/analytics/search_scope_own_transfers.yaml": 38,
     ".maestro/flows/assistant/ask_question.yaml": 12,
     ".maestro/flows/assistant/daily_limit.yaml": 13,
     ".maestro/flows/statements/upload_and_history.yaml": 14,
