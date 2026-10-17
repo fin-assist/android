@@ -486,6 +486,18 @@ class LedgerTest {
     }
 
     @Test
+    fun `the same-amount rule takes the last earlier debit and ignores one after the refund`() {
+        import(
+            "u1",
+            trn("first", "2026-08-10T10:00", 700, "Магазин обуви", "Одежда и обувь"),
+            trn("last", "2026-09-01T10:00", 700, "Супермаркет", "Супермаркеты"),
+            trn("in", "2026-09-05T10:00", 700, "Иван И.", "Пополнения", debit = false),
+            trn("after", "2026-09-06T10:00", 700, "Аптека", "Аптеки"),
+        )
+        assertEquals("cat_supermarkets", markRefund("in").refundTarget?.id)
+    }
+
+    @Test
     fun `a manual refund with neither match reduces its own expense bank category`() {
         import(
             "u1",
