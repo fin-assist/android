@@ -134,7 +134,8 @@
                         "tone": "primary"
                     },
                     {
-                        "text": "Среднее за апрель — август — 82 800 ₽"
+                        "text": "Среднее за апрель — август — 82 800 ₽",
+                        "tone": "muted"
                     }
                 ]
             }
@@ -323,6 +324,7 @@
                         "note": "зарплата и проценты",
                         "value": 1.4214E7,
                         "value_kind": "amount",
+                        "share": 0.99,
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
@@ -342,6 +344,7 @@
                         "note": "по акциям и облигациям",
                         "value": 125000.0,
                         "value_kind": "amount",
+                        "share": 0.01,
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
@@ -380,6 +383,16 @@
                         "sublabel": "1-го числа",
                         "value": 290000.0,
                         "value_kind": "amount",
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "transfer_mode": "without",
+                                "selection": "s_regular_r1",
+                                "selection_name": "Спортзал"
+                            }
+                        },
                         "button": {
                             "type": "dismiss_regular_payment",
                             "payment_id": "r1",
@@ -391,6 +404,16 @@
                         "sublabel": "12-го числа",
                         "value": 39900.0,
                         "value_kind": "amount",
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "transfer_mode": "without",
+                                "selection": "s_regular_r2",
+                                "selection_name": "Яндекс Плюс"
+                            }
+                        },
                         "button": {
                             "type": "dismiss_regular_payment",
                             "payment_id": "r2",
@@ -402,6 +425,16 @@
                         "sublabel": "3-го числа",
                         "value": 29900.0,
                         "value_kind": "amount",
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "transfer_mode": "without",
+                                "selection": "s_regular_r3",
+                                "selection_name": "Облачное хранилище"
+                            }
+                        },
                         "button": {
                             "type": "dismiss_regular_payment",
                             "payment_id": "r3",
@@ -480,17 +513,17 @@
                 "value": 640000.0,
                 "value_kind": "amount",
                 "approx": true,
-                "description": "в месяц · кофе и перекусы: 23 раза по 280 ₽ — около 77 000 ₽ в год"
+                "description": "в месяц · кофе и перекусы: 23 раза по 280 ₽ — около 77 000 ₽ в год",
+                "items": []
             },
             "action": {
                 "type": "open_operations",
                 "filter": {
                     "from": "2026-09-01T00:00:00+03:00",
                     "to": "2026-10-01T00:00:00+03:00",
-                    "q": "Кофе и перекусы",
-                    "kind": "expense",
-                    "amount_to": 50000,
-                    "transfer_mode": "without"
+                    "transfer_mode": "without",
+                    "selection": "s_small_merchant_2026-08_with_coffee",
+                    "selection_name": "Кофе и перекусы"
                 }
             }
         },

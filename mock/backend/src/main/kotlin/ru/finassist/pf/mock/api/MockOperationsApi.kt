@@ -33,6 +33,13 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
         backend.requireSession()
         val isSearch = !query.filter.isEmpty || query.allTime
         if (isSearch && query.before != null) throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400, message = "before with filters")
+        // `before` is the start of a month in the profile zone — a `next_before` (docs/calc.md, section 6).
+        query.before?.let { before ->
+            val local = before.atZoneSameInstant(zone)
+            if (local.toLocalDate().withDayOfMonth(1).atStartOfDay(zone).toInstant() != before.toInstant()) {
+                throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400, message = "before is not the start of a month")
+            }
+        }
         if (query.allTime && (query.filter.from != null || query.filter.to != null)) throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400, message = "all_time with period")
         return backend.mutex.withLock { if (isSearch) searchPage(query) else feedPage(query) }
     }
@@ -40,11 +47,13 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
     /** Three calendar months, newest first, ending with the last month that has data (or before `before`). */
     private fun feedPage(query: OperationsQuery): OperationsList {
         val records = views.records()
-        val stale = backend.coverage().lastDay?.let { ChronoUnit.DAYS.between(it, backend.now().atZoneSameInstant(zone).toLocalDate()) > 14 } ?: true
+        val lastDay = backend.coverage().lastDay
+        val stale = lastDay?.let { ChronoUnit.DAYS.between(it, backend.now().atZoneSameInstant(zone).toLocalDate()) > 14 } ?: true
         val state = FeedState(
             stale = stale,
             lastOperationAt = backend.ledger.all.maxOfOrNull { it.occurredAt },
             lastUploadedAt = backend.uploads.filter { it.isDone }.maxOfOrNull { it.uploadedAt },
+            dataTo = lastDay?.plusDays(1)?.atStartOfDay(zone)?.toOffsetDateTime(),
         )
         if (records.isEmpty()) return OperationsList(items = emptyList(), summary = emptyList(), state = state, range = null, nextBefore = null)
 

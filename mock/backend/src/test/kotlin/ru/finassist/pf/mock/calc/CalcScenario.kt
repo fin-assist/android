@@ -207,6 +207,3 @@ internal class CalcScenario(private val root: File) {
 
 /** Loads a JSON file of the fixtures. */
 internal fun readJson(file: File): JsonElement = Json.parseToJsonElement(file.readText())
-
-/** `JsonArray` of strings. */
-internal fun strings(values: List<String>) = JsonArray(values.map(::JsonPrimitive))

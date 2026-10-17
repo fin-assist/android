@@ -1,10 +1,10 @@
 package ru.finassist.pf.mock.domain
 
 import ru.finassist.pf.core.api.model.OperationKindFilter
-import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.SystemCategories
 import ru.finassist.pf.core.api.model.TransferMode
+import ru.finassist.pf.mock.MockCodes
 
 /**
  * Search semantics of `listOperations` (api.md 4.1) over [Record]s. With `transfer_mode` the analytics rules
@@ -75,8 +75,14 @@ class Search(private val ledger: Ledger, private val catalog: Catalog, private v
      */
     private fun selectionPredicate(selection: String): (Record) -> Boolean {
         val test: (Operation) -> Boolean = when {
-            selection == AnalyticsEngine.SELECTION_UNCATEGORIZED -> { op -> op.isRefund && op.refundTarget == null }
-            selection == AnalyticsEngine.SELECTION_BANK_FEES -> { op -> op.isDebit && op.category.id == catalog.bankFees.id }
+            selection == AnalyticsEngine.SELECTION_UNCATEGORIZED -> { op ->
+                op.category.id == SystemCategories.UNCATEGORIZED || (op.isRefund && op.refundTarget?.id == SystemCategories.UNCATEGORIZED)
+            }
+            selection == AnalyticsEngine.SELECTION_BANK_FEES -> { op ->
+                ((op.isDebit && !op.isOwnTransferCategory) || op.isRefund) &&
+                    AnalyticsEngine.isFee(op, if (op.isRefund) op.refundTarget else op.category)
+            }
+            selection.startsWith(AnalyticsEngine.SELECTION_SMALL + "_") -> analytics.smallSelection(selection) ?: throw UnknownSelection(selection)
             selection.startsWith(AnalyticsEngine.SELECTION_REGULAR_ALL) -> {
                 val names = analytics.regularNames(selection) ?: throw UnknownSelection(selection)
                 ({ op -> op.isDebit && op.name in names })

@@ -31,6 +31,10 @@ class Catalog(
             id = SystemCategories.REFUND, name = "Возврат", icon = "repeat", isSystem = true,
             kinds = listOf(CategoryKind.INCOME), assignable = true, note = "уменьшает расходы на покупку",
         )
+        byName[UNCATEGORIZED_NAME] = Category(
+            id = SystemCategories.UNCATEGORIZED, name = UNCATEGORIZED_NAME, icon = "tag", isSystem = true,
+            kinds = listOf(CategoryKind.EXPENSE, CategoryKind.INCOME), assignable = false, note = "в выписке нет категории",
+        )
         KNOWN.forEach { (name, slug, icon) -> byName[name] = category(name, slug, icon) }
     }
 
@@ -38,15 +42,34 @@ class Catalog(
 
     fun byId(id: String): Category? = byName.values.firstOrNull { it.id == id }
 
-    fun byName(name: String): Category = byName.getOrPut(name) { category(name, slugOf(name), "tag") }
+    /**
+     * A category by name; a bank category seen for the first time is added with both directions, a `cat_<транслит>`
+     * id and the `tag` icon (docs/calc.md, 3.1).
+     */
+    fun byName(name: String): Category = byName.getOrPut(name) {
+        var id = "cat_" + slugOf(name)
+        var n = 2
+        while (byId(id) != null) id = "cat_${slugOf(name)}_${n++}" // another name with the same slug
+        Category(id = id, name = name, icon = "tag", isSystem = false, kinds = listOf(CategoryKind.EXPENSE, CategoryKind.INCOME), assignable = true)
+    }
+
+    /**
+     * Bank category of a `MEMO` (docs/calc.md, 3.1): trimmed and cut to 64 characters; empty, literal «Без категории»
+     * or «Возврат» — the system «Без категории» (a credit with `MEMO` «Возврат» is a refund, 3.3).
+     */
+    fun bankCategory(memo: String): Category {
+        val name = memo.trim().take(NAME_LIMIT)
+        return if (name.isEmpty() || name == UNCATEGORIZED_NAME || name == REFUND_NAME) uncategorized else byName(name)
+    }
+
+    /** An expense bank category: a credit in it is a refund (3.1, 3.3). */
+    fun isExpense(category: Category) = category.kinds == listOf(CategoryKind.EXPENSE)
 
     val transfers: Category get() = byName("Переводы")
     val ownTransfer: Category get() = byName.getValue("Между своими счетами")
     val refund: Category get() = byName.getValue("Возврат")
+    val uncategorized: Category get() = byName.getValue(UNCATEGORIZED_NAME)
     val bankFees: Category get() = byName("Услуги банка")
-
-    /** Bank categories that are never a purchase — a credit in them is income, not a refund (decision-ofx-only.md). */
-    fun isIncomeOnly(name: String) = name in INCOME_ONLY
 
     private fun category(name: String, slug: String, icon: String): Category {
         val kinds = when {
@@ -58,6 +81,10 @@ class Catalog(
     }
 
     companion object {
+        const val UNCATEGORIZED_NAME = "Без категории"
+        const val REFUND_NAME = "Возврат"
+        /** Length of a bank category name (docs/calc.md, 3.1). */
+        const val NAME_LIMIT = 64
         val INCOME_ONLY = setOf("Зарплата", "Пополнения", "Вклады", "Проценты", "Бонусы", "Дивиденды и купоны", "Другое")
         val BOTH_KINDS = setOf("Переводы", "Финансы", "Наличные")
 

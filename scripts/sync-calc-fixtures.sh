@@ -26,4 +26,9 @@ mkdir -p "$dest"
 cp -R "$src/statements" "$src/expected" "$dest/"
 cp "$src/scenario.json" "$src/categories.json" "$src/README.md" "$dest/"
 echo "$sha" > "$dest/VERSION"
+if ignored="$(git -C "$root" check-ignore "$dest"/statements/* "$dest"/expected/* 2>/dev/null)"; then
+  echo "ignored by .gitignore, would not be committed:" >&2
+  echo "$ignored" >&2
+  exit 1
+fi
 echo "fixtures/calc of fin-assist/contracts at $sha → ${dest#"$root"/}"

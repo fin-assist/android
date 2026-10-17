@@ -42,6 +42,7 @@ class AnalyticsEngineTest {
         assertEquals(MetricLock(LockReason.NEED_MONTHS_WITH_DATA, required = 2, available = 1), a.monthlyChart?.lock)
         val insights = assertNotNull(a.insights)
         assertEquals(MetricLock(LockReason.NEED_FULL_MONTHS, required = 2, available = 1), insights.regularPayments.lock)
-        assertEquals(MetricLock(LockReason.NEED_FULL_MONTHS, required = 3, available = 1), insights.notableSpending.lock)
+        // Notable spending counts full months before the selected one (docs/calc.md, section 5).
+        assertEquals(MetricLock(LockReason.NEED_FULL_MONTHS, required = 3, available = 0), insights.notableSpending.lock)
     }
 }

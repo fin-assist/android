@@ -289,14 +289,14 @@ class LedgerTest {
             trn("back", "2026-09-05T10:00", 800, "Возврат покупки", "Переводы", debit = false),
         )
         assertTrue(op("back").isRefund)
-        assertNull(op("back").refundTarget)
+        assertEquals(SystemCategories.UNCATEGORIZED, op("back").refundTarget?.id) // «Без категории» (docs/calc.md 3.3)
     }
 
     @Test
     fun `a refund that matches nothing is uncategorised`() {
         import("u1", trn("back", "2026-09-05T10:00", 123, "ВОЗВРАТ средств", "Переводы", debit = false))
         assertTrue(op("back").isRefund)
-        assertNull(op("back").refundTarget)
+        assertEquals(SystemCategories.UNCATEGORIZED, op("back").refundTarget?.id) // «Без категории» (docs/calc.md 3.3)
     }
 
     @Test
@@ -344,7 +344,7 @@ class LedgerTest {
         )
         // The same-amount debit on the account is an own transfer: it is not a category to reduce.
         assertTrue(op("back").isRefund)
-        assertNull(op("back").refundTarget)
+        assertEquals(SystemCategories.UNCATEGORIZED, op("back").refundTarget?.id) // «Без категории» (docs/calc.md 3.3)
     }
 
     @Test

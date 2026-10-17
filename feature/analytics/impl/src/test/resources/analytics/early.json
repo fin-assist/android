@@ -248,6 +248,7 @@
                         "note": "зарплата и проценты",
                         "value": 1.4214E7,
                         "value_kind": "amount",
+                        "share": 0.91,
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
@@ -267,6 +268,7 @@
                         "note": "5 переводов",
                         "value": 1351000.0,
                         "value_kind": "amount",
+                        "share": 0.08,
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
@@ -286,6 +288,7 @@
                         "note": "по акциям и облигациям",
                         "value": 125000.0,
                         "value_kind": "amount",
+                        "share": 0.01,
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
@@ -321,8 +324,7 @@
             "alt_text": "Подписки и регулярные платежи: Регулярных платежей не нашли",
             "data": {
                 "icon": "repeat",
-                "title": "Подписки и регулярные платежи",
-                "value_kind": "amount"
+                "title": "Подписки и регулярные платежи"
             }
         },
         {
@@ -376,9 +378,7 @@
             "alt_text": "Мелкие частые траты: Мелких частых трат не нашли",
             "data": {
                 "icon": "coffee",
-                "title": "Мелкие частые траты",
-                "value_kind": "amount",
-                "approx": true
+                "title": "Мелкие частые траты"
             }
         },
         {

@@ -30,15 +30,12 @@ fin-assist/contracts on the fake backend: the same statements, «now», profile 
 `CalcCompare.kt`). How the fields are calculated is `docs/calc.md` of contracts.
 
 - **Data.** A copy of `fixtures/calc` lives in `mock/backend/src/test/resources/calc`, with the contracts commit in
-  `VERSION`; the test runs offline. `scripts/sync-calc-fixtures.sh [ref]` (default `main`) replaces the copy. Take a
-  new copy when contracts change the expected responses, in its own PR, and update the known divergences in it.
-- **Known divergences.** `mock/backend/src/test/resources/calc-known-divergences.json` lists the differences the
-  fake backend still has, by cause: what is wrong, the issue that fixes it, «expect file + JSON path». A difference
-  that is not there fails the test; a listed one that is gone fails it too, so the list only shrinks.
-- **Fixing a divergence.** Change the fake backend, then rewrite the list:
-  `CALC_UPDATE_KNOWN=1 ./gradlew :mock:backend:testDebugUnitTest --tests '*CalcFixturesTest'`. The fixed paths go
-  away; anything that lands in a `TODO` group is a new difference — fix it or find its cause before the PR.
-  `CALC_DUMP=<file>` writes every difference with both values and the responses of the fake backend.
+  `VERSION`; the test runs offline. `scripts/sync-calc-fixtures.sh [ref]` (default `main`) replaces the copy and
+  fails if `.gitignore` would keep a file of it out of the commit. Take a new copy when contracts change the
+  expected responses, and bring the fake backend in line in the same PR.
+- **Exact match.** The responses of the fake backend equal the expected ones by the comparison rules; any difference
+  fails the test with its JSON path and both values. `CALC_DUMP=<file>` also writes the fake backend's responses
+  next to it (`./gradlew :mock:backend:testDebugUnitTest --tests '*CalcFixturesTest'`).
 - **Categories.** The fake backend loads the registry of the fixtures (`categories.json`) instead of its built-in one
   (`Catalog(known)`), as the Go backend does in the same test.
 
