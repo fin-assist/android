@@ -68,13 +68,11 @@ tags:
       id: "analytics.screen"
     timeout: 10000
 
-# A row of «Подписки и регулярные платежи» opens the charges of that payment in the selected month.
-- scrollUntilVisible:
-    element:
-      id: "analytics.block.regular_payments"
-    direction: UP
+# A row of «Подписки и регулярные платежи» opens the charges of that payment in the selected month. The card is
+# above the small frequent spending one: scrolling up, its last rows come in first and «РБК», the first row, last.
 - scrollUntilVisible:
     element: "РБК"
+    direction: UP
 - tapOn: "РБК"
 - extendedWaitUntil:
     visible:
