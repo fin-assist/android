@@ -246,8 +246,12 @@ object AnalyticsDesignFixtures {
         )
     }
 
-    /** Last operation on September 25, more than two weeks ago: the forecast is locked (`stale_data`), the tile shows the fact. */
+    /**
+     * The statement ends on September 25, more than two weeks ago: the forecast is locked (`stale_data`), the tile shows
+     * the fact. `data_to` is the start of the day after the last covered one (6.1 `state`), so the banner says «по 25
+     * сентября» (FIN-125).
+     */
     val stale: AnalyticsSnapshot = september().let { a ->
-        a.copy(tiles = a.tiles!!.copy(forecast = locked(LockReason.STALE_DATA)), state = analyticsState.copy(stale = true))
+        a.copy(tiles = a.tiles!!.copy(forecast = locked(LockReason.STALE_DATA)), state = analyticsState.copy(stale = true, dataTo = day(9, 26)))
     }
 }

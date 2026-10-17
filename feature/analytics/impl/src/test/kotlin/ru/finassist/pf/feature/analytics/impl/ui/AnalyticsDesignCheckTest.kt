@@ -13,7 +13,11 @@ import ru.finassist.pf.core.api.model.AssistantLimit
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.screenshot.DesignCheck
+import androidx.compose.runtime.CompositionLocalProvider
+import ru.finassist.pf.core.common.time.Clock
+import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.ZoneOffset
 
 /**
@@ -65,9 +69,17 @@ class AnalyticsDesignCheckTest {
         override fun onBlockShown(block: Block) = Unit
     }
 
+    /** A fixed «now» in the profile zone: the stale banner dates its day by it, not by the machine's clock and zone. */
+    private val clock = object : Clock {
+        override val zone: ZoneId = Clock.MOSCOW
+        override fun now(): OffsetDateTime = OffsetDateTime.of(2026, 10, 12, 12, 0, 0, 0, ZoneOffset.ofHours(3))
+    }
+
     private fun capture(name: String, state: AnalyticsUiState, heightDp: Int, dark: Boolean = false, popups: Boolean = false) =
         DesignCheck.capture(name, dark = dark, heightDp = heightDp, tab = 1, popups = popups) {
-            AnalyticsContent(state, actions, Handlers(state.data?.params?.transferMode ?: TransferMode.WITH))
+            CompositionLocalProvider(LocalPfClock provides clock) {
+                AnalyticsContent(state, actions, Handlers(state.data?.params?.transferMode ?: TransferMode.WITH))
+            }
         }
 
     @Test fun analytics() = capture("Analytics", ui(september()), heightDp = 2848)

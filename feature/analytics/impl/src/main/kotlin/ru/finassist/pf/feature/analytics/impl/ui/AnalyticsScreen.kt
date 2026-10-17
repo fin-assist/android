@@ -42,7 +42,7 @@ import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.time.PeriodKey
-import ru.finassist.pf.core.common.time.RussianDates
+import ru.finassist.pf.core.common.time.StaleData
 import ru.finassist.pf.core.common.time.toApiString
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.NoticeTone
@@ -65,6 +65,7 @@ import ru.finassist.pf.core.designsystem.components.PfSnackbar
 import ru.finassist.pf.core.designsystem.components.PfStatTile
 import ru.finassist.pf.core.designsystem.components.PfTabHeader
 import ru.finassist.pf.core.designsystem.icons.PfIcons
+import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.analytics.impl.domain.AnalyticsTexts
 
@@ -176,10 +177,13 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         text = "Помощник отвечает по вашим операциям, 5 вопросов в день",
         vm = vm,
     ) {
-        a.state?.takeIf { it.stale }?.lastOperationAt?.let { last ->
+        // Stale: where the statement data ends (`state.data_to`), not the last operation; days in the profile zone (FIN-125).
+        val clock = LocalPfClock.current
+        a.state?.let { s -> StaleData.banner(s.stale, s.dataTo, s.lastOperationAt, clock.zone, clock.today()) }?.let { text ->
             Gap(d.space3)
             PfNotice(
-                "Операции в приложении по ${RussianDates.day(last.toLocalDate())} — с тех пор прошло больше двух недель",
+                text,
+                modifier = Modifier.testTag(AnalyticsTags.STALE),
                 tone = NoticeTone.INFO,
                 action = if (blocks.upload) ({ PfNoticeLink("Загрузить новую выписку", onClick = actions.openUpload) }) else null,
             )
@@ -399,6 +403,8 @@ internal object AnalyticsTags {
     const val RETRY = "analytics.retry"
     const val ASK = "analytics.ask"
     const val UNREAD = "analytics.unread"
+    /** The stale statement banner: «Данные в приложении по … — с тех пор прошло больше двух недель». */
+    const val STALE = "analytics.stale"
     const val TRANSFERS = "analytics.transfers"
     const val TRANSFERS_WITH = "analytics.transfers.with"
     const val TRANSFERS_WITHOUT = "analytics.transfers.without"

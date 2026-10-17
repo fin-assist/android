@@ -65,8 +65,12 @@ class FeedDesignCheckTest {
 
     @Test fun mainDark() = capture("MainDark", dark = true)
 
-    /** Last operation on 25 September, more than two weeks ago: the info notice instead of the caption. */
-    @Test fun mainStale() = capture("MainStale", state = state.copy(state = FeedState(stale = true, lastOperationAt = at(25, 18))))
+    /**
+     * The statement ends on 25 September (`data_to` — the start of the 26th), more than two weeks ago: the info notice
+     * instead of the caption, dated by the statement's end (FIN-125).
+     */
+    @Test fun mainStale() =
+        capture("MainStale", state = state.copy(state = FeedState(stale = true, lastOperationAt = at(25, 18), dataTo = at(26, 0))))
 
     @Test fun mainEmpty() = capture(
         "MainEmpty",
