@@ -1,0 +1,71 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — Поиск «как на Аналитике» не показывает переводы себе
+tags:
+  - analytics
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+# "Now" is pinned to 8 October 2026; September, one step back, is the last full month of the fixture.
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible: "Сентябрь 2026"
+    timeout: 10000
+
+# The «Расходы» tile opens the search «как на Аналитике»: September, «Только расходы», transfer_mode.
+- tapOn:
+    id: "analytics.tile.expense"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+    timeout: 10000
+# The last chips start off screen: bring them in.
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
+- assertVisible:
+    id: "operations.search.chip.scope"
+# Without «Только расходы» the scope still applies (FIN-164, docs/calc.md section 6, example 21): a single
+# transfer to self — «Себе в другой банк» 6 000 ₽ on 27 September, the only September operation of that amount —
+# is not found, as the Analytics figure does not count it.
+- tapOn:
+    id: "operations.search.chip.kind"
+- assertVisible:
+    id: "operations.search.chip.kind"
+    checked: false
+- tapOn:
+    id: "operations.search.chip.amount"
+- tapOn:
+    id: "operations.search.amount.from"
+- inputText: "6000"
+- tapOn:
+    id: "operations.search.amount.to"
+- inputText: "6000"
+- hideKeyboard
+- tapOn:
+    id: "operations.search.amount.apply"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.empty"
+    timeout: 10000
+- assertNotVisible: "Себе в другой банк"
+
+# Without the scope the same filters find it: the empty result above was the scope, not the amount.
+- swipe:
+    from:
+      id: "operations.search.chip.amount"
+    direction: LEFT
+- tapOn:
+    id: "operations.search.chip.scope"
+- extendedWaitUntil:
+    visible: "Себе в другой банк"
+    timeout: 10000
+- assertVisible:
+    id: "operations.row"

@@ -8,8 +8,8 @@ import ru.finassist.pf.mock.MockCodes
 
 /**
  * Search semantics of `listOperations` (api.md 4.1) over [Record]s. With `transfer_mode` the analytics rules
- * apply (pairs out, refunds are expenses of their target category); without it every record is searchable and
- * a refund is a plain credit.
+ * apply (no «Между своими счетами» — pairs and single transfers to self, docs/calc.md section 6; refunds are
+ * expenses of their target category); without it every record is searchable and a refund is a plain credit.
  */
 class Search(private val ledger: Ledger, private val catalog: Catalog, private val analytics: AnalyticsEngine) {
 
@@ -20,7 +20,8 @@ class Search(private val ledger: Ledger, private val catalog: Catalog, private v
         var result = records
         if (mode != null) {
             result = result.filter { r ->
-                r is Record.Single && r.op.pairId == null && (mode != TransferMode.WITHOUT || r.op.category.id != catalog.transfers.id)
+                r is Record.Single && r.op.pairId == null && !r.op.isOwnTransferCategory &&
+                    (mode != TransferMode.WITHOUT || r.op.category.id != catalog.transfers.id)
             }
         }
         f.kind?.let { kind ->

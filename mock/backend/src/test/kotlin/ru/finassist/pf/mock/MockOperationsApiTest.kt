@@ -73,10 +73,14 @@ class MockOperationsApiTest {
     }
 
     @Test
-    fun `transfer mode alone hides pairs, an unknown mode counts as with`() = runBlocking<Unit> {
+    fun `transfer mode alone hides transfers to self - pairs and single ones, an unknown mode counts as with`() = runBlocking<Unit> {
+        // docs/calc.md section 6, example 21: the search matches the Analytics figure, which counts neither.
         val with = found(OperationsFilter(transferMode = TransferMode.WITH))
         assertFalse("pair" in with)
-        assertTrue("ivan" in with && "abroad" in with)
+        assertFalse("abroad" in with)
+        assertTrue("ivan" in with && "buy" in with)
+        assertTrue("abroad" in found(OperationsFilter()))
+        assertFalse("abroad" in found(OperationsFilter(transferMode = TransferMode.WITHOUT)))
         assertEquals(with, found(OperationsFilter(transferMode = TransferMode.UNKNOWN)))
         assertFalse("ivan" in found(OperationsFilter(transferMode = TransferMode.WITHOUT)))
     }
@@ -86,6 +90,8 @@ class MockOperationsApiTest {
         assertEquals(setOf("buy"), found(OperationsFilter(categoryId = "cat_marketplaces")))
         assertEquals(setOf("buy", "back"), found(OperationsFilter(categoryId = "cat_marketplaces", transferMode = TransferMode.WITH)))
         assertEquals(setOf("pair", "abroad"), found(OperationsFilter(categoryId = SystemCategories.OWN_TRANSFER)))
+        // «Как на Аналитике» has no transfers to self at all, so their own category finds nothing there.
+        assertEquals(emptySet(), found(OperationsFilter(categoryId = SystemCategories.OWN_TRANSFER, transferMode = TransferMode.WITH)))
         assertEquals(setOf("back", "refund"), found(OperationsFilter(categoryId = SystemCategories.REFUND)))
     }
 
