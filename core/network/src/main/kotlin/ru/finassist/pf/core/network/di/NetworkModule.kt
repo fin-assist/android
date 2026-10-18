@@ -38,7 +38,9 @@ import ru.finassist.pf.core.network.ProfileService
 import ru.finassist.pf.core.network.RequestIdInterceptor
 import ru.finassist.pf.core.network.SseRequests
 import ru.finassist.pf.core.network.StatementsService
+import ru.finassist.pf.core.network.TlsFailureReporter
 import ru.finassist.pf.core.network.TokenAuthenticator
+import ru.finassist.pf.core.tracking.CrashReporter
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Qualifier
@@ -57,12 +59,16 @@ internal object NetworkModule {
     @Singleton
     fun baseUrl(@Named("apiBaseUrl") url: String): HttpUrl = url.toHttpUrl()
 
-    /** Client for refresh-token calls only: no authenticator, so a 401 on refresh cannot recurse. */
+    /**
+     * Client for refresh-token calls only: no authenticator, so a 401 on refresh cannot recurse. Every client is built
+     * from it, so all of them report a refused server certificate (pinning, FIN-121) through [TlsFailureReporter].
+     */
     @Provides
     @Singleton
     @Named("plain")
-    fun plainClient(@Named("httpLogging") logging: Boolean): OkHttpClient = OkHttpClient.Builder()
+    fun plainClient(@Named("httpLogging") logging: Boolean, crashReporter: CrashReporter): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
+        .eventListenerFactory(TlsFailureReporter(crashReporter).eventListenerFactory())
         .readTimeout(30, TimeUnit.SECONDS)
         // Network interceptor: runs per attempt (auth retry, redirect), so every attempt gets a fresh X-Request-Id.
         .addNetworkInterceptor(RequestIdInterceptor())

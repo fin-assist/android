@@ -77,10 +77,13 @@ object LocalBackend {
         replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 }
 
-/** Writes `xml/network_security_config.xml` of [LocalBackend.networkSecurityConfig] into a generated res directory. */
+/**
+ * Writes [config] as `xml/network_security_config.xml` into a generated res directory: the config of `localDebug`
+ * ([LocalBackend.networkSecurityConfig]) or of a variant with API pins ([ApiPins.networkSecurityConfig]).
+ */
 abstract class GenerateNetworkSecurityConfig : DefaultTask() {
     @get:Input
-    abstract val baseUrl: Property<String>
+    abstract val config: Property<String>
 
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
@@ -91,6 +94,6 @@ abstract class GenerateNetworkSecurityConfig : DefaultTask() {
         dir.deleteRecursively()
         val file = dir.resolve("xml/network_security_config.xml")
         file.parentFile.mkdirs()
-        file.writeText(LocalBackend.networkSecurityConfig(LocalBackend.parse(baseUrl.get())))
+        file.writeText(config.get())
     }
 }
