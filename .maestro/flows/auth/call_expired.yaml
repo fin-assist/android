@@ -1,0 +1,65 @@
+appId: ru.finassist.pf.mock.e2e
+name: Время на звонок вышло и «Позвонить ещё раз»
+tags:
+  - auth
+---
+# FIN-166: the wait ends by the device clock (response time + expires_in, api.md 1.1). The request lives 8 s and
+# the call never «arrives» in time: the number leaves the screen, the stream confirms `expired`.
+- runFlow: ../../subflows/clear_state.yaml
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 20000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_delay_ms=600000&call_ttl_ms=8000"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "9161234567"
+- hideKeyboard
+- tapOn:
+    id: "auth.phone.submit"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 10000
+- assertVisible:
+    id: "auth.call.dial"
+- assertVisible:
+    id: "auth.call.wait"
+    text: ".*Ждём звонок до [0-2][0-9]:[0-5][0-9]"
+
+# The deadline passes: no number to call, «Время на звонок вышло» with a new request offered.
+- extendedWaitUntil:
+    visible: "Время на звонок вышло"
+    timeout: 30000
+- assertNotVisible:
+    id: "auth.call.dial"
+- assertNotVisible: "Номер для звонка"
+- assertVisible: "Звонка с \\+7 916 123-45-67 мы не дождались\\. Запросите номер ещё раз"
+
+# A new request (new key) brings the number and a new deadline back; this one lives 5 minutes.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_ttl_ms=300000"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call.retry"
+    timeout: 10000
+- tapOn:
+    id: "auth.call.retry"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call.dial"
+    timeout: 10000
+- assertVisible:
+    id: "auth.call.wait"
+    text: ".*Ждём звонок до [0-2][0-9]:[0-5][0-9]"
+- assertNotVisible: "Время на звонок вышло"

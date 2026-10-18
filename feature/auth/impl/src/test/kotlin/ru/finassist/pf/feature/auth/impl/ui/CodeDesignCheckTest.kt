@@ -7,7 +7,10 @@ import org.robolectric.annotation.Config
 import ru.finassist.pf.core.screenshot.DesignCheck
 import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
 
-/** Artboards `Code`, `CodeDark`, `CodeExpired`, `CodeLocked`: confirmation by a call from +7 916 123-45-67. */
+/**
+ * Artboards `Code`, `CodeDark`, `CodeExpired`, `CodeLocked`: confirmation by a call from +7 916 123-45-67.
+ * `CodeChecking` (FIN-166) has no artboard yet: the device deadline passed, the number is gone until the stream answers.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class CodeDesignCheckTest {
@@ -23,6 +26,8 @@ class CodeDesignCheckTest {
     @Test fun codeDark() = capture("CodeDark", dark = true)
 
     @Test fun codeExpired() = capture("CodeExpired", state.copy(phase = CallPhase.EXPIRED))
+
+    @Test fun codeChecking() = capture("CodeChecking", state.copy(phase = CallPhase.CHECKING, waitUntil = null))
 
     @Test fun codeLocked() = capture("CodeLocked", state.copy(phase = CallPhase.LOCKED, lockText = "Слишком много попыток. Позвонить можно будет через 10 минут, в 14:32"))
 }
