@@ -1,8 +1,9 @@
 package ru.finassist.pf.mock
 
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.withTimeout
 import org.junit.Test
 import ru.finassist.pf.core.api.model.AnswerEvent
@@ -132,26 +133,23 @@ class AssistantChangedSinceTest {
 
     @Test
     fun `a category changed while the answer is streaming is reported by its live source event`() = runBlocking<Unit> {
-        val jobs = ManualDispatcher()
+        // Virtual time: generation runs only when the scheduler lets it, and its chunk delays never elapse by themselves.
+        val scheduler = TestCoroutineScheduler()
         val clock = TestClock(NOW)
-        val backend = testBackend(clock, config = FAST.copy(assistantChunkDelayMs = 1), assistantConsent = true, dispatcher = jobs)
+        val backend = testBackend(clock, config = FAST.copy(assistantChunkDelayMs = 1), assistantConsent = true, dispatcher = StandardTestDispatcher(scheduler))
         backend.load(doc)
         val assistant = MockAssistantApi(backend)
         val answerId = assistant.ask(IdempotencyKey("q1"), AskRequest("Сколько я трачу на Krabsbir?")).answerId
         // Generation calculates the answer and stops at the first chunk delay: the data is changed after the calculation.
-        jobs.runAll()
+        scheduler.runCurrent()
         val answer = backend.assistant.answers.getValue(answerId)
         assertEquals(AnswerStatus.GENERATING, answer.status)
+        assertTrue(answer.log.isNotEmpty())
         assertTrue(answer.log.none { it is AnswerEvent.Source })
         clock.at = clock.at.plusHours(1)
         MockOperationsApi(backend).changeCategory(backend.ledger.all.single { it.fitId == "k5" }.id, ChangeCategoryRequest("cat_clothes"))
 
-        withTimeout(10_000) {
-            while (answer.status == AnswerStatus.GENERATING) {
-                jobs.runAll()
-                delay(1)
-            }
-        }
+        scheduler.advanceUntilIdle()
         assertEquals(AnswerStatus.COMPLETE, answer.status)
         val live = liveSource(backend, answerId)
         assertEquals(listOf(ChangedSince.CATEGORIES), live.changedSince)
