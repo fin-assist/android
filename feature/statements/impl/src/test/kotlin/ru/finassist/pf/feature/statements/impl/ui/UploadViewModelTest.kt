@@ -410,6 +410,31 @@ class UploadViewModelTest {
         assertEquals(2, api.streamOpens.get())
     }
 
+    @Test fun `a stream closed after progress without a terminal event is re-opened, no error is shown`() {
+        val seen = mutableListOf<UploadPhase>()
+        api.streams += flowOf(ImportEvent.Progress(ImportProgress(ImportStage.PARSING, 30)))
+        api.streams += flow {
+            emit(ImportEvent.Progress(ImportProgress(ImportStage.RULES, 80)))
+            throw AppError.Server(502)
+        }
+        api.streams += flowOf(ImportEvent.Complete(importResult()))
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        advanceUntil("the result") {
+            seen += vm.state.value.phase
+            vm.state.value.doneUploadId == "u1"
+        }
+        assertEquals(3, api.streamOpens.get())
+        assertTrue(seen.none { it is UploadPhase.Error || it is UploadPhase.Offline }, "no error between the openings: $seen")
+    }
+
+    @Test fun `a malformed progress event fails the upload instead of re-opening for ever`() {
+        api.streams += flow { throw AppError.Server(200) }
+        vm.onFilePicked(uri)
+        await("the error") { it.phase is UploadPhase.Error }
+        assertEquals(1, api.streamOpens.get())
+    }
+
     @Test fun `the stream stops with the screen and is re-opened once on its return`() {
         liveStream()
         vm.onFilePicked(uri)

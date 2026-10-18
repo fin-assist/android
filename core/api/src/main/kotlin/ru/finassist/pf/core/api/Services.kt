@@ -42,7 +42,9 @@ import java.time.OffsetDateTime
  * Service interfaces of the client API (api.md / openapi.yaml). Implemented by :core:network over HTTP and by
  * :mock:backend in-process. Every call either returns or throws an `AppError` (core/common) — features never
  * see HTTP. SSE endpoints are exposed as cold Flows: collecting opens the stream, cancelling closes it; the
- * first element is always the current state, so re-collecting after a drop loses nothing.
+ * first element is always the current state, so re-collecting after a drop loses nothing. A stream is one opening:
+ * it ends when the server closes it, with or without a terminal event; callers re-open it through [reopeningStream]
+ * (pauses with jitter, 429), the one place of that rule (api.md «SSE», FIN-170).
  */
 
 interface AuthApi {

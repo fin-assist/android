@@ -129,6 +129,10 @@ class HistoryViewModelTest {
         assertTrue(repoEvents.isEmpty())
     }
 
+    /**
+     * The pauses are random in [d/2; d] with d = 1, 2, 4 s (api.md «SSE», schedule tested in `SseReopenTest`): the n-th
+     * re-open comes after 2^n − 1.5 s at the earliest and 2^n − 1 s at the latest, so these checkpoints hold for any jitter.
+     */
     @Test fun `a dropped stream is re-opened with backoff`() {
         api.listOutcomes += processing
         api.listOutcomes += done
@@ -145,12 +149,9 @@ class HistoryViewModelTest {
         assertEquals(1, api.streamOpens.size)
         advance(1_000)
         assertEquals(2, api.streamOpens.size)
-        // The progress event reset the backoff to one second.
-        advance(1_000)
+        advance(2_000)
         assertEquals(3, api.streamOpens.size)
-        advance(1_999)
-        assertEquals(3, api.streamOpens.size)
-        advance(1)
+        advance(4_000)
         assertEquals(4, api.streamOpens.size)
         assertEquals(2, api.listCalls)
         assertEquals(done, vm.state.value.list)

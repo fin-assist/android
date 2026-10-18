@@ -41,6 +41,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 |---|---|
 | Composition root, NavHost (auth graph → main tabs), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt`, `app/src/local/…/LocalModule.kt` |
 | API contract (service interfaces + DTOs) | `core/api/…/Services.kt`, `core/api/…/model/*.kt` |
+| SSE streams: transport and the one re-open loop of all three streams (pauses with jitter, 429, FIN-170) | `core/network/…/Sse.kt`; `core/api/…/SseReopen.kt` (`reopeningStream`, used by the view models; the fake backend's drops — `MockConfig.streamDrops`) |
 | Fake backend (mock flavor): OFX parsing, ledger, analytics, assistant | `mock/backend/…/mock/` — `MockBackend.kt`, `domain/*`, `MockConfig.kt` (existing phone, delays, `offline`) |
 | Fake backend against the calculation fixtures of contracts | `mock/backend/src/test/…/mock/calc/`, `mock/backend/src/test/resources/calc/` (copy), `scripts/sync-calc-fixtures.sh`; rules — `docs/testing.md`, «Calculation fixtures» |
 | Feature routes and public interfaces | `feature/<name>/api/…/*Routes.kt` (or `AuthApi.kt`, `AppLock.kt`) |

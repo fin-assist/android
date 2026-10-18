@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.StatementsApi
+import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.UploadFile
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.IdempotencyKey
@@ -191,33 +192,20 @@ class UploadViewModel @Inject constructor(
     }
 
     /**
-     * Opens (or re-opens) the progress stream; the first event is the current state (api.md SSE). A dropped
-     * connection is retried with backoff while the screen is started — [stopWatching] ends it.
+     * Opens (or re-opens) the progress stream; the first event is the current state (api.md SSE). A drop (network,
+     * 5xx, a stream closed without `complete` / `error`) is re-opened by [reopeningStream] while the screen is
+     * started — [stopWatching] ends it; any other error ends the upload with it.
      */
     fun watch() {
         val busy = _state.value.phase as? UploadPhase.Busy ?: return
         val uploadId = busy.uploadId ?: return
         if (progressJob?.isActive == true) return
         progressJob = viewModelScope.launch {
-            var backoff = 1_000L
-            while (true) {
-                var terminal = false
-                try {
-                    api.streamProgress(uploadId).collect { event ->
-                        backoff = 1_000L
-                        if (event !is ImportEvent.Progress) terminal = true
-                        handle(uploadId, busy.fileName, event)
-                    }
-                    // A stream closed without `complete` / `error` (server restart) is a drop, not the end.
-                    if (terminal) return@launch
-                } catch (e: AppError) {
-                    if (e !is AppError.Offline && e !is AppError.Server) {
-                        fail(e, busy.fileName)
-                        return@launch
-                    }
-                }
-                delay(backoff)
-                backoff = (backoff * 2).coerceAtMost(15_000L)
+            try {
+                reopeningStream(isTerminal = { it !is ImportEvent.Progress }) { api.streamProgress(uploadId) }
+                    .collect { event -> handle(uploadId, busy.fileName, event) }
+            } catch (e: AppError) {
+                fail(e, busy.fileName)
             }
         }
     }

@@ -17,9 +17,10 @@ internal data class SseEvent(val type: String, val data: String)
 
 /**
  * Opens an SSE stream as a cold flow. The server sends the full current state first and closes the stream
- * after a terminal event, so the flow completes normally on close. A dropped connection surfaces as
- * [AppError.Offline]; the caller decides whether to re-collect. Errors before the stream starts (401, 404)
- * are mapped from the HTTP response like any other call.
+ * after a terminal event, so the flow completes normally on close — and also when it closes the stream without one
+ * (its own failure, api.md «SSE»). A dropped connection surfaces as [AppError.Offline]. Errors before the stream
+ * starts (401, 404, 429) are mapped from the HTTP response like any other call. Re-opening after a drop is not done
+ * here: callers wrap the stream in `reopeningStream` (core/api), shared with the fake backend's streams.
  */
 internal fun OkHttpClient.sse(request: Request): Flow<SseEvent> = callbackFlow {
     val listener = object : EventSourceListener() {

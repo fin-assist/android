@@ -142,6 +142,79 @@ class CallViewModelTest {
         assertEquals("Слишком много попыток. Позвонить можно будет через 10 минут, в 14:32", locked.state.value.lockText)
     }
 
+    /** Each opening of the stream takes the next flow of [openings]; none left — a stream that never ends. */
+    private fun SessionHarness.scripted(vararg openings: kotlinx.coroutines.flow.Flow<PhoneVerificationStatusEvent>): CallViewModel {
+        val queue = ArrayDeque(openings.toList())
+        auth.stream = { token ->
+            opened += token
+            queue.removeFirstOrNull() ?: flow { awaitCancellation() }
+        }
+        return CallViewModel(auth, flow, repo, flags, tracker, clock)
+    }
+
+    private val newUser = PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = true, registrationToken = "reg_1")
+
+    @Test fun `a stream closed after pending is re-opened after a pause and the wait goes on without an error`() {
+        val h = harness()
+        val vm = h.scripted(flowOf(event(VerificationStatus.PENDING)), flowOf(event(VerificationStatus.PENDING), newUser))
+        vm.watch()
+        assertEquals(listOf("vt_1"), opened)
+        assertEquals(CallPhase.WAITING, vm.state.value.phase)
+        // The first pause is random in [0.5 s; 1 s] (api.md «SSE»).
+        scheduler.advanceTimeBy(499)
+        scheduler.runCurrent()
+        assertEquals(1, opened.size, "not re-opened before the pause")
+        scheduler.advanceTimeBy(501)
+        scheduler.runCurrent()
+        assertEquals(listOf("vt_1", "vt_1"), opened)
+        assertEquals(CallEvent.NewUser, vm.events.value)
+    }
+
+    @Test fun `a network drop of an open stream is re-opened instead of showing offline`() {
+        val h = harness()
+        val dropped = flow {
+            emit(event(VerificationStatus.PENDING))
+            throw AppError.Offline()
+        }
+        // The re-open fails too (still no network) and is retried; then the stream comes back.
+        val vm = h.scripted(dropped, flow { throw AppError.Offline() }, flowOf(event(VerificationStatus.PENDING), newUser))
+        vm.watch()
+        assertEquals(CallPhase.WAITING, vm.state.value.phase)
+        advanceSeconds(1)
+        assertEquals(CallPhase.WAITING, vm.state.value.phase, "a failed re-open is not «нет сети»")
+        advanceSeconds(2)
+        assertEquals(3, opened.size)
+        assertEquals(CallEvent.NewUser, vm.events.value)
+    }
+
+    @Test fun `a 429 on a re-open waits for retry_at and does not lock the screen`() {
+        val h = harness()
+        val vm = h.scripted(
+            flowOf(event(VerificationStatus.PENDING)),
+            flow { throw AppError.RateLimited(now.plusSeconds(20), retryAfterSeconds = 20) },
+            flowOf(event(VerificationStatus.PENDING), newUser),
+        )
+        vm.watch()
+        advanceSeconds(1)
+        assertEquals(2, opened.size)
+        assertEquals(CallPhase.WAITING, vm.state.value.phase)
+        advanceSeconds(19)
+        assertEquals(2, opened.size, "not before Retry-After")
+        // The re-open came after at most 1 s, then Retry-After plus up to d/2 = 1 s.
+        advanceSeconds(2)
+        assertEquals(3, opened.size)
+        assertEquals(CallEvent.NewUser, vm.events.value)
+    }
+
+    @Test fun `leaving the screen during a pause does not re-open the stream`() {
+        val h = harness()
+        val vm = h.scripted(flowOf(event(VerificationStatus.PENDING)))
+        vm.watch()
+        vm.stopWatching()
+        advanceSeconds(60)
+        assertEquals(listOf("vt_1"), opened)
+    }
+
     @Test fun `a new number goes to consent with its registration token`() {
         val h = harness(registration = true)
         val vm = h.vm(PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = true, registrationToken = "reg_1"))

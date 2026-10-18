@@ -34,6 +34,16 @@ data class MockConfig(
     val unknownCodes: Boolean = false,
     /** Ids of Analytics blocks that fail to build: they come as `unavailable` (FIN-5), the rest of the screen stays. */
     val failingBlocks: Set<String> = emptySet(),
+    /** A parse not finished this long after its start ends with `PROCESSING_FAILED` (api.md 3.3: 3 minutes). */
+    val importTimeoutMs: Long = 180_000,
+    /** Generation of an answer not finished this long after its start ends with `MODEL_ERROR` (api.md 7.2: 3 minutes). */
+    val answerTimeoutMs: Long = 180_000,
+    /**
+     * How many of the next stream openings (1.2, 3.3, 7.2 alike) close right after their first event without a
+     * terminal one — what the server does on its own failure (api.md «SSE»); the client re-opens them. An opening whose
+     * first event is already terminal is not dropped and does not count.
+     */
+    val streamDrops: Int = 0,
 ) {
     companion object {
         /** Git-ignored: `app/src/mock/assets/private/statement.ofx`. */

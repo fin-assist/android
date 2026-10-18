@@ -64,7 +64,10 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         return stored.copy(expiresIn = left.toInt())
     }
 
-    override fun streamPhoneVerification(verificationToken: String): Flow<PhoneVerificationStatusEvent> = flow {
+    override fun streamPhoneVerification(verificationToken: String): Flow<PhoneVerificationStatusEvent> =
+        backend.droppable(verificationEvents(verificationToken)) { it.status != VerificationStatus.PENDING }
+
+    private fun verificationEvents(verificationToken: String): Flow<PhoneVerificationStatusEvent> = flow {
         val v = backend.mutex.withLock { verifications[verificationToken] }
             ?: throw AppError.Unauthorized(ErrorCodes.INVALID_TOKEN)
         if (v.consumed) throw AppError.Unauthorized(ErrorCodes.INVALID_TOKEN)

@@ -757,12 +757,11 @@ class ChatViewModelBehaviourTest {
         )
         val vm = newVm()
         sendQuestion(vm)
+        // Pauses random in [d/2; d], d = 1, 2, 4 s: the n-th re-open falls in [2^n − 1.5 s; 2^n − 1 s] for any jitter.
         assertEquals(1, api.streamOpens.size)
         advance(1_000)
         assertEquals(2, api.streamOpens.size)
-        advance(1_999)
-        assertEquals(2, api.streamOpens.size)
-        advance(1)
+        advance(2_000)
         assertEquals(3, api.streamOpens.size)
         advance(4_000)
         assertEquals(4, api.streamOpens.size)
@@ -772,7 +771,7 @@ class ChatViewModelBehaviourTest {
         assertEquals(4, api.streamOpens.size)
     }
 
-    @Test fun `an event resets the backoff`() {
+    @Test fun `a drop after an event keeps what was shown and re-opens without an error`() {
         api.askOutcomes += askResponse("a1")
         api.script(
             "a1",
@@ -786,10 +785,11 @@ class ChatViewModelBehaviourTest {
         sendQuestion(vm)
         advance(1_000)
         assertEquals(2, api.streamOpens.size)
-        // Backoff was 2 s after the first drop, back to 1 s after the event.
-        advance(1_000)
+        advance(2_000)
         assertEquals(3, api.streamOpens.size)
         assertEquals(listOf(text("Начало")), vm.answerItem("a1").blocks)
+        assertFalse(vm.state.value.offline)
+        assertFalse(vm.state.value.sendFailed)
     }
 
     @Test fun `a stream error other than the network stops watching and the history gives the answer its status`() {

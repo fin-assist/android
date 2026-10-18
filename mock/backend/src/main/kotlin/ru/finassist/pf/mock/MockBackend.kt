@@ -7,7 +7,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -145,6 +149,30 @@ class MockBackend(
         ready.await()
         if (config.offline) throw AppError.Offline()
         if (config.networkDelayMs > 0) delay(config.networkDelayMs)
+    }
+
+    private val dropLock = Any()
+
+    /**
+     * [stream] as one opening of an SSE stream: when [MockConfig.streamDrops] is above zero and the first event is not
+     * terminal, the opening ends right after that event (a drop, api.md «SSE») and the counter goes down by one.
+     */
+    fun <T> droppable(stream: Flow<T>, isTerminal: (T) -> Boolean): Flow<T> = flow {
+        var drop: Boolean? = null
+        emitAll(
+            stream.transformWhile { event ->
+                emit(event)
+                if (drop == null) drop = !isTerminal(event) && takeDrop()
+                drop != true
+            },
+        )
+    }
+
+    private fun takeDrop(): Boolean = synchronized(dropLock) {
+        val left = config.streamDrops
+        if (left <= 0) return@synchronized false
+        config = config.copy(streamDrops = left - 1)
+        true
     }
 
     /** Keys whose first request is still running. */

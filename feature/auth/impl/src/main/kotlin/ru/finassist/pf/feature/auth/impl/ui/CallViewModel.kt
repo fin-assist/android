@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.api.AuthApi
+import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.api.model.VerificationStatus
@@ -95,7 +96,12 @@ class CallViewModel @Inject constructor(
         if (streamJob?.isActive == true) return
         streamJob = viewModelScope.launch {
             try {
-                authApi.streamPhoneVerification(token).collect { event ->
+                // A drop of an open stream is re-opened with pauses and does not show «нет сети»; a stream that cannot be
+                // opened at all still does (reopenFirstFailure = false), as does a 429 on the first opening (LOCKED).
+                reopeningStream(
+                    isTerminal = { it.status != VerificationStatus.PENDING },
+                    reopenFirstFailure = false,
+                ) { authApi.streamPhoneVerification(token) }.collect { event ->
                     when (event.status) {
                         VerificationStatus.PENDING -> _state.update { it.copy(phase = CallPhase.WAITING) }
                         VerificationStatus.VERIFIED -> onVerified(event.isNewUser == true, event.accessToken, event.refreshToken, event.registrationToken)

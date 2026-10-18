@@ -3,12 +3,15 @@ package ru.finassist.pf.mock.api
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.UploadFile
@@ -62,6 +65,11 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     // Touched by request coroutines and by the import jobs, on different threads.
     private val jobs = ConcurrentHashMap<String, Job>()
     private val cancelled: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    /**
+     * The `error` a failed or cancelled upload ended with: the upload itself is discarded, but re-opening its progress
+     * stream gives that event at once (api.md 3.3), not 404.
+     */
+    private val failures = ConcurrentHashMap<String, ImportEvent.Error>()
 
     override suspend fun getImportConfig(): ImportConfig {
         backend.simulateNetwork()
@@ -143,30 +151,41 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             if (stepDelay > 0) delay(stepDelay)
         }
         try {
-            stage(ImportStage.PARSING, 20)
-            stage(ImportStage.DEDUP, 55)
-            val result = backend.mutex.withLock {
-                val before = backend.coverage()
-                val isFirst = backend.uploads.none { it.isDone }
-                val (added, duplicates) = backend.ledger.importUpload(upload.id, doc.accounts, doc.transactions)
-                stage(ImportStage.RULES, 85)
-                // In the same transaction, after the last point a cancellation can stop it: unread lines are closed
-                // both ways — earlier uploads' against this one, this one's against later finished ones (FIN-79).
-                backend.unreadResolver.recompute(backend.uploads, committing = upload)
-                upload.result = buildResult(upload, doc, added, duplicates, isFirst, before)
-                backend.dataChanges.uploadsChanged()
-                upload.result!!
+            // api.md 3.3: a parse that has not finished in 3 minutes from its start fails like any other.
+            val result = withTimeout(backend.config.importTimeoutMs) {
+                stage(ImportStage.PARSING, 20)
+                stage(ImportStage.DEDUP, 55)
+                backend.mutex.withLock {
+                    val before = backend.coverage()
+                    val isFirst = backend.uploads.none { it.isDone }
+                    val (added, duplicates) = backend.ledger.importUpload(upload.id, doc.accounts, doc.transactions)
+                    stage(ImportStage.RULES, 85)
+                    // In the same transaction, after the last point a cancellation can stop it: unread lines are closed
+                    // both ways — earlier uploads' against this one, this one's against later finished ones (FIN-79).
+                    backend.unreadResolver.recompute(backend.uploads, committing = upload)
+                    upload.result = buildResult(upload, doc, added, duplicates, isFirst, before)
+                    backend.dataChanges.uploadsChanged()
+                    upload.result!!
+                }
             }
             upload.events.value = ImportEvent.Complete(result)
+        } catch (e: TimeoutCancellationException) {
+            // Caught before CancellationException, its parent: a timeout is a failed parse, not a cancel by the user.
+            failWith(upload, ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, "parsing did not finish in time"))
         } catch (e: kotlinx.coroutines.CancellationException) {
-            discard(upload)
-            upload.events.value = ImportEvent.Error(ErrorCodes.CANCELLED, "cancelled by user")
+            failWith(upload, ImportEvent.Error(ErrorCodes.CANCELLED, "cancelled by user"))
         } catch (e: Exception) {
-            discard(upload)
-            upload.events.value = ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, e.message ?: "failed")
+            failWith(upload, ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, e.message ?: "failed"))
         } finally {
             cancelled.remove(upload.id)
         }
+    }
+
+    private suspend fun failWith(upload: MockBackend.Upload, error: ImportEvent.Error) {
+        // Kept before the upload goes: a stream re-opened in between finds the outcome, not 404.
+        failures[upload.id] = error
+        discard(upload)
+        upload.events.value = error
     }
 
     /** Import is atomic: a failed or cancelled upload leaves nothing behind. Runs even when the job is cancelled. */
@@ -275,11 +294,14 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
 
     override fun streamProgress(uploadId: String): Flow<ImportEvent> {
         val upload = backend.uploads.firstOrNull { it.id == uploadId }
-            ?: return kotlinx.coroutines.flow.flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) }
-        return upload.events.transformWhile { event ->
-            emit(event)
-            event is ImportEvent.Progress
-        }
+            ?: return failures[uploadId]?.let { flowOf(it) }
+                ?: kotlinx.coroutines.flow.flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) }
+        return backend.droppable(
+            upload.events.transformWhile { event ->
+                emit(event)
+                event is ImportEvent.Progress
+            },
+        ) { it !is ImportEvent.Progress }
     }
 
     override suspend fun listStatements(): StatementsList {
