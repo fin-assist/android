@@ -204,6 +204,45 @@ class JvmReferencesTest(unittest.TestCase):
             "kotlinx.coroutines.android.HandlerDispatcher",
         ])
 
+    def test_class_literal_is_not_a_declaration(self):
+        text = "fun probe() {\n    val type = String::class\n    Thread.sleep(1)\n    val k = Int :: class\n    Math.abs(1)\n}\n"
+        self.assertEqual(kmp.jvm_references(text), [(3, "java.lang.Thread"), (5, "java.lang.Math")])
+
+    def test_qualified_name_across_lines_and_comments(self):
+        text = (
+            "fun probe() = java.io.\n"
+            '    File("/tmp/a").exists()\n'
+            "val u = java /* the JDK */ .util\n"
+            "    .UUID.randomUUID()\n"
+            "val d = org.w3c\n    .dom.Document::class\n"
+        )
+        self.assertEqual(kmp.jvm_references(text), [(1, "java.io.File"), (3, "java.util.UUID"), (5, "org.w3c.dom.Document")])
+
+    def test_java_bridges_of_common_packages(self):
+        text = (
+            "import kotlin.time.toJavaDuration\n"
+            "import kotlin.time.toKotlinInstant\n"
+            "import kotlin.uuid.toJavaUuid\n"
+            "import kotlin.random.asJavaRandom\n"
+            "import kotlinx.datetime.toJavaLocalDate\n"
+            "import kotlinx.datetime.toKotlinTimeZone\n"
+            "import kotlinx.coroutines.runInterruptible\n"
+            "import kotlinx.coroutines.asCoroutineDispatcher\n"
+            "import kotlinx.coroutines.ThreadContextElement\n"
+            "import kotlin.time.Duration\n"
+            "import kotlin.time.toDuration\n"
+            "import kotlinx.datetime.LocalDate\n"
+            "import kotlinx.datetime.toLocalDateTime\n"
+            "import kotlinx.coroutines.runBlocking\n"
+            "import kotlinx.coroutines.asFlow\n"
+        )
+        self.assertEqual([name for _, name in kmp.jvm_references(text)], [
+            "kotlin.time.toJavaDuration", "kotlin.time.toKotlinInstant", "kotlin.uuid.toJavaUuid",
+            "kotlin.random.asJavaRandom", "kotlinx.datetime.toJavaLocalDate", "kotlinx.datetime.toKotlinTimeZone",
+            "kotlinx.coroutines.runInterruptible", "kotlinx.coroutines.asCoroutineDispatcher",
+            "kotlinx.coroutines.ThreadContextElement",
+        ])
+
     def test_java_lang_names_that_are_not_java_lang(self):
         text = (
             "import ru.finassist.pf.core.common.Math\n"
@@ -356,6 +395,12 @@ class ProblemsTest(unittest.TestCase):
     def test_new_java_lang_type_in_the_contract_fails(self):
         self.write("core/api/src/main/kotlin/Probe.kt", "fun start(worker: Thread) = worker.start()\n")
         self.assertIn("Probe.kt:1: new JVM-only API java.lang.Thread in core/api", self.problems()[0])
+
+    def test_class_literal_does_not_hide_a_java_lang_api(self):
+        self.write("core/api/src/main/kotlin/Probe.kt",
+                   "fun probe() {\n    val type = String::class\n    Thread.sleep(1)\n}\n")
+        self.assertEqual(len(self.problems()), 1)
+        self.assertIn("Probe.kt:3: new JVM-only API java.lang.Thread in core/api", self.problems()[0])
 
     def test_new_java_lang_api_without_import_fails(self):
         self.write("mock/backend/src/main/kotlin/Engine.kt", "fun typical(sum: Long) = Math.floorDiv(sum, 3)\n")

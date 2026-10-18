@@ -28,6 +28,10 @@ that only runs on the JVM or Android.
 
 ## Check
 
+The check is a heuristic against JVM-only APIs creeping in by accident — copied from the code next to them, which is
+how most of the inventory below got there — not a guard against a deliberate bypass. Code written to slip past it
+is caught by the review (Checklist in `AGENTS.md`); the forms the check does not see are listed in «Known limits».
+
 `python3 scripts/check-kmp-ready.py` (CI, job «Agent docs up to date»; tests — `scripts/test_check_kmp_ready.py`)
 reads the production sources of both modules (every source set under `src/` except `test*` and `androidTest*`)
 and their `build.gradle.kts`. Comments (nested block comments too) and the text of string literals are skipped; the
@@ -39,9 +43,13 @@ code inside `${…}` of a string template, raw strings included, is checked like
   `jdk.*`, and the JVM-only stdlib packages `kotlin.io.path`, `kotlin.streams`, `kotlin.reflect.full`,
   `kotlin.reflect.jvm`, `kotlin.jvm.optionals`; the JVM-only members of `kotlin.concurrent` (`thread`, `timer`,
   `fixedRateTimer`, `withLock`, `read`, `write`, `getOrSet` — the package itself has the common `Volatile` and
-  atomics); the JVM-only parts of kotlinx-coroutines `kotlinx.coroutines.future`, `.stream`, `.time`, `.android`. A
-  fully qualified name counts when it reaches a class (a segment with a capital letter), so a local `val android`
-  and `android.version` are not a package. Backticks around name segments (``import java.io.`File` ``) are dropped
+  atomics); the JVM-only parts of kotlinx-coroutines `kotlinx.coroutines.future`, `.stream`, `.time`, `.android`
+  and the members `runInterruptible`, `asExecutor`, `asCoroutineDispatcher`, `ThreadContextElement`,
+  `CopyableThreadContextElement`, `ExecutorCoroutineDispatcher`; the Java bridges of common packages — `toJava*`,
+  `toKotlin*`, `asJava*`, `asKotlin*` of `kotlin.time`, `kotlin.uuid`, `kotlin.random` and `kotlinx.datetime`
+  (`d.toJavaDuration()` brings `java.time.Duration` in without naming it). A fully qualified name may break lines
+  (or hold a comment) around its dots and is reported at its first line. It counts when it reaches a class (a
+  segment with a capital letter), so a local `val android` and `android.version` are not a package. Backticks around name segments (``import java.io.`File` ``) are dropped
   before the search.
 - Classes of `java.lang` that Kotlin/JVM resolves without an import and common Kotlin has no class of that name for
   (`System`, `Thread`, `Runtime`, `Class`, `ClassLoader`, `Math`, `StrictMath`, `Integer`, `Character`,
@@ -61,14 +69,17 @@ with its file and line; a baseline entry the module no longer uses fails it too,
 (`python3 scripts/check-kmp-ready.py --write` regenerates it). A PR that changes one of the two `build.gradle.kts`
 or removes an API runs `--write` too, even when nothing JVM-only is added.
 
-Known limits — a review item (Code Review Rules, Checklist in `AGENTS.md`), not seen by the check:
+Known limits — a review item (Code Review Rules, Checklist in `AGENTS.md`), not seen by the check. Like the check
+itself, the list aims at what can appear by accident; a bypass that takes deliberate effort belongs here rather than
+in another rule of the check:
 
 - dependencies that convention plugins of `build-logic` (`pf.jvm.library`, `pf.android.library`, `pf.hilt`) add to
   the module: the module's file does not show them, so a change there is not checked;
 - JVM-only members of the Kotlin stdlib in common packages: `synchronized` / `@Synchronized`, `String.format`,
   `toBigDecimal*`, `java.io` stream extensions, `Charsets`, `.java` / `javaClass`, `@Volatile` of `kotlin.jvm`,
-  `sortedMapOf` / `toSortedMap` (return `java.util.SortedMap`), `Json.decodeFromStream` / `encodeToStream` of
-  kotlinx.serialization;
+  `sortedMapOf` / `toSortedMap` (return `java.util.SortedMap`), `sortedSetOf` / `toSortedSet` (`java.util.TreeSet`),
+  `String(bytes, charset)` / `toByteArray(charset)` (common: `decodeToString()` / `encodeToByteArray()`),
+  `Json.decodeFromStream` / `encodeToStream` of kotlinx.serialization;
 - a fully qualified call of a top-level function without a class (`kotlin.io.path.createTempFile()`,
   `kotlin.concurrent.thread {}`), a member reached through a star import (`import kotlin.concurrent.*`), a name the
   file declares in a way the check does not see (`val Math = …`, `fun Thread(…)`), and a `java.lang` class outside
@@ -83,8 +94,8 @@ What the move would have to replace. «Replacement» is the expected multiplatfo
 | File | JVM-only API | Replacement |
 |---|---|---|
 | `Services.kt` | `java.io.InputStream` (`StatementFile.open`) | `kotlinx.io.Source`, or `ByteArray` read by the platform (picker) side |
-| `Services.kt` | `java.time.OffsetDateTime` (`listUnreadLines(from, to)`) | `kotlinx.datetime.Instant` + `UtcOffset` where the offset matters |
-| `model/Auth.kt` | `java.time.Instant` (`serverTime`) | `kotlinx.datetime.Instant` (`kotlin.time.Instant` after the Kotlin update, below) |
+| `Services.kt` | `java.time.OffsetDateTime` (`listUnreadLines(from, to)`) | an `Instant` + `UtcOffset` where the offset matters; which `Instant` depends on the kotlinx-datetime version (below) |
+| `model/Auth.kt` | `java.time.Instant` (`serverTime`) | `kotlin.time.Instant` with kotlinx-datetime 0.7+, `kotlinx.datetime.Instant` with 0.6.x (below) |
 | `model/Common.kt` | `java.util.UUID` (`IdempotencyKey.random`) | `kotlin.uuid.Uuid.random()` |
 | `model/Common.kt` | `@JvmInline` value classes | stays: `kotlin.jvm.JvmInline` is available in common code |
 | `build.gradle.kts` | `pf.jvm.library` | a multiplatform convention plugin (JVM/Android + iOS targets) |
@@ -121,8 +132,17 @@ Already multiplatform: kotlinx.serialization (`OpenEnumSerializer`, `ApiJson`), 
 On Kotlin 2.1.20 (the stack today) `kotlin.uuid.Uuid` needs `@OptIn(ExperimentalUuidApi::class)`,
 `kotlin.io.encoding.Base64` needs `@OptIn(ExperimentalEncodingApi::class)` (stable since Kotlin 2.2) and
 `kotlin.time.Instant` (new in 2.1.20) needs `@OptIn(ExperimentalTime::class)`, so these replacements carry an
-opt-in until the Kotlin update. `kotlinx.datetime.Instant` needs none on the current kotlinx-datetime, so it is the
-main choice for the API times.
+opt-in until the Kotlin update.
+
+The choice of `Instant` is tied to the kotlinx-datetime version (the repository has no kotlinx-datetime yet; check
+the versions again at the move):
+
+- kotlinx-datetime 0.6.x — its own `kotlinx.datetime.Instant` / `Clock`, no opt-in, but no `YearMonth`;
+- kotlinx-datetime 0.7+ — `YearMonth` (needed by the `:mock:backend` rows below), while `Instant` / `Clock` are the
+  stdlib's `kotlin.time.Instant` / `Clock` (the old names stay as deprecated typealiases), so the whole contract
+  carries `@OptIn(ExperimentalTime::class)` until a Kotlin version where they are stable.
+
+Taking 0.7 for `YearMonth` therefore means the opt-in on every API time, or a Kotlin update first.
 
 `OffsetDateTime` is the largest item: kotlinx-datetime has no type with an offset, so the API times become `Instant`
 plus the profile `TimeZone` (`ReportZone`), and the wire format with an offset needs its own serializer.

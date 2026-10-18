@@ -8,9 +8,11 @@ contract and the fake backend. Until then the check does not demand a clean modu
   - a package of `JVM_PACKAGES` (`java.*`, `javax.*`, `android.*`, `androidx.*`, `dagger.*`, the JDK's `org.w3c.*`,
     `org.xml.*`, `org.ietf.*`, `org.omg.*`, `sun.*`, `com.sun.*`, `jdk.*`, and the JVM-only parts of the Kotlin stdlib
     `kotlin.io.path`, `kotlin.streams`, `kotlin.reflect.full`, `kotlin.reflect.jvm`, `kotlin.jvm.optionals`, the
-    JVM-only members of `kotlin.concurrent` (`thread`, `withLock`, ...) and `kotlinx.coroutines.future` / `.stream`
-    / `.time` / `.android`), as an import or as a fully qualified class name in the code
-    (`java.time.Duration.between(...)`); backticks around name segments do not hide it;
+    JVM-only members of `kotlin.concurrent` (`thread`, `withLock`, ...) and of `kotlinx.coroutines`
+    (`runInterruptible`, ..., `kotlinx.coroutines.future` / `.stream` / `.time` / `.android`), and the Java bridges
+    `toJava*` / `toKotlin*` / `asJava*` / `asKotlin*` of `kotlin.time`, `kotlin.uuid`, `kotlin.random` and
+    kotlinx-datetime), as an import or as a fully qualified class name in the code
+    (`java.time.Duration.between(...)`, line breaks around the dots allowed); backticks do not hide it;
   - a class of `java.lang` that Kotlin/JVM resolves without an import (`JAVA_LANG_IMPLICIT`), anywhere it is used as
     a whole word (`Math.floorDiv(...)`, `worker: Thread`, `System::currentTimeMillis`), unless the file imports or
     declares a class of that name.
@@ -22,6 +24,10 @@ contract and the fake backend. Until then the check does not demand a clean modu
   dependency is declared (`add("api", ...)`, `"implementation"(...)`, a variable, `apply(plugin = ...)`): the PR
   shows the change and says why it is multiplatform-ready. Convention plugins of `build-logic` (`pf.jvm.library`,
   `pf.hilt`, ...) add dependencies the module's file does not show; they are outside the check.
+
+The check is a heuristic against JVM-only APIs creeping in by accident (copied from the code next to it), not a
+guard against a deliberate bypass: that is the review's job (Checklist in AGENTS.md, «Known limits» in
+docs/kmp-readiness.md).
 
 What the module uses today is listed in `scripts/kmp-baseline.json`. A reference outside it fails the check; an
 entry of the baseline that the module no longer uses fails it too, so the baseline only shrinks. The baseline is per
@@ -57,7 +63,12 @@ JVM_PACKAGES = (
     "kotlin.concurrent.withLock", "kotlin.concurrent.read", "kotlin.concurrent.write", "kotlin.concurrent.getOrSet",
     # JVM-only parts of kotlinx-coroutines
     "kotlinx.coroutines.future", "kotlinx.coroutines.stream", "kotlinx.coroutines.time", "kotlinx.coroutines.android",
+    "kotlinx.coroutines.runInterruptible", "kotlinx.coroutines.asExecutor", "kotlinx.coroutines.asCoroutineDispatcher",
+    "kotlinx.coroutines.ThreadContextElement", "kotlinx.coroutines.CopyableThreadContextElement",
+    "kotlinx.coroutines.ExecutorCoroutineDispatcher",
 )
+# JVM-only bridges in otherwise common packages: they return a Java type without naming it (`d.toJavaDuration()`).
+_BRIDGE = re.compile(r"(?:kotlin\.time|kotlin\.uuid|kotlin\.random|kotlinx\.datetime)\.(?:toJava|toKotlin|asJava|asKotlin)\w*")
 # java.lang classes Kotlin/JVM resolves without an import and common Kotlin has no class of that name for
 # (`Exception`, `RuntimeException`, `StringBuilder`, `Comparable`, `AutoCloseable` have a common typealias).
 JAVA_LANG_IMPLICIT = (
@@ -70,13 +81,15 @@ TEST_SOURCE_SETS = ("test", "androidTest")
 
 _CHAR_LITERAL = re.compile(r"'(?:\\.|[^'\\\n])+'")
 _IMPORT = re.compile(r"^\s*import\s+([A-Za-z_][\w.]*(?:\.\*)?)(?:\s+as\s+(\w+))?\s*;?\s*$", re.MULTILINE)
-_PACKAGES = "|".join(re.escape(p) for p in sorted(JVM_PACKAGES, key=len, reverse=True))
+_DOT = r"\s*\.\s*"  # a qualified name may break lines (or hold a comment, blanked) around its dots
+_PACKAGES = "|".join(_DOT.join(map(re.escape, p.split("."))) for p in sorted(JVM_PACKAGES, key=len, reverse=True))
 # A package of JVM_PACKAGES, lower-case package segments, then a class (a segment that starts with a capital): a
 # local `val android` followed by `android.version` is not a package.
-_QUALIFIED = re.compile(r"(?<![\w.])((?:%s)(?:\.[a-z_]\w*)*\.[A-Z]\w*(?:\.\w+)*)" % _PACKAGES)
+_QUALIFIED = re.compile(r"(?<![\w.])((?:{p})(?:{d}[a-z_]\w*)*{d}[A-Z]\w*(?:{d}\w+)*)".format(p=_PACKAGES, d=_DOT))
 # Any use of the name as a whole word: a call, a type (`worker: Thread?`), `Thread::class`, `System::currentTimeMillis`.
 _IMPLICIT = re.compile(r"(?<![\w.$])(%s)\b" % "|".join(JAVA_LANG_IMPLICIT))
-_DECLARED = re.compile(r"\b(?:class|interface|object|typealias)\s+(\w+)")
+# A declaration keyword, not `String::class`, with the name on the same line.
+_DECLARED = re.compile(r"(?<!:)(?<!:\s)\b(?:class|interface|object|typealias)[ \t]+(\w+)")
 
 
 class _Scanner:
@@ -197,7 +210,7 @@ def strip_comments(text: str) -> str:
 
 
 def is_jvm_package(name: str) -> bool:
-    return any(name == p or name.startswith(p + ".") for p in JVM_PACKAGES)
+    return any(name == p or name.startswith(p + ".") for p in JVM_PACKAGES) or bool(_BRIDGE.fullmatch(name))
 
 
 def api_name(reference: str) -> str:
@@ -230,7 +243,7 @@ def jvm_references(text: str) -> list[tuple[int, str]]:
             found.append((match.start(1), api_name(name)))
     for match in _QUALIFIED.finditer(code):
         if match.start(1) not in imports:
-            found.append((match.start(1), api_name(match.group(1))))
+            found.append((match.start(1), api_name(re.sub(r"\s+", "", match.group(1)))))
     for match in _IMPLICIT.finditer(code):
         if match.group(1) not in local_names:
             found.append((match.start(1), f"java.lang.{match.group(1)}"))
