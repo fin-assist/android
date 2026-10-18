@@ -182,6 +182,22 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - Code, KDoc and commit messages are in English; user-facing strings are in Russian.
 - Each feature is `:api` + `:impl`; an `:impl` depends on other features only through their `:api`
   (enforced by `pf.module.rules`).
+- SOLID applies to the Android code too (decision of 18.10.2026, FIN-175; the Go services have the same principles,
+  FIN-117, but not their order of priorities). Rules for new and changed code; existing code is not rewritten for them
+  alone:
+  - Single responsibility: a class or module has one reason to change. A ViewModel holds the screen state and
+    handles events, it does not format data for display; a `…Content` only draws its state; a repository moves data
+    and does not decide business rules; parsing a DTO and mapping it to the domain model are separate steps.
+  - Open/closed: new behaviour is a new implementation of an interface — a new `BlockRenderer` in `CatalogV1`, a new
+    implementation of a data source — not a new `when` branch or flag inside existing code. Flags are read at the
+    screen boundary (below).
+  - Liskov substitution: implementations and fakes (`:mock:backend`, `Fake…` in tests) keep the contract of the
+    interface: the same errors in the same cases, no exception where the real implementation returns an error, no
+    success where it fails.
+  - Interface segregation: interfaces in a feature's `:api` are small and hold only what their consumers need
+    (`SessionRepository`, `AppLock`); no "fat" repository for every case.
+  - Dependency inversion: an `:impl` depends on other features' `:api` (above); view models and use cases depend on
+    interfaces injected by Hilt, not on concrete implementations or Android classes (`Context`, `Application`).
 - System bar insets go through `PfInsets.statusBars` / `PfInsets.navigationBars`, never `WindowInsets.*`
   directly: design-check snapshots replace them with the mockups' fixed bars.
 - "Now" and "today" come from the injected `Clock` (`LocalPfClock` in composables), never `LocalDate.now()` /
@@ -320,6 +336,9 @@ dedicated pass on every PR: Security and Test coverage of use cases (below).
   fake backend), not only against the PR description; when `.contracts/docs/api.md` is missing (no checkout,
   or a failed one that left only `.git`), fall back to the KDoc and say so in the summary. Toggles: `docs/flags.md`. Modules: `docs/modules.md`.
 - Report only verified problems with a concrete failure scenario; skip style nits.
+- A SOLID violation in new or changed code (see Code) is a finding when it has a concrete consequence: name what
+  cannot be replaced, tested with a fake or extended without editing existing code. A violation without such a
+  consequence, or one in code the PR does not touch, is not a finding.
 - Post each finding as an inline comment on the changed line (a review conversation that can be resolved),
   not only in a summary comment. The summary lists what was checked, with a «Безопасность» part and a «Покрытие
   сценариев» part (see below); «not affected» is a valid answer for either, with one line why.
