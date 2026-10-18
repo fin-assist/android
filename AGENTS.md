@@ -182,22 +182,40 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - Code, KDoc and commit messages are in English; user-facing strings are in Russian.
 - Each feature is `:api` + `:impl`; an `:impl` depends on other features only through their `:api`
   (enforced by `pf.module.rules`).
-- SOLID applies to the Android code too (decision of 18.10.2026, FIN-175; the Go services have the same principles,
-  FIN-117, but not their order of priorities). Rules for new and changed code; existing code is not rewritten for them
-  alone:
-  - Single responsibility: a class or module has one reason to change. A ViewModel holds the screen state and
-    handles events, it does not format data for display; a `…Content` only draws its state; a repository moves data
-    and does not decide business rules; parsing a DTO and mapping it to the domain model are separate steps.
-  - Open/closed: new behaviour is a new implementation of an interface — a new `BlockRenderer` in `CatalogV1`, a new
-    implementation of a data source — not a new `when` branch or flag inside existing code. Flags are read at the
+- SOLID applies to the Android code too (decision of 18.10.2026, FIN-175). The Go services follow the same principles
+  (FIN-117), but their order of priorities — tests → clarity → security → optimality — does not apply here. The rules
+  below are for new code and for a dependency or responsibility a PR adds or changes; editing a file does not oblige
+  rewriting what it already does (known gaps are listed at the end):
+  - Single responsibility: a class or module has one reason to change.
+    - How to show a value — money, dates, plurals, the text for a code — lives in pure formatters: `Money`
+      (`core/common`), `BlockFormat` (`core/blocks`), the feature's `domain/*Format` and `*Texts` objects. A ViewModel
+      or a `…Content` calls them instead of building such strings itself.
+    - A ViewModel decides *what* to show (which message for an `AppError` subtype, which server text) and keeps it in
+      the state; a `…Content` draws the state and calls formatters, but makes no API calls and decides no rules.
+    - A repository moves and caches data; it does not decide business rules.
+    - The models of `core/api` are the client's model: features use them as they are, with no separate domain model
+      and mapper. Where a conversion exists (`BlockRenderer.prepare` decoding a block, `core/network` mapping errors
+      to `AppError`), decoding stays apart from the code that uses the result.
+  - Open/closed: behaviour that has an interface grows by a new implementation — a new `BlockRenderer` in `CatalogV1`,
+    a new data source, a new `FeatureEntry` — not by a branch or flag inside existing code. A new value of an open code
+    (`ApiCode`, `ActionType`, `ValueKind`, `BlockStatus`, a subtype of `AppError`) is a new branch in the existing
+    `when` next to `UNKNOWN`, as the extensibility rules below require; that is not a violation. Flags are read at the
     screen boundary (below).
   - Liskov substitution: implementations and fakes (`:mock:backend`, `Fake…` in tests) keep the contract of the
-    interface: the same errors in the same cases, no exception where the real implementation returns an error, no
-    success where it fails.
+    interface. In `core/api` every call returns a result or throws an `AppError` (`Services.kt`): a fake throws the
+    same `AppError` subtype in the same case and succeeds where the real implementation succeeds — no
+    `IllegalStateException` instead of `AppError.Offline`, no success where the server answers with `AppError.Api`.
+    A fake may fail with `error("unused")` on a method the test must not reach.
   - Interface segregation: interfaces in a feature's `:api` are small and hold only what their consumers need
-    (`SessionRepository`, `AppLock`); no "fat" repository for every case.
-  - Dependency inversion: an `:impl` depends on other features' `:api` (above); view models and use cases depend on
-    interfaces injected by Hilt, not on concrete implementations or Android classes (`Context`, `Application`).
+    (`SessionRepository`, `AppLock`); no "fat" repository for every case. A consumer that needs more gets its own
+    narrow interface, not the concrete `…Impl`.
+  - Dependency inversion: an `:impl` depends on other features' `:api` (above); a ViewModel depends on interfaces
+    injected by Hilt, not on concrete `…Impl` classes or on `Context`, `Application` and platform services
+    (`ContentResolver`, `PackageManager`). `SavedStateHandle` is allowed: it keeps the state through process death and
+    is built in unit tests without Android.
+  - Known gaps, left as they are until a PR changes that dependency: `UploadViewModel` (`@ApplicationContext`,
+    `StatementsRepositoryImpl`), `DetailViewModel` (`OperationsRepositoryImpl`), `CallViewModel` and
+    `ConsentViewModel` (`SessionRepositoryImpl`) — they reach methods the `:api` interfaces do not have.
 - System bar insets go through `PfInsets.statusBars` / `PfInsets.navigationBars`, never `WindowInsets.*`
   directly: design-check snapshots replace them with the mockups' fixed bars.
 - "Now" and "today" come from the injected `Clock` (`LocalPfClock` in composables), never `LocalDate.now()` /
@@ -338,7 +356,8 @@ dedicated pass on every PR: Security and Test coverage of use cases (below).
 - Report only verified problems with a concrete failure scenario; skip style nits.
 - A SOLID violation in new or changed code (see Code) is a finding when it has a concrete consequence: name what
   cannot be replaced, tested with a fake or extended without editing existing code. A violation without such a
-  consequence, or one in code the PR does not touch, is not a finding.
+  consequence, one in code the PR does not touch, or one of the known gaps listed there (unless the PR changes that
+  dependency), is not a finding.
 - Post each finding as an inline comment on the changed line (a review conversation that can be resolved),
   not only in a summary comment. The summary lists what was checked, with a «Безопасность» part and a «Покрытие
   сценариев» part (see below); «not affected» is a valid answer for either, with one line why.
