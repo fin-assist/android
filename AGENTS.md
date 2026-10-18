@@ -52,6 +52,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Tokens, preferences, idempotency keys | `core/storage` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md` (mockups: Figma, exported by `design-check/export.py`), `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks, native gaps, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/qase-*` |
+| Multiplatform readiness of `:core:api` and `:mock:backend`: rule, JVM-only inventory, check | `docs/kmp-readiness.md`; `scripts/check-kmp-ready.py`, `scripts/kmp-baseline.json` |
 | Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
 | UI test coverage: JaCoCo on the e2e build, scenario coverage of the flows | `docs/testing.md` («UI test coverage»); `:e2eCoverageReport` in root `build.gradle.kts`, `app/src/mockE2e/…/E2eCoverage.kt`, `scripts/ui-coverage.py` |
 
@@ -164,8 +165,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   Their coverage: `./gradlew :e2eCoverageReport` after a run, then
   `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml`; the scenario part
   (`python3 scripts/ui-coverage.py summary`) needs no device (docs/testing.md).
-- `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
-  docs check and its parser tests from CI, no Gradle needed.
+- `python3 scripts/agent-docs.py --check`, `python3 scripts/check-kmp-ready.py` and
+  `python3 -m unittest discover -s scripts -p 'test_*.py'` — the docs check, the multiplatform check of `:core:api` /
+  `:mock:backend` and the scripts' tests from CI, no Gradle needed.
 - Coverage: `./gradlew :koverXmlReportUnit` (runs the unit tests), then
   `python3 scripts/coverage-diff.py --base origin/<base branch>` for the changed lines; HTML report via
   `:koverHtmlReportUnit` (docs/testing.md).
@@ -203,6 +205,12 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - When the server sends a ready text for a code (`*_name`, `text`, lock texts), the UI shows that text for a code it does
   not know instead of building one itself or skipping it (FIN-83: import features and notices, `changed_since_text`).
 - A new block type or code value changes both `:core:api` and the fake backend `:mock:backend` in the same PR.
+- `:core:api` and `:mock:backend` move to Kotlin Multiplatform when iOS starts (FIN-144): new code and dependencies
+  there use only what KMP has — kotlinx.serialization, kotlinx-coroutines, kotlinx-datetime, the common stdlib
+  (`kotlin.uuid.Uuid`, `kotlin.time.Duration`, `kotlin.io.encoding.Base64`) — never new `java.*`, `javax.*`,
+  `android.*`, `androidx.*`, Dagger / Hilt, JVM-only libraries or JVM-only stdlib (`synchronized`, `String.format`).
+  An API already in `scripts/kmp-baseline.json` may be reused; an exception is justified in the PR and added there.
+  `scripts/check-kmp-ready.py` (CI) fails on anything beyond the baseline; rule, inventory — `docs/kmp-readiness.md`.
 - The Analytics screen is composed by the server (FIN-4): blocks of the catalog (api.md «Блоки») drawn by the renderers of
   `core/blocks`; texts of blocks come from the server (in `mock` — `AnalyticsServerTexts`). A new primitive is a renderer in
   `CatalogV1` (it goes into `supports` by itself) plus the composer of the fake server. Design-check fixtures of the screen
@@ -377,6 +385,13 @@ Also check:
 - Check that a new or changed user scenario comes with a UI test (or a «Not covered yet» entry with a technical
   reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md
   (see Code).
+- Check that changes in `core/api` and `mock/backend` add no JVM-only APIs or dependencies (see Code,
+  `docs/kmp-readiness.md`): a new entry in `scripts/kmp-baseline.json` and a change of its `build` lines need a reason
+  in the PR, a new library needs an iOS target, and what the check does not see is a finding — JVM-only stdlib members
+  (`synchronized`, `String.format`, `toBigDecimal*`, `java.io` stream extensions, `.java` / `javaClass`,
+  `RegexOption.DOT_MATCHES_ALL`, JDK default methods on collections such as `computeIfAbsent`),
+  dependencies added through the convention plugins of `build-logic` and code shaped to slip past the check (it is a
+  heuristic against accidental JVM-only APIs, not a guard against a deliberate bypass; «Known limits»).
 - Check that new DTOs and mappers follow the extensibility rules (see Code): no closed `enum` for a set that grows,
   no failure on an unknown field or code, and a unit test that parses an unknown value.
 - Check that new functionality comes with tests (see Tests) and that the tests would fail if the behaviour

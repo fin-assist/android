@@ -40,6 +40,15 @@ Features: `auth`, `applock`, `operations`, `statements`, `analytics`, `assistant
 | `:providers:*`, `:mock:*` | `:core:*` |
 | `:app` | anything |
 
+## Multiplatform-ready modules (FIN-144)
+
+`:core:api` and `:mock:backend` move to Kotlin Multiplatform when iOS starts (the Swift app reuses the contract and
+the fake backend). New code and dependencies there use only what Kotlin Multiplatform has (kotlinx.serialization,
+kotlinx-coroutines, kotlinx-datetime, the common stdlib); no new `java.*`, `javax.*`, `android.*`, `androidx.*`,
+Dagger / Hilt or JVM-only libraries. An exception is justified in the PR. `scripts/check-kmp-ready.py` (CI) fails on
+anything beyond `scripts/kmp-baseline.json`. Rule, check and inventory of what is JVM-only today:
+`docs/kmp-readiness.md`.
+
 ## Flavors of `:app` (dimension `env`, FIN-120)
 
 | Flavor | Modules it adds | Source sets |
