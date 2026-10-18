@@ -53,24 +53,143 @@ class JvmReferencesTest(unittest.TestCase):
         self.assertEqual(kmp.jvm_references(text), [])
 
 
-class BuildDeclarationsTest(unittest.TestCase):
-    def test_plugins_and_dependencies(self):
+    def test_string_templates_are_code(self):
         text = (
-            "plugins {\n    id(\"pf.android.library\")\n    alias(libs.plugins.kotlin.serialization)\n}\n"
-            "dependencies {\n    implementation(projects.core.api)\n"
-            "    implementation( libs.kotlinx.coroutines.android )\n"
-            "    // implementation(libs.okhttp)\n"
-            "    implementation(\"com.squareup.okio:okio:3.9.0\")\n"
-            "    testImplementation(project(\":core:common\"))\n}\n"
+            'val id = "op-${java.util.UUID.randomUUID()}"\n'
+            'val t = "${java.io.File("x").readText()} and ${"java.net.URL"}"\n'
+            'val r = """\n${java.time.LocalDate.now()}\n"""\n'
+            'val n = "${listOf(1).map { "${java.time.Instant.now()}" }}"\n'
+            "val after = java.math.BigDecimal.ONE\n"
         )
-        self.assertEqual(kmp.build_declarations(text), [
-            'id("pf.android.library")',
-            "alias(libs.plugins.kotlin.serialization)",
-            "implementation(projects.core.api)",
-            "implementation(libs.kotlinx.coroutines.android)",
-            'implementation("com.squareup.okio:okio:3.9.0")',
-            'testImplementation(project(":core:common"))',
+        self.assertEqual(kmp.jvm_references(text), [
+            (1, "java.util.UUID"),
+            (2, "java.io.File"),
+            (4, "java.time.LocalDate"),
+            (6, "java.time.Instant"),
+            (7, "java.math.BigDecimal"),
         ])
+
+    def test_string_text_and_simple_templates_are_not_code(self):
+        text = (
+            'val a = "java.io.File $java.io.File \\"${\'$\'}{java.io.File}"\n'
+            'val b = """java.time.LocalDate""""\n'
+            "val c = '\"'\n"
+            "val d = 1\n"
+        )
+        self.assertEqual(kmp.jvm_references(text), [])
+
+    def test_nested_block_comments(self):
+        text = (
+            "/* outer /* inner */ java.io.File */\n"
+            "val x = 1 /* a /* b /* c */ */ java.net.URL */\n"
+            "import java.util.UUID\n"
+        )
+        self.assertEqual(kmp.jvm_references(text), [(3, "java.util.UUID")])
+
+    def test_jdk_packages_outside_java(self):
+        text = (
+            "import org.w3c.dom.Document\n"
+            "import org.xml.sax.XMLReader\n"
+            "import org.ietf.jgss.GSSManager\n"
+            "import sun.misc.Unsafe\n"
+            "import jdk.internal.misc.VM\n"
+            "fun f(): Any = com.sun.net.httpserver.HttpServer.create() ?: org.omg.CORBA.ORB.init()\n"
+            "import org.jetbrains.annotations.NotNull\n"
+        )
+        self.assertEqual([name for _, name in kmp.jvm_references(text)], [
+            "org.w3c.dom.Document", "org.xml.sax.XMLReader", "org.ietf.jgss.GSSManager", "sun.misc.Unsafe",
+            "jdk.internal.misc.VM", "com.sun.net.httpserver.HttpServer", "org.omg.CORBA",
+        ])
+
+    def test_jvm_only_kotlin_stdlib_packages(self):
+        text = (
+            "import kotlin.io.path.readText\n"
+            "import kotlin.streams.asSequence\n"
+            "import kotlin.reflect.full.memberProperties\n"
+            "import kotlin.reflect.jvm.javaField\n"
+            "import kotlin.jvm.optionals.getOrNull\n"
+            'val p = kotlin.io.path.Path("x")\n'
+            "import kotlin.io.encoding.Base64\n"
+            "import kotlin.reflect.KClass\n"
+            "import kotlin.jvm.JvmInline\n"
+        )
+        self.assertEqual(kmp.jvm_references(text), [
+            (1, "kotlin.io.path.readText"),
+            (2, "kotlin.streams.asSequence"),
+            (3, "kotlin.reflect.full.memberProperties"),
+            (4, "kotlin.reflect.jvm.javaField"),
+            (5, "kotlin.jvm.optionals.getOrNull"),
+            (6, "kotlin.io.path.Path"),
+        ])
+
+    def test_java_lang_without_import(self):
+        text = (
+            "val a = Math.floorDiv(7, 2)\n"
+            'val b = System.currentTimeMillis() + Integer.parseInt("1")\n'
+            "val c = Thread { }.also { Thread.sleep(1) }\n"
+            'val d = Class.forName("x") to Runtime.getRuntime()\n'
+            "val e = Character.isDigit('1') || StrictMath.abs(1) > 0\n"
+            'val f = ThreadLocal<Int>() to ProcessBuilder("ls") to ClassLoader.getSystemClassLoader()\n'
+        )
+        self.assertEqual(kmp.jvm_references(text), [
+            (1, "java.lang.Math"),
+            (2, "java.lang.System"),
+            (2, "java.lang.Integer"),
+            (3, "java.lang.Thread"),
+            (3, "java.lang.Thread"),
+            (4, "java.lang.Class"),
+            (4, "java.lang.Runtime"),
+            (5, "java.lang.Character"),
+            (5, "java.lang.StrictMath"),
+            (6, "java.lang.ThreadLocal"),
+            (6, "java.lang.ProcessBuilder"),
+            (6, "java.lang.ClassLoader"),
+        ])
+
+    def test_java_lang_names_that_are_not_java_lang(self):
+        text = (
+            "import ru.finassist.pf.core.common.Math\n"
+            "import ru.finassist.pf.time.Clock as System\n"
+            "object Thread { fun sleep() = Unit }\n"
+            "val a = Math.round(1) + System.now() + Thread.sleep()\n"
+            "val b = SystemCategories.UNCATEGORIZED + config.Math.x + kotlin.math.floor(1.0) + MathUtils.x\n"
+            "val c = Int.MAX_VALUE + Char.MIN_VALUE.code + 7.floorDiv(2)\n"
+            "// Math.floorDiv\n"
+            'val d = "System.exit"\n'
+        )
+        self.assertEqual(kmp.jvm_references(text), [])
+
+    def test_local_names_like_packages_are_not_references(self):
+        text = (
+            "val android = cfg.android\n"
+            "val v = android.version + java.size + dagger.name\n"
+            "val androidName = android.sdk.level\n"
+        )
+        self.assertEqual(kmp.jvm_references(text), [])
+
+
+class BuildLinesTest(unittest.TestCase):
+    def test_normalized_without_comments_and_blank_lines(self):
+        text = (
+            "// In-process fake backend.\n"
+            'plugins {\n    id("pf.android.library")   // the base\n\n'
+            '    /* nested /* comment */ id("pf.hilt") */\n}\n'
+            "dependencies {\n    implementation( libs.kotlinx.coroutines.android )\n"
+            '    implementation("com.squareup.okio:okio:3.9.0") // not "a string"\n}\n'
+        )
+        self.assertEqual(kmp.build_lines(text), [
+            "plugins {",
+            'id("pf.android.library")',
+            "}",
+            "dependencies {",
+            "implementation( libs.kotlinx.coroutines.android )",
+            'implementation("com.squareup.okio:okio:3.9.0")',
+            "}",
+        ])
+
+    def test_comment_and_whitespace_changes_keep_the_lines(self):
+        reformatted = "// the contract\n" + API_BUILD.replace("    ", "\t").replace("}\n", "}\n\n")
+        self.assertEqual(kmp.build_lines(reformatted), kmp.build_lines(API_BUILD))
 
 
 class ProblemsTest(unittest.TestCase):
@@ -82,9 +201,8 @@ class ProblemsTest(unittest.TestCase):
         self.write("core/api/src/main/kotlin/Auth.kt", "import java.time.Instant\nclass Auth(val at: Instant)\n")
         self.write("mock/backend/src/main/kotlin/Ledger.kt", "import java.time.LocalDate\n")
         self.baseline = {
-            "core/api": {"jvm_apis": ["java.time.Instant"],
-                         "build": ['id("pf.jvm.library")', "api(libs.kotlinx.serialization.json)"]},
-            "mock/backend": {"jvm_apis": ["java.time.LocalDate"], "build": ['id("pf.android.library")']},
+            "core/api": {"jvm_apis": ["java.time.Instant"], "build": kmp.build_lines(API_BUILD)},
+            "mock/backend": {"jvm_apis": ["java.time.LocalDate"], "build": kmp.build_lines(BACKEND_BUILD)},
         }
 
     def tearDown(self):
@@ -133,25 +251,58 @@ class ProblemsTest(unittest.TestCase):
         self.write("core/api/src/testFixtures/kotlin/Fixture.kt", "import java.nio.file.Files\n")
         self.assertEqual(self.problems(), [])
 
-    def test_new_dependency_fails(self):
+    def add_dependency(self, line: str):
         self.write("core/api/build.gradle.kts", API_BUILD.replace(
-            "api(libs.kotlinx.serialization.json)", "api(libs.kotlinx.serialization.json)\n    implementation(libs.okhttp)"))
+            "api(libs.kotlinx.serialization.json)", "api(libs.kotlinx.serialization.json)\n    " + line))
+
+    def test_new_dependency_fails(self):
+        self.add_dependency("implementation(libs.okhttp)")
         self.assertEqual(self.problems(), [
-            "core/api/build.gradle.kts: new declaration implementation(libs.okhttp) (only multiplatform-ready "
-            "dependencies; add it to scripts/kmp-baseline.json with a reason in the PR)",
+            "core/api/build.gradle.kts differs from scripts/kmp-baseline.json (only multiplatform-ready plugins and "
+            "dependencies; give the reason in the PR and run scripts/check-kmp-ready.py --write):\n"
+            "  + implementation(libs.okhttp)",
         ])
+
+    def test_dependency_in_any_form_fails(self):
+        for line in (
+            'add("implementation", "com.google.code.gson:gson:2.11.0")',
+            '"implementation"(libs.okhttp)',
+            'apply(plugin = "com.google.dagger.hilt.android")',
+            "val net = libs.okhttp; implementation(net)",
+            'configurations["implementation"].dependencies.add(project.dependencies.create(libs.okhttp.get()))',
+        ):
+            with self.subTest(line=line):
+                self.add_dependency(line)
+                problems = self.problems()
+                self.assertEqual(len(problems), 1)
+                self.assertIn("core/api/build.gradle.kts differs", problems[0])
+                self.assertIn("+ " + line, problems[0])
 
     def test_new_plugin_fails(self):
         self.write("core/api/build.gradle.kts", API_BUILD.replace('id("pf.jvm.library")', 'id("pf.jvm.library")\n    id("pf.hilt")'))
-        self.assertIn('new declaration id("pf.hilt")', self.problems()[0])
+        self.assertIn('+ id("pf.hilt")', self.problems()[0])
+
+    def test_removed_dependency_fails_until_the_baseline_is_rewritten(self):
+        self.write("core/api/build.gradle.kts", API_BUILD.replace("    api(libs.kotlinx.serialization.json)\n", ""))
+        self.assertIn("- api(libs.kotlinx.serialization.json)", self.problems()[0])
+
+    def test_comment_in_build_file_passes(self):
+        self.write("core/api/build.gradle.kts", "// Client API contract.\n" + API_BUILD.replace(
+            "dependencies {", "dependencies { // nothing JVM-only\n    // implementation(libs.okhttp)"))
+        self.assertEqual(self.problems(), [])
+
+    def test_new_jvm_api_inside_a_string_template_fails(self):
+        self.write("core/api/src/main/kotlin/Probe.kt", 'fun probe() = "${java.io.File("/tmp/a").exists()}"\n')
+        self.assertIn("Probe.kt:1: new JVM-only API java.io.File in core/api", self.problems()[0])
+
+    def test_new_java_lang_api_without_import_fails(self):
+        self.write("mock/backend/src/main/kotlin/Engine.kt", "fun typical(sum: Long) = Math.floorDiv(sum, 3)\n")
+        self.assertIn("Engine.kt:1: new JVM-only API java.lang.Math in mock/backend", self.problems()[0])
 
     def test_stale_baseline_entries_fail(self):
         self.write("mock/backend/src/main/kotlin/Ledger.kt", "import kotlinx.datetime.LocalDate\n")
-        self.baseline["mock/backend"]["build"].append("implementation(libs.kotlinx.coroutines.android)")
         self.assertEqual(self.problems(), [
             "scripts/kmp-baseline.json: mock/backend no longer uses java.time.LocalDate; remove it from the baseline",
-            "scripts/kmp-baseline.json: mock/backend no longer declares implementation(libs.kotlinx.coroutines.android); "
-            "remove it from the baseline",
         ])
 
     def test_current_baseline_round_trips(self):

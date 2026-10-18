@@ -386,9 +386,10 @@ Also check:
   reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md
   (see Code).
 - Check that changes in `core/api` and `mock/backend` add no JVM-only APIs or dependencies (see Code,
-  `docs/kmp-readiness.md`): a new entry in `scripts/kmp-baseline.json` needs a reason in the PR, a new library needs
-  an iOS target, and JVM-only stdlib the check does not see (`synchronized`, `String.format`, `toBigDecimal*`,
-  `java.io` stream extensions) is a finding.
+  `docs/kmp-readiness.md`): a new entry in `scripts/kmp-baseline.json` and a change of its `build` lines need a reason
+  in the PR, a new library needs an iOS target, and what the check does not see is a finding — JVM-only stdlib members
+  (`synchronized`, `String.format`, `toBigDecimal*`, `java.io` stream extensions, `.java` / `javaClass`) and
+  dependencies added through the convention plugins of `build-logic`.
 - Check that new DTOs and mappers follow the extensibility rules (see Code): no closed `enum` for a set that grows,
   no failure on an unknown field or code, and a unit test that parses an unknown value.
 - Check that new functionality comes with tests (see Tests) and that the tests would fail if the behaviour

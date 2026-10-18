@@ -7,10 +7,14 @@
       "java.util.UUID"
     ],
     "build": [
+      "plugins {",
+      "id(\"pf.jvm.library\")",
       "alias(libs.plugins.kotlin.serialization)",
-      "api(libs.kotlinx.serialization.json)",
+      "}",
+      "dependencies {",
       "api(projects.core.common)",
-      "id(\"pf.jvm.library\")"
+      "api(libs.kotlinx.serialization.json)",
+      "}"
     ]
   },
   "mock/backend": {
@@ -23,6 +27,7 @@
       "dagger.hilt.InstallIn",
       "dagger.hilt.android.qualifiers.ApplicationContext",
       "dagger.hilt.components.SingletonComponent",
+      "java.lang.Math",
       "java.math.BigDecimal",
       "java.math.RoundingMode",
       "java.security.SecureRandom",
@@ -43,13 +48,17 @@
       "javax.inject.Singleton"
     ],
     "build": [
-      "alias(libs.plugins.kotlin.serialization)",
+      "plugins {",
       "id(\"pf.android.library\")",
+      "alias(libs.plugins.kotlin.serialization)",
       "id(\"pf.hilt\")",
-      "implementation(libs.kotlinx.coroutines.android)",
-      "implementation(libs.kotlinx.serialization.json)",
+      "}",
+      "dependencies {",
+      "implementation(projects.core.common)",
       "implementation(projects.core.api)",
-      "implementation(projects.core.common)"
+      "implementation(libs.kotlinx.serialization.json)",
+      "implementation(libs.kotlinx.coroutines.android)",
+      "}"
     ]
   }
 }
