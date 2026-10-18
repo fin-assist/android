@@ -11,6 +11,7 @@ import ru.finassist.pf.core.api.model.InsightCardData
 import ru.finassist.pf.core.api.model.LockReason
 import ru.finassist.pf.core.api.model.AnalyticsPeriodsList
 import ru.finassist.pf.core.api.model.ErrorCodes
+import ru.finassist.pf.core.api.model.FieldErrorCodes
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
@@ -61,13 +62,32 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
     override suspend fun dismissRegularPayment(id: String) {
         backend.simulateNetwork()
         backend.requireSession()
-        if (backend.analytics.regularPaymentName("s_regular_$id") == null) throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+        requirePayment(id)
         backend.mutex.withLock { backend.dismissedPayments += id }
     }
 
     override suspend fun restoreRegularPayment(id: String) {
         backend.simulateNetwork()
         backend.requireSession()
+        requirePayment(id)
         backend.mutex.withLock { backend.dismissedPayments -= id }
+    }
+
+    /**
+     * api.md 6.3: `{id}` is a canonical lowercase UUID, anything else is 400 before the payment is looked up (no
+     * operation description in the URL); an id no payment has is 404, for the dismissal and its undo alike.
+     */
+    private fun requirePayment(id: String) {
+        if (!PAYMENT_ID.matches(id)) {
+            throw AppError.Api(
+                ErrorCodes.VALIDATION_ERROR, 400,
+                details = listOf(AppError.FieldError("id", FieldErrorCodes.INVALID_FORMAT, "must be a lowercase UUID")),
+            )
+        }
+        if (backend.analytics.regularPaymentName("s_regular_$id") == null) throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+    }
+
+    private companion object {
+        val PAYMENT_ID = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     }
 }

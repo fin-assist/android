@@ -1,0 +1,71 @@
+package ru.finassist.pf.mock.contract
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * The validator itself (FIN-123): what it must catch, so a library update or a change of its options cannot make the
+ * contract tests pass by checking less. `getAssistantLimit`: `{remaining, daily_max, resets_at}`, all required.
+ */
+class ContractValidatorTest {
+    private val op = Contract.operation("getAssistantLimit")
+    private fun check(body: String, status: Int = 200) = Contract.validateResponse(op, op.path, status, body, emptyMap())
+
+    private val valid = """{"remaining":5,"daily_max":5,"resets_at":"2026-10-07T00:00:00+03:00"}"""
+
+    @Test fun `a valid body passes`() = assertEquals(emptyList<String>(), check(valid))
+
+    @Test fun `a field the schema does not declare fails`() =
+        assertTrue(check(valid.replace("}", ""","used":0}""")).any { "additionalProperties" in it })
+
+    @Test fun `a missing required field fails`() =
+        assertTrue(check(valid.replace(""","daily_max":5""", "")).any { "required" in it })
+
+    @Test fun `a wrong type fails`() = assertTrue(check(valid.replace("\"remaining\":5", "\"remaining\":\"5\"")).any { "type" in it })
+
+    @Test fun `null in a field that is not nullable fails`() = assertTrue(check(valid.replace("\"remaining\":5", "\"remaining\":null")).isNotEmpty())
+
+    @Test fun `a date-time in another format fails`() = assertTrue(check(valid.replace("2026-10-07T00:00:00+03:00", "07.10.2026")).isNotEmpty())
+
+    @Test fun `extra fields fail inside allOf schemas too`() {
+        val feed = Contract.operation("getOperation")
+        val body = """{"id":"o1","kind":"expense","occurred_at":"2026-10-01T10:00:00+03:00","amount":100,"currency":"RUB","title":"Кофе",
+            |"category_id":"cat_cafe","category_name":"Кафе","category_icon":"cafe","is_category_manual":false,"status":"posted",
+            |"source_name":"Выписка Т-Банка","secret":"x"}""".trimMargin()
+        val messages = Contract.validateResponse(feed, "/v1/operations/o1", 200, body, emptyMap())
+        assertTrue(messages.toString(), messages.any { "additionalProperties" in it && "secret" in it })
+    }
+
+    @Test fun `an unknown value of an open code passes`() {
+        val feed = Contract.operation("getOperation")
+        val body = """{"id":"o1","kind":"cashback","occurred_at":"2026-10-01T10:00:00+03:00","amount":100,"currency":"RUB","title":"Кофе",
+            |"category_id":"cat_cafe","category_name":"Кафе","category_icon":"cafe","is_category_manual":false,"status":"posted",
+            |"source_name":"Выписка Т-Банка"}""".trimMargin()
+        assertEquals(emptyList<String>(), Contract.validateResponse(feed, "/v1/operations/o1", 200, body, emptyMap()))
+    }
+
+    @Test fun `an error body is checked against the error schema`() {
+        val messages = check("""{"error":{"code":"NOT_FOUND"}}""", status = 401)
+        assertTrue(messages.toString(), messages.any { "required" in it && "message" in it })
+    }
+
+    @Test fun `a status the operation does not declare fails`() =
+        assertTrue(check("""{"error":{"code":"NOT_FOUND","message":"x"}}""", status = 404).isNotEmpty())
+
+    @Test fun `a block's data is checked against its primitive`() {
+        val ask = Contract.operation("streamAnswer")
+        val event = """{"index":0,"block":{"type":"heading","v":1,"data":{"title":1}}}"""
+        assertTrue(Contract.validateEvent(ask, "block", event).any { it.startsWith("block") })
+    }
+
+    @Test fun `an event the stream does not declare fails`() =
+        assertTrue(Contract.validateEvent(Contract.operation("streamAnswer"), "progress", "{}").isNotEmpty())
+
+    @Test fun `the registry is read from api md`() {
+        assertEquals(400, Contract.registry["CLIENT_VERSION_UNSUPPORTED"])
+        assertEquals(404, Contract.registry["NOT_FOUND"])
+        assertEquals(null, Contract.registry["MODEL_ERROR"])
+        assertTrue(Contract.registry.containsKey("MODEL_ERROR"))
+    }
+}

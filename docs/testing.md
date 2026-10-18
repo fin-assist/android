@@ -30,14 +30,48 @@ fin-assist/contracts on the fake backend: the same statements, «now», profile 
 `CalcCompare.kt`). How the fields are calculated is `docs/calc.md` of contracts.
 
 - **Data.** A copy of `fixtures/calc` lives in `mock/backend/src/test/resources/calc`, with the contracts commit in
-  `VERSION`; the test runs offline. `scripts/sync-calc-fixtures.sh [ref]` (default `main`) replaces the copy and
-  fails if `.gitignore` would keep a file of it out of the commit. Take a new copy when contracts change the
-  expected responses, and bring the fake backend in line in the same PR.
+  `VERSION`; the test runs offline. `scripts/sync-contracts.sh [ref]` (default `main`) replaces the copy — together
+  with the copy of the contract tests below, at the same commit — and fails if `.gitignore` would keep a file of it
+  out of the commit. Take a new copy when contracts change the expected responses, and bring the fake backend in line
+  in the same PR.
 - **Exact match.** The responses of the fake backend equal the expected ones by the comparison rules; any difference
   fails the test with its JSON path and both values. `CALC_DUMP=<file>` also writes the fake backend's responses
   next to it (`./gradlew :mock:backend:testDebugUnitTest --tests '*CalcFixturesTest'`).
 - **Categories.** The fake backend loads the registry of the fixtures (`categories.json`) instead of its built-in one
   (`Catalog(known)`), as the Go backend does in the same test.
+
+## Contract tests
+
+The fake backend is in-process: Kotlin calls, no HTTP and no JSON, so nothing in it is checked against `openapi.yaml`
+by itself. The contract tests (`mock/backend/src/test/…/mock/contract/`, FIN-123) render each mock call as the HTTP
+exchange a server would send and validate it against the pinned contract.
+
+- **Data.** `openapi/openapi.yaml` and `docs/api.md` of fin-assist/contracts are copied into
+  `mock/backend/src/test/resources/contracts` with the commit in `VERSION`, by the same `scripts/sync-contracts.sh`
+  and at the same commit as the calculation fixtures (`ContractCoverageTest` checks that the two `VERSION` files agree).
+- **Wire (test code only).** `Wire.kt` builds the HTTP side: a result is the operation's 2xx status and a body
+  serialized with `ApiJson` (the configuration the HTTP client reads with) plus `encodeDefaults`, because a server
+  writes every field; an `AppError` is the status and `{"error": …}` body the HTTP client maps back to that error
+  (`core/network`, `ErrorMapping.kt`); stream events are `event` + `data` pairs.
+- **Validator.** [swagger-request-validator-core](https://bitbucket.org/atlassian/swagger-request-validator)
+  (Atlassian, Apache-2.0), test dependency of `:mock:backend` only, with its defaults: every message is an error and
+  objects without `additionalProperties` get `false`, so an undeclared field fails like a missing, mistyped or
+  `null` one; `allOf` is merged first so that holds for composed schemas too. Stream events are checked against their
+  `x-sse-events` schema, block `data` against its primitive (`heading` → `HeadingData`, …). `ContractValidatorTest`
+  pins what the validator must reject, so an update of the library or of its options cannot check less.
+- **What runs.** `ContractShapeTest` — every operation in its main states (empty, loaded, each kind, each terminal
+  event of a stream). `ContractErrorCodesTest` — every code of section 8 of `api.md` the mock can return, with the
+  registry's status and a body valid for the operation. `ContractBehaviourTest` — error order, idempotency (replay,
+  another body, request in progress), 404 for an object the user never had or another user's.
+  `ContractCoverageTest` fails when an operation or a code of the pinned contract has neither a case nor an exclusion.
+- **Exclusions.** `Exclusions.kt` lists the known mismatches, each with its reason and issue: a validation message of
+  one case, a code the mock cannot return, a behaviour it does not follow (run through `knownGap`, which fails once the
+  behaviour is fixed). An entry that no longer matches fails the test, so the list only shrinks; never weaken the
+  validator instead.
+- **A contract change.** Run `scripts/sync-contracts.sh <ref>` in a PR of its own (the contract issue's client
+  issue), then `./gradlew :mock:backend:testDebugUnitTest --tests 'ru.finassist.pf.mock.contract.*'`: the failures
+  are where the fake backend has to follow, with the JSON pointer and the schema message. Fix the mock in that PR, or
+  add an exclusion with its issue and say so in the PR.
 
 ## Coverage
 
