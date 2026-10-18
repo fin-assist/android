@@ -7,7 +7,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -145,6 +149,52 @@ class MockBackend(
         ready.await()
         if (config.offline) throw AppError.Offline()
         if (config.networkDelayMs > 0) delay(config.networkDelayMs)
+    }
+
+    /** Guards the drop and 429 counters of [MockConfig] (a coroutine mutex: `synchronized` is JVM-only). */
+    private val dropLock = Mutex()
+
+    /** How many stream openings have been turned away with 429 ([MockConfig.streamRateLimits]); for UI tests. */
+    val streamRateLimited = MutableStateFlow(0)
+
+    /** The last opening of a stream was dropped: the next one is a re-open ([MockConfig.streamRateLimits]). */
+    private var afterDrop = false
+
+    /**
+     * [stream] as one opening of an SSE stream: when [MockConfig.streamDrops] is above zero and the first event is not
+     * terminal, the opening ends right after that event (a drop, api.md «SSE») and the counter goes down by one. An
+     * opening right after a drop answers 429 while [MockConfig.streamRateLimits] is above zero, counting it down.
+     */
+    fun <T> droppable(stream: Flow<T>, isTerminal: (T) -> Boolean): Flow<T> = flow {
+        takeRateLimit()?.let { throw it }
+        var drop: Boolean? = null
+        emitAll(
+            stream.transformWhile { event ->
+                emit(event)
+                if (drop == null) drop = !isTerminal(event) && takeDrop()
+                drop != true
+            },
+        )
+    }
+
+    private suspend fun takeDrop(): Boolean = dropLock.withLock {
+        val left = config.streamDrops
+        if (left <= 0) return@withLock false
+        config = config.copy(streamDrops = left - 1)
+        afterDrop = true
+        true
+    }
+
+    private suspend fun takeRateLimit(): AppError.RateLimited? = dropLock.withLock {
+        val left = config.streamRateLimits
+        if (!afterDrop || left <= 0) {
+            afterDrop = false
+            return@withLock null
+        }
+        config = config.copy(streamRateLimits = left - 1)
+        val seconds = config.streamRetrySeconds
+        streamRateLimited.value += 1
+        AppError.RateLimited(retryAt = now().plusSeconds(seconds), retryAfterSeconds = seconds)
     }
 
     /** Keys whose first request is still running. */

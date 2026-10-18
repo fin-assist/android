@@ -103,6 +103,7 @@ What the move would have to replace. «Replacement» is the expected multiplatfo
 |---|---|---|
 | `Services.kt` | `java.io.InputStream` (`StatementFile.open`) | `kotlinx.io.Source`, or `ByteArray` read by the platform (picker) side |
 | `Services.kt` | `java.time.OffsetDateTime` (`listUnreadLines(from, to)`) | an `Instant` + `UtcOffset` where the offset matters; which `Instant` depends on the kotlinx-datetime version (below) |
+| `SseReopen.kt` | `java.time.Instant` (`wallClock`, `retryAt.toInstant()` — the time left until `retry_at`) | `kotlin.time.Instant` / `Clock.System.now()` (which one depends on the kotlinx-datetime version, below) |
 | `model/Auth.kt` | `java.time.Instant` (`serverTime`) | `kotlin.time.Instant` with kotlinx-datetime 0.7+, `kotlinx.datetime.Instant` with 0.6.x (below) |
 | `model/Common.kt` | `java.util.UUID` (`IdempotencyKey.random`) | `kotlin.uuid.Uuid.random()` |
 | `model/Common.kt` | `@JvmInline` value classes | stays: `kotlin.jvm.JvmInline` is available in common code |

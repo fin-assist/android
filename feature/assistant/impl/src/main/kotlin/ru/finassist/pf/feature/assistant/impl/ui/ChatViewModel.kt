@@ -14,6 +14,8 @@ import kotlinx.coroutines.launch
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.AssistantApi
+import ru.finassist.pf.core.api.SseReopenState
+import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.model.AnswerEvent
 import ru.finassist.pf.core.api.model.AnswerSource
 import ru.finassist.pf.core.api.model.AnswerStatus
@@ -99,6 +101,9 @@ class ChatViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(ChatUiState())
     val state: StateFlow<ChatUiState> = _state
+    /** Re-open state of each answer's stream for the life of the screen ([SseReopenState]). */
+    private val reopenStates = HashMap<String, SseReopenState>()
+
     private val streams = HashMap<String, Job>()
     private val retryKeys = HashMap<String, IdempotencyKey>()
     /** Failed answers whose «Повторить» is in flight: a second tap must not send the same key again (FIN-75). */
@@ -297,31 +302,20 @@ class ChatViewModel @Inject constructor(
     private fun watch(answerId: String) {
         if (streams[answerId]?.isActive == true) return
         streams[answerId] = viewModelScope.launch {
-            // The answer keeps generating on the server; a dropped stream is simply re-opened (the first event is a
-            // full snapshot) with backoff, until a terminal event or the screen stops.
-            var backoff = 1_000L
+            // The answer keeps generating on the server; a dropped stream (network, 5xx, closed without `done` / `error`)
+            // is re-opened by [reopeningStream] — the first event is a full snapshot — until a terminal event or the
+            // screen stops.
             var reload = false
             try {
-                while (true) {
-                    var terminal = false
-                    try {
-                        api.streamAnswer(answerId).collect { event ->
-                            backoff = 1_000L
-                            if (isTerminal(event)) terminal = true
-                            applyEvent(answerId, event)
-                        }
-                        _state.update { it.copy(offline = false) }
-                        // Closed without `done` / `error` (server restart): the answer is still generating.
-                        if (terminal) break
-                    } catch (e: AppError) {
-                        // Not the network (404 and the like): the stream will not recover by itself.
-                        if (e !is AppError.Offline && e !is AppError.Server) {
-                            reload = true
-                            break
-                        }
-                    }
-                    delay(backoff)
-                    backoff = (backoff * 2).coerceAtMost(15_000L)
+                try {
+                    // Opening it again after the screen came back is a re-open: a 429 is waited for (api.md «SSE»).
+                    reopeningStream(isTerminal = ::isTerminal, state = reopenStates.getOrPut(answerId) { SseReopenState() }) {
+                        api.streamAnswer(answerId)
+                    }.collect { event -> applyEvent(answerId, event) }
+                    _state.update { it.copy(offline = false) }
+                } catch (e: AppError) {
+                    // Not a drop (404 and the like): the stream will not recover by itself.
+                    reload = true
                 }
             } finally {
                 if (streams[answerId] === coroutineContext[Job]) streams.remove(answerId)

@@ -14,8 +14,11 @@ sealed class AppError(message: String? = null, cause: Throwable? = null) : Excep
     /** Session is gone (`INVALID_TOKEN`, `TOKEN_REVOKED` after a failed refresh): go to the sign-in screen. */
     class Unauthorized(val code: String) : AppError(code)
 
-    /** `RATE_LIMITED` with the moment to retry at (may be null if the server did not say). */
-    class RateLimited(val retryAt: OffsetDateTime?) : AppError("rate_limited")
+    /**
+     * `RATE_LIMITED` with the moment to retry at (may be null if the server did not say). [retryAfterSeconds] — the
+     * `Retry-After` header of the same answer: relative, so it does not depend on the device clock being right.
+     */
+    class RateLimited(val retryAt: OffsetDateTime?, val retryAfterSeconds: Long? = null) : AppError("rate_limited")
 
     /** 409 `REQUEST_IN_PROGRESS`: the same idempotent request is still running — retry after [retryAfterSeconds]. */
     class InProgress(val retryAfterSeconds: Int?) : AppError("request_in_progress")

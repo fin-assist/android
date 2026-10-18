@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock.api
 
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
@@ -7,6 +9,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import ru.finassist.pf.core.api.AssistantApi
 import ru.finassist.pf.core.api.model.AnswerBlockEvent
 import ru.finassist.pf.core.api.model.AnswerChunkEvent
@@ -92,40 +96,54 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
     private fun generate(answer: AssistantStore.Answer, text: String) {
         val mode = answer.transferMode
         backend.scope.launch {
-            delay(backend.config.networkDelayMs * 2)
-            var calculatedAt = backend.now()
-            val outcome = backend.mutex.withLock {
-                val modelErrors = backend.config.assistantModelErrors
-                if (modelErrors > 0) {
-                    backend.config = backend.config.copy(assistantModelErrors = modelErrors - 1)
-                    null
-                } else {
-                    // The data the answer is calculated on: `calculated_at` and the version `changed_since` counts from.
-                    calculatedAt = backend.now()
-                    answer.calculatedOn = store.changes.version
-                    engine.answer(text, mode, moscowToday())
-                }
+            try {
+                // api.md 7.2: a generation not finished in 3 minutes ends with MODEL_ERROR (refunded, retryable).
+                withTimeout(backend.config.answerTimeoutMs) { produce(answer, text, mode) }
+            } catch (e: TimeoutCancellationException) {
+                // The deadline may pass inside a non-cancellable ending that already sent the terminal event.
+                if (answer.status == AnswerStatus.GENERATING) fail(answer, AnswerErrorCode.MODEL_ERROR, "generation timed out")
             }
-            when (outcome) {
-                null -> fail(answer, AnswerErrorCode.MODEL_ERROR, "model failed")
-                AssistantEngine.Outcome.CannotAnswer -> fail(answer, AnswerErrorCode.CANNOT_ANSWER, "cannot answer from data")
-                AssistantEngine.Outcome.OffTopic -> fail(answer, AnswerErrorCode.OFF_TOPIC, "off_topic tool called")
-                is AssistantEngine.Outcome.Answered -> {
-                    val a = outcome.answer
-                    var index = 0
-                    for (block in a.blocks) {
-                        if (block.type == BlockType.TEXT) {
-                            val words = block.text.orEmpty().split(" ")
-                            words.forEachIndexed { i, w ->
-                                answer.append(AnswerEvent.Chunk(AnswerChunkEvent(index, if (i == 0) w else " $w")))
-                                delay(backend.config.assistantChunkDelayMs)
-                            }
-                        } else {
-                            answer.append(AnswerEvent.BlockAdded(AnswerBlockEvent(index, block)))
-                            delay(backend.config.assistantChunkDelayMs * 4)
+        }
+    }
+
+    private suspend fun produce(answer: AssistantStore.Answer, text: String, mode: TransferMode) {
+        delay(backend.config.networkDelayMs * 2)
+        var calculatedAt = backend.now()
+        val outcome = backend.mutex.withLock {
+            val modelErrors = backend.config.assistantModelErrors
+            if (modelErrors > 0) {
+                backend.config = backend.config.copy(assistantModelErrors = modelErrors - 1)
+                null
+            } else {
+                // The data the answer is calculated on: `calculated_at` and the version `changed_since` counts from.
+                calculatedAt = backend.now()
+                answer.calculatedOn = store.changes.version
+                engine.answer(text, mode, moscowToday())
+            }
+        }
+        when (outcome) {
+            null -> fail(answer, AnswerErrorCode.MODEL_ERROR, "model failed")
+            AssistantEngine.Outcome.CannotAnswer -> fail(answer, AnswerErrorCode.CANNOT_ANSWER, "cannot answer from data")
+            AssistantEngine.Outcome.OffTopic -> fail(answer, AnswerErrorCode.OFF_TOPIC, "off_topic tool called")
+            is AssistantEngine.Outcome.Answered -> {
+                val a = outcome.answer
+                var index = 0
+                for (block in a.blocks) {
+                    if (block.type == BlockType.TEXT) {
+                        val words = block.text.orEmpty().split(" ")
+                        words.forEachIndexed { i, w ->
+                            answer.append(AnswerEvent.Chunk(AnswerChunkEvent(index, if (i == 0) w else " $w")))
+                            delay(backend.config.assistantChunkDelayMs)
                         }
-                        index++
+                    } else {
+                        answer.append(AnswerEvent.BlockAdded(AnswerBlockEvent(index, block)))
+                        delay(backend.config.assistantChunkDelayMs * 4)
                     }
+                    index++
+                }
+                // The ending is not cut by the timeout: a refund followed by the timeout's own refund would return
+                // two attempts for one answer.
+                withContext(NonCancellable) {
                     // What changed while the answer was streaming is reported already here; the history recounts it (7.3).
                     val source = AnswerSource(calculatedAt = calculatedAt, dataRange = a.dataRange, transferMode = mode, changedSince = emptyList())
                     answer.append(AnswerEvent.Source(backend.mutex.withLock { store.changes.restamp(source, answer.calculatedOn) }))
@@ -137,8 +155,11 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
         }
     }
 
-    /** Any failure refunds the attempt (api.md 7); the text and `retryable` are the server's (FIN-159). */
-    private suspend fun fail(answer: AssistantStore.Answer, code: AnswerErrorCode, message: String) {
+    /**
+     * Any failure refunds the attempt (api.md 7); the text and `retryable` are the server's (FIN-159). Not cut by the
+     * generation timeout: the refund and the `error` event go together.
+     */
+    private suspend fun fail(answer: AssistantStore.Answer, code: AnswerErrorCode, message: String) = withContext(NonCancellable) {
         refund()
         answer.append(
             AnswerEvent.Error(
@@ -154,7 +175,12 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
         store.usage[moscowToday()] = ((store.usage[moscowToday()] ?: 1) - 1).coerceAtLeast(0)
     }
 
-    override fun streamAnswer(answerId: String): Flow<AnswerEvent> = flow {
+    override fun streamAnswer(answerId: String): Flow<AnswerEvent> = backend.droppable(answerEvents(answerId)) { event ->
+        event is AnswerEvent.Done || event is AnswerEvent.Error ||
+            (event is AnswerEvent.Snapshot && event.event.status != AnswerStatus.GENERATING)
+    }
+
+    private fun answerEvents(answerId: String): Flow<AnswerEvent> = flow {
         val answer = backend.mutex.withLock { store.answers[answerId] }
         if (answer == null || answer.replaced) throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
         val (snapshot, seen) = answer.snapshot()

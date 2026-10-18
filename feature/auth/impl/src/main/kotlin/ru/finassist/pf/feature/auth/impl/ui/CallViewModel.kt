@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.api.AuthApi
+import ru.finassist.pf.core.api.SseReopenState
+import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.api.model.VerificationStatus
@@ -81,6 +83,12 @@ class CallViewModel @Inject constructor(
     private var watching = false
     /** The device deadline of the current request has been reached; the timer does not fire again for it. */
     private var deadlinePassed = false
+    /**
+     * Re-open state of each request's stream (by token) for the life of the screen: opening it again (resume, the
+     * deadline re-check) after it brought an event or dropped is a re-open, and a 429 on it is waited for, not shown as
+     * LOCKED (api.md «SSE», [SseReopenState]).
+     */
+    private val reopenStates = HashMap<String, SseReopenState>()
 
     init {
         armTimer()
@@ -95,7 +103,14 @@ class CallViewModel @Inject constructor(
         if (streamJob?.isActive == true) return
         streamJob = viewModelScope.launch {
             try {
-                authApi.streamPhoneVerification(token).collect { event ->
+                // A drop of an open stream is re-opened with pauses and does not show «нет сети»; a stream that cannot be
+                // opened at all still does (reopenFirstFailure = false), as does a 429 on the first opening of the
+                // request on this screen (LOCKED). A 429 when the screen opens it again is waited for.
+                reopeningStream(
+                    isTerminal = { it.status != VerificationStatus.PENDING },
+                    reopenFirstFailure = false,
+                    state = reopenStates.getOrPut(token) { SseReopenState() },
+                ) { authApi.streamPhoneVerification(token) }.collect { event ->
                     when (event.status) {
                         VerificationStatus.PENDING -> _state.update { it.copy(phase = CallPhase.WAITING) }
                         VerificationStatus.VERIFIED -> onVerified(event.isNewUser == true, event.accessToken, event.refreshToken, event.registrationToken)
