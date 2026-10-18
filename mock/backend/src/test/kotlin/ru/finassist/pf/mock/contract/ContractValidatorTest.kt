@@ -99,6 +99,34 @@ class ContractValidatorTest {
         assertTrue(messages.toString(), messages.any { "required" in it && "transfer_mode" in it })
     }
 
+    @Test fun `an undeclared field fails when it is null too`() {
+        val list = Contract.operation("listOperations")
+        val messages = Contract.validateResponse(list, "/v1/operations", 200, """{"items":[],"secret":null}""", emptyMap())
+        assertTrue(messages.toString(), messages.any { "additionalProperties" in it && "secret" in it })
+    }
+
+    @Test fun `an undeclared null field of an event fails`() {
+        val messages = Contract.validateEvent(Contract.operation("streamAnswer"), "chunk", """{"index":0,"text":"Вы","extra":null}""")
+        assertTrue(messages.toString(), messages.any { "additionalProperties" in it && "extra" in it })
+    }
+
+    @Test fun `an undeclared null field of a nested object of an event fails`() {
+        val event = """{"status":"complete","blocks":[],"chips":[],"currency":"RUB","source":{"calculated_at":"2026-10-01T10:00:00+03:00",
+            |"transfer_mode":"with","changed_since":[],"changed_since_text":null,"extra":null}}""".trimMargin()
+        val messages = Contract.validateEvent(Contract.operation("streamAnswer"), "snapshot", event)
+        assertTrue(messages.toString(), messages.any { "additionalProperties" in it && "extra" in it })
+    }
+
+    @Test fun `a terminal event before the last one is found`() {
+        val cancelledThenComplete = listOf("progress" to "{}", "error" to """{"code":"CANCELLED","message":"x"}""", "complete" to "{}")
+        assertEquals(listOf(cancelledThenComplete[1]), ContractCheck.earlyTerminals(cancelledThenComplete))
+        val verifiedThenExpired = listOf("status" to """{"status":"pending"}""", "status" to """{"status":"verified"}""", "status" to """{"status":"expired"}""")
+        assertEquals(listOf(verifiedThenExpired[1]), ContractCheck.earlyTerminals(verifiedThenExpired))
+        val doneTwice = listOf("snapshot" to "{}", "done" to "{}", "done" to "{}")
+        assertEquals(listOf(doneTwice[1]), ContractCheck.earlyTerminals(doneTwice))
+        assertEquals(emptyList<Pair<String, String>>(), ContractCheck.earlyTerminals(listOf("status" to """{"status":"pending"}""", "status" to """{"status":"verified"}""")))
+    }
+
     @Test fun `an event the stream does not declare fails`() =
         assertTrue(Contract.validateEvent(Contract.operation("streamAnswer"), "progress", "{}").isNotEmpty())
 

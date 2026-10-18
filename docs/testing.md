@@ -58,9 +58,10 @@ exchange a server would send and validate it against the pinned contract.
   (Atlassian, Apache-2.0), test dependency of `:mock:backend` only, with its defaults: every message is an error and
   objects without `additionalProperties` get `false`, so an undeclared field fails like a missing, mistyped or
   `null` one. Two preparations (`Contract.kt`): every `allOf` of the copy is merged into one schema, keeping the
-  wrapper's `nullable`, so that holds for composed schemas, events and nested objects too; and a `null` for a field
-  the schema neither requires nor declares `nullable` is taken as the field left out, as a server writes it (the
-  Kotlin DTO has one `T? = null` for both). A `null` in a required or a declared non-nullable field still fails.
+  wrapper's `nullable`, so that holds for composed schemas, events and nested objects too; and a `null` for a
+  declared, optional field the schema does not declare `nullable` is taken as the field left out, as a server writes
+  it (the Kotlin DTO has one `T? = null` for both). A `null` in a required field still fails, and so does a field the
+  schema does not declare, `null` or not.
   Stream events are checked against their `x-sse-events` schema, block `data` against its primitive (`heading` →
   `HeadingData`, …). `ContractValidatorTest` pins what the validator must reject, so an update of the library or of
   its options cannot check less.

@@ -76,8 +76,7 @@ class ContractShapeTest(private val name: String) {
                 assertEquals("$name: the terminal event", expected, event)
                 status?.let { assertEquals("$name: status of the terminal event", it, json["status"]?.jsonPrimitive?.content) }
             }
-            val terminals = exchange.events.count { (n, d) -> n == event && (case.terminal?.contains(':') != true || d == data) }
-            assertEquals("$name: the terminal event comes once, last", 1, terminals)
+            assertEquals("$name: a terminal event before the last one", emptyList<Pair<String, String>>(), ContractCheck.earlyTerminals(exchange.events))
         }
         ContractCheck.assertContract(case.name, exchange)
     }
@@ -296,12 +295,17 @@ class ContractShapeTest(private val name: String) {
             stream("streamAnswer: category with blocks", "streamAnswer", "done") { s -> s.answerEvents(s.finishedAnswer("Сколько уходит на рестораны")) },
             stream("streamAnswer: live, connected while generating", "streamAnswer", "done") { s ->
                 // Each event of a generation in progress goes through Wire and the validator, not only the replay's snapshot.
-                s.backend.config = s.backend.config.copy(assistantChunkDelayMs = 20)
+                s.backend.config = s.backend.config.copy(assistantChunkDelayMs = 150)
                 val id = s.assistant.ask(IdempotencyKey.random(), AskRequest("Сколько уходит на рестораны")).answerId
                 s.answerEvents(id).also { exchange ->
+                    val (first, snapshot) = exchange.events.first()
+                    assertEquals("the first event is the snapshot", "snapshot", first)
+                    assertEquals(
+                        "the stream was opened after the answer finished: the case needs a live generation",
+                        "generating", Json.parseToJsonElement(snapshot).jsonObject["status"]?.jsonPrimitive?.content,
+                    )
                     val seen = exchange.events.map { it.first }
                     assertEquals("event types of a live answer: $seen", setOf("snapshot", "chunk", "block", "source", "chip", "done"), seen.toSet())
-                    assertEquals("the first event is the snapshot", "snapshot", seen.first())
                 }
             },
             streamError("CANNOT_ANSWER", "streamAnswer") { s -> s.answerEvents(s.finishedAnswer("Сколько я потрачу в следующем году?")) },

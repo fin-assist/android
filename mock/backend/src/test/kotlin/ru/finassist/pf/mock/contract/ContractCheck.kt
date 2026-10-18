@@ -1,5 +1,8 @@
 package ru.finassist.pf.mock.contract
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.fail
 
 /**
@@ -58,6 +61,20 @@ internal object ContractCheck {
         if (now == null && exchange.status != exchange.operation.success) fail("$id: $exchange — the known gap is a success")
         assertContract("gap $id", exchange)
     }
+
+    /**
+     * Events before the last one that end a stream (api.md, «SSE»: the server closes the stream after its terminal
+     * event): `error`, `complete`, `done`, or a `status` event with a final status (`verified`, `expired`).
+     */
+    fun earlyTerminals(events: List<Pair<String, String>>): List<Pair<String, String>> = events.dropLast(1).filter { (name, data) -> isTerminal(name, data) }
+
+    private fun isTerminal(name: String, data: String): Boolean = when (name) {
+        "error", "complete", "done" -> true
+        "status" -> runCatching { Json.parseToJsonElement(data).jsonObject["status"]?.jsonPrimitive?.content }.getOrNull() in FINAL_STATUSES
+        else -> false
+    }
+
+    private val FINAL_STATUSES = setOf("verified", "expired")
 
     private const val BODY_PREVIEW = 2_000
     private const val EVENTS_PREVIEW = 20

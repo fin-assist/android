@@ -32,10 +32,10 @@ import java.io.File
  * - every `allOf` of the copy is merged into one object schema before parsing ([flattenAllOf]), keeping `nullable`
  *   of the wrapper: the injected `additionalProperties: false` would otherwise sit on each part alone
  *   (`OperationItem` = `OperationBase` + its own fields) and no object could match them all;
- * - a `null` the body carries for a field the schema does not declare `nullable` or `required` is dropped before the
- *   check ([pruneNulls]): that is how a server writes an optional field it has no value for (left out; `null` only
- *   where the schema allows it), and the Kotlin DTO cannot tell the two apart. A `null` in a required field, or a
- *   declared field that is not `nullable`, still fails.
+ * - a `null` the body carries for a declared, optional field the schema does not declare `nullable` is dropped
+ *   before the check ([pruneNulls]): that is how a server writes an optional field it has no value for (left out;
+ *   `null` only where the schema allows it), and the Kotlin DTO cannot tell the two apart. A `null` in a required
+ *   field still fails, and so does a field the schema does not declare, `null` or not.
  */
 object Contract {
     val ROOT = File("src/test/resources/contracts")
@@ -194,14 +194,14 @@ object Contract {
     private fun resolve(schema: Schema<*>?): Schema<*>? =
         schema?.`$ref`?.let { resolve(api.components.schemas[it.substringAfterLast('/')]) } ?: schema
 
-    /** Drops `null` members the schema neither requires nor declares `nullable` (see the class KDoc). */
+    /** Drops `null` members of declared, optional, non-nullable fields (see the class KDoc); undeclared ones stay. */
     private fun pruneNulls(json: JsonElement, schema: Schema<*>?): JsonElement {
         val s = resolve(schema) ?: return json
         return when {
             json is JsonObject && s.properties != null -> JsonObject(
                 json.entries.mapNotNull { (k, v) ->
                     val property = s.properties[k]
-                    val keep = property != null && (k in s.required.orEmpty() || property.nullable == true || resolve(property)?.nullable == true)
+                    val keep = property == null || k in s.required.orEmpty() || property.nullable == true || resolve(property)?.nullable == true
                     if (v is JsonNull && !keep) null else k to pruneNulls(v, property)
                 }.toMap(),
             )

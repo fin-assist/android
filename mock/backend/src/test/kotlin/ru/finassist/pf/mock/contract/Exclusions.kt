@@ -16,7 +16,16 @@ internal object Exclusions {
     /** A behaviour of the contract the fake backend does not follow; its test runs through [ContractCheck.knownGap]. */
     data class Behaviour(val id: String, val reason: String, val issue: String)
 
-    val schema: List<Schema> = listOf()
+    private const val SPOKEN =
+        "core/api has one Account DTO for both schemas: `Account` of a list item has no `spoken`, only `AccountDetails` " +
+            "(4.2) has it; the list item carries `\"spoken\": null` on the wire. Splitting the DTO changes the operations " +
+            "feature, not the fake backend"
+    private const val ISSUE_SPOKEN = "proposed: [Android] core/api: AccountDetails with `spoken` for details, Account without it for lists"
+    private const val SPOKEN_MATCH = "not allowed by the schema: [\"spoken\"]"
+
+    val schema: List<Schema> = listOf(
+        "listOperations: feed", "listOperations: feed, older page", "listOperations: search by text", "listOperations: search, all time",
+    ).map { Schema(it, SPOKEN_MATCH, SPOKEN, ISSUE_SPOKEN) }
 
     private const val FIN_22 =
         "the fake backend of release/0.2.8 has no version check and no maintenance mode: FIN-22 added both to the mock, but it is " +
