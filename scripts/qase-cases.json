@@ -5,6 +5,7 @@
     ".maestro/flows/auth/register_new_user.yaml": 2,
     ".maestro/flows/auth/phone_validation.yaml": 3,
     ".maestro/flows/auth/registration_closed.yaml": 4,
+    ".maestro/flows/auth/call_expired.yaml": 41,
     ".maestro/flows/applock/unlock.yaml": 5,
     ".maestro/flows/applock/forgot_code.yaml": 6,
     ".maestro/flows/applock/change_passcode.yaml": 7,
@@ -36,6 +37,7 @@
     ".maestro/flows/assistant/chip_after_statements_deleted.yaml": 24,
     ".maestro/flows/assistant/retry_without_transfers.yaml": 25,
     ".maestro/flows/assistant/answer_retry.yaml": 26,
-    ".maestro/flows/assistant/off_topic.yaml": 39
+    ".maestro/flows/assistant/off_topic.yaml": 39,
+    ".maestro/flows/assistant/answer_changed_since.yaml": 40
   }
 }

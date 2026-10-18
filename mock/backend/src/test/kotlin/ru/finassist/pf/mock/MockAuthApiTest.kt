@@ -60,9 +60,13 @@ class MockAuthApiTest {
     fun `the verification is pending until the call and then signs the existing user in`() = runTest {
         val v = api.startPhoneVerification(key("k"), existing)
         assertEquals("+78001234567", v.callbackNumber)
-        assertEquals(clock.at.plusMinutes(3), v.expiresAt)
-        // Same key, same verification.
-        assertEquals(v, api.startPhoneVerification(key("k"), existing))
+        assertEquals(clock.at.plusMinutes(5), v.expiresAt)
+        assertEquals(300, v.expiresIn)
+        assertNull(v.serverTime, "no Date header in-process")
+        // Same key, same verification; `expires_in` is recomputed on the replay (api.md 1.1).
+        clock.at = clock.at.plusSeconds(1)
+        assertEquals(v.copy(expiresIn = 299), api.startPhoneVerification(key("k"), existing))
+        clock.at = clock.at.minusSeconds(1)
 
         val events = api.streamPhoneVerification(v.verificationToken).toList()
         assertEquals(listOf(VerificationStatus.PENDING, VerificationStatus.VERIFIED), events.map { it.status })
@@ -84,13 +88,41 @@ class MockAuthApiTest {
     }
 
     @Test
-    fun `a verification older than 3 minutes is expired`() = runTest {
+    fun `a verification older than 5 minutes is expired`() = runTest {
         val v = api.startPhoneVerification(key("k"), existing)
-        clock.at = clock.at.plusMinutes(3).plusSeconds(1)
+        clock.at = clock.at.plusMinutes(5).plusSeconds(1)
         val events = api.streamPhoneVerification(v.verificationToken).toList()
         assertEquals(listOf(VerificationStatus.EXPIRED), events.map { it.status })
         assertNull(events.single().accessToken)
         assertEquals("", backend.profile.userId)
+    }
+
+    @Test
+    fun `expires_in counts down on replays, floors partial seconds and stops at zero`() = runTest {
+        val v = api.startPhoneVerification(key("k"), existing)
+        clock.at = clock.at.plusSeconds(100).plusNanos(500_000_000)
+        assertEquals(199, api.startPhoneVerification(key("k"), existing).expiresIn)
+        clock.at = clock.at.plusMinutes(10)
+        val late = api.startPhoneVerification(key("k"), existing)
+        assertEquals(0, late.expiresIn)
+        assertEquals(v.verificationToken, late.verificationToken)
+    }
+
+    @Test
+    fun `a call due after the end of the request ends the open stream with expired`() = runTest {
+        backend.config = backend.config.copy(verificationTtlMs = 3_000)
+        val v = api.startPhoneVerification(key("late"), existing)
+        val events = api.streamPhoneVerification(v.verificationToken).toList()
+        assertEquals(listOf(VerificationStatus.PENDING, VerificationStatus.EXPIRED), events.map { it.status })
+        assertEquals("", backend.profile.userId)
+    }
+
+    @Test
+    fun `the request lifetime follows the config`() = runTest {
+        backend.config = backend.config.copy(verificationTtlMs = 5_000)
+        val v = api.startPhoneVerification(key("short"), existing)
+        assertEquals(clock.at.plusSeconds(5), v.expiresAt)
+        assertEquals(5, v.expiresIn)
     }
 
     @Test

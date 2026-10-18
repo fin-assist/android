@@ -19,6 +19,9 @@ tags:
       id: "auth.phone"
     timeout: 10000
 
+# The call is paid at the subscriber's rate: nothing on the screens promises it is free (FIN-166).
+- assertVisible: "Для подтверждения позвоните нам с этого номера"
+- assertNotVisible: ".*бесплатн.*"
 - tapOn:
     id: "auth.phone.submit"
 - assertVisible: "В номере не хватает цифр"
@@ -44,6 +47,12 @@ tags:
       id: "auth.call"
     timeout: 10000
 - assertVisible: "Позвоните нам для подтверждения"
+- assertVisible: "Позвоните с номера \\+7 916 123-45-67 на наш номер. Мы сразу сбросим звонок — по нему и поймём, что номер ваш"
+# The end of the wait by the device clock: response time + expires_in (api.md 1.1), not a fixed «3 минуты».
+- assertVisible:
+    id: "auth.call.wait"
+    text: "Как только дозвонитесь, вход продолжится сам\\. Ждём звонок до [0-2][0-9]:[0-5][0-9]"
+- assertNotVisible: ".*бесплатн.*"
 - tapOn:
     id: "auth.call.change_number"
 # Back on the phone screen with the number kept.

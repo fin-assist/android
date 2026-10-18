@@ -94,6 +94,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `flags=reset` | drops all overrides | — |
   | `offline=true\|false` | every backend request fails with «нет сети» | process |
   | `call_delay_ms=<n>` | how long the sign-in call takes | process |
+  | `call_ttl_ms=<n>` | lifetime of the next phone verification requests (`expires_at`, `expires_in`; 5 minutes by default): the wait ends without a call (FIN-166) | process |
   | `network_delay_ms=<n>` | latency of every backend request (a «busy» state stays up for that long) | process |
   | `unknown_codes=true\|false` | the fake server sends codes the client does not know (`MockCodes`): a filter `kind` on the expense tile, an import notice, an analytics feature, an Analytics block of an unknown type and a card locked for an unknown reason (FIN-83, FIN-4) | process |
   | `failing_blocks=<id>,…` | those Analytics blocks fail on the fake server and come as `unavailable` (FIN-5); empty — none | process |
@@ -177,7 +178,8 @@ were.
 |---|---|
 | `auth/register_new_user` (smoke) | new number → consent (error without the tick) → passcode → first upload → result → feed |
 | `auth/sign_in_existing_user` (smoke) | existing account → passcode → feed; the three tabs |
-| `auth/phone_validation` | short number error; call screen; «Изменить номер» keeps the number |
+| `auth/phone_validation` | short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
+| `auth/call_expired` | `call_ttl_ms=15000`: the wait ends either by the stream's `expired` or by the device timer (their order is not fixed); both lead to «Время на звонок вышло» with no number; «Позвонить ещё раз» brings the number and a new deadline back — FIN-166 |
 | `auth/registration_closed` | `auth.registration=false`: new number → «Регистрация пока закрыта»; existing account still signs in |
 | `applock/unlock` (smoke) | cold start → unlock; wrong code error |
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |
@@ -200,6 +202,7 @@ were.
 | `assistant/chip_after_statements_deleted` | every statement deleted: the operations chip of an earlier answer opens the search without its stale selection (notice, empty result) — FIN-76 |
 | `assistant/retry_without_transfers` | `assistant_model_errors=1`: a question asked «Без переводов» fails, not spent; «Повторить» answers it still «без переводов» — FIN-76 |
 | `assistant/answer_retry` | `assistant_model_errors=1`: the answer fails, not spent; a double tap on «Повторить» while the request is on its way sends it once: one answer, no «Не получилось отправить вопрос», 4 of 5 — FIN-75 |
+| `assistant/answer_changed_since` | after an answer a category is changed, then the statement deleted: the earlier answer in the history shows «С тех пор категории менялись», then «С тех пор данные менялись» (`changed_since` counted at the time of the request) — FIN-135 |
 | `statements/upload_errors` | CSV, not a statement, another bank; leaving the picker |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |

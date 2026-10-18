@@ -154,6 +154,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
                 // both ways — earlier uploads' against this one, this one's against later finished ones (FIN-79).
                 backend.unreadResolver.recompute(backend.uploads, committing = upload)
                 upload.result = buildResult(upload, doc, added, duplicates, isFirst, before)
+                backend.dataChanges.uploadsChanged()
                 upload.result!!
             }
             upload.events.value = ImportEvent.Complete(result)
@@ -327,6 +328,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         backend.mutex.withLock {
             backend.ledger.removeUpload(uploadId)
             backend.uploads.remove(upload)
+            backend.dataChanges.uploadsChanged()
             // Lines this upload closed are checked again against the uploads that remain (FIN-79).
             backend.unreadResolver.recompute(backend.uploads)
         }

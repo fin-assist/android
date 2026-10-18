@@ -152,6 +152,8 @@ class MockStatementsApiTest {
         assertEquals(ErrorCodes.CANCELLED, error.code)
         assertTrue(api.listStatements().uploads.isEmpty())
         assertTrue(backend.ledger.all.isEmpty())
+        // The data is as it was: earlier answers of the assistant are not marked «загружали выписки» (FIN-135).
+        assertEquals(0, backend.dataChanges.version)
     }
 
     @Test
