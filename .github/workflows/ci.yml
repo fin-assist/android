@@ -38,6 +38,11 @@ jobs:
       - name: Check AGENTS.md and docs registries
         run: python3 scripts/agent-docs.py --check
 
+      # :core:api and :mock:backend go to Kotlin Multiplatform when iOS starts: no JVM-only APIs or dependencies
+      # beyond scripts/kmp-baseline.json (FIN-144, docs/kmp-readiness.md).
+      - name: No new JVM-only code in core/api and mock/backend
+        run: python3 scripts/check-kmp-ready.py
+
   build:
     name: Build, test, lint (mock flavor)
     runs-on: ubuntu-latest
