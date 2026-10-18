@@ -1,0 +1,58 @@
+appId: ru.finassist.pf.mock.e2e
+name: Загрузка — обрыв потока, 429, сворачивание и возврат, снова 429 — итог без ошибки
+tags:
+  - statements
+---
+# FIN-170 (api.md «SSE»): the progress stream drops after its first event (`stream_drops=1`); the openings after the
+# drop answer 429 `Retry-After: 3` three times (`stream_rate_limits=3`). While the app waits, it goes to the background
+# and comes back: the screen opens the stream itself and gets 429 again — that is a re-open, waited for, not an
+# upload error. The import result opens.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?stream_drops=1&stream_rate_limits=3"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload.busy"
+    timeout: 10000
+# The 429s keep the stream waiting for about 10 s; the app goes to the background and returns inside that window
+# (no app lock: it locks after 5 minutes in the background).
+- pressKey: Home
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 40000
+- assertVisible:
+    id: "statements.result.new"
+- assertNotVisible:
+    id: "statements.upload.error.processing_failed"
+- assertNotVisible:
+    id: "statements.upload.offline"

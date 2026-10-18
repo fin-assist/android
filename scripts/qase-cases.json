@@ -32,6 +32,7 @@
     ".maestro/flows/offline/stream_drops.yaml": 43,
     ".maestro/flows/assistant/offline_retry.yaml": 20,
     ".maestro/flows/statements/upload_offline_retry.yaml": 21,
+    ".maestro/flows/statements/upload_rate_limited_resume.yaml": 45,
     ".maestro/flows/statements/upload_unreadable.yaml": 22,
     ".maestro/flows/statements/upload_unreadable_fixed.yaml": 28,
     ".maestro/flows/statements/upload_no_description.yaml": 23,

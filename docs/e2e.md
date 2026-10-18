@@ -212,6 +212,7 @@ were.
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
 | `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
+| `statements/upload_rate_limited_resume` | `stream_drops=1&stream_rate_limits=3`: the progress stream drops, its re-opens get 429 `Retry-After: 3`; the app goes to the background and back during the wait, the screen opens the stream itself and gets 429 again — waited for, no upload error; the import result opens — FIN-170 |
 | `statements/upload_no_description` | a line without a description is imported (no unread notice) and shown as «Без описания» in the feed and on the operation |
 | `statements/upload_unknown_codes` | `unknown_codes=true`: the import result shows the server's text for a notice code and for a locked analytics feature the client does not know — FIN-83 |
 | `profile/theme_and_logout` | dark theme; logout cancel / confirm with the notice |
