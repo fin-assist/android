@@ -34,6 +34,7 @@ import ru.finassist.pf.mock.domain.RegularPaymentsCard
 import ru.finassist.pf.mock.domain.SmallFrequentCard
 import ru.finassist.pf.mock.domain.SmallFrequentGroup
 import java.time.OffsetDateTime
+import java.time.YearMonth
 import java.time.ZoneOffset
 
 /**
@@ -107,14 +108,15 @@ object AnalyticsDesignFixtures {
         bankFees = BankFeesCard(MetricStatus.READY, basis = basis, value = rub(1_240),
             filters = s.period.copy(selection = AnalyticsEngine.SELECTION_BANK_FEES, selectionName = "Комиссии и проценты банку"),
             kindsName = "обслуживание, переводы, снятие наличных"),
+        // Counted over August, the last full month: September runs to the 25th (docs/calc.md, section 5).
         smallFrequent = SmallFrequentCard(
-            MetricStatus.READY, basis = basis, value = rub(6_400),
-            items = listOf(SmallFrequentGroup("Кофе и перекусы", 23, rub(280), rub(6_400), rub(77_000), s.expense.copy(q = "Кофе и перекусы", amountTo = Money(AnalyticsEngine.SMALL_MAX_MINOR)))),
+            MetricStatus.READY, basis = basis, value = rub(6_400), month = YearMonth.of(2026, 8),
+            items = listOf(SmallFrequentGroup("Кофе и перекусы", 23, rub(280), rub(6_400), rub(77_000), s.period.copy(selection = "s_small_merchant_2026-08_with_coffee", selectionName = "Кофе и перекусы"))),
         ),
     )
 
     val analyticsState = AnalyticsState(
-        stale = false, lastOperationAt = day(9, 25), dataFrom = day(4, 1), dataTo = day(9, 25), fullMonths = 5,
+        stale = false, lastOperationAt = day(9, 25), dataFrom = day(4, 1), dataTo = day(9, 26), fullMonths = 5,
         unreadLinesCount = 0, calculatedAt = day(9, 26), recalculating = false,
     )
 
@@ -246,8 +248,12 @@ object AnalyticsDesignFixtures {
         )
     }
 
-    /** Last operation on September 25, more than two weeks ago: the forecast is locked (`stale_data`), the tile shows the fact. */
+    /**
+     * The statement ends on September 25, more than two weeks ago: the forecast is locked (`stale_data`), the tile shows
+     * the fact. `data_to` is the start of the day after the last covered one (6.1 `state`), so the banner says «по 25
+     * сентября» (FIN-125).
+     */
     val stale: AnalyticsSnapshot = september().let { a ->
-        a.copy(tiles = a.tiles!!.copy(forecast = locked(LockReason.STALE_DATA)), state = analyticsState.copy(stale = true))
+        a.copy(tiles = a.tiles!!.copy(forecast = locked(LockReason.STALE_DATA)), state = analyticsState.copy(stale = true, dataTo = day(9, 26)))
     }
 }

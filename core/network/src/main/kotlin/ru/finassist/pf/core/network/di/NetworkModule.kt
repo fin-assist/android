@@ -43,7 +43,9 @@ import ru.finassist.pf.core.network.RequestIdInterceptor
 import ru.finassist.pf.core.network.ServiceGateInterceptor
 import ru.finassist.pf.core.network.SseRequests
 import ru.finassist.pf.core.network.StatementsService
+import ru.finassist.pf.core.network.TlsFailureReporter
 import ru.finassist.pf.core.network.TokenAuthenticator
+import ru.finassist.pf.core.tracking.CrashReporter
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Qualifier
@@ -65,17 +67,23 @@ internal object NetworkModule {
     @Singleton
     fun baseUrl(@Named("apiBaseUrl") url: String): HttpUrl = url.toHttpUrl()
 
-    /** Client for refresh-token calls only: no authenticator, so a 401 on refresh cannot recurse. */
+    /**
+     * Client for refresh-token calls only: no authenticator, so a 401 on refresh cannot recurse. Every client is built
+     * from it, so all of them report a refused server certificate (pinning, FIN-121) through [TlsFailureReporter];
+     * SSE streams report through [SseRequests], whose OkHttp path drops the event listener.
+     */
     @Provides
     @Singleton
     @Named("plain")
     fun plainClient(
         @Named("httpLogging") logging: Boolean,
+        tlsFailures: TlsFailureReporter,
         version: ClientVersion,
         gate: ServiceGate,
         clock: Clock,
     ): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
+        .eventListenerFactory(tlsFailures.eventListenerFactory())
         .readTimeout(30, TimeUnit.SECONDS)
         // FIN-22: the version on every request (refresh included), and what the server says about it and maintenance.
         .addInterceptor(ClientVersionInterceptor(version))
@@ -85,12 +93,18 @@ internal object NetworkModule {
         .apply { if (logging) addInterceptor(HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BASIC)) }
         .build()
 
+    /** One reporter for every client and stream: each kind of refusal is reported once per process. */
+    @Provides
+    @Singleton
+    fun tlsFailures(crashReporter: CrashReporter): TlsFailureReporter = TlsFailureReporter(crashReporter)
+
     @Provides
     @Singleton
     fun client(
         @Named("plain") plain: OkHttpClient,
         baseUrl: HttpUrl,
         tokenStore: TokenStore,
+        tlsFailures: TlsFailureReporter,
     ): OkHttpClient {
         // The refresh call gets its own Dispatcher: requests waiting in TokenAuthenticator hold slots of the
         // main dispatcher (5 per host), and a refresh queued behind them would never start.
@@ -102,7 +116,7 @@ internal object NetworkModule {
             .callTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(AuthInterceptor(tokenStore))
             .build()
-        val refreshApi = HttpAuthApi(retrofit(refreshClient, baseUrl).create(AuthService::class.java), SseRequests(baseUrl, refreshClient))
+        val refreshApi = HttpAuthApi(retrofit(refreshClient, baseUrl).create(AuthService::class.java), SseRequests(baseUrl, refreshClient, tlsFailures))
         return plain.newBuilder()
             .addInterceptor(AuthInterceptor(tokenStore))
             .authenticator(TokenAuthenticator(tokenStore) { key, refresh -> refreshApi.refreshTokens(key, refresh) })
@@ -127,7 +141,8 @@ internal object NetworkModule {
 
     @Provides
     @Singleton
-    fun sseRequests(baseUrl: HttpUrl, @Sse client: OkHttpClient): SseRequests = SseRequests(baseUrl, client)
+    fun sseRequests(baseUrl: HttpUrl, @Sse client: OkHttpClient, tlsFailures: TlsFailureReporter): SseRequests =
+        SseRequests(baseUrl, client, tlsFailures)
 
     @Provides @Singleton
     fun authApi(retrofit: Retrofit, sse: SseRequests): AuthApi = HttpAuthApi(retrofit.create(AuthService::class.java), sse)

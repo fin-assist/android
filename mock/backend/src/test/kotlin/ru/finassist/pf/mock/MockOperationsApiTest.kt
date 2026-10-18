@@ -73,10 +73,14 @@ class MockOperationsApiTest {
     }
 
     @Test
-    fun `transfer mode alone hides pairs, an unknown mode counts as with`() = runBlocking<Unit> {
+    fun `transfer mode alone hides transfers to self - pairs and single ones, an unknown mode counts as with`() = runBlocking<Unit> {
+        // docs/calc.md section 6, example 21: the search matches the Analytics figure, which counts neither.
         val with = found(OperationsFilter(transferMode = TransferMode.WITH))
         assertFalse("pair" in with)
-        assertTrue("ivan" in with && "abroad" in with)
+        assertFalse("abroad" in with)
+        assertTrue("ivan" in with && "buy" in with)
+        assertTrue("abroad" in found(OperationsFilter()))
+        assertFalse("abroad" in found(OperationsFilter(transferMode = TransferMode.WITHOUT)))
         assertEquals(with, found(OperationsFilter(transferMode = TransferMode.UNKNOWN)))
         assertFalse("ivan" in found(OperationsFilter(transferMode = TransferMode.WITHOUT)))
     }
@@ -86,6 +90,8 @@ class MockOperationsApiTest {
         assertEquals(setOf("buy"), found(OperationsFilter(categoryId = "cat_marketplaces")))
         assertEquals(setOf("buy", "back"), found(OperationsFilter(categoryId = "cat_marketplaces", transferMode = TransferMode.WITH)))
         assertEquals(setOf("pair", "abroad"), found(OperationsFilter(categoryId = SystemCategories.OWN_TRANSFER)))
+        // «Как на Аналитике» has no transfers to self at all, so their own category finds nothing there.
+        assertEquals(emptySet(), found(OperationsFilter(categoryId = SystemCategories.OWN_TRANSFER, transferMode = TransferMode.WITH)))
         assertEquals(setOf("back", "refund"), found(OperationsFilter(categoryId = SystemCategories.REFUND)))
     }
 
@@ -116,7 +122,11 @@ class MockOperationsApiTest {
 
     @Test
     fun `an unknown or malformed selection is SELECTION_NOT_FOUND`() = runBlocking<Unit> {
-        for (selection in listOf("s_whatever", "s_merchant_nobody", "s_regular_rp_nobody", "s_regular_all_bad", "s_regular_all_2026-13_with")) {
+        val smallSelections = listOf(
+            "s_small_bad", "s_small_merchant_2026-13_with_x", "s_small_merchant_2026-09_sideways_x",
+            "s_small_merchant_2026-09_with_00000000-0000-0000-0000-000000000000",
+        )
+        for (selection in listOf("s_whatever", "s_merchant_nobody", "s_regular_rp_nobody", "s_regular_all_bad", "s_regular_all_2026-13_with") + smallSelections) {
             val e = assertFailsWith<AppError.Api>(selection) { search(OperationsFilter(selection = selection)) }
             assertEquals(ErrorCodes.SELECTION_NOT_FOUND to 422, e.code to e.httpStatus, selection)
         }
@@ -299,6 +309,43 @@ class MockOperationsApiTest {
     }
 
     @Test
+    fun `a manual refund names the category it reduces in its note and details (FIN-132)`() = runBlocking<Unit> {
+        val backend = testBackend().apply {
+            load(
+                statement(
+                    "2026-08-01", "2026-09-30",
+                    trn("shoes", "2026-08-20T10:00", 700, "Магазин обуви", "Одежда и обувь"),
+                    trn("in", "2026-09-05T10:00", 700, "Иван И.", "Пополнения", debit = false),
+                ),
+            )
+        }
+        val api = MockOperationsApi(backend)
+        val credit = backend.ledger.all.single { it.fitId == "in" }.id
+        assertNull(api.getOperation(credit).note)
+
+        val response = api.changeCategory(credit, ChangeCategoryRequest(SystemCategories.REFUND))
+        assertNull(response.replacedId)
+        val item = response.items.single()
+        assertEquals(OperationKind.INCOME, item.kind)
+        assertEquals(SystemCategories.REFUND, item.categoryId)
+        assertTrue(item.isCategoryManual)
+        assertEquals("возврат · Одежда и обувь", item.note)
+        assertEquals("Уменьшает расходы «Одежда и обувь» в сентябре", item.noteDetails)
+        assertEquals(item, api.getOperation(credit))
+    }
+
+    @Test
+    fun `a manual refund without a target reduces the total expenses`() = runBlocking<Unit> {
+        val response = api.changeCategory(id("salary"), ChangeCategoryRequest(SystemCategories.REFUND))
+        val item = response.items.single()
+        assertEquals(SystemCategories.REFUND, item.categoryId)
+        assertTrue(item.isCategoryManual)
+        assertEquals("возврат", item.note)
+        assertEquals("Уменьшает общие расходы в сентябре", item.noteDetails)
+        assertEquals(item, api.getOperation(id("salary")))
+    }
+
+    @Test
     fun `an unknown, wrong-kind category or an unknown operation is rejected`() = runBlocking<Unit> {
         val unknown = assertFailsWith<AppError.Api> { api.changeCategory(id("buy"), ChangeCategoryRequest("cat_nope")) }
         assertEquals(ErrorCodes.CATEGORY_NOT_ASSIGNABLE to 422, unknown.code to unknown.httpStatus)
@@ -328,5 +375,17 @@ class MockOperationsApiTest {
     fun `the fake server's own unknown kind searches like expense (FIN-83)`() = runBlocking<Unit> {
         val known = found(OperationsFilter(kind = OperationKindFilter.EXPENSE, transferMode = TransferMode.WITH))
         assertEquals(known, found(OperationsFilter(kind = MockCodes.EXPENSE_UNKNOWN, transferMode = TransferMode.WITH)))
+    }
+
+    @Test
+    fun `before is the start of a month in the profile zone, another moment is VALIDATION_ERROR`() = runBlocking<Unit> {
+        backend.profile = backend.profile.copy(timezone = "Asia/Vladivostok")
+        val ok = api.listOperations(OperationsQuery(before = java.time.OffsetDateTime.parse("2026-09-01T00:00:00+10:00")))
+        assertEquals(java.time.OffsetDateTime.parse("2026-06-01T00:00:00+10:00").toInstant(), ok.range?.from?.toInstant())
+        // The start of September in Moscow is 07:00 on 1 September in Vladivostok: not a month start of the profile.
+        for (before in listOf("2026-09-01T00:00:00+03:00", "2026-09-15T00:00:00+10:00")) {
+            val e = assertFailsWith<AppError.Api>(before) { api.listOperations(OperationsQuery(before = java.time.OffsetDateTime.parse(before))) }
+            assertEquals(ErrorCodes.VALIDATION_ERROR to 400, e.code to e.httpStatus, before)
+        }
     }
 }

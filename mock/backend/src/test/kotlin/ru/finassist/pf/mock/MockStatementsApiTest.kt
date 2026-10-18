@@ -152,6 +152,8 @@ class MockStatementsApiTest {
         assertEquals(ErrorCodes.CANCELLED, error.code)
         assertTrue(api.listStatements().uploads.isEmpty())
         assertTrue(backend.ledger.all.isEmpty())
+        // The data is as it was: earlier answers of the assistant are not marked «загружали выписки» (FIN-135).
+        assertEquals(0, backend.dataChanges.version)
     }
 
     @Test
@@ -323,7 +325,8 @@ class MockStatementsApiTest {
         assertEquals("2026-10", october.month.toString())
         assertTrue(october.inProgress)
         assertEquals(dt("2026-10-01T00:00:00+03:00"), october.dataFrom)
-        assertEquals(dt("2026-10-06T00:00:00+03:00"), october.dataTo)
+        // The last operation of the month is not on its last covered day: the end of that day (docs/calc.md 4).
+        assertEquals(dt("2026-10-05T23:59:59+03:00"), october.dataTo)
     }
 
     @Test

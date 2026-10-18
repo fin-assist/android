@@ -176,7 +176,8 @@
                         "tone": "primary"
                     },
                     {
-                        "text": "Январь — март: в выписке нет операций. Сентябрь — по 25-е"
+                        "text": "Январь — март: в выписке нет операций. Сентябрь — по 25-е",
+                        "tone": "muted"
                     }
                 ]
             }
@@ -310,6 +311,7 @@
                         "title": "Финансы",
                         "value": 8.519E7,
                         "value_kind": "amount",
+                        "share": 0.92,
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
@@ -328,6 +330,7 @@
                         "title": "Переводы",
                         "value": 6230000.0,
                         "value_kind": "amount",
+                        "share": 0.07,
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
@@ -346,6 +349,7 @@
                         "title": "Дивиденды и купоны",
                         "value": 720000.0,
                         "value_kind": "amount",
+                        "share": 0.01,
                         "show_plus": true,
                         "action": {
                             "type": "open_operations",
@@ -367,7 +371,7 @@
         "stale": false,
         "last_operation_at": "2026-09-25T00:00:00+03:00",
         "data_from": "2026-04-01T00:00:00+03:00",
-        "data_to": "2026-09-25T00:00:00+03:00",
+        "data_to": "2026-09-26T00:00:00+03:00",
         "full_months": 5,
         "unread_lines_count": 0,
         "calculated_at": "2026-09-26T00:00:00+03:00",

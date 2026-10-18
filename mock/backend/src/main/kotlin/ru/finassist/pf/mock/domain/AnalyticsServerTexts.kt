@@ -54,7 +54,7 @@ object AnalyticsServerTexts {
 
     /**
      * Lock text: «Нужно 3 полных месяца, есть 1»; with no full months at all — «…пока есть только 1–25 сентября»
-     * from `state.data_from` / `data_to`.
+     * from `state.data_from` / `data_to` (`data_to` is the start of the day after the last covered one).
      */
     fun lock(lock: MetricLock?, state: AnalyticsState?): String {
         if (lock == null) return "Пока недоступно"
@@ -64,7 +64,7 @@ object AnalyticsServerTexts {
                 val need = "Нужно ${countWithNoun(req, "полный месяц", "полных месяца", "полных месяцев")}"
                 val avail = lock.available ?: 0
                 if (avail == 0 && state != null) {
-                    "$need — пока есть только ${RussianDates.dayRange(state.dataFrom.toLocalDate(), state.dataTo.toLocalDate())}"
+                    "$need — пока есть только ${RussianDates.dayRange(state.dataFrom.toLocalDate(), state.dataTo.minusNanos(1).toLocalDate())}"
                 } else {
                     "$need, есть $avail"
                 }
@@ -172,10 +172,18 @@ object AnalyticsServerTexts {
         return "В $ratio раза больше обычного ${RussianDates.EM_DASH} $usual"
     }
 
-    /** «в месяц · кофе и перекусы: 23 раза по 280 ₽ — около 77 000 ₽ в год». */
-    fun smallFrequent(title: String, count: Int, average: Money, yearly: Money): String =
-        "в месяц · ${title.replaceFirstChar { it.lowercase() }}: ${countWithNoun(count, "раз", "раза", "раз")} по ${average.format()} " +
+    /**
+     * «в месяц · кофе и перекусы: 23 раза по 280 ₽ — около 77 000 ₽ в год». When the month of the calculation [month]
+     * is not the [selected] one (the selected month is incomplete, docs/calc.md, section 5), the text starts with it:
+     * «по августу · в месяц · …», with the year when it differs: «по декабрю 2025 · …».
+     */
+    fun smallFrequent(title: String, count: Int, average: Money, yearly: Money, month: YearMonth?, selected: YearMonth): String {
+        val base = "в месяц · ${title.replaceFirstChar { it.lowercase() }}: ${countWithNoun(count, "раз", "раза", "раз")} по ${average.format()} " +
             "${RussianDates.EM_DASH} около ${yearly.format()} в год"
+        if (month == null || month == selected) return base
+        val year = if (month.year != selected.year) " ${month.year}" else ""
+        return "по ${RussianDates.monthDative(month.month)}$year · $base"
+    }
 
     /** «Больше всего — в июле: 96 300 ₽» under the chart of a quarter or a year. */
     fun peakMonth(points: List<MonthlyPoint>): String? {

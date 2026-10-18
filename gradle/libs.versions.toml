@@ -28,10 +28,10 @@ okhttp = "4.12.0"
 retrofit = "2.11.0"
 
 # Prod SDKs (stage 8)
-rustoreRemoteConfig = "10.5.1"
+rustoreRemoteConfig = "10.5.2"
 mytracker = "3.2.0"
 # Crashes and ANR (both flavors); the Gradle plugin uploads R8 mappings
-tracer = "1.5.0"
+tracer = "1.5.1"
 
 # Security
 tink = "1.16.0"
@@ -46,6 +46,8 @@ espresso = "3.6.1"
 androidxTestRunner = "1.6.2"
 androidxTestOrchestrator = "1.5.1"
 androidxTestServices = "1.5.0"
+# Contract tests of the fake backend against openapi.yaml (FIN-123); Apache-2.0
+openapiValidator = "2.46.1"
 # Unit test coverage (docs/testing.md)
 kover = "0.9.11"
 # UI test coverage (FIN-48): probes in the mock e2e build and the report task.
@@ -125,6 +127,7 @@ androidx-test-espresso-intents = { group = "androidx.test.espresso", name = "esp
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
 androidx-test-orchestrator = { group = "androidx.test", name = "orchestrator", version.ref = "androidxTestOrchestrator" }
 androidx-test-services = { group = "androidx.test.services", name = "test-services", version.ref = "androidxTestServices" }
+openapi-validator = { group = "com.atlassian.oai", name = "swagger-request-validator-core", version.ref = "openapiValidator" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

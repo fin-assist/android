@@ -7,7 +7,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -25,6 +29,7 @@ import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.mock.domain.AnalyticsEngine
 import ru.finassist.pf.mock.domain.Catalog
 import ru.finassist.pf.mock.domain.Coverage
+import ru.finassist.pf.mock.domain.DataChanges
 import ru.finassist.pf.mock.domain.Ledger
 import ru.finassist.pf.mock.domain.Scope
 import ru.finassist.pf.mock.domain.UnreadResolver
@@ -45,6 +50,7 @@ class MockBackend(
     private val clock: Clock,
     /** Where background work (imports, answer generation) runs; tests pass one they control. */
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    val catalog: Catalog = Catalog(),
     /** What the app sends as `X-Client-Version`: the fake server checks it like the real one (FIN-20). */
     private val clientVersion: ClientVersion = ClientVersion("0.0.0", 0),
     /** Where the update and maintenance answers go, as the network layer reports them in `prod` (FIN-22). */
@@ -56,7 +62,6 @@ class MockBackend(
     /** Completed once the preloaded statement is imported; requests wait for it. */
     val ready = CompletableDeferred<Unit>()
 
-    val catalog = Catalog()
     val ledger = Ledger(catalog)
     val operationScope = Scope(ledger, catalog) { profileZone() }
     /** Days of lines and statement periods are compared in the profile zone at the time of the check (FIN-79, FIN-92). */
@@ -102,10 +107,15 @@ class MockBackend(
 
     var profile: Profile = emptyProfile("")
     val dismissedPayments = HashSet<String>()
-    val assistant = AssistantStore()
+    /** Category changes and statement uploads/deletions, for `changed_since` of the assistant's answers (api.md 7.2). */
+    val dataChanges = DataChanges()
+    val assistant = AssistantStore(dataChanges)
 
     /** `Idempotency-Key` → cached response for the endpoints api.md marks idempotent. */
-    val idempotency = HashMap<String, Any>()
+    val idempotency = HashMap<String, Stored>()
+
+    /** A cached response and the request it answered ([request] null: the endpoint does not compare bodies yet). */
+    class Stored(val request: Any?, val result: Any)
 
     val analytics = AnalyticsEngine(
         ledger = ledger,
@@ -148,7 +158,16 @@ class MockBackend(
         ready.await()
         if (config.offline) throw AppError.Offline()
         if (config.networkDelayMs > 0) delay(config.networkDelayMs)
-        // The order of the real server (api.md, errors): maintenance, then the client version, then everything else.
+        checkAvailability()
+    }
+
+    /**
+     * What the real server checks before anything else, in its order (api.md «Ошибки»): maintenance (503
+     * `MAINTENANCE`), then the client version (400 `CLIENT_VERSION_UNSUPPORTED`). Both go to the [gate] as the
+     * network layer reports them in `prod`; a request that passes ends a maintenance the gate still shows. Every
+     * plain call ([simulateNetwork]) and every opening of a stream, re-opens included ([droppable]), runs it.
+     */
+    private fun checkAvailability() {
         val c = config
         if (c.maintenance) {
             gate.maintenance(c.maintenanceUntil, c.maintenanceRetryAfterSeconds, now())
@@ -161,19 +180,77 @@ class MockBackend(
         gate.reopen()
     }
 
+    /** Guards the drop and 429 counters of [MockConfig] (a coroutine mutex: `synchronized` is JVM-only). */
+    private val dropLock = Mutex()
+
+    /** How many stream openings have been turned away with 429 ([MockConfig.streamRateLimits]); for UI tests. */
+    val streamRateLimited = MutableStateFlow(0)
+
+    /** The last opening of a stream was dropped: the next one is a re-open ([MockConfig.streamRateLimits]). */
+    private var afterDrop = false
+
+    /**
+     * [stream] as one opening of an SSE stream: maintenance and the client version are checked first
+     * ([checkAvailability]), as for a plain call; then, when [MockConfig.streamDrops] is above zero and the first event is not
+     * terminal, the opening ends right after that event (a drop, api.md «SSE») and the counter goes down by one. An
+     * opening right after a drop answers 429 while [MockConfig.streamRateLimits] is above zero, counting it down. An
+     * opening still open when maintenance starts ends at its next event without it, like a drop.
+     */
+    fun <T> droppable(stream: Flow<T>, isTerminal: (T) -> Boolean): Flow<T> = flow {
+        // Before the stream starts, as an HTTP answer (api.md «SSE»: a re-open during maintenance gets 503).
+        checkAvailability()
+        takeRateLimit()?.let { throw it }
+        var drop: Boolean? = null
+        emitAll(
+            stream.transformWhile { event ->
+                // An open stream is cut when maintenance starts (api.md «SSE»); the re-open then gets 503.
+                if (config.maintenance) return@transformWhile false
+                emit(event)
+                if (drop == null) drop = !isTerminal(event) && takeDrop()
+                drop != true
+            },
+        )
+    }
+
+    private suspend fun takeDrop(): Boolean = dropLock.withLock {
+        val left = config.streamDrops
+        if (left <= 0) return@withLock false
+        config = config.copy(streamDrops = left - 1)
+        afterDrop = true
+        true
+    }
+
+    private suspend fun takeRateLimit(): AppError.RateLimited? = dropLock.withLock {
+        val left = config.streamRateLimits
+        if (!afterDrop || left <= 0) {
+            afterDrop = false
+            return@withLock null
+        }
+        config = config.copy(streamRateLimits = left - 1)
+        val seconds = config.streamRetrySeconds
+        streamRateLimited.value += 1
+        AppError.RateLimited(retryAt = now().plusSeconds(seconds), retryAfterSeconds = seconds)
+    }
+
     /** Keys whose first request is still running. */
     private val inFlight = HashSet<String>()
 
     /**
      * Runs [block] once per key; a repeat with the same key returns the cached result, and a repeat while the
-     * first request is still running gets 409 REQUEST_IN_PROGRESS (api.md, idempotency). A failed [block] is not
-     * stored: the key can be used again. [onRepeat] runs before a cached result is returned: a [block] that
-     * simulates the network itself passes the same checks here, so a repeat still meets offline and a lost session.
+     * first request is still running gets 409 REQUEST_IN_PROGRESS (api.md, idempotency). A repeat with another
+     * [request] (the request body, compared by equality) gets 409 IDEMPOTENCY_CONFLICT; a call without [request]
+     * is not compared. A failed [block] is not stored: the key can be used again. [onRepeat] runs before a cached
+     * result is returned: a [block] that simulates the network itself passes the same checks here, so a repeat
+     * still meets offline and a lost session.
      */
-    suspend fun <T : Any> idempotent(key: String, onRepeat: suspend () -> Unit = {}, block: suspend () -> T): T {
+    suspend fun <T : Any> idempotent(key: String, request: Any? = null, onRepeat: suspend () -> Unit = {}, block: suspend () -> T): T {
         val cached = mutex.withLock {
+            val stored = idempotency[key]
+            if (stored != null && request != null && stored.request != null && stored.request != request) {
+                throw AppError.Api(ErrorCodes.IDEMPOTENCY_CONFLICT, 409, message = "Idempotency-Key was used with another request")
+            }
             @Suppress("UNCHECKED_CAST")
-            (idempotency[key] as? T) ?: run {
+            (stored?.result as? T) ?: run {
                 if (!inFlight.add(key)) throw AppError.InProgress(retryAfterSeconds = 1)
                 null
             }
@@ -184,7 +261,7 @@ class MockBackend(
         }
         try {
             val result = block()
-            mutex.withLock { idempotency[key] = result }
+            mutex.withLock { idempotency[key] = Stored(request, result) }
             return result
         } finally {
             // Also when the caller was cancelled mid-request: the lock may be busy, and a cancellable wait for it

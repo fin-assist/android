@@ -29,16 +29,27 @@ import javax.inject.Inject
  * - `flags=reset` — drop every override.
  * - `offline=true|false` — every request of the fake backend fails with «нет сети».
  * - `call_delay_ms=<n>` — how long the sign-in call takes to «arrive» (keeps the call screen up).
+ * - `call_ttl_ms=<n>` — lifetime of the next phone verification requests (`expires_at`, `expires_in`); lets a flow
+ *   reach «Время на звонок вышло» without waiting 5 minutes.
  * - `network_delay_ms=<n>` — latency of every backend request (keeps a «busy» state up long enough to act on it).
  * - `assistant_model_errors=<n>` — the next n assistant answers fail with MODEL_ERROR («Повторить» under them).
+ * - `stream_drops=<n>` — the next n openings of an SSE stream (call, import progress, answer) close after their first
+ *   event without a terminal one, as the server does on its own failure; the app re-opens them (FIN-170).
+ * - `stream_rate_limits=<n>` — the next n openings that follow a dropped one answer 429 with `Retry-After: 3`; the app
+ *   waits and re-opens again, without «Слишком много попыток» (FIN-170).
+ * - `stream_retry_s=<n>` — `Retry-After` of those 429 answers, seconds (a long one keeps the app waiting).
+ * - `expect_stream_rate_limited=<n>` — a check, not a setting: the applied tag shows only if the fake server has
+ *   already turned away at least n stream openings with 429; otherwise [TAG_UNMET] shows, and the flow fails on the
+ *   missing applied tag. The check is instant: stream openings run on the main thread this activity holds, and the
+ *   app's screen is paused under it, so the openings to count must have happened before the link is opened.
  * - `unknown_codes=true|false` — the fake server sends codes the client does not know (`MockCodes`, FIN-83).
  * - `failing_blocks=<id>,<id>` — those Analytics blocks fail to build and come as `unavailable` (FIN-5); empty — none.
  * - `profile_timezone=<zone id>` — `profile.timezone` on the server, as if changed from another device; the app
  *   adopts it on the next profile read (opening «Профиль»).
- * - `min_version=<MAJOR.MINOR.PATCH>` — the server's minimum client version; below it every request gets
- *   `CLIENT_VERSION_UNSUPPORTED` and the app shows the update screen (FIN-22). Empty — no minimum.
- * - `maintenance=<minutes>|unknown|off` — every request gets 503 `MAINTENANCE`, ending in that many minutes from the
- *   fake «now» or at an unknown time; `off` ends it (FIN-22).
+ * - `min_version=<MAJOR.MINOR.PATCH>` — the server's minimum client version; below it every request and every stream
+ *   opening gets `CLIENT_VERSION_UNSUPPORTED` and the app shows the update screen (FIN-22). Empty — no minimum.
+ * - `maintenance=<minutes>|unknown|off` — every request and every stream opening gets 503 `MAINTENANCE` (a stream already
+ *   open is cut at its next event), ending in that many minutes from the fake «now» or at an unknown time; `off` ends it (FIN-22).
  * - `maintenance_retry_after=<s>` — `Retry-After` of the maintenance answer (15 s by default, the shortest the app waits).
  *
  * Backend values live until the process dies: set them after `launchApp`.
@@ -55,14 +66,20 @@ class E2eControlActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Synchronous on purpose (test build only, a few DataStore writes): nothing can cancel it half-way.
-        runBlocking { apply(intent?.data) }
+        val unmet = runBlocking { apply(intent?.data) }
         setContent {
-            Box(Modifier.fillMaxSize().pfTestRoot().testTag(TAG_APPLIED)) { Text("pfe2e: applied") }
+            if (unmet == null) {
+                Box(Modifier.fillMaxSize().pfTestRoot().testTag(TAG_APPLIED)) { Text("pfe2e: applied") }
+            } else {
+                Box(Modifier.fillMaxSize().pfTestRoot().testTag(TAG_UNMET)) { Text("pfe2e: $unmet") }
+            }
         }
         window.decorView.postDelayed({ finish() }, VISIBLE_MS)
     }
 
-    private suspend fun apply(uri: Uri?) {
+    /** Applies the values; returns what an `expect_*` check did not find, or null. */
+    private suspend fun apply(uri: Uri?): String? {
+        var unmet: String? = null
         uri?.queryParameterNames.orEmpty().forEach { name ->
             val value = uri?.getQueryParameter(name).orEmpty()
             when {
@@ -73,8 +90,16 @@ class E2eControlActivity : ComponentActivity() {
                 }
                 name == "offline" -> backend.config = backend.config.copy(offline = value.toBoolean())
                 name == "call_delay_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(callVerifyDelayMs = it) }
+                name == "call_ttl_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(verificationTtlMs = it) }
                 name == "network_delay_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(networkDelayMs = it) }
                 name == "assistant_model_errors" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(assistantModelErrors = it) }
+                name == "stream_drops" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(streamDrops = it) }
+                name == "stream_rate_limits" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(streamRateLimits = it) }
+                name == "stream_retry_s" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(streamRetrySeconds = it) }
+                name == "expect_stream_rate_limited" -> value.toIntOrNull()?.let { expected ->
+                    val given = backend.streamRateLimited.value
+                    if (given < expected) unmet = "expected $expected stream 429s, got $given"
+                }
                 name == "unknown_codes" -> backend.config = backend.config.copy(unknownCodes = value.toBoolean())
                 name == "failing_blocks" -> backend.config = backend.config.copy(failingBlocks = value.split(',').map(String::trim).filter(String::isNotEmpty).toSet())
                 name == "profile_timezone" -> backend.mutex.withLock { backend.profile = backend.profile.copy(timezone = value) }
@@ -88,6 +113,7 @@ class E2eControlActivity : ComponentActivity() {
                 else -> Log.w(TAG, "unknown parameter $name in $uri")
             }
         }
+        return unmet
     }
 
     private companion object {
@@ -95,6 +121,8 @@ class E2eControlActivity : ComponentActivity() {
         const val FLAG_PREFIX = "flag."
         /** Test tag shown once the values are applied; `.maestro/subflows/config.yaml` waits on it. */
         const val TAG_APPLIED = "e2e.config.applied"
+        /** Shown instead of [TAG_APPLIED] when an `expect_*` check fails. */
+        const val TAG_UNMET = "e2e.config.unmet"
         /** Long enough for Maestro to catch the tag between its hierarchy polls, even on a slow CI emulator. */
         const val VISIBLE_MS = 4000L
     }

@@ -118,7 +118,7 @@ internal fun PhoneContent(state: PhoneUiState, onInput: (TextFieldValue) -> Unit
                 label = "Номер телефона",
                 placeholder = "+7 900 000-00-00",
                 visualTransformation = PhoneMaskTransformation,
-                hint = "Для подтверждения позвоните нам с этого номера — бесплатно",
+                hint = "Для подтверждения позвоните нам с этого номера",
                 error = state.error,
                 keyboardType = KeyboardType.Phone,
                 imeAction = ImeAction.Done,
@@ -191,7 +191,7 @@ internal fun CallContent(
         Spacer(Modifier.height(PfTheme.dimens.space4))
         Text("Позвоните нам для подтверждения", style = PfTheme.type.title1, color = PfTheme.colors.text)
         Text(
-            "Позвоните с номера ${state.phoneDisplay} на наш номер. Звонок бесплатный, мы сразу сбросим его — по нему и поймём, что номер ваш",
+            "Позвоните с номера ${state.phoneDisplay} на наш номер. Мы сразу сбросим звонок — по нему и поймём, что номер ваш",
             style = PfTheme.type.lead, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space1),
         )
         if (state.phase == CallPhase.WAITING) {
@@ -214,7 +214,10 @@ internal fun CallContent(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         PfIcon(PfIcons.CLOCK, contentDescription = null, size = 16.dp, tint = PfTheme.colors.textMuted)
                         Spacer(Modifier.width(PfTheme.dimens.space2))
-                        Text("Как только дозвонитесь, вход продолжится сам. Ждём звонок 3 минуты", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
+                        Text(
+                            waitText(state.waitUntil), style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+                            modifier = Modifier.testTag(AuthTags.CALL_WAIT),
+                        )
                     }
                     Text(
                         "Не проходит? Проверьте, что звоните с ${state.phoneDisplay} и не скрываете свой номер в настройках звонков",
@@ -223,7 +226,7 @@ internal fun CallContent(
                 }
                 CallPhase.EXPIRED -> {
                     PfNotice(
-                        "Звонка с ${state.phoneDisplay} мы не дождались. Запросите номер ещё раз — звонок по-прежнему бесплатный",
+                        "Звонка с ${state.phoneDisplay} мы не дождались. Запросите номер ещё раз",
                         title = "Время на звонок вышло", tone = NoticeTone.LIMIT, alert = true,
                     )
                     PfButton(
@@ -231,6 +234,8 @@ internal fun CallContent(
                         modifier = Modifier.testTag(AuthTags.CALL_RETRY),
                     )
                 }
+                // The deadline passed by the device clock: the number is gone while the stream confirms the status.
+                CallPhase.CHECKING -> Unit
                 CallPhase.LOCKED -> PfNotice(
                     state.lockText.orEmpty(),
                     tone = NoticeTone.WARNING, alert = true,
@@ -243,6 +248,12 @@ internal fun CallContent(
             Row { PfLink("Изменить номер", onClick = onChangeNumber, modifier = Modifier.testTag(AuthTags.CALL_CHANGE_NUMBER)) }
         }
     }
+}
+
+/** «…Ждём звонок до 12:34» by the device deadline; without one (unknown or passed) — no time is promised. */
+internal fun waitText(waitUntil: String?): String {
+    val base = "Как только дозвонитесь, вход продолжится сам."
+    return if (waitUntil == null) base else "$base Ждём звонок до $waitUntil"
 }
 
 @Composable
@@ -381,6 +392,7 @@ internal object AuthTags {
     const val PHONE_NOTICE = "auth.phone.notice"
     const val CALL = "auth.call"
     const val CALL_DIAL = "auth.call.dial"
+    const val CALL_WAIT = "auth.call.wait"
     const val CALL_RETRY = "auth.call.retry"
     const val CALL_CHANGE_NUMBER = "auth.call.change_number"
     const val CONSENT = "auth.consent"

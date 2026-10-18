@@ -1,0 +1,67 @@
+appId: ru.finassist.pf.mock.e2e
+name: Время на звонок вышло и «Позвонить ещё раз»
+tags:
+  - auth
+---
+# FIN-166: the request lives 15 s (expires_in 14 after rounding down; long enough for a slow emulator) and the call never «arrives» in time. Two things end the wait: the open stream's
+# `expired` at the request's end on the fake server, and the device timer (response time + expires_in + 1 s,
+# api.md 1.1), which hides the number and re-opens the stream. Their order is not defined here; both lead to
+# «Время на звонок вышло» with no number and a new request offered.
+- runFlow: ../../subflows/clear_state.yaml
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 20000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_delay_ms=600000&call_ttl_ms=15000"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "9161234567"
+- hideKeyboard
+- tapOn:
+    id: "auth.phone.submit"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 10000
+- assertVisible:
+    id: "auth.call.dial"
+- assertVisible:
+    id: "auth.call.wait"
+    text: ".*Ждём звонок до [0-2][0-9]:[0-5][0-9]"
+
+# The deadline passes: no number to call, «Время на звонок вышло» with a new request offered.
+- extendedWaitUntil:
+    visible: "Время на звонок вышло"
+    timeout: 30000
+- assertNotVisible:
+    id: "auth.call.dial"
+- assertNotVisible: "Номер для звонка"
+- assertVisible: "Звонка с \\+7 916 123-45-67 мы не дождались\\. Запросите номер ещё раз"
+
+# A new request (new key) brings the number and a new deadline back; this one lives 5 minutes.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_ttl_ms=300000"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call.retry"
+    timeout: 10000
+- tapOn:
+    id: "auth.call.retry"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call.dial"
+    timeout: 10000
+- assertVisible:
+    id: "auth.call.wait"
+    text: ".*Ждём звонок до [0-2][0-9]:[0-5][0-9]"
+- assertNotVisible: "Время на звонок вышло"

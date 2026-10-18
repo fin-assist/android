@@ -1,5 +1,7 @@
 package ru.finassist.pf.core.api.model
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -202,8 +204,10 @@ enum class NoteTone(override val code: String) : ApiCode {
     object Serializer : OpenEnumSerializer<NoteTone>("NoteTone", entries, UNKNOWN)
 }
 
+/** A line under a chart. `tone` is always on the wire: absent it reads as `muted`, but the server sends it (api.md 6.1). */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-data class ChartNote(val text: String, val tone: NoteTone = NoteTone.MUTED)
+data class ChartNote(val text: String, @EncodeDefault val tone: NoteTone = NoteTone.MUTED)
 
 @Serializable
 data class TileGroupData(@Serializable(with = TileList::class) val tiles: List<Tile>)

@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -71,8 +73,16 @@ class ChatViewModelBehaviourTest {
     private fun question(id: String, text: String = "Вопрос $id") =
         Message(id = id, role = MessageRole.USER, text = text, createdAt = now)
 
-    private fun answer(id: String, status: AnswerStatus = AnswerStatus.COMPLETE, errorCode: AnswerErrorCode? = null) =
-        Message(id = id, role = MessageRole.ASSISTANT, status = status, errorCode = errorCode, blocks = listOf(text("Ответ $id")), createdAt = now)
+    private fun answer(
+        id: String,
+        status: AnswerStatus = AnswerStatus.COMPLETE,
+        errorCode: AnswerErrorCode? = null,
+        errorText: String? = null,
+        retryable: Boolean? = null,
+    ) = Message(
+        id = id, role = MessageRole.ASSISTANT, status = status, errorCode = errorCode, errorText = errorText, retryable = retryable,
+        blocks = listOf(text("Ответ $id")), createdAt = now,
+    )
 
     private fun text(t: String) = Block.text(t)
 
@@ -180,7 +190,8 @@ class ChatViewModelBehaviourTest {
                 answer("a1"),
                 // Unknown role is dropped, an unknown status reads as failed, a duplicate id is shown once.
                 Message(id = "x", role = MessageRole.UNKNOWN, createdAt = now),
-                answer("a2", status = AnswerStatus.UNKNOWN, errorCode = AnswerErrorCode.UNKNOWN),
+                // Error fields of a status the client does not know are not trusted: the generic text, no retry (api.md 7.3).
+                answer("a2", status = AnswerStatus.UNKNOWN, errorCode = AnswerErrorCode.MODEL_ERROR, errorText = "x", retryable = true),
                 answer("a1"),
             ),
             hasOlder = true,
@@ -194,7 +205,8 @@ class ChatViewModelBehaviourTest {
         assertEquals("Вопрос q1", assertIs<ChatItem.Question>(s.items[0]).text)
         val failed = vm.answerItem("a2")
         assertEquals(AnswerStatus.FAILED, failed.status)
-        assertEquals(AnswerErrorCode.MODEL_ERROR, failed.errorCode)
+        assertNull(failed.errorText)
+        assertFalse(failed.retryable)
         assertEquals(limit, s.limit)
         assertEquals(Events.ASSISTANT_OPENED, tracker.names().first())
     }
@@ -410,19 +422,85 @@ class ChatViewModelBehaviourTest {
         sendQuestion(vm)
         val a = vm.answerItem("a1")
         assertEquals(AnswerStatus.FAILED, a.status)
-        assertEquals(AnswerErrorCode.CANNOT_ANSWER, a.errorCode)
+        // A server older than FIN-159: no text — the generic one; no retryable — no retry for CANNOT_ANSWER.
+        assertNull(a.errorText)
+        assertFalse(a.retryable)
         assertTrue(a.blocks.isEmpty())
         assertTrue(a.chips.isEmpty())
         assertEquals(3, vm.state.value.limit!!.remaining)
         assertEquals(mapOf("code" to "CANNOT_ANSWER"), tracker.events.single { it.first == Events.ASSISTANT_ANSWER_FAILED }.second)
     }
 
-    @Test fun `an unknown error code in the stream offers a retry like MODEL_ERROR`() {
+    /** The answer item after the stream ends with [error]. */
+    private fun failedBy(error: AnswerErrorEvent): ChatItem.Answer {
         api.askOutcomes += askResponse("a1")
-        api.script("a1", events(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.UNKNOWN, "?", remainingLimit = 3))))
+        api.script("a1", events(AnswerEvent.Error(error)))
         val vm = newVm()
         sendQuestion(vm)
-        assertEquals(AnswerErrorCode.MODEL_ERROR, vm.answerItem("a1").errorCode)
+        return vm.answerItem("a1").also { assertEquals(AnswerStatus.FAILED, it.status) }
+    }
+
+    @Test fun `an error shows the server text and offers a retry only when retryable (FIN-159)`() {
+        val offTopic = failedBy(AnswerErrorEvent(AnswerErrorCode.OFF_TOPIC, "off_topic", remainingLimit = 5, text = "Вопрос не по теме", retryable = false))
+        assertEquals("Вопрос не по теме" to false, offTopic.errorText to offTopic.retryable)
+        assertEquals("Вопрос не по теме", offTopic.failureText)
+        // The flag decides, not the code: a retryable CANNOT_ANSWER gets «Повторить», a non-retryable MODEL_ERROR does not.
+        val cannot = failedBy(AnswerErrorEvent(AnswerErrorCode.CANNOT_ANSWER, "m", remainingLimit = 5, text = "Т", retryable = true))
+        assertTrue(cannot.retryable)
+        val model = failedBy(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "m", remainingLimit = 5, text = "Т", retryable = false))
+        assertFalse(model.retryable)
+    }
+
+    @Test fun `an unknown error code follows its text and retryable, not MODEL_ERROR (FIN-159)`() {
+        val noRetry = failedBy(AnswerErrorEvent(AnswerErrorCode.UNKNOWN, "?", remainingLimit = 3, text = "Новая причина", retryable = false))
+        assertEquals("Новая причина", noRetry.errorText)
+        assertFalse(noRetry.retryable)
+        val retry = failedBy(AnswerErrorEvent(AnswerErrorCode.UNKNOWN, "?", remainingLimit = 3, text = "Новая причина", retryable = true))
+        assertTrue(retry.retryable)
+        // Without retryable (an older server) an unknown code is no longer retried like MODEL_ERROR.
+        assertFalse(failedBy(AnswerErrorEvent(AnswerErrorCode.UNKNOWN, "?", remainingLimit = 3)).retryable)
+    }
+
+    @Test fun `an error without text and retryable gets the generic text, a retry only for MODEL_ERROR (FIN-159)`() {
+        for (code in AnswerErrorCode.entries) {
+            val item = failedBy(AnswerErrorEvent(code, "m", remainingLimit = 5))
+            assertNull(item.errorText, "$code")
+            assertEquals("Не получилось ответить", item.failureText, "$code")
+            assertEquals(code == AnswerErrorCode.MODEL_ERROR, item.retryable, "$code")
+        }
+    }
+
+    @Test fun `a blank server text is no text, in the stream and in the history`() {
+        for (blank in listOf("", "   ")) {
+            val item = failedBy(AnswerErrorEvent(AnswerErrorCode.OFF_TOPIC, "m", remainingLimit = 5, text = blank, retryable = false))
+            assertNull(item.errorText)
+            assertEquals("Не получилось ответить", item.failureText)
+        }
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED, AnswerErrorCode.OFF_TOPIC, errorText = " ", retryable = false)), hasOlder = false)
+        val history = newVm().answerItem("a1")
+        assertNull(history.errorText)
+        assertEquals("Не получилось ответить", history.failureText)
+    }
+
+    @Test fun `a failed answer in the history follows error_text and retryable, falling back to the code (FIN-159)`() {
+        api.pages[null] = MessagesList(
+            listOf(
+                question("q1"), answer("a1", AnswerStatus.FAILED, AnswerErrorCode.OFF_TOPIC, errorText = "Вопрос не по теме", retryable = false),
+                question("q2"), answer("a2", AnswerStatus.FAILED, AnswerErrorCode.UNKNOWN, errorText = "Новая причина", retryable = true),
+                question("q3"), answer("a3", AnswerStatus.FAILED, AnswerErrorCode.MODEL_ERROR),
+                question("q4"), answer("a4", AnswerStatus.FAILED, AnswerErrorCode.CANNOT_ANSWER),
+                question("q5"), answer("a5", AnswerStatus.FAILED, AnswerErrorCode.UNKNOWN),
+                // Error fields of a message that is not failed are not shown.
+                question("q6"), answer("a6", AnswerStatus.COMPLETE, errorText = "x", retryable = true),
+            ),
+            hasOlder = false,
+        )
+        val vm = newVm()
+        val shown = listOf("a1", "a2", "a3", "a4", "a5", "a6").map { vm.answerItem(it).let { a -> a.errorText to a.retryable } }
+        assertEquals(
+            listOf("Вопрос не по теме" to false, "Новая причина" to true, null to true, null to false, null to false, null to false),
+            shown,
+        )
     }
 
     // ---- send failures ----
@@ -681,12 +759,11 @@ class ChatViewModelBehaviourTest {
         )
         val vm = newVm()
         sendQuestion(vm)
+        // Pauses random in [d/2; d], d = 1, 2, 4 s: the n-th re-open falls in [2^n − 1.5 s; 2^n − 1 s] for any jitter.
         assertEquals(1, api.streamOpens.size)
         advance(1_000)
         assertEquals(2, api.streamOpens.size)
-        advance(1_999)
-        assertEquals(2, api.streamOpens.size)
-        advance(1)
+        advance(2_000)
         assertEquals(3, api.streamOpens.size)
         advance(4_000)
         assertEquals(4, api.streamOpens.size)
@@ -696,7 +773,7 @@ class ChatViewModelBehaviourTest {
         assertEquals(4, api.streamOpens.size)
     }
 
-    @Test fun `an event resets the backoff`() {
+    @Test fun `a drop after an event keeps what was shown and re-opens without an error`() {
         api.askOutcomes += askResponse("a1")
         api.script(
             "a1",
@@ -710,10 +787,79 @@ class ChatViewModelBehaviourTest {
         sendQuestion(vm)
         advance(1_000)
         assertEquals(2, api.streamOpens.size)
-        // Backoff was 2 s after the first drop, back to 1 s after the event.
-        advance(1_000)
+        advance(2_000)
         assertEquals(3, api.streamOpens.size)
         assertEquals(listOf(text("Начало")), vm.answerItem("a1").blocks)
+        assertFalse(vm.state.value.offline)
+        assertFalse(vm.state.value.sendFailed)
+    }
+
+    @Test fun `coming back to the chat during a 429 pause waits again, without a reload or an error, one stream at a time`() {
+        var active = 0
+        var maxActive = 0
+        fun tracked(f: Flow<AnswerEvent>) = f.onStart { active++; maxActive = maxOf(maxActive, active) }.onCompletion { active-- }
+        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        api.askOutcomes += askResponse("a1")
+        api.script(
+            "a1",
+            // Closed after the snapshot: a drop.
+            tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.GENERATING, listOf(text("Нач")), emptyList())))),
+            limited(),
+            // The screen came back: the view model opens the stream itself, the server still says 429.
+            limited(),
+            tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList())))),
+        )
+        val vm = newVm()
+        sendQuestion(vm)
+        advance(1_000)
+        assertEquals(2, api.streamOpens.size, "the drop was re-opened and got 429")
+        val lists = api.listCalls.size
+        vm.pauseStreams()
+        vm.resumeStreams()
+        assertEquals(3, api.streamOpens.size)
+        assertEquals(lists, api.listCalls.size, "a 429 on opening it again is not a reason to reload")
+        assertEquals(AnswerStatus.GENERATING, vm.answerItem("a1").status)
+        assertFalse(vm.state.value.sendFailed)
+        assertFalse(vm.state.value.offline)
+        advance(59_000)
+        assertEquals(3, api.streamOpens.size, "not before Retry-After")
+        advance(2_000)
+        assertEquals(4, api.streamOpens.size)
+        assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
+        assertEquals(1, maxActive, "never two streams at once")
+    }
+
+    @Test fun `a 503 before the snapshot, a 429, a return to the chat and a 429 again still end with the answer`() {
+        var active = 0
+        var maxActive = 0
+        fun tracked(f: Flow<AnswerEvent>) = f.onStart { active++; maxActive = maxOf(maxActive, active) }.onCompletion { active-- }
+        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        api.askOutcomes += askResponse("a1")
+        api.script(
+            "a1",
+            // No event at all: the stream drops before its snapshot.
+            tracked(flow { throw AppError.Server(503) }),
+            limited(),
+            limited(),
+            tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList())))),
+        )
+        val vm = newVm()
+        sendQuestion(vm)
+        advance(1_000)
+        assertEquals(2, api.streamOpens.size, "the 503 was re-opened and got 429")
+        val lists = api.listCalls.size
+        vm.pauseStreams()
+        vm.resumeStreams()
+        assertEquals(3, api.streamOpens.size)
+        assertEquals(lists, api.listCalls.size, "the 429 after coming back is waited for, not a reason to reload")
+        assertFalse(vm.state.value.sendFailed)
+        advance(59_000)
+        assertEquals(3, api.streamOpens.size, "not before Retry-After")
+        advance(2_000)
+        assertEquals(4, api.streamOpens.size)
+        assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
+        assertEquals(listOf(text("Ответ")), vm.answerItem("a1").blocks)
+        assertEquals(1, maxActive, "never two streams at once")
     }
 
     @Test fun `a stream error other than the network stops watching and the history gives the answer its status`() {

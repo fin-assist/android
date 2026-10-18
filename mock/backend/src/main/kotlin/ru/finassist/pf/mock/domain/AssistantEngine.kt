@@ -26,7 +26,8 @@ import java.time.YearMonth
 
 /**
  * Canned "LLM": understands «сколько я трачу на X» for a merchant or a category, and general spending
- * questions; everything else is CANNOT_ANSWER. Numbers in charts and rows are computed from the ledger, as
+ * questions; a question on an unrelated subject (weather, recipes, …) is OFF_TOPIC, as when the model calls the
+ * `off_topic` tool (FIN-159); everything else is CANNOT_ANSWER. Numbers in charts and rows are computed from the ledger, as
  * the real service does from function results.
  */
 class AssistantEngine(
@@ -40,17 +41,35 @@ class AssistantEngine(
         val blocks: List<Block>,
         val chips: List<Chip>,
         val dataRange: DateRange?,
-        /** false when the data could not fully answer (api.md 7: the attempt is refunded). */
+        /** false when a function the answer needed returned a lock or no data for the period ([isCharged]). */
         val charged: Boolean,
     )
+
+    /**
+     * What a function the answer needed returned, as far as the attempt is concerned: the coverage of the requested
+     * period (`complete` / `partial` / `no_data`, the tool result's `bounds.coverage`) and whether the metric is
+     * locked (`status == LOCKED` in `GetAnalytics`), as the real `assistant` service checks it (grpc-api.md).
+     */
+    data class FunctionResult(val coverage: String, val locked: Boolean = false)
 
     sealed interface Outcome {
         data class Answered(val answer: Answer) : Outcome
         data object CannotAnswer : Outcome
+        data object OffTopic : Outcome
     }
 
     fun answer(question: String, mode: TransferMode, today: LocalDate): Outcome {
         val q = question.lowercase().replace('ё', 'е')
+        val merchant = ledger.all.map { it.name }.distinct()
+            .filter { it.length >= 3 }
+            .filter { q.contains(it.lowercase().replace('ё', 'е')) }
+            .maxByOrNull { it.length }
+        val category = catalog.categories.filter { !it.isSystem }
+            .filter { q.contains(it.name.lowercase().replace('ё', 'е').replace(' ', ' ')) }
+            .maxByOrNull { it.name.length }
+        // A question about a merchant or a category of the user is about finances whatever else it mentions («аптеки по
+        // рецепту»); the spending words do not count — «анекдот про траты» is still off-topic.
+        if (merchant == null && category == null && isOffTopic(q)) return Outcome.OffTopic
         if (NONSENSE.any { q.contains(it) }) return Outcome.CannotAnswer
         val visible = scope.visible(mode)
         val cov = coverage()
@@ -60,14 +79,6 @@ class AssistantEngine(
         val from = months.first().atDay(1)
         val toExcl = months.last().plusMonths(1).atDay(1)
         val range = DateRange(from.atStartOfDay(scope.zone).toOffsetDateTime(), toExcl.atStartOfDay(scope.zone).toOffsetDateTime())
-
-        val merchant = ledger.all.map { it.name }.distinct()
-            .filter { it.length >= 3 }
-            .filter { q.contains(it.lowercase().replace('ё', 'е')) }
-            .maxByOrNull { it.length }
-        val category = catalog.categories.filter { !it.isSystem }
-            .filter { q.contains(it.name.lowercase().replace('ё', 'е').replace(' ', ' ')) }
-            .maxByOrNull { it.name.length }
 
         val subjectOps: List<Operation>
         val title: String
@@ -79,7 +90,7 @@ class AssistantEngine(
                 filter = OperationsFilter(from = range.from, to = range.to, transferMode = mode, selection = "s_merchant_" + Catalog.slugOf(merchant).take(40), selectionName = merchant)
             }
             category != null -> {
-                subjectOps = scope.inDays(visible, from, toExcl).filter { scope.expenses(listOf(it)).any { e -> e.category?.id == category.id } }
+                subjectOps = scope.inDays(visible, from, toExcl).filter { scope.expenses(listOf(it)).any { e -> e.category.id == category.id } }
                 title = category.name
                 filter = OperationsFilter(from = range.from, to = range.to, transferMode = mode, kind = OperationKindFilter.EXPENSE, categoryId = category.id)
             }
@@ -98,10 +109,12 @@ class AssistantEngine(
         val total = perMonth.sumOf { it.second }
         val count = subjectOps.count { it.isDebit }
         val periodLabel = RussianDates.monthRange(months.first(), months.last())
+        // The canned model needs one function: the operations of the subject over the requested period.
+        val charged = isCharged(listOf(FunctionResult(cov.coverageOf(from, toExcl))))
         if (count == 0) {
             val text = "За $periodLabel операций «$title» не нашли. Возможно, они проходят под другим названием — " +
                 "посмотрите «Операции» или уточните вопрос."
-            return Outcome.Answered(Answer(text, listOf(Block.text(text)), emptyList(), range, charged = false))
+            return Outcome.Answered(Answer(text, listOf(Block.text(text)), emptyList(), range, charged))
         }
         val firstMonthWithOps = perMonth.first { it.second != 0L }.first
         val peak = perMonth.maxBy { it.second }
@@ -147,11 +160,27 @@ class AssistantEngine(
             Chip(label = "$title · ${countWithNoun(count, "операция", "операции", "операций")}", screen = ChipScreen.OPERATIONS, filters = filter),
             Chip(label = "Аналитика за ${RussianDates.monthNominative(lastMonth.month)}", screen = ChipScreen.ANALYTICS, params = AnalyticsParams(PeriodTypeCode.MONTH, PeriodKey.ofMonth(lastMonth), mode)),
         )
-        return Outcome.Answered(Answer(text, listOf(Block.text(text), chart, rows), chips, range, charged = true))
+        return Outcome.Answered(Answer(text, listOf(Block.text(text), chart, rows), chips, range, charged))
     }
 
-    private companion object {
-        val NONSENSE = listOf("марс", "следующем году", "курс доллара", "погода")
-        val SPENDING_WORDS = listOf("трат", "расход", "потрат", "ушло", "сколько")
+    /**
+     * «По рецепту», «по рецептам», «рецептурные» are about how medicines are bought, not a request for a recipe: those
+     * word forms are dropped before the keywords are looked up.
+     */
+    private fun isOffTopic(q: String): Boolean = q.replace(PRESCRIPTION, "").let { rest -> OFF_TOPIC.any { rest.contains(it) } }
+
+    companion object {
+        /**
+         * api.md 7 «Лимит», calc.md 8: the attempt is refunded only when at least one needed function returned a lock
+         * or `no_data` coverage of the requested period. An empty result over a covered period («не нашли») is an
+         * answer and is charged: otherwise a question phrased to find nothing would be free (FIN-136).
+         */
+        fun isCharged(results: List<FunctionResult>): Boolean = results.none { it.locked || it.coverage == "no_data" }
+
+        private val PRESCRIPTION = Regex("по рецепт\\S*|рецептурн\\S*")
+        private val NONSENSE = listOf("марс", "следующем году", "курс доллара")
+        /** Subjects outside personal finance; ASCII ones too, for UI tests (docs/e2e.md: type ASCII). */
+        private val OFF_TOPIC = listOf("погод", "рецепт", "анекдот", "стихотворен", "weather", "recipe", "joke", "poem")
+        private val SPENDING_WORDS =listOf("трат", "расход", "потрат", "ушло", "сколько")
     }
 }

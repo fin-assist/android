@@ -9,4 +9,7 @@ dependencies {
     implementation(projects.core.toggles)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.rustore.remoteconfig)
+
+    // RuStoreFeatureFlags takes a Context; without an app id the SDK is never built, so Robolectric's is enough.
+    testImplementation(libs.robolectric)
 }

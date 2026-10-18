@@ -9,6 +9,8 @@ data class MockConfig(
     val existingPhone: String = "+79161234567",
     /** How long after "Позвонить" the verification completes. */
     val callVerifyDelayMs: Long = 5_000,
+    /** Lifetime of a phone verification request (`expires_at` − creation; 5 minutes, as the provider's, api.md 1.1). */
+    val verificationTtlMs: Long = 300_000,
     /** Simulated latency of every request. */
     val networkDelayMs: Long = 250,
     /** Pause between import stages (parsing → dedup → rules). */
@@ -32,9 +34,30 @@ data class MockConfig(
     val unknownCodes: Boolean = false,
     /** Ids of Analytics blocks that fail to build: they come as `unavailable` (FIN-5), the rest of the screen stays. */
     val failingBlocks: Set<String> = emptySet(),
-    /** Minimum supported client version, `MAJOR.MINOR.PATCH`; below it every request gets `CLIENT_VERSION_UNSUPPORTED` (FIN-20). */
+    /** A parse not finished this long after its start ends with `PROCESSING_FAILED` (api.md 3.3: 3 minutes). */
+    val importTimeoutMs: Long = 180_000,
+    /** Generation of an answer not finished this long after its start ends with `MODEL_ERROR` (api.md 7.2: 3 minutes). */
+    val answerTimeoutMs: Long = 180_000,
+    /**
+     * How many of the next stream openings (1.2, 3.3, 7.2 alike) close right after their first event without a
+     * terminal one — what the server does on its own failure (api.md «SSE»); the client re-opens them. An opening whose
+     * first event is already terminal is not dropped and does not count.
+     */
+    val streamDrops: Int = 0,
+    /**
+     * How many stream openings that follow a dropped one ([streamDrops]) answer 429 `RATE_LIMITED` before the stream
+     * starts, with `retry_at` [streamRetrySeconds] ahead — a re-open the server turns away (api.md «SSE»). An opening
+     * that does not follow a drop is never turned away and does not count.
+     */
+    val streamRateLimits: Int = 0,
+    /** `Retry-After` of a turned-away re-open ([streamRateLimits]); a long one keeps the client waiting for a UI test. */
+    val streamRetrySeconds: Long = STREAM_RETRY_SECONDS,
+    /** Minimum supported client version, `MAJOR.MINOR.PATCH`; below it every request and stream opening gets `CLIENT_VERSION_UNSUPPORTED` (FIN-20). */
     val minVersion: String? = null,
-    /** Maintenance: every request gets 503 `MAINTENANCE` (FIN-20). [maintenanceUntil] — its expected end, null — unknown. */
+    /**
+     * Maintenance: every request and every stream opening gets 503 `MAINTENANCE`, a stream already open is cut at its next
+     * event (FIN-20, api.md «SSE»). [maintenanceUntil] — its expected end, null — unknown.
+     */
     val maintenance: Boolean = false,
     val maintenanceUntil: java.time.OffsetDateTime? = null,
     /** `Retry-After` of the maintenance answer, seconds. */
@@ -44,5 +67,7 @@ data class MockConfig(
         /** Git-ignored: `app/src/mock/assets/private/statement.ofx`. */
         const val PRIVATE_STATEMENT = "private/statement.ofx"
         const val FIXTURE_STATEMENT = "statements/fixture.ofx"
+        /** Default of [streamRetrySeconds]. */
+        const val STREAM_RETRY_SECONDS = 3L
     }
 }

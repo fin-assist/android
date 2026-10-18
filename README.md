@@ -9,7 +9,7 @@
 
 Kotlin 2.1, Jetpack Compose, Hilt (KSP), Navigation Compose (typed routes), OkHttp + Retrofit +
 kotlinx.serialization, OkHttp SSE, DataStore, Tink (refresh-токен под Android Keystore).
-Флаги — RuStore Remote Config, события — MyTracker (flavor `prod`); крэши и ANR — Tracer (оба flavor, при заданном токене).
+Флаги — RuStore Remote Config, события — MyTracker (flavor `prod`); крэши и ANR — Tracer (`mock` и `prod`, при заданном токене).
 
 ## Структура
 
@@ -24,6 +24,7 @@ kotlinx.serialization, OkHttp SSE, DataStore, Tink (refresh-токен под An
 
 ```
 ./gradlew assembleMockDebug     # сборка без сервера и без ключей SDK
+./gradlew assembleLocalDebug    # HTTP-клиент к bank-bff на машине разработчика (ниже, «Flavor local»)
 ./gradlew assembleProdDebug     # настоящий HTTP-клиент (stage 8: ключи SDK в sdk-keys.properties)
 ./gradlew test lintMockDebug    # то же, что в CI
 ```
@@ -47,6 +48,38 @@ mock/backend/src/main/assets/statements/fixture.ofx   # обезличенная
 
 Вход в `mock`: единственный «существующий» номер — из `mock/backend` (`MockConfig.existingPhone`);
 любой другой номер — новый пользователь (регистрация, если флаг `auth.registration` включён).
+
+Flavor-ы — одно измерение `env` (FIN-120): `mock`, `local`, `prod`; измерения не перемножаются. Стенд появится
+отдельным flavor-ом `stage` по образцу `prod`.
+
+### Flavor `local`
+
+Настоящий HTTP-клиент против `bank-bff`, запущенного у разработчика. Ставится рядом с `prod` (`ru.finassist.pf.local`,
+«Понятные финансы local»). Адрес — свойство Gradle `pf.apiBaseUrl` в `~/.gradle/gradle.properties` (или переменная
+`PF_API_BASE_URL`); по умолчанию `http://10.0.2.2:8080/` — машина разработчика из эмулятора. С телефона —
+адрес машины в локальной сети, например `pf.apiBaseUrl=http://192.168.1.20:8080/`. Неверный адрес (без схемы, с
+логином, query) ломает конфигурацию с понятной причиной.
+
+HTTP без TLS разрешён только в `localDebug` и только к хосту из `pf.apiBaseUrl` (сгенерированный
+`network_security_config`); в `prod` и в любой release-сборке — запрещён. Флаги — локальные (код по умолчанию, свой
+`app/src/local/assets/flags.json` по желанию, в git не попадает; docs/flags.md), события — в logcat, Tracer, RuStore
+Remote Config и MyTracker выключены: локальные прогоны не попадают в продовые консоли.
+
+### Закрепление сертификата в `prod`
+
+Решение и процесс ротации — Confluence PF, «Архитектура» → «Вход трафика» → «Закрепление сертификата API (pinning)»
+(FIN-121). Пока сертификата нет, пины не заданы и pinning выключен. Когда появится: в среде, где собирается релиз
+(`~/.gradle/gradle.properties` или секреты CI), задать
+
+```
+pf.apiPins=sha256/<текущий ключ>,sha256/<резервный ключ>     # или PF_API_PINS
+pf.apiPinsExpiration=2027-06-01                            # или PF_API_PINS_EXPIRATION
+```
+
+Пин — base64 SHA-256 от SPKI ключа: `openssl pkey -in key.pem -pubout -outform der | openssl dgst -sha256 -binary |
+base64`. Нужно не меньше двух разных пинов и срок позже даты сборки, но не дальше года; иначе конфигурация падает с
+причиной. Сборка `prod` получает `network_security_config` с `pin-set` для хоста `API_BASE_URL`; `local` и `mock` не
+меняются. Реальные пины в репозиторий не кладутся.
 
 ### JDK для Gradle
 
@@ -76,15 +109,15 @@ Gradle 8.11 не запускается на JDK 25, а Android Studio 2026.x п
 
 Пока ключ MyTracker пуст, события пишутся никуда.
 
-### Крэши и ANR: Tracer (оба flavor)
+### Крэши и ANR: Tracer (`mock` и `prod`)
 
 Tracer (VK, консоль RuStore) собирает крэши, ANR и non-fatal ошибки. Токены — из консоли Tracer, в репозиторий не
 коммитятся:
 
 | Свойство | Переменная окружения | Что это |
 |---|---|---|
-| `pf.tracerAppToken` | `PF_TRACER_APP_TOKEN` | Токен приложения. Без него SDK не стартует ни в одном варианте: провайдер запуска выключен в манифесте, `TracerCrashReporter` ничего не делает. CI проверяет это по собранному манифесту (`scripts/check-tracer-off.py`) |
-| `pf.tracerPluginToken` | `PF_TRACER_PLUGIN_TOKEN` | Токен Gradle-плагина: загрузка маппингов R8 у минифицированных сборок. Без него маппинги не грузятся |
+| `pf.tracerAppToken` | `PF_TRACER_APP_TOKEN` | Токен приложения. Без него SDK не стартует ни в одном варианте (в `local` — и с ним): провайдер запуска выключен в манифесте, `TracerCrashReporter` ничего не делает. CI проверяет это по собранному манифесту (`scripts/check-tracer-off.py`) |
+| `pf.tracerPluginToken` | `PF_TRACER_PLUGIN_TOKEN` | Токен Gradle-плагина: загрузка маппингов R8 у минифицированных сборок. Без него маппинги не грузятся; у `local` не грузятся и с ним (`tracer { create("local") }`) |
 
 Текст исключений в Tracer не уходит — ни у non-fatal, ни у фатальных крашей (`ScrubbedThrowable`): только тип, стек и код ошибки; в debug-сборке исходный текст фатального краша остаётся в logcat (`PfCrash`). С токеном отчёты отправляются и из debug-сборок (`setDebugUpload`): токен задают только для сборки, чьи крэши
 нужны, — сейчас это `mock` альфы. В `mock` отчёты дублируются в logcat (`PfTracking`). Как проверить: собрать с

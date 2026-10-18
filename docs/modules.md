@@ -7,22 +7,22 @@ implementations (Hilt). The rule is enforced at configuration time by `pf.module
 (`build-logic/convention/src/main/kotlin/ModuleRulesPlugin.kt`); a violation fails the build.
 
 ```
-app                       composition root: Hilt graph, NavHost, tabs, app-lock gate, update / maintenance overlay, SDK init, flavors mock/prod
+app                       composition root: Hilt graph, NavHost, tabs, app-lock gate, update / maintenance overlay, SDK init, flavors mock/local/prod (dimension `env`)
 core/common               Money, dates/periods, AppError, Result helpers, ClientVersion and ServiceGate (FIN-22) (JVM)
 core/api                  client API contract: DTOs + service interfaces from openapi.yaml (JVM)
-core/network              HTTP implementation of core/api: OkHttp, Retrofit, SSE, auth, idempotency (prod)
+core/network              HTTP implementation of core/api: OkHttp, Retrofit, SSE, auth, idempotency (local, prod)
 core/designsystem         tokens, theme, components, chart animation (Compose)
 core/blocks               renderers of the block catalog (api.md «Блоки»): registry, `supports`, Analytics and assistant (Compose, FIN-7)
 core/navigation           FeatureEntry, Navigator, shared route arguments
 core/toggles              FeatureFlags interface + flag registry with code defaults (JVM)
 core/tracking             Tracker / CrashReporter interfaces, event naming, typed crash context (JVM)
-core/storage              DataStore preferences + Tink-encrypted TokenStore (both flavors)
+core/storage              DataStore preferences + Tink-encrypted TokenStore (all flavors)
 core/screenshot-testing   design-check snapshot harness (Robolectric + Roborazzi); test-only dependency via `pf.screenshots`
-providers/toggles-local   flags from a JSON asset + debug overrides (mock flavor)
-providers/tracking-log    logcat tracker (mock flavor)
+providers/toggles-local   flags from a JSON asset + debug overrides (mock, local)
+providers/tracking-log    logcat tracker (mock, local)
 providers/toggles-rustore RuStore Remote Config (prod, stage 8)
 providers/tracking-mytracker MyTracker events (prod, stage 8)
-providers/crash-tracer    Tracer crashes, ANR, non-fatals (both flavors; off without `pf.tracerAppToken`)
+providers/crash-tracer    Tracer crashes, ANR, non-fatals (mock, prod; off without `pf.tracerAppToken` and always in local)
 mock/backend              in-process fake backend on an OFX statement, implements core/api (mock flavor)
 feature/<name>/api        public surface of the feature (JVM)
 feature/<name>/impl       data / domain / ui + Hilt bindings (Android, Compose)
@@ -40,6 +40,26 @@ Features: `auth`, `applock`, `availability`, `operations`, `statements`, `analyt
 | `:core:*` | `:core:*` |
 | `:providers:*`, `:mock:*` | `:core:*` |
 | `:app` | anything |
+
+## Multiplatform-ready modules (FIN-144)
+
+`:core:api` and `:mock:backend` move to Kotlin Multiplatform when iOS starts (the Swift app reuses the contract and
+the fake backend). New code and dependencies there use only what Kotlin Multiplatform has (kotlinx.serialization,
+kotlinx-coroutines, kotlinx-datetime, the common stdlib); no new `java.*`, `javax.*`, `android.*`, `androidx.*`,
+Dagger / Hilt or JVM-only libraries. An exception is justified in the PR. `scripts/check-kmp-ready.py` (CI) fails on
+anything beyond `scripts/kmp-baseline.json`. Rule, check and inventory of what is JVM-only today:
+`docs/kmp-readiness.md`.
+
+## Flavors of `:app` (dimension `env`, FIN-120)
+
+| Flavor | Modules it adds | Source sets |
+|---|---|---|
+| `mock` | `:mock:backend`, `:providers:toggles-local`, `:providers:tracking-log` | `src/mock` (flags asset), `src/mockE2e` (UI-test hooks), `src/androidTestMock` |
+| `local` | `:core:network`, `:providers:toggles-local`, `:providers:tracking-log` | `src/local` (`LocalModule`: base URL, name), `src/localDebug` (network security config) |
+| `prod` | `:core:network`, `:providers:toggles-rustore`, `:providers:tracking-mytracker` | `src/prod` (`ProdModule`: base URL, SDK keys); with `pf.apiPins` — a generated network security config with a `pin-set` and its manifest overlay (`ApiPins` in build-logic, FIN-121) |
+
+`:mock:*` never reaches `local` or `prod` (`:app:checkNoMockCode` in CI checks every variant outside `mock`, so a new flavor is covered by itself). A future `stage` flavor follows `prod`.
+Variants that are off: `localE2e`, `prodE2e` (`androidComponents.beforeVariants` in `app/build.gradle.kts`).
 
 ## Inside `:impl`
 

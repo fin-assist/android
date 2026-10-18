@@ -22,6 +22,10 @@ object RussianDates {
         "январе", "феврале", "марте", "апреле", "мае", "июне",
         "июле", "августе", "сентябре", "октябре", "ноябре", "декабре",
     )
+    private val DATIVE = listOf(
+        "январю", "февралю", "марту", "апрелю", "маю", "июню",
+        "июлю", "августу", "сентябрю", "октябрю", "ноябрю", "декабрю",
+    )
     private val SHORT = listOf("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
     const val EN_DASH = "–"
@@ -33,6 +37,8 @@ object RussianDates {
     fun monthShort(month: Month) = SHORT[month.value - 1]
     /** «в июле» form. */
     fun monthPrepositional(month: Month) = PREPOSITIONAL[month.value - 1]
+    /** «по августу» form. */
+    fun monthDative(month: Month) = DATIVE[month.value - 1]
 
     /** «25 сентября» or «25 сентября 2025» when the year differs from [currentYear]. */
     fun day(date: LocalDate, currentYear: Int? = null): String {

@@ -1,0 +1,65 @@
+{
+  "core/api": {
+    "jvm_apis": [
+      "java.io.InputStream",
+      "java.time.Instant",
+      "java.time.OffsetDateTime",
+      "java.util.UUID"
+    ],
+    "build": [
+      "plugins {",
+      "id(\"pf.jvm.library\")",
+      "alias(libs.plugins.kotlin.serialization)",
+      "}",
+      "dependencies {",
+      "api(projects.core.common)",
+      "api(libs.kotlinx.serialization.json)",
+      "}"
+    ]
+  },
+  "mock/backend": {
+    "jvm_apis": [
+      "android.content.Context",
+      "android.util.Log",
+      "dagger.BindsOptionalOf",
+      "dagger.Module",
+      "dagger.Provides",
+      "dagger.hilt.InstallIn",
+      "dagger.hilt.android.qualifiers.ApplicationContext",
+      "dagger.hilt.components.SingletonComponent",
+      "java.lang.Math",
+      "java.math.BigDecimal",
+      "java.math.RoundingMode",
+      "java.security.SecureRandom",
+      "java.time.DateTimeException",
+      "java.time.Duration",
+      "java.time.LocalDate",
+      "java.time.LocalDateTime",
+      "java.time.OffsetDateTime",
+      "java.time.YearMonth",
+      "java.time.ZoneId",
+      "java.time.ZoneOffset",
+      "java.time.format.DateTimeFormatter",
+      "java.time.temporal.ChronoUnit",
+      "java.util.Base64",
+      "java.util.Optional",
+      "java.util.UUID",
+      "java.util.concurrent.ConcurrentHashMap",
+      "javax.inject.Singleton"
+    ],
+    "build": [
+      "plugins {",
+      "id(\"pf.android.library\")",
+      "alias(libs.plugins.kotlin.serialization)",
+      "id(\"pf.hilt\")",
+      "}",
+      "dependencies {",
+      "implementation(projects.core.common)",
+      "implementation(projects.core.api)",
+      "implementation(libs.kotlinx.serialization.json)",
+      "implementation(libs.kotlinx.coroutines.android)",
+      "testImplementation(libs.openapi.validator)",
+      "}"
+    ]
+  }
+}

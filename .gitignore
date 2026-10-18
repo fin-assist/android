@@ -25,7 +25,14 @@ app/src/mock/assets/private/
 !mock/backend/src/main/assets/statements/fixture.ofx
 # Synthetic statements for UI tests (docs/e2e.md): a few made-up operations, no personal data.
 !app/src/mockE2e/assets/e2e/statements/*.ofx
+# Anonymized statements of the calculation fixtures of fin-assist/contracts (FIN-108).
+!mock/backend/src/test/resources/calc/statements/*.ofx
 
 # SDK keys for the prod flavor
 sdk-keys.properties
 __pycache__/
+
+# Flag values of the local flavor (docs/flags.md): each developer's own, never committed.
+app/src/local/assets/flags.json
+# Read-only checkout of fin-assist/contracts in the @claude review workflow (FIN-174).
+.contracts/

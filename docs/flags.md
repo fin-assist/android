@@ -1,8 +1,21 @@
 # Feature flags registry
 
 Source of truth for flag names. Code defaults live in `core/toggles` (`Flag` enum, `defaultValue`); the provider
-(RuStore Remote Config in `prod`, JSON asset in `mock`) may override them. Unknown or unreachable provider →
+(RuStore Remote Config in `prod`, JSON asset in `mock` and `local`) may override them. Unknown or unreachable provider →
 code default. Values are read at the screen boundary (when a screen is entered), not mid-screen.
+
+Flags by flavor (FIN-120):
+
+- `mock` — `:providers:toggles-local`: `app/src/mock/assets/flags.json` over code defaults (e2e:
+  `app/src/mockE2e/assets/flags.json` and the control link).
+- `local` — `:providers:toggles-local`: code defaults; a developer may put their own `app/src/local/assets/flags.json`
+  (gitignored, same format as in `mock`). No debug screen yet: the e2e control link is mock-only.
+- `prod` — `:providers:toggles-rustore`: RuStore Remote Config over code defaults.
+
+Why `local` has local flags and not RuStore: whoever runs a local bank-bff should not depend on the RuStore console
+or its keys, nor read flags meant for real users; and a `local` build stays out of production configs and cohorts
+(it has no RuStore app id). The cost: Remote Config itself is not exercised in `local` — that is for `prod` (and the
+future `stage`).
 
 Naming: `<feature>.<object>[.<detail>]`, lowercase, dot-separated. Same prefix is used for analytics events
 (`<feature>.<object>.<action>`), see `core/tracking`.

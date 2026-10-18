@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Test
+import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.common.error.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -41,6 +42,15 @@ class IdempotencyTest {
         withTimeout(5_000) { cancelled.join() }
 
         assertEquals("again", backend.idempotent("k") { "again" })
+    }
+
+    @Test fun `a repeat with another request is IDEMPOTENCY_CONFLICT, with the same one the cached answer`() = runBlocking {
+        assertEquals("first", backend.idempotent("k", request = "a") { "first" })
+        assertEquals("first", backend.idempotent("k", request = "a") { "second" })
+        val e = assertFailsWith<AppError.Api> { backend.idempotent("k", request = "b") { "third" } }
+        assertEquals(ErrorCodes.IDEMPOTENCY_CONFLICT to 409, e.code to e.httpStatus)
+        // An endpoint that does not pass its request is not compared.
+        assertEquals("first", backend.idempotent("k") { "fourth" })
     }
 
     @Test fun `a failed request does not keep its key`() = runBlocking {

@@ -38,7 +38,7 @@ class SerializationTest {
            "status":"posted","brand_new_field":{"x":1}}],
          "summary":[{"month":"2026-09","range":{"from":"2026-09-01T00:00:00+03:00","to":"2026-10-01T00:00:00+03:00"},
                      "expense":8432000,"income":15690000,"data_to":"2026-09-25T21:40:00+03:00"}],
-         "state":{"stale":false,"last_operation_at":"2026-09-25T21:40:00+03:00"},
+         "state":{"stale":false,"last_operation_at":"2026-09-25T21:40:00+03:00","data_to":"2026-09-26T00:00:00+03:00"},
          "range":{"from":"2026-08-01T00:00:00+03:00","to":"2026-11-01T00:00:00+03:00"},
          "next_before":"2026-08-01T00:00:00+03:00"}
         """.trimIndent()
@@ -52,6 +52,10 @@ class SerializationTest {
         assertEquals(Money(8_432_000), list.summary?.single()?.expense)
         assertEquals(8, list.nextBefore?.monthValue)
         assertNull(list.totalCount)
+        assertEquals(26, list.state?.dataTo?.dayOfMonth)
+        // A server without `state.data_to` (before FIN-124) still parses.
+        val old = ApiJson.decodeFromString(OperationsList.serializer(), json.replace(""","data_to":"2026-09-26T00:00:00+03:00"}""", "}"))
+        assertNull(old.state?.dataTo)
     }
 
     @Test
@@ -213,6 +217,67 @@ class SerializationTest {
             """{"id":"m","role":"assistant","created_at":"2026-10-01T10:00:00+03:00"}""",
         )
         assertEquals("RUB", old.currency)
+    }
+
+    @Test
+    fun `an answer error carries the server text and retryable, an unknown code stays unknown (FIN-159)`() {
+        val offTopic = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.AnswerErrorEvent.serializer(),
+            """{"code":"OFF_TOPIC","text":"Вопрос не по теме","retryable":false,"message":"off_topic tool called","remaining_limit":5}""",
+        )
+        assertEquals(ru.finassist.pf.core.api.model.AnswerErrorCode.OFF_TOPIC, offTopic.code)
+        assertEquals("Вопрос не по теме", offTopic.text)
+        assertEquals(false, offTopic.retryable)
+        assertEquals(5, offTopic.remainingLimit)
+
+        val newer = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.AnswerErrorEvent.serializer(),
+            """{"code":"BRAND_NEW","text":"Новая причина","retryable":true,"message":"m","remaining_limit":4,"brand_new_field":1}""",
+        )
+        assertEquals(ru.finassist.pf.core.api.model.AnswerErrorCode.UNKNOWN, newer.code)
+        assertEquals("Новая причина", newer.text)
+        assertEquals(true, newer.retryable)
+
+        // A server older than FIN-159: no text, no retryable.
+        val old = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.AnswerErrorEvent.serializer(),
+            """{"code":"MODEL_ERROR","message":"m","remaining_limit":5}""",
+        )
+        assertNull(old.text)
+        assertNull(old.retryable)
+    }
+
+    @Test
+    fun `a failed message of the history carries error_text and retryable (FIN-159)`() {
+        val failed = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.Message.serializer(),
+            """{"id":"m","role":"assistant","status":"failed","error_code":"SOMETHING_NEW","error_text":"Текст сервера","retryable":false,
+               "blocks":[],"created_at":"2026-10-01T10:00:00+03:00"}""",
+        )
+        assertEquals(ru.finassist.pf.core.api.model.AnswerErrorCode.UNKNOWN, failed.errorCode)
+        assertEquals("Текст сервера", failed.errorText)
+        assertEquals(false, failed.retryable)
+        val old = ApiJson.decodeFromString(
+            ru.finassist.pf.core.api.model.Message.serializer(),
+            """{"id":"m","role":"assistant","status":"failed","error_code":"MODEL_ERROR","blocks":[],"created_at":"2026-10-01T10:00:00+03:00"}""",
+        )
+        assertNull(old.errorText)
+        assertNull(old.retryable)
+    }
+
+    @Test
+    fun `retry is offered by retryable, and by MODEL_ERROR only when retryable is absent (FIN-159)`() {
+        val codes = ru.finassist.pf.core.api.model.AnswerErrorCode.entries
+        for (code in codes) {
+            assertTrue(ru.finassist.pf.core.api.model.answerRetryable(code, true), "$code, retryable")
+            assertFalse(ru.finassist.pf.core.api.model.answerRetryable(code, false), "$code, not retryable")
+        }
+        // Fallback: only MODEL_ERROR; an unknown code is no longer treated like MODEL_ERROR.
+        assertEquals(
+            listOf(ru.finassist.pf.core.api.model.AnswerErrorCode.MODEL_ERROR),
+            codes.filter { ru.finassist.pf.core.api.model.answerRetryable(it, null) },
+        )
+        assertFalse(ru.finassist.pf.core.api.model.answerRetryable(null, null))
     }
 
     @Test

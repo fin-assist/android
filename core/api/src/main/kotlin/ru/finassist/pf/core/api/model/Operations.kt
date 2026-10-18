@@ -92,6 +92,8 @@ data class FeedState(
     val stale: Boolean,
     val lastOperationAt: ApiDateTime? = null,
     val lastUploadedAt: ApiDateTime? = null,
+    /** Start of the day after the last day covered by the statement periods; `null` without data (api.md 4.1, FIN-124). */
+    val dataTo: ApiDateTime? = null,
 )
 
 /**
@@ -150,4 +152,6 @@ data class CategoriesList(val categories: List<Category>)
 object SystemCategories {
     const val OWN_TRANSFER = "cat_own_transfer"
     const val REFUND = "cat_refund"
+    /** «Без категории»: the bank gave no category, or a refund has no expense category to reduce (api.md 5.1). */
+    const val UNCATEGORIZED = "cat_uncategorized"
 }

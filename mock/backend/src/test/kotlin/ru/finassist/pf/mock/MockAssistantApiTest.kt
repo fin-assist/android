@@ -108,17 +108,21 @@ class MockAssistantApiTest {
 
     @Test
     fun `a question the data cannot answer fails with CANNOT_ANSWER and is refunded`() = runBlocking<Unit> {
-        val response = ask("Какая погода на Марсе?")
+        val response = ask("Сколько я потрачу в следующем году?")
         // The response counts the question; the refund comes with the terminal event.
         assertEquals(4, response.remainingLimit)
         val error = assertIs<AnswerEvent.Error>(finish(response.answerId).last()).event
         assertEquals(AnswerErrorCode.CANNOT_ANSWER, error.code)
+        assertEquals(MockAssistantApi.ERROR_TEXTS.getValue(AnswerErrorCode.CANNOT_ANSWER), error.text)
+        assertEquals(false, error.retryable)
         assertEquals(5, error.remainingLimit)
         assertEquals(5, api.getLimit().remaining)
 
         val answer = api.listMessages().messages.last()
         assertEquals(AnswerStatus.FAILED, answer.status)
         assertEquals(AnswerErrorCode.CANNOT_ANSWER, answer.errorCode)
+        assertEquals(error.text, answer.errorText)
+        assertEquals(false, answer.retryable)
         assertEquals(emptyList(), answer.blocks)
         assertNull(answer.charged)
         assertNull(answer.chips)
@@ -126,12 +130,41 @@ class MockAssistantApiTest {
     }
 
     @Test
-    fun `a question about something with no operations is answered but not charged`() = runBlocking<Unit> {
+    fun `an off-topic question fails with OFF_TOPIC, its text, no retry, and is refunded (FIN-159)`() = runBlocking<Unit> {
+        for ((i, text) in listOf("What is the weather today?", "Дай рецепт борща", "Расскажи анекдот про траты").withIndex()) {
+            val response = ask(text)
+            assertEquals(4, response.remainingLimit)
+            val error = assertIs<AnswerEvent.Error>(finish(response.answerId).last()).event
+            assertEquals(AnswerErrorCode.OFF_TOPIC, error.code, text)
+            assertEquals(
+                "Вопрос не по теме — помощник отвечает только на вопросы о ваших финансах. " +
+                    "С другими вопросами помогут универсальные ассистенты: Алиса AI, GigaChat, ChatGPT, Claude, DeepSeek",
+                error.text,
+            )
+            assertEquals(false, error.retryable)
+            assertEquals(5, error.remainingLimit)
+            assertEquals(5, api.getLimit().remaining)
+
+            val answer = api.listMessages().messages.last()
+            assertEquals(AnswerStatus.FAILED to AnswerErrorCode.OFF_TOPIC, answer.status to answer.errorCode)
+            assertEquals(error.text, answer.errorText)
+            assertEquals(false, answer.retryable)
+            assertEquals(emptyList(), answer.blocks)
+
+            val e = assertFailsWith<AppError.Api> { api.retry(key("r$i"), response.answerId) }
+            assertEquals(ErrorCodes.RETRY_NOT_ALLOWED to 422, e.code to e.httpStatus)
+        }
+    }
+
+    @Test
+    fun `a question about something with no operations in a covered period is answered and charged`() = runBlocking<Unit> {
+        // FIN-136: an empty result over a covered period is an answer; only a lock or no data refunds the attempt.
         val response = ask("Расходы на такси")
         val done = assertIs<AnswerEvent.Done>(finish(response.answerId).last()).event
-        assertEquals(false, done.charged)
-        assertEquals(5, done.remainingLimit)
-        assertEquals(5, api.getLimit().remaining)
+        assertEquals(true, done.charged)
+        assertEquals(4, done.remainingLimit)
+        assertEquals(4, api.getLimit().remaining)
+        assertEquals(true, api.listMessages().messages.last().charged)
         val snapshot = finalSnapshot(response.answerId)
         assertEquals(emptyList(), snapshot.chips)
         val text = snapshot.blocks.single().text.orEmpty()
@@ -224,10 +257,12 @@ class MockAssistantApiTest {
         code: AnswerErrorCode = AnswerErrorCode.MODEL_ERROR,
         mode: TransferMode = TransferMode.WITH,
         backend: MockBackend = this.backend,
+        /** null — an answer saved before FIN-159, without the retry flag. */
+        retryable: Boolean? = null,
     ): AssistantStore.Answer {
         val question = Message(id = "q-$text", role = MessageRole.USER, text = text, createdAt = clock.at)
         val answer = AssistantStore.Answer("a-$text", question.id, clock.at, mode)
-        answer.append(AnswerEvent.Error(AnswerErrorEvent(code, "model failed", 5)))
+        answer.append(AnswerEvent.Error(AnswerErrorEvent(code, "model failed", 5, retryable = retryable)))
         backend.assistant.questions += question
         backend.assistant.answers[answer.id] = answer
         return answer
@@ -280,7 +315,7 @@ class MockAssistantApiTest {
         // FIN-76: an unconfined generation job runs to its CANNOT_ANSWER refund before ask/retry return.
         val eager = testBackend(clock, assistantConsent = true, dispatcher = Dispatchers.Unconfined)
         val api = MockAssistantApi(eager)
-        val response = api.ask(key("e"), AskRequest("Какая погода на Марсе?"))
+        val response = api.ask(key("e"), AskRequest("Сколько я потрачу в следующем году?"))
         val error = assertIs<AnswerEvent.Error>(eager.assistant.answers.getValue(response.answerId).log.last()).event
         assertEquals(AnswerErrorCode.CANNOT_ANSWER, error.code)
         assertEquals(4, response.remainingLimit)
@@ -319,9 +354,12 @@ class MockAssistantApiTest {
         val asked = ask("Сколько я трачу на Krabsbir?")
         val error = assertIs<AnswerEvent.Error>(finish(asked.answerId).last()).event
         assertEquals(AnswerErrorCode.MODEL_ERROR, error.code)
+        assertEquals("Не получилось ответить. Вопрос не потрачен", error.text)
+        assertEquals(true, error.retryable)
         assertEquals(5, error.remainingLimit)
         val failed = api.listMessages().messages.last()
         assertEquals(AnswerStatus.FAILED to AnswerErrorCode.MODEL_ERROR, failed.status to failed.errorCode)
+        assertEquals(error.text to true, failed.errorText to failed.retryable)
         assertEquals(0, backend.config.assistantModelErrors)
 
         val retry = api.retry(key("r1"), asked.answerId)
@@ -368,13 +406,19 @@ class MockAssistantApiTest {
     }
 
     @Test
-    fun `only a failed MODEL_ERROR answer can be retried`() = runBlocking<Unit> {
+    fun `only a failed answer marked retryable can be retried, one saved before FIN-159 by its code`() = runBlocking<Unit> {
         val missing = assertFailsWith<AppError.Api> { api.retry(key("m"), "missing") }
         assertEquals(ErrorCodes.NOT_FOUND to 404, missing.code to missing.httpStatus)
 
         val cannot = failedAnswer("Погода", AnswerErrorCode.CANNOT_ANSWER)
         val e = assertFailsWith<AppError.Api> { api.retry(key("c"), cannot.id) }
         assertEquals(ErrorCodes.RETRY_NOT_ALLOWED to 422, e.code to e.httpStatus)
+
+        // The flag decides, not the code.
+        val notRetryable = failedAnswer("Сколько я трачу на Krabsbir?", AnswerErrorCode.MODEL_ERROR, retryable = false)
+        assertEquals(ErrorCodes.RETRY_NOT_ALLOWED, assertFailsWith<AppError.Api> { api.retry(key("n"), notRetryable.id) }.code)
+        val newCode = failedAnswer("Сколько уходит на рестораны", AnswerErrorCode.UNKNOWN, retryable = true)
+        assertIs<AnswerEvent.Done>(finish(api.retry(key("u"), newCode.id).answerId).last())
 
         val complete = ask("Сколько я трачу на Krabsbir?")
         finish(complete.answerId)

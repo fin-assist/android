@@ -1,3 +1,11 @@
+import ru.finassist.pf.buildlogic.ApiPins
+import ru.finassist.pf.buildlogic.BuildDate
+import ru.finassist.pf.buildlogic.CheckNoMockCode
+import ru.finassist.pf.buildlogic.GenerateNetworkSecurityConfig
+import ru.finassist.pf.buildlogic.GeneratePinningManifest
+import ru.finassist.pf.buildlogic.LocalBackend
+import java.time.LocalDate
+
 plugins {
     id("pf.android.application")
     alias(libs.plugins.kotlin.serialization)
@@ -10,12 +18,50 @@ plugins {
 val tracerAppToken = secret("pf.tracerAppToken")
 val tracerPluginToken = secret("pf.tracerPluginToken")
 
-// Version of the app = version of the release branch (`release/0.2.7` → 0.2.7), raised with every release branch.
+// Backend of the `local` flavor: `pf.apiBaseUrl`, by default bank-bff on the emulator's host (LocalBackend, FIN-120).
+// An invalid value fails the configuration with the reason.
+val localBackend = LocalBackend.parse(secret("pf.apiBaseUrl"))
+
+val localNetworkSecurityConfig = tasks.register<GenerateNetworkSecurityConfig>("generateLocalNetworkSecurityConfig") {
+    // The output directory is set by AGP (`addGeneratedSourceDirectory` below).
+    config.set(LocalBackend.networkSecurityConfig(localBackend))
+}
+
+// Production API. A placeholder until there is a server (AGENTS.md «Flavors»).
+val prodBaseUrl = "https://api.example.ru/"
+
+// Certificate pinning (FIN-121, ApiPins): `pf.apiPins` + `pf.apiPinsExpiration` (or PF_API_PINS and
+// PF_API_PINS_EXPIRATION in CI) pin the API host of the flavor. Without them the flavor has no network security
+// config, as before; a partial or invalid value fails the configuration with the reason. A future `stage` gets its own
+// properties and one more `pinnedFlavors` entry. The build date is a value source: a configuration cache entry from
+// another day is not reused, and the generator checks the date again when it runs.
+val buildDate: LocalDate = LocalDate.parse(providers.of(BuildDate::class.java) {}.get())
+val pinnedFlavors: Map<String, Pair<String, ApiPins.Pins?>> = mapOf(
+    "prod" to (prodBaseUrl to ApiPins.parse(secret(ApiPins.PINS_PROPERTY), secret(ApiPins.EXPIRATION_PROPERTY), buildDate)),
+)
+val pinningTasks = pinnedFlavors.mapNotNull { (flavor, environment) ->
+    val (baseUrl, pins) = environment
+    if (pins == null) return@mapNotNull null
+    val name = flavor.replaceFirstChar { it.uppercase() }
+    val config = tasks.register<GenerateNetworkSecurityConfig>("generate${name}NetworkSecurityConfig") {
+        config.set(ApiPins.networkSecurityConfig(ApiPins.host(baseUrl), pins))
+        pinsExpiration.set(pins.expiration.toString())
+    }
+    val manifest = tasks.register<GeneratePinningManifest>("generate${name}PinningManifest")
+    flavor to (config to manifest)
+}.toMap()
+
+// CI: the fake backend never reaches a build that talks to a real one (scripts/check-build-separation.py checks
+// the manifests of the same builds). Every variant outside the `mock` flavor is checked (onVariants below), so a new
+// environment such as `stage` is covered without a change here.
+val checkNoMockCode = tasks.register<CheckNoMockCode>("checkNoMockCode")
+
+// Version of the app = version of the release branch (`release/0.2.8` → 0.2.8), raised with every release branch.
 // Build number: `PF_VERSION_CODE` — set by the build that goes to the stores; it must only grow across every published
 // build, which `GITHUB_RUN_NUMBER` does not guarantee (a counter per workflow; a re-run keeps it). Without it — the CI
 // run number (`GITHUB_RUN_NUMBER`, enough to tell builds apart in logs), 1 locally. Both go into `X-Client-Version`
-// (`android/0.2.7+41`, api.md «Заголовки», FIN-20/22).
-val appVersionName = "0.2.7"
+// (`android/0.2.8+41`, api.md «Заголовки», FIN-20/22).
+val appVersionName = "0.2.8"
 val appVersionCode = (System.getenv("PF_VERSION_CODE") ?: System.getenv("GITHUB_RUN_NUMBER"))?.toIntOrNull() ?: 1
 
 android {
@@ -40,19 +86,35 @@ android {
         manifestPlaceholders["tracerEnabled"] = tracerAppToken.isNotBlank()
     }
 
+    // One dimension `env`, one flavor per environment (FIN-120); dimensions are not multiplied. A stand will be one
+    // more flavor `stage`, built like `prod`.
     // `mock`: in-process fake backend on an OFX statement, local toggles, logcat tracking — no SDK keys needed.
-    // `prod`: real HTTP client, RuStore Remote Config, MyTracker.
-    // Both: Tracer for crashes and ANR, when a token is set.
-    flavorDimensions += "backend"
+    // `local`: real HTTP client against a bank-bff on the developer's machine (`pf.apiBaseUrl`); local toggles and
+    //   logcat tracking as in `mock` — no RuStore, MyTracker or Tracer, so nothing reaches production analytics,
+    //   config or crash console. Installs next to `prod` (`.local`). Plain HTTP only in localDebug (src/localDebug +
+    //   generated security config).
+    // `prod`: real HTTP client, RuStore Remote Config, MyTracker; certificate pinning of the API host when
+    //   `pf.apiPins` is set (pinnedFlavors above, FIN-121).
+    // `mock` and `prod`: Tracer for crashes and ANR, when a token is set.
+    flavorDimensions += "env"
     productFlavors {
         create("mock") {
-            dimension = "backend"
+            dimension = "env"
             applicationIdSuffix = ".mock"
             versionNameSuffix = "-mock"
         }
+        create("local") {
+            dimension = "env"
+            applicationIdSuffix = ".local"
+            versionNameSuffix = "-local"
+            buildConfigField("String", "API_BASE_URL", "\"${localBackend.url}\"")
+            // Tracer stays off even with a token: crashes of a developer's backend runs do not belong in the console.
+            buildConfigField("boolean", "CRASH_REPORTING_ENABLED", "false")
+            manifestPlaceholders["tracerEnabled"] = false
+        }
         create("prod") {
-            dimension = "backend"
-            buildConfigField("String", "API_BASE_URL", "\"https://api.example.ru/\"")
+            dimension = "env"
+            buildConfigField("String", "API_BASE_URL", "\"$prodBaseUrl\"")
             // SDK keys come from ~/.gradle/gradle.properties or CI env; empty → the SDK stays off.
             buildConfigField("String", "RUSTORE_REMOTE_CONFIG_APP_ID", "\"${secret("pf.rustoreRemoteConfigAppId")}\"")
             buildConfigField("String", "MYTRACKER_SDK_KEY", "\"${secret("pf.mytrackerSdkKey")}\"")
@@ -105,9 +167,29 @@ android {
     }
 }
 
-// The e2e build type exists only for the fake backend: prodE2e would have no test hooks to run against.
 androidComponents {
-    beforeVariants(selector().withBuildType("e2e").withFlavor("backend" to "prod")) { it.enable = false }
+    // The e2e build type exists only for the fake backend: localE2e and prodE2e would have no test hooks to run against.
+    beforeVariants(selector().withBuildType("e2e").withFlavor("env" to "local")) { it.enable = false }
+    beforeVariants(selector().withBuildType("e2e").withFlavor("env" to "prod")) { it.enable = false }
+
+    onVariants { variant ->
+        if (variant.flavorName != "mock") {
+            val graph = variant.runtimeConfiguration.incoming.resolutionResult.rootComponent
+            checkNoMockCode.configure { graphs.put("${variant.name}RuntimeClasspath", graph) }
+        }
+    }
+
+    // The network security config of localDebug, with the app's only cleartext exception: the local backend's host.
+    onVariants(selector().withName("localDebug")) { variant ->
+        variant.sources.res?.addGeneratedSourceDirectory(localNetworkSecurityConfig, GenerateNetworkSecurityConfig::outputDir)
+    }
+
+    // Pinned flavors (FIN-121): every build type of the flavor gets the pins when they are set, debug included.
+    onVariants { variant ->
+        val (config, manifest) = pinningTasks[variant.flavorName] ?: return@onVariants
+        variant.sources.res?.addGeneratedSourceDirectory(config, GenerateNetworkSecurityConfig::outputDir)
+        variant.sources.manifests.addGeneratedManifestFile(manifest, GeneratePinningManifest::manifest)
+    }
 }
 
 dependencies {
@@ -130,6 +212,10 @@ dependencies {
     "mockImplementation"(projects.providers.togglesLocal)
     "mockImplementation"(projects.providers.trackingLog)
 
+    "localImplementation"(projects.core.network)
+    "localImplementation"(projects.providers.togglesLocal)
+    "localImplementation"(projects.providers.trackingLog)
+
     "prodImplementation"(projects.core.network)
     "prodImplementation"(projects.providers.togglesRustore)
     "prodImplementation"(projects.providers.trackingMytracker)
@@ -145,6 +231,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+
+    // Unit tests of the app's own small classes (src/test): Robolectric gives them a Context.
+    testImplementation(libs.robolectric)
 
     // Native UI tests (src/androidTestMock, run on the mock e2e build): what Maestro cannot drive.
     androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -168,6 +257,12 @@ tracer {
         pluginToken = tracerPluginToken
         // R8 mappings of minified builds, so stack traces in the console are readable. Needs the plugin token.
         uploadMapping = tracerPluginToken.isNotBlank()
+    }
+    // `local` never reports to Tracer (see the flavor): no mappings of its builds either. The plugin takes each setting
+    // from the first config that has it — variant name, build type, flavors, then `defaultConfig`.
+    create("local") {
+        isDisabled = true
+        uploadMapping = false
     }
 }
 

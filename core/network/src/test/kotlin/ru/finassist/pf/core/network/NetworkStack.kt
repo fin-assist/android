@@ -17,15 +17,17 @@ import ru.finassist.pf.core.network.di.NetworkModule
 internal class NetworkStack(
     server: MockWebServer,
     val tokenStore: TokenStore = InMemoryTokenStore(),
+    val crashReporter: RecordingCrashReporter = RecordingCrashReporter(),
     val gate: ServiceGate = ServiceGate(),
     val version: ClientVersion = ClientVersion("0.2.7", 41),
 ) {
     private val baseUrl = NetworkModule.baseUrl(server.url("/").toString())
-    val plain: OkHttpClient = NetworkModule.plainClient(logging = false, version = version, gate = gate, clock = SystemClock())
-    val client: OkHttpClient = NetworkModule.client(plain, baseUrl, tokenStore)
+    val tlsFailures: TlsFailureReporter = NetworkModule.tlsFailures(crashReporter)
+    val plain: OkHttpClient = NetworkModule.plainClient(logging = false, tlsFailures = tlsFailures, version = version, gate = gate, clock = SystemClock())
+    val client: OkHttpClient = NetworkModule.client(plain, baseUrl, tokenStore, tlsFailures)
     val sseClient: OkHttpClient = NetworkModule.sseClient(client)
     private val retrofit: Retrofit = NetworkModule.retrofit(client, baseUrl)
-    private val sse: SseRequests = NetworkModule.sseRequests(baseUrl, sseClient)
+    private val sse: SseRequests = NetworkModule.sseRequests(baseUrl, sseClient, tlsFailures)
     private val operationsApi = NetworkModule.operationsApi(retrofit)
 
     val api: PfApi = NetworkModule.pfApi(

@@ -38,6 +38,11 @@ jobs:
       - name: Check AGENTS.md and docs registries
         run: python3 scripts/agent-docs.py --check
 
+      # :core:api and :mock:backend go to Kotlin Multiplatform when iOS starts: no JVM-only APIs or dependencies
+      # beyond scripts/kmp-baseline.json (FIN-144, docs/kmp-readiness.md).
+      - name: No new JVM-only code in core/api and mock/backend
+        run: python3 scripts/check-kmp-ready.py
+
   build:
     name: Build, test, lint (mock flavor)
     runs-on: ubuntu-latest
@@ -87,7 +92,7 @@ jobs:
 
       - name: Unit tests
         id: unit-tests
-        run: ./gradlew testMockDebugUnitTest testDebugUnitTest test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew testMockDebugUnitTest testDebugUnitTest test :build-logic:convention:test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Saved from main and release branches only, like the Gradle cache: their caches are the ones every PR can read.
       # Only after green tests: then every jar a test needed has been fetched, and an entry, once saved, never changes.
@@ -160,12 +165,57 @@ jobs:
       - name: Lint
         run: ./gradlew lintMockDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
+      # Environments (FIN-120, AGENTS.md «Flavors»): mock as the working product, localDebug for the local backend,
+      # prodRelease as what users get (unsigned: CI has no signing key). The localRelease manifest is checked below.
+      # Other variants (mockRelease, prodDebug, localRelease) are not built here.
       - name: Assemble
-        run: ./gradlew assembleMockDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew assembleMockDebug assembleLocalDebug assembleProdRelease processLocalReleaseManifest :app:checkNoMockCode --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # CI has no Tracer token: the SDK must not be able to start (scripts/check-tracer-off.py, README).
       - name: Tracer is off without a token
-        run: python3 scripts/check-tracer-off.py app/build/intermediates/merged_manifests/mockDebug/processMockDebugManifest/AndroidManifest.xml 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: |
+          m=app/build/intermediates/merged_manifests
+          python3 scripts/check-tracer-off.py $m/mockDebug/processMockDebugManifest/AndroidManifest.xml \
+            $m/localDebug/processLocalDebugManifest/AndroidManifest.xml \
+            $m/prodRelease/processProdReleaseManifest/AndroidManifest.xml 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      # No e2e/mock hooks and no cleartext in release builds; in localDebug cleartext only to the host of the compiled
+      # API_BASE_URL, none for https (scripts/check-build-separation.py). Mock code on the HTTP flavors' classpath fails
+      # `:app:checkNoMockCode` above.
+      - name: Test hooks and cleartext stay out of release
+        run: |
+          m=app/build/intermediates/merged_manifests
+          {
+            python3 scripts/check-build-separation.py release \
+              $m/prodRelease/processProdReleaseManifest/AndroidManifest.xml \
+              $m/localRelease/processLocalReleaseManifest/AndroidManifest.xml &&
+            python3 scripts/check-build-separation.py local-debug \
+              $m/localDebug/processLocalDebugManifest/AndroidManifest.xml \
+              app/build/intermediates/packaged_res/localDebug/packageLocalDebugResources/xml/network_security_config.xml \
+              app/build/generated/source/buildConfig/local/debug/ru/finassist/pf/BuildConfig.java
+          } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      # Certificate pinning of prod (FIN-121): CI has no real pins, so the generator is checked with test values (32
+      # fixed bytes, not keys of any certificate). Rebuilds only manifests and resources, after the checks above have
+      # read them: prodRelease must be pinned, while localRelease and mockDebug built with the same pins must stay
+      # without a network security config.
+      - name: API pins in prodRelease only
+        run: |
+          m=app/build/intermediates/merged_manifests
+          {
+            ./gradlew processProdReleaseManifest packageProdReleaseResources processLocalReleaseManifest \
+              processMockDebugManifest --no-daemon \
+              -Ppf.apiPins="sha256/$(head -c 32 /dev/zero | tr '\0' '\1' | base64),sha256/$(head -c 32 /dev/zero | tr '\0' '\2' | base64)" \
+              -Ppf.apiPinsExpiration="$(date -u -d '+180 days' +%F)" &&
+            python3 scripts/check-build-separation.py pinned-release \
+              $m/prodRelease/processProdReleaseManifest/AndroidManifest.xml \
+              app/build/intermediates/packaged_res/prodRelease/packageProdReleaseResources/xml/network_security_config.xml \
+              app/build/generated/source/buildConfig/prod/release/ru/finassist/pf/BuildConfig.java &&
+            python3 scripts/check-build-separation.py release $m/localRelease/processLocalReleaseManifest/AndroidManifest.xml &&
+            if grep -q networkSecurityConfig $m/mockDebug/processMockDebugManifest/AndroidManifest.xml; then
+              echo "mockDebug got a network security config with the API pins"; false
+            fi
+          } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       - uses: actions/upload-artifact@v4
         if: success()

@@ -1,0 +1,62 @@
+appId: ru.finassist.pf.mock.e2e
+name: Помощник — вопрос не по теме даёт текст сервера без «Повторить» и не тратит попытку
+tags:
+  - assistant
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+
+# FIN-160: a question not about the user's finances is OFF_TOPIC (the fake server recognises «weather»).
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "What is the weather today?"
+- tapOn:
+    id: "ds.chat.send"
+# The first question asks for consent; after it the question goes out by itself.
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- tapOn:
+    id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.failed"
+    timeout: 20000
+# The server's text is shown as is; retryable is false, so there is no «Повторить».
+- assertVisible: "Вопрос не по теме — помощник отвечает только на вопросы о ваших финансах.*"
+- assertNotVisible:
+    id: "assistant.answer.failed.retry"
+# The attempt is returned: still 5 of 5.
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
+
+# The composer stays usable: the next question about the data is answered and spends an attempt.
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.input"
+      enabled: true
+    timeout: 20000
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Krabsbir"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 20000
+- assertVisible: ".*[Оо]сталось 4 из 5.*"

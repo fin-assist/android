@@ -13,6 +13,7 @@ import ru.finassist.pf.core.api.model.MonthSummary
 import ru.finassist.pf.core.api.model.OperationKindFilter
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.PeriodTypeCode
+import ru.finassist.pf.core.api.model.SystemCategories
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
@@ -23,6 +24,7 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.YearMonth
 import java.time.temporal.ChronoUnit
+import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
@@ -100,7 +102,7 @@ class AnalyticsEngine(
                 isCurrent = isCurrent,
                 coverage = apiCoverage(cov.coverageOf(from, toExcl)),
                 dataFrom = bounds?.first?.at(),
-                dataTo = bounds?.second?.let { dataEnd(ops, it) },
+                dataTo = dataEnd(from, toExcl, cov),
                 gaps = cov.gapsWithin(from, toExcl),
             ),
             navigation = navigation,
@@ -122,10 +124,16 @@ class AnalyticsEngine(
         )
     }
 
-    /** Last moment with data inside the period: the last operation, or the end of the last covered day. */
-    private fun dataEnd(ops: List<Operation>, lastDay: LocalDate): OffsetDateTime =
-        ops.maxOfOrNull { it.occurredAt }?.takeIf { it.atZoneSameInstant(zone).toLocalDate() == lastDay }
-            ?: lastDay.plusDays(1).at().minusSeconds(1)
+    /**
+     * Last moment with data inside `[from, toExcl)` (docs/calc.md, section 4): the time of the period's last operation —
+     * any, whatever the transfer mode and pairs — if it is on the last covered day, else the end of that day.
+     */
+    fun dataEnd(from: LocalDate, toExcl: LocalDate, cov: Coverage): OffsetDateTime? {
+        val lastDay = cov.dataBounds(from, toExcl)?.second ?: return null
+        val last = ledger.all.filter { val d = it.occurredAt.atZoneSameInstant(zone).toLocalDate(); d >= from && d < toExcl }
+            .maxOfOrNull { it.occurredAt }
+        return last?.takeIf { it.atZoneSameInstant(zone).toLocalDate() == lastDay } ?: lastDay.plusDays(1).at().minusSeconds(1)
+    }
 
     // ---- tiles ----
 
@@ -164,7 +172,8 @@ class AnalyticsEngine(
             locked(LockReason.NEED_FULL_MONTHS, required = TYPICAL_MIN_PERIODS * monthsIn(key), available = previousFull.sumOf { monthsIn(it) })
         }
 
-        val daysWithData = bounds?.let { (a, b) -> ChronoUnit.DAYS.between(a, minOf(b, today())) + 1 }?.coerceAtLeast(1) ?: 1
+        // Covered days of the period not later than today, gaps excluded (docs/calc.md, section 5).
+        val daysWithData = cov.countDays(key.start(), minOf(key.endExclusive(), today().plusDays(1))).coerceAtLeast(1)
         val daily = Metric(status = MetricStatus.READY, value = Money(expense / daysWithData))
         val dailyComparison = previousKeys.firstOrNull()?.takeIf { isFullPeriod(it, cov) }?.let { prev ->
             val prevOps = scope.inDays(visible, prev.start(), prev.endExclusive())
@@ -238,20 +247,19 @@ class AnalyticsEngine(
         val items = grouped.map { (category, list) ->
             val amount = list.sumOf { it.signedMinor }
             CategoryAmount(
-                categoryId = category?.id,
-                categoryName = category?.name ?: "Без категории",
-                categoryIcon = category?.icon ?: "tag",
+                categoryId = category.id,
+                categoryName = category.name,
+                categoryIcon = category.icon,
                 note = note(category, list.map { it.op }),
                 amount = Money(amount),
-                share = if (total > 0 && amount > 0) amount.toDouble() / total else null,
+                share = if (total > 0 && amount >= 0) amount.toDouble() / total else null,
                 operationCount = list.size,
                 filters = OperationsFilter(
                     from = periodRange.from, to = periodRange.to, kind = OperationKindFilter.EXPENSE, transferMode = mode,
-                    categoryId = category?.id, selection = if (category == null) SELECTION_UNCATEGORIZED else null,
-                    selectionName = if (category == null) "Без категории" else null,
+                    categoryId = category.id,
                 ),
             )
-        }.sortedByDescending { it.amount.minor }
+        }.sortedWith(BY_AMOUNT_THEN_NAME)
         return CategoryBreakdown(BreakdownStatus.READY, items)
     }
 
@@ -267,7 +275,7 @@ class AnalyticsEngine(
                 operationCount = list.size,
                 filters = OperationsFilter(from = periodRange.from, to = periodRange.to, kind = OperationKindFilter.INCOME, transferMode = mode, categoryId = category.id),
             )
-        }.sortedByDescending { it.amount.minor }
+        }.sortedWith(BY_AMOUNT_THEN_NAME)
         return CategoryBreakdown(BreakdownStatus.READY, items)
     }
 
@@ -305,7 +313,7 @@ class AnalyticsEngine(
             income = if (has) Money(scope.incomeTotal(ops)) else null,
             coverage = apiCoverage(cov.coverageOf(from, toExcl)),
             dataFrom = bounds?.first?.at(),
-            dataTo = bounds?.second?.let { dataEnd(ops, it) },
+            dataTo = dataEnd(from, toExcl, cov),
             gaps = cov.gapsWithin(from, toExcl),
         )
     }
@@ -325,15 +333,15 @@ class AnalyticsEngine(
 
     private fun insights(key: PeriodKey, mode: TransferMode, visible: List<Operation>, ops: List<Operation>, periodRange: DateRange, cov: Coverage): Insights {
         val month = YearMonth.from(key.start())
-        // Base: full months up to and including the selected one, newest first, at most 6.
-        val base = cov.fullMonths.filter { !it.isAfter(month) }.sortedDescending().take(6)
+        // B: full months up to and including the selected one, newest first (docs/calc.md, section 5).
+        val base = cov.fullMonths.filter { !it.isAfter(month) }.sortedDescending()
         val basis = if (base.isEmpty()) null else MetricBasis(range(base.last().atDay(1), base.first().plusMonths(1).atDay(1)), base.size)
 
         return Insights(
             regularPayments = regularPayments(mode, visible, base, basis, periodRange),
-            notableSpending = notableSpending(mode, ops, visible, base, basis, periodRange),
+            notableSpending = notableSpending(mode, ops, visible, month, cov, periodRange),
             bankFees = bankFees(mode, ops, periodRange),
-            smallFrequent = smallFrequent(mode, ops, base, basis, periodRange, month),
+            smallFrequent = smallFrequent(mode, base, basis),
         )
     }
 
@@ -350,19 +358,30 @@ class AnalyticsEngine(
         )
     }
 
-    /** Regular payments over the last (up to 3) full months of [base]; [base] is newest first, at least 2 months. */
+    /**
+     * Regular payments (docs/calc.md, section 5): window W — the first up to 3 months of [base] (full months up to the
+     * selected one, newest first). Debits with a description, outside the common exclusions, grouped by description;
+     * a payment is a group with exactly one debit in every month of W, all within ±15 % of the median (the element
+     * n/2 of the sorted amounts). Payments the user dismissed are left out. Largest first, then by description.
+     */
     private fun regularItems(mode: TransferMode, visible: List<Operation>, base: List<YearMonth>, periodRange: DateRange): List<RegularPayment> {
         val window = base.take(3)
-        val debits = window.flatMap { m -> scope.inDays(visible, m.atDay(1), m.plusMonths(1).atDay(1)) }
-            .filter { it.isDebit && !it.isOwnTransferCategory && it.category.id != catalog.transfers.id && it.name.isNotBlank() }
+        val byName = LinkedHashMap<String, MutableMap<YearMonth, MutableList<Operation>>>()
+        for (m in window) {
+            for (op in scope.inDays(visible, m.atDay(1), m.plusMonths(1).atDay(1))) {
+                if (op.isDebit && op.name.isNotEmpty() && observed(op) && !op.isOwnTransferCategory) {
+                    byName.getOrPut(op.name) { LinkedHashMap() }.getOrPut(m) { mutableListOf() } += op
+                }
+            }
+        }
         val dismissed = dismissedPayments()
-        return debits.groupBy { it.name }.mapNotNull { (name, list) ->
-            val perMonth = list.groupBy { YearMonth.from(scope.dayOf(it)) }
-            if (perMonth.size < window.size || perMonth.values.any { it.size > 2 }) return@mapNotNull null
+        return byName.mapNotNull { (name, byMonth) ->
+            if (byMonth.size != window.size || byMonth.values.any { it.size != 1 }) return@mapNotNull null
+            val list = byMonth.values.map { it.single() }
             val amounts = list.map { it.amountMinor }.sorted()
             val median = amounts[amounts.size / 2]
-            if (amounts.any { abs(it - median) > median * REGULAR_TOLERANCE }) return@mapNotNull null
-            val id = "rp_" + Catalog.slugOf(name).take(40)
+            if (amounts.any { 100 * abs(it - median) > REGULAR_TOLERANCE_PCT * median }) return@mapNotNull null
+            val id = paymentId(name)
             if (id in dismissed) return@mapNotNull null
             val day = list.map { scope.dayOf(it).dayOfMonth }.sorted().let { it[it.size / 2] }
             RegularPayment(
@@ -370,7 +389,7 @@ class AnalyticsEngine(
                 scheduleName = "$day-го числа", categoryId = list.first().category.id,
                 filters = OperationsFilter(from = periodRange.from, to = periodRange.to, transferMode = mode, selection = "s_regular_$id", selectionName = name),
             )
-        }.sortedByDescending { it.monthlyAmount.minor }
+        }.sortedWith(compareByDescending<RegularPayment> { it.monthlyAmount.minor }.thenBy { it.title })
     }
 
     /**
@@ -383,7 +402,7 @@ class AnalyticsEngine(
             .takeIf { it.size == 2 } ?: return null
         val m = runCatching { YearMonth.parse(month) }.getOrNull() ?: return null
         val mode = TransferMode.entries.firstOrNull { it.code == modeCode && it != TransferMode.UNKNOWN } ?: return null
-        val base = coverage().fullMonths.filter { !it.isAfter(m) }.sortedDescending().take(6)
+        val base = coverage().fullMonths.filter { !it.isAfter(m) }.sortedDescending()
         if (base.firstOrNull() != m || base.size < 2) return emptySet()
         val range = range(m.atDay(1), m.plusMonths(1).atDay(1))
         return regularItems(mode, scope.visible(mode), base, range).map { it.title }.toSet()
@@ -391,62 +410,141 @@ class AnalyticsEngine(
 
     private fun regularAllSelection(baseMonth: YearMonth, mode: TransferMode) = "${SELECTION_REGULAR_ALL}_${baseMonth}_${mode.code}"
 
-    /** Which operations a `s_regular_*` selection means: debits with that merchant name. */
+    /** Which operations a `s_regular_*` selection means: debits with that description. */
     fun regularPaymentName(selection: String): String? {
         val id = selection.removePrefix("s_regular_")
-        return ledger.all.map { it.name }.distinct().firstOrNull { "rp_" + Catalog.slugOf(it).take(40) == id }
+        return ledger.all.map { it.name }.distinct().firstOrNull { paymentId(it) == id }
     }
 
-    private fun notableSpending(mode: TransferMode, ops: List<Operation>, visible: List<Operation>, base: List<YearMonth>, basis: MetricBasis?, periodRange: DateRange): NotableSpendingCard {
-        if (base.size < 3) {
-            return NotableSpendingCard(status = MetricStatus.LOCKED, lock = MetricLock(LockReason.NEED_FULL_MONTHS, 3, base.size))
+    /**
+     * Notable spending (docs/calc.md, section 5): base — 3 full months before the selected one; «usual» of a category
+     * — its expense over the base / 3, rounded half up. A category (except «Без категории», «Переводы», «Между своими
+     * счетами») is notable when usual > 0, the period's expense ≥ 1 000 ₽ and ≥ 1.5 × usual. By the difference.
+     */
+    private fun notableSpending(mode: TransferMode, ops: List<Operation>, visible: List<Operation>, month: YearMonth, cov: Coverage, periodRange: DateRange): NotableSpendingCard {
+        val before = cov.fullMonths.filter { it.isBefore(month) }.sortedDescending()
+        if (before.size < 3) {
+            return NotableSpendingCard(status = MetricStatus.LOCKED, lock = MetricLock(LockReason.NEED_FULL_MONTHS, 3, before.size))
         }
-        val baseOps = base.flatMap { m -> scope.inDays(visible, m.atDay(1), m.plusMonths(1).atDay(1)) }
-        val typical = scope.expenses(baseOps).filter { it.category != null }.groupBy { it.category!! }
-            .mapValues { (_, l) -> l.sumOf { it.signedMinor } / base.size }
-        val current = scope.expenses(ops).filter { it.category != null }.groupBy { it.category!! }
-            .mapValues { (_, l) -> l.sumOf { it.signedMinor } }
-        val items = current.mapNotNull { (category, amount) ->
-            val typ = typical[category] ?: return@mapNotNull null
-            if (typ <= 0 || amount < NOTABLE_MIN_MINOR || amount < typ * NOTABLE_FACTOR) return@mapNotNull null
+        val base = before.take(3)
+        val basis = MetricBasis(range(base.last().atDay(1), base.first().plusMonths(1).atDay(1)), base.size)
+
+        fun byCategory(list: List<Operation>): Map<Category, Long> = scope.expenses(list)
+            .filter { e -> e.category.id != SystemCategories.UNCATEGORIZED && e.category.id != catalog.transfers.id && e.category.id != SystemCategories.OWN_TRANSFER }
+            .groupBy { it.category }.mapValues { (_, l) -> l.sumOf { it.signedMinor } }
+
+        val typical = byCategory(base.flatMap { m -> scope.inDays(visible, m.atDay(1), m.plusMonths(1).atDay(1)) })
+            .mapValues { (_, sum) -> Math.floorDiv(2 * sum + 3, 6) } // sum / 3, half up
+        val items = byCategory(ops).mapNotNull { (category, amount) ->
+            val typ = typical[category] ?: 0
+            if (typ <= 0 || amount < NOTABLE_MIN_MINOR || 2 * amount < 3 * typ) return@mapNotNull null
             NotableSpendingItem(
                 categoryId = category.id, categoryName = category.name, categoryIcon = category.icon,
                 amount = Money(amount), typicalAmount = Money(typ),
                 filters = OperationsFilter(from = periodRange.from, to = periodRange.to, kind = OperationKindFilter.EXPENSE, transferMode = mode, categoryId = category.id),
             )
-        }.sortedByDescending { it.amount.minor - it.typicalAmount.minor }
+        }.sortedWith(compareByDescending<NotableSpendingItem> { it.amount.minor - it.typicalAmount.minor }.thenBy { it.categoryName })
         return if (items.isEmpty()) NotableSpendingCard(status = MetricStatus.NONE, basis = basis)
         else NotableSpendingCard(status = MetricStatus.READY, basis = basis, items = items)
     }
 
+    /**
+     * Bank fees (docs/calc.md, section 5): expense lines of the period whose final category (the target for a
+     * refund) is «Услуги банка» or whose description has the whole word «комиссия» / «процент» in any case form.
+     */
     private fun bankFees(mode: TransferMode, ops: List<Operation>, periodRange: DateRange): BankFeesCard {
-        val fees = scope.expenses(ops).filter { it.category?.id == catalog.bankFees.id }
+        val fees = scope.expenses(ops).filter { isFee(it.op, it.category) }
         val total = fees.sumOf { it.signedMinor }
         if (fees.isEmpty() || total <= 0) return BankFeesCard(status = MetricStatus.NONE)
         // Fees without a description name no kind; none named — no kinds line at all (FIN-67).
-        val kinds = fees.map { it.op.name.lowercase() }.filter { it.isNotBlank() }.distinct().take(3).joinToString(", ").ifEmpty { null }
+        val kinds = fees.map { it.op.name }.filter { it.isNotBlank() }.distinct().take(3).joinToString(", ").ifEmpty { null }
         return BankFeesCard(
             status = MetricStatus.READY, value = Money(total), kindsName = kinds,
             filters = OperationsFilter(from = periodRange.from, to = periodRange.to, transferMode = mode, selection = SELECTION_BANK_FEES, selectionName = "Комиссии и проценты банку"),
         )
     }
 
-    private fun smallFrequent(mode: TransferMode, ops: List<Operation>, base: List<YearMonth>, basis: MetricBasis?, periodRange: DateRange, month: YearMonth): SmallFrequentCard {
-        if (base.isEmpty()) return SmallFrequentCard(status = MetricStatus.LOCKED, lock = MetricLock(LockReason.NEED_FULL_MONTHS, 1, 0))
-        val groups = ops.filter { it.isDebit && !it.isOwnTransferCategory && it.amountMinor <= SMALL_MAX_MINOR && it.category.id != catalog.transfers.id && it.name.isNotBlank() }
-            .groupBy { it.name }
-            .filter { (_, l) -> l.size >= SMALL_MIN_COUNT }
-            .map { (name, l) ->
-                val monthly = l.sumOf { it.amountMinor }
-                SmallFrequentGroup(
-                    title = name, count = l.size, averageAmount = Money(monthly / l.size),
-                    monthlyAmount = Money(monthly), yearlyAmount = Money(monthly * 12),
-                    filters = OperationsFilter(from = periodRange.from, to = periodRange.to, transferMode = mode, q = name, kind = OperationKindFilter.EXPENSE, amountTo = Money(SMALL_MAX_MINOR)),
-                )
-            }.sortedByDescending { it.monthlyAmount.minor }
-        if (groups.isEmpty()) return SmallFrequentCard(status = MetricStatus.NONE, basis = basis)
-        return SmallFrequentCard(status = MetricStatus.READY, basis = basis, value = Money(groups.sumOf { it.monthlyAmount.minor }), items = groups)
+    /** One group of small frequent spending: by merchant (description) or by category. */
+    private data class SmallGroup(val kind: String, val key: String, val title: String, val ops: List<Operation>) {
+        val total: Long get() = ops.sumOf { it.amountMinor }
     }
+
+    /**
+     * Small frequent spending of month [m] (docs/calc.md, section 5): its debits outside the common exclusions;
+     * groups by merchant (non-empty description) of more than 8 operations with an average ≤ 500 ₽, then, from the
+     * rest, the same by final category (not «Без категории»). Largest first, then by title.
+     */
+    private fun smallGroups(m: YearMonth, mode: TransferMode): List<SmallGroup> {
+        val debits = scope.inDays(scope.visible(mode), m.atDay(1), m.plusMonths(1).atDay(1))
+            .filter { it.isDebit && !it.isOwnTransferCategory && observed(it) }
+        val groups = mutableListOf<SmallGroup>()
+        val used = HashSet<String>()
+        fun take(candidates: List<Operation>, keyOf: (Operation) -> String?, group: (String, List<Operation>) -> SmallGroup) {
+            val buckets = LinkedHashMap<String, MutableList<Operation>>()
+            candidates.forEach { op -> keyOf(op)?.let { buckets.getOrPut(it) { mutableListOf() } += op } }
+            for ((key, list) in buckets) {
+                val total = list.sumOf { it.amountMinor }
+                if (list.size > SMALL_MIN_COUNT && total / list.size <= SMALL_MAX_AVG_MINOR) {
+                    groups += group(key, list)
+                    list.forEach { used += it.key }
+                }
+            }
+        }
+        take(debits, { op -> op.name.takeIf { it.isNotEmpty() } }) { k, l -> SmallGroup(SMALL_MERCHANT, k, k, l) }
+        take(
+            debits.filter { it.key !in used },
+            { op -> op.category.id.takeIf { it != SystemCategories.UNCATEGORIZED } },
+        ) { k, l -> SmallGroup(SMALL_CATEGORY, k, l.first().category.name, l) }
+        return groups.sortedWith(compareByDescending<SmallGroup> { it.total }.thenBy { it.title })
+    }
+
+    private fun smallFrequent(mode: TransferMode, base: List<YearMonth>, basis: MetricBasis?): SmallFrequentCard {
+        if (base.isEmpty()) return SmallFrequentCard(status = MetricStatus.LOCKED, lock = MetricLock(LockReason.NEED_FULL_MONTHS, 1, 0))
+        // The month of the calculation: the selected one if it is full, else the last full month before it.
+        val m = base.first()
+        val range = range(m.atDay(1), m.plusMonths(1).atDay(1))
+        val groups = smallGroups(m, mode).map { g ->
+            SmallFrequentGroup(
+                title = g.title, count = g.ops.size, averageAmount = Money(g.total / g.ops.size),
+                monthlyAmount = Money(g.total), yearlyAmount = Money(g.total * 12),
+                filters = OperationsFilter(
+                    from = range.from, to = range.to, transferMode = mode,
+                    selection = "${SELECTION_SMALL}_${g.kind}_${m}_${mode.code}_${keyId(g.key)}", selectionName = g.title,
+                ),
+            )
+        }
+        if (groups.isEmpty()) return SmallFrequentCard(status = MetricStatus.NONE, basis = basis, month = m)
+        return SmallFrequentCard(status = MetricStatus.READY, basis = basis, value = Money(groups.sumOf { it.monthlyAmount.minor }), items = groups, month = m)
+    }
+
+    /**
+     * Which operations a `s_small_<kind>_<month>_<mode>_<key>` selection means. It carries the card it came from, so
+     * the groups are recomputed (a selection is valid indefinitely, api.md 4.1). Null for a malformed or unknown one.
+     */
+    fun smallSelection(selection: String): ((Operation) -> Boolean)? {
+        val parts = selection.removePrefix(SELECTION_SMALL + "_").split("_", limit = 4).takeIf { it.size == 4 } ?: return null
+        val (kind, month, modeCode, keyId) = parts
+        val m = runCatching { YearMonth.parse(month) }.getOrNull() ?: return null
+        val mode = TransferMode.entries.firstOrNull { it.code == modeCode && it != TransferMode.UNKNOWN } ?: return null
+        val groups = smallGroups(m, mode)
+        val group = groups.firstOrNull { it.kind == kind && keyId(it.key) == keyId } ?: return null
+        val merchantUsed = groups.filter { it.kind == SMALL_MERCHANT }.flatMap { g -> g.ops.map { it.key } }.toSet()
+        return { op ->
+            op.isDebit && !op.isOwnTransferCategory && observed(op) &&
+                if (group.kind == SMALL_MERCHANT) op.name == group.key else op.category.id == group.key && op.key !in merchantUsed
+        }
+    }
+
+    /** Common exclusions of observations: «Переводы» and «Между своими счетами», by the target for a refund. */
+    private fun observed(op: Operation): Boolean {
+        val category = if (op.isRefund) op.refundTarget else op.category
+        return category?.id != catalog.transfers.id && category?.id != SystemCategories.OWN_TRANSFER
+    }
+
+    private fun keyId(key: String) = UUID.nameUUIDFromBytes(key.toByteArray()).toString()
+
+    /** Id of a regular payment: a UUID stable by its description (docs/calc.md, section 5). */
+    private fun paymentId(name: String) = UUID.nameUUIDFromBytes("payment:$name".toByteArray()).toString()
 
     private fun apiCoverage(code: String) = when (code) {
         "complete" -> ApiCoverage.COMPLETE
@@ -465,12 +563,26 @@ class AnalyticsEngine(
         const val FORECAST_FROM_DAY = 10
         const val TYPICAL_MIN_PERIODS = 2
         const val CHART_MIN_MONTHS = 2
-        const val REGULAR_TOLERANCE = 0.15
-        const val NOTABLE_FACTOR = 1.5
+        const val REGULAR_TOLERANCE_PCT = 15
         const val NOTABLE_MIN_MINOR = 100_000L
-        const val SMALL_MAX_MINOR = 50_000L
-        const val SMALL_MIN_COUNT = 4
+        const val SMALL_MAX_AVG_MINOR = 50_000L
+        const val SMALL_MIN_COUNT = 8
+        const val SELECTION_SMALL = "s_small"
+        private const val SMALL_MERCHANT = "merchant"
+        private const val SMALL_CATEGORY = "category"
+        private val FEE_WORDS = setOf(
+            "комиссия", "комиссии", "комиссию", "комиссией", "комиссий", "комиссиям", "комиссиями", "комиссиях",
+            "процент", "процента", "проценту", "процентом", "проценте", "проценты", "процентов", "процентам", "процентами",
+            "процентах",
+        )
+        private val WORD = Regex("[a-zа-яё]+")
+
+        /** A fee or interest to the bank: category «Услуги банка» or a whole fee word in the description (5). */
+        fun isFee(op: Operation, category: Category?): Boolean =
+            category?.name == "Услуги банка" || WORD.findAll(op.name.lowercase().replace('ё', 'е')).any { it.value in FEE_WORDS }
         const val SELECTION_UNCATEGORIZED = "s_uncategorized"
+        /** Category rows: by amount descending, equal amounts by name in code points (docs/calc.md, section 10). */
+        private val BY_AMOUNT_THEN_NAME = compareByDescending<CategoryAmount> { it.amount.minor }.thenBy { it.categoryName }
         const val SELECTION_BANK_FEES = "s_bank_fees"
         const val SELECTION_REGULAR_ALL = "s_regular_all"
     }

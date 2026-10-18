@@ -56,7 +56,15 @@ class NetworkModuleTest {
 
     @Test
     fun `logging is added only when enabled`() {
-        val logging = assertIs<HttpLoggingInterceptor>(NetworkModule.plainClient(logging = true, version = stack.version, gate = stack.gate, clock = ru.finassist.pf.core.common.time.SystemClock()).interceptors.last())
+        val logging = assertIs<HttpLoggingInterceptor>(
+            NetworkModule.plainClient(
+                logging = true,
+                tlsFailures = TlsFailureReporter(RecordingCrashReporter()),
+                version = stack.version,
+                gate = stack.gate,
+                clock = ru.finassist.pf.core.common.time.SystemClock(),
+            ).interceptors.last(),
+        )
         assertEquals(HttpLoggingInterceptor.Level.BASIC, logging.level)
     }
 

@@ -1,15 +1,15 @@
 package ru.finassist.pf.mock.domain
 
 import ru.finassist.pf.core.api.model.OperationKindFilter
-import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.SystemCategories
 import ru.finassist.pf.core.api.model.TransferMode
+import ru.finassist.pf.mock.MockCodes
 
 /**
  * Search semantics of `listOperations` (api.md 4.1) over [Record]s. With `transfer_mode` the analytics rules
- * apply (pairs out, refunds are expenses of their target category); without it every record is searchable and
- * a refund is a plain credit.
+ * apply (no «Между своими счетами» — pairs and single transfers to self, docs/calc.md section 6; refunds are
+ * expenses of their target category); without it every record is searchable and a refund is a plain credit.
  */
 class Search(private val ledger: Ledger, private val catalog: Catalog, private val analytics: AnalyticsEngine) {
 
@@ -20,7 +20,8 @@ class Search(private val ledger: Ledger, private val catalog: Catalog, private v
         var result = records
         if (mode != null) {
             result = result.filter { r ->
-                r is Record.Single && r.op.pairId == null && (mode != TransferMode.WITHOUT || r.op.category.id != catalog.transfers.id)
+                r is Record.Single && r.op.pairId == null && !r.op.isOwnTransferCategory &&
+                    (mode != TransferMode.WITHOUT || r.op.category.id != catalog.transfers.id)
             }
         }
         f.kind?.let { kind ->
@@ -75,8 +76,14 @@ class Search(private val ledger: Ledger, private val catalog: Catalog, private v
      */
     private fun selectionPredicate(selection: String): (Record) -> Boolean {
         val test: (Operation) -> Boolean = when {
-            selection == AnalyticsEngine.SELECTION_UNCATEGORIZED -> { op -> op.isRefund && op.refundTarget == null }
-            selection == AnalyticsEngine.SELECTION_BANK_FEES -> { op -> op.isDebit && op.category.id == catalog.bankFees.id }
+            selection == AnalyticsEngine.SELECTION_UNCATEGORIZED -> { op ->
+                op.category.id == SystemCategories.UNCATEGORIZED || (op.isRefund && op.refundTarget?.id == SystemCategories.UNCATEGORIZED)
+            }
+            selection == AnalyticsEngine.SELECTION_BANK_FEES -> { op ->
+                ((op.isDebit && !op.isOwnTransferCategory) || op.isRefund) &&
+                    AnalyticsEngine.isFee(op, if (op.isRefund) op.refundTarget else op.category)
+            }
+            selection.startsWith(AnalyticsEngine.SELECTION_SMALL + "_") -> analytics.smallSelection(selection) ?: throw UnknownSelection(selection)
             selection.startsWith(AnalyticsEngine.SELECTION_REGULAR_ALL) -> {
                 val names = analytics.regularNames(selection) ?: throw UnknownSelection(selection)
                 ({ op -> op.isDebit && op.name in names })

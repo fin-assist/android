@@ -1,5 +1,8 @@
 package ru.finassist.pf.mock
 
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import ru.finassist.pf.core.common.availability.ClientVersion
 import ru.finassist.pf.core.common.availability.ServiceGate
@@ -34,5 +37,40 @@ class MockServiceGateTest {
         b.config = b.config.copy(maintenance = false, minVersion = null)
         b.simulateNetwork()
         assertEquals(ServiceGate.State.Open, gate.state.value)
+    }
+
+    @Test fun `a stream opening is checked like a request, re-opens included`() = runBlocking<Unit> {
+        val b = backend(MockConfig(maintenance = true, minVersion = "9.0.0"))
+        val opening = b.droppable(flowOf(1, 2)) { it == 2 }
+        assertFailsWith<AppError.Maintenance> { opening.toList() }
+        assertIs<ServiceGate.State.Maintenance>(gate.state.value)
+
+        b.config = b.config.copy(maintenance = false)
+        // The same flow collected again is the next opening: now the version.
+        assertFailsWith<AppError.UpdateRequired> { opening.toList() }
+        assertEquals(ServiceGate.State.UpdateRequired(), gate.state.value)
+    }
+
+    @Test fun `an opening that passes ends the maintenance the gate shows`() = runBlocking<Unit> {
+        val b = backend(MockConfig(maintenance = true))
+        assertFailsWith<AppError.Maintenance> { b.simulateNetwork() }
+        b.config = b.config.copy(maintenance = false)
+        assertEquals(listOf(1, 2), b.droppable(flowOf(1, 2)) { it == 2 }.toList())
+        assertEquals(ServiceGate.State.Open, gate.state.value)
+    }
+
+    @Test fun `an open stream is cut at its next event when maintenance starts`() = runBlocking<Unit> {
+        val b = backend(MockConfig())
+        val events = b.droppable(
+            flow {
+                emit(1)
+                b.config = b.config.copy(maintenance = true)
+                emit(2)
+                emit(3)
+            },
+        ) { it == 3 }.toList()
+        // A drop: no terminal event; the client re-opens and meets the 503.
+        assertEquals(listOf(1), events)
+        assertFailsWith<AppError.Maintenance> { b.droppable(flowOf(3)) { true }.toList() }
     }
 }

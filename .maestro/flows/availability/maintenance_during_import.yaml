@@ -1,0 +1,70 @@
+appId: ru.finassist.pf.mock.e2e
+name: Техработы во время разбора выписки — переоткрытие потока получает 503, экран техработ поверх загрузки
+tags:
+  - availability
+---
+# FIN-22 + FIN-170 (api.md «SSE»: an open stream is cut when maintenance starts, a re-open gets 503 MAINTENANCE). The
+# progress stream drops after its first event and every re-open is turned away with a long 429, so the upload stays in
+# parsing for as long as the flow needs. Maintenance then starts: the next opening of the stream (the return from the
+# control link) gets 503 before the 429, the re-open loop stops instead of retrying, and the maintenance screen covers
+# the app (the screens under it are created anew after the maintenance, FIN-22).
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?stream_drops=1&stream_rate_limits=100&stream_retry_s=120"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload.busy"
+    timeout: 10000
+# Maintenance with a long Retry-After (no automatic check races the steps below). Returning from the link, the screen
+# opens the progress stream again: 503 MAINTENANCE.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=600"
+- extendedWaitUntil:
+    visible:
+      id: "availability.maintenance"
+    timeout: 15000
+- assertVisible: "Идут технические работы"
+# The maintenance is over and the limit lifted: «Проверить сейчас» opens the app again.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=off&stream_rate_limits=0"
+- tapOn:
+    id: "availability.maintenance.check"
+- extendedWaitUntil:
+    notVisible:
+      id: "availability.maintenance"
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 15000

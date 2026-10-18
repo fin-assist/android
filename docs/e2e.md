@@ -58,7 +58,7 @@ steps and expected results in Russian, marked automated.
 ## The `e2e` build type
 
 `assembleMockE2e` builds `ru.finassist.pf.mock.e2e`: the mock flavor plus test hooks from `app/src/mockE2e/`. It
-installs next to `mockDebug` and never exists for `prod`. It is also the `testBuildType`: the native tests run on
+installs next to `mockDebug` and never exists for `local` or `prod`. It is also the `testBuildType`: the native tests run on
 it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»).
 
 - **Pinned date.** "Now" starts at 2026-10-08 12:00 MSK (`BuildConfig.E2E_NOW`, `ShiftedClock`) and runs from
@@ -80,6 +80,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
 | `unreadable.ofx` | no readable operation, 2 unread lines (`EMPTY_STATEMENT`, `unread_count = 2`) |
   | `unreadable-fixed.ofx` | the two operations of `unreadable.ofx` read correctly (same account and FITID): closes its unread lines (FIN-79) |
   | `no-description.ofx` | 1 new operation without a description (7 October 2026): «Без описания» in the feed, no unread line |
+  | `stale.ofx` | 3 operations, statement period 1 August — 20 September 2026, the last operation on 15 September: once the preloaded statement is deleted, the data is stale on the pinned date — the banner says «по 20 сентября» (FIN-125) |
   | `other-bank.ofx` | `WRONG_BANK` |
 
 - **Control link.** `pfe2e://config?…` changes state from a flow (`E2eControlActivity`). Open it through the subflow,
@@ -93,12 +94,17 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `flags=reset` | drops all overrides | — |
   | `offline=true\|false` | every backend request fails with «нет сети» | process |
   | `call_delay_ms=<n>` | how long the sign-in call takes | process |
+  | `call_ttl_ms=<n>` | lifetime of the next phone verification requests (`expires_at`, `expires_in`; 5 minutes by default): the wait ends without a call (FIN-166) | process |
   | `network_delay_ms=<n>` | latency of every backend request (a «busy» state stays up for that long) | process |
   | `unknown_codes=true\|false` | the fake server sends codes the client does not know (`MockCodes`): a filter `kind` on the expense tile, an import notice, an analytics feature, an Analytics block of an unknown type and a card locked for an unknown reason (FIN-83, FIN-4) | process |
   | `failing_blocks=<id>,…` | those Analytics blocks fail on the fake server and come as `unavailable` (FIN-5); empty — none | process |
   | `assistant_model_errors=<n>` | the next n assistant answers fail with MODEL_ERROR («Повторить» under them) | process (counts down) |
-  | `min_version=<MAJOR.MINOR.PATCH>` | the fake server's minimum client version; below it every request gets `CLIENT_VERSION_UNSUPPORTED` and the app shows the update screen (FIN-22); empty — none | process |
-  | `maintenance=<minutes>\|unknown\|off` | every request gets 503 `MAINTENANCE` ending in that many minutes of the fake «now» or at an unknown time; `off` ends it (FIN-22) | process |
+  | `stream_drops=<n>` | the next n openings of an SSE stream (call, import progress, answer) close after their first event without a terminal one; the app re-opens them with a pause (FIN-170) | process (counts down) |
+  | `stream_rate_limits=<n>` | the next n stream openings that follow a dropped one answer 429 `RATE_LIMITED` with `Retry-After: 3`; the app waits and re-opens, no «Слишком много попыток» (FIN-170) | process (counts down) |
+  | `stream_retry_s=<n>` | `Retry-After` of those 429 answers, seconds (3 by default; a long one keeps the app waiting) | process |
+  | `expect_stream_rate_limited=<n>` | a check, instant: `e2e.config.applied` shows only if the fake server has already turned away at least n stream openings with 429, else `e2e.config.unmet` and the flow fails; the app is paused under the link and its stream openings run on the main thread the link holds, so the openings must have happened before it | — |
+  | `min_version=<MAJOR.MINOR.PATCH>` | the fake server's minimum client version; below it every request and every stream opening gets `CLIENT_VERSION_UNSUPPORTED` and the app shows the update screen (FIN-22); empty — none | process |
+  | `maintenance=<minutes>\|unknown\|off` | every request and every stream opening gets 503 `MAINTENANCE` (a stream already open is cut at its next event) ending in that many minutes of the fake «now» or at an unknown time; `off` ends it (FIN-22) | process |
   | `maintenance_retry_after=<s>` | `Retry-After` of the maintenance answer, 15 s by default (the shortest the app waits) | process |
   | `profile_timezone=<zone id>` | `profile.timezone` on the fake server, as if changed elsewhere; the app adopts it on the next profile read (opening «Профиль») | process |
 
@@ -179,7 +185,9 @@ were.
 |---|---|
 | `auth/register_new_user` (smoke) | new number → consent (error without the tick) → passcode → first upload → result → feed |
 | `auth/sign_in_existing_user` (smoke) | existing account → passcode → feed; the three tabs |
-| `auth/phone_validation` | short number error; call screen; «Изменить номер» keeps the number |
+| `auth/phone_validation` | short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
+| `auth/call_expired` | `call_ttl_ms=15000`: the wait ends either by the stream's `expired` or by the device timer (their order is not fixed); both lead to «Время на звонок вышло» with no number; «Позвонить ещё раз» brings the number and a new deadline back — FIN-166 |
+| `auth/call_stream_rate_limited` | `stream_drops=2&stream_rate_limits=1`: the call stream drops, its re-open gets 429 `Retry-After: 3`; the app waits and re-opens — no «Слишком много попыток», the number stays, sign-in goes on to the passcode — FIN-170 |
 | `auth/registration_closed` | `auth.registration=false`: new number → «Регистрация пока закрыта»; existing account still signs in |
 | `applock/unlock` (smoke) | cold start → unlock; wrong code error |
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |
@@ -187,22 +195,29 @@ were.
 | `operations/feed_and_detail` (smoke) | feed → card → change category → saved as manual |
 | `operations/unknown_filter_kind` | `unknown_codes=true`: the expense tile sends a `kind` the client does not know; the search keeps it under «Как на „Аналитике“» and finds no incomes — FIN-83 |
 | `operations/days_in_profile_zone` | `profile_timezone=Asia/Vladivostok`: after the profile is read, the feed groups days in the profile zone, not the device's — an evening operation in Moscow moves to the next day — FIN-92 |
-| `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card |
+| `operations/statement_stale` | on the preloaded statement the caption under the summary says «Данные по 1 октября» (the statement's end, not the last operation on 30 September); then the preloaded statement deleted, `stale.ofx` uploaded: «Операции» and «Аналитика» show «Данные в приложении по 20 сентября — с тех пор прошло больше двух недель», dated by the statement's end (`state.data_to`), not the last operation (15 September) — FIN-125 |
+| `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
 | `analytics/overview` (smoke) | blocks, previous month, month/quarter/year, «Без переводов», category → operations |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
+| `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
+| `analytics/search_scope_own_transfers` | September «Расходы» tile → search «как на Аналитике»; without «Только расходы» and with the amount 6 000 ₽ nothing is found — the single «Себе в другой банк» of 27 September is out, as in the Analytics figure; without the scope chip it is found — FIN-164 |
 | `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card and profile) |
 | `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
-| `assistant/daily_limit` | unanswerable question is free; five questions exhaust the day |
+| `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
+| `assistant/off_topic` | a question not about finances (`weather`): the server's OFF_TOPIC text, no «Повторить» (`retryable: false`), still 5 of 5; the next question is answered, 4 of 5 — FIN-160 |
+| `assistant/nothing_found_charged` | a merchant with no operations over the covered six months of the answer (`Kaspersky`, only in March): «…операций «Kaspersky» не нашли», an answer, not a refund — 4 of 5 (it used to stay 5 of 5); only a lock or no data over the period is refunded — FIN-136 |
 | `assistant/offline_retry` | no network: the notice replaces the input; «Повторить» sends the question once the network is back |
 | `assistant/chip_after_statements_deleted` | every statement deleted: the operations chip of an earlier answer opens the search without its stale selection (notice, empty result) — FIN-76 |
 | `assistant/retry_without_transfers` | `assistant_model_errors=1`: a question asked «Без переводов» fails, not spent; «Повторить» answers it still «без переводов» — FIN-76 |
 | `assistant/answer_retry` | `assistant_model_errors=1`: the answer fails, not spent; a double tap on «Повторить» while the request is on its way sends it once: one answer, no «Не получилось отправить вопрос», 4 of 5 — FIN-75 |
+| `assistant/answer_changed_since` | after an answer a category is changed, then the statement deleted: the earlier answer in the history shows «С тех пор категории менялись», then «С тех пор данные менялись» (`changed_since` counted at the time of the request) — FIN-135 |
 | `statements/upload_errors` | CSV, not a statement, another bank; leaving the picker |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
 | `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
+| `statements/upload_rate_limited_resume` | `stream_drops=1&stream_rate_limits=100&stream_retry_s=120`: the progress stream drops, every re-open gets 429; after the first 429 (`expect_stream_rate_limited=1`) the screen comes back from the control link and from the background and opens the stream itself, the server counts a 429 for each (`expect_stream_rate_limited=3`) — waited for, still parsing, no upload error; with the limit lifted the import result opens — FIN-170 |
 | `statements/upload_no_description` | a line without a description is imported (no unread notice) and shown as «Без описания» in the feed and on the operation |
 | `statements/upload_unknown_codes` | `unknown_codes=true`: the import result shows the server's text for a notice code and for a locked analytics feature the client does not know — FIN-83 |
 | `profile/theme_and_logout` | dark theme; logout cancel / confirm with the notice |
@@ -210,7 +225,9 @@ were.
 | `availability/update_required` | `min_version=9.0.0`: the next request gets `CLIENT_VERSION_UNSUPPORTED`, the update screen covers the app — FIN-22 |
 | `availability/maintenance` | `maintenance=30` with a long `Retry-After`: the screen promises the end time, after `maintenance=off` «Проверить сейчас» opens the app; then with 15 s the app leaves the screen by itself — FIN-22 |
 | `availability/maintenance_on_sign_in` | `maintenance=unknown` before sign-in: «Продолжить» on the phone screen gets the maintenance screen over sign-in, without an end time — FIN-22 |
+| `availability/maintenance_during_import` | `maintenance=30` while an upload is parsing (its stream kept re-opening with 429): the next opening of the progress stream gets 503 before the 429, the re-open loop stops and the maintenance screen covers the upload; after `maintenance=off` «Проверить сейчас» opens the app — FIN-22, FIN-170 |
 | `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
+| `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
 
 Not covered yet: voice input (needs a speech recognizer on the emulator), biometrics (needs an enrolled
@@ -229,6 +246,9 @@ A false «сессия истекла» after the user's own sign-out (FIN-74) n
 `null` only after the sign-out returned and the phone screen read the reason — a thread interleaving neither the
 emulator nor the mock can force; `SessionRepositoryImplTest` reproduces it with a token store that delivers the
 `null` late.
+A refunded answer (`charged: false` for a lock or `no_data` over the requested period, FIN-136) cannot be reached
+in the mock: the canned model builds the answer window from the covered months and knows no locked metrics;
+`AssistantEngineTest` covers the refund rule.
 A passcode left behind by a signed-out session (the process died between the sign-out and the passcode reset) and
 cleared while the lock is starting (FIN-87) cannot be forced either: the flow cannot kill the process inside that
 window, and the stale state needs a DataStore collector to start while the reset is being written, a timing the

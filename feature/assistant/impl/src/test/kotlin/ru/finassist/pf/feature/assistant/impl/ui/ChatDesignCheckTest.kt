@@ -7,7 +7,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import ru.finassist.pf.core.api.model.AnswerErrorCode
 import ru.finassist.pf.core.api.model.AnswerSource
 import ru.finassist.pf.core.api.model.AnswerStatus
 import ru.finassist.pf.core.api.model.AssistantLimit
@@ -35,7 +34,9 @@ import java.util.TimeZone
 
 /**
  * Artboards `Chat`, `ChatEmpty`, `ChatBusy`, `ChatStale`, `ChatDark`, `ChatError`, `ChatErrorData`, `ChatOffline`,
- * `ChatLimit`: the Самокат answer (7 200 ₽ over April — September 2026) and its failure / limit states.
+ * `ChatLimit`, `ChatOffTopic`, `ChatOffTopicDark`, `ChatErrorGeneric` and `ChatErrorGenericDark` (the last four —
+ * FIN-160 states, artboards FIN-173): the Самокат answer (7 200 ₽ over April — September 2026) and its failure / limit
+ * states.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -158,7 +159,7 @@ class ChatDesignCheckTest {
         "ChatError",
         pending(
             "Сколько я трачу на заправки?",
-            ChatItem.Answer("a1", calculated, AnswerStatus.FAILED, errorCode = AnswerErrorCode.MODEL_ERROR),
+            ChatItem.Answer("a1", calculated, AnswerStatus.FAILED, errorText = "Не получилось ответить. Вопрос не потрачен", retryable = true),
         ),
     )
 
@@ -166,9 +167,40 @@ class ChatDesignCheckTest {
         "ChatErrorData",
         pending(
             "Сколько я потрачу в следующем году на путешествия на Марс?",
-            ChatItem.Answer("a1", calculated, AnswerStatus.FAILED, errorCode = AnswerErrorCode.CANNOT_ANSWER),
+            ChatItem.Answer(
+                "a1", calculated, AnswerStatus.FAILED,
+                errorText = "Не получилось ответить — недостаточно данных, переформулируйте вопрос. Вопрос не потрачен",
+            ),
         ),
     )
+
+    /**
+     * OFF_TOPIC: the server's text without «Повторить», shown as any failed answer (warning notice; owner's decision
+     * on FIN-173).
+     */
+    private val offTopic = pending(
+        "Какая погода будет завтра?",
+        ChatItem.Answer(
+            "a1", calculated, AnswerStatus.FAILED,
+            errorText = "Вопрос не по теме — помощник отвечает только на вопросы о ваших финансах. " +
+                "С другими вопросами помогут универсальные ассистенты: Алиса AI, GigaChat, ChatGPT, Claude, DeepSeek",
+        ),
+    )
+
+    @Test fun chatOffTopic() = capture("ChatOffTopic", offTopic)
+
+    @Test fun chatOffTopicDark() = capture("ChatOffTopicDark", offTopic, dark = true)
+
+    /**
+     * A server older than FIN-159 sends no text: the generic «Не получилось ответить», «Повторить» by the MODEL_ERROR
+     * fallback.
+     */
+    private val errorGeneric =
+        pending("Сколько я трачу на заправки?", ChatItem.Answer("a1", calculated, AnswerStatus.FAILED, errorText = null, retryable = true))
+
+    @Test fun chatErrorGeneric() = capture("ChatErrorGeneric", errorGeneric)
+
+    @Test fun chatErrorGenericDark() = capture("ChatErrorGenericDark", errorGeneric, dark = true)
 
     @Test fun chatStale() = capture(
         "ChatStale",

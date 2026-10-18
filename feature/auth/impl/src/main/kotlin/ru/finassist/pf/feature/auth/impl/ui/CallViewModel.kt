@@ -4,11 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.api.AuthApi
+import ru.finassist.pf.core.api.SseReopenState
+import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.api.model.VerificationStatus
@@ -19,17 +22,26 @@ import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.auth.impl.data.SessionRepositoryImpl
+import ru.finassist.pf.feature.auth.impl.domain.CallDeadline
 import ru.finassist.pf.feature.auth.impl.domain.CallLockText
 import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
 import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
+import java.time.Duration
+import java.time.ZoneId
 import javax.inject.Inject
 
-enum class CallPhase { WAITING, EXPIRED, LOCKED, OFFLINE }
+/**
+ * [CHECKING]: the device deadline has passed while waiting; the number is hidden until the stream confirms the status
+ * (`expired` → [EXPIRED], `pending` → back to [WAITING] without a time, api.md 1.1 «Клиент, номер подтверждения»).
+ */
+enum class CallPhase { WAITING, CHECKING, EXPIRED, LOCKED, OFFLINE }
 
 data class CallUiState(
     val phoneDisplay: String,
     val callbackNumber: String,
     val phase: CallPhase = CallPhase.WAITING,
+    /** «ЧЧ:ММ» of the device deadline in the device zone; null when it is unknown or has passed. */
+    val waitUntil: String? = null,
     /** Text of the [CallPhase.LOCKED] state (`CallLockText`). */
     val lockText: String? = null,
     val busy: Boolean = false,
@@ -59,20 +71,46 @@ class CallViewModel @Inject constructor(
         CallUiState(
             phoneDisplay = PhoneFormat.display(PhoneFormat.digits(flow.phone)),
             callbackNumber = flow.verification?.callbackNumber ?: "",
+            waitUntil = waitUntilText(),
         ),
     )
     val state: StateFlow<CallUiState> = _state
     private val _events = MutableStateFlow<CallEvent?>(null)
     val events: StateFlow<CallEvent?> = _events
     private var streamJob: Job? = null
+    private var timerJob: Job? = null
+    /** The screen is resumed: [watch] was called and [stopWatching] was not. */
+    private var watching = false
+    /** The device deadline of the current request has been reached; the timer does not fire again for it. */
+    private var deadlinePassed = false
+    /**
+     * Re-open state of each request's stream (by token) for the life of the screen: opening it again (resume, the
+     * deadline re-check) after it brought an event or dropped is a re-open, and a 429 on it is waited for, not shown as
+     * LOCKED (api.md «SSE», [SseReopenState]).
+     */
+    private val reopenStates = HashMap<String, SseReopenState>()
+
+    init {
+        armTimer()
+    }
 
     /** Called on every resume: the stream is cheap and its first event is the full state. */
     fun watch() {
         val token = flow.verification?.verificationToken ?: return
+        watching = true
+        // Re-armed on every resume: the remaining time is read from the clock again (the device clock may have moved).
+        armTimer()
         if (streamJob?.isActive == true) return
         streamJob = viewModelScope.launch {
             try {
-                authApi.streamPhoneVerification(token).collect { event ->
+                // A drop of an open stream is re-opened with pauses and does not show «нет сети»; a stream that cannot be
+                // opened at all still does (reopenFirstFailure = false), as does a 429 on the first opening of the
+                // request on this screen (LOCKED). A 429 when the screen opens it again is waited for.
+                reopeningStream(
+                    isTerminal = { it.status != VerificationStatus.PENDING },
+                    reopenFirstFailure = false,
+                    state = reopenStates.getOrPut(token) { SseReopenState() },
+                ) { authApi.streamPhoneVerification(token) }.collect { event ->
                     when (event.status) {
                         VerificationStatus.PENDING -> _state.update { it.copy(phase = CallPhase.WAITING) }
                         VerificationStatus.VERIFIED -> onVerified(event.isNewUser == true, event.accessToken, event.refreshToken, event.registrationToken)
@@ -91,13 +129,57 @@ class CallViewModel @Inject constructor(
     }
 
     fun stopWatching() {
+        watching = false
         streamJob?.cancel()
         streamJob = null
     }
 
+    /**
+     * Timer to the device deadline ([SignInFlow.callDeadline]): at the deadline the number leaves the screen and the
+     * stream is re-opened to confirm the status (it may have been closed). No deadline — no timer: `expired` of the
+     * stream ends the wait.
+     *
+     * The timer fires [TIMER_GRACE] after the deadline: `expires_in` is rounded down, so the device deadline usually
+     * comes up to a second before the server's. Fired exactly at it, the re-opened stream would answer `pending` and the
+     * number would come back for a moment before `expired`. «до ЧЧ:ММ» keeps the deadline itself (seconds dropped).
+     */
+    private fun armTimer() {
+        val deadline = flow.callDeadline
+        if (deadline == null) {
+            timerJob?.cancel()
+            return
+        }
+        if (deadlinePassed) return
+        timerJob?.cancel()
+        timerJob = viewModelScope.launch {
+            val left = Duration.between(clock.now().toInstant(), deadline.plus(TIMER_GRACE))
+            if (!left.isNegative && !left.isZero) delay(left.toMillis())
+            onDeadline()
+        }
+    }
+
+    private fun onDeadline() {
+        deadlinePassed = true
+        _state.update { it.copy(waitUntil = null, phase = if (it.phase == CallPhase.WAITING) CallPhase.CHECKING else it.phase) }
+        if (_state.value.phase != CallPhase.CHECKING) return
+        streamJob?.cancel()
+        streamJob = null
+        // In the background the stream is not open; the next resume opens it and confirms the status.
+        if (watching) watch()
+    }
+
+    private fun waitUntilText(): String? =
+        flow.callDeadline?.let { CallDeadline.clockText(it, deviceZone()) }
+
+    /** The wait is shown by the device's clock and zone, not the profile zone of [Clock] (api.md 1.1). */
+    private fun deviceZone(): ZoneId = ZoneId.systemDefault()
+
     fun onDialOpened() = tracker.track(Events.AUTH_CALL_STARTED)
 
     private suspend fun onVerified(isNew: Boolean, access: String?, refresh: String?, registrationToken: String?) {
+        // The call has been counted: the deadline of the request no longer matters (the result lives 15 minutes).
+        timerJob?.cancel()
+        deadlinePassed = true
         if (isNew) {
             flow.registrationToken = registrationToken
             _events.value = if (flags.isEnabled(Flag.AUTH_REGISTRATION)) CallEvent.NewUser else CallEvent.RegistrationClosed
@@ -123,8 +205,13 @@ class CallViewModel @Inject constructor(
             try {
                 stopWatching()
                 flow.phoneRequestKey = IdempotencyKey.random().value
-                flow.verification = authApi.startPhoneVerification(IdempotencyKey(flow.phoneRequestKey!!), flow.phone)
-                _state.update { it.copy(phase = CallPhase.WAITING, callbackNumber = flow.verification!!.callbackNumber) }
+                val verification = authApi.startPhoneVerification(IdempotencyKey(flow.phoneRequestKey!!), flow.phone)
+                flow.verificationReceived(verification, clock.now().toInstant())
+                deadlinePassed = false
+                _state.update {
+                    it.copy(phase = CallPhase.WAITING, callbackNumber = verification.callbackNumber, waitUntil = waitUntilText())
+                }
+                armTimer()
                 watch()
             } catch (e: AppError) {
                 when (e) {
@@ -141,4 +228,9 @@ class CallViewModel @Inject constructor(
     private fun lockText(e: AppError.RateLimited) = CallLockText.of(e.retryAt, clock.now(), clock.zone)
 
     fun consumeEvent() { _events.value = null }
+
+    private companion object {
+        /** Margin over the rounding of `expires_in` (whole seconds, rounded down) — see [armTimer]. */
+        val TIMER_GRACE: Duration = Duration.ofSeconds(1)
+    }
 }

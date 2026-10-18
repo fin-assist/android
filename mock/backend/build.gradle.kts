@@ -12,4 +12,7 @@ dependencies {
     implementation(projects.core.api)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
+
+    // Contract tests: responses of the fake backend against the pinned openapi.yaml (FIN-123, docs/testing.md).
+    testImplementation(libs.openapi.validator)
 }

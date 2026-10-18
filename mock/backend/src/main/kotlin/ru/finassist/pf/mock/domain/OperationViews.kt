@@ -5,6 +5,7 @@ import ru.finassist.pf.core.api.model.OperationDetails
 import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.api.model.OperationKind
 import ru.finassist.pf.core.api.model.OperationStatus
+import ru.finassist.pf.core.api.model.SystemCategories
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.RussianDates
 import ru.finassist.pf.mock.ofx.OfxAccount
@@ -16,17 +17,21 @@ sealed interface Record {
     val id: String
     val occurredAt: OffsetDateTime
     val amountMinor: Long
+    /** The operation whose (ACCTID, FITID) orders records of the same moment: the debit of a pair. */
+    val keyOp: Operation
 
     data class Single(val op: Operation) : Record {
         override val id get() = op.id
         override val occurredAt get() = op.occurredAt
         override val amountMinor get() = op.amountMinor
+        override val keyOp get() = op
     }
 
     data class Pair(val pair: OwnTransferPair) : Record {
         override val id get() = pair.id
         override val occurredAt get() = pair.debit.occurredAt
         override val amountMinor get() = pair.debit.amountMinor
+        override val keyOp get() = pair.debit
     }
 }
 
@@ -35,7 +40,10 @@ class OperationViews(private val ledger: Ledger, private val zoneOf: () -> ZoneI
     private val zone: ZoneId get() = zoneOf()
 
 
-    /** Every record, newest first: pairs as one record, everything else as singles. */
+    /**
+     * Every record, newest first: pairs as one record, everything else as singles. Equal moments — by (ACCTID, FITID)
+     * of the record descending, a pair by its debit (docs/calc.md, section 10).
+     */
     fun records(): List<Record> {
         val result = ArrayList<Record>()
         val seenPairs = HashSet<String>()
@@ -47,7 +55,10 @@ class OperationViews(private val ledger: Ledger, private val zoneOf: () -> ZoneI
                 result += Record.Pair(pair)
             }
         }
-        return result.sortedByDescending { it.occurredAt }
+        return result.sortedWith(
+            compareByDescending<Record> { it.occurredAt.toInstant() }
+                .thenByDescending { it.keyOp.account.id }.thenByDescending { it.keyOp.fitId },
+        )
     }
 
     fun record(id: String): Record? = ledger.pair(id)?.let { Record.Pair(it) }
@@ -99,7 +110,7 @@ class OperationViews(private val ledger: Ledger, private val zoneOf: () -> ZoneI
 
     private fun note(op: Operation): String? = when {
         op.isOwnTransferCategory -> "не в тратах"
-        op.isRefund -> op.refundTarget?.let { "возврат · ${it.name}" } ?: "возврат"
+        op.isRefund -> op.refundTarget?.takeIf { it.id != SystemCategories.UNCATEGORIZED }?.let { "возврат · ${it.name}" } ?: "возврат"
         else -> null
     }
 
@@ -107,7 +118,8 @@ class OperationViews(private val ledger: Ledger, private val zoneOf: () -> ZoneI
         op.isOwnTransferCategory -> "Не считаем тратой и доходом"
         op.isRefund -> {
             val month = RussianDates.monthPrepositional(op.occurredAt.atZoneSameInstant(zone).month)
-            op.refundTarget?.let { "Уменьшает расходы «${it.name}» в $month" } ?: "Уменьшает общие расходы в $month"
+            op.refundTarget?.takeIf { it.id != SystemCategories.UNCATEGORIZED }?.let { "Уменьшает расходы «${it.name}» в $month" }
+                ?: "Уменьшает общие расходы в $month"
         }
         else -> null
     }

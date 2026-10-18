@@ -52,15 +52,22 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
                 details = listOf(AppError.FieldError(PHONE_FIELD, FieldErrorCodes.INVALID_FORMAT, "Номер — +7 и 10 цифр")),
             )
         }
-        return backend.idempotent("auth.phone:${key.value}") {
+        val stored = backend.idempotent("auth.phone:${key.value}", request = phone) {
             val now = backend.now()
             val token = secret("vt_")
-            backend.mutex.withLock { verifications[token] = Verification(phone, now, now.plusMinutes(3)) }
-            PhoneVerification(verificationToken = token, callbackNumber = CALLBACK_NUMBER, expiresAt = now.plusMinutes(3))
+            val expiresAt = now.plusNanos(backend.config.verificationTtlMs * 1_000_000)
+            backend.mutex.withLock { verifications[token] = Verification(phone, now, expiresAt) }
+            PhoneVerification(verificationToken = token, callbackNumber = CALLBACK_NUMBER, expiresAt = expiresAt)
         }
+        // `expires_in` is computed on every send, a replay by the same key included (api.md 1.1): floor, not below 0.
+        val left = java.time.Duration.between(backend.now(), stored.expiresAt).seconds.coerceAtLeast(0)
+        return stored.copy(expiresIn = left.toInt())
     }
 
-    override fun streamPhoneVerification(verificationToken: String): Flow<PhoneVerificationStatusEvent> = flow {
+    override fun streamPhoneVerification(verificationToken: String): Flow<PhoneVerificationStatusEvent> =
+        backend.droppable(verificationEvents(verificationToken)) { it.status != VerificationStatus.PENDING }
+
+    private fun verificationEvents(verificationToken: String): Flow<PhoneVerificationStatusEvent> = flow {
         val v = backend.mutex.withLock { verifications[verificationToken] }
             ?: throw AppError.Unauthorized(ErrorCodes.INVALID_TOKEN)
         if (v.consumed) throw AppError.Unauthorized(ErrorCodes.INVALID_TOKEN)
@@ -72,6 +79,12 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         }
         if (now.isBefore(verifiedAt)) {
             emit(PhoneVerificationStatusEvent(status = VerificationStatus.PENDING))
+            // A call that would come after the request's end never comes: the open stream ends with `expired`.
+            if (verifiedAt.isAfter(v.expiresAt)) {
+                delay(java.time.Duration.between(now, v.expiresAt).toMillis() + 1)
+                emit(PhoneVerificationStatusEvent(status = VerificationStatus.EXPIRED))
+                return@flow
+            }
             delay(java.time.Duration.between(now, verifiedAt).toMillis())
         }
         emit(verified(v))
@@ -105,7 +118,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
 
     override suspend fun register(key: IdempotencyKey, request: RegisterRequest): RegisterResponse {
         backend.simulateNetwork()
-        return backend.idempotent("auth.register:${key.value}") {
+        return backend.idempotent("auth.register:${key.value}", request = request) {
             val phone = backend.mutex.withLock { registrationTokens[request.registrationToken] }
                 ?: throw AppError.Unauthorized(ErrorCodes.INVALID_TOKEN)
             if (!request.pdConsentAccepted) throw AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403)
@@ -123,7 +136,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
 
     override suspend fun refreshTokens(key: IdempotencyKey, refreshToken: String): TokenPair {
         backend.simulateNetwork()
-        return backend.idempotent("auth.token:${key.value}") {
+        return backend.idempotent("auth.token:${key.value}", request = refreshToken) {
             val known = backend.mutex.withLock { refreshTokens.remove(refreshToken) }
             if (!known) throw AppError.Unauthorized(ErrorCodes.TOKEN_REVOKED)
             issueTokens()

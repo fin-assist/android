@@ -67,10 +67,12 @@ class AssistantStoreTest {
     fun `a failed answer keeps its error and drops the partial text`() {
         val answer = AssistantStore.Answer("a", "q", at)
         answer.append(chunk(0, "Ушло"))
-        answer.append(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "boom", 4)))
+        answer.append(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "boom", 4, text = "Текст", retryable = true)))
         val message = answer.toMessage()
         assertEquals(AnswerStatus.FAILED, message.status)
         assertEquals(AnswerErrorCode.MODEL_ERROR, message.errorCode)
+        assertEquals("Текст", message.errorText)
+        assertEquals(true, message.retryable)
         assertEquals(emptyList(), message.blocks)
         assertEquals(AnswerStatus.FAILED, answer.snapshot().first.status)
     }
