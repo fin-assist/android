@@ -10,7 +10,7 @@ import java.io.File
 /**
  * The fake backend against the calculation fixtures of fin-assist/contracts (FIN-108): the same statements and
  * actions as the Go backend, the same expected responses (`src/test/resources/calc`, copied by
- * `scripts/sync-calc-fixtures.sh`). Any difference fails the test.
+ * `scripts/sync-contracts.sh`). Any difference fails the test.
  *
  * `CALC_DUMP=<file>` writes every difference with both values there and the responses of the fake backend to
  * `<file>.responses/`.

@@ -94,9 +94,26 @@ class MockAnalyticsApiTest {
     }
 
     @Test
-    fun `dismissing an unknown regular payment is NOT_FOUND`() = runBlocking<Unit> {
-        val e = assertFailsWith<AppError.Api> { api.dismissRegularPayment("rp_unknown_merchant") }
-        assertEquals(ErrorCodes.NOT_FOUND to 404, e.code to e.httpStatus)
+    fun `dismissing or restoring an unknown regular payment is NOT_FOUND`() = runBlocking<Unit> {
+        val unknown = "0b9d5c2e-6f1a-4c3b-9a7e-2d4f6b8c0e1a"
+        val dismiss = assertFailsWith<AppError.Api> { api.dismissRegularPayment(unknown) }
+        assertEquals(ErrorCodes.NOT_FOUND to 404, dismiss.code to dismiss.httpStatus)
+        val restore = assertFailsWith<AppError.Api> { api.restoreRegularPayment(unknown) }
+        assertEquals(ErrorCodes.NOT_FOUND to 404, restore.code to restore.httpStatus)
+        assertTrue(backend.dismissedPayments.isEmpty())
+    }
+
+    @Test
+    fun `a payment id that is not a lowercase UUID is a VALIDATION_ERROR before the lookup (api md 6_3)`() = runBlocking<Unit> {
+        val netflix = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH).insights!!
+            .regularPayments.items.orEmpty().single { it.title == "Netflix" }.id
+        for (id in listOf("rp_unknown_merchant", netflix.uppercase(), "Netflix", "")) {
+            for (call in listOf<suspend () -> Unit>({ api.dismissRegularPayment(id) }, { api.restoreRegularPayment(id) })) {
+                val e = assertFailsWith<AppError.Api>(id) { call() }
+                assertEquals(ErrorCodes.VALIDATION_ERROR to 400, e.code to e.httpStatus, id)
+                assertEquals(listOf("id"), e.details.map { it.field }, id)
+            }
+        }
         assertTrue(backend.dismissedPayments.isEmpty())
     }
 

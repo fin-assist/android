@@ -120,9 +120,10 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
     override suspend fun changeCategory(id: String, request: ChangeCategoryRequest): ChangeCategoryResponse {
         backend.simulateNetwork()
         backend.requireSession()
-        val category = backend.catalog.byId(request.categoryId) ?: throw AppError.Api(ErrorCodes.CATEGORY_NOT_ASSIGNABLE, 422)
         return backend.mutex.withLock {
+            // 404 before 422 (api.md, «Ошибки»): an operation that is not there is not found, whatever the category.
             views.record(id) ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+            val category = backend.catalog.byId(request.categoryId) ?: throw AppError.Api(ErrorCodes.CATEGORY_NOT_ASSIGNABLE, 422)
             val before = categoryState()
             val (items, replaced) = try {
                 backend.ledger.changeCategory(id, category)

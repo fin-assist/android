@@ -43,7 +43,8 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | API contract (service interfaces + DTOs) | `core/api/…/Services.kt`, `core/api/…/model/*.kt` |
 | SSE streams: transport and the one re-open loop of all three streams (pauses with jitter, 429, FIN-170) | `core/network/…/Sse.kt`; `core/api/…/SseReopen.kt` (`reopeningStream`, used by the view models; the fake backend's drops — `MockConfig.streamDrops`) |
 | Fake backend (mock flavor): OFX parsing, ledger, analytics, assistant | `mock/backend/…/mock/` — `MockBackend.kt`, `domain/*`, `MockConfig.kt` (existing phone, delays, `offline`) |
-| Fake backend against the calculation fixtures of contracts | `mock/backend/src/test/…/mock/calc/`, `mock/backend/src/test/resources/calc/` (copy), `scripts/sync-calc-fixtures.sh`; rules — `docs/testing.md`, «Calculation fixtures» |
+| Fake backend against the calculation fixtures of contracts | `mock/backend/src/test/…/mock/calc/`, `mock/backend/src/test/resources/calc/` (copy), `scripts/sync-contracts.sh`; rules — `docs/testing.md`, «Calculation fixtures» |
+| Fake backend against `openapi.yaml` and the error registry of contracts (contract tests, known mismatches) | `mock/backend/src/test/…/mock/contract/` (`Exclusions.kt`), `mock/backend/src/test/resources/contracts/` (copy of the same commit); rules — `docs/testing.md`, «Contract tests» |
 | Feature routes and public interfaces | `feature/<name>/api/…/*Routes.kt` (or `AuthApi.kt`, `AppLock.kt`) |
 | Screen registration | `FeatureEntry` / `Navigator` in `core/navigation/…/Navigation.kt`; each `:impl` binds its entry in `di/` |
 | Design system: theme, tokens, components, icons | `core/designsystem/…/theme`, `components`, `icons` |
@@ -256,6 +257,10 @@ commands: `docs/testing.md`.
   unit test when the cause is in logic.
 - The fake backend's calculation follows `docs/calc.md` of contracts: `CalcFixturesTest` requires its responses to
   equal the calculation fixtures, any difference fails CI (`docs/testing.md`, «Calculation fixtures»).
+- The fake backend's responses follow `openapi.yaml` and section 8 of `docs/api.md` of contracts: the contract tests
+  fail on a field, type, status or error code the pinned contract does not have (`docs/testing.md`, «Contract tests»).
+  A contract change updates the pinned copy (`scripts/sync-contracts.sh`) in its own PR, and the failing cases show
+  where the mock must follow; a mismatch left for later goes to `Exclusions.kt` with its issue, never into the validator.
 - The measurable check is coverage of changed lines by unit tests: at least 80 % of changed executable lines
   (Build in an agent container → Coverage). Composables are excluded from the report — they are covered by the
   design check and UI tests, not by this number. Uncovered changed lines are listed in the PR («Проверка») with

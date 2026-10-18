@@ -52,7 +52,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
                 details = listOf(AppError.FieldError(PHONE_FIELD, FieldErrorCodes.INVALID_FORMAT, "Номер — +7 и 10 цифр")),
             )
         }
-        val stored = backend.idempotent("auth.phone:${key.value}") {
+        val stored = backend.idempotent("auth.phone:${key.value}", request = phone) {
             val now = backend.now()
             val token = secret("vt_")
             val expiresAt = now.plusNanos(backend.config.verificationTtlMs * 1_000_000)
@@ -118,7 +118,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
 
     override suspend fun register(key: IdempotencyKey, request: RegisterRequest): RegisterResponse {
         backend.simulateNetwork()
-        return backend.idempotent("auth.register:${key.value}") {
+        return backend.idempotent("auth.register:${key.value}", request = request) {
             val phone = backend.mutex.withLock { registrationTokens[request.registrationToken] }
                 ?: throw AppError.Unauthorized(ErrorCodes.INVALID_TOKEN)
             if (!request.pdConsentAccepted) throw AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403)
@@ -136,7 +136,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
 
     override suspend fun refreshTokens(key: IdempotencyKey, refreshToken: String): TokenPair {
         backend.simulateNetwork()
-        return backend.idempotent("auth.token:${key.value}") {
+        return backend.idempotent("auth.token:${key.value}", request = refreshToken) {
             val known = backend.mutex.withLock { refreshTokens.remove(refreshToken) }
             if (!known) throw AppError.Unauthorized(ErrorCodes.TOKEN_REVOKED)
             issueTokens()

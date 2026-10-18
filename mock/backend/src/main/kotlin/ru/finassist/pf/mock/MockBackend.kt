@@ -106,7 +106,10 @@ class MockBackend(
     val assistant = AssistantStore(dataChanges)
 
     /** `Idempotency-Key` → cached response for the endpoints api.md marks idempotent. */
-    val idempotency = HashMap<String, Any>()
+    val idempotency = HashMap<String, Stored>()
+
+    /** A cached response and the request it answered ([request] null: the endpoint does not compare bodies yet). */
+    class Stored(val request: Any?, val result: Any)
 
     val analytics = AnalyticsEngine(
         ledger = ledger,
@@ -202,14 +205,20 @@ class MockBackend(
 
     /**
      * Runs [block] once per key; a repeat with the same key returns the cached result, and a repeat while the
-     * first request is still running gets 409 REQUEST_IN_PROGRESS (api.md, idempotency). A failed [block] is not
-     * stored: the key can be used again. [onRepeat] runs before a cached result is returned: a [block] that
-     * simulates the network itself passes the same checks here, so a repeat still meets offline and a lost session.
+     * first request is still running gets 409 REQUEST_IN_PROGRESS (api.md, idempotency). A repeat with another
+     * [request] (the request body, compared by equality) gets 409 IDEMPOTENCY_CONFLICT; a call without [request]
+     * is not compared. A failed [block] is not stored: the key can be used again. [onRepeat] runs before a cached
+     * result is returned: a [block] that simulates the network itself passes the same checks here, so a repeat
+     * still meets offline and a lost session.
      */
-    suspend fun <T : Any> idempotent(key: String, onRepeat: suspend () -> Unit = {}, block: suspend () -> T): T {
+    suspend fun <T : Any> idempotent(key: String, request: Any? = null, onRepeat: suspend () -> Unit = {}, block: suspend () -> T): T {
         val cached = mutex.withLock {
+            val stored = idempotency[key]
+            if (stored != null && request != null && stored.request != null && stored.request != request) {
+                throw AppError.Api(ErrorCodes.IDEMPOTENCY_CONFLICT, 409, message = "Idempotency-Key was used with another request")
+            }
             @Suppress("UNCHECKED_CAST")
-            (idempotency[key] as? T) ?: run {
+            (stored?.result as? T) ?: run {
                 if (!inFlight.add(key)) throw AppError.InProgress(retryAfterSeconds = 1)
                 null
             }
@@ -220,7 +229,7 @@ class MockBackend(
         }
         try {
             val result = block()
-            mutex.withLock { idempotency[key] = result }
+            mutex.withLock { idempotency[key] = Stored(request, result) }
             return result
         } finally {
             // Also when the caller was cancelled mid-request: the lock may be busy, and a cancellable wait for it
