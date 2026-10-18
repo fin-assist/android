@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.AssistantApi
+import ru.finassist.pf.core.api.SseReopenState
 import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.model.AnswerEvent
 import ru.finassist.pf.core.api.model.AnswerSource
@@ -100,8 +101,8 @@ class ChatViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(ChatUiState())
     val state: StateFlow<ChatUiState> = _state
-    /** Answers whose stream has already brought an event on this screen. */
-    private val openedStreams = HashSet<String>()
+    /** Re-open state of each answer's stream for the life of the screen ([SseReopenState]). */
+    private val reopenStates = HashMap<String, SseReopenState>()
 
     private val streams = HashMap<String, Job>()
     private val retryKeys = HashMap<String, IdempotencyKey>()
@@ -308,12 +309,9 @@ class ChatViewModel @Inject constructor(
             try {
                 try {
                     // Opening it again after the screen came back is a re-open: a 429 is waited for (api.md «SSE»).
-                    reopeningStream(isTerminal = ::isTerminal, continuesEarlierOpening = answerId in openedStreams) {
+                    reopeningStream(isTerminal = ::isTerminal, state = reopenStates.getOrPut(answerId) { SseReopenState() }) {
                         api.streamAnswer(answerId)
-                    }.collect { event ->
-                        openedStreams += answerId
-                        applyEvent(answerId, event)
-                    }
+                    }.collect { event -> applyEvent(answerId, event) }
                     _state.update { it.copy(offline = false) }
                 } catch (e: AppError) {
                     // Not a drop (404 and the like): the stream will not recover by itself.

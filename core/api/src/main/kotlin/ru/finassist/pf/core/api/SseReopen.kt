@@ -7,7 +7,6 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onEach
 import ru.finassist.pf.core.common.error.AppError
-import java.time.Duration
 import java.time.Instant
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
@@ -56,6 +55,15 @@ class SseBackoff(private val random: Random = Random.Default) {
 }
 
 /**
+ * Whether a stream is in re-open mode: it has brought an event or dropped, and no terminal event came since. Kept by the
+ * caller per stream key across collections ([reopeningStream]); not thread-safe — one collection at a time.
+ */
+class SseReopenState {
+    var reopening: Boolean = false
+        internal set
+}
+
+/**
  * The one re-open loop of the three SSE streams (1.2 verification, 3.3 import progress, 7.2 assistant answer), for every
  * flavor: collects [open] and, after a drop, opens it again with the pauses of [SseBackoff]. Re-collecting loses
  * nothing: the first event of a stream is the full current state.
@@ -72,9 +80,12 @@ class SseBackoff(private val random: Random = Random.Default) {
  * - [reopenFirstFailure] false: a failure of the very first opening, before any event, goes to the caller too, so a
  *   screen keeps its own «нет сети» state for a stream that could not be opened at all. A clean close without a
  *   terminal event is a drop either way.
- * - [continuesEarlierOpening] true: the caller has already had this stream open (a screen that comes back, a re-check
- *   by a timer), so its first opening here is a re-open too, and a 429 on it is waited for instead of going to the
- *   caller. Other failures of that opening follow [reopenFirstFailure].
+ * - [state] carries «this stream is being re-opened» across collections of the same stream (one per stream key —
+ *   token, upload, answer — for the life of the screen): the loop marks it at the first event or the first drop,
+ *   whichever comes first. A screen that opens the stream again (it came back, a timer re-checks) passes the same
+ *   holder, so a 429 on that opening is waited for too instead of going to the caller. A terminal event clears it.
+ *   [reopenFirstFailure] still looks at this collection only: a stream that cannot be opened after the screen came
+ *   back shows the screen's «нет сети» state, as on the first visit.
  *
  * The flow completes after the stream that brought the terminal event ends. Cancelling the collector stops it,
  * pauses included.
@@ -82,14 +93,14 @@ class SseBackoff(private val random: Random = Random.Default) {
 fun <T> reopeningStream(
     isTerminal: (T) -> Boolean,
     reopenFirstFailure: Boolean = true,
-    continuesEarlierOpening: Boolean = false,
+    state: SseReopenState = SseReopenState(),
     random: Random = Random.Default,
     timeSource: TimeSource = TimeSource.Monotonic,
     wallClock: () -> Instant = Instant::now,
     open: () -> Flow<T>,
 ): Flow<T> = flow {
     val backoff = SseBackoff(random)
-    // A drop has happened: the next opening is a re-open (429 is waited for only then).
+    // A drop has happened in this collection (the first-failure rule looks at this one only).
     var reopening = false
     while (true) {
         var openedAt: TimeMark? = null
@@ -97,7 +108,10 @@ fun <T> reopeningStream(
         var failure: Throwable? = null
         open()
             .onEach { event ->
-                if (openedAt == null) openedAt = timeSource.markNow()
+                if (openedAt == null) {
+                    openedAt = timeSource.markNow()
+                    state.reopening = true
+                }
                 if (isTerminal(event)) terminal = true
             }
             // Upstream failures only: an exception of the collector passes through untouched.
@@ -109,6 +123,7 @@ fun <T> reopeningStream(
         if (terminal) {
             // The server closes the stream after its terminal event; a failure of that close changes nothing.
             backoff.reset()
+            state.reopening = false
             return@flow
         }
         val error = failure
@@ -118,14 +133,15 @@ fun <T> reopeningStream(
                 if ((openedAt?.elapsedNow() ?: kotlin.time.Duration.ZERO) >= SseBackoff.HEALTHY_MS.milliseconds) backoff.reset()
                 backoff.afterDrop()
             }
-            error is AppError.RateLimited && (reopening || continuesEarlierOpening) -> {
+            error is AppError.RateLimited && state.reopening -> {
                 val wait = error.retryAfterSeconds?.let { it * 1_000 }
-                    ?: error.retryAt?.let { Duration.between(wallClock(), it.toInstant()).toMillis() }
+                    ?: error.retryAt?.let { it.toInstant().toEpochMilli() - wallClock().toEpochMilli() }
                 if (wait != null) backoff.afterRateLimit(wait) else backoff.afterDrop()
             }
             else -> throw error
         }
         reopening = true
+        state.reopening = true
         delay(pause)
     }
 }

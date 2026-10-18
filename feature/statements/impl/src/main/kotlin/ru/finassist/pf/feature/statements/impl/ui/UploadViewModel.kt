@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.StatementsApi
+import ru.finassist.pf.core.api.SseReopenState
 import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.UploadFile
 import ru.finassist.pf.core.api.model.ErrorCodes
@@ -85,8 +86,8 @@ class UploadViewModel @Inject constructor(
 
     /** A picked file is still being sent: another pick meanwhile is ignored. Tests wait on it before picking again. */
     internal val uploadInFlight: Boolean get() = uploadJob?.isActive == true
-    /** Uploads whose progress stream has already brought an event on this screen. */
-    private val openedStreams = HashSet<String>()
+    /** Re-open state of each upload's progress stream for the life of the screen ([SseReopenState]). */
+    private val reopenStates = HashMap<String, SseReopenState>()
 
     private var progressJob: Job? = null
 
@@ -208,12 +209,9 @@ class UploadViewModel @Inject constructor(
                 // Opening it again after the screen came back is a re-open: a 429 is waited for, not an error (api.md «SSE»).
                 reopeningStream(
                     isTerminal = { it !is ImportEvent.Progress },
-                    continuesEarlierOpening = uploadId in openedStreams,
+                    state = reopenStates.getOrPut(uploadId) { SseReopenState() },
                 ) { api.streamProgress(uploadId) }
-                    .collect { event ->
-                        openedStreams += uploadId
-                        handle(uploadId, busy.fileName, event)
-                    }
+                    .collect { event -> handle(uploadId, busy.fileName, event) }
             } catch (e: AppError) {
                 fail(e, busy.fileName)
             }

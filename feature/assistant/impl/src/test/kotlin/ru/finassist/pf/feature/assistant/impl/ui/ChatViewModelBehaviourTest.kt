@@ -829,6 +829,39 @@ class ChatViewModelBehaviourTest {
         assertEquals(1, maxActive, "never two streams at once")
     }
 
+    @Test fun `a 503 before the snapshot, a 429, a return to the chat and a 429 again still end with the answer`() {
+        var active = 0
+        var maxActive = 0
+        fun tracked(f: Flow<AnswerEvent>) = f.onStart { active++; maxActive = maxOf(maxActive, active) }.onCompletion { active-- }
+        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        api.askOutcomes += askResponse("a1")
+        api.script(
+            "a1",
+            // No event at all: the stream drops before its snapshot.
+            tracked(flow { throw AppError.Server(503) }),
+            limited(),
+            limited(),
+            tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList())))),
+        )
+        val vm = newVm()
+        sendQuestion(vm)
+        advance(1_000)
+        assertEquals(2, api.streamOpens.size, "the 503 was re-opened and got 429")
+        val lists = api.listCalls.size
+        vm.pauseStreams()
+        vm.resumeStreams()
+        assertEquals(3, api.streamOpens.size)
+        assertEquals(lists, api.listCalls.size, "the 429 after coming back is waited for, not a reason to reload")
+        assertFalse(vm.state.value.sendFailed)
+        advance(59_000)
+        assertEquals(3, api.streamOpens.size, "not before Retry-After")
+        advance(2_000)
+        assertEquals(4, api.streamOpens.size)
+        assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
+        assertEquals(listOf(text("Ответ")), vm.answerItem("a1").blocks)
+        assertEquals(1, maxActive, "never two streams at once")
+    }
+
     @Test fun `a stream error other than the network stops watching and the history gives the answer its status`() {
         api.askOutcomes += askResponse("a1")
         api.askOutcomes += askResponse("a2")

@@ -39,6 +39,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.StatementsApi
+import ru.finassist.pf.core.api.SseReopenState
 import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.model.StatementsList
 import ru.finassist.pf.core.api.model.Upload
@@ -98,8 +99,8 @@ class HistoryViewModel @Inject constructor(
         }
     }
 
-    /** Uploads whose progress stream has already brought an event on this screen. */
-    private val openedStreams = HashSet<String>()
+    /** Re-open state of each upload's progress stream for the life of the screen ([SseReopenState]). */
+    private val reopenStates = HashMap<String, SseReopenState>()
 
     private val watching = HashMap<String, Job>()
 
@@ -115,12 +116,9 @@ class HistoryViewModel @Inject constructor(
                 // Opening it again after the screen came back is a re-open: a 429 is waited for (api.md «SSE»).
                 reopeningStream(
                     isTerminal = { it !is ImportEvent.Progress },
-                    continuesEarlierOpening = uploadId in openedStreams,
+                    state = reopenStates.getOrPut(uploadId) { SseReopenState() },
                 ) { api.streamProgress(uploadId) }
-                    .collect { event ->
-                        openedStreams += uploadId
-                        if (event is ImportEvent.Complete) repository.importCompleted(uploadId, event.result)
-                    }
+                    .collect { event -> if (event is ImportEvent.Complete) repository.importCompleted(uploadId, event.result) }
             } catch (e: AppError) {
                 return@launch
             }

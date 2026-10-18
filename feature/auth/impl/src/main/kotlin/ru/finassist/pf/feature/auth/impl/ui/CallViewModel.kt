@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.api.AuthApi
+import ru.finassist.pf.core.api.SseReopenState
 import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.TokenPair
@@ -83,10 +84,11 @@ class CallViewModel @Inject constructor(
     /** The device deadline of the current request has been reached; the timer does not fire again for it. */
     private var deadlinePassed = false
     /**
-     * Token whose stream has already brought an event on this screen: opening it again (resume, the deadline re-check)
-     * is a re-open, and a 429 on it is waited for, not shown as LOCKED (api.md «SSE»).
+     * Re-open state of each request's stream (by token) for the life of the screen: opening it again (resume, the
+     * deadline re-check) after it brought an event or dropped is a re-open, and a 429 on it is waited for, not shown as
+     * LOCKED (api.md «SSE», [SseReopenState]).
      */
-    private var openedToken: String? = null
+    private val reopenStates = HashMap<String, SseReopenState>()
 
     init {
         armTimer()
@@ -107,9 +109,8 @@ class CallViewModel @Inject constructor(
                 reopeningStream(
                     isTerminal = { it.status != VerificationStatus.PENDING },
                     reopenFirstFailure = false,
-                    continuesEarlierOpening = openedToken == token,
+                    state = reopenStates.getOrPut(token) { SseReopenState() },
                 ) { authApi.streamPhoneVerification(token) }.collect { event ->
-                    openedToken = token
                     when (event.status) {
                         VerificationStatus.PENDING -> _state.update { it.copy(phase = CallPhase.WAITING) }
                         VerificationStatus.VERIFIED -> onVerified(event.isNewUser == true, event.accessToken, event.refreshToken, event.registrationToken)

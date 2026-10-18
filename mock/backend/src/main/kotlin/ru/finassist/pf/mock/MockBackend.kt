@@ -151,7 +151,8 @@ class MockBackend(
         if (config.networkDelayMs > 0) delay(config.networkDelayMs)
     }
 
-    private val dropLock = Any()
+    /** Guards the drop and 429 counters of [MockConfig] (a coroutine mutex: `synchronized` is JVM-only). */
+    private val dropLock = Mutex()
 
     /** The last opening of a stream was dropped: the next one is a re-open ([MockConfig.streamRateLimits]). */
     private var afterDrop = false
@@ -173,19 +174,19 @@ class MockBackend(
         )
     }
 
-    private fun takeDrop(): Boolean = synchronized(dropLock) {
+    private suspend fun takeDrop(): Boolean = dropLock.withLock {
         val left = config.streamDrops
-        if (left <= 0) return@synchronized false
+        if (left <= 0) return@withLock false
         config = config.copy(streamDrops = left - 1)
         afterDrop = true
         true
     }
 
-    private fun takeRateLimit(): AppError.RateLimited? = synchronized(dropLock) {
+    private suspend fun takeRateLimit(): AppError.RateLimited? = dropLock.withLock {
         val left = config.streamRateLimits
         if (!afterDrop || left <= 0) {
             afterDrop = false
-            return@synchronized null
+            return@withLock null
         }
         config = config.copy(streamRateLimits = left - 1)
         val seconds = MockConfig.STREAM_RETRY_SECONDS
