@@ -6,8 +6,9 @@
 explicitly off and no network security config, so no exception to it either.
 
 `local-debug` — the merged manifest of localDebug, its network security config and its BuildConfig.java: no test
-hooks; the config is the app's own, forbids cleartext by default and allows it only to the host of the compiled
-`API_BASE_URL` (pf.apiBaseUrl), without subdomains, user CAs or debug overrides, and not at all for an https backend.
+hooks; the config is the app's own and forbids cleartext by default. An http backend (the compiled `API_BASE_URL`,
+i.e. pf.apiBaseUrl) gets exactly one exception, for its own host, without subdomains; an https backend gets none.
+No user CAs or debug overrides.
 
 Usage:
   scripts/check-build-separation.py release <merged AndroidManifest.xml>...
@@ -85,6 +86,8 @@ def local_debug_problems(manifest_xml: str, nsc_xml: str, base_url: str) -> list
             problems.append(f"cleartext to {', '.join(hosts)} although the backend {base_url} is https")
     elif url.scheme == "http" and url.hostname:
         others = [h for h in hosts if h.lower() != url.hostname]
+        if not hosts:
+            problems.append(f"no cleartext exception for the http backend host {url.hostname}: the build cannot reach it")
         if others:
             problems.append(f"cleartext to {', '.join(others)}, not the backend host {url.hostname}")
     else:

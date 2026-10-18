@@ -76,8 +76,15 @@ class LocalDebugTest(unittest.TestCase):
     def test_one_cleartext_host_passes(self):
         self.assertEqual([], local_debug(LOCAL_MANIFEST, nsc(ONE_HOST)))
 
-    def test_https_config_without_exception_passes(self):
-        self.assertEqual([], local_debug(LOCAL_MANIFEST, nsc("")))
+    def test_http_backend_without_exception_fails(self):
+        self.assertEqual(
+            ["no cleartext exception for the http backend host 10.0.2.2: the build cannot reach it"],
+            local_debug(LOCAL_MANIFEST, nsc("")),
+        )
+
+    def test_http_backend_with_exception_that_is_not_cleartext_fails(self):
+        body = '<domain-config cleartextTrafficPermitted="false"><domain>10.0.2.2</domain></domain-config>'
+        self.assertEqual(1, len(local_debug(LOCAL_MANIFEST, nsc(body))))
 
     def test_manifest_without_config_fails(self):
         self.assertEqual(1, len(local_debug(manifest(), nsc(ONE_HOST))))
@@ -90,9 +97,9 @@ class LocalDebugTest(unittest.TestCase):
         self.assertEqual(1, len(local_debug(xml, nsc(ONE_HOST))))
 
     def test_base_config_allowing_cleartext_fails(self):
-        problems = local_debug(LOCAL_MANIFEST, nsc("", '<base-config cleartextTrafficPermitted="true" />'))
+        problems = local_debug(LOCAL_MANIFEST, nsc(ONE_HOST, '<base-config cleartextTrafficPermitted="true" />'))
         self.assertEqual(["base-config does not forbid cleartext"], problems)
-        self.assertEqual(1, len(local_debug(LOCAL_MANIFEST, nsc("", ""))))
+        self.assertEqual(1, len(local_debug(LOCAL_MANIFEST, nsc(ONE_HOST, ""))))
 
     def test_subdomains_fail(self):
         body = '<domain-config cleartextTrafficPermitted="true"><domain includeSubdomains="true">10.0.2.2</domain></domain-config>'
@@ -109,7 +116,7 @@ class LocalDebugTest(unittest.TestCase):
 
     def test_debug_overrides_and_trust_anchors_fail(self):
         body = "<debug-overrides><trust-anchors><certificates src=\"user\"/></trust-anchors></debug-overrides>"
-        self.assertEqual(1, len(local_debug(LOCAL_MANIFEST, nsc(body))))
+        self.assertEqual(1, len(local_debug(LOCAL_MANIFEST, nsc(ONE_HOST + body))))
 
 
     def test_other_host_than_the_backend_fails(self):

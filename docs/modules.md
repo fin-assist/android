@@ -48,7 +48,7 @@ Features: `auth`, `applock`, `operations`, `statements`, `analytics`, `assistant
 | `local` | `:core:network`, `:providers:toggles-local`, `:providers:tracking-log` | `src/local` (`LocalModule`: base URL, name), `src/localDebug` (network security config) |
 | `prod` | `:core:network`, `:providers:toggles-rustore`, `:providers:tracking-mytracker` | `src/prod` (`ProdModule`: base URL, SDK keys) |
 
-`:mock:*` never reaches `local` or `prod` (`:app:checkNoMockCode` in CI). A future `stage` flavor follows `prod`.
+`:mock:*` never reaches `local` or `prod` (`:app:checkNoMockCode` in CI checks every variant outside `mock`, so a new flavor is covered by itself). A future `stage` flavor follows `prod`.
 Variants that are off: `localE2e`, `prodE2e` (`androidComponents.beforeVariants` in `app/build.gradle.kts`).
 
 ## Inside `:impl`

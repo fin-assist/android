@@ -24,13 +24,9 @@ val localNetworkSecurityConfig = tasks.register<GenerateNetworkSecurityConfig>("
 }
 
 // CI: the fake backend never reaches a build that talks to a real one (scripts/check-build-separation.py checks
-// the manifests of the same builds).
-tasks.register<CheckNoMockCode>("checkNoMockCode") {
-    listOf("localDebug", "localRelease", "prodDebug", "prodRelease").forEach { variant ->
-        val classpath = "${variant}RuntimeClasspath"
-        graphs.put(classpath, configurations.named(classpath).flatMap { it.incoming.resolutionResult.rootComponent })
-    }
-}
+// the manifests of the same builds). Every variant outside the `mock` flavor is checked (onVariants below), so a new
+// environment such as `stage` is covered without a change here.
+val checkNoMockCode = tasks.register<CheckNoMockCode>("checkNoMockCode")
 
 android {
     namespace = "ru.finassist.pf"
@@ -136,6 +132,13 @@ androidComponents {
     // The e2e build type exists only for the fake backend: localE2e and prodE2e would have no test hooks to run against.
     beforeVariants(selector().withBuildType("e2e").withFlavor("env" to "local")) { it.enable = false }
     beforeVariants(selector().withBuildType("e2e").withFlavor("env" to "prod")) { it.enable = false }
+
+    onVariants { variant ->
+        if (variant.flavorName != "mock") {
+            val graph = variant.runtimeConfiguration.incoming.resolutionResult.rootComponent
+            checkNoMockCode.configure { graphs.put("${variant.name}RuntimeClasspath", graph) }
+        }
+    }
 
     // The app's only network security config, with its only cleartext exception: the local backend's host.
     onVariants(selector().withName("localDebug")) { variant ->
