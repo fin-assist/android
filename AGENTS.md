@@ -187,11 +187,14 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   below are for new code and for a dependency or responsibility a PR adds or changes; editing a file does not oblige
   rewriting what it already does (known gaps are listed at the end):
   - Single responsibility: a class or module has one reason to change.
-    - How to show a value — money, dates, plurals, the text for a code — lives in pure formatters: `Money`
-      (`core/common`), `BlockFormat` (`core/blocks`), the feature's `domain/*Format` and `*Texts` objects. A ViewModel
-      or a `…Content` calls them instead of building such strings itself.
-    - A ViewModel decides *what* to show (which message for an `AppError` subtype, which server text) and keeps it in
-      the state; a `…Content` draws the state and calls formatters, but makes no API calls and decides no rules.
+    - How to show a value — money, dates, plurals, the text for a value of an open code (`ApiCode`: `ChangedSince`,
+      `AnalyticsFeature`, `OperationKind`), a text that depends on data (`ImportErrorTexts` takes the file's name and
+      size) — lives in pure formatters: `Money` (`core/common`), `BlockFormat` (`core/blocks`), the feature's
+      `domain/*Format` and `*Texts` objects. A ViewModel or a `…Content` calls them instead of building such strings
+      itself.
+    - A ViewModel decides *what* to show — which message for an `AppError` subtype or for an `AppError.Api` with a
+      code of `ErrorCodes`, which server text — and keeps it in the state; a `…Content` draws the state and calls
+      formatters, but makes no API calls and decides no rules.
     - A repository moves and caches data; it does not decide business rules.
     - The models of `core/api` are the client's model: features use them as they are, with no separate domain model
       and mapper. Where a conversion exists (`BlockRenderer.prepare` decoding a block, `core/network` mapping errors
@@ -213,9 +216,11 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
     injected by Hilt, not on concrete `…Impl` classes or on `Context`, `Application` and platform services
     (`ContentResolver`, `PackageManager`). `SavedStateHandle` is allowed: it keeps the state through process death and
     is built in unit tests without Android.
-  - Known gaps, left as they are until a PR changes that dependency: `UploadViewModel` (`@ApplicationContext`,
-    `StatementsRepositoryImpl`), `DetailViewModel` (`OperationsRepositoryImpl`), `CallViewModel` and
-    `ConsentViewModel` (`SessionRepositoryImpl`) — they reach methods the `:api` interfaces do not have.
+  - Known gaps, left as they are until a PR changes that dependency: `UploadViewModel` and `HistoryViewModel` (in
+    `HistoryScreen.kt`) — `@ApplicationContext` in the first, `StatementsRepositoryImpl` in both; `DetailViewModel`
+    (`OperationsRepositoryImpl`); `CallViewModel` and `ConsentViewModel` (`SessionRepositoryImpl`) — they reach
+    methods the `:api` interfaces do not have. `FeedViewModel` and `SearchViewModel` take `OperationsRepositoryImpl`
+    where `OperationsRepository` would do.
 - System bar insets go through `PfInsets.statusBars` / `PfInsets.navigationBars`, never `WindowInsets.*`
   directly: design-check snapshots replace them with the mockups' fixed bars.
 - "Now" and "today" come from the injected `Clock` (`LocalPfClock` in composables), never `LocalDate.now()` /
