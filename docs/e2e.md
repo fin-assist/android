@@ -232,6 +232,9 @@ A false «сессия истекла» after the user's own sign-out (FIN-74) n
 `null` only after the sign-out returned and the phone screen read the reason — a thread interleaving neither the
 emulator nor the mock can force; `SessionRepositoryImplTest` reproduces it with a token store that delivers the
 `null` late.
+A refunded answer (`charged: false` for a lock or `no_data` over the requested period, FIN-136) cannot be reached
+in the mock: the canned model builds the answer window from the covered months and knows no locked metrics;
+`AssistantEngineTest` covers the refund rule.
 A passcode left behind by a signed-out session (the process died between the sign-out and the passcode reset) and
 cleared while the lock is starting (FIN-87) cannot be forced either: the flow cannot kill the process inside that
 window, and the stale state needs a DataStore collector to start while the reset is being written, a timing the
