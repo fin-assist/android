@@ -31,3 +31,6 @@ app/src/mock/assets/private/
 # SDK keys for the prod flavor
 sdk-keys.properties
 __pycache__/
+
+# Flag values of the local flavor (docs/flags.md): each developer's own, never committed.
+app/src/local/assets/flags.json

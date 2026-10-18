@@ -14,6 +14,9 @@ dependencies {
     compileOnly(libs.ksp.gradlePlugin)
     compileOnly(libs.hilt.gradlePlugin)
     compileOnly(libs.kover.gradlePlugin)
+
+    // Logic of the build without Gradle types (LocalBackend): `./gradlew :build-logic:convention:test`, run by CI.
+    testImplementation(libs.junit4)
 }
 
 gradlePlugin {
