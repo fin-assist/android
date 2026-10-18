@@ -1,6 +1,7 @@
 package ru.finassist.pf.feature.auth.impl.domain
 
 import ru.finassist.pf.core.api.model.PhoneVerification
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -12,12 +13,27 @@ import javax.inject.Singleton
 class SignInFlow @Inject constructor() {
     @Volatile var phone: String = ""
     @Volatile var verification: PhoneVerification? = null
+        private set
+    /** Device deadline of [verification] ([CallDeadline]); null when the response gave no way to compute it. */
+    @Volatile var callDeadline: Instant? = null
+        private set
     @Volatile var registrationToken: String? = null
     /** `Idempotency-Key` of the current phone verification request (reused on retry of the same action). */
     @Volatile var phoneRequestKey: String? = null
 
-    fun reset() {
+    /** Keeps [v] with its device deadline, computed from [receivedAt] — the device time the response arrived. */
+    fun verificationReceived(v: PhoneVerification, receivedAt: Instant) {
+        verification = v
+        callDeadline = CallDeadline.of(v, receivedAt)
+    }
+
+    fun clearVerification() {
         verification = null
+        callDeadline = null
+    }
+
+    fun reset() {
+        clearVerification()
         registrationToken = null
         phoneRequestKey = null
     }

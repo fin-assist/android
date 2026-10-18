@@ -9,6 +9,8 @@ data class MockConfig(
     val existingPhone: String = "+79161234567",
     /** How long after "Позвонить" the verification completes. */
     val callVerifyDelayMs: Long = 5_000,
+    /** Lifetime of a phone verification request (`expires_at` − creation; 5 minutes, as the provider's, api.md 1.1). */
+    val verificationTtlMs: Long = 300_000,
     /** Simulated latency of every request. */
     val networkDelayMs: Long = 250,
     /** Pause between import stages (parsing → dedup → rules). */

@@ -52,12 +52,16 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
                 details = listOf(AppError.FieldError(PHONE_FIELD, FieldErrorCodes.INVALID_FORMAT, "Номер — +7 и 10 цифр")),
             )
         }
-        return backend.idempotent("auth.phone:${key.value}") {
+        val stored = backend.idempotent("auth.phone:${key.value}") {
             val now = backend.now()
             val token = secret("vt_")
-            backend.mutex.withLock { verifications[token] = Verification(phone, now, now.plusMinutes(3)) }
-            PhoneVerification(verificationToken = token, callbackNumber = CALLBACK_NUMBER, expiresAt = now.plusMinutes(3))
+            val expiresAt = now.plusNanos(backend.config.verificationTtlMs * 1_000_000)
+            backend.mutex.withLock { verifications[token] = Verification(phone, now, expiresAt) }
+            PhoneVerification(verificationToken = token, callbackNumber = CALLBACK_NUMBER, expiresAt = expiresAt)
         }
+        // `expires_in` is computed on every send, a replay by the same key included (api.md 1.1): floor, not below 0.
+        val left = java.time.Duration.between(backend.now(), stored.expiresAt).seconds.coerceAtLeast(0)
+        return stored.copy(expiresIn = left.toInt())
     }
 
     override fun streamPhoneVerification(verificationToken: String): Flow<PhoneVerificationStatusEvent> = flow {
@@ -72,6 +76,12 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         }
         if (now.isBefore(verifiedAt)) {
             emit(PhoneVerificationStatusEvent(status = VerificationStatus.PENDING))
+            // A call that would come after the request's end never comes: the open stream ends with `expired`.
+            if (verifiedAt.isAfter(v.expiresAt)) {
+                delay(java.time.Duration.between(now, v.expiresAt).toMillis() + 1)
+                emit(PhoneVerificationStatusEvent(status = VerificationStatus.EXPIRED))
+                return@flow
+            }
             delay(java.time.Duration.between(now, verifiedAt).toMillis())
         }
         emit(verified(v))

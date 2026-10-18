@@ -13,6 +13,7 @@ import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
@@ -38,6 +39,7 @@ class PhoneViewModel @Inject constructor(
     private val authApi: AuthApi,
     private val flow: SignInFlow,
     private val tracker: Tracker,
+    private val clock: Clock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         PhoneFormat.digits(flow.phone).let { PhoneUiState(input = TextFieldValue(it, TextRange(it.length))) },
@@ -69,10 +71,12 @@ class PhoneViewModel @Inject constructor(
             if (flow.phone != phone || flow.phoneRequestKey == null) {
                 flow.phone = phone
                 flow.phoneRequestKey = IdempotencyKey.random().value
-                flow.verification = null
+                flow.clearVerification()
             }
             try {
-                flow.verification = authApi.startPhoneVerification(IdempotencyKey(flow.phoneRequestKey!!), phone)
+                val verification = authApi.startPhoneVerification(IdempotencyKey(flow.phoneRequestKey!!), phone)
+                // Device time of arrival: the wait is counted by the device clock, not by `expires_at` (api.md 1.1).
+                flow.verificationReceived(verification, clock.now().toInstant())
                 tracker.track(Events.AUTH_PHONE_SUBMITTED)
                 _events.value = PhoneEvent.GoToCall
             } catch (e: AppError) {

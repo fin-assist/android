@@ -112,8 +112,16 @@ internal class SseRequests(private val baseUrl: HttpUrl, private val client: OkH
 }
 
 internal class HttpAuthApi(private val service: AuthService, private val sse: SseRequests) : AuthApi {
-    override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification =
-        call { service.startPhoneVerification(key.value, StartPhoneVerificationRequest(phone)) }
+    /** Keeps the `Date` header: the fallback device deadline when the server sends no `expires_in` (api.md 1.1). */
+    override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification {
+        var serverTime: java.time.Instant? = null
+        val body = call {
+            service.startPhoneVerification(key.value, StartPhoneVerificationRequest(phone)).also { response ->
+                serverTime = response.headers().getDate("Date")?.toInstant()
+            }
+        }
+        return body.copy(serverTime = serverTime)
+    }
 
     override fun streamPhoneVerification(verificationToken: String): Flow<PhoneVerificationStatusEvent> =
         sse.open(

@@ -86,6 +86,32 @@ class HttpApisTest {
     }
 
     @Test
+    fun `start phone verification reads expires_in and keeps the server time of the Date header`() = runBlocking {
+        server.enqueue(
+            json("""{"verification_token":"vt","callback_number":"+78001234567","expires_at":"2026-10-04T22:17:00+03:00","expires_in":300}""")
+                .addHeader("Date", "Sun, 04 Oct 2026 19:12:00 GMT"),
+        )
+
+        val verification = api.auth.startPhoneVerification(key, "+79991234567")
+
+        assertEquals(300, verification.expiresIn)
+        assertEquals(java.time.Instant.parse("2026-10-04T19:12:00Z"), verification.serverTime)
+    }
+
+    @Test
+    fun `start phone verification without expires_in and Date leaves both empty`() = runBlocking {
+        server.enqueue(
+            json("""{"verification_token":"vt","callback_number":"+78001234567","expires_at":"2026-10-04T22:17:00+03:00"}""")
+                .removeHeader("Date"),
+        )
+
+        val verification = api.auth.startPhoneVerification(key, "+79991234567")
+
+        assertNull(verification.expiresIn)
+        assertNull(verification.serverTime)
+    }
+
+    @Test
     fun `invalid phone comes back as a validation error on the phone field`() = runBlocking {
         reply(
             """{"error":{"code":"VALIDATION_ERROR","message":"bad","details":[{"field":"phone","code":"INVALID_FORMAT","message":"x"}]}}""",

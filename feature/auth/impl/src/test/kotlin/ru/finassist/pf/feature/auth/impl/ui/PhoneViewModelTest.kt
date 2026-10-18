@@ -20,10 +20,12 @@ import ru.finassist.pf.core.api.model.RegisterRequest
 import ru.finassist.pf.core.api.model.RegisterResponse
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.tracking.Event
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -43,7 +45,7 @@ class PhoneViewModelTest {
             keys += key.value
             failure?.let { throw it }
             phones += phone
-            return PhoneVerification("vt_1", "+78000000000", OffsetDateTime.parse("2026-10-13T12:03:00+03:00"))
+            return PhoneVerification("vt_1", "+78000000000", OffsetDateTime.parse("2026-10-13T12:03:00+03:00"), expiresIn = 300)
         }
         override fun streamPhoneVerification(verificationToken: String): Flow<PhoneVerificationStatusEvent> = error("unused")
         override suspend fun register(key: IdempotencyKey, request: RegisterRequest): RegisterResponse = error("unused")
@@ -52,6 +54,12 @@ class PhoneViewModelTest {
         override suspend fun getConsentDocument(type: ConsentType): ConsentDocument = error("unused")
     }
 
+    /** Device clock, 1 h 40 min ahead of the server (12:03 − 5 min): the deadline must follow it, not `expires_at`. */
+    private val deviceNow = OffsetDateTime.parse("2026-10-13T13:38:00+03:00")
+    private val clock = object : Clock {
+        override fun now(): OffsetDateTime = deviceNow
+        override val zone: ZoneId = Clock.MOSCOW
+    }
     private val auth = FakeAuth()
     private val flow = SignInFlow()
     private val tracked = mutableListOf<String>()
@@ -65,7 +73,7 @@ class PhoneViewModelTest {
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
     private fun submitted(digits: String = "9161234567"): PhoneViewModel {
-        val vm = PhoneViewModel(auth, flow, tracker)
+        val vm = PhoneViewModel(auth, flow, tracker, clock)
         vm.onInput(TextFieldValue(digits, TextRange(digits.length)))
         vm.submit()
         return vm
@@ -135,11 +143,18 @@ class PhoneViewModelTest {
     @Test fun `a new number drops the previous verification request`() {
         flow.phone = "+79031234567"
         flow.phoneRequestKey = "old"
-        flow.verification = PhoneVerification("vt_old", "+78000000000", OffsetDateTime.parse("2026-10-13T12:03:00+03:00"))
+        flow.verificationReceived(PhoneVerification("vt_old", "+78000000000", OffsetDateTime.parse("2026-10-13T12:03:00+03:00")), deviceNow.toInstant())
         auth.failure = AppError.Offline()
         submitted("9161234567")
         assertNull(flow.verification)
+        assertNull(flow.callDeadline)
         assertNotEquals("old", flow.phoneRequestKey)
+    }
+
+    @Test fun `the call deadline is the device time of the response plus expires_in`() {
+        submitted()
+        assertEquals("vt_1", flow.verification?.verificationToken)
+        assertEquals(deviceNow.plusSeconds(300).toInstant(), flow.callDeadline)
     }
 
     @Test fun `too many attempts names the time to retry when the server gives it`() {
@@ -156,7 +171,7 @@ class PhoneViewModelTest {
 
     @Test fun `the number typed before is restored with the cursor at the end`() {
         flow.phone = "+79161234567"
-        val vm = PhoneViewModel(auth, flow, tracker)
+        val vm = PhoneViewModel(auth, flow, tracker, clock)
         assertEquals("9161234567", vm.state.value.digits)
         assertEquals(TextRange(10), vm.state.value.input.selection)
     }
