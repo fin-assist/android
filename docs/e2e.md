@@ -58,7 +58,7 @@ steps and expected results in Russian, marked automated.
 ## The `e2e` build type
 
 `assembleMockE2e` builds `ru.finassist.pf.mock.e2e`: the mock flavor plus test hooks from `app/src/mockE2e/`. It
-installs next to `mockDebug` and never exists for `prod`. It is also the `testBuildType`: the native tests run on
+installs next to `mockDebug` and never exists for `local` or `prod`. It is also the `testBuildType`: the native tests run on
 it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»).
 
 - **Pinned date.** "Now" starts at 2026-10-08 12:00 MSK (`BuildConfig.E2E_NOW`, `ShiftedClock`) and runs from

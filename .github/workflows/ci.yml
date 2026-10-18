@@ -87,7 +87,7 @@ jobs:
 
       - name: Unit tests
         id: unit-tests
-        run: ./gradlew testMockDebugUnitTest testDebugUnitTest test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew testMockDebugUnitTest testDebugUnitTest test :build-logic:convention:test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Saved from main and release branches only, like the Gradle cache: their caches are the ones every PR can read.
       # Only after green tests: then every jar a test needed has been fetched, and an entry, once saved, never changes.
@@ -160,12 +160,33 @@ jobs:
       - name: Lint
         run: ./gradlew lintMockDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
+      # Environments (FIN-120, AGENTS.md «Flavors»): mock as the working product, localDebug for the local backend,
+      # prodRelease as what users get (unsigned: CI has no signing key). The localRelease manifest is checked below.
+      # Other variants (mockRelease, prodDebug, localRelease) are not built here.
       - name: Assemble
-        run: ./gradlew assembleMockDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew assembleMockDebug assembleLocalDebug assembleProdRelease processLocalReleaseManifest :app:checkNoMockCode --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # CI has no Tracer token: the SDK must not be able to start (scripts/check-tracer-off.py, README).
       - name: Tracer is off without a token
-        run: python3 scripts/check-tracer-off.py app/build/intermediates/merged_manifests/mockDebug/processMockDebugManifest/AndroidManifest.xml 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: |
+          m=app/build/intermediates/merged_manifests
+          python3 scripts/check-tracer-off.py $m/mockDebug/processMockDebugManifest/AndroidManifest.xml \
+            $m/localDebug/processLocalDebugManifest/AndroidManifest.xml \
+            $m/prodRelease/processProdReleaseManifest/AndroidManifest.xml 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      # No e2e/mock hooks and no cleartext in release builds; in localDebug cleartext to the local backend's host only
+      # (scripts/check-build-separation.py). Mock code on the HTTP flavors' classpath fails `:app:checkNoMockCode` above.
+      - name: Test hooks and cleartext stay out of release
+        run: |
+          m=app/build/intermediates/merged_manifests
+          {
+            python3 scripts/check-build-separation.py release \
+              $m/prodRelease/processProdReleaseManifest/AndroidManifest.xml \
+              $m/localRelease/processLocalReleaseManifest/AndroidManifest.xml &&
+            python3 scripts/check-build-separation.py local-debug \
+              $m/localDebug/processLocalDebugManifest/AndroidManifest.xml \
+              app/build/intermediates/packaged_res/localDebug/packageLocalDebugResources/xml/network_security_config.xml
+          } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       - uses: actions/upload-artifact@v4
         if: success()

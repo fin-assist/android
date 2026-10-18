@@ -56,7 +56,7 @@ class ModuleRulesPlugin : Plugin<Project> {
         val CHECKED_CONFIGURATIONS = setOf(
             "api", "implementation", "compileOnly", "runtimeOnly",
             "debugImplementation", "releaseImplementation",
-            "mockImplementation", "prodImplementation",
+            "mockImplementation", "localImplementation", "prodImplementation",
         )
     }
 }
