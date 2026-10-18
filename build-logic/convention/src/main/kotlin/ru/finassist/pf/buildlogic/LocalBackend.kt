@@ -4,10 +4,12 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
 import java.net.URI
 import java.net.URISyntaxException
+import java.time.LocalDate
 
 /**
  * Backend of the `local` flavor (FIN-120): a bank-bff the developer runs on their machine. The address comes from the
@@ -77,20 +79,38 @@ object LocalBackend {
         replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 }
 
-/** Writes `xml/network_security_config.xml` of [LocalBackend.networkSecurityConfig] into a generated res directory. */
+/**
+ * Writes [config] as `xml/network_security_config.xml` into a generated res directory: the config of `localDebug`
+ * ([LocalBackend.networkSecurityConfig]) or of a variant with API pins ([ApiPins.networkSecurityConfig]).
+ */
 abstract class GenerateNetworkSecurityConfig : DefaultTask() {
     @get:Input
-    abstract val baseUrl: Property<String>
+    abstract val config: Property<String>
+
+    /**
+     * Expiration of the pins in [config], when it has any. The task then never counts as up to date and checks the date
+     * against the day it runs ([ApiPins.requireActive]), so no build writes an expired pin set.
+     */
+    @get:Input
+    @get:Optional
+    abstract val pinsExpiration: Property<String>
 
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
+    init {
+        outputs.upToDateWhen { !pinsExpiration.isPresent }
+    }
+
     @TaskAction
-    fun generate() {
+    fun generate() = generate(LocalDate.now())
+
+    internal fun generate(today: LocalDate) {
+        pinsExpiration.orNull?.let { ApiPins.requireActive(LocalDate.parse(it), today) }
         val dir = outputDir.get().asFile
         dir.deleteRecursively()
         val file = dir.resolve("xml/network_security_config.xml")
         file.parentFile.mkdirs()
-        file.writeText(LocalBackend.networkSecurityConfig(LocalBackend.parse(baseUrl.get())))
+        file.writeText(config.get())
     }
 }
