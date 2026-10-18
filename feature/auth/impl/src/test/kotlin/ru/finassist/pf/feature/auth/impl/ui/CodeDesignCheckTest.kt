@@ -14,7 +14,7 @@ import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class CodeDesignCheckTest {
-    private val state = CallUiState(phoneDisplay = "+7 916 123-45-67", callbackNumber = "8 800 000-00-00")
+    private val state = CallUiState(phoneDisplay = "+7 916 123-45-67", callbackNumber = "8 800 000-00-00", waitUntil = "12:34")
 
     private fun capture(name: String, state: CallUiState = this.state, dark: Boolean = false) =
         DesignCheck.capture(name, dark = dark) {

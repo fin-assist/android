@@ -389,4 +389,9 @@ class CallViewModelTest {
         assertEquals(listOf("vt_1"), opened)
         assertEquals(CallPhase.WAITING, vm.state.value.phase)
     }
+
+    @Test fun `the wait text names the deadline only when there is one`() {
+        assertEquals("Как только дозвонитесь, вход продолжится сам. Ждём звонок до 12:34", waitText("12:34"))
+        assertEquals("Как только дозвонитесь, вход продолжится сам.", waitText(null))
+    }
 }
