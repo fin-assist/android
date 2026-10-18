@@ -26,7 +26,8 @@ import java.time.YearMonth
 
 /**
  * Canned "LLM": understands «сколько я трачу на X» for a merchant or a category, and general spending
- * questions; everything else is CANNOT_ANSWER. Numbers in charts and rows are computed from the ledger, as
+ * questions; a question on an unrelated subject (weather, recipes, …) is OFF_TOPIC, as when the model calls the
+ * `off_topic` tool (FIN-159); everything else is CANNOT_ANSWER. Numbers in charts and rows are computed from the ledger, as
  * the real service does from function results.
  */
 class AssistantEngine(
@@ -47,10 +48,12 @@ class AssistantEngine(
     sealed interface Outcome {
         data class Answered(val answer: Answer) : Outcome
         data object CannotAnswer : Outcome
+        data object OffTopic : Outcome
     }
 
     fun answer(question: String, mode: TransferMode, today: LocalDate): Outcome {
         val q = question.lowercase().replace('ё', 'е')
+        if (OFF_TOPIC.any { q.contains(it) }) return Outcome.OffTopic
         if (NONSENSE.any { q.contains(it) }) return Outcome.CannotAnswer
         val visible = scope.visible(mode)
         val cov = coverage()
@@ -151,7 +154,9 @@ class AssistantEngine(
     }
 
     private companion object {
-        val NONSENSE = listOf("марс", "следующем году", "курс доллара", "погода")
+        val NONSENSE = listOf("марс", "следующем году", "курс доллара")
+        /** Subjects outside personal finance; ASCII ones too, for UI tests (docs/e2e.md: type ASCII). */
+        val OFF_TOPIC = listOf("погод", "рецепт", "анекдот", "стихотворен", "weather", "recipe", "joke", "poem")
         val SPENDING_WORDS = listOf("трат", "расход", "потрат", "ушло", "сколько")
     }
 }

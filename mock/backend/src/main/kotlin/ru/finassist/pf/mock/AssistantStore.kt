@@ -31,6 +31,10 @@ class AssistantStore {
         val version = MutableStateFlow(0)
         var status = AnswerStatus.GENERATING
         var errorCode: AnswerErrorCode? = null
+        /** The server's text of a failure (api.md 7.2, FIN-159). */
+        var errorText: String? = null
+        /** Whether a failure may be retried; null — stored before FIN-159, decided by the code ([retryAllowed]). */
+        var retryable: Boolean? = null
         var charged: Boolean? = null
         var replaced = false
 
@@ -39,7 +43,12 @@ class AssistantStore {
             log += event
             when (event) {
                 is AnswerEvent.Done -> { status = AnswerStatus.COMPLETE; charged = event.event.charged }
-                is AnswerEvent.Error -> { status = AnswerStatus.FAILED; errorCode = event.event.code }
+                is AnswerEvent.Error -> {
+                    status = AnswerStatus.FAILED
+                    errorCode = event.event.code
+                    errorText = event.event.text
+                    retryable = event.event.retryable
+                }
                 else -> Unit
             }
             version.value = log.size
@@ -70,10 +79,15 @@ class AssistantStore {
             return snap to log.size
         }
 
+        /** api.md 7.4: only a failed answer marked retryable; one saved before FIN-159 — by the code, MODEL_ERROR only. */
+        val retryAllowed: Boolean
+            get() = !replaced && status == AnswerStatus.FAILED && (retryable ?: (errorCode == AnswerErrorCode.MODEL_ERROR))
+
         fun toMessage(): Message {
             val (snap, _) = snapshot()
             return Message(
                 id = id, role = MessageRole.ASSISTANT, status = status, errorCode = errorCode,
+                errorText = errorText, retryable = retryable,
                 charged = charged.takeIf { status == AnswerStatus.COMPLETE },
                 blocks = snap.blocks, chips = snap.chips.takeIf { status == AnswerStatus.COMPLETE },
                 source = snap.source.takeIf { status == AnswerStatus.COMPLETE }, createdAt = createdAt,

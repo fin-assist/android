@@ -47,15 +47,31 @@ enum class AnswerStatus(override val code: String) : ApiCode {
     val effective: AnswerStatus get() = if (this == UNKNOWN) FAILED else this
 }
 
+/**
+ * Why an answer failed (api.md 7.2, 7.3). The client neither builds a text from it nor decides on «Повторить» by it:
+ * that is what `text` / `error_text` and `retryable` are for (FIN-159). The code is for analytics and logs and for the
+ * fallback rule when `retryable` is absent ([answerRetryable]). An unknown code follows the text and `retryable`, like
+ * a known one.
+ */
 @Serializable(with = AnswerErrorCode.Serializer::class)
 enum class AnswerErrorCode(override val code: String) : ApiCode {
-    MODEL_ERROR("MODEL_ERROR"), CANNOT_ANSWER("CANNOT_ANSWER"), UNKNOWN("?");
+    MODEL_ERROR("MODEL_ERROR"),
+    CANNOT_ANSWER("CANNOT_ANSWER"),
+    /** The question is not about the user's data or personal finance (FIN-159); not retryable, refunded. */
+    OFF_TOPIC("OFF_TOPIC"),
+    /** The gateway does not know the assistant service's reason; text and `retryable` still come from the service. */
+    INTERNAL_ERROR("INTERNAL_ERROR"),
+    UNKNOWN("?");
 
     object Serializer : OpenEnumSerializer<AnswerErrorCode>("AnswerErrorCode", entries, UNKNOWN)
-
-    /** Unknown code behaves like MODEL_ERROR: "Повторить" is offered. */
-    val effective: AnswerErrorCode get() = if (this == UNKNOWN) MODEL_ERROR else this
 }
+
+/**
+ * Whether «Повторить» is offered under a failed answer (api.md 7.2, 7.3): the server's [retryable]; when a server older
+ * than FIN-159 does not send it, only for [AnswerErrorCode.MODEL_ERROR]. No code (an unknown status shown as failed) —
+ * no retry.
+ */
+fun answerRetryable(code: AnswerErrorCode?, retryable: Boolean?): Boolean = retryable ?: (code == AnswerErrorCode.MODEL_ERROR)
 
 @Serializable(with = ChipScreen.Serializer::class)
 enum class ChipScreen(override val code: String) : ApiCode {
@@ -95,7 +111,12 @@ data class Message(
     val role: MessageRole,
     val text: String? = null,
     val status: AnswerStatus? = null,
+    /** Only for `failed`: why (see [AnswerErrorCode]). */
     val errorCode: AnswerErrorCode? = null,
+    /** Only for `failed`: the server's text shown instead of the answer; absent — the client's generic text (FIN-159). */
+    val errorText: String? = null,
+    /** Only for `failed`: whether «Повторить» is offered; absent — [answerRetryable] falls back to the code (FIN-159). */
+    val retryable: Boolean? = null,
     val charged: Boolean? = null,
     val blocks: List<Block>? = null,
     val chips: List<Chip>? = null,
@@ -132,8 +153,18 @@ data class AnswerBlockEvent(val index: Int, val block: Block)
 @Serializable
 data class AnswerDoneEvent(val charged: Boolean, val remainingLimit: Int)
 
+/**
+ * Terminal `error` event (api.md 7.2). [text] is shown instead of the answer (absent from a server older than FIN-159 —
+ * the client's generic text); [retryable] decides on «Повторить» ([answerRetryable]); [message] is for logs only.
+ */
 @Serializable
-data class AnswerErrorEvent(val code: AnswerErrorCode, val message: String, val remainingLimit: Int)
+data class AnswerErrorEvent(
+    val code: AnswerErrorCode,
+    val message: String,
+    val remainingLimit: Int,
+    val text: String? = null,
+    val retryable: Boolean? = null,
+)
 
 /** Typed view of the answer stream. [Unknown] carries event types this client does not know (ignored by UI). */
 sealed interface AnswerEvent {

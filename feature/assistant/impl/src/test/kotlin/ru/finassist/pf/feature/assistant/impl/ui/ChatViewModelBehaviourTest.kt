@@ -71,8 +71,16 @@ class ChatViewModelBehaviourTest {
     private fun question(id: String, text: String = "Вопрос $id") =
         Message(id = id, role = MessageRole.USER, text = text, createdAt = now)
 
-    private fun answer(id: String, status: AnswerStatus = AnswerStatus.COMPLETE, errorCode: AnswerErrorCode? = null) =
-        Message(id = id, role = MessageRole.ASSISTANT, status = status, errorCode = errorCode, blocks = listOf(text("Ответ $id")), createdAt = now)
+    private fun answer(
+        id: String,
+        status: AnswerStatus = AnswerStatus.COMPLETE,
+        errorCode: AnswerErrorCode? = null,
+        errorText: String? = null,
+        retryable: Boolean? = null,
+    ) = Message(
+        id = id, role = MessageRole.ASSISTANT, status = status, errorCode = errorCode, errorText = errorText, retryable = retryable,
+        blocks = listOf(text("Ответ $id")), createdAt = now,
+    )
 
     private fun text(t: String) = Block.text(t)
 
@@ -180,7 +188,8 @@ class ChatViewModelBehaviourTest {
                 answer("a1"),
                 // Unknown role is dropped, an unknown status reads as failed, a duplicate id is shown once.
                 Message(id = "x", role = MessageRole.UNKNOWN, createdAt = now),
-                answer("a2", status = AnswerStatus.UNKNOWN, errorCode = AnswerErrorCode.UNKNOWN),
+                // Error fields of a status the client does not know are not trusted: the generic text, no retry (api.md 7.3).
+                answer("a2", status = AnswerStatus.UNKNOWN, errorCode = AnswerErrorCode.MODEL_ERROR, errorText = "x", retryable = true),
                 answer("a1"),
             ),
             hasOlder = true,
@@ -194,7 +203,8 @@ class ChatViewModelBehaviourTest {
         assertEquals("Вопрос q1", assertIs<ChatItem.Question>(s.items[0]).text)
         val failed = vm.answerItem("a2")
         assertEquals(AnswerStatus.FAILED, failed.status)
-        assertEquals(AnswerErrorCode.MODEL_ERROR, failed.errorCode)
+        assertNull(failed.errorText)
+        assertFalse(failed.retryable)
         assertEquals(limit, s.limit)
         assertEquals(Events.ASSISTANT_OPENED, tracker.names().first())
     }
@@ -410,19 +420,71 @@ class ChatViewModelBehaviourTest {
         sendQuestion(vm)
         val a = vm.answerItem("a1")
         assertEquals(AnswerStatus.FAILED, a.status)
-        assertEquals(AnswerErrorCode.CANNOT_ANSWER, a.errorCode)
+        // A server older than FIN-159: no text — the generic one; no retryable — no retry for CANNOT_ANSWER.
+        assertNull(a.errorText)
+        assertFalse(a.retryable)
         assertTrue(a.blocks.isEmpty())
         assertTrue(a.chips.isEmpty())
         assertEquals(3, vm.state.value.limit!!.remaining)
         assertEquals(mapOf("code" to "CANNOT_ANSWER"), tracker.events.single { it.first == Events.ASSISTANT_ANSWER_FAILED }.second)
     }
 
-    @Test fun `an unknown error code in the stream offers a retry like MODEL_ERROR`() {
+    /** The answer item after the stream ends with [error]. */
+    private fun failedBy(error: AnswerErrorEvent): ChatItem.Answer {
         api.askOutcomes += askResponse("a1")
-        api.script("a1", events(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.UNKNOWN, "?", remainingLimit = 3))))
+        api.script("a1", events(AnswerEvent.Error(error)))
         val vm = newVm()
         sendQuestion(vm)
-        assertEquals(AnswerErrorCode.MODEL_ERROR, vm.answerItem("a1").errorCode)
+        return vm.answerItem("a1").also { assertEquals(AnswerStatus.FAILED, it.status) }
+    }
+
+    @Test fun `an error shows the server text and offers a retry only when retryable (FIN-159)`() {
+        val offTopic = failedBy(AnswerErrorEvent(AnswerErrorCode.OFF_TOPIC, "off_topic", remainingLimit = 5, text = "Вопрос не по теме", retryable = false))
+        assertEquals("Вопрос не по теме" to false, offTopic.errorText to offTopic.retryable)
+        // The flag decides, not the code: a retryable CANNOT_ANSWER gets «Повторить», a non-retryable MODEL_ERROR does not.
+        val cannot = failedBy(AnswerErrorEvent(AnswerErrorCode.CANNOT_ANSWER, "m", remainingLimit = 5, text = "Т", retryable = true))
+        assertTrue(cannot.retryable)
+        val model = failedBy(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "m", remainingLimit = 5, text = "Т", retryable = false))
+        assertFalse(model.retryable)
+    }
+
+    @Test fun `an unknown error code follows its text and retryable, not MODEL_ERROR (FIN-159)`() {
+        val noRetry = failedBy(AnswerErrorEvent(AnswerErrorCode.UNKNOWN, "?", remainingLimit = 3, text = "Новая причина", retryable = false))
+        assertEquals("Новая причина", noRetry.errorText)
+        assertFalse(noRetry.retryable)
+        val retry = failedBy(AnswerErrorEvent(AnswerErrorCode.UNKNOWN, "?", remainingLimit = 3, text = "Новая причина", retryable = true))
+        assertTrue(retry.retryable)
+        // Without retryable (an older server) an unknown code is no longer retried like MODEL_ERROR.
+        assertFalse(failedBy(AnswerErrorEvent(AnswerErrorCode.UNKNOWN, "?", remainingLimit = 3)).retryable)
+    }
+
+    @Test fun `an error without text and retryable gets the generic text, a retry only for MODEL_ERROR (FIN-159)`() {
+        for (code in AnswerErrorCode.entries) {
+            val item = failedBy(AnswerErrorEvent(code, "m", remainingLimit = 5))
+            assertNull(item.errorText, "$code")
+            assertEquals(code == AnswerErrorCode.MODEL_ERROR, item.retryable, "$code")
+        }
+    }
+
+    @Test fun `a failed answer in the history follows error_text and retryable, falling back to the code (FIN-159)`() {
+        api.pages[null] = MessagesList(
+            listOf(
+                question("q1"), answer("a1", AnswerStatus.FAILED, AnswerErrorCode.OFF_TOPIC, errorText = "Вопрос не по теме", retryable = false),
+                question("q2"), answer("a2", AnswerStatus.FAILED, AnswerErrorCode.UNKNOWN, errorText = "Новая причина", retryable = true),
+                question("q3"), answer("a3", AnswerStatus.FAILED, AnswerErrorCode.MODEL_ERROR),
+                question("q4"), answer("a4", AnswerStatus.FAILED, AnswerErrorCode.CANNOT_ANSWER),
+                question("q5"), answer("a5", AnswerStatus.FAILED, AnswerErrorCode.UNKNOWN),
+                // Error fields of a message that is not failed are not shown.
+                question("q6"), answer("a6", AnswerStatus.COMPLETE, errorText = "x", retryable = true),
+            ),
+            hasOlder = false,
+        )
+        val vm = newVm()
+        val shown = listOf("a1", "a2", "a3", "a4", "a5", "a6").map { vm.answerItem(it).let { a -> a.errorText to a.retryable } }
+        assertEquals(
+            listOf("Вопрос не по теме" to false, "Новая причина" to true, null to true, null to false, null to false, null to false),
+            shown,
+        )
     }
 
     // ---- send failures ----

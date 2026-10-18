@@ -14,7 +14,6 @@ import kotlinx.coroutines.launch
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.AssistantApi
-import ru.finassist.pf.core.api.model.AnswerErrorCode
 import ru.finassist.pf.core.api.model.AnswerEvent
 import ru.finassist.pf.core.api.model.AnswerSource
 import ru.finassist.pf.core.api.model.AnswerStatus
@@ -27,6 +26,7 @@ import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.Message
 import ru.finassist.pf.core.api.model.MessageRole
 import ru.finassist.pf.core.api.model.TransferMode
+import ru.finassist.pf.core.api.model.answerRetryable
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
@@ -48,7 +48,13 @@ sealed interface ChatItem {
         val blocks: List<Block> = emptyList(),
         val chips: List<Chip> = emptyList(),
         val source: AnswerSource? = null,
-        val errorCode: AnswerErrorCode? = null,
+        /**
+         * Of a failed answer: the server's text shown instead of the answer; null — the client's generic text (a server
+         * older than FIN-159, or an unknown status shown as failed). Never built from the error code (api.md 7.2, 7.3).
+         */
+        val errorText: String? = null,
+        /** Of a failed answer: «Повторить» is offered ([answerRetryable]). */
+        val retryable: Boolean = false,
         val currency: String = Money.RUB,
     ) : ChatItem
 }
@@ -248,7 +254,7 @@ class ChatViewModel @Inject constructor(
 
     fun consumeEvent() = _state.update { it.copy(event = null) }
 
-    /** «Повторить» after MODEL_ERROR: a new answer replaces the failed one (api.md 7.4). */
+    /** «Повторить» under a failed answer the server marked retryable: a new answer replaces it (api.md 7.4). */
     fun retry(answerId: String) {
         // A double tap: the first request is still on its way, a second one with its key would only get 409.
         if (!retrying.add(answerId)) return
@@ -340,7 +346,10 @@ class ChatViewModel @Inject constructor(
                 is AnswerEvent.ChipAdded -> item.copy(chips = item.chips + event.event)
                 is AnswerEvent.Done -> item.copy(status = AnswerStatus.COMPLETE)
                 // Shown blocks are removed on error (api.md 7.2).
-                is AnswerEvent.Error -> item.copy(status = AnswerStatus.FAILED, blocks = emptyList(), chips = emptyList(), errorCode = event.event.code.effective)
+                is AnswerEvent.Error -> item.copy(
+                    status = AnswerStatus.FAILED, blocks = emptyList(), chips = emptyList(),
+                    errorText = event.event.text, retryable = answerRetryable(event.event.code, event.event.retryable),
+                )
                 is AnswerEvent.Unknown -> item
             }
         }
@@ -356,16 +365,22 @@ class ChatViewModel @Inject constructor(
 
     private fun toItem(m: Message): ChatItem? = when (m.role) {
         MessageRole.USER -> ChatItem.Question(m.id, m.createdAt, m.text.orEmpty())
-        MessageRole.ASSISTANT -> ChatItem.Answer(
-            id = m.id,
-            createdAt = m.createdAt,
-            status = m.status?.effective ?: AnswerStatus.FAILED,
-            blocks = m.blocks.orEmpty(),
-            chips = m.chips.orEmpty(),
-            source = m.source,
-            errorCode = m.errorCode?.effective,
-            currency = m.currency,
-        )
+        MessageRole.ASSISTANT -> {
+            // Error fields belong to `failed` only: an unknown (or missing) status shown as failed has no code, so it gets
+            // the generic text and no «Повторить» (api.md 7.3).
+            val failed = m.status == AnswerStatus.FAILED
+            ChatItem.Answer(
+                id = m.id,
+                createdAt = m.createdAt,
+                status = m.status?.effective ?: AnswerStatus.FAILED,
+                blocks = m.blocks.orEmpty(),
+                chips = m.chips.orEmpty(),
+                source = m.source,
+                errorText = m.errorText.takeIf { failed },
+                retryable = failed && answerRetryable(m.errorCode, m.retryable),
+                currency = m.currency,
+            )
+        }
         MessageRole.UNKNOWN -> null
     }
 
