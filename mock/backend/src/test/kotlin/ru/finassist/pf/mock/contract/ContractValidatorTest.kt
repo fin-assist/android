@@ -127,6 +127,26 @@ class ContractValidatorTest {
         assertEquals(emptyList<Pair<String, String>>(), ContractCheck.earlyTerminals(listOf("status" to """{"status":"pending"}""", "status" to """{"status":"verified"}""")))
     }
 
+    @Test fun `the spoken exclusion covers only spoken null in the account of a list item`() {
+        val list = Contract.operation("listOperations")
+        val case = Exclusions.SPOKEN_CASES.first()
+        fun item(account: String) = """{"id":"o1","kind":"expense","occurred_at":"2026-10-01T10:00:00+03:00","amount":100,"currency":"RUB",
+            |"title":"Кофе","category_id":"cat_cafe","category_name":"Кафе","category_icon":"cafe","is_category_manual":false,
+            |"status":"posted","account":$account}""".trimMargin()
+        fun exchange(body: String) = Wire.Exchange(list, "/v1/operations", 200, body)
+
+        ContractCheck.assertContract(case, exchange("""{"items":[${item("""{"type_name":"Текущий","spoken":null}""")}]}"""))
+        val cases = mapOf(
+            "a value" to """{"items":[${item("""{"type_name":"Текущий","spoken":"текущий счёт"}""")}]}""",
+            "at the root" to """{"items":[${item("""{"type_name":"Текущий"}""")}],"spoken":null}""",
+            "with another field" to """{"items":[${item("""{"type_name":"Текущий","spoken":null,"extra":null}""")}]}""",
+        )
+        for ((what, body) in cases) {
+            val e = runCatching { ContractCheck.assertContract(case, exchange(body)) }.exceptionOrNull()
+            assertTrue("spoken $what must still fail: $e", e is AssertionError && "not allowed by the schema" in e.message.orEmpty())
+        }
+    }
+
     @Test fun `an event the stream does not declare fails`() =
         assertTrue(Contract.validateEvent(Contract.operation("streamAnswer"), "progress", "{}").isNotEmpty())
 

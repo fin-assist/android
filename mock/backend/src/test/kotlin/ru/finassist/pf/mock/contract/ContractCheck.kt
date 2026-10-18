@@ -31,8 +31,9 @@ internal object ContractCheck {
         }
 
         val excluded = Exclusions.schema.filter { it.case == case }
-        val unused = excluded.filter { ex -> problems.none { ex.match in it } }
-        val left = problems.filter { p -> excluded.none { it.match in p } }
+        val body = exchange.body?.let { Json.parseToJsonElement(it) }
+        val unused = excluded.filter { ex -> problems.none { ex.covers(it, body) } }
+        val left = problems.filter { p -> excluded.none { it.covers(p, body) } }
         if (left.isNotEmpty() || unused.isNotEmpty()) {
             fail(
                 buildString {

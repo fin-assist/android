@@ -1,5 +1,10 @@
 package ru.finassist.pf.mock.contract
 
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+
 /**
  * Known mismatches between the fake backend and the pinned contract (FIN-123). Every entry names why it is not fixed
  * here and the issue that fixes it (proposed in the PR of FIN-123 until it gets a key); the tests fail when an entry
@@ -7,8 +12,33 @@ package ru.finassist.pf.mock.contract
  */
 internal object Exclusions {
 
-    /** A validation message [match] (a substring) expected in the check of [case]. */
-    data class Schema(val case: String, val match: String, val reason: String, val issue: String)
+    /**
+     * A validation message expected in the check of [case]: its text contains [match], its JSON pointer matches
+     * [pointer], and the body's value at that pointer passes [allows]. Anything else at that place still fails.
+     */
+    data class Schema(
+        val case: String,
+        val match: String,
+        val pointer: Regex,
+        val allows: (JsonElement?) -> Boolean,
+        val reason: String,
+        val issue: String,
+    ) {
+        fun covers(problem: String, body: JsonElement?): Boolean {
+            if (match !in problem) return false
+            val where = problem.split(" | ").getOrNull(1) ?: return false
+            return pointer.matches(where) && allows(body?.let { at(it, where) })
+        }
+
+        private fun at(json: JsonElement, pointer: String): JsonElement? =
+            pointer.split('/').drop(1).fold(json as JsonElement?) { node, key ->
+                when (node) {
+                    is JsonObject -> node[key]
+                    is JsonArray -> key.toIntOrNull()?.let { node.getOrNull(it) }
+                    else -> null
+                }
+            }
+    }
 
     /** A code of section 8 the fake backend cannot return, so no case reproduces it. */
     data class Code(val code: String, val reason: String, val issue: String)
@@ -23,9 +53,13 @@ internal object Exclusions {
     private const val ISSUE_SPOKEN = "proposed: [Android] core/api: AccountDetails with `spoken` for details, Account without it for lists"
     private const val SPOKEN_MATCH = "not allowed by the schema: [\"spoken\"]"
 
-    val schema: List<Schema> = listOf(
-        "listOperations: feed", "listOperations: feed, older page", "listOperations: search by text", "listOperations: search, all time",
-    ).map { Schema(it, SPOKEN_MATCH, SPOKEN, ISSUE_SPOKEN) }
+    /** Only `spoken: null`, only in the account objects of a list item. */
+    private val SPOKEN_AT = Regex("""/items/\d+/(account|from_account|to_account)""")
+    private val SPOKEN_NULL: (JsonElement?) -> Boolean = { it is JsonObject && it.containsKey("spoken") && it["spoken"] is JsonNull }
+
+    val SPOKEN_CASES = listOf("listOperations: feed", "listOperations: feed, older page", "listOperations: search by text", "listOperations: search, all time")
+
+    val schema: List<Schema> = SPOKEN_CASES.map { Schema(it, SPOKEN_MATCH, SPOKEN_AT, SPOKEN_NULL, SPOKEN, ISSUE_SPOKEN) }
 
     private const val FIN_22 =
         "the fake backend of release/0.2.8 has no version check and no maintenance mode: FIN-22 added both to the mock, but it is " +
