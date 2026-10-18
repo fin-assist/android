@@ -71,9 +71,10 @@ exchange a server would send and validate it against the pinned contract.
   another body, request in progress), 404 for an object the user never had or another user's.
   `ContractCoverageTest` fails when an operation or a code of the pinned contract has neither a case nor an exclusion.
 - **Exclusions.** `Exclusions.kt` lists the known mismatches, each with its reason and issue: a validation message of
-  one case, a code the mock cannot return, a behaviour it does not follow (`knownGap` takes the code the contract wants
-  and the one the mock gives today, and fails when the gap is closed or the outcome is anything else). An entry that no longer matches fails the test, so the list only shrinks; never weaken the
-  validator instead.
+  one case, bound to the JSON pointer it is reported at and to the value the body may carry there (anything else at
+  that place still fails); a code the mock cannot return; a behaviour it does not follow (`knownGap` takes the code
+  the contract wants and the one the mock gives today, and fails when the gap is closed or the outcome is anything
+  else). An entry that no longer matches fails the test, so the list only shrinks; never weaken the validator instead.
 - **A contract change.** Run `scripts/sync-contracts.sh <ref>` in a PR of its own (the contract issue's client
   issue), then `./gradlew :mock:backend:testDebugUnitTest --tests 'ru.finassist.pf.mock.contract.*'`: the failures
   are where the fake backend has to follow, with the JSON pointer and the schema message. Fix the mock in that PR, or
