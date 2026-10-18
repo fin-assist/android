@@ -56,7 +56,7 @@ class NetworkModuleTest {
 
     @Test
     fun `logging is added only when enabled`() {
-        val logging = assertIs<HttpLoggingInterceptor>(NetworkModule.plainClient(logging = true).interceptors.single())
+        val logging = assertIs<HttpLoggingInterceptor>(NetworkModule.plainClient(logging = true, tlsFailures = TlsFailureReporter(RecordingCrashReporter())).interceptors.single())
         assertEquals(HttpLoggingInterceptor.Level.BASIC, logging.level)
     }
 

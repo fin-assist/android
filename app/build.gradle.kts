@@ -1,6 +1,10 @@
+import ru.finassist.pf.buildlogic.ApiPins
+import ru.finassist.pf.buildlogic.BuildDate
 import ru.finassist.pf.buildlogic.CheckNoMockCode
 import ru.finassist.pf.buildlogic.GenerateNetworkSecurityConfig
+import ru.finassist.pf.buildlogic.GeneratePinningManifest
 import ru.finassist.pf.buildlogic.LocalBackend
+import java.time.LocalDate
 
 plugins {
     id("pf.android.application")
@@ -20,8 +24,32 @@ val localBackend = LocalBackend.parse(secret("pf.apiBaseUrl"))
 
 val localNetworkSecurityConfig = tasks.register<GenerateNetworkSecurityConfig>("generateLocalNetworkSecurityConfig") {
     // The output directory is set by AGP (`addGeneratedSourceDirectory` below).
-    baseUrl.set(localBackend.url)
+    config.set(LocalBackend.networkSecurityConfig(localBackend))
 }
+
+// Production API. A placeholder until there is a server (AGENTS.md «Flavors»).
+val prodBaseUrl = "https://api.example.ru/"
+
+// Certificate pinning (FIN-121, ApiPins): `pf.apiPins` + `pf.apiPinsExpiration` (or PF_API_PINS and
+// PF_API_PINS_EXPIRATION in CI) pin the API host of the flavor. Without them the flavor has no network security
+// config, as before; a partial or invalid value fails the configuration with the reason. A future `stage` gets its own
+// properties and one more `pinnedFlavors` entry. The build date is a value source: a configuration cache entry from
+// another day is not reused, and the generator checks the date again when it runs.
+val buildDate: LocalDate = LocalDate.parse(providers.of(BuildDate::class.java) {}.get())
+val pinnedFlavors: Map<String, Pair<String, ApiPins.Pins?>> = mapOf(
+    "prod" to (prodBaseUrl to ApiPins.parse(secret(ApiPins.PINS_PROPERTY), secret(ApiPins.EXPIRATION_PROPERTY), buildDate)),
+)
+val pinningTasks = pinnedFlavors.mapNotNull { (flavor, environment) ->
+    val (baseUrl, pins) = environment
+    if (pins == null) return@mapNotNull null
+    val name = flavor.replaceFirstChar { it.uppercase() }
+    val config = tasks.register<GenerateNetworkSecurityConfig>("generate${name}NetworkSecurityConfig") {
+        config.set(ApiPins.networkSecurityConfig(ApiPins.host(baseUrl), pins))
+        pinsExpiration.set(pins.expiration.toString())
+    }
+    val manifest = tasks.register<GeneratePinningManifest>("generate${name}PinningManifest")
+    flavor to (config to manifest)
+}.toMap()
 
 // CI: the fake backend never reaches a build that talks to a real one (scripts/check-build-separation.py checks
 // the manifests of the same builds). Every variant outside the `mock` flavor is checked (onVariants below), so a new
@@ -55,7 +83,8 @@ android {
     //   logcat tracking as in `mock` — no RuStore, MyTracker or Tracer, so nothing reaches production analytics,
     //   config or crash console. Installs next to `prod` (`.local`). Plain HTTP only in localDebug (src/localDebug +
     //   generated security config).
-    // `prod`: real HTTP client, RuStore Remote Config, MyTracker.
+    // `prod`: real HTTP client, RuStore Remote Config, MyTracker; certificate pinning of the API host when
+    //   `pf.apiPins` is set (pinnedFlavors above, FIN-121).
     // `mock` and `prod`: Tracer for crashes and ANR, when a token is set.
     flavorDimensions += "env"
     productFlavors {
@@ -75,7 +104,7 @@ android {
         }
         create("prod") {
             dimension = "env"
-            buildConfigField("String", "API_BASE_URL", "\"https://api.example.ru/\"")
+            buildConfigField("String", "API_BASE_URL", "\"$prodBaseUrl\"")
             // SDK keys come from ~/.gradle/gradle.properties or CI env; empty → the SDK stays off.
             buildConfigField("String", "RUSTORE_REMOTE_CONFIG_APP_ID", "\"${secret("pf.rustoreRemoteConfigAppId")}\"")
             buildConfigField("String", "MYTRACKER_SDK_KEY", "\"${secret("pf.mytrackerSdkKey")}\"")
@@ -140,9 +169,16 @@ androidComponents {
         }
     }
 
-    // The app's only network security config, with its only cleartext exception: the local backend's host.
+    // The network security config of localDebug, with the app's only cleartext exception: the local backend's host.
     onVariants(selector().withName("localDebug")) { variant ->
         variant.sources.res?.addGeneratedSourceDirectory(localNetworkSecurityConfig, GenerateNetworkSecurityConfig::outputDir)
+    }
+
+    // Pinned flavors (FIN-121): every build type of the flavor gets the pins when they are set, debug included.
+    onVariants { variant ->
+        val (config, manifest) = pinningTasks[variant.flavorName] ?: return@onVariants
+        variant.sources.res?.addGeneratedSourceDirectory(config, GenerateNetworkSecurityConfig::outputDir)
+        variant.sources.manifests.addGeneratedManifestFile(manifest, GeneratePinningManifest::manifest)
     }
 }
 

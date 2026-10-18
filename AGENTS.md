@@ -53,6 +53,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Tokens, preferences, idempotency keys | `core/storage` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md` (mockups: Figma, exported by `design-check/export.py`), `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks, native gaps, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/qase-*` |
+| Multiplatform readiness of `:core:api` and `:mock:backend`: rule, JVM-only inventory, check | `docs/kmp-readiness.md`; `scripts/check-kmp-ready.py`, `scripts/kmp-baseline.json` |
 | Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
 | UI test coverage: JaCoCo on the e2e build, scenario coverage of the flows | `docs/testing.md` («UI test coverage»); `:e2eCoverageReport` in root `build.gradle.kts`, `app/src/mockE2e/…/E2eCoverage.kt`, `scripts/ui-coverage.py` |
 
@@ -63,11 +64,16 @@ multiplied:
 |---|---|---|---|
 | `mock` | in-process fake (`:mock:backend`) | `toggles-local` (`app/src/mock/assets/flags.json`) / logcat / Tracer with a token | `.mock` |
 | `local` | bank-bff on the developer's machine: `pf.apiBaseUrl` (Gradle property or `PF_API_BASE_URL`), default `http://10.0.2.2:8080/` (emulator → host; `LocalBackend` in build-logic) | `toggles-local` (optional, gitignored `app/src/local/assets/flags.json`) / logcat / off — nothing reaches production consoles | `.local`, «Понятные финансы local» |
-| `prod` | `API_BASE_URL` (placeholder until there is a server) | RuStore Remote Config / MyTracker / Tracer with a token | no suffix |
+| `prod` | `API_BASE_URL` (placeholder until there is a server); certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | RuStore Remote Config / MyTracker / Tracer with a token | no suffix |
 
 A stand will be one more flavor `stage`, built like `prod`. Plain HTTP only in `localDebug`: its network security config
 is generated from `pf.apiBaseUrl` (one host, no subdomains); every other variant has `usesCleartextTraffic="false"`
-and no config. CI checks it on the merged manifests (`scripts/check-build-separation.py`) and keeps `:mock:*` off the
+and no config — except `prod` with API pins (Gradle properties or `PF_API_PINS` / `PF_API_PINS_EXPIRATION`; at least
+two distinct `sha256/` pins and an expiration within a year, or the configuration fails): a generated config with a
+`pin-set` for the `API_BASE_URL` host, no cleartext, no trust anchors of its own. Real pins are never committed; a
+refused certificate is the usual offline error plus a `network.tls` non-fatal (`core/network/…/TlsFailures.kt`).
+Decision and rotation: «Архитектура» → «Вход трафика» in Confluence PF. CI checks it on the merged manifests
+(`scripts/check-build-separation.py`, `pinned-release` with test pins) and keeps `:mock:*` off the
 `local` and `prod` classpaths (`:app:checkNoMockCode`). Build type `e2e` (mock only): debug + UI-test hooks, pinned
 date, JaCoCo probes; the native tests run on it (docs/e2e.md).
 
@@ -165,8 +171,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   Their coverage: `./gradlew :e2eCoverageReport` after a run, then
   `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml`; the scenario part
   (`python3 scripts/ui-coverage.py summary`) needs no device (docs/testing.md).
-- `python3 scripts/agent-docs.py --check` and `python3 -m unittest discover -s scripts -p 'test_*.py'` — the
-  docs check and its parser tests from CI, no Gradle needed.
+- `python3 scripts/agent-docs.py --check`, `python3 scripts/check-kmp-ready.py` and
+  `python3 -m unittest discover -s scripts -p 'test_*.py'` — the docs check, the multiplatform check of `:core:api` /
+  `:mock:backend` and the scripts' tests from CI, no Gradle needed.
 - Coverage: `./gradlew :koverXmlReportUnit` (runs the unit tests), then
   `python3 scripts/coverage-diff.py --base origin/<base branch>` for the changed lines; HTML report via
   `:koverHtmlReportUnit` (docs/testing.md).
@@ -204,6 +211,12 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - When the server sends a ready text for a code (`*_name`, `text`, lock texts), the UI shows that text for a code it does
   not know instead of building one itself or skipping it (FIN-83: import features and notices, `changed_since_text`).
 - A new block type or code value changes both `:core:api` and the fake backend `:mock:backend` in the same PR.
+- `:core:api` and `:mock:backend` move to Kotlin Multiplatform when iOS starts (FIN-144): new code and dependencies
+  there use only what KMP has — kotlinx.serialization, kotlinx-coroutines, kotlinx-datetime, the common stdlib
+  (`kotlin.uuid.Uuid`, `kotlin.time.Duration`, `kotlin.io.encoding.Base64`) — never new `java.*`, `javax.*`,
+  `android.*`, `androidx.*`, Dagger / Hilt, JVM-only libraries or JVM-only stdlib (`synchronized`, `String.format`).
+  An API already in `scripts/kmp-baseline.json` may be reused; an exception is justified in the PR and added there.
+  `scripts/check-kmp-ready.py` (CI) fails on anything beyond the baseline; rule, inventory — `docs/kmp-readiness.md`.
 - The Analytics screen is composed by the server (FIN-4): blocks of the catalog (api.md «Блоки») drawn by the renderers of
   `core/blocks`; texts of blocks come from the server (in `mock` — `AnalyticsServerTexts`). A new primitive is a renderer in
   `CatalogV1` (it goes into `supports` by itself) plus the composer of the fake server. Design-check fixtures of the screen
@@ -326,7 +339,9 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
   `feature/applock`), never in plain preferences, files, `BuildConfig`, resources or source; no real keys or tokens
   in the repository.
 - Network: HTTPS only, no cleartext exceptions, no custom `TrustManager` / `HostnameVerifier` that weakens checks;
-  auth headers not logged.
+  auth headers not logged. Certificate pinning (FIN-121) only through the generated `pin-set` of `prod`: at least two
+  pins, an `expiration`, no `trust-anchors` / `debug-overrides`; pin failures reported without URL, host or
+  certificate data.
 - Untrusted input — the OFX file the user picks (read and uploaded by the app, parsed today by the fake backend
   `mock/ofx`) and every API response: size and depth limits, no XML external entities or DTD expansion in OFX 2.x,
   malformed or hostile data ends in a handled error, not a crash or a hang.
@@ -378,6 +393,13 @@ Also check:
 - Check that a new or changed user scenario comes with a UI test (or a «Not covered yet» entry with a technical
   reason), its Qase case, its line in `scripts/qase-cases.json` and its row in the «Coverage» table of docs/e2e.md
   (see Code).
+- Check that changes in `core/api` and `mock/backend` add no JVM-only APIs or dependencies (see Code,
+  `docs/kmp-readiness.md`): a new entry in `scripts/kmp-baseline.json` and a change of its `build` lines need a reason
+  in the PR, a new library needs an iOS target, and what the check does not see is a finding — JVM-only stdlib members
+  (`synchronized`, `String.format`, `toBigDecimal*`, `java.io` stream extensions, `.java` / `javaClass`,
+  `RegexOption.DOT_MATCHES_ALL`, JDK default methods on collections such as `computeIfAbsent`),
+  dependencies added through the convention plugins of `build-logic` and code shaped to slip past the check (it is a
+  heuristic against accidental JVM-only APIs, not a guard against a deliberate bypass; «Known limits»).
 - Check that new DTOs and mappers follow the extensibility rules (see Code): no closed `enum` for a set that grows,
   no failure on an unknown field or code, and a unit test that parses an unknown value.
 - Check that new functionality comes with tests (see Tests) and that the tests would fail if the behaviour

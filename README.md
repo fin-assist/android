@@ -65,6 +65,22 @@ HTTP без TLS разрешён только в `localDebug` и только к
 `app/src/local/assets/flags.json` по желанию, в git не попадает; docs/flags.md), события — в logcat, Tracer, RuStore
 Remote Config и MyTracker выключены: локальные прогоны не попадают в продовые консоли.
 
+### Закрепление сертификата в `prod`
+
+Решение и процесс ротации — Confluence PF, «Архитектура» → «Вход трафика» → «Закрепление сертификата API (pinning)»
+(FIN-121). Пока сертификата нет, пины не заданы и pinning выключен. Когда появится: в среде, где собирается релиз
+(`~/.gradle/gradle.properties` или секреты CI), задать
+
+```
+pf.apiPins=sha256/<текущий ключ>,sha256/<резервный ключ>     # или PF_API_PINS
+pf.apiPinsExpiration=2027-06-01                            # или PF_API_PINS_EXPIRATION
+```
+
+Пин — base64 SHA-256 от SPKI ключа: `openssl pkey -in key.pem -pubout -outform der | openssl dgst -sha256 -binary |
+base64`. Нужно не меньше двух разных пинов и срок позже даты сборки, но не дальше года; иначе конфигурация падает с
+причиной. Сборка `prod` получает `network_security_config` с `pin-set` для хоста `API_BASE_URL`; `local` и `mock` не
+меняются. Реальные пины в репозиторий не кладутся.
+
 ### JDK для Gradle
 
 Gradle 8.11 не запускается на JDK 25, а Android Studio 2026.x по умолчанию берёт встроенный JBR 25 —

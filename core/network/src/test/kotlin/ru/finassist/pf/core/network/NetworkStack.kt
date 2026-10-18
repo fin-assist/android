@@ -11,13 +11,18 @@ import ru.finassist.pf.core.network.di.NetworkModule
  * The production object graph of [NetworkModule] pointed at a [MockWebServer]: the same clients, interceptors,
  * authenticator and Retrofit setup the app gets from Hilt, so tests see what goes over the wire.
  */
-internal class NetworkStack(server: MockWebServer, val tokenStore: TokenStore = InMemoryTokenStore()) {
+internal class NetworkStack(
+    server: MockWebServer,
+    val tokenStore: TokenStore = InMemoryTokenStore(),
+    val crashReporter: RecordingCrashReporter = RecordingCrashReporter(),
+) {
     private val baseUrl = NetworkModule.baseUrl(server.url("/").toString())
-    val plain: OkHttpClient = NetworkModule.plainClient(logging = false)
-    val client: OkHttpClient = NetworkModule.client(plain, baseUrl, tokenStore)
+    val tlsFailures: TlsFailureReporter = NetworkModule.tlsFailures(crashReporter)
+    val plain: OkHttpClient = NetworkModule.plainClient(logging = false, tlsFailures = tlsFailures)
+    val client: OkHttpClient = NetworkModule.client(plain, baseUrl, tokenStore, tlsFailures)
     val sseClient: OkHttpClient = NetworkModule.sseClient(client)
     private val retrofit: Retrofit = NetworkModule.retrofit(client, baseUrl)
-    private val sse: SseRequests = NetworkModule.sseRequests(baseUrl, sseClient)
+    private val sse: SseRequests = NetworkModule.sseRequests(baseUrl, sseClient, tlsFailures)
     private val operationsApi = NetworkModule.operationsApi(retrofit)
 
     val api: PfApi = NetworkModule.pfApi(

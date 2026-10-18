@@ -7,6 +7,7 @@ plugins {
 dependencies {
     api(projects.core.api)
     implementation(projects.core.common)
+    implementation(projects.core.tracking)
 
     implementation(libs.okhttp)
     implementation(libs.okhttp.sse)

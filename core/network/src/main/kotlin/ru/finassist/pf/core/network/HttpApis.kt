@@ -100,14 +100,21 @@ private fun <T> decode(strategy: DeserializationStrategy<T>, data: String): T = 
     throw AppError.Server(200, e)
 }
 
-/** Builds an SSE request to [path] against the base URL with the standard headers. */
-internal class SseRequests(private val baseUrl: HttpUrl, private val client: OkHttpClient) {
+/**
+ * Builds an SSE request to [path] against the base URL with the standard headers. [tlsFailures] gets the connection
+ * failures of the streams: OkHttp SSE replaces the client's event listener, so they never reach it otherwise.
+ */
+internal class SseRequests(
+    private val baseUrl: HttpUrl,
+    private val client: OkHttpClient,
+    private val tlsFailures: TlsFailureReporter? = null,
+) {
     fun open(path: String, headers: Map<String, String> = emptyMap()): Flow<SseEvent> {
         val builder = Request.Builder()
             .url(baseUrl.newBuilder().addPathSegments(path).build())
             .header("Accept", "text/event-stream")
         headers.forEach { (k, v) -> builder.header(k, v) }
-        return client.sse(builder.build())
+        return client.sse(builder.build(), tlsFailures)
     }
 }
 

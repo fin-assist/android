@@ -40,13 +40,22 @@ Features: `auth`, `applock`, `operations`, `statements`, `analytics`, `assistant
 | `:providers:*`, `:mock:*` | `:core:*` |
 | `:app` | anything |
 
+## Multiplatform-ready modules (FIN-144)
+
+`:core:api` and `:mock:backend` move to Kotlin Multiplatform when iOS starts (the Swift app reuses the contract and
+the fake backend). New code and dependencies there use only what Kotlin Multiplatform has (kotlinx.serialization,
+kotlinx-coroutines, kotlinx-datetime, the common stdlib); no new `java.*`, `javax.*`, `android.*`, `androidx.*`,
+Dagger / Hilt or JVM-only libraries. An exception is justified in the PR. `scripts/check-kmp-ready.py` (CI) fails on
+anything beyond `scripts/kmp-baseline.json`. Rule, check and inventory of what is JVM-only today:
+`docs/kmp-readiness.md`.
+
 ## Flavors of `:app` (dimension `env`, FIN-120)
 
 | Flavor | Modules it adds | Source sets |
 |---|---|---|
 | `mock` | `:mock:backend`, `:providers:toggles-local`, `:providers:tracking-log` | `src/mock` (flags asset), `src/mockE2e` (UI-test hooks), `src/androidTestMock` |
 | `local` | `:core:network`, `:providers:toggles-local`, `:providers:tracking-log` | `src/local` (`LocalModule`: base URL, name), `src/localDebug` (network security config) |
-| `prod` | `:core:network`, `:providers:toggles-rustore`, `:providers:tracking-mytracker` | `src/prod` (`ProdModule`: base URL, SDK keys) |
+| `prod` | `:core:network`, `:providers:toggles-rustore`, `:providers:tracking-mytracker` | `src/prod` (`ProdModule`: base URL, SDK keys); with `pf.apiPins` — a generated network security config with a `pin-set` and its manifest overlay (`ApiPins` in build-logic, FIN-121) |
 
 `:mock:*` never reaches `local` or `prod` (`:app:checkNoMockCode` in CI checks every variant outside `mock`, so a new flavor is covered by itself). A future `stage` flavor follows `prod`.
 Variants that are off: `localE2e`, `prodE2e` (`androidComponents.beforeVariants` in `app/build.gradle.kts`).

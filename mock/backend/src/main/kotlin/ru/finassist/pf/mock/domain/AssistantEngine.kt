@@ -41,9 +41,16 @@ class AssistantEngine(
         val blocks: List<Block>,
         val chips: List<Chip>,
         val dataRange: DateRange?,
-        /** false when the data could not fully answer (api.md 7: the attempt is refunded). */
+        /** false when a function the answer needed returned a lock or no data for the period ([isCharged]). */
         val charged: Boolean,
     )
+
+    /**
+     * What a function the answer needed returned, as far as the attempt is concerned: the coverage of the requested
+     * period (`complete` / `partial` / `no_data`, the tool result's `bounds.coverage`) and whether the metric is
+     * locked (`status == LOCKED` in `GetAnalytics`), as the real `assistant` service checks it (grpc-api.md).
+     */
+    data class FunctionResult(val coverage: String, val locked: Boolean = false)
 
     sealed interface Outcome {
         data class Answered(val answer: Answer) : Outcome
@@ -102,10 +109,12 @@ class AssistantEngine(
         val total = perMonth.sumOf { it.second }
         val count = subjectOps.count { it.isDebit }
         val periodLabel = RussianDates.monthRange(months.first(), months.last())
+        // The canned model needs one function: the operations of the subject over the requested period.
+        val charged = isCharged(listOf(FunctionResult(cov.coverageOf(from, toExcl))))
         if (count == 0) {
             val text = "За $periodLabel операций «$title» не нашли. Возможно, они проходят под другим названием — " +
                 "посмотрите «Операции» или уточните вопрос."
-            return Outcome.Answered(Answer(text, listOf(Block.text(text)), emptyList(), range, charged = false))
+            return Outcome.Answered(Answer(text, listOf(Block.text(text)), emptyList(), range, charged))
         }
         val firstMonthWithOps = perMonth.first { it.second != 0L }.first
         val peak = perMonth.maxBy { it.second }
@@ -151,7 +160,7 @@ class AssistantEngine(
             Chip(label = "$title · ${countWithNoun(count, "операция", "операции", "операций")}", screen = ChipScreen.OPERATIONS, filters = filter),
             Chip(label = "Аналитика за ${RussianDates.monthNominative(lastMonth.month)}", screen = ChipScreen.ANALYTICS, params = AnalyticsParams(PeriodTypeCode.MONTH, PeriodKey.ofMonth(lastMonth), mode)),
         )
-        return Outcome.Answered(Answer(text, listOf(Block.text(text), chart, rows), chips, range, charged = true))
+        return Outcome.Answered(Answer(text, listOf(Block.text(text), chart, rows), chips, range, charged))
     }
 
     /**
@@ -160,11 +169,18 @@ class AssistantEngine(
      */
     private fun isOffTopic(q: String): Boolean = q.replace(PRESCRIPTION, "").let { rest -> OFF_TOPIC.any { rest.contains(it) } }
 
-    private companion object {
-        val PRESCRIPTION = Regex("по рецепт\\S*|рецептурн\\S*")
-        val NONSENSE = listOf("марс", "следующем году", "курс доллара")
+    companion object {
+        /**
+         * api.md 7 «Лимит», calc.md 8: the attempt is refunded only when at least one needed function returned a lock
+         * or `no_data` coverage of the requested period. An empty result over a covered period («не нашли») is an
+         * answer and is charged: otherwise a question phrased to find nothing would be free (FIN-136).
+         */
+        fun isCharged(results: List<FunctionResult>): Boolean = results.none { it.locked || it.coverage == "no_data" }
+
+        private val PRESCRIPTION = Regex("по рецепт\\S*|рецептурн\\S*")
+        private val NONSENSE = listOf("марс", "следующем году", "курс доллара")
         /** Subjects outside personal finance; ASCII ones too, for UI tests (docs/e2e.md: type ASCII). */
-        val OFF_TOPIC = listOf("погод", "рецепт", "анекдот", "стихотворен", "weather", "recipe", "joke", "poem")
-        val SPENDING_WORDS = listOf("трат", "расход", "потрат", "ушло", "сколько")
+        private val OFF_TOPIC = listOf("погод", "рецепт", "анекдот", "стихотворен", "weather", "recipe", "joke", "poem")
+        private val SPENDING_WORDS =listOf("трат", "расход", "потрат", "ушло", "сколько")
     }
 }
