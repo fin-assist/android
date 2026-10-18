@@ -61,7 +61,9 @@ internal object Exclusions {
 
     val schema: List<Schema> = SPOKEN_CASES.map { Schema(it, SPOKEN_MATCH, SPOKEN_AT, SPOKEN_NULL, SPOKEN, ISSUE_SPOKEN) }
 
-    private const val ISSUE_FAILURES = "proposed: [Android] fake backend: switches for server-side failures (RATE_LIMITED, INTERNAL_ERROR, PROCESSING_FAILED)"
+    private const val ISSUE_FAILURES =
+        "proposed: [Android] fake backend: switches for server-side failures (INTERNAL_ERROR, PROCESSING_FAILED) and request rate " +
+            "limits (RATE_LIMITED of 1.1 «номер занят» and of plain calls; only the 429 of a stream re-open exists, FIN-170)"
 
     val codes: List<Code> = listOf(
         Code(
@@ -70,7 +72,6 @@ internal object Exclusions {
                 "already turns any 401 into «start again», the new path needs its UI flow",
             "proposed: [Android] fake backend: registration token expires after 15 minutes (TOKEN_EXPIRED)",
         ),
-        Code("RATE_LIMITED", "the fake backend has no request rate limits (1.1 «номер занят», 1.2 reopening)", ISSUE_FAILURES),
         Code("INTERNAL_ERROR", "the fake backend never fails with 500; `offline` is its only failure switch", ISSUE_FAILURES),
         Code(
             "PROCESSING_FAILED",

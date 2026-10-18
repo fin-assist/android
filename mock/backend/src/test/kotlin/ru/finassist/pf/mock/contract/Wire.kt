@@ -20,7 +20,7 @@ import ru.finassist.pf.core.common.error.AppError
  *
  * - A result is the operation's 2xx status with the body serialized by [WireJson].
  * - An [AppError] is the error the HTTP client maps back to it (`core/network`, `ErrorMapping.kt`): [AppError.Api]
- *   carries its status and code; [AppError.Unauthorized] is 401, [AppError.RateLimited] 429 `RATE_LIMITED`,
+ *   carries its status and code; [AppError.Unauthorized] is 401, [AppError.RateLimited] 429 `RATE_LIMITED` with `Retry-After`,
  *   [AppError.InProgress] 409 `REQUEST_IN_PROGRESS` with `Retry-After`, [AppError.UpdateRequired] 400
  *   `CLIENT_VERSION_UNSUPPORTED`, [AppError.Maintenance] 503 `MAINTENANCE` with `error.until` and `Retry-After` (FIN-22),
  *   [AppError.Server] its status with `INTERNAL_ERROR`. `message` is the mock's text or, without one, the code.
@@ -101,7 +101,11 @@ internal object Wire {
                 emptyMap(),
             )
             is AppError.Unauthorized -> Triple(401, ApiError(e.code, e.code), emptyMap())
-            is AppError.RateLimited -> Triple(429, ApiError(ErrorCodes.RATE_LIMITED, ErrorCodes.RATE_LIMITED, retryAt = e.retryAt), emptyMap())
+            is AppError.RateLimited -> Triple(
+                429,
+                ApiError(ErrorCodes.RATE_LIMITED, ErrorCodes.RATE_LIMITED, retryAt = e.retryAt),
+                e.retryAfterSeconds?.let { mapOf("Retry-After" to it.toString()) }.orEmpty(),
+            )
             is AppError.InProgress -> Triple(
                 409,
                 ApiError(ErrorCodes.REQUEST_IN_PROGRESS, ErrorCodes.REQUEST_IN_PROGRESS),

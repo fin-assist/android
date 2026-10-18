@@ -146,7 +146,9 @@ class ContractBehaviourTest {
         expect(ErrorCodes.MAINTENANCE, "re-open: 503 before 429", s.phoneEvents(token))
         assertEquals("the 429 is not spent on the turned-away opening", 0, s.backend.streamRateLimited.value)
         s.backend.config = s.backend.config.copy(maintenance = false)
-        expect(ErrorCodes.RATE_LIMITED, "re-open after maintenance: the 429", s.phoneEvents(token))
+        val limited = s.phoneEvents(token)
+        expect(ErrorCodes.RATE_LIMITED, "re-open after maintenance: the 429", limited)
+        assertEquals(s.backend.config.streamRetrySeconds.toString(), limited.headers["Retry-After"])
     }
 
     @Test

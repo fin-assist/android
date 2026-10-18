@@ -46,10 +46,10 @@ import javax.inject.Inject
  * - `failing_blocks=<id>,<id>` — those Analytics blocks fail to build and come as `unavailable` (FIN-5); empty — none.
  * - `profile_timezone=<zone id>` — `profile.timezone` on the server, as if changed from another device; the app
  *   adopts it on the next profile read (opening «Профиль»).
- * - `min_version=<MAJOR.MINOR.PATCH>` — the server's minimum client version; below it every request gets
- *   `CLIENT_VERSION_UNSUPPORTED` and the app shows the update screen (FIN-22). Empty — no minimum.
- * - `maintenance=<minutes>|unknown|off` — every request gets 503 `MAINTENANCE`, ending in that many minutes from the
- *   fake «now» or at an unknown time; `off` ends it (FIN-22).
+ * - `min_version=<MAJOR.MINOR.PATCH>` — the server's minimum client version; below it every request and every stream
+ *   opening gets `CLIENT_VERSION_UNSUPPORTED` and the app shows the update screen (FIN-22). Empty — no minimum.
+ * - `maintenance=<minutes>|unknown|off` — every request and every stream opening gets 503 `MAINTENANCE` (a stream already
+ *   open is cut at its next event), ending in that many minutes from the fake «now» or at an unknown time; `off` ends it (FIN-22).
  * - `maintenance_retry_after=<s>` — `Retry-After` of the maintenance answer (15 s by default, the shortest the app waits).
  *
  * Backend values live until the process dies: set them after `launchApp`.

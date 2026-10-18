@@ -142,6 +142,13 @@ class ContractErrorCodesTest(private val name: String) {
                 repeat(5) { s.answer("Сколько я потратил?") }
                 s.call("askAssistant", null) { s.assistant.ask(IdempotencyKey.random(), AskRequest("Сколько я потратил?")) }
             },
+            // The only 429 of the fake backend (FIN-170); request rate limits (1.1 «номер занят», plain calls) it does not have.
+            case(ErrorCodes.RATE_LIMITED, "a stream re-open turned away after a drop") {
+                val s = Scene(FAST.copy(streamDrops = 1, streamRateLimits = 1, callVerifyDelayMs = 60_000), signedIn = false)
+                val token = s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken
+                s.phoneEvents(token) // `pending`, then the drop
+                s.phoneEvents(token)
+            },
             case(ErrorCodes.NOT_FOUND, "an operation that does not exist") {
                 val s = Scene()
                 s.call("getOperation", null, MISSING) { s.operations.getOperation(MISSING) }
