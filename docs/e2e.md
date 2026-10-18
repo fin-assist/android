@@ -179,7 +179,7 @@ were.
 | `auth/register_new_user` (smoke) | new number → consent (error without the tick) → passcode → first upload → result → feed |
 | `auth/sign_in_existing_user` (smoke) | existing account → passcode → feed; the three tabs |
 | `auth/phone_validation` | short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
-| `auth/call_expired` | `call_ttl_ms=8000`: at the device deadline the number leaves the screen, «Время на звонок вышло»; «Позвонить ещё раз» brings the number and a new deadline back — FIN-166 |
+| `auth/call_expired` | `call_ttl_ms=8000`: the wait ends either by the stream's `expired` or by the device timer (their order is not fixed); both lead to «Время на звонок вышло» with no number; «Позвонить ещё раз» brings the number and a new deadline back — FIN-166 |
 | `auth/registration_closed` | `auth.registration=false`: new number → «Регистрация пока закрыта»; existing account still signs in |
 | `applock/unlock` (smoke) | cold start → unlock; wrong code error |
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |

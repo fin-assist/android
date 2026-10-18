@@ -3,9 +3,10 @@ name: Время на звонок вышло и «Позвонить ещё р�
 tags:
   - auth
 ---
-# FIN-166: the request lives 8 s and the call never «arrives» in time. The open stream ends with `expired` at the
-# request's end on the fake server; the device timer (response time + expires_in + 1 s, api.md 1.1) comes after it
-# and leaves «Время на звонок вышло» as it is. Either way the number is gone and a new request is offered.
+# FIN-166: the request lives 8 s and the call never «arrives» in time. Two things end the wait: the open stream's
+# `expired` at the request's end on the fake server, and the device timer (response time + expires_in + 1 s,
+# api.md 1.1), which hides the number and re-opens the stream. Their order is not defined here; both lead to
+# «Время на звонок вышло» with no number and a new request offered.
 - runFlow: ../../subflows/clear_state.yaml
 - launchApp
 - extendedWaitUntil:
