@@ -55,7 +55,7 @@ anything beyond `scripts/kmp-baseline.json`. Rule, check and inventory of what i
 |---|---|---|
 | `mock` | `:mock:backend`, `:providers:toggles-local`, `:providers:tracking-log` | `src/mock` (flags asset), `src/mockE2e` (UI-test hooks), `src/androidTestMock` |
 | `local` | `:core:network`, `:providers:toggles-local`, `:providers:tracking-log` | `src/local` (`LocalModule`: base URL, name), `src/localDebug` (network security config) |
-| `prod` | `:core:network`, `:providers:toggles-rustore`, `:providers:tracking-mytracker` | `src/prod` (`ProdModule`: base URL, SDK keys) |
+| `prod` | `:core:network`, `:providers:toggles-rustore`, `:providers:tracking-mytracker` | `src/prod` (`ProdModule`: base URL, SDK keys); with `pf.apiPins` — a generated network security config with a `pin-set` and its manifest overlay (`ApiPins` in build-logic, FIN-121) |
 
 `:mock:*` never reaches `local` or `prod` (`:app:checkNoMockCode` in CI checks every variant outside `mock`, so a new flavor is covered by itself). A future `stage` flavor follows `prod`.
 Variants that are off: `localE2e`, `prodE2e` (`androidComponents.beforeVariants` in `app/build.gradle.kts`).

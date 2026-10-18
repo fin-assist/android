@@ -63,11 +63,16 @@ multiplied:
 |---|---|---|---|
 | `mock` | in-process fake (`:mock:backend`) | `toggles-local` (`app/src/mock/assets/flags.json`) / logcat / Tracer with a token | `.mock` |
 | `local` | bank-bff on the developer's machine: `pf.apiBaseUrl` (Gradle property or `PF_API_BASE_URL`), default `http://10.0.2.2:8080/` (emulator → host; `LocalBackend` in build-logic) | `toggles-local` (optional, gitignored `app/src/local/assets/flags.json`) / logcat / off — nothing reaches production consoles | `.local`, «Понятные финансы local» |
-| `prod` | `API_BASE_URL` (placeholder until there is a server) | RuStore Remote Config / MyTracker / Tracer with a token | no suffix |
+| `prod` | `API_BASE_URL` (placeholder until there is a server); certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | RuStore Remote Config / MyTracker / Tracer with a token | no suffix |
 
 A stand will be one more flavor `stage`, built like `prod`. Plain HTTP only in `localDebug`: its network security config
 is generated from `pf.apiBaseUrl` (one host, no subdomains); every other variant has `usesCleartextTraffic="false"`
-and no config. CI checks it on the merged manifests (`scripts/check-build-separation.py`) and keeps `:mock:*` off the
+and no config — except `prod` with API pins (Gradle properties or `PF_API_PINS` / `PF_API_PINS_EXPIRATION`; at least
+two distinct `sha256/` pins and an expiration within a year, or the configuration fails): a generated config with a
+`pin-set` for the `API_BASE_URL` host, no cleartext, no trust anchors of its own. Real pins are never committed; a
+refused certificate is the usual offline error plus a `network.tls` non-fatal (`core/network/…/TlsFailures.kt`).
+Decision and rotation: «Архитектура» → «Вход трафика» in Confluence PF. CI checks it on the merged manifests
+(`scripts/check-build-separation.py`, `pinned-release` with test pins) and keeps `:mock:*` off the
 `local` and `prod` classpaths (`:app:checkNoMockCode`). Build type `e2e` (mock only): debug + UI-test hooks, pinned
 date, JaCoCo probes; the native tests run on it (docs/e2e.md).
 
@@ -333,7 +338,9 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
   `feature/applock`), never in plain preferences, files, `BuildConfig`, resources or source; no real keys or tokens
   in the repository.
 - Network: HTTPS only, no cleartext exceptions, no custom `TrustManager` / `HostnameVerifier` that weakens checks;
-  auth headers not logged.
+  auth headers not logged. Certificate pinning (FIN-121) only through the generated `pin-set` of `prod`: at least two
+  pins, an `expiration`, no `trust-anchors` / `debug-overrides`; pin failures reported without URL, host or
+  certificate data.
 - Untrusted input — the OFX file the user picks (read and uploaded by the app, parsed today by the fake backend
   `mock/ofx`) and every API response: size and depth limits, no XML external entities or DTD expansion in OFX 2.x,
   malformed or hostile data ends in a handled error, not a crash or a hang.

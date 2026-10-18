@@ -10,10 +10,19 @@ hooks; the config is the app's own and forbids cleartext by default. An http bac
 i.e. pf.apiBaseUrl) gets exactly one exception, for its own host, without subdomains; an https backend gets none.
 No user CAs or debug overrides.
 
+`pinned-release` — a release build with API pins (FIN-121, `pf.apiPins`): the release rules, except that the manifest
+must use the app's own network security config; that config forbids cleartext everywhere, has no trust anchors or
+debug overrides (user CAs stay untrusted) and pins exactly the host of the compiled `API_BASE_URL`, without subdomains:
+at least two distinct SHA-256 pins and an expiration date that has not passed.
+
 Usage:
   scripts/check-build-separation.py release <merged AndroidManifest.xml>...
   scripts/check-build-separation.py local-debug <merged AndroidManifest.xml> <network_security_config.xml> <BuildConfig.java>
+  scripts/check-build-separation.py pinned-release <merged AndroidManifest.xml> <network_security_config.xml> <BuildConfig.java>
 """
+import base64
+import binascii
+import datetime
 import re
 import sys
 import urllib.parse
@@ -35,7 +44,8 @@ def test_hooks(root: ET.Element) -> list[str]:
     return found
 
 
-def release_problems(manifest_xml: str) -> list[str]:
+def release_problems(manifest_xml: str, allow_config: bool = False) -> list[str]:
+    """Release rules; [allow_config] — a pinned build, which must use the app's own config instead of having none."""
     root = ET.fromstring(manifest_xml)
     problems = [f"test hook: {hook}" for hook in test_hooks(root)]
     application = root.find("application")
@@ -45,9 +55,81 @@ def release_problems(manifest_xml: str) -> list[str]:
         problems.append("android:debuggable is true")
     if application.get(ANDROID + "usesCleartextTraffic") != "false":
         problems.append("android:usesCleartextTraffic is not explicitly false")
-    if application.get(ANDROID + "networkSecurityConfig") is not None:
+    config = application.get(ANDROID + "networkSecurityConfig")
+    if allow_config:
+        if config != NSC_REF:
+            problems.append(f"the manifest does not use {NSC_REF}")
+    elif config is not None:
         problems.append("a network security config (it may allow cleartext) in a release build")
     return problems
+
+
+MIN_PINS = 2
+
+
+def sha256_digest(value: str) -> bytes | None:
+    """The 32 bytes of a base64 SHA-256 pin, or None. Two spellings of one digest decode to the same bytes."""
+    try:
+        decoded = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    return decoded if len(value) == 44 and len(decoded) == 32 else None
+
+
+def pin_problems(nsc_xml: str, base_url: str, today: datetime.date) -> list[str]:
+    """Problems of the pinned network security config of a release build (FIN-121)."""
+    problems = []
+    config = ET.fromstring(nsc_xml)
+    base = config.find("base-config")
+    if base is None or base.get("cleartextTrafficPermitted") != "false":
+        problems.append("base-config does not forbid cleartext")
+    if config.find("debug-overrides") is not None or config.find(".//trust-anchors") is not None:
+        problems.append("custom trust anchors or debug overrides")
+    url = urllib.parse.urlsplit(base_url)
+    if url.scheme != "https" or not url.hostname:
+        return problems + [f"API_BASE_URL {base_url!r} is not an https URL: nothing to pin"]
+    domain_configs = list(config.iter("domain-config"))
+    if len(domain_configs) != 1:
+        return problems + [f"expected one domain-config for {url.hostname}, found {len(domain_configs)}"]
+    domain_config = domain_configs[0]
+    if domain_config.get("cleartextTrafficPermitted") == "true":
+        problems.append("cleartext allowed in the pinned domain-config")
+    domains = domain_config.findall("domain")
+    hosts = [(d.text or "").strip().lower() for d in domains]
+    if hosts != [url.hostname]:
+        problems.append(f"pinned hosts {', '.join(hosts) or 'none'}, expected only the backend host {url.hostname}")
+    if any(d.get("includeSubdomains") == "true" for d in domains):
+        problems.append("pins cover subdomains")
+    pin_set = domain_config.find("pin-set")
+    if pin_set is None:
+        return problems + ["no pin-set"]
+    expiration = pin_set.get("expiration")
+    if expiration is None:
+        problems.append("pin-set has no expiration: a stale pin would lock the app out for good")
+    else:
+        try:
+            if datetime.date.fromisoformat(expiration) <= today:
+                problems.append(f"pin-set expired on {expiration}: the pins are ignored")
+        except ValueError:
+            problems.append(f"pin-set expiration {expiration!r} is not a date")
+    # Distinct by decoded bytes, not by text: base64 with different unused bits before `=` is the same key.
+    digests = set()
+    for pin in pin_set.findall("pin"):
+        value = (pin.text or "").strip()
+        digest = sha256_digest(value)
+        if pin.get("digest") != "SHA-256":
+            problems.append(f"pin {value!r} is not SHA-256")
+        elif digest is None:
+            problems.append(f"pin {value!r} is not a base64 SHA-256 digest")
+        else:
+            digests.add(digest)
+    if len(digests) < MIN_PINS:
+        problems.append(f"{len(digests)} distinct pin(s), at least {MIN_PINS} required (the current key and a backup)")
+    return problems
+
+
+def pinned_release_problems(manifest_xml: str, nsc_xml: str, base_url: str, today: datetime.date) -> list[str]:
+    return release_problems(manifest_xml, allow_config=True) + pin_problems(nsc_xml, base_url, today)
 
 
 def api_base_url(build_config_java: str) -> str:
@@ -120,6 +202,14 @@ def main(args: list[str]) -> int:
         failed = report(args[1], local_debug_problems(read(args[1]), read(args[2]), api_base_url(read(args[3]))))
         if not failed:
             print("localDebug: no test hooks, cleartext only to the backend host")
+        return 1 if failed else 0
+    if len(args) == 4 and args[0] == "pinned-release":
+        problems = pinned_release_problems(
+            read(args[1]), read(args[2]), api_base_url(read(args[3])), datetime.date.today()
+        )
+        failed = report(args[1], problems)
+        if not failed:
+            print("pinned release: no test hooks or cleartext, the API host pinned with a backup and an expiration")
         return 1 if failed else 0
     print(__doc__)
     return 2
