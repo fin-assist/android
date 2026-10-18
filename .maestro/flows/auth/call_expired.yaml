@@ -3,8 +3,9 @@ name: Время на звонок вышло и «Позвонить ещё р�
 tags:
   - auth
 ---
-# FIN-166: the wait ends by the device clock (response time + expires_in, api.md 1.1). The request lives 8 s and
-# the call never «arrives» in time: the number leaves the screen, the stream confirms `expired`.
+# FIN-166: the request lives 8 s and the call never «arrives» in time. The open stream ends with `expired` at the
+# request's end on the fake server; the device timer (response time + expires_in + 1 s, api.md 1.1) comes after it
+# and leaves «Время на звонок вышло» as it is. Either way the number is gone and a new request is offered.
 - runFlow: ../../subflows/clear_state.yaml
 - launchApp
 - extendedWaitUntil:

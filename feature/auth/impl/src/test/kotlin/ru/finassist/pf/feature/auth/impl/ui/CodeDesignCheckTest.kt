@@ -9,7 +9,8 @@ import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
 
 /**
  * Artboards `Code`, `CodeDark`, `CodeExpired`, `CodeLocked`: confirmation by a call from +7 916 123-45-67.
- * `CodeChecking` (FIN-166) has no artboard yet: the device deadline passed, the number is gone until the stream answers.
+ * No artboards yet (FIN-166): `CodeChecking` — the device deadline passed, the number is gone until the stream answers;
+ * `CodeNoDeadline` — waiting without a time (no `expires_in` and no `Date`, or `pending` after the device deadline).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -28,6 +29,8 @@ class CodeDesignCheckTest {
     @Test fun codeExpired() = capture("CodeExpired", state.copy(phase = CallPhase.EXPIRED))
 
     @Test fun codeChecking() = capture("CodeChecking", state.copy(phase = CallPhase.CHECKING, waitUntil = null))
+
+    @Test fun codeNoDeadline() = capture("CodeNoDeadline", state.copy(waitUntil = null))
 
     @Test fun codeLocked() = capture("CodeLocked", state.copy(phase = CallPhase.LOCKED, lockText = "Слишком много попыток. Позвонить можно будет через 10 минут, в 14:32"))
 }

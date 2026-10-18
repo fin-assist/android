@@ -123,6 +123,10 @@ class CallViewModel @Inject constructor(
      * Timer to the device deadline ([SignInFlow.callDeadline]): at the deadline the number leaves the screen and the
      * stream is re-opened to confirm the status (it may have been closed). No deadline — no timer: `expired` of the
      * stream ends the wait.
+     *
+     * The timer fires [TIMER_GRACE] after the deadline: `expires_in` is rounded down, so the device deadline usually
+     * comes up to a second before the server's. Fired exactly at it, the re-opened stream would answer `pending` and the
+     * number would come back for a moment before `expired`. «до ЧЧ:ММ» keeps the deadline itself (seconds dropped).
      */
     private fun armTimer() {
         val deadline = flow.callDeadline
@@ -133,7 +137,7 @@ class CallViewModel @Inject constructor(
         if (deadlinePassed) return
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
-            val left = Duration.between(clock.now().toInstant(), deadline)
+            val left = Duration.between(clock.now().toInstant(), deadline.plus(TIMER_GRACE))
             if (!left.isNegative && !left.isZero) delay(left.toMillis())
             onDeadline()
         }
@@ -209,4 +213,9 @@ class CallViewModel @Inject constructor(
     private fun lockText(e: AppError.RateLimited) = CallLockText.of(e.retryAt, clock.now(), clock.zone)
 
     fun consumeEvent() { _events.value = null }
+
+    private companion object {
+        /** Margin over the rounding of `expires_in` (whole seconds, rounded down) — see [armTimer]. */
+        val TIMER_GRACE: Duration = Duration.ofSeconds(1)
+    }
 }
