@@ -46,6 +46,21 @@ class ApiPinsTest {
     }
 
     @Test
+    fun `two spellings of one digest are the same pin`() {
+        // 32 zero bytes: the canonical form ends with `A=`, the other spelling sets unused bits before `=`.
+        val canonical = "A".repeat(43) + "="
+        val sameBytes = "A".repeat(42) + "B="
+        assertEquals(Base64.getDecoder().decode(canonical).toList(), Base64.getDecoder().decode(sameBytes).toList())
+        assertFails("repeats a pin") { ApiPins.parse("sha256/$canonical,sha256/$sameBytes", "2027-04-01", today) }
+    }
+
+    @Test
+    fun `pins are written in canonical form`() {
+        val pins = ApiPins.parse("sha256/${"A".repeat(42)}B=,sha256/$backup", "2027-04-01", today)!!
+        assertEquals(listOf("A".repeat(43) + "=", backup), pins.digests)
+    }
+
+    @Test
     fun `pins without expiration fail`() {
         assertFails("without pf.apiPinsExpiration") { ApiPins.parse("sha256/$current,sha256/$backup", "", today) }
     }
@@ -83,6 +98,21 @@ class ApiPinsTest {
         val latest = today.plusDays(ApiPins.MAX_EXPIRATION_DAYS)
         assertEquals(latest, ApiPins.parse(both, latest.toString(), today)!!.expiration)
         assertFails("more than") { ApiPins.parse(both, latest.plusDays(1).toString(), today) }
+    }
+
+    @Test
+    fun `the date rules hold on their own`() {
+        ApiPins.requireActive(LocalDate.of(2027, 4, 1), today)
+        assertFails("not after the build date") { ApiPins.requireActive(today, today) }
+        assertFails("more than") { ApiPins.requireActive(today.plusDays(ApiPins.MAX_EXPIRATION_DAYS + 1), today) }
+    }
+
+    @Test
+    fun `the build date source is today`() {
+        val source = object : BuildDate() {
+            override fun getParameters() = throw UnsupportedOperationException()
+        }
+        assertEquals(LocalDate.now().toString(), source.obtain())
     }
 
     @Test

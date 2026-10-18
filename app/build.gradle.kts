@@ -1,4 +1,5 @@
 import ru.finassist.pf.buildlogic.ApiPins
+import ru.finassist.pf.buildlogic.BuildDate
 import ru.finassist.pf.buildlogic.CheckNoMockCode
 import ru.finassist.pf.buildlogic.GenerateNetworkSecurityConfig
 import ru.finassist.pf.buildlogic.GeneratePinningManifest
@@ -32,9 +33,11 @@ val prodBaseUrl = "https://api.example.ru/"
 // Certificate pinning (FIN-121, ApiPins): `pf.apiPins` + `pf.apiPinsExpiration` (or PF_API_PINS and
 // PF_API_PINS_EXPIRATION in CI) pin the API host of the flavor. Without them the flavor has no network security
 // config, as before; a partial or invalid value fails the configuration with the reason. A future `stage` gets its own
-// properties and one more `pinnedFlavors` entry.
+// properties and one more `pinnedFlavors` entry. The build date is a value source: a configuration cache entry from
+// another day is not reused, and the generator checks the date again when it runs.
+val buildDate: LocalDate = LocalDate.parse(providers.of(BuildDate::class.java) {}.get())
 val pinnedFlavors: Map<String, Pair<String, ApiPins.Pins?>> = mapOf(
-    "prod" to (prodBaseUrl to ApiPins.parse(secret(ApiPins.PINS_PROPERTY), secret(ApiPins.EXPIRATION_PROPERTY), LocalDate.now())),
+    "prod" to (prodBaseUrl to ApiPins.parse(secret(ApiPins.PINS_PROPERTY), secret(ApiPins.EXPIRATION_PROPERTY), buildDate)),
 )
 val pinningTasks = pinnedFlavors.mapNotNull { (flavor, environment) ->
     val (baseUrl, pins) = environment
@@ -42,6 +45,7 @@ val pinningTasks = pinnedFlavors.mapNotNull { (flavor, environment) ->
     val name = flavor.replaceFirstChar { it.uppercase() }
     val config = tasks.register<GenerateNetworkSecurityConfig>("generate${name}NetworkSecurityConfig") {
         config.set(ApiPins.networkSecurityConfig(ApiPins.host(baseUrl), pins))
+        pinsExpiration.set(pins.expiration.toString())
     }
     val manifest = tasks.register<GeneratePinningManifest>("generate${name}PinningManifest")
     flavor to (config to manifest)

@@ -1,5 +1,8 @@
 package ru.finassist.pf.core.network
 
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.mockwebserver.MockResponse
@@ -80,6 +83,18 @@ class TlsFailuresTest {
         assertEquals("tls_pin_mismatch", report.code?.value)
         assertEquals(Severity.ERROR, report.severity)
         assertIs<SSLHandshakeException>(report.cause)
+    }
+
+    @Test
+    fun `a refused certificate on an SSE stream is reported and is the usual offline error`() = runBlocking {
+        // OkHttp SSE drops the client's EventListener: the report must come from the stream's own failure path.
+        val refusing = stack.sseClient.newBuilder().addInterceptor(Interceptor { throw pinFailure() }).build()
+        val sse = SseRequests(server.url("/"), refusing, stack.tlsFailures)
+
+        withTimeout(10_000) { assertFailsWith<AppError.Offline> { sse.open("v1/statements/u1/progress").toList() } }
+
+        assertIs<SSLHandshakeException>(stack.crashReporter.reports.single().cause)
+        assertEquals(listOf("tls_pin_mismatch"), stack.crashReporter.reports.map { it.code?.value })
     }
 
     @Test

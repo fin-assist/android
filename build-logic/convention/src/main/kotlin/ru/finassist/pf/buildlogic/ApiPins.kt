@@ -2,6 +2,8 @@ package ru.finassist.pf.buildlogic
 
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ValueSource
+import org.gradle.api.provider.ValueSourceParameters
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 import java.net.URI
@@ -34,13 +36,16 @@ object ApiPins {
     private const val PREFIX = "sha256/"
     private const val SHA256_BYTES = 32
 
-    /** A checked pin set: base64 SHA-256 digests of SubjectPublicKeyInfo, and the date pinning stops at. */
+    /**
+     * A checked pin set: base64 SHA-256 digests of SubjectPublicKeyInfo in canonical form (what the standard encoder
+     * writes for the decoded bytes), and the date pinning stops at.
+     */
     data class Pins(val digests: List<String>, val expiration: LocalDate)
 
     /**
      * Checks the two properties. Both blank → `null` (no pinning). Otherwise both are required: at least [MIN_PINS]
-     * distinct `sha256/` pins of 32 bytes (44 base64 characters) and an expiration after [today] and no later than
-     * [MAX_EXPIRATION_DAYS] from it. Any other value fails the configuration with the reason.
+     * `sha256/` pins of 32 bytes (44 base64 characters) that decode to different digests, and an expiration after
+     * [today] and no later than [MAX_EXPIRATION_DAYS] from it. Any other value fails the configuration with the reason.
      */
     fun parse(pinsRaw: String?, expirationRaw: String?, today: LocalDate): Pins? {
         val pinsValue = pinsRaw?.trim().orEmpty()
@@ -54,19 +59,30 @@ object ApiPins {
         if (digests.size < MIN_PINS) {
             invalid("$PINS_PROPERTY has ${digests.size} pin(s), at least $MIN_PINS are required (the current key and a backup)")
         }
+        // Compared as canonical encodings of the decoded bytes: two spellings of one digest (different unused bits
+        // before `=`) are the same key, not a backup.
         if (digests.toSet().size != digests.size) invalid("$PINS_PROPERTY repeats a pin: a backup must be a different key")
         val expiration = try {
             LocalDate.parse(expirationValue)
         } catch (e: DateTimeParseException) {
             invalid("$EXPIRATION_PROPERTY \"$expirationValue\" is not a date like 2027-10-01")
         }
+        requireActive(expiration, today)
+        return Pins(digests, expiration)
+    }
+
+    /**
+     * The date rules of [parse] on their own: [expiration] after [today] and within [MAX_EXPIRATION_DAYS]. Checked
+     * again when the config is written ([GenerateNetworkSecurityConfig]): a reused configuration cache entry or an
+     * up-to-date task must not put an expired pin set into a new APK.
+     */
+    fun requireActive(expiration: LocalDate, today: LocalDate) {
         if (!expiration.isAfter(today)) {
             invalid("$EXPIRATION_PROPERTY $expiration is not after the build date $today: the pins would be ignored")
         }
         if (expiration.isAfter(today.plusDays(MAX_EXPIRATION_DAYS))) {
             invalid("$EXPIRATION_PROPERTY $expiration is more than $MAX_EXPIRATION_DAYS days after the build date $today")
         }
-        return Pins(digests, expiration)
     }
 
     /** Host of an environment's base URL to pin; pinning makes sense only over https. */
@@ -115,13 +131,21 @@ object ApiPins {
         if (value.length != 44 || bytes == null || bytes.size != SHA256_BYTES) {
             invalid("pin \"$pin\" is not a base64 SHA-256 digest (44 characters)")
         }
-        return value
+        return Base64.getEncoder().encodeToString(bytes)
     }
 
     private fun invalid(reason: String): Nothing = throw IllegalArgumentException("API pins: $reason")
 
     private fun String.escapeXml(): String =
         replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+}
+
+/**
+ * Today's date for the configuration: a value source, so Gradle checks it again before reusing a configuration cache
+ * entry and configures anew on another day — [ApiPins.parse] then runs against the real build date.
+ */
+abstract class BuildDate : ValueSource<String, ValueSourceParameters.None> {
+    override fun obtain(): String = LocalDate.now().toString()
 }
 
 /** Writes [ApiPins.MANIFEST_OVERLAY] for `variant.sources.manifests.addGeneratedManifestFile`. */

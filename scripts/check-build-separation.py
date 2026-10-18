@@ -67,11 +67,13 @@ def release_problems(manifest_xml: str, allow_config: bool = False) -> list[str]
 MIN_PINS = 2
 
 
-def is_sha256_digest(value: str) -> bool:
+def sha256_digest(value: str) -> bytes | None:
+    """The 32 bytes of a base64 SHA-256 pin, or None. Two spellings of one digest decode to the same bytes."""
     try:
-        return len(value) == 44 and len(base64.b64decode(value, validate=True)) == 32
+        decoded = base64.b64decode(value, validate=True)
     except (binascii.Error, ValueError):
-        return False
+        return None
+    return decoded if len(value) == 44 and len(decoded) == 32 else None
 
 
 def pin_problems(nsc_xml: str, base_url: str, today: datetime.date) -> list[str]:
@@ -110,16 +112,19 @@ def pin_problems(nsc_xml: str, base_url: str, today: datetime.date) -> list[str]
                 problems.append(f"pin-set expired on {expiration}: the pins are ignored")
         except ValueError:
             problems.append(f"pin-set expiration {expiration!r} is not a date")
-    digests = []
+    # Distinct by decoded bytes, not by text: base64 with different unused bits before `=` is the same key.
+    digests = set()
     for pin in pin_set.findall("pin"):
         value = (pin.text or "").strip()
+        digest = sha256_digest(value)
         if pin.get("digest") != "SHA-256":
             problems.append(f"pin {value!r} is not SHA-256")
-        elif not is_sha256_digest(value):
+        elif digest is None:
             problems.append(f"pin {value!r} is not a base64 SHA-256 digest")
-        digests.append(value)
-    if len(set(digests)) < MIN_PINS:
-        problems.append(f"{len(set(digests))} distinct pin(s), at least {MIN_PINS} required (the current key and a backup)")
+        else:
+            digests.add(digest)
+    if len(digests) < MIN_PINS:
+        problems.append(f"{len(digests)} distinct pin(s), at least {MIN_PINS} required (the current key and a backup)")
     return problems
 
 

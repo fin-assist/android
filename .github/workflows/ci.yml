@@ -191,19 +191,25 @@ jobs:
           } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Certificate pinning of prod (FIN-121): CI has no real pins, so the generator is checked with test values (32
-      # fixed bytes, not keys of any certificate). Rebuilds only the manifest and resources of prodRelease, after the
-      # checks above have read them.
-      - name: API pins in prodRelease
+      # fixed bytes, not keys of any certificate). Rebuilds only manifests and resources, after the checks above have
+      # read them: prodRelease must be pinned, while localRelease and mockDebug built with the same pins must stay
+      # without a network security config.
+      - name: API pins in prodRelease only
         run: |
           m=app/build/intermediates/merged_manifests
           {
-            ./gradlew processProdReleaseManifest packageProdReleaseResources --no-daemon \
+            ./gradlew processProdReleaseManifest packageProdReleaseResources processLocalReleaseManifest \
+              processMockDebugManifest --no-daemon \
               -Ppf.apiPins="sha256/$(head -c 32 /dev/zero | tr '\0' '\1' | base64),sha256/$(head -c 32 /dev/zero | tr '\0' '\2' | base64)" \
               -Ppf.apiPinsExpiration="$(date -u -d '+180 days' +%F)" &&
             python3 scripts/check-build-separation.py pinned-release \
               $m/prodRelease/processProdReleaseManifest/AndroidManifest.xml \
               app/build/intermediates/packaged_res/prodRelease/packageProdReleaseResources/xml/network_security_config.xml \
-              app/build/generated/source/buildConfig/prod/release/ru/finassist/pf/BuildConfig.java
+              app/build/generated/source/buildConfig/prod/release/ru/finassist/pf/BuildConfig.java &&
+            python3 scripts/check-build-separation.py release $m/localRelease/processLocalReleaseManifest/AndroidManifest.xml &&
+            if grep -q networkSecurityConfig $m/mockDebug/processMockDebugManifest/AndroidManifest.xml; then
+              echo "mockDebug got a network security config with the API pins"; false
+            fi
           } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       - uses: actions/upload-artifact@v4

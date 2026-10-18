@@ -199,8 +199,16 @@ class PinnedReleaseTest(unittest.TestCase):
     def test_repeated_pin_is_not_a_backup(self):
         self.assertEqual(1, len(pinned(pinned_nsc(pins=(PIN_A, PIN_A)))))
 
+    def test_two_spellings_of_one_digest_are_not_a_backup(self):
+        canonical, same_bytes = "A" * 43 + "=", "A" * 42 + "B="
+        self.assertEqual(base64.b64decode(canonical), base64.b64decode(same_bytes))
+        self.assertEqual(
+            ["1 distinct pin(s), at least 2 required (the current key and a backup)"],
+            pinned(pinned_nsc(pins=(canonical, same_bytes))),
+        )
+
     def test_malformed_pin_fails(self):
-        for bad in (PIN_A[:-2], "not-base64!" * 4, base64.b64encode(bytes(33)).decode()):
+        for bad in (PIN_A[:-2], "not-base64!" * 4, base64.b64encode(bytes(33)).decode(), "A" * 44):
             self.assertEqual([f"pin {bad!r} is not a base64 SHA-256 digest"], pinned(pinned_nsc(pins=(bad, PIN_A, PIN_B))))
 
     def test_other_digest_fails(self):

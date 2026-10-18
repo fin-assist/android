@@ -61,19 +61,25 @@ internal object NetworkModule {
 
     /**
      * Client for refresh-token calls only: no authenticator, so a 401 on refresh cannot recurse. Every client is built
-     * from it, so all of them report a refused server certificate (pinning, FIN-121) through [TlsFailureReporter].
+     * from it, so all of them report a refused server certificate (pinning, FIN-121) through [TlsFailureReporter];
+     * SSE streams report through [SseRequests], whose OkHttp path drops the event listener.
      */
     @Provides
     @Singleton
     @Named("plain")
-    fun plainClient(@Named("httpLogging") logging: Boolean, crashReporter: CrashReporter): OkHttpClient = OkHttpClient.Builder()
+    fun plainClient(@Named("httpLogging") logging: Boolean, tlsFailures: TlsFailureReporter): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .eventListenerFactory(TlsFailureReporter(crashReporter).eventListenerFactory())
+        .eventListenerFactory(tlsFailures.eventListenerFactory())
         .readTimeout(30, TimeUnit.SECONDS)
         // Network interceptor: runs per attempt (auth retry, redirect), so every attempt gets a fresh X-Request-Id.
         .addNetworkInterceptor(RequestIdInterceptor())
         .apply { if (logging) addInterceptor(HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BASIC)) }
         .build()
+
+    /** One reporter for every client and stream: each kind of refusal is reported once per process. */
+    @Provides
+    @Singleton
+    fun tlsFailures(crashReporter: CrashReporter): TlsFailureReporter = TlsFailureReporter(crashReporter)
 
     @Provides
     @Singleton
@@ -81,6 +87,7 @@ internal object NetworkModule {
         @Named("plain") plain: OkHttpClient,
         baseUrl: HttpUrl,
         tokenStore: TokenStore,
+        tlsFailures: TlsFailureReporter,
     ): OkHttpClient {
         // The refresh call gets its own Dispatcher: requests waiting in TokenAuthenticator hold slots of the
         // main dispatcher (5 per host), and a refresh queued behind them would never start.
@@ -92,7 +99,7 @@ internal object NetworkModule {
             .callTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(AuthInterceptor(tokenStore))
             .build()
-        val refreshApi = HttpAuthApi(retrofit(refreshClient, baseUrl).create(AuthService::class.java), SseRequests(baseUrl, refreshClient))
+        val refreshApi = HttpAuthApi(retrofit(refreshClient, baseUrl).create(AuthService::class.java), SseRequests(baseUrl, refreshClient, tlsFailures))
         return plain.newBuilder()
             .addInterceptor(AuthInterceptor(tokenStore))
             .authenticator(TokenAuthenticator(tokenStore) { key, refresh -> refreshApi.refreshTokens(key, refresh) })
@@ -117,7 +124,8 @@ internal object NetworkModule {
 
     @Provides
     @Singleton
-    fun sseRequests(baseUrl: HttpUrl, @Sse client: OkHttpClient): SseRequests = SseRequests(baseUrl, client)
+    fun sseRequests(baseUrl: HttpUrl, @Sse client: OkHttpClient, tlsFailures: TlsFailureReporter): SseRequests =
+        SseRequests(baseUrl, client, tlsFailures)
 
     @Provides @Singleton
     fun authApi(retrofit: Retrofit, sse: SseRequests): AuthApi = HttpAuthApi(retrofit.create(AuthService::class.java), sse)
