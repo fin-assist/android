@@ -107,16 +107,46 @@ class ContractBehaviourTest {
     }
 
     @Test
-    fun `a stream opened during maintenance or on an unsupported version is turned away`() = runBlocking {
-        val s = Scene()
-        val upload = s.backend.uploads.first().id
-        val answer = s.answer("Сколько я потратил?")
+    fun `a stream is not opened during maintenance or on an unsupported version`() = runBlocking {
+        val s = Scene(signedIn = false)
+        val token = s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken
+        val signedIn = Scene()
+        val upload = signedIn.backend.uploads.first().id
+        val answer = signedIn.answer("Сколько я потратил?")
+        val until = OffsetDateTime.parse(NOW).plusMinutes(30)
+        listOf(s, signedIn).forEach { it.backend.config = it.backend.config.copy(maintenance = true, maintenanceUntil = until, minVersion = "0.3.0") }
+        // 503 first, for each of the three streams (api.md «SSE»: an error before the stream is a plain HTTP answer).
+        expect(ErrorCodes.MAINTENANCE, "stream 503: verification", s.phoneEvents(token))
+        expect(ErrorCodes.MAINTENANCE, "stream 503: progress", signedIn.progressEvents(upload))
+        val answerMaintenance = signedIn.answerEvents(answer)
+        expect(ErrorCodes.MAINTENANCE, "stream 503: answer", answerMaintenance)
+        assertEquals("15", answerMaintenance.headers["Retry-After"])
+        listOf(s, signedIn).forEach { it.backend.config = it.backend.config.copy(maintenance = false) }
+        expect(ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "stream 400 version: verification", s.phoneEvents(token))
+        expect(ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "stream 400 version: progress", signedIn.progressEvents(upload))
+        expect(ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "stream 400 version: answer", signedIn.answerEvents(answer))
+    }
+
+    @Test
+    fun `on a stream the client version comes before 401 and 404`() = runBlocking {
+        val s = Scene(FAST.copy(minVersion = "0.3.0"))
+        expect(ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "stream: version before 404 progress", s.progressEvents(MISSING))
+        expect(ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "stream: version before 404 answer", s.answerEvents(MISSING))
+        expect(ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "stream: version before 401 verification", Scene(FAST.copy(minVersion = "0.3.0"), signedIn = false).phoneEvents("vt_unknown"))
+    }
+
+    @Test
+    fun `a re-open during maintenance gets 503 before its 429`() = runBlocking {
+        // The call does not come for a minute: the verification stream starts with `pending`, which is not terminal.
+        val s = Scene(FAST.copy(streamDrops = 1, streamRateLimits = 1, callVerifyDelayMs = 60_000), signedIn = false)
+        val token = s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken
+        // The first opening drops after its first event; the next one would be turned away with 429.
+        assertEquals(1, s.phoneEvents(token).events.size)
         s.backend.config = s.backend.config.copy(maintenance = true)
-        ContractCheck.knownGap(GAP_STREAM_AVAILABILITY, s.progressEvents(upload), contract = ErrorCodes.MAINTENANCE, now = null)
-        ContractCheck.knownGap(GAP_STREAM_AVAILABILITY, s.answerEvents(answer), contract = ErrorCodes.MAINTENANCE, now = null)
-        s.backend.config = s.backend.config.copy(maintenance = false, minVersion = "0.3.0")
-        ContractCheck.knownGap(GAP_STREAM_AVAILABILITY, s.progressEvents(upload), contract = ErrorCodes.CLIENT_VERSION_UNSUPPORTED, now = null)
-        ContractCheck.knownGap(GAP_STREAM_AVAILABILITY, s.answerEvents(answer), contract = ErrorCodes.CLIENT_VERSION_UNSUPPORTED, now = null)
+        expect(ErrorCodes.MAINTENANCE, "re-open: 503 before 429", s.phoneEvents(token))
+        assertEquals("the 429 is not spent on the turned-away opening", 0, s.backend.streamRateLimited.value)
+        s.backend.config = s.backend.config.copy(maintenance = false)
+        expect(ErrorCodes.RATE_LIMITED, "re-open after maintenance: the 429", s.phoneEvents(token))
     }
 
     @Test
@@ -350,9 +380,8 @@ class ContractBehaviourTest {
         const val GAP_DELETE_UNKNOWN = "delete-unknown-upload"
         const val GAP_STREAM_SESSION = "stream-session"
         const val GAP_SESSIONLESS = "logout-delete-session"
-        const val GAP_STREAM_AVAILABILITY = "stream-availability"
 
         /** Every gap a test here runs; [ContractCoverageTest] keeps it equal to [Exclusions.behaviours]. */
-        val GAPS = listOf(GAP_RETRY_ORDER, GAP_CONFLICT, GAP_STORED_ERRORS, GAP_DELETE_UNKNOWN, GAP_STREAM_SESSION, GAP_SESSIONLESS, GAP_STREAM_AVAILABILITY)
+        val GAPS = listOf(GAP_RETRY_ORDER, GAP_CONFLICT, GAP_STORED_ERRORS, GAP_DELETE_UNKNOWN, GAP_STREAM_SESSION, GAP_SESSIONLESS)
     }
 }

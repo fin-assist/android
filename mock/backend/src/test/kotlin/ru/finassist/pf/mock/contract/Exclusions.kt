@@ -111,14 +111,6 @@ internal object Exclusions {
             "proposed: [Android] fake backend: idempotency and error order of statements and assistant",
         ),
         Behaviour(
-            "stream-availability",
-            "the progress (3.3) and answer (7.2) streams do not check maintenance and the client version: FIN-22 added both to " +
-                "MockBackend.simulateNetwork, which the stream openings do not call, so a stream opened during maintenance or on an " +
-                "unsupported version starts instead of 503 MAINTENANCE / 400 CLIENT_VERSION_UNSUPPORTED (api.md «SSE»: a re-open " +
-                "during maintenance gets 503). Closing it changes what the screens see under the update and maintenance overlay",
-            "proposed: [Android] fake backend: maintenance and client version check on stream openings",
-        ),
-        Behaviour(
             "logout-delete-session",
             "logout and account deletion answer 204 without a session: the fake backend keeps no access tokens, and a repeat of the " +
                 "deletion (2.5) must stay 204 after the profile is gone",

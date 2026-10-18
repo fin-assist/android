@@ -158,7 +158,16 @@ class MockBackend(
         ready.await()
         if (config.offline) throw AppError.Offline()
         if (config.networkDelayMs > 0) delay(config.networkDelayMs)
-        // The order of the real server (api.md, errors): maintenance, then the client version, then everything else.
+        checkAvailability()
+    }
+
+    /**
+     * What the real server checks before anything else, in its order (api.md «Ошибки»): maintenance (503
+     * `MAINTENANCE`), then the client version (400 `CLIENT_VERSION_UNSUPPORTED`). Both go to the [gate] as the
+     * network layer reports them in `prod`; a request that passes ends a maintenance the gate still shows. Every
+     * plain call ([simulateNetwork]) and every opening of a stream, re-opens included ([droppable]), runs it.
+     */
+    private fun checkAvailability() {
         val c = config
         if (c.maintenance) {
             gate.maintenance(c.maintenanceUntil, c.maintenanceRetryAfterSeconds, now())
@@ -181,15 +190,21 @@ class MockBackend(
     private var afterDrop = false
 
     /**
-     * [stream] as one opening of an SSE stream: when [MockConfig.streamDrops] is above zero and the first event is not
+     * [stream] as one opening of an SSE stream: maintenance and the client version are checked first
+     * ([checkAvailability]), as for a plain call; then, when [MockConfig.streamDrops] is above zero and the first event is not
      * terminal, the opening ends right after that event (a drop, api.md «SSE») and the counter goes down by one. An
-     * opening right after a drop answers 429 while [MockConfig.streamRateLimits] is above zero, counting it down.
+     * opening right after a drop answers 429 while [MockConfig.streamRateLimits] is above zero, counting it down. An
+     * opening still open when maintenance starts ends at its next event without it, like a drop.
      */
     fun <T> droppable(stream: Flow<T>, isTerminal: (T) -> Boolean): Flow<T> = flow {
+        // Before the stream starts, as an HTTP answer (api.md «SSE»: a re-open during maintenance gets 503).
+        checkAvailability()
         takeRateLimit()?.let { throw it }
         var drop: Boolean? = null
         emitAll(
             stream.transformWhile { event ->
+                // An open stream is cut when maintenance starts (api.md «SSE»); the re-open then gets 503.
+                if (config.maintenance) return@transformWhile false
                 emit(event)
                 if (drop == null) drop = !isTerminal(event) && takeDrop()
                 drop != true

@@ -1,5 +1,6 @@
 package ru.finassist.pf.core.network
 
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -105,5 +106,20 @@ class ServiceGateNetworkTest {
         server.enqueue(MockResponse().setResponseCode(503).setHeader("Retry-After", "60").setBody("""{"error":{"code":"MAINTENANCE","message":"m"}}"""))
         runCatching { stack.api.profile.getProfile() }
         assertIs<ServiceGate.State.Maintenance>(stack.gate.state.value)
+    }
+
+    @Test
+    fun `a stream opening turned away with MAINTENANCE or CLIENT_VERSION_UNSUPPORTED reaches the gate`() = runBlocking<Unit> {
+        server.enqueue(
+            MockResponse().setResponseCode(503).setHeader("Retry-After", "600")
+                .setBody("""{"error":{"code":"MAINTENANCE","message":"m"}}"""),
+        )
+        assertFailsWith<AppError.Maintenance> { stack.api.statements.streamProgress("u1").toList() }
+        assertIs<ServiceGate.State.Maintenance>(stack.gate.state.value)
+        assertEquals("android/0.2.7+41", server.takeRequest().getHeader("X-Client-Version"))
+
+        server.enqueue(MockResponse().setResponseCode(400).setBody("""{"error":{"code":"CLIENT_VERSION_UNSUPPORTED","message":"u"}}"""))
+        assertFailsWith<AppError.UpdateRequired> { stack.api.assistant.streamAnswer("a1").toList() }
+        assertEquals(ServiceGate.State.UpdateRequired(), stack.gate.state.value)
     }
 }

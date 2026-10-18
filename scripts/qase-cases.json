@@ -33,6 +33,7 @@
     ".maestro/flows/availability/update_required.yaml": 33,
     ".maestro/flows/availability/maintenance.yaml": 34,
     ".maestro/flows/availability/maintenance_on_sign_in.yaml": 35,
+    ".maestro/flows/availability/maintenance_during_import.yaml": 46,
     ".maestro/flows/assistant/offline_retry.yaml": 20,
     ".maestro/flows/statements/upload_offline_retry.yaml": 21,
     ".maestro/flows/statements/upload_rate_limited_resume.yaml": 45,
