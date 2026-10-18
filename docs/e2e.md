@@ -102,7 +102,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `stream_drops=<n>` | the next n openings of an SSE stream (call, import progress, answer) close after their first event without a terminal one; the app re-opens them with a pause (FIN-170) | process (counts down) |
   | `stream_rate_limits=<n>` | the next n stream openings that follow a dropped one answer 429 `RATE_LIMITED` with `Retry-After: 3`; the app waits and re-opens, no «Слишком много попыток» (FIN-170) | process (counts down) |
   | `stream_retry_s=<n>` | `Retry-After` of those 429 answers, seconds (3 by default; a long one keeps the app waiting) | process |
-  | `expect_stream_rate_limited=<n>` | a check: `e2e.config.applied` shows only once the fake server has turned away at least n stream openings with 429 (waits up to 3 s), else `e2e.config.unmet` and the flow fails; the app is paused under the link, so the openings must have happened before it | — |
+  | `expect_stream_rate_limited=<n>` | a check, instant: `e2e.config.applied` shows only if the fake server has already turned away at least n stream openings with 429, else `e2e.config.unmet` and the flow fails; the app is paused under the link and its stream openings run on the main thread the link holds, so the openings must have happened before it | — |
   | `profile_timezone=<zone id>` | `profile.timezone` on the fake server, as if changed elsewhere; the app adopts it on the next profile read (opening «Профиль») | process |
 
   Flags are read when a screen opens: set them before the screen (usually right after `clear_state.yaml`, before

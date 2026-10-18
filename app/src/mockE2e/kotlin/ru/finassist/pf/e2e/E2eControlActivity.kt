@@ -12,8 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.withLock
 import ru.finassist.pf.core.designsystem.components.pfTestRoot
 import ru.finassist.pf.core.toggles.Flag
@@ -40,10 +38,10 @@ import javax.inject.Inject
  * - `stream_rate_limits=<n>` — the next n openings that follow a dropped one answer 429 with `Retry-After: 3`; the app
  *   waits and re-opens again, without «Слишком много попыток» (FIN-170).
  * - `stream_retry_s=<n>` — `Retry-After` of those 429 answers, seconds (a long one keeps the app waiting).
- * - `expect_stream_rate_limited=<n>` — a check, not a setting: the applied tag shows only once the fake server has
- *   turned away at least n stream openings with 429 (waits up to [EXPECT_MS]); otherwise [TAG_UNMET] shows, and the
- *   flow fails on the missing applied tag. The app's screen is paused while this activity is up, so the openings to
- *   count must have happened before the link is opened.
+ * - `expect_stream_rate_limited=<n>` — a check, not a setting: the applied tag shows only if the fake server has
+ *   already turned away at least n stream openings with 429; otherwise [TAG_UNMET] shows, and the flow fails on the
+ *   missing applied tag. The check is instant: stream openings run on the main thread this activity holds, and the
+ *   app's screen is paused under it, so the openings to count must have happened before the link is opened.
  * - `unknown_codes=true|false` — the fake server sends codes the client does not know (`MockCodes`, FIN-83).
  * - `failing_blocks=<id>,<id>` — those Analytics blocks fail to build and come as `unavailable` (FIN-5); empty — none.
  * - `profile_timezone=<zone id>` — `profile.timezone` on the server, as if changed from another device; the app
@@ -94,8 +92,8 @@ class E2eControlActivity : ComponentActivity() {
                 name == "stream_rate_limits" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(streamRateLimits = it) }
                 name == "stream_retry_s" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(streamRetrySeconds = it) }
                 name == "expect_stream_rate_limited" -> value.toIntOrNull()?.let { expected ->
-                    val reached = withTimeoutOrNull(EXPECT_MS) { backend.streamRateLimited.first { it >= expected } }
-                    if (reached == null) unmet = "expected $expected stream 429s, got ${backend.streamRateLimited.value}"
+                    val given = backend.streamRateLimited.value
+                    if (given < expected) unmet = "expected $expected stream 429s, got $given"
                 }
                 name == "unknown_codes" -> backend.config = backend.config.copy(unknownCodes = value.toBoolean())
                 name == "failing_blocks" -> backend.config = backend.config.copy(failingBlocks = value.split(',').map(String::trim).filter(String::isNotEmpty).toSet())
@@ -113,7 +111,6 @@ class E2eControlActivity : ComponentActivity() {
         const val TAG_APPLIED = "e2e.config.applied"
         /** Shown instead of [TAG_APPLIED] when an `expect_*` check fails. */
         const val TAG_UNMET = "e2e.config.unmet"
-        const val EXPECT_MS = 3000L
         /** Long enough for Maestro to catch the tag between its hierarchy polls, even on a slow CI emulator. */
         const val VISIBLE_MS = 4000L
     }
