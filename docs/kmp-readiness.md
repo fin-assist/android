@@ -80,9 +80,10 @@ in another rule of the check:
   `sortedMapOf` / `toSortedMap` (return `java.util.SortedMap`), `sortedSetOf` / `toSortedSet` (`java.util.TreeSet`),
   `String(bytes, charset)` / `toByteArray(charset)` (common: `decodeToString()` / `encodeToByteArray()`),
   `Json.decodeFromStream` / `encodeToStream` of kotlinx.serialization, `RegexOption` beyond `IGNORE_CASE` /
-  `MULTILINE` (`DOT_MATCHES_ALL`, `LITERAL`, `COMMENTS`, …; common: inline flags such as `(?s)`),
+  `MULTILINE` (`DOT_MATCHES_ALL`, `LITERAL`, `COMMENTS`, …; on JVM and Native: inline flags such as `(?s)`),
   `Regex.toPattern()` (`java.util.regex.Pattern`), JDK default methods on Kotlin collections (`computeIfAbsent`,
-  `putIfAbsent`, `merge`, `removeIf`, `replaceAll`, `stream()`; common: `getOrPut`, `removeAll { }`, …);
+  `putIfAbsent`, `merge`, `removeIf`, `replaceAll`, `stream()`; common: `getOrPut`, `removeAll { }`, …), the
+  two-parameter `Map.forEach { k, v -> }` (JDK `BiConsumer`; common: `forEach { (k, v) -> }`);
 - a fully qualified call of a top-level function without a class (`kotlin.io.path.createTempFile()`,
   `kotlin.concurrent.thread {}`), a member reached through a star import of a common package with JVM-only members or Java bridges
   (`import kotlin.concurrent.*`, `kotlin.time.*`, `kotlinx.datetime.*`), a name the
@@ -117,7 +118,7 @@ Already multiplatform: kotlinx.serialization (`OpenEnumSerializer`, `ApiJson`), 
 | `build.gradle.kts` | `pf.android.library`, `pf.hilt` (Hilt Android, KSP) | multiplatform plugin with an Android target; DI stays Android-side |
 | `build.gradle.kts` | `kotlinx-coroutines-android` | `kotlinx-coroutines-core` (the module uses `Dispatchers.Default` only) |
 | `di/MockModule.kt` | `dagger.*`, `dagger.hilt.*`, `javax.inject.Singleton`, `java.util.Optional`, `android.content.Context` | moves to `androidMain` or `:app` (`src/mock`); Swift builds the graph by hand |
-| `MockPfApi.kt` | `android.content.Context` (assets), `android.util.Log` | statement text passed in by the platform (expect/actual resource loader); a logger interface |
+| `MockPfApi.kt` | `android.content.Context` (assets), `android.util.Log`, `InputStream.bufferedReader()` / `Reader.readText()` (JVM stdlib) | statement text passed in by the platform (expect/actual resource loader); a logger interface |
 | `src/main/assets/statements/fixture.ofx` | Android assets | common resources (bundled per platform) |
 | `MockBackend.kt` | `java.time.OffsetDateTime`, `ZoneId`, `DateTimeException`, `java.util.UUID`, `@Volatile` | `Instant`, `TimeZone`, `IllegalTimeZoneException` of kotlinx-datetime (thrown by `TimeZone.of`; catch it, not the wider `IllegalArgumentException` it extends), `kotlin.uuid.Uuid`, `kotlin.concurrent.Volatile` |
 | `AssistantStore.kt` | `java.time.LocalDate`, `OffsetDateTime`, `@Synchronized`, `@Volatile` | kotlinx-datetime; `Mutex` or atomicfu locks |
@@ -125,11 +126,11 @@ Already multiplatform: kotlinx.serialization (`OpenEnumSerializer`, `ApiJson`), 
 | `api/MockStatementsApi.kt` | `ConcurrentHashMap` (+ `newKeySet`), `OffsetDateTime`, `UUID`, `InputStream.readBytes`, `Charsets.UTF_8` | `Mutex`-guarded maps (or atomicfu), kotlinx-datetime, `Uuid`, `ByteArray.decodeToString()` |
 | `api/MockAssistantApi.kt` | `java.time.LocalDate`, `UUID`, `synchronized(answer)` | kotlinx-datetime, `Uuid`, `Mutex` / atomicfu `synchronized` |
 | `api/MockOperationsApi.kt` | `java.time.YearMonth`, `ChronoUnit` | `kotlinx.datetime.YearMonth` (0.7+), `LocalDate.daysUntil` / `monthsUntil` |
-| `ofx/OfxParser.kt` | `java.math.BigDecimal`, `RoundingMode`, `LocalDateTime`, `ZoneOffset`, `DateTimeFormatter`; `RegexOption.DOT_MATCHES_ALL` (JVM / Native stdlib, not common) | amounts parsed as text into `Long` minor units; `LocalDateTime.Format {}`, `UtcOffset` of kotlinx-datetime (a parse error is `DateTimeFormatException`); the inline flag `(?s)` in the pattern |
+| `ofx/OfxParser.kt` | `java.math.BigDecimal`, `RoundingMode`, `LocalDateTime`, `ZoneOffset`, `DateTimeFormatter`; `RegexOption.DOT_MATCHES_ALL` (JVM / Native stdlib, not common) | amounts parsed as text into `Long` minor units; `LocalDateTime.Format {}`, `UtcOffset` of kotlinx-datetime (a parse error is `DateTimeFormatException`); the inline flag `(?s)` in the pattern (JVM and Native) |
 | `domain/Search.kt` | `String.toBigDecimalOrNull` (JVM stdlib) | parse the digits into minor units by hand |
 | `domain/AnalyticsServerTexts.kt` | `java.time.YearMonth`, `"%.1f".format(...)` (JVM stdlib) | `kotlinx.datetime.YearMonth`, own decimal formatting |
 | `domain/AnalyticsComposer.kt`, `AnalyticsModel.kt` | `java.time.YearMonth` | `kotlinx.datetime.YearMonth` |
-| `domain/AnalyticsEngine.kt` | `LocalDate`, `OffsetDateTime`, `YearMonth`, `ChronoUnit`, `UUID`; `Math.floorDiv` (`java.lang.Math`, no import) | kotlinx-datetime, `Uuid`; `Long.floorDiv` of the stdlib |
+| `domain/AnalyticsEngine.kt` | `LocalDate`, `OffsetDateTime`, `YearMonth`, `ChronoUnit`, `UUID` (`nameUUIDFromBytes`); `Math.floorDiv` (`java.lang.Math`, no import); `String.toByteArray()` (JVM stdlib, hidden `Charset`) | kotlinx-datetime; `Uuid` has no name-based (v3) UUIDs, so the stable ids (`keyId`, `paymentId`, docs/calc.md) need an own deterministic hash; `Long.floorDiv` of the stdlib; `encodeToByteArray()` |
 | `domain/AssistantEngine.kt` | `LocalDate`, `YearMonth` | kotlinx-datetime |
 | `domain/Coverage.kt` | `LocalDate`, `OffsetDateTime`, `YearMonth`, `ZoneId`, `ChronoUnit` | kotlinx-datetime |
 | `domain/Ledger.kt` | `Duration`, `OffsetDateTime`, `UUID` | `kotlin.time.Duration`, kotlinx-datetime, `Uuid` |
