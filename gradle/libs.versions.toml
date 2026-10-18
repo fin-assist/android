@@ -49,7 +49,7 @@ androidxTestServices = "1.5.0"
 # Unit test coverage (docs/testing.md)
 kover = "0.9.11"
 # UI test coverage (FIN-48): probes in the mock e2e build and the report task.
-jacoco = "0.8.12"
+jacoco = "0.8.15"
 
 [libraries]
 # Gradle plugins as libraries — used by build-logic convention plugins
