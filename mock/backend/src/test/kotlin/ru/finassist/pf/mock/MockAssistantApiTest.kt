@@ -157,12 +157,14 @@ class MockAssistantApiTest {
     }
 
     @Test
-    fun `a question about something with no operations is answered but not charged`() = runBlocking<Unit> {
+    fun `a question about something with no operations in a covered period is answered and charged`() = runBlocking<Unit> {
+        // FIN-136: an empty result over a covered period is an answer; only a lock or no data refunds the attempt.
         val response = ask("Расходы на такси")
         val done = assertIs<AnswerEvent.Done>(finish(response.answerId).last()).event
-        assertEquals(false, done.charged)
-        assertEquals(5, done.remainingLimit)
-        assertEquals(5, api.getLimit().remaining)
+        assertEquals(true, done.charged)
+        assertEquals(4, done.remainingLimit)
+        assertEquals(4, api.getLimit().remaining)
+        assertEquals(true, api.listMessages().messages.last().charged)
         val snapshot = finalSnapshot(response.answerId)
         assertEquals(emptyList(), snapshot.chips)
         val text = snapshot.blocks.single().text.orEmpty()

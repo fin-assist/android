@@ -198,6 +198,7 @@ were.
 | `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
 | `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
 | `assistant/off_topic` | a question not about finances (`weather`): the server's OFF_TOPIC text, no «Повторить» (`retryable: false`), still 5 of 5; the next question is answered, 4 of 5 — FIN-160 |
+| `assistant/nothing_found_charged` | a merchant with no operations over the covered six months of the answer (`Kaspersky`, only in March): «…операций «Kaspersky» не нашли», an answer, not a refund — 4 of 5 (it used to stay 5 of 5); only a lock or no data over the period is refunded — FIN-136 |
 | `assistant/offline_retry` | no network: the notice replaces the input; «Повторить» sends the question once the network is back |
 | `assistant/chip_after_statements_deleted` | every statement deleted: the operations chip of an earlier answer opens the search without its stale selection (notice, empty result) — FIN-76 |
 | `assistant/retry_without_transfers` | `assistant_model_errors=1`: a question asked «Без переводов» fails, not spent; «Повторить» answers it still «без переводов» — FIN-76 |
@@ -231,6 +232,9 @@ A false «сессия истекла» after the user's own sign-out (FIN-74) n
 `null` only after the sign-out returned and the phone screen read the reason — a thread interleaving neither the
 emulator nor the mock can force; `SessionRepositoryImplTest` reproduces it with a token store that delivers the
 `null` late.
+A refunded answer (`charged: false` for a lock or `no_data` over the requested period, FIN-136) cannot be reached
+in the mock: the canned model builds the answer window from the covered months and knows no locked metrics;
+`AssistantEngineTest` covers the refund rule.
 A passcode left behind by a signed-out session (the process died between the sign-out and the passcode reset) and
 cleared while the lock is starting (FIN-87) cannot be forced either: the flow cannot kill the process inside that
 window, and the stale state needs a DataStore collector to start while the reset is being written, a timing the

@@ -1,0 +1,48 @@
+appId: ru.finassist.pf.mock.e2e
+name: Помощник — «не нашли» за покрытый период — ответ, попытка списывается
+tags:
+  - assistant
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+
+# FIN-136: «Kaspersky» is a merchant of the fixture, but its only operation (March) is before the six months of the
+# answer, which the statement covers. Nothing found over a covered period is an answer, not a refund: it used to be
+# free (still 5 of 5).
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Kaspersky"
+- tapOn:
+    id: "ds.chat.send"
+# The first question asks for consent; after it the question goes out by itself.
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- tapOn:
+    id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 20000
+- assertVisible: ".*операций «Kaspersky» не нашли.*"
+- assertNotVisible:
+    id: "assistant.answer.failed"
+- extendedWaitUntil:
+    visible: ".*[Оо]сталось 4 из 5.*"
+    timeout: 20000
+- assertNotVisible: ".*[Оо]сталось 5 из 5.*"
