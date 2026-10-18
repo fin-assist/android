@@ -36,11 +36,17 @@ jobs:
       # The contract (docs/api.md, openapi.yaml) for reviews of client changes (AGENTS.md, Code Review Rules; FIN-174).
       # The repo is public: read-only checkout without credentials, read with the Read tool, no extra tools allowed.
       - uses: actions/checkout@v4
+        # Without the contract the review still runs and says so (AGENTS.md, Code Review Rules).
+        continue-on-error: true
         with:
           repository: fin-assist/contracts
+          ref: main
           path: .contracts
           fetch-depth: 1
           persist-credentials: false
+      # The action switches this clone to the PR branch, whose .gitignore may predate .contracts/: exclude it per clone
+      # so a `git add -A` by the reviewer never commits the nested repo.
+      - run: echo '.contracts/' >> .git/info/exclude
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

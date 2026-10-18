@@ -288,7 +288,9 @@ dedicated pass on every PR: Security and Test coverage of use cases (below).
 - Contract: `docs/api.md` / `openapi/openapi.yaml` in fin-assist/contracts; in this repo the
   rules are mirrored in KDoc of `core/api` and `core/network`. In the `@claude` review run the contract is checked
   out read-only at `.contracts/` (`main` of fin-assist/contracts, FIN-174): check client changes that follow the
-  contract against `.contracts/docs/api.md` itself, not only against the PR description. Toggles: `docs/flags.md`. Modules: `docs/modules.md`.
+  contract against the contract itself (`.contracts/docs/api.md`, `openapi/openapi.yaml`, `docs/calc.md` for the
+  fake backend), not only against the PR description; when `.contracts/` is missing, fall back to the KDoc and say
+  so in the summary. Toggles: `docs/flags.md`. Modules: `docs/modules.md`.
 - Report only verified problems with a concrete failure scenario; skip style nits.
 - Post each finding as an inline comment on the changed line (a review conversation that can be resolved),
   not only in a summary comment. The summary lists what was checked, with a «Безопасность» part and a «Покрытие
