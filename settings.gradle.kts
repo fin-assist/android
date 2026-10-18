@@ -63,7 +63,7 @@ include(":providers:crash-tracer")
 include(":mock:backend")
 
 // Features: each one is :api (interfaces, routes, models) + :impl (data, domain, ui).
-listOf("auth", "applock", "operations", "statements", "analytics", "assistant", "profile").forEach { feature ->
+listOf("auth", "applock", "availability", "operations", "statements", "analytics", "assistant", "profile").forEach { feature ->
     include(":feature:$feature:api")
     include(":feature:$feature:impl")
 }

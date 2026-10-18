@@ -17,6 +17,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import ru.finassist.pf.core.toggles.Experiment
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
+import ru.finassist.pf.core.toggles.RemoteValue
 import ru.finassist.pf.core.toggles.flagsVersion
 import ru.rustore.sdk.remoteconfig.Account
 import ru.rustore.sdk.remoteconfig.AppId
@@ -53,10 +54,15 @@ class RuStoreFeatureFlags @Inject constructor(
     private val changesFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     /** One immutable snapshot: a reader never sees new flags with old variants. */
-    private class Config(val values: Map<String, Boolean> = emptyMap(), val variants: Map<String, String> = emptyMap())
+    private class Config(
+        val values: Map<String, Boolean> = emptyMap(),
+        val variants: Map<String, String> = emptyMap(),
+        val strings: Map<String, String> = emptyMap(),
+    )
 
     @Volatile private var config = Config()
     @Volatile private var account: String? = null
+    @Volatile private var snapshotted = false
 
     private val client: RemoteConfigClient? = appId.takeIf { it.isNotBlank() }?.let { id ->
         runCatching {
@@ -88,9 +94,14 @@ class RuStoreFeatureFlags @Inject constructor(
 
     override fun variant(experiment: Experiment): String = experiment.variantOf(config.variants[experiment.key])
 
+    override fun value(key: RemoteValue): String = config.strings[key.key] ?: key.defaultValue
+
     override val changes: Flow<Unit> = changesFlow
 
     override val version: String get() = config.let { flagsVersion(it.values, it.variants) }
+
+    /** Without an app id there is nothing to wait for: the code defaults are the config. */
+    override val loaded: Boolean get() = client == null || snapshotted
 
     override suspend fun setUser(userId: String?) {
         if (account == userId) return
@@ -124,7 +135,12 @@ class RuStoreFeatureFlags @Inject constructor(
             if (!config.containsKey(e.key)) return@mapNotNull null
             runCatching { e.key to config.getString(e.key) }.getOrNull()
         }.toMap()
-        this.config = Config(values, variants)
+        val strings = RemoteValue.entries.mapNotNull { v ->
+            if (!config.containsKey(v.key)) return@mapNotNull null
+            runCatching { v.key to config.getString(v.key) }.getOrNull()
+        }.toMap()
+        this.config = Config(values, variants, strings)
+        snapshotted = true
         changesFlow.tryEmit(Unit)
     }
 

@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import ru.finassist.pf.core.api.model.Consent
 import ru.finassist.pf.core.api.model.ConsentType
+import ru.finassist.pf.core.common.availability.ClientVersion
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.mock.api.MockStatementsApi
 import ru.finassist.pf.mock.ofx.OfxAccount
@@ -35,11 +36,15 @@ internal val FAST = MockConfig(
 
 internal const val NOW = "2026-10-06T12:00:00+03:00"
 
+/** What the test app sends as `X-Client-Version` (`android/0.2.8+41`); the fake server compares it with `minVersion`. */
+internal val CLIENT_VERSION = ClientVersion("0.2.8", 41)
+
 internal val fixtureText: String by lazy { File("src/main/assets/statements/fixture.ofx").readText() }
 
 /**
  * A ready backend; [userId] non-empty = a signed-in user, [assistantConsent] = consent to the assistant given,
- * [dispatcher] — where its background jobs run ([ManualDispatcher] to decide when they do).
+ * [dispatcher] — where its background jobs run ([ManualDispatcher] to decide when they do), [clientVersion] — the
+ * version the app reports (FIN-22).
  */
 internal fun testBackend(
     clock: Clock = TestClock(NOW),
@@ -47,8 +52,9 @@ internal fun testBackend(
     userId: String = "u1",
     assistantConsent: Boolean = false,
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    clientVersion: ClientVersion = CLIENT_VERSION,
 ): MockBackend {
-    val backend = MockBackend(config, clock, dispatcher)
+    val backend = MockBackend(config, clock, dispatcher, clientVersion = clientVersion)
     backend.ready.complete(Unit)
     backend.profile = backend.emptyProfile("+79160000000", userId).let {
         if (assistantConsent) it.copy(consents = listOf(Consent(ConsentType.ASSISTANT, true, MockBackend.CONSENT_VERSION_ASSISTANT, MockBackend.CONSENT_VERSION_ASSISTANT))) else it

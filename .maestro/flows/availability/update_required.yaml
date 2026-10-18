@@ -1,0 +1,25 @@
+appId: ru.finassist.pf.mock.e2e
+name: Версия ниже минимальной — экран обновления поверх приложения
+tags:
+  - availability
+---
+# FIN-22. The fake server's minimum is above this build (0.2.x): the next request gets CLIENT_VERSION_UNSUPPORTED and
+# the update screen covers the app. Nothing else is reachable from it.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?min_version=9.0.0"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "availability.update"
+    timeout: 15000
+- assertVisible: "Обновите приложение"
+- assertVisible: "Эта версия больше не поддерживается"
+- assertVisible:
+    id: "availability.update.button"
+- assertVisible:
+    id: "availability.update.support"

@@ -1,5 +1,7 @@
 package ru.finassist.pf
 
+import ru.finassist.pf.core.common.availability.ServiceGate
+import ru.finassist.pf.feature.availability.impl.ui.AvailabilityScreens
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
@@ -36,6 +38,8 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var session: SessionRepository
     @Inject lateinit var appLock: AppLock
     @Inject lateinit var appLockScreens: AppLockScreens
+    @Inject lateinit var gate: ServiceGate
+    @Inject lateinit var availabilityScreens: AvailabilityScreens
     @Inject lateinit var preferences: AppPreferences
     @Inject lateinit var flags: FeatureFlags
     @Inject lateinit var crashContext: CrashContextSync
@@ -57,6 +61,8 @@ class MainActivity : FragmentActivity() {
                     session = session,
                     appLock = appLock,
                     appLockScreens = appLockScreens,
+                    gate = gate,
+                    availabilityScreens = availabilityScreens,
                     preferences = preferences,
                     flags = flags,
                     onScreenOpened = crashContext::onScreenOpened,

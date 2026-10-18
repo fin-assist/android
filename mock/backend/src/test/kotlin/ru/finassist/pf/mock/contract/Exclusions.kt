@@ -61,19 +61,9 @@ internal object Exclusions {
 
     val schema: List<Schema> = SPOKEN_CASES.map { Schema(it, SPOKEN_MATCH, SPOKEN_AT, SPOKEN_NULL, SPOKEN, ISSUE_SPOKEN) }
 
-    private const val FIN_22 =
-        "the fake backend of release/0.2.8 has no version check and no maintenance mode: FIN-22 added both to the mock, but it is " +
-            "in release/0.2.7, which is not merged into main and release/0.2.8 yet"
-    private const val ISSUE_FIN_22 = "FIN-22 (after release/0.2.7 reaches this branch: a case per code, the exclusion removed)"
     private const val ISSUE_FAILURES = "proposed: [Android] fake backend: switches for server-side failures (RATE_LIMITED, INTERNAL_ERROR, PROCESSING_FAILED)"
 
     val codes: List<Code> = listOf(
-        Code(
-            "CLIENT_VERSION_UNSUPPORTED",
-            "the in-process fake backend sees no headers, `X-Client-Version` included; " + FIN_22,
-            ISSUE_FIN_22,
-        ),
-        Code("MAINTENANCE", FIN_22, ISSUE_FIN_22),
         Code(
             "TOKEN_EXPIRED",
             "a registration token of the fake backend never expires (api.md 1.3: 15 minutes after the call); the consent screen " +
@@ -119,6 +109,14 @@ internal object Exclusions {
             "stream-session",
             "the progress (3.3) and answer (7.2) streams do not check the session: no 401 INVALID_TOKEN before the stream; $FIN_170_FILES",
             "proposed: [Android] fake backend: idempotency and error order of statements and assistant",
+        ),
+        Behaviour(
+            "stream-availability",
+            "the progress (3.3) and answer (7.2) streams do not check maintenance and the client version: FIN-22 added both to " +
+                "MockBackend.simulateNetwork, which the stream openings do not call, so a stream opened during maintenance or on an " +
+                "unsupported version starts instead of 503 MAINTENANCE / 400 CLIENT_VERSION_UNSUPPORTED (api.md «SSE»: a re-open " +
+                "during maintenance gets 503). Closing it changes what the screens see under the update and maintenance overlay",
+            "proposed: [Android] fake backend: maintenance and client version check on stream openings",
         ),
         Behaviour(
             "logout-delete-session",
