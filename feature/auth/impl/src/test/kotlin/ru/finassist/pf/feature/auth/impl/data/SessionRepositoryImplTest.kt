@@ -243,6 +243,8 @@ class SessionRepositoryImplTest {
         eventually { "flags.user:u1" in h.log.all() }
         h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
         h.repo.consumeSignOutReason()
+        // Signed in again only once the observer has the `null`: earlier, the state flow would conflate it (FIN-172).
+        eventually { h.crash.crumbs.size >= 2 } // restored, signed out
         h.tokens.flow.value = TokenStore.Session("u1", TokenPair("a2", "r2")) // signed in again
         // Handled in order: once the new sign-in is applied, the sign-out's `null` has been handled too.
         eventually { h.log.all().count { it == "flags.user:u1" } == 2 }
