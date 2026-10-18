@@ -72,6 +72,9 @@ class SseBackoff(private val random: Random = Random.Default) {
  * - [reopenFirstFailure] false: a failure of the very first opening, before any event, goes to the caller too, so a
  *   screen keeps its own «нет сети» state for a stream that could not be opened at all. A clean close without a
  *   terminal event is a drop either way.
+ * - [continuesEarlierOpening] true: the caller has already had this stream open (a screen that comes back, a re-check
+ *   by a timer), so its first opening here is a re-open too, and a 429 on it is waited for instead of going to the
+ *   caller. Other failures of that opening follow [reopenFirstFailure].
  *
  * The flow completes after the stream that brought the terminal event ends. Cancelling the collector stops it,
  * pauses included.
@@ -79,6 +82,7 @@ class SseBackoff(private val random: Random = Random.Default) {
 fun <T> reopeningStream(
     isTerminal: (T) -> Boolean,
     reopenFirstFailure: Boolean = true,
+    continuesEarlierOpening: Boolean = false,
     random: Random = Random.Default,
     timeSource: TimeSource = TimeSource.Monotonic,
     wallClock: () -> Instant = Instant::now,
@@ -114,7 +118,7 @@ fun <T> reopeningStream(
                 if ((openedAt?.elapsedNow() ?: kotlin.time.Duration.ZERO) >= SseBackoff.HEALTHY_MS.milliseconds) backoff.reset()
                 backoff.afterDrop()
             }
-            error is AppError.RateLimited && reopening -> {
+            error is AppError.RateLimited && (reopening || continuesEarlierOpening) -> {
                 val wait = error.retryAfterSeconds?.let { it * 1_000 }
                     ?: error.retryAt?.let { Duration.between(wallClock(), it.toInstant()).toMillis() }
                 if (wait != null) backoff.afterRateLimit(wait) else backoff.afterDrop()

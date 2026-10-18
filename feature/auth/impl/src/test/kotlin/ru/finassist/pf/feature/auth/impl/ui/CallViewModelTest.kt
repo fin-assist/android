@@ -6,6 +6,8 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -204,6 +206,45 @@ class CallViewModelTest {
         advanceSeconds(2)
         assertEquals(3, opened.size)
         assertEquals(CallEvent.NewUser, vm.events.value)
+    }
+
+    @Test fun `coming back to the screen during a 429 pause waits again instead of locking, with one stream at a time`() {
+        val h = harness()
+        var active = 0
+        var maxActive = 0
+        fun tracked(f: kotlinx.coroutines.flow.Flow<PhoneVerificationStatusEvent>) = f
+            .onStart { active++; maxActive = maxOf(maxActive, active) }
+            .onCompletion { active-- }
+        val limited = { tracked(flow { throw AppError.RateLimited(now.plusSeconds(60), retryAfterSeconds = 60) }) }
+        val vm = h.scripted(
+            tracked(flowOf(event(VerificationStatus.PENDING))),
+            limited(),
+            // The screen came back: the view model opens the stream itself, the server still says 429.
+            limited(),
+            tracked(flowOf(event(VerificationStatus.PENDING), newUser)),
+        )
+        vm.watch()
+        advanceSeconds(1)
+        assertEquals(2, opened.size, "the drop was re-opened and got 429")
+        advanceSeconds(4)
+        vm.stopWatching()
+        vm.watch()
+        assertEquals(3, opened.size)
+        assertEquals(CallPhase.WAITING, vm.state.value.phase, "a 429 on opening the stream again does not lock the screen")
+        assertNull(vm.state.value.lockText)
+        advanceSeconds(59)
+        assertEquals(3, opened.size, "not before Retry-After")
+        advanceSeconds(2)
+        assertEquals(4, opened.size)
+        assertEquals(CallEvent.NewUser, vm.events.value)
+        assertEquals(1, maxActive, "never two streams at once")
+    }
+
+    @Test fun `a 429 on the first opening of the request still locks the screen`() {
+        val h = harness()
+        val vm = h.scripted(flow { throw AppError.RateLimited(now.plusMinutes(10)) })
+        vm.watch()
+        assertEquals(CallPhase.LOCKED, vm.state.value.phase)
     }
 
     @Test fun `leaving the screen during a pause does not re-open the stream`() {

@@ -82,6 +82,11 @@ class CallViewModel @Inject constructor(
     private var watching = false
     /** The device deadline of the current request has been reached; the timer does not fire again for it. */
     private var deadlinePassed = false
+    /**
+     * Token whose stream has already brought an event on this screen: opening it again (resume, the deadline re-check)
+     * is a re-open, and a 429 on it is waited for, not shown as LOCKED (api.md «SSE»).
+     */
+    private var openedToken: String? = null
 
     init {
         armTimer()
@@ -97,11 +102,14 @@ class CallViewModel @Inject constructor(
         streamJob = viewModelScope.launch {
             try {
                 // A drop of an open stream is re-opened with pauses and does not show «нет сети»; a stream that cannot be
-                // opened at all still does (reopenFirstFailure = false), as does a 429 on the first opening (LOCKED).
+                // opened at all still does (reopenFirstFailure = false), as does a 429 on the first opening of the
+                // request on this screen (LOCKED). A 429 when the screen opens it again is waited for.
                 reopeningStream(
                     isTerminal = { it.status != VerificationStatus.PENDING },
                     reopenFirstFailure = false,
+                    continuesEarlierOpening = openedToken == token,
                 ) { authApi.streamPhoneVerification(token) }.collect { event ->
+                    openedToken = token
                     when (event.status) {
                         VerificationStatus.PENDING -> _state.update { it.copy(phase = CallPhase.WAITING) }
                         VerificationStatus.VERIFIED -> onVerified(event.isNewUser == true, event.accessToken, event.refreshToken, event.registrationToken)

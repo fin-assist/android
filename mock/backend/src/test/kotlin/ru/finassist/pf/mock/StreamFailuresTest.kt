@@ -1,6 +1,9 @@
 package ru.finassist.pf.mock
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -64,6 +67,28 @@ class StreamFailuresTest {
     }
 
     @Test
+    fun `a parse cut after its operations reached the ledger is rolled back`() = runTest {
+        // Parsing to 70 s, dedup to 140 s, then the ledger write and rules to 210 s: the limit hits inside the lock.
+        val backend = testBackend(clock, config = FAST.copy(importStepDelayMs = 70_000), dispatcher = StandardTestDispatcher(testScheduler))
+        val api = MockStatementsApi(backend)
+        val accepted = api.uploadStatement(IdempotencyKey("k1"), file())
+
+        val collected = async { api.streamProgress(accepted.uploadId).toList() }
+        testScheduler.advanceTimeBy(150_000)
+        testScheduler.runCurrent()
+        assertEquals(1, backend.ledger.all.size, "the operations are in the ledger before the limit")
+        val events = collected.await()
+
+        assertEquals(85, assertIs<ImportEvent.Progress>(events[events.size - 2]).progress.percent, "cut during rules")
+        val error = assertIs<ImportEvent.Error>(events.last())
+        assertEquals(ErrorCodes.PROCESSING_FAILED, error.code)
+        assertEquals(180_000, testScheduler.currentTime)
+        assertTrue(backend.ledger.all.isEmpty(), "the operations already written are removed")
+        assertTrue(api.listStatements().uploads.isEmpty())
+        assertEquals(listOf<ImportEvent>(error), api.streamProgress(accepted.uploadId).toList())
+    }
+
+    @Test
     fun `a parse within the limit is not cut`() = runTest {
         val backend = testBackend(clock, config = FAST.copy(importStepDelayMs = 50_000), dispatcher = StandardTestDispatcher(testScheduler))
         val api = MockStatementsApi(backend)
@@ -112,6 +137,73 @@ class StreamFailuresTest {
         val history = api.listMessages().messages.last()
         assertEquals(AnswerStatus.FAILED, history.status)
         assertEquals(AnswerErrorCode.MODEL_ERROR, history.errorCode)
+    }
+
+    /**
+     * Holds [MockBackend.mutex] from a coroutine queued right behind the generation's own critical section: the fair
+     * mutex goes to it when the generation lets go, so the next lock of the generation — inside its non-cancellable
+     * ending — waits until [releaseAt], past the deadline.
+     */
+    private suspend fun kotlinx.coroutines.test.TestScope.holdMutexBehindGeneration(backend: MockBackend, releaseAt: Long) {
+        backend.mutex.lock()
+        testScheduler.runCurrent() // the generation starts and waits for the lock
+        launch {
+            backend.mutex.lock()
+            delay(releaseAt - testScheduler.currentTime)
+            backend.mutex.unlock()
+        }
+        testScheduler.runCurrent() // queued behind the generation
+        backend.mutex.unlock()
+    }
+
+    @Test
+    fun `a deadline inside the failure of an answer sends one error and refunds once`() = runTest {
+        val backend = testBackend(
+            clock, config = FAST.copy(answerTimeoutMs = 10_000), assistantConsent = true,
+            dispatcher = StandardTestDispatcher(testScheduler),
+        ).apply { load(doc) }
+        val api = MockAssistantApi(backend)
+        // One attempt spent before: a second refund would show, not vanish in coerceAtLeast(0).
+        val first = api.ask(IdempotencyKey("q0"), AskRequest("Сколько я трачу на Krabsbir?"))
+        assertIs<AnswerEvent.Done>(api.streamAnswer(first.answerId).toList().last())
+        backend.config = backend.config.copy(assistantModelErrors = 1)
+        val asked = api.ask(IdempotencyKey("q1"), AskRequest("Сколько я трачу на Krabsbir?"))
+        assertEquals(3, asked.remainingLimit)
+
+        // fail() waits for the lock in NonCancellable until 20 s; the 10 s deadline passes meanwhile.
+        holdMutexBehindGeneration(backend, releaseAt = 20_000)
+        val events = api.streamAnswer(asked.answerId).toList()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, events.count { it is AnswerEvent.Done || it is AnswerEvent.Error }, "one terminal event: $events")
+        assertEquals(AnswerErrorCode.MODEL_ERROR, assertIs<AnswerEvent.Error>(events.last()).event.code)
+        assertEquals(4, api.getLimit().remaining, "exactly one attempt back")
+        val replay = api.streamAnswer(asked.answerId).toList()
+        assertEquals(AnswerStatus.FAILED, assertIs<AnswerEvent.Snapshot>(replay.first()).event.status)
+        assertEquals(1, replay.count { it is AnswerEvent.Error })
+    }
+
+    @Test
+    fun `a deadline inside the ending of an answer keeps it done and refunds nothing`() = runTest {
+        val backend = testBackend(
+            clock, config = FAST.copy(answerTimeoutMs = 10_000), assistantConsent = true,
+            dispatcher = StandardTestDispatcher(testScheduler),
+        ).apply { load(doc) }
+        val api = MockAssistantApi(backend)
+        val first = api.ask(IdempotencyKey("q0"), AskRequest("Сколько я трачу на Krabsbir?"))
+        assertIs<AnswerEvent.Done>(api.streamAnswer(first.answerId).toList().last())
+        val asked = api.ask(IdempotencyKey("q1"), AskRequest("Сколько я трачу на Krabsbir?"))
+        assertEquals(3, asked.remainingLimit)
+
+        // The ending waits for the lock (its `source` restamp) in NonCancellable until 20 s, past the 10 s deadline.
+        holdMutexBehindGeneration(backend, releaseAt = 20_000)
+        val events = api.streamAnswer(asked.answerId).toList()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, events.count { it is AnswerEvent.Done || it is AnswerEvent.Error }, "one terminal event: $events")
+        assertIs<AnswerEvent.Done>(events.last())
+        assertEquals(3, api.getLimit().remaining, "a charged answer is not refunded by the late deadline")
+        assertEquals(AnswerStatus.COMPLETE, api.listMessages().messages.last().status)
     }
 
     @Test
