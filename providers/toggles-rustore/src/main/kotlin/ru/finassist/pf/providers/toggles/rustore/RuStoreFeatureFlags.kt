@@ -17,6 +17,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import ru.finassist.pf.core.toggles.Experiment
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
+import ru.finassist.pf.core.toggles.RemoteValue
 import ru.finassist.pf.core.toggles.flagsVersion
 import ru.rustore.sdk.remoteconfig.Account
 import ru.rustore.sdk.remoteconfig.AppId
@@ -52,11 +53,9 @@ class RuStoreFeatureFlags @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val changesFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
-    /** One immutable snapshot: a reader never sees new flags with old variants. */
-    private class Config(val values: Map<String, Boolean> = emptyMap(), val variants: Map<String, String> = emptyMap())
-
-    @Volatile private var config = Config()
+    @Volatile private var config = ConfigSnapshot()
     @Volatile private var account: String? = null
+    @Volatile private var snapshotted = false
 
     private val client: RemoteConfigClient? = appId.takeIf { it.isNotBlank() }?.let { id ->
         runCatching {
@@ -88,9 +87,14 @@ class RuStoreFeatureFlags @Inject constructor(
 
     override fun variant(experiment: Experiment): String = experiment.variantOf(config.variants[experiment.key])
 
+    override fun value(key: RemoteValue): String = config.strings[key.key] ?: key.defaultValue
+
     override val changes: Flow<Unit> = changesFlow
 
     override val version: String get() = config.let { flagsVersion(it.values, it.variants) }
+
+    /** Without an app id there is nothing to wait for: the code defaults are the config. */
+    override val loaded: Boolean get() = client == null || snapshotted
 
     override suspend fun setUser(userId: String?) {
         if (account == userId) return
@@ -113,23 +117,50 @@ class RuStoreFeatureFlags @Inject constructor(
             .addOnFailureListener { cont.resume(null) }
     }
 
-    /** Only known keys of boolean type are read; a wrong type in the console falls back to the code default. */
     private fun snapshot(config: RemoteConfig) {
-        val values = Flag.entries.mapNotNull { flag ->
-            if (!config.containsKey(flag.key)) return@mapNotNull null
-            runCatching { flag.key to config.getBoolean(flag.key) }.getOrNull()
-        }.toMap()
-        // Experiment variants are strings (FIN-9); a missing or unknown one is the default variant.
-        val variants = Experiment.entries.mapNotNull { e ->
-            if (!config.containsKey(e.key)) return@mapNotNull null
-            runCatching { e.key to config.getString(e.key) }.getOrNull()
-        }.toMap()
-        this.config = Config(values, variants)
+        this.config = ConfigSnapshot.of(
+            object : ConfigSnapshot.Values {
+                override fun has(key: String) = config.containsKey(key)
+                override fun boolean(key: String) = config.getBoolean(key)
+                override fun string(key: String) = config.getString(key)
+            },
+        )
+        snapshotted = true
         changesFlow.tryEmit(Unit)
     }
 
     private companion object {
         const val TAG = "PfFlags"
+    }
+}
+
+/** One immutable snapshot of a Remote Config: a reader never sees new flags with old variants. */
+internal class ConfigSnapshot(
+    val values: Map<String, Boolean> = emptyMap(),
+    val variants: Map<String, String> = emptyMap(),
+    val strings: Map<String, String> = emptyMap(),
+) {
+    /** What a snapshot reads from a config; a value of another type throws. */
+    interface Values {
+        fun has(key: String): Boolean
+        fun boolean(key: String): Boolean
+        fun string(key: String): String
+    }
+
+    companion object {
+        /**
+         * Only known keys are read: [Flag]s as booleans, [Experiment] variants (FIN-9) and [RemoteValue]s (FIN-22) as
+         * strings. A missing key or a wrong type in the console is left out, so the code default stays in effect.
+         */
+        fun of(config: Values): ConfigSnapshot {
+            fun <T> read(keys: List<String>, get: (String) -> T): Map<String, T> =
+                keys.mapNotNull { key -> if (!config.has(key)) null else runCatching { key to get(key) }.getOrNull() }.toMap()
+            return ConfigSnapshot(
+                values = read(Flag.entries.map { it.key }, config::boolean),
+                variants = read(Experiment.entries.map { it.key }, config::string),
+                strings = read(RemoteValue.entries.map { it.key }, config::string),
+            )
+        }
     }
 }
 

@@ -49,21 +49,29 @@ class NetworkModuleTest {
         assertEquals(15_000, plain.connectTimeoutMillis)
         assertEquals(30_000, plain.readTimeoutMillis)
         assertEquals(0, plain.callTimeoutMillis)
-        assertTrue(plain.interceptors.isEmpty())
+        assertEquals(listOf(ClientVersionInterceptor::class, ServiceGateInterceptor::class), plain.interceptors.map { it::class })
         assertIs<RequestIdInterceptor>(plain.networkInterceptors.single())
         assertSame(Authenticator.NONE, plain.authenticator)
     }
 
     @Test
     fun `logging is added only when enabled`() {
-        val logging = assertIs<HttpLoggingInterceptor>(NetworkModule.plainClient(logging = true, tlsFailures = TlsFailureReporter(RecordingCrashReporter())).interceptors.single())
+        val logging = assertIs<HttpLoggingInterceptor>(
+            NetworkModule.plainClient(
+                logging = true,
+                tlsFailures = TlsFailureReporter(RecordingCrashReporter()),
+                version = stack.version,
+                gate = stack.gate,
+                clock = ru.finassist.pf.core.common.time.SystemClock(),
+            ).interceptors.last(),
+        )
         assertEquals(HttpLoggingInterceptor.Level.BASIC, logging.level)
     }
 
     @Test
     fun `main client adds the session and refreshes on 401, keeping the plain setup`() {
         val client = stack.client
-        assertIs<AuthInterceptor>(client.interceptors.single())
+        assertIs<AuthInterceptor>(client.interceptors.last())
         assertIs<RequestIdInterceptor>(client.networkInterceptors.single())
         assertIs<TokenAuthenticator>(client.authenticator)
         assertEquals(30_000, client.readTimeoutMillis)
@@ -76,7 +84,7 @@ class NetworkModuleTest {
         val sse = stack.sseClient
         assertEquals(0, sse.readTimeoutMillis)
         assertEquals(15_000, sse.connectTimeoutMillis)
-        assertIs<AuthInterceptor>(sse.interceptors.single())
+        assertIs<AuthInterceptor>(sse.interceptors.last())
         assertIs<TokenAuthenticator>(sse.authenticator)
     }
 

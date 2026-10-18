@@ -67,7 +67,8 @@ exchange a server would send and validate it against the pinned contract.
   its options cannot check less.
 - **What runs.** `ContractShapeTest` — the success of every operation in its main states (empty, loaded, each kind,
   each terminal event of a stream, which must come last; an answer stream also while it is generated). `ContractErrorCodesTest` — every code of section 8 of `api.md` the mock can return, with the
-  registry's status and a body valid for the operation. `ContractBehaviourTest` — error order, idempotency (replay,
+  registry's status and a body valid for the operation. `ContractBehaviourTest` — error order (503 `MAINTENANCE` and 400
+  `CLIENT_VERSION_UNSUPPORTED` first, neither stored under an `Idempotency-Key`, FIN-22), idempotency (replay,
   another body, request in progress), 404 for an object the user never had or another user's.
   `ContractCoverageTest` fails when an operation or a code of the pinned contract has neither a case nor an exclusion.
 - **Exclusions.** `Exclusions.kt` lists the known mismatches, each with its reason and issue: a validation message of

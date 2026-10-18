@@ -27,10 +27,12 @@ import ru.finassist.pf.core.api.model.UploadAccepted
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.mock.FAST
 import ru.finassist.pf.mock.MockBackend
+import ru.finassist.pf.mock.NOW
 import ru.finassist.pf.mock.fixtureText
 import ru.finassist.pf.mock.load
 import ru.finassist.pf.mock.statement
 import ru.finassist.pf.mock.trn
+import java.time.OffsetDateTime
 
 /**
  * Error codes (FIN-123, step 2): every code of section 8 of `api.md` the fake backend can return comes from a case
@@ -68,6 +70,18 @@ class ContractErrorCodesTest(private val name: String) {
             statementFile(name, text).let { f -> if (size == null) f else ru.finassist.pf.core.api.UploadFile(f.name, size, f.open) }
 
         internal val cases: List<ErrorCase> = listOf(
+            case(ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "a client version below the minimum") {
+                val s = Scene(FAST.copy(minVersion = "0.3.0"))
+                s.call("getProfile", Profile.serializer()) { s.profile.getProfile() }
+            },
+            case(ErrorCodes.MAINTENANCE, "maintenance with an expected end") {
+                val s = Scene(FAST.copy(maintenance = true, maintenanceUntil = OffsetDateTime.parse(NOW).plusMinutes(30)))
+                s.call("getProfile", Profile.serializer()) { s.profile.getProfile() }
+            },
+            case(ErrorCodes.MAINTENANCE, "maintenance with an unknown end") {
+                val s = Scene(FAST.copy(maintenance = true))
+                s.call("getAnalytics", null) { s.analytics.getAnalytics() }
+            },
             case(ErrorCodes.VALIDATION_ERROR, "phone outside +7 and 10 digits") {
                 val s = Scene(signedIn = false)
                 s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(IdempotencyKey.random(), "8916") }
@@ -127,6 +141,13 @@ class ContractErrorCodesTest(private val name: String) {
                 val s = Scene()
                 repeat(5) { s.answer("Сколько я потратил?") }
                 s.call("askAssistant", null) { s.assistant.ask(IdempotencyKey.random(), AskRequest("Сколько я потратил?")) }
+            },
+            // The only 429 of the fake backend (FIN-170); request rate limits (1.1 «номер занят», plain calls) it does not have.
+            case(ErrorCodes.RATE_LIMITED, "a stream re-open turned away after a drop") {
+                val s = Scene(FAST.copy(streamDrops = 1, streamRateLimits = 1, callVerifyDelayMs = 60_000), signedIn = false)
+                val token = s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken
+                s.phoneEvents(token) // `pending`, then the drop
+                s.phoneEvents(token)
             },
             case(ErrorCodes.NOT_FOUND, "an operation that does not exist") {
                 val s = Scene()

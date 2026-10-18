@@ -4,6 +4,11 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
 import ru.finassist.pf.core.api.TokenStore
+import ru.finassist.pf.core.api.model.ErrorCodes
+import ru.finassist.pf.core.common.availability.ClientVersion
+import ru.finassist.pf.core.common.availability.ServiceGate
+import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.time.Clock
 import java.util.UUID
 
 /** `X-Request-Id`: a fresh UUID per attempt (not per logical action — that is `Idempotency-Key`). */
@@ -37,6 +42,36 @@ internal class AuthInterceptor(private val tokenStore: TokenStore) : Interceptor
     }
 }
 
+/** `X-Client-Version` on every request, auth and SSE included (api.md «Заголовки», FIN-20). */
+internal class ClientVersionInterceptor(private val version: ClientVersion) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response =
+        chain.proceed(chain.request().newBuilder().header(HEADER_CLIENT_VERSION, version.header).build())
+}
+
+/**
+ * Reports `CLIENT_VERSION_UNSUPPORTED` and `MAINTENANCE` to the [ServiceGate] whatever request got them, so the app root
+ * shows the update or maintenance screen; the caller still gets the error. Any other answer of the server after
+ * maintenance reopens the gate.
+ */
+internal class ServiceGateInterceptor(private val gate: ServiceGate, private val clock: Clock) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        // Only the maintenance known before this call ends with its answer: a maintenance a nested call reported
+        // meanwhile (the refresh of an expired token) stays. Hidden under an update requirement too (review of #81).
+        val before = gate.maintenance
+        val response = chain.proceed(chain.request())
+        if (response.code == 400 || response.code == 503) {
+            when (val e = response.toAppError()) {
+                is AppError.UpdateRequired -> gate.updateRequired()
+                is AppError.Maintenance -> gate.maintenance(e.until, e.retryAfterSeconds, clock.now())
+                else -> if (response.code != 503 && before != null) gate.reopen(before)
+            }
+        } else if (response.code < 500 && before != null) {
+            gate.reopen(before)
+        }
+        return response
+    }
+}
+
 /** Marker header for requests that must not carry a session token. Never reaches the server. */
 object NoAuth {
     const val HEADER = "X-Pf-No-Auth"
@@ -44,5 +79,6 @@ object NoAuth {
 }
 
 internal const val HEADER_REQUEST_ID = "X-Request-Id"
+internal const val HEADER_CLIENT_VERSION = "X-Client-Version"
 internal const val HEADER_IDEMPOTENCY_KEY = "Idempotency-Key"
 internal const val HEADER_VERIFICATION_TOKEN = "X-Verification-Token"

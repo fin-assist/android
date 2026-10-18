@@ -5,6 +5,9 @@ import okhttp3.mockwebserver.MockWebServer
 import retrofit2.Retrofit
 import ru.finassist.pf.core.api.PfApi
 import ru.finassist.pf.core.api.TokenStore
+import ru.finassist.pf.core.common.availability.ClientVersion
+import ru.finassist.pf.core.common.availability.ServiceGate
+import ru.finassist.pf.core.common.time.SystemClock
 import ru.finassist.pf.core.network.di.NetworkModule
 
 /**
@@ -15,10 +18,12 @@ internal class NetworkStack(
     server: MockWebServer,
     val tokenStore: TokenStore = InMemoryTokenStore(),
     val crashReporter: RecordingCrashReporter = RecordingCrashReporter(),
+    val gate: ServiceGate = ServiceGate(),
+    val version: ClientVersion = ClientVersion("0.2.7", 41),
 ) {
     private val baseUrl = NetworkModule.baseUrl(server.url("/").toString())
     val tlsFailures: TlsFailureReporter = NetworkModule.tlsFailures(crashReporter)
-    val plain: OkHttpClient = NetworkModule.plainClient(logging = false, tlsFailures = tlsFailures)
+    val plain: OkHttpClient = NetworkModule.plainClient(logging = false, tlsFailures = tlsFailures, version = version, gate = gate, clock = SystemClock())
     val client: OkHttpClient = NetworkModule.client(plain, baseUrl, tokenStore, tlsFailures)
     val sseClient: OkHttpClient = NetworkModule.sseClient(client)
     private val retrofit: Retrofit = NetworkModule.retrofit(client, baseUrl)

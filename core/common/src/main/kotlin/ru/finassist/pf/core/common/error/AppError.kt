@@ -36,6 +36,12 @@ sealed class AppError(message: String? = null, cause: Throwable? = null) : Excep
         message: String? = null,
     ) : AppError(message ?: code)
 
+    /** 400 `CLIENT_VERSION_UNSUPPORTED` (FIN-20): this version is no longer supported; a retry is pointless. */
+    class UpdateRequired : AppError("client_version_unsupported")
+
+    /** 503 `MAINTENANCE` (FIN-20): [until] — expected end, if known; [retryAfterSeconds] — the server's `Retry-After`. */
+    class Maintenance(val until: OffsetDateTime?, val retryAfterSeconds: Int?) : AppError("maintenance")
+
     /** 5xx or a malformed response. */
     class Server(val httpStatus: Int, cause: Throwable? = null) : AppError("server_$httpStatus", cause)
 

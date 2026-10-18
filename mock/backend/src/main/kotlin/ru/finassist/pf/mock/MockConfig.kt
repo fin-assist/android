@@ -52,6 +52,16 @@ data class MockConfig(
     val streamRateLimits: Int = 0,
     /** `Retry-After` of a turned-away re-open ([streamRateLimits]); a long one keeps the client waiting for a UI test. */
     val streamRetrySeconds: Long = STREAM_RETRY_SECONDS,
+    /** Minimum supported client version, `MAJOR.MINOR.PATCH`; below it every request and stream opening gets `CLIENT_VERSION_UNSUPPORTED` (FIN-20). */
+    val minVersion: String? = null,
+    /**
+     * Maintenance: every request and every stream opening gets 503 `MAINTENANCE`, a stream already open is cut at its next
+     * event (FIN-20, api.md «SSE»). [maintenanceUntil] — its expected end, null — unknown.
+     */
+    val maintenance: Boolean = false,
+    val maintenanceUntil: java.time.OffsetDateTime? = null,
+    /** `Retry-After` of the maintenance answer, seconds. */
+    val maintenanceRetryAfterSeconds: Int = 15,
 ) {
     companion object {
         /** Git-ignored: `app/src/mock/assets/private/statement.ofx`. */

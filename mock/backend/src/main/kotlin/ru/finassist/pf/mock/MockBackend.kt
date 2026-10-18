@@ -22,6 +22,8 @@ import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.ImportResult
 import ru.finassist.pf.core.api.model.Profile
 import ru.finassist.pf.core.api.model.Theme
+import ru.finassist.pf.core.common.availability.ClientVersion
+import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.mock.domain.AnalyticsEngine
@@ -49,6 +51,10 @@ class MockBackend(
     /** Where background work (imports, answer generation) runs; tests pass one they control. */
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
     val catalog: Catalog = Catalog(),
+    /** What the app sends as `X-Client-Version`: the fake server checks it like the real one (FIN-20). */
+    private val clientVersion: ClientVersion = ClientVersion("0.0.0", 0),
+    /** Where the update and maintenance answers go, as the network layer reports them in `prod` (FIN-22). */
+    private val gate: ServiceGate = ServiceGate(),
 ) {
     val scope = CoroutineScope(SupervisorJob() + dispatcher)
     val mutex = Mutex()
@@ -152,6 +158,26 @@ class MockBackend(
         ready.await()
         if (config.offline) throw AppError.Offline()
         if (config.networkDelayMs > 0) delay(config.networkDelayMs)
+        checkAvailability()
+    }
+
+    /**
+     * What the real server checks before anything else, in its order (api.md «Ошибки»): maintenance (503
+     * `MAINTENANCE`), then the client version (400 `CLIENT_VERSION_UNSUPPORTED`). Both go to the [gate] as the
+     * network layer reports them in `prod`; a request that passes ends a maintenance the gate still shows. Every
+     * plain call ([simulateNetwork]) and every opening of a stream, re-opens included ([droppable]), runs it.
+     */
+    private fun checkAvailability() {
+        val c = config
+        if (c.maintenance) {
+            gate.maintenance(c.maintenanceUntil, c.maintenanceRetryAfterSeconds, now())
+            throw AppError.Maintenance(c.maintenanceUntil, c.maintenanceRetryAfterSeconds)
+        }
+        if (clientVersion.isBelow(c.minVersion)) {
+            gate.updateRequired()
+            throw AppError.UpdateRequired()
+        }
+        gate.reopen()
     }
 
     /** Guards the drop and 429 counters of [MockConfig] (a coroutine mutex: `synchronized` is JVM-only). */
@@ -164,15 +190,21 @@ class MockBackend(
     private var afterDrop = false
 
     /**
-     * [stream] as one opening of an SSE stream: when [MockConfig.streamDrops] is above zero and the first event is not
+     * [stream] as one opening of an SSE stream: maintenance and the client version are checked first
+     * ([checkAvailability]), as for a plain call; then, when [MockConfig.streamDrops] is above zero and the first event is not
      * terminal, the opening ends right after that event (a drop, api.md «SSE») and the counter goes down by one. An
-     * opening right after a drop answers 429 while [MockConfig.streamRateLimits] is above zero, counting it down.
+     * opening right after a drop answers 429 while [MockConfig.streamRateLimits] is above zero, counting it down. An
+     * opening still open when maintenance starts ends at its next event without it, like a drop.
      */
     fun <T> droppable(stream: Flow<T>, isTerminal: (T) -> Boolean): Flow<T> = flow {
+        // Before the stream starts, as an HTTP answer (api.md «SSE»: a re-open during maintenance gets 503).
+        checkAvailability()
         takeRateLimit()?.let { throw it }
         var drop: Boolean? = null
         emitAll(
             stream.transformWhile { event ->
+                // An open stream is cut when maintenance starts (api.md «SSE»); the re-open then gets 503.
+                if (config.maintenance) return@transformWhile false
                 emit(event)
                 if (drop == null) drop = !isTerminal(event) && takeDrop()
                 drop != true

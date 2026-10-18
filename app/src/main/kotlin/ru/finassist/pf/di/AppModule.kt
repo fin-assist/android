@@ -1,15 +1,20 @@
 package ru.finassist.pf.di
 
+import android.content.Context
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import ru.finassist.pf.BuildConfig
+import ru.finassist.pf.core.common.availability.ClientVersion
+import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.core.common.time.ShiftedClock
 import ru.finassist.pf.core.common.time.SystemClock
 import ru.finassist.pf.core.toggles.FeatureFlags
+import ru.finassist.pf.core.toggles.MinVersionCheck
 import ru.finassist.pf.core.tracking.CompositeCrashReporter
 import ru.finassist.pf.core.tracking.CrashContextSync
 import ru.finassist.pf.core.tracking.CrashReporter
@@ -24,6 +29,23 @@ object AppModule {
     @Provides
     @Singleton
     fun reportZone(): ReportZone = ReportZone()
+
+    /** `X-Client-Version` (FIN-20/22): the release version and the CI build number. */
+    @Provides
+    fun clientVersion(): ClientVersion = ClientVersion(BuildConfig.CLIENT_VERSION_NAME, BuildConfig.VERSION_CODE)
+
+    /** Update and maintenance screens over the whole app (FIN-22). */
+    @Provides
+    @Singleton
+    fun serviceGate(): ServiceGate = ServiceGate()
+
+    @Provides
+    fun minVersionCheck(
+        @ApplicationContext context: Context,
+        flags: FeatureFlags,
+        version: ClientVersion,
+        gate: ServiceGate,
+    ): MinVersionCheck = MinVersionCheck(flags, version, gate, LastMinVersionPrefs(context))
 
     /**
      * Days and "today" in the report zone (profile zone, FIN-92). The e2e build pins "now" ([BuildConfig.E2E_NOW]) so

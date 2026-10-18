@@ -1,5 +1,8 @@
 package ru.finassist.pf.ui
 
+import androidx.compose.runtime.key
+import ru.finassist.pf.core.common.availability.ServiceGate
+import ru.finassist.pf.feature.availability.impl.ui.AvailabilityScreens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -60,6 +63,8 @@ fun PfApp(
     session: SessionRepository,
     appLock: AppLock,
     appLockScreens: AppLockScreens,
+    gate: ServiceGate,
+    availabilityScreens: AvailabilityScreens,
     preferences: AppPreferences,
     flags: FeatureFlags,
     onScreenOpened: (routePattern: String?) -> Unit,
@@ -89,39 +94,60 @@ fun PfApp(
                 else -> Unit
             }
         }
+        val gateState by gate.state.collectAsStateWithLifecycle()
+        val reopened by gate.reopened.collectAsStateWithLifecycle()
+        val blocked = gateState != ServiceGate.State.Open
         // pfTestRoot: test tags become resource ids for UI tests (.maestro/); dialogs and sheets set it themselves.
         Box(Modifier.fillMaxSize().background(PfTheme.colors.bg).pfTestRoot()) {
-            when (val s = sessionState) {
-                SessionState.Unknown -> Unit
-                SessionState.SignedOut -> LayerScope("auth") { AuthLayer(entries, session, onScreenOpened) }
-                is SessionState.SignedIn -> when {
-                    (settingUp && lockState != LockState.Locked) || lockState == LockState.NotConfigured ->
-                        LayerScope("setup-${s.userId}") {
-                            LayerBreadcrumb(APP_LOCK_SETUP, onScreenOpened)
-                            appLockScreens.Setup(onDone = { settingUp = false })
-                        }
-                    else -> {
-                        val locked = lockState == LockState.Locked
-                        // Main stays composed under the lock so the back stack survives; while locked it is
-                        // hidden from TalkBack and its dialogs and sheets are not shown.
-                        CompositionLocalProvider(LocalSuppressPopups provides locked) {
-                            LayerScope("main-${s.userId}") {
-                                MainLayer(
-                                    entries, session, flags, userId = s.userId, onScreenOpened = onScreenOpened,
-                                    active = !locked,
-                                    modifier = if (locked) Modifier.clearAndSetSemantics { } else Modifier,
-                                )
-                            }
-                        }
-                        if (locked) {
-                            // A pointer handler on the overlay root makes it the hit target: taps never reach the app below.
-                            Box(Modifier.fillMaxSize().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
-                                LayerScope("unlock") {
-                                    LayerBreadcrumb(APP_LOCK_UNLOCK, onScreenOpened)
-                                    appLockScreens.Unlock()
+            // After maintenance the screens are created anew: whatever failed under the overlay loads again (FIN-22). The
+            // generation is in the layer keys too: a layer key reused by the new tree would get the view model store
+            // the old tree clears on dispose.
+            key(reopened) {
+                CompositionLocalProvider(LocalSuppressPopups provides (blocked || LocalSuppressPopups.current)) {
+                    Box(if (blocked) Modifier.fillMaxSize().clearAndSetSemantics { } else Modifier.fillMaxSize()) {
+                        when (val s = sessionState) {
+                            SessionState.Unknown -> Unit
+                            SessionState.SignedOut -> LayerScope("auth-$reopened") { AuthLayer(entries, session, onScreenOpened) }
+                            is SessionState.SignedIn -> when {
+                                (settingUp && lockState != LockState.Locked) || lockState == LockState.NotConfigured ->
+                                    LayerScope("setup-${s.userId}-$reopened") {
+                                        LayerBreadcrumb(APP_LOCK_SETUP, onScreenOpened)
+                                        appLockScreens.Setup(onDone = { settingUp = false })
+                                    }
+                                else -> {
+                                    val locked = lockState == LockState.Locked
+                                    // Main stays composed under the lock so the back stack survives; while locked it is
+                                    // hidden from TalkBack and its dialogs and sheets are not shown.
+                                    CompositionLocalProvider(LocalSuppressPopups provides (locked || blocked)) {
+                                        LayerScope("main-${s.userId}-$reopened") {
+                                            MainLayer(
+                                                entries, session, flags, userId = s.userId, onScreenOpened = onScreenOpened,
+                                                active = !locked,
+                                                modifier = if (locked) Modifier.clearAndSetSemantics { } else Modifier,
+                                            )
+                                        }
+                                    }
+                                    if (locked) {
+                                        // A pointer handler on the overlay root makes it the hit target: taps never reach the app below.
+                                        Box(Modifier.fillMaxSize().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
+                                            LayerScope("unlock-$reopened") {
+                                                LayerBreadcrumb(APP_LOCK_UNLOCK, onScreenOpened)
+                                                appLockScreens.Unlock()
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
+                    }
+                }
+            }
+            // Update or maintenance (FIN-22): over everything — sign-in, the lock and the main screens alike.
+            if (blocked) {
+                Box(Modifier.fillMaxSize().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
+                    LayerScope("availability") {
+                        LayerBreadcrumb(if (gateState is ServiceGate.State.UpdateRequired) AVAILABILITY_UPDATE else AVAILABILITY_MAINTENANCE, onScreenOpened)
+                        availabilityScreens.Overlay()
                     }
                 }
             }
@@ -174,6 +200,8 @@ private fun LayerBreadcrumb(routePattern: String, onScreenOpened: (String?) -> U
 /** Route-like names of the app lock screens, for [screenSlug][ru.finassist.pf.core.tracking.screenSlug]. */
 private const val APP_LOCK_SETUP = "AppLock.Setup"
 private const val APP_LOCK_UNLOCK = "AppLock.Unlock"
+private const val AVAILABILITY_UPDATE = "Availability.Update"
+private const val AVAILABILITY_MAINTENANCE = "Availability.Maintenance"
 
 /** Routes of [PfMainTabs], by index. */
 private val tabRoutes: List<Any> = listOf(OperationsRoutes.Feed, AnalyticsRoutes.Home, ProfileRoutes.Home)

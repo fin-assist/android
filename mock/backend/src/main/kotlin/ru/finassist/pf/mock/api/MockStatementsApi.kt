@@ -293,9 +293,11 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     }
 
     override fun streamProgress(uploadId: String): Flow<ImportEvent> {
+        // Every opening goes through droppable: maintenance and the client version come before 404 (api.md «Ошибки»).
         val upload = backend.uploads.firstOrNull { it.id == uploadId }
-            ?: return failures[uploadId]?.let { flowOf(it) }
-                ?: kotlinx.coroutines.flow.flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) }
+            ?: return backend.droppable(
+                failures[uploadId]?.let { flowOf(it) } ?: kotlinx.coroutines.flow.flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) },
+            ) { true }
         return backend.droppable(
             upload.events.transformWhile { event ->
                 emit(event)

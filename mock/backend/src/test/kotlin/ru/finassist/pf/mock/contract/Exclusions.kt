@@ -61,26 +61,17 @@ internal object Exclusions {
 
     val schema: List<Schema> = SPOKEN_CASES.map { Schema(it, SPOKEN_MATCH, SPOKEN_AT, SPOKEN_NULL, SPOKEN, ISSUE_SPOKEN) }
 
-    private const val FIN_22 =
-        "the fake backend of release/0.2.8 has no version check and no maintenance mode: FIN-22 added both to the mock, but it is " +
-            "in release/0.2.7, which is not merged into main and release/0.2.8 yet"
-    private const val ISSUE_FIN_22 = "FIN-22 (after release/0.2.7 reaches this branch: a case per code, the exclusion removed)"
-    private const val ISSUE_FAILURES = "proposed: [Android] fake backend: switches for server-side failures (RATE_LIMITED, INTERNAL_ERROR, PROCESSING_FAILED)"
+    private const val ISSUE_FAILURES =
+        "proposed: [Android] fake backend: switches for server-side failures (INTERNAL_ERROR, PROCESSING_FAILED) and request rate " +
+            "limits (RATE_LIMITED of 1.1 «номер занят» and of plain calls; only the 429 of a stream re-open exists, FIN-170)"
 
     val codes: List<Code> = listOf(
-        Code(
-            "CLIENT_VERSION_UNSUPPORTED",
-            "the in-process fake backend sees no headers, `X-Client-Version` included; " + FIN_22,
-            ISSUE_FIN_22,
-        ),
-        Code("MAINTENANCE", FIN_22, ISSUE_FIN_22),
         Code(
             "TOKEN_EXPIRED",
             "a registration token of the fake backend never expires (api.md 1.3: 15 minutes after the call); the consent screen " +
                 "already turns any 401 into «start again», the new path needs its UI flow",
             "proposed: [Android] fake backend: registration token expires after 15 minutes (TOKEN_EXPIRED)",
         ),
-        Code("RATE_LIMITED", "the fake backend has no request rate limits (1.1 «номер занят», 1.2 reopening)", ISSUE_FAILURES),
         Code("INTERNAL_ERROR", "the fake backend never fails with 500; `offline` is its only failure switch", ISSUE_FAILURES),
         Code(
             "PROCESSING_FAILED",
