@@ -25,7 +25,8 @@ orientation map: read it first, then open only the files the task touches.
   (https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv, link also in `design-check/README.md`).
 - Version 0.2 (API, mockups, docs) is crystallized; every change goes through a YouTrack issue (`FIN-<n>`,
   finassist.youtrack.cloud) and is referenced in the PR. Release notes live in Confluence.
-- There is no backend yet: the `mock` flavor is the working product, `prod` is the HTTP client for later.
+- There is no deployed backend yet: the `mock` flavor is the working product, `local` talks to a bank-bff on the
+  developer's machine, `prod` is the HTTP client for later.
 - Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) +
   the latest decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
 - API extensibility (decision of 13.10.2026): the contract grows by addition and keeps `deprecated` for
@@ -38,7 +39,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 
 | What | Where |
 |---|---|
-| Composition root, NavHost (auth graph → main tabs), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt` |
+| Composition root, NavHost (auth graph → main tabs), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt`, `app/src/local/…/LocalModule.kt` |
 | API contract (service interfaces + DTOs) | `core/api/…/Services.kt`, `core/api/…/model/*.kt` |
 | Fake backend (mock flavor): OFX parsing, ledger, analytics, assistant | `mock/backend/…/mock/` — `MockBackend.kt`, `domain/*`, `MockConfig.kt` (existing phone, delays, `offline`) |
 | Fake backend against the calculation fixtures of contracts | `mock/backend/src/test/…/mock/calc/`, `mock/backend/src/test/resources/calc/` (copy), `scripts/sync-calc-fixtures.sh`; rules — `docs/testing.md`, «Calculation fixtures» |
@@ -54,8 +55,20 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
 | UI test coverage: JaCoCo on the e2e build, scenario coverage of the flows | `docs/testing.md` («UI test coverage»); `:e2eCoverageReport` in root `build.gradle.kts`, `app/src/mockE2e/…/E2eCoverage.kt`, `scripts/ui-coverage.py` |
 
-Package root: `ru.finassist.pf`. Flavors: `mock` (default for development and CI) and `prod`. Build type `e2e`
-(mock only): debug + UI-test hooks, pinned date, JaCoCo probes; the native tests run on it (docs/e2e.md).
+Package root: `ru.finassist.pf`. Flavor dimension `env` (FIN-120), one flavor per environment, dimensions are not
+multiplied:
+
+| Flavor | Backend | Flags / events / crashes | Id, name |
+|---|---|---|---|
+| `mock` | in-process fake (`:mock:backend`) | `toggles-local` (`app/src/mock/assets/flags.json`) / logcat / Tracer with a token | `.mock` |
+| `local` | bank-bff on the developer's machine: `pf.apiBaseUrl` (Gradle property or `PF_API_BASE_URL`), default `http://10.0.2.2:8080/` (emulator → host; `LocalBackend` in build-logic) | `toggles-local` (optional, gitignored `app/src/local/assets/flags.json`) / logcat / off — nothing reaches production consoles | `.local`, «Понятные финансы local» |
+| `prod` | `API_BASE_URL` (placeholder until there is a server) | RuStore Remote Config / MyTracker / Tracer with a token | no suffix |
+
+A stand will be one more flavor `stage`, built like `prod`. Plain HTTP only in `localDebug`: its network security config
+is generated from `pf.apiBaseUrl` (one host, no subdomains); every other variant has `usesCleartextTraffic="false"`
+and no config. CI checks it on the merged manifests (`scripts/check-build-separation.py`) and keeps `:mock:*` off the
+`local` and `prod` classpaths (`:app:checkNoMockCode`). Build type `e2e` (mock only): debug + UI-test hooks, pinned
+date, JaCoCo probes; the native tests run on it (docs/e2e.md).
 
 ### Stack
 
@@ -143,7 +156,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - Fresh Linux container: run `scripts/agent-setup.sh` once (Android SDK matching `gradle/libs.versions.toml`,
   `local.properties`, a Maven Central mirror in `~/.gradle/init.d`). Needs JDK 21 and network access to
   Google Maven, Gradle and Maven Central.
-- Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug testMockDebugUnitTest` — the same checks as CI.
+- Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug testMockDebugUnitTest` — the main checks of CI;
+  CI also builds `assembleLocalDebug assembleProdRelease` (release unsigned), runs `:build-logic:convention:test`
+  and `:app:checkNoMockCode`, and checks the manifests (`scripts/check-build-separation.py`).
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally, the `UI tests`
   workflow in CI (after a merge to `main`, or started by hand for a branch; PRs never run them by themselves).
   Their coverage: `./gradlew :e2eCoverageReport` after a run, then
@@ -320,7 +335,8 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
 - Backup and data extraction: new stores (databases, DataStore, files) stay covered by
   `allowBackup="false"` / `data_extraction_rules.xml`.
 - Build separation: mock, e2e and debug hooks (`app/src/mock*`, `E2eControlActivity`, the control link, test
-  flags) stay out of the `prod` flavor and release builds.
+  flags) stay out of the `local` and `prod` flavors and release builds; cleartext HTTP only in `localDebug`, to the
+  one host of `pf.apiBaseUrl` (FIN-120).
 - Trust boundaries: limits, quotas and permissions are enforced by the backend; the client only shows them.
   Client-side checks are not the security control — flag code that relies on them.
 - Consent: user data goes to the LLM assistant only after the assistant consent; an account is registered

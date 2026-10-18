@@ -1,3 +1,7 @@
+import ru.finassist.pf.buildlogic.CheckNoMockCode
+import ru.finassist.pf.buildlogic.GenerateNetworkSecurityConfig
+import ru.finassist.pf.buildlogic.LocalBackend
+
 plugins {
     id("pf.android.application")
     alias(libs.plugins.kotlin.serialization)
@@ -9,6 +13,20 @@ plugins {
 // an app token the SDK is switched off in every variant (README, «Ключи SDK»).
 val tracerAppToken = secret("pf.tracerAppToken")
 val tracerPluginToken = secret("pf.tracerPluginToken")
+
+// Backend of the `local` flavor: `pf.apiBaseUrl`, by default bank-bff on the emulator's host (LocalBackend, FIN-120).
+// An invalid value fails the configuration with the reason.
+val localBackend = LocalBackend.parse(secret("pf.apiBaseUrl"))
+
+val localNetworkSecurityConfig = tasks.register<GenerateNetworkSecurityConfig>("generateLocalNetworkSecurityConfig") {
+    // The output directory is set by AGP (`addGeneratedSourceDirectory` below).
+    baseUrl.set(localBackend.url)
+}
+
+// CI: the fake backend never reaches a build that talks to a real one (scripts/check-build-separation.py checks
+// the manifests of the same builds). Every variant outside the `mock` flavor is checked (onVariants below), so a new
+// environment such as `stage` is covered without a change here.
+val checkNoMockCode = tasks.register<CheckNoMockCode>("checkNoMockCode")
 
 android {
     namespace = "ru.finassist.pf"
@@ -30,18 +48,33 @@ android {
         manifestPlaceholders["tracerEnabled"] = tracerAppToken.isNotBlank()
     }
 
+    // One dimension `env`, one flavor per environment (FIN-120); dimensions are not multiplied. A stand will be one
+    // more flavor `stage`, built like `prod`.
     // `mock`: in-process fake backend on an OFX statement, local toggles, logcat tracking — no SDK keys needed.
+    // `local`: real HTTP client against a bank-bff on the developer's machine (`pf.apiBaseUrl`); local toggles and
+    //   logcat tracking as in `mock` — no RuStore, MyTracker or Tracer, so nothing reaches production analytics,
+    //   config or crash console. Installs next to `prod` (`.local`). Plain HTTP only in localDebug (src/localDebug +
+    //   generated security config).
     // `prod`: real HTTP client, RuStore Remote Config, MyTracker.
-    // Both: Tracer for crashes and ANR, when a token is set.
-    flavorDimensions += "backend"
+    // `mock` and `prod`: Tracer for crashes and ANR, when a token is set.
+    flavorDimensions += "env"
     productFlavors {
         create("mock") {
-            dimension = "backend"
+            dimension = "env"
             applicationIdSuffix = ".mock"
             versionNameSuffix = "-mock"
         }
+        create("local") {
+            dimension = "env"
+            applicationIdSuffix = ".local"
+            versionNameSuffix = "-local"
+            buildConfigField("String", "API_BASE_URL", "\"${localBackend.url}\"")
+            // Tracer stays off even with a token: crashes of a developer's backend runs do not belong in the console.
+            buildConfigField("boolean", "CRASH_REPORTING_ENABLED", "false")
+            manifestPlaceholders["tracerEnabled"] = false
+        }
         create("prod") {
-            dimension = "backend"
+            dimension = "env"
             buildConfigField("String", "API_BASE_URL", "\"https://api.example.ru/\"")
             // SDK keys come from ~/.gradle/gradle.properties or CI env; empty → the SDK stays off.
             buildConfigField("String", "RUSTORE_REMOTE_CONFIG_APP_ID", "\"${secret("pf.rustoreRemoteConfigAppId")}\"")
@@ -95,9 +128,22 @@ android {
     }
 }
 
-// The e2e build type exists only for the fake backend: prodE2e would have no test hooks to run against.
 androidComponents {
-    beforeVariants(selector().withBuildType("e2e").withFlavor("backend" to "prod")) { it.enable = false }
+    // The e2e build type exists only for the fake backend: localE2e and prodE2e would have no test hooks to run against.
+    beforeVariants(selector().withBuildType("e2e").withFlavor("env" to "local")) { it.enable = false }
+    beforeVariants(selector().withBuildType("e2e").withFlavor("env" to "prod")) { it.enable = false }
+
+    onVariants { variant ->
+        if (variant.flavorName != "mock") {
+            val graph = variant.runtimeConfiguration.incoming.resolutionResult.rootComponent
+            checkNoMockCode.configure { graphs.put("${variant.name}RuntimeClasspath", graph) }
+        }
+    }
+
+    // The app's only network security config, with its only cleartext exception: the local backend's host.
+    onVariants(selector().withName("localDebug")) { variant ->
+        variant.sources.res?.addGeneratedSourceDirectory(localNetworkSecurityConfig, GenerateNetworkSecurityConfig::outputDir)
+    }
 }
 
 dependencies {
@@ -119,6 +165,10 @@ dependencies {
     "mockImplementation"(projects.mock.backend)
     "mockImplementation"(projects.providers.togglesLocal)
     "mockImplementation"(projects.providers.trackingLog)
+
+    "localImplementation"(projects.core.network)
+    "localImplementation"(projects.providers.togglesLocal)
+    "localImplementation"(projects.providers.trackingLog)
 
     "prodImplementation"(projects.core.network)
     "prodImplementation"(projects.providers.togglesRustore)
@@ -158,6 +208,12 @@ tracer {
         pluginToken = tracerPluginToken
         // R8 mappings of minified builds, so stack traces in the console are readable. Needs the plugin token.
         uploadMapping = tracerPluginToken.isNotBlank()
+    }
+    // `local` never reports to Tracer (see the flavor): no mappings of its builds either. The plugin takes each setting
+    // from the first config that has it — variant name, build type, flavors, then `defaultConfig`.
+    create("local") {
+        isDisabled = true
+        uploadMapping = false
     }
 }
 

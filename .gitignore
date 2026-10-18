@@ -32,5 +32,7 @@ app/src/mock/assets/private/
 sdk-keys.properties
 __pycache__/
 
+# Flag values of the local flavor (docs/flags.md): each developer's own, never committed.
+app/src/local/assets/flags.json
 # Read-only checkout of fin-assist/contracts in the @claude review workflow (FIN-174).
 .contracts/

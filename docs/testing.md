@@ -58,7 +58,7 @@ python3 scripts/coverage-diff.py --base origin/<base>
 ```
 
 - Variant `unit`: the JVM tests of pure Kotlin modules, `debug` unit tests of Android libraries, `mockDebug` of
-  `:app`. Release, `prod` and `e2e` variants are not run for coverage.
+  `:app`. Release, `local`, `prod` and `e2e` variants are not run for coverage.
 - Excluded from the report (root `build.gradle.kts`): generated code (Hilt/Dagger, kotlinx.serialization
   serializers, `R`, `BuildConfig`, `ComposableSingletons`, `HiltWrapper_*`, Dagger-generated factories — `@DaggerGenerated`,
   `*Module_*Factory`), `@Composable` and `@Preview` functions, and `:core:screenshot-testing`. Composables are
