@@ -31,3 +31,6 @@ app/src/mock/assets/private/
 # SDK keys for the prod flavor
 sdk-keys.properties
 __pycache__/
+
+# Read-only checkout of fin-assist/contracts in the @claude review workflow (FIN-174).
+.contracts/
