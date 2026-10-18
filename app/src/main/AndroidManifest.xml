@@ -6,8 +6,13 @@
     <!-- Voice input is recognized on device (SpeechRecognizer), no SpeechKit -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Package visibility (API 30+): speech recognizers, mail apps for mailto, browsers for Custom Tabs. -->
+    <!-- Package visibility (API 30+): speech recognizers, mail apps for mailto, browsers for Custom Tabs, app stores for
+         the update screen (market://, FIN-22). -->
     <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="market" />
+        </intent>
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>

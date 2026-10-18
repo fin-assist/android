@@ -18,6 +18,8 @@ import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.ImportResult
 import ru.finassist.pf.core.api.model.Profile
 import ru.finassist.pf.core.api.model.Theme
+import ru.finassist.pf.core.common.availability.ClientVersion
+import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.mock.domain.AnalyticsEngine
@@ -43,6 +45,10 @@ class MockBackend(
     private val clock: Clock,
     /** Where background work (imports, answer generation) runs; tests pass one they control. */
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /** What the app sends as `X-Client-Version`: the fake server checks it like the real one (FIN-20). */
+    private val clientVersion: ClientVersion = ClientVersion("0.0.0", 0),
+    /** Where the update and maintenance answers go, as the network layer reports them in `prod` (FIN-22). */
+    private val gate: ServiceGate = ServiceGate(),
 ) {
     val scope = CoroutineScope(SupervisorJob() + dispatcher)
     val mutex = Mutex()
@@ -142,6 +148,17 @@ class MockBackend(
         ready.await()
         if (config.offline) throw AppError.Offline()
         if (config.networkDelayMs > 0) delay(config.networkDelayMs)
+        // The order of the real server (api.md, errors): maintenance, then the client version, then everything else.
+        val c = config
+        if (c.maintenance) {
+            gate.maintenance(c.maintenanceUntil, c.maintenanceRetryAfterSeconds, now())
+            throw AppError.Maintenance(c.maintenanceUntil, c.maintenanceRetryAfterSeconds)
+        }
+        if (clientVersion.isBelow(c.minVersion)) {
+            gate.updateRequired()
+            throw AppError.UpdateRequired()
+        }
+        gate.reopen()
     }
 
     /** Keys whose first request is still running. */

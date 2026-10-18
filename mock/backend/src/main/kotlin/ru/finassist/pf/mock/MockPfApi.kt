@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock
 
+import ru.finassist.pf.core.common.availability.ClientVersion
+import ru.finassist.pf.core.common.availability.ServiceGate
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.launch
@@ -26,8 +28,10 @@ class MockPfApi(
     clock: Clock,
     tokenStore: TokenStore,
     config: MockConfig = MockConfig(),
+    clientVersion: ClientVersion = ClientVersion("0.0.0", 0),
+    gate: ServiceGate = ServiceGate(),
 ) : PfApi {
-    val backend = MockBackend(config, clock)
+    val backend = MockBackend(config, clock, clientVersion = clientVersion, gate = gate)
 
     override val auth = MockAuthApi(backend)
     override val profile = MockProfileApi(backend)

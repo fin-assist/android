@@ -14,6 +14,8 @@ data class ApiError(
     val details: List<ApiErrorDetail>? = null,
     val retryAt: ApiDateTime? = null,
     val resetsAt: ApiDateTime? = null,
+    /** `MAINTENANCE`: expected end of the maintenance; absent — unknown (api.md, `error.until`). */
+    val until: ApiDateTime? = null,
 )
 
 @Serializable
@@ -32,6 +34,8 @@ object FieldErrorCodes {
 
 /** Error codes from api.md §8 that screens branch on. Unknown codes are handled by HTTP status. */
 object ErrorCodes {
+    const val CLIENT_VERSION_UNSUPPORTED = "CLIENT_VERSION_UNSUPPORTED"
+    const val MAINTENANCE = "MAINTENANCE"
     const val VALIDATION_ERROR = "VALIDATION_ERROR"
     const val INVALID_TOKEN = "INVALID_TOKEN"
     const val TOKEN_EXPIRED = "TOKEN_EXPIRED"

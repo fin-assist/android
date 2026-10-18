@@ -24,6 +24,8 @@ internal fun mapHttpError(status: Int, body: String?, retryAfterHeader: String?)
     return when (parsed.code) {
         ErrorCodes.INVALID_TOKEN, ErrorCodes.TOKEN_REVOKED ->
             if (status == 401) AppError.Unauthorized(parsed.code) else parsed.toApi(status)
+        ErrorCodes.CLIENT_VERSION_UNSUPPORTED -> AppError.UpdateRequired()
+        ErrorCodes.MAINTENANCE -> AppError.Maintenance(parsed.until, retryAfterHeader?.toIntOrNull())
         ErrorCodes.RATE_LIMITED -> AppError.RateLimited(parsed.retryAt)
         ErrorCodes.REQUEST_IN_PROGRESS -> AppError.InProgress(retryAfterHeader?.toIntOrNull())
         else -> if (status >= 500) AppError.Server(status) else parsed.toApi(status)
