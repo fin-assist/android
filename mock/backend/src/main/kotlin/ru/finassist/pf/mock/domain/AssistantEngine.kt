@@ -154,10 +154,14 @@ class AssistantEngine(
         return Outcome.Answered(Answer(text, listOf(Block.text(text), chart, rows), chips, range, charged = true))
     }
 
-    /** «По рецепту» is how medicines are bought, not a request for a recipe. */
-    private fun isOffTopic(q: String): Boolean = q.replace("по рецепту", "").let { rest -> OFF_TOPIC.any { rest.contains(it) } }
+    /**
+     * «По рецепту», «по рецептам», «рецептурные» are about how medicines are bought, not a request for a recipe: those
+     * word forms are dropped before the keywords are looked up.
+     */
+    private fun isOffTopic(q: String): Boolean = q.replace(PRESCRIPTION, "").let { rest -> OFF_TOPIC.any { rest.contains(it) } }
 
     private companion object {
+        val PRESCRIPTION = Regex("по рецепт\\S*|рецептурн\\S*")
         val NONSENSE = listOf("марс", "следующем году", "курс доллара")
         /** Subjects outside personal finance; ASCII ones too, for UI tests (docs/e2e.md: type ASCII). */
         val OFF_TOPIC = listOf("погод", "рецепт", "анекдот", "стихотворен", "weather", "recipe", "joke", "poem")

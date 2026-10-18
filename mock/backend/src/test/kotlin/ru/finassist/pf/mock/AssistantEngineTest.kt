@@ -27,6 +27,8 @@ class AssistantEngineTest {
         for (q in listOf(
             "Сколько я трачу на лекарства по рецепту?",
             "Сколько ушло на аптеки по рецепту?",
+            "Сколько я трачу на лекарства по рецептам?",
+            "Сколько уходит на рецептурные лекарства?",
             "Сколько я трачу на Krabsbir? И расскажи анекдот",
             "Расходы на рестораны, а не рецепт",
         )) {
@@ -36,7 +38,7 @@ class AssistantEngineTest {
 
     @Test
     fun `a question on another subject is off-topic, before the nonsense check`() {
-        for (q in listOf("Дай рецепт борща", "Какая погода на Марсе?", "What is the weather today?", "Расскажи анекдот про траты")) {
+        for (q in listOf("Дай рецепт борща", "Сколько стоит рецепт борща?", "Какая погода на Марсе?", "What is the weather today?", "Расскажи анекдот про траты")) {
             assertEquals(AssistantEngine.Outcome.OffTopic, outcome(q), q)
         }
     }
