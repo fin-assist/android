@@ -7,10 +7,13 @@ contract and the fake backend. Until then the check does not demand a clean modu
 - JVM-only APIs in the production sources (every source set under `src/` except `test*` and `androidTest*`):
   - a package of `JVM_PACKAGES` (`java.*`, `javax.*`, `android.*`, `androidx.*`, `dagger.*`, the JDK's `org.w3c.*`,
     `org.xml.*`, `org.ietf.*`, `org.omg.*`, `sun.*`, `com.sun.*`, `jdk.*`, and the JVM-only parts of the Kotlin stdlib
-    `kotlin.io.path`, `kotlin.streams`, `kotlin.reflect.full`, `kotlin.reflect.jvm`, `kotlin.jvm.optionals`), as an
-    import or as a fully qualified class name in the code (`java.time.Duration.between(...)`);
-  - a class of `java.lang` that Kotlin/JVM resolves without an import (`JAVA_LANG_IMPLICIT`: `Math.floorDiv(...)`,
-    `System.currentTimeMillis()`), unless the file imports or declares a class of that name.
+    `kotlin.io.path`, `kotlin.streams`, `kotlin.reflect.full`, `kotlin.reflect.jvm`, `kotlin.jvm.optionals`, the
+    JVM-only members of `kotlin.concurrent` (`thread`, `withLock`, ...) and `kotlinx.coroutines.future` / `.stream`
+    / `.time` / `.android`), as an import or as a fully qualified class name in the code
+    (`java.time.Duration.between(...)`); backticks around name segments do not hide it;
+  - a class of `java.lang` that Kotlin/JVM resolves without an import (`JAVA_LANG_IMPLICIT`), anywhere it is used as
+    a whole word (`Math.floorDiv(...)`, `worker: Thread`, `System::currentTimeMillis`), unless the file imports or
+    declares a class of that name.
   Comments (nested block comments included) and the text of string literals are skipped; the code inside `${...}`
   of a string template is checked. An API is identified by its class (`java.time.Duration`), or by the import as
   written for a star import or a top-level function.
@@ -49,11 +52,19 @@ JVM_PACKAGES = (
     "org.w3c", "org.xml", "org.ietf", "org.omg", "sun", "com.sun", "jdk",
     # JVM-only parts of the Kotlin stdlib
     "kotlin.io.path", "kotlin.streams", "kotlin.reflect.full", "kotlin.reflect.jvm", "kotlin.jvm.optionals",
+    # JVM-only members of kotlin.concurrent (the package itself has common Volatile and atomics)
+    "kotlin.concurrent.thread", "kotlin.concurrent.timer", "kotlin.concurrent.fixedRateTimer",
+    "kotlin.concurrent.withLock", "kotlin.concurrent.read", "kotlin.concurrent.write", "kotlin.concurrent.getOrSet",
+    # JVM-only parts of kotlinx-coroutines
+    "kotlinx.coroutines.future", "kotlinx.coroutines.stream", "kotlinx.coroutines.time", "kotlinx.coroutines.android",
 )
-# java.lang classes Kotlin/JVM resolves without an import and common Kotlin has no class of that name for.
+# java.lang classes Kotlin/JVM resolves without an import and common Kotlin has no class of that name for
+# (`Exception`, `RuntimeException`, `StringBuilder`, `Comparable`, `AutoCloseable` have a common typealias).
 JAVA_LANG_IMPLICIT = (
     "System", "Thread", "Runtime", "Class", "ClassLoader", "Math", "StrictMath", "Integer", "Character",
-    "ProcessBuilder", "ThreadLocal",
+    "ProcessBuilder", "Process", "ThreadLocal", "Runnable", "InterruptedException", "StringBuffer", "Object", "Void",
+    "StackTraceElement", "OutOfMemoryError", "StackOverflowError", "ClassNotFoundException",
+    "CloneNotSupportedException",
 )
 TEST_SOURCE_SETS = ("test", "androidTest")
 
@@ -63,7 +74,8 @@ _PACKAGES = "|".join(re.escape(p) for p in sorted(JVM_PACKAGES, key=len, reverse
 # A package of JVM_PACKAGES, lower-case package segments, then a class (a segment that starts with a capital): a
 # local `val android` followed by `android.version` is not a package.
 _QUALIFIED = re.compile(r"(?<![\w.])((?:%s)(?:\.[a-z_]\w*)*\.[A-Z]\w*(?:\.\w+)*)" % _PACKAGES)
-_IMPLICIT = re.compile(r"(?<![\w.$])(%s)\s*[.(<{]" % "|".join(JAVA_LANG_IMPLICIT))
+# Any use of the name as a whole word: a call, a type (`worker: Thread?`), `Thread::class`, `System::currentTimeMillis`.
+_IMPLICIT = re.compile(r"(?<![\w.$])(%s)\b" % "|".join(JAVA_LANG_IMPLICIT))
 _DECLARED = re.compile(r"\b(?:class|interface|object|typealias)\s+(\w+)")
 
 
@@ -205,7 +217,8 @@ def _line(code: str, offset: int) -> int:
 
 def jvm_references(text: str) -> list[tuple[int, str]]:
     """(line, API) for every JVM-only reference of a Kotlin source, in source order."""
-    code = strip_code(text)
+    # Backticks are dropped: Kotlin allows them around any name segment (import java.io.`File`).
+    code = strip_code(text).replace("`", "")
     found = []
     imports = set()
     local_names = set(_DECLARED.findall(code))

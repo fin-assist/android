@@ -37,12 +37,19 @@ code inside `${…}` of a string template, raw strings included, is checked like
   class (`java.time.Duration.between` → `java.time.Duration`). The packages: `java.*`, `javax.*`, `android.*`,
   `androidx.*`, `dagger.*`, the JDK's `org.w3c.*`, `org.xml.*`, `org.ietf.*`, `org.omg.*`, `sun.*`, `com.sun.*`,
   `jdk.*`, and the JVM-only stdlib packages `kotlin.io.path`, `kotlin.streams`, `kotlin.reflect.full`,
-  `kotlin.reflect.jvm`, `kotlin.jvm.optionals`. A fully qualified name counts when it reaches a class (a segment
-  with a capital letter), so a local `val android` and `android.version` are not a package.
+  `kotlin.reflect.jvm`, `kotlin.jvm.optionals`; the JVM-only members of `kotlin.concurrent` (`thread`, `timer`,
+  `fixedRateTimer`, `withLock`, `read`, `write`, `getOrSet` — the package itself has the common `Volatile` and
+  atomics); the JVM-only parts of kotlinx-coroutines `kotlinx.coroutines.future`, `.stream`, `.time`, `.android`. A
+  fully qualified name counts when it reaches a class (a segment with a capital letter), so a local `val android`
+  and `android.version` are not a package. Backticks around name segments (``import java.io.`File` ``) are dropped
+  before the search.
 - Classes of `java.lang` that Kotlin/JVM resolves without an import and common Kotlin has no class of that name for
   (`System`, `Thread`, `Runtime`, `Class`, `ClassLoader`, `Math`, `StrictMath`, `Integer`, `Character`,
-  `ProcessBuilder`, `ThreadLocal`), followed by `.`, `(`, `<` or `{`, are reported as `java.lang.<Name>` unless the
-  file imports or declares a class of that name.
+  `ProcessBuilder`, `Process`, `ThreadLocal`, `Runnable`, `InterruptedException`, `StringBuffer`, `Object`, `Void`,
+  `StackTraceElement`, `OutOfMemoryError`, `StackOverflowError`, `ClassNotFoundException`,
+  `CloneNotSupportedException`) are reported as `java.lang.<Name>` wherever the name is used as a whole word — a
+  call, a type (`worker: Thread?`), `Thread::class`, `System::currentTimeMillis` — unless the file imports or
+  declares a class of that name.
 - `build.gradle.kts` is compared as a whole, normalized (comments dropped, whitespace collapsed, blank lines
   skipped): a plugin or a dependency can be declared in too many forms (`add("api", …)`, `"implementation"(…)`, a
   variable, `apply(plugin = …)`) to recognize each one, and these files change rarely. Any change to the file fails
@@ -59,9 +66,13 @@ Known limits — a review item (Code Review Rules, Checklist in `AGENTS.md`), no
 - dependencies that convention plugins of `build-logic` (`pf.jvm.library`, `pf.android.library`, `pf.hilt`) add to
   the module: the module's file does not show them, so a change there is not checked;
 - JVM-only members of the Kotlin stdlib in common packages: `synchronized` / `@Synchronized`, `String.format`,
-  `toBigDecimal*`, `java.io` stream extensions, `Charsets`, `.java` / `javaClass`, `@Volatile` of `kotlin.jvm`;
-- a fully qualified call of a top-level function without a class (`kotlin.io.path.createTempFile()`), and a `java.lang`
-  class outside the list above (`StringBuilder`, `Exception` and others have a common typealias).
+  `toBigDecimal*`, `java.io` stream extensions, `Charsets`, `.java` / `javaClass`, `@Volatile` of `kotlin.jvm`,
+  `sortedMapOf` / `toSortedMap` (return `java.util.SortedMap`), `Json.decodeFromStream` / `encodeToStream` of
+  kotlinx.serialization;
+- a fully qualified call of a top-level function without a class (`kotlin.io.path.createTempFile()`,
+  `kotlin.concurrent.thread {}`), a member reached through a star import (`import kotlin.concurrent.*`), a name the
+  file declares in a way the check does not see (`val Math = …`, `fun Thread(…)`), and a `java.lang` class outside
+  the list above (`StringBuilder`, `Exception` and others have a common typealias).
 
 ## Inventory (18.10.2026)
 
@@ -72,8 +83,8 @@ What the move would have to replace. «Replacement» is the expected multiplatfo
 | File | JVM-only API | Replacement |
 |---|---|---|
 | `Services.kt` | `java.io.InputStream` (`StatementFile.open`) | `kotlinx.io.Source`, or `ByteArray` read by the platform (picker) side |
-| `Services.kt` | `java.time.OffsetDateTime` (`listUnreadLines(from, to)`) | `kotlinx.datetime.Instant` (or `kotlin.time.Instant`) + `UtcOffset` where the offset matters |
-| `model/Auth.kt` | `java.time.Instant` (`serverTime`) | `kotlin.time.Instant` / `kotlinx.datetime.Instant` |
+| `Services.kt` | `java.time.OffsetDateTime` (`listUnreadLines(from, to)`) | `kotlinx.datetime.Instant` + `UtcOffset` where the offset matters |
+| `model/Auth.kt` | `java.time.Instant` (`serverTime`) | `kotlinx.datetime.Instant` (`kotlin.time.Instant` after the Kotlin update, below) |
 | `model/Common.kt` | `java.util.UUID` (`IdempotencyKey.random`) | `kotlin.uuid.Uuid.random()` |
 | `model/Common.kt` | `@JvmInline` value classes | stays: `kotlin.jvm.JvmInline` is available in common code |
 | `build.gradle.kts` | `pf.jvm.library` | a multiplatform convention plugin (JVM/Android + iOS targets) |
@@ -107,9 +118,11 @@ Already multiplatform: kotlinx.serialization (`OpenEnumSerializer`, `ApiJson`), 
 | `domain/Scope.kt`, `OperationViews.kt`, `UnreadResolver.kt` | `LocalDate`, `OffsetDateTime`, `ZoneId` | kotlinx-datetime |
 | `domain/DataChanges.kt`, `MockBackend.kt` | `@Volatile` (`kotlin.jvm`) | `kotlin.concurrent.Volatile` |
 
-On Kotlin 2.1.20 (the stack today) `kotlin.uuid.Uuid` needs `@OptIn(ExperimentalUuidApi::class)` and
-`kotlin.io.encoding.Base64` needs `@OptIn(ExperimentalEncodingApi::class)` (stable since Kotlin 2.2), so these
-replacements carry an opt-in until the Kotlin update.
+On Kotlin 2.1.20 (the stack today) `kotlin.uuid.Uuid` needs `@OptIn(ExperimentalUuidApi::class)`,
+`kotlin.io.encoding.Base64` needs `@OptIn(ExperimentalEncodingApi::class)` (stable since Kotlin 2.2) and
+`kotlin.time.Instant` (new in 2.1.20) needs `@OptIn(ExperimentalTime::class)`, so these replacements carry an
+opt-in until the Kotlin update. `kotlinx.datetime.Instant` needs none on the current kotlinx-datetime, so it is the
+main choice for the API times.
 
 `OffsetDateTime` is the largest item: kotlinx-datetime has no type with an offset, so the API times become `Instant`
 plus the profile `TimeZone` (`ReportZone`), and the wire format with an offset needs its own serializer.

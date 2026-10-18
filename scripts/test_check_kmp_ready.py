@@ -146,6 +146,64 @@ class JvmReferencesTest(unittest.TestCase):
             (6, "java.lang.ClassLoader"),
         ])
 
+    def test_java_lang_in_type_positions_and_references(self):
+        text = (
+            "fun start(worker: Thread) = worker.start()\n"
+            "fun empty(): Thread? = null\n"
+            "val k = Thread::class\n"
+            "val now: () -> Long = System::currentTimeMillis\n"
+            "class Job : Runnable { override fun run() = Unit }\n"
+            "fun f() = try { 1 } catch (e: InterruptedException) { 0 }\n"
+            "val b: StringBuffer? = null; val o: Object? = null; val p: Process? = null\n"
+        )
+        self.assertEqual(kmp.jvm_references(text), [
+            (1, "java.lang.Thread"),
+            (2, "java.lang.Thread"),
+            (3, "java.lang.Thread"),
+            (4, "java.lang.System"),
+            (5, "java.lang.Runnable"),
+            (6, "java.lang.InterruptedException"),
+            (7, "java.lang.StringBuffer"),
+            (7, "java.lang.Object"),
+            (7, "java.lang.Process"),
+        ])
+
+    def test_java_lang_names_with_a_common_typealias_are_not_references(self):
+        text = (
+            "class E : RuntimeException()\n"
+            "fun f(e: Exception, b: StringBuilder, c: Comparable<Int>, a: AutoCloseable) = Unit\n"
+            "val j = buildJsonObject { }\n"
+        )
+        self.assertEqual(kmp.jvm_references(text), [])
+
+    def test_backticks_do_not_hide_a_reference(self):
+        text = "import java.io.`File`\nval f = java.`io`.File(\"x\")\nval t = `Thread`.currentThread()\n"
+        self.assertEqual(kmp.jvm_references(text), [
+            (1, "java.io.File"),
+            (2, "java.io.File"),
+            (3, "java.lang.Thread"),
+        ])
+
+    def test_jvm_only_members_of_kotlin_concurrent_and_coroutines(self):
+        text = (
+            "import kotlin.concurrent.thread\n"
+            "import kotlin.concurrent.withLock\n"
+            "import kotlinx.coroutines.future.future\n"
+            "import kotlinx.coroutines.time.delay\n"
+            "import kotlinx.coroutines.stream.consumeAsFlow\n"
+            "import kotlinx.coroutines.android.HandlerDispatcher\n"
+            "import kotlin.concurrent.Volatile\n"
+            "import kotlin.concurrent.atomics.AtomicInt\n"
+            "import kotlin.concurrent.threadLocal\n"
+            "import kotlinx.coroutines.flow.Flow\n"
+            "import kotlinx.coroutines.Dispatchers\n"
+        )
+        self.assertEqual([name for _, name in kmp.jvm_references(text)], [
+            "kotlin.concurrent.thread", "kotlin.concurrent.withLock", "kotlinx.coroutines.future.future",
+            "kotlinx.coroutines.time.delay", "kotlinx.coroutines.stream.consumeAsFlow",
+            "kotlinx.coroutines.android.HandlerDispatcher",
+        ])
+
     def test_java_lang_names_that_are_not_java_lang(self):
         text = (
             "import ru.finassist.pf.core.common.Math\n"
@@ -294,6 +352,10 @@ class ProblemsTest(unittest.TestCase):
     def test_new_jvm_api_inside_a_string_template_fails(self):
         self.write("core/api/src/main/kotlin/Probe.kt", 'fun probe() = "${java.io.File("/tmp/a").exists()}"\n')
         self.assertIn("Probe.kt:1: new JVM-only API java.io.File in core/api", self.problems()[0])
+
+    def test_new_java_lang_type_in_the_contract_fails(self):
+        self.write("core/api/src/main/kotlin/Probe.kt", "fun start(worker: Thread) = worker.start()\n")
+        self.assertIn("Probe.kt:1: new JVM-only API java.lang.Thread in core/api", self.problems()[0])
 
     def test_new_java_lang_api_without_import_fails(self):
         self.write("mock/backend/src/main/kotlin/Engine.kt", "fun typical(sum: Long) = Math.floorDiv(sum, 3)\n")
