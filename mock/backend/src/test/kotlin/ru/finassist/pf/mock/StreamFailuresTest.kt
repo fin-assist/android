@@ -270,15 +270,16 @@ class StreamFailuresTest {
         val backend = testBackend(clock, config = FAST.copy(callVerifyDelayMs = 5_000), userId = "", dispatcher = StandardTestDispatcher(testScheduler))
         val api = MockAuthApi(backend)
         val token = api.startPhoneVerification(IdempotencyKey("p1"), "+79990001122").verificationToken
-        backend.config = backend.config.copy(streamDrops = 1, streamRateLimits = 2)
+        backend.config = backend.config.copy(streamDrops = 1, streamRateLimits = 2, streamRetrySeconds = 7)
 
         assertEquals(listOf(VerificationStatus.PENDING), api.streamPhoneVerification(token).toList().map { it.status })
         repeat(2) {
             val limited = assertFailsWith<AppError.RateLimited> { api.streamPhoneVerification(token).toList() }
-            assertEquals(MockConfig.STREAM_RETRY_SECONDS, limited.retryAfterSeconds)
-            assertEquals(clock.at.plusSeconds(MockConfig.STREAM_RETRY_SECONDS), limited.retryAt)
+            assertEquals(7L, limited.retryAfterSeconds)
+            assertEquals(clock.at.plusSeconds(7), limited.retryAt)
         }
         assertEquals(0, backend.config.streamRateLimits)
+        assertEquals(2, backend.streamRateLimited.value, "every 429 is counted")
         clock.at = clock.at.plusSeconds(10)
         assertEquals(VerificationStatus.VERIFIED, api.streamPhoneVerification(token).toList().last().status)
     }
@@ -293,6 +294,7 @@ class StreamFailuresTest {
         clock.at = clock.at.plusSeconds(10)
         assertEquals(VerificationStatus.VERIFIED, api.streamPhoneVerification(token).toList().last().status)
         assertEquals(1, backend.config.streamRateLimits, "not counted")
+        assertEquals(0, backend.streamRateLimited.value)
     }
 
     @Test

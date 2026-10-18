@@ -154,6 +154,9 @@ class MockBackend(
     /** Guards the drop and 429 counters of [MockConfig] (a coroutine mutex: `synchronized` is JVM-only). */
     private val dropLock = Mutex()
 
+    /** How many stream openings have been turned away with 429 ([MockConfig.streamRateLimits]); for UI tests. */
+    val streamRateLimited = MutableStateFlow(0)
+
     /** The last opening of a stream was dropped: the next one is a re-open ([MockConfig.streamRateLimits]). */
     private var afterDrop = false
 
@@ -189,7 +192,8 @@ class MockBackend(
             return@withLock null
         }
         config = config.copy(streamRateLimits = left - 1)
-        val seconds = MockConfig.STREAM_RETRY_SECONDS
+        val seconds = config.streamRetrySeconds
+        streamRateLimited.value += 1
         AppError.RateLimited(retryAt = now().plusSeconds(seconds), retryAfterSeconds = seconds)
     }
 
