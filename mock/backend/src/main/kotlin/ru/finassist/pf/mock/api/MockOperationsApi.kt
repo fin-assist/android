@@ -114,17 +114,23 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
         return views.details(record)
     }
 
+    /** What a category change can alter: the category, refund target and pair of every operation. */
+    private fun categoryState() = backend.ledger.all.associate { it.id to Triple(it.category.id, it.refundTarget?.id, it.pairId) }
+
     override suspend fun changeCategory(id: String, request: ChangeCategoryRequest): ChangeCategoryResponse {
         backend.simulateNetwork()
         backend.requireSession()
         val category = backend.catalog.byId(request.categoryId) ?: throw AppError.Api(ErrorCodes.CATEGORY_NOT_ASSIGNABLE, 422)
         return backend.mutex.withLock {
             views.record(id) ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+            val before = categoryState()
             val (items, replaced) = try {
                 backend.ledger.changeCategory(id, category)
             } catch (e: IllegalArgumentException) {
                 throw AppError.Api(ErrorCodes.CATEGORY_NOT_ASSIGNABLE, 422, message = e.message)
             }
+            // Only a real change marks the assistant's earlier answers: the same category again is not one (FIN-135).
+            if (categoryState() != before) backend.dataChanges.categoriesChanged()
             ChangeCategoryResponse(
                 items = items.map { item ->
                     when (item) {

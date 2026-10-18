@@ -23,6 +23,7 @@ import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.mock.domain.AnalyticsEngine
 import ru.finassist.pf.mock.domain.Catalog
 import ru.finassist.pf.mock.domain.Coverage
+import ru.finassist.pf.mock.domain.DataChanges
 import ru.finassist.pf.mock.domain.Ledger
 import ru.finassist.pf.mock.domain.Scope
 import ru.finassist.pf.mock.domain.UnreadResolver
@@ -96,7 +97,9 @@ class MockBackend(
 
     var profile: Profile = emptyProfile("")
     val dismissedPayments = HashSet<String>()
-    val assistant = AssistantStore()
+    /** Category changes and statement uploads/deletions, for `changed_since` of the assistant's answers (api.md 7.2). */
+    val dataChanges = DataChanges()
+    val assistant = AssistantStore(dataChanges)
 
     /** `Idempotency-Key` → cached response for the endpoints api.md marks idempotent. */
     val idempotency = HashMap<String, Any>()
