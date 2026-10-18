@@ -3,7 +3,7 @@ name: Время на звонок вышло и «Позвонить ещё р�
 tags:
   - auth
 ---
-# FIN-166: the request lives 8 s and the call never «arrives» in time. Two things end the wait: the open stream's
+# FIN-166: the request lives 15 s (expires_in 14 after rounding down; long enough for a slow emulator) and the call never «arrives» in time. Two things end the wait: the open stream's
 # `expired` at the request's end on the fake server, and the device timer (response time + expires_in + 1 s,
 # api.md 1.1), which hides the number and re-opens the stream. Their order is not defined here; both lead to
 # «Время на звонок вышло» with no number and a new request offered.
@@ -16,7 +16,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?call_delay_ms=600000&call_ttl_ms=8000"
+      LINK: "pfe2e://config?call_delay_ms=600000&call_ttl_ms=15000"
 - extendedWaitUntil:
     visible:
       id: "auth.phone"
