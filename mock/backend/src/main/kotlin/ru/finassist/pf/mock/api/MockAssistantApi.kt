@@ -87,7 +87,7 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
 
     /**
      * Generation runs on the backend scope: the client can drop the stream and reconnect. The engine never fails
-     * like a model; [MockConfig.assistantModelErrors] makes the next answers fail with MODEL_ERROR (refunded).
+     * like a model; [MockConfig.assistantModelErrors] makes the next answers fail with MODEL_ERROR (refunded, retryable).
      */
     private fun generate(answer: AssistantStore.Answer, text: String) {
         val mode = answer.transferMode
@@ -107,14 +107,9 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
                 }
             }
             when (outcome) {
-                null -> {
-                    refund()
-                    answer.append(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "model failed", remaining())))
-                }
-                AssistantEngine.Outcome.CannotAnswer -> {
-                    refund()
-                    answer.append(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.CANNOT_ANSWER, "cannot answer from data", remaining())))
-                }
+                null -> fail(answer, AnswerErrorCode.MODEL_ERROR, "model failed")
+                AssistantEngine.Outcome.CannotAnswer -> fail(answer, AnswerErrorCode.CANNOT_ANSWER, "cannot answer from data")
+                AssistantEngine.Outcome.OffTopic -> fail(answer, AnswerErrorCode.OFF_TOPIC, "off_topic tool called")
                 is AssistantEngine.Outcome.Answered -> {
                     val a = outcome.answer
                     var index = 0
@@ -140,6 +135,19 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
                 }
             }
         }
+    }
+
+    /** Any failure refunds the attempt (api.md 7); the text and `retryable` are the server's (FIN-159). */
+    private suspend fun fail(answer: AssistantStore.Answer, code: AnswerErrorCode, message: String) {
+        refund()
+        answer.append(
+            AnswerEvent.Error(
+                AnswerErrorEvent(
+                    code = code, message = message, remainingLimit = remaining(),
+                    text = ERROR_TEXTS.getValue(code), retryable = code == AnswerErrorCode.MODEL_ERROR,
+                ),
+            ),
+        )
     }
 
     private suspend fun refund() = backend.mutex.withLock {
@@ -185,7 +193,7 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
                 // One critical section from the checks to the charge, as in [ask]: two retries of the same answer
                 // replace it once, and the last remaining question is not spent twice.
                 val old = store.answers[answerId] ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
-                if (old.replaced || old.status != AnswerStatus.FAILED || old.errorCode != AnswerErrorCode.MODEL_ERROR) {
+                if (!old.retryAllowed) {
                     throw AppError.Api(ErrorCodes.RETRY_NOT_ALLOWED, 422)
                 }
                 checkConsentAndLimit()
@@ -208,7 +216,15 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
         return AssistantLimit(remaining = remaining(), dailyMax = DAILY_MAX, resetsAt = resetsAt())
     }
 
-    private companion object {
-        const val DAILY_MAX = 5
+    companion object {
+        private const val DAILY_MAX = 5
+
+        /** Texts of the failures (api.md 7.2): the client shows them instead of the answer. */
+        val ERROR_TEXTS: Map<AnswerErrorCode, String> = mapOf(
+            AnswerErrorCode.MODEL_ERROR to "Не получилось ответить. Вопрос не потрачен",
+            AnswerErrorCode.CANNOT_ANSWER to "Не получилось ответить — недостаточно данных, переформулируйте вопрос. Вопрос не потрачен",
+            AnswerErrorCode.OFF_TOPIC to "Вопрос не по теме — помощник отвечает только на вопросы о ваших финансах. " +
+                "С другими вопросами помогут универсальные ассистенты: Алиса AI, GigaChat, ChatGPT, Claude, DeepSeek",
+        )
     }
 }

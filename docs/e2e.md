@@ -196,7 +196,8 @@ were.
 | `analytics/search_scope_own_transfers` | September «Расходы» tile → search «как на Аналитике»; without «Только расходы» and with the amount 6 000 ₽ nothing is found — the single «Себе в другой банк» of 27 September is out, as in the Analytics figure; without the scope chip it is found — FIN-164 |
 | `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card and profile) |
 | `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
-| `assistant/daily_limit` | unanswerable question is free; five questions exhaust the day |
+| `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
+| `assistant/off_topic` | a question not about finances (`weather`): the server's OFF_TOPIC text, no «Повторить» (`retryable: false`), still 5 of 5; the next question is answered, 4 of 5 — FIN-160 |
 | `assistant/offline_retry` | no network: the notice replaces the input; «Повторить» sends the question once the network is back |
 | `assistant/chip_after_statements_deleted` | every statement deleted: the operations chip of an earlier answer opens the search without its stale selection (notice, empty result) — FIN-76 |
 | `assistant/retry_without_transfers` | `assistant_model_errors=1`: a question asked «Без переводов» fails, not spent; «Повторить» answers it still «без переводов» — FIN-76 |

@@ -7,7 +7,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import ru.finassist.pf.core.api.model.AnswerErrorCode
 import ru.finassist.pf.core.api.model.AnswerSource
 import ru.finassist.pf.core.api.model.AnswerStatus
 import ru.finassist.pf.core.api.model.AssistantLimit
@@ -35,7 +34,8 @@ import java.util.TimeZone
 
 /**
  * Artboards `Chat`, `ChatEmpty`, `ChatBusy`, `ChatStale`, `ChatDark`, `ChatError`, `ChatErrorData`, `ChatOffline`,
- * `ChatLimit`: the Самокат answer (7 200 ₽ over April — September 2026) and its failure / limit states.
+ * `ChatLimit`, `ChatOffTopic` and `ChatErrorGeneric` (no artboards yet, FIN-160): the Самокат answer (7 200 ₽ over April — September 2026) and its
+ * failure / limit states.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -158,7 +158,7 @@ class ChatDesignCheckTest {
         "ChatError",
         pending(
             "Сколько я трачу на заправки?",
-            ChatItem.Answer("a1", calculated, AnswerStatus.FAILED, errorCode = AnswerErrorCode.MODEL_ERROR),
+            ChatItem.Answer("a1", calculated, AnswerStatus.FAILED, errorText = "Не получилось ответить. Вопрос не потрачен", retryable = true),
         ),
     )
 
@@ -166,8 +166,33 @@ class ChatDesignCheckTest {
         "ChatErrorData",
         pending(
             "Сколько я потрачу в следующем году на путешествия на Марс?",
-            ChatItem.Answer("a1", calculated, AnswerStatus.FAILED, errorCode = AnswerErrorCode.CANNOT_ANSWER),
+            ChatItem.Answer(
+                "a1", calculated, AnswerStatus.FAILED,
+                errorText = "Не получилось ответить — недостаточно данных, переформулируйте вопрос. Вопрос не потрачен",
+            ),
         ),
+    )
+
+    /** No artboard in Figma yet (FIN-160): OFF_TOPIC, the server's text without «Повторить». */
+    @Test fun chatOffTopic() = capture(
+        "ChatOffTopic",
+        pending(
+            "Какая погода будет завтра?",
+            ChatItem.Answer(
+                "a1", calculated, AnswerStatus.FAILED,
+                errorText = "Вопрос не по теме — помощник отвечает только на вопросы о ваших финансах. " +
+                    "С другими вопросами помогут универсальные ассистенты: Алиса AI, GigaChat, ChatGPT, Claude, DeepSeek",
+            ),
+        ),
+    )
+
+    /**
+     * No artboard in Figma yet (FIN-160): a server older than FIN-159 sends no text — the generic «Не получилось ответить»,
+     * «Повторить» by the MODEL_ERROR fallback.
+     */
+    @Test fun chatErrorGeneric() = capture(
+        "ChatErrorGeneric",
+        pending("Сколько я трачу на заправки?", ChatItem.Answer("a1", calculated, AnswerStatus.FAILED, errorText = null, retryable = true)),
     )
 
     @Test fun chatStale() = capture(

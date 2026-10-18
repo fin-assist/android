@@ -58,4 +58,5 @@ object ErrorCodes {
     const val CANCELLED = "CANCELLED"
     const val MODEL_ERROR = "MODEL_ERROR"
     const val CANNOT_ANSWER = "CANNOT_ANSWER"
+    const val OFF_TOPIC = "OFF_TOPIC"
 }

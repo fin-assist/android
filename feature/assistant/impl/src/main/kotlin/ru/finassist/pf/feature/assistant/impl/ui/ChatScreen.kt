@@ -38,7 +38,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.finassist.pf.core.api.model.AnalyticsParams
-import ru.finassist.pf.core.api.model.AnswerErrorCode
 import ru.finassist.pf.core.api.model.AnswerStatus
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockType
@@ -266,16 +265,16 @@ private fun Answer(
     onOpenAnalytics: (AnalyticsParams) -> Unit,
 ) {
     when {
-        item.status == AnswerStatus.FAILED -> {
-            if (item.errorCode == AnswerErrorCode.CANNOT_ANSWER) {
-                PfChatStatus("Не получилось ответить — недостаточно данных, переформулируйте вопрос. Вопрос не потрачен", tone = ChatStatusTone.ERROR, modifier = Modifier.testTag(AssistantTags.ANSWER_CANNOT))
+        // The text and «Повторить» come from the server, whatever the code (api.md 7.2, 7.3, FIN-159).
+        item.status == AnswerStatus.FAILED -> PfChatStatus(
+            item.failureText, tone = ChatStatusTone.ERROR,
+            action = if (item.retryable) {
+                { PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.GHOST, modifier = Modifier.testTag(AssistantTags.ANSWER_FAILED_RETRY)) }
             } else {
-                PfChatStatus(
-                    "Не получилось ответить. Вопрос не потрачен", tone = ChatStatusTone.ERROR, action = { PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.GHOST, modifier = Modifier.testTag(AssistantTags.ANSWER_FAILED_RETRY)) },
-                    modifier = Modifier.testTag(AssistantTags.ANSWER_FAILED),
-                )
-            }
-        }
+                null
+            },
+            modifier = Modifier.testTag(AssistantTags.ANSWER_FAILED),
+        )
         item.blocks.isEmpty() && item.status == AnswerStatus.GENERATING -> PfChatStatus("Считаю по выписке…", Modifier.testTag(AssistantTags.ANSWER_GENERATING))
         else -> Column(verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4)) {
             PfAssistantMessage(
@@ -381,6 +380,9 @@ private fun markdown(text: String): AnnotatedString = buildAnnotatedString {
     }
 }.let { if (it.text.endsWith("\n")) it.subSequence(0, it.length - 1) else it }
 
+/** Shown for a failed answer without a server text: a server older than FIN-159, an unknown status (api.md 7.2, 7.3). */
+internal const val GENERIC_ANSWER_ERROR = "Не получилось ответить"
+
 /** Test tags of the assistant screens (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object AssistantTags {
     const val CHAT = "assistant.chat"
@@ -388,9 +390,9 @@ internal object AssistantTags {
     /** A complete answer; while it streams the message carries [ANSWER_GENERATING]. */
     const val ANSWER = "assistant.answer"
     const val ANSWER_GENERATING = "assistant.answer.generating"
-    const val ANSWER_CANNOT = "assistant.answer.cannot"
+    /** A failed answer: the server's text (or the generic one), whatever the code. */
     const val ANSWER_FAILED = "assistant.answer.failed"
-    /** «Повторить» under a failed answer (MODEL_ERROR). */
+    /** «Повторить» under a failed answer the server marked `retryable`. */
     const val ANSWER_FAILED_RETRY = "assistant.answer.failed.retry"
     /** «Не получилось отправить вопрос» above the composer. */
     const val SEND_FAILED = "assistant.chat.send_failed"

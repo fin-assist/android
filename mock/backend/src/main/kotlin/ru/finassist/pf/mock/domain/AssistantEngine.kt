@@ -26,7 +26,8 @@ import java.time.YearMonth
 
 /**
  * Canned "LLM": understands «сколько я трачу на X» for a merchant or a category, and general spending
- * questions; everything else is CANNOT_ANSWER. Numbers in charts and rows are computed from the ledger, as
+ * questions; a question on an unrelated subject (weather, recipes, …) is OFF_TOPIC, as when the model calls the
+ * `off_topic` tool (FIN-159); everything else is CANNOT_ANSWER. Numbers in charts and rows are computed from the ledger, as
  * the real service does from function results.
  */
 class AssistantEngine(
@@ -47,10 +48,21 @@ class AssistantEngine(
     sealed interface Outcome {
         data class Answered(val answer: Answer) : Outcome
         data object CannotAnswer : Outcome
+        data object OffTopic : Outcome
     }
 
     fun answer(question: String, mode: TransferMode, today: LocalDate): Outcome {
         val q = question.lowercase().replace('ё', 'е')
+        val merchant = ledger.all.map { it.name }.distinct()
+            .filter { it.length >= 3 }
+            .filter { q.contains(it.lowercase().replace('ё', 'е')) }
+            .maxByOrNull { it.length }
+        val category = catalog.categories.filter { !it.isSystem }
+            .filter { q.contains(it.name.lowercase().replace('ё', 'е').replace(' ', ' ')) }
+            .maxByOrNull { it.name.length }
+        // A question about a merchant or a category of the user is about finances whatever else it mentions («аптеки по
+        // рецепту»); the spending words do not count — «анекдот про траты» is still off-topic.
+        if (merchant == null && category == null && isOffTopic(q)) return Outcome.OffTopic
         if (NONSENSE.any { q.contains(it) }) return Outcome.CannotAnswer
         val visible = scope.visible(mode)
         val cov = coverage()
@@ -60,14 +72,6 @@ class AssistantEngine(
         val from = months.first().atDay(1)
         val toExcl = months.last().plusMonths(1).atDay(1)
         val range = DateRange(from.atStartOfDay(scope.zone).toOffsetDateTime(), toExcl.atStartOfDay(scope.zone).toOffsetDateTime())
-
-        val merchant = ledger.all.map { it.name }.distinct()
-            .filter { it.length >= 3 }
-            .filter { q.contains(it.lowercase().replace('ё', 'е')) }
-            .maxByOrNull { it.length }
-        val category = catalog.categories.filter { !it.isSystem }
-            .filter { q.contains(it.name.lowercase().replace('ё', 'е').replace(' ', ' ')) }
-            .maxByOrNull { it.name.length }
 
         val subjectOps: List<Operation>
         val title: String
@@ -150,8 +154,17 @@ class AssistantEngine(
         return Outcome.Answered(Answer(text, listOf(Block.text(text), chart, rows), chips, range, charged = true))
     }
 
+    /**
+     * «По рецепту», «по рецептам», «рецептурные» are about how medicines are bought, not a request for a recipe: those
+     * word forms are dropped before the keywords are looked up.
+     */
+    private fun isOffTopic(q: String): Boolean = q.replace(PRESCRIPTION, "").let { rest -> OFF_TOPIC.any { rest.contains(it) } }
+
     private companion object {
-        val NONSENSE = listOf("марс", "следующем году", "курс доллара", "погода")
+        val PRESCRIPTION = Regex("по рецепт\\S*|рецептурн\\S*")
+        val NONSENSE = listOf("марс", "следующем году", "курс доллара")
+        /** Subjects outside personal finance; ASCII ones too, for UI tests (docs/e2e.md: type ASCII). */
+        val OFF_TOPIC = listOf("погод", "рецепт", "анекдот", "стихотворен", "weather", "recipe", "joke", "poem")
         val SPENDING_WORDS = listOf("трат", "расход", "потрат", "ушло", "сколько")
     }
 }
