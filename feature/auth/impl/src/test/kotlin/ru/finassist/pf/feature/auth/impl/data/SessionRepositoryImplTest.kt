@@ -187,11 +187,14 @@ class SessionRepositoryImplTest {
         // and the phone screen already consumed the reason.
         val h = harness(TokenStore.Session("u1", pair))
         eventually { "flags.user:u1" in h.log.all() }
+        val nullReached = CompletableDeferred<Unit>()
         val deliverNull = CompletableDeferred<Unit>()
-        h.tokens.beforeDeliver = { if (it == null) deliverNull.await() }
+        h.tokens.beforeDeliver = { if (it == null) { nullReached.complete(Unit); deliverNull.await() } }
 
         h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
         assertEquals(AuthRoutes.Phone.REASON_LOGGED_OUT, h.repo.consumeSignOutReason())
+        // Held until the observer has the `null`: set earlier, the state flow would conflate it into `u2` (FIN-172).
+        withTimeout(5_000) { nullReached.await() }
         deliverNull.complete(Unit)
         // The observer handles values in order: once the next session is applied, the late `null` has been handled.
         h.tokens.flow.value = TokenStore.Session("u2", pair)
@@ -222,10 +225,12 @@ class SessionRepositoryImplTest {
     @Test fun `a local clearing seen late without a reason is not reported as expired`() = runBlocking {
         val h = harness(TokenStore.Session("u1", pair))
         eventually { "flags.user:u1" in h.log.all() }
+        val nullReached = CompletableDeferred<Unit>()
         val deliverNull = CompletableDeferred<Unit>()
-        h.tokens.beforeDeliver = { if (it == null) deliverNull.await() }
+        h.tokens.beforeDeliver = { if (it == null) { nullReached.complete(Unit); deliverNull.await() } }
 
         h.repo.clearLocal(reason = null)
+        withTimeout(5_000) { nullReached.await() } // see above: `u2` must not conflate the `null` away
         deliverNull.complete(Unit)
         h.tokens.flow.value = TokenStore.Session("u2", pair)
         eventually { "flags.user:u2" in h.log.all() }
