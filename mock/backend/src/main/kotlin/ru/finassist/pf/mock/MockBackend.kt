@@ -153,11 +153,16 @@ class MockBackend(
 
     private val dropLock = Any()
 
+    /** The last opening of a stream was dropped: the next one is a re-open ([MockConfig.streamRateLimits]). */
+    private var afterDrop = false
+
     /**
      * [stream] as one opening of an SSE stream: when [MockConfig.streamDrops] is above zero and the first event is not
-     * terminal, the opening ends right after that event (a drop, api.md «SSE») and the counter goes down by one.
+     * terminal, the opening ends right after that event (a drop, api.md «SSE») and the counter goes down by one. An
+     * opening right after a drop answers 429 while [MockConfig.streamRateLimits] is above zero, counting it down.
      */
     fun <T> droppable(stream: Flow<T>, isTerminal: (T) -> Boolean): Flow<T> = flow {
+        takeRateLimit()?.let { throw it }
         var drop: Boolean? = null
         emitAll(
             stream.transformWhile { event ->
@@ -172,7 +177,19 @@ class MockBackend(
         val left = config.streamDrops
         if (left <= 0) return@synchronized false
         config = config.copy(streamDrops = left - 1)
+        afterDrop = true
         true
+    }
+
+    private fun takeRateLimit(): AppError.RateLimited? = synchronized(dropLock) {
+        val left = config.streamRateLimits
+        if (!afterDrop || left <= 0) {
+            afterDrop = false
+            return@synchronized null
+        }
+        config = config.copy(streamRateLimits = left - 1)
+        val seconds = MockConfig.STREAM_RETRY_SECONDS
+        AppError.RateLimited(retryAt = now().plusSeconds(seconds), retryAfterSeconds = seconds)
     }
 
     /** Keys whose first request is still running. */

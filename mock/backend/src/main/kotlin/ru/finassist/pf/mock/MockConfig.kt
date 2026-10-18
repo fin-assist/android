@@ -44,10 +44,18 @@ data class MockConfig(
      * first event is already terminal is not dropped and does not count.
      */
     val streamDrops: Int = 0,
+    /**
+     * How many stream openings that follow a dropped one ([streamDrops]) answer 429 `RATE_LIMITED` before the stream
+     * starts, with `retry_at` [STREAM_RETRY_SECONDS] ahead — a re-open the server turns away (api.md «SSE»). An opening
+     * that does not follow a drop is never turned away and does not count.
+     */
+    val streamRateLimits: Int = 0,
 ) {
     companion object {
         /** Git-ignored: `app/src/mock/assets/private/statement.ofx`. */
         const val PRIVATE_STATEMENT = "private/statement.ofx"
         const val FIXTURE_STATEMENT = "statements/fixture.ofx"
+        /** `Retry-After` of a turned-away re-open ([streamRateLimits]). */
+        const val STREAM_RETRY_SECONDS = 3L
     }
 }

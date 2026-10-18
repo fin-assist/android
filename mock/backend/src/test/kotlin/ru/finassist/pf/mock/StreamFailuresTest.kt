@@ -17,10 +17,12 @@ import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.VerificationStatus
 import ru.finassist.pf.core.api.reopeningStream
+import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.mock.api.MockAssistantApi
 import ru.finassist.pf.mock.api.MockAuthApi
 import ru.finassist.pf.mock.api.MockStatementsApi
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -261,6 +263,53 @@ class StreamFailuresTest {
         assertEquals(3, opens, "two drops, then the full stream")
         assertIs<ImportEvent.Complete>(events.last())
         assertTrue(events.none { it is ImportEvent.Error })
+    }
+
+    @Test
+    fun `an opening after a drop answers 429 with Retry-After while stream_rate_limits lasts`() = runTest {
+        val backend = testBackend(clock, config = FAST.copy(callVerifyDelayMs = 5_000), userId = "", dispatcher = StandardTestDispatcher(testScheduler))
+        val api = MockAuthApi(backend)
+        val token = api.startPhoneVerification(IdempotencyKey("p1"), "+79990001122").verificationToken
+        backend.config = backend.config.copy(streamDrops = 1, streamRateLimits = 2)
+
+        assertEquals(listOf(VerificationStatus.PENDING), api.streamPhoneVerification(token).toList().map { it.status })
+        repeat(2) {
+            val limited = assertFailsWith<AppError.RateLimited> { api.streamPhoneVerification(token).toList() }
+            assertEquals(MockConfig.STREAM_RETRY_SECONDS, limited.retryAfterSeconds)
+            assertEquals(clock.at.plusSeconds(MockConfig.STREAM_RETRY_SECONDS), limited.retryAt)
+        }
+        assertEquals(0, backend.config.streamRateLimits)
+        clock.at = clock.at.plusSeconds(10)
+        assertEquals(VerificationStatus.VERIFIED, api.streamPhoneVerification(token).toList().last().status)
+    }
+
+    @Test
+    fun `an opening that does not follow a drop is never turned away`() = runTest {
+        val backend = testBackend(clock, config = FAST.copy(callVerifyDelayMs = 5_000), userId = "", dispatcher = StandardTestDispatcher(testScheduler))
+        val api = MockAuthApi(backend)
+        val token = api.startPhoneVerification(IdempotencyKey("p1"), "+79990001122").verificationToken
+        backend.config = backend.config.copy(streamRateLimits = 1)
+
+        clock.at = clock.at.plusSeconds(10)
+        assertEquals(VerificationStatus.VERIFIED, api.streamPhoneVerification(token).toList().last().status)
+        assertEquals(1, backend.config.streamRateLimits, "not counted")
+    }
+
+    @Test
+    fun `the client loop waits out a 429 after a drop and gets the result`() = runTest {
+        val backend = testBackend(clock, config = FAST.copy(importStepDelayMs = 1_000, streamDrops = 1, streamRateLimits = 1), dispatcher = StandardTestDispatcher(testScheduler))
+        val api = MockStatementsApi(backend)
+        val accepted = api.uploadStatement(IdempotencyKey("k1"), file())
+        val openedAt = mutableListOf<Long>()
+
+        val events = reopeningStream(isTerminal = { it !is ImportEvent.Progress }) {
+            openedAt += testScheduler.currentTime
+            api.streamProgress(accepted.uploadId)
+        }.toList()
+
+        assertEquals(3, openedAt.size, "drop, 429, then the full stream")
+        assertTrue(openedAt[2] - openedAt[1] >= MockConfig.STREAM_RETRY_SECONDS * 1_000, "waited for Retry-After: $openedAt")
+        assertIs<ImportEvent.Complete>(events.last())
     }
 
     @Test

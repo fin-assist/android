@@ -415,6 +415,28 @@ class CallViewModelTest {
         vm.stopWatching()
     }
 
+    @Test fun `a 429 on the deadline re-check keeps the number hidden and waits for Retry-After instead of locking`() {
+        val h = harness()
+        val vm = h.scripted(
+            pendingForever(),
+            flow { throw AppError.RateLimited(now.plusSeconds(361), retryAfterSeconds = 60) },
+            flowOf(event(VerificationStatus.PENDING)),
+        )
+        vm.watch()
+        advanceSeconds(301)
+        assertEquals(CallPhase.CHECKING, vm.state.value.phase, "not LOCKED: the stream had been open on this screen")
+        assertNull(vm.state.value.lockText)
+        assertEquals(2, opened.size)
+        advanceSeconds(59)
+        assertEquals(2, opened.size, "not before Retry-After")
+        // Retry-After plus up to d/2 = 0.5 s.
+        advanceSeconds(2)
+        assertEquals(3, opened.size)
+        assertEquals(CallPhase.WAITING, vm.state.value.phase)
+        assertNull(vm.state.value.waitUntil, "the deadline has passed: no time is promised")
+        vm.stopWatching()
+    }
+
     @Test fun `the deadline confirmed by a closed request is a fresh start`() {
         val h = harness()
         h.streams(first = ::pendingForever, rest = { flow { throw AppError.Unauthorized("INVALID_TOKEN") } })

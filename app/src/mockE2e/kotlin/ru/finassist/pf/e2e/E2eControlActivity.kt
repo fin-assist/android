@@ -35,6 +35,8 @@ import javax.inject.Inject
  * - `assistant_model_errors=<n>` — the next n assistant answers fail with MODEL_ERROR («Повторить» under them).
  * - `stream_drops=<n>` — the next n openings of an SSE stream (call, import progress, answer) close after their first
  *   event without a terminal one, as the server does on its own failure; the app re-opens them (FIN-170).
+ * - `stream_rate_limits=<n>` — the next n openings that follow a dropped one answer 429 with `Retry-After: 3`; the app
+ *   waits and re-opens again, without «Слишком много попыток» (FIN-170).
  * - `unknown_codes=true|false` — the fake server sends codes the client does not know (`MockCodes`, FIN-83).
  * - `failing_blocks=<id>,<id>` — those Analytics blocks fail to build and come as `unavailable` (FIN-5); empty — none.
  * - `profile_timezone=<zone id>` — `profile.timezone` on the server, as if changed from another device; the app
@@ -76,6 +78,7 @@ class E2eControlActivity : ComponentActivity() {
                 name == "network_delay_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(networkDelayMs = it) }
                 name == "assistant_model_errors" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(assistantModelErrors = it) }
                 name == "stream_drops" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(streamDrops = it) }
+                name == "stream_rate_limits" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(streamRateLimits = it) }
                 name == "unknown_codes" -> backend.config = backend.config.copy(unknownCodes = value.toBoolean())
                 name == "failing_blocks" -> backend.config = backend.config.copy(failingBlocks = value.split(',').map(String::trim).filter(String::isNotEmpty).toSet())
                 name == "profile_timezone" -> backend.mutex.withLock { backend.profile = backend.profile.copy(timezone = value) }
