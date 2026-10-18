@@ -87,7 +87,10 @@ in another rule of the check:
   `kotlin.concurrent.thread {}`), a member reached through a star import of a common package with JVM-only members or Java bridges
   (`import kotlin.concurrent.*`, `kotlin.time.*`, `kotlinx.datetime.*`), a name the
   file declares in a way the check does not see (`val Math = …`, `fun Thread(…)`), and a `java.lang` class outside
-  the list above (`StringBuilder`, `Exception` and others have a common typealias).
+  the list above (`StringBuilder`, `Exception` and others have a common typealias);
+- the other way round, a false positive: an enum constant named like a `java.lang` class
+  (`enum class Kind { Process, Integer }`) is not seen as a declaration, so its uses are reported — rename the
+  constant or reword the code.
 
 ## Inventory (18.10.2026)
 
