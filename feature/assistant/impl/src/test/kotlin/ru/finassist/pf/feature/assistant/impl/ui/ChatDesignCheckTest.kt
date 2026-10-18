@@ -34,7 +34,7 @@ import java.util.TimeZone
 
 /**
  * Artboards `Chat`, `ChatEmpty`, `ChatBusy`, `ChatStale`, `ChatDark`, `ChatError`, `ChatErrorData`, `ChatOffline`,
- * `ChatLimit`, `ChatOffTopic` (no artboard yet, FIN-160): the Самокат answer (7 200 ₽ over April — September 2026) and its
+ * `ChatLimit`, `ChatOffTopic` and `ChatErrorGeneric` (no artboards yet, FIN-160): the Самокат answer (7 200 ₽ over April — September 2026) and its
  * failure / limit states.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -184,6 +184,15 @@ class ChatDesignCheckTest {
                     "С другими вопросами помогут универсальные ассистенты: Алиса AI, GigaChat, ChatGPT, Claude, DeepSeek",
             ),
         ),
+    )
+
+    /**
+     * No artboard in Figma yet (FIN-160): a server older than FIN-159 sends no text — the generic «Не получилось ответить»,
+     * «Повторить» by the MODEL_ERROR fallback.
+     */
+    @Test fun chatErrorGeneric() = capture(
+        "ChatErrorGeneric",
+        pending("Сколько я трачу на заправки?", ChatItem.Answer("a1", calculated, AnswerStatus.FAILED, errorText = null, retryable = true)),
     )
 
     @Test fun chatStale() = capture(

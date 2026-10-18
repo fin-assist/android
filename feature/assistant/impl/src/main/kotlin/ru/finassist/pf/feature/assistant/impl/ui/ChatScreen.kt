@@ -267,7 +267,7 @@ private fun Answer(
     when {
         // The text and «Повторить» come from the server, whatever the code (api.md 7.2, 7.3, FIN-159).
         item.status == AnswerStatus.FAILED -> PfChatStatus(
-            item.errorText ?: GENERIC_ANSWER_ERROR, tone = ChatStatusTone.ERROR,
+            item.failureText, tone = ChatStatusTone.ERROR,
             action = if (item.retryable) {
                 { PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.GHOST, modifier = Modifier.testTag(AssistantTags.ANSWER_FAILED_RETRY)) }
             } else {

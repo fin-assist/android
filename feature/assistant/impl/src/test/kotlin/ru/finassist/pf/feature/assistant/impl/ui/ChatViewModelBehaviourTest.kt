@@ -441,6 +441,7 @@ class ChatViewModelBehaviourTest {
     @Test fun `an error shows the server text and offers a retry only when retryable (FIN-159)`() {
         val offTopic = failedBy(AnswerErrorEvent(AnswerErrorCode.OFF_TOPIC, "off_topic", remainingLimit = 5, text = "Вопрос не по теме", retryable = false))
         assertEquals("Вопрос не по теме" to false, offTopic.errorText to offTopic.retryable)
+        assertEquals("Вопрос не по теме", offTopic.failureText)
         // The flag decides, not the code: a retryable CANNOT_ANSWER gets «Повторить», a non-retryable MODEL_ERROR does not.
         val cannot = failedBy(AnswerErrorEvent(AnswerErrorCode.CANNOT_ANSWER, "m", remainingLimit = 5, text = "Т", retryable = true))
         assertTrue(cannot.retryable)
@@ -462,8 +463,21 @@ class ChatViewModelBehaviourTest {
         for (code in AnswerErrorCode.entries) {
             val item = failedBy(AnswerErrorEvent(code, "m", remainingLimit = 5))
             assertNull(item.errorText, "$code")
+            assertEquals("Не получилось ответить", item.failureText, "$code")
             assertEquals(code == AnswerErrorCode.MODEL_ERROR, item.retryable, "$code")
         }
+    }
+
+    @Test fun `a blank server text is no text, in the stream and in the history`() {
+        for (blank in listOf("", "   ")) {
+            val item = failedBy(AnswerErrorEvent(AnswerErrorCode.OFF_TOPIC, "m", remainingLimit = 5, text = blank, retryable = false))
+            assertNull(item.errorText)
+            assertEquals("Не получилось ответить", item.failureText)
+        }
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED, AnswerErrorCode.OFF_TOPIC, errorText = " ", retryable = false)), hasOlder = false)
+        val history = newVm().answerItem("a1")
+        assertNull(history.errorText)
+        assertEquals("Не получилось ответить", history.failureText)
     }
 
     @Test fun `a failed answer in the history follows error_text and retryable, falling back to the code (FIN-159)`() {

@@ -56,7 +56,10 @@ sealed interface ChatItem {
         /** Of a failed answer: «Повторить» is offered ([answerRetryable]). */
         val retryable: Boolean = false,
         val currency: String = Money.RUB,
-    ) : ChatItem
+    ) : ChatItem {
+        /** What a failed answer shows: the server's text, or the generic one without it. */
+        val failureText: String get() = errorText ?: GENERIC_ANSWER_ERROR
+    }
 }
 
 enum class ChatEvent { OPEN_CONSENT }
@@ -348,7 +351,7 @@ class ChatViewModel @Inject constructor(
                 // Shown blocks are removed on error (api.md 7.2).
                 is AnswerEvent.Error -> item.copy(
                     status = AnswerStatus.FAILED, blocks = emptyList(), chips = emptyList(),
-                    errorText = event.event.text, retryable = answerRetryable(event.event.code, event.event.retryable),
+                    errorText = event.event.text.presentText(), retryable = answerRetryable(event.event.code, event.event.retryable),
                 )
                 is AnswerEvent.Unknown -> item
             }
@@ -376,13 +379,16 @@ class ChatViewModel @Inject constructor(
                 blocks = m.blocks.orEmpty(),
                 chips = m.chips.orEmpty(),
                 source = m.source,
-                errorText = m.errorText.takeIf { failed },
+                errorText = m.errorText.takeIf { failed }.presentText(),
                 retryable = failed && answerRetryable(m.errorCode, m.retryable),
                 currency = m.currency,
             )
         }
         MessageRole.UNKNOWN -> null
     }
+
+    /** A blank server text is no text: the generic one is shown instead of an empty notice. */
+    private fun String?.presentText(): String? = this?.takeIf { it.isNotBlank() }
 
     /** `LazyColumn` keys by id: a duplicate crashes the list, so the first occurrence wins. */
     private fun List<ChatItem>.distinctById(): List<ChatItem> = distinctBy { it.id }
