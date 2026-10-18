@@ -50,23 +50,28 @@ exchange a server would send and validate it against the pinned contract.
   `mock/backend/src/test/resources/contracts` with the commit in `VERSION`, by the same `scripts/sync-contracts.sh`
   and at the same commit as the calculation fixtures (`ContractCoverageTest` checks that the two `VERSION` files agree).
 - **Wire (test code only).** `Wire.kt` builds the HTTP side: a result is the operation's 2xx status and a body
-  serialized with `ApiJson` (the configuration the HTTP client reads with) plus `encodeDefaults`, because a server
-  writes every field; an `AppError` is the status and `{"error": …}` body the HTTP client maps back to that error
-  (`core/network`, `ErrorMapping.kt`); stream events are `event` + `data` pairs.
+  serialized with `ApiJson` (the configuration the HTTP client reads with) plus `encodeDefaults` and `explicitNulls`,
+  because a server writes every field and writes an empty one as `null` (the examples of `api.md`, the expected
+  responses of `fixtures/calc`); an `AppError` is the status and `{"error": …}` body the HTTP client maps back to that
+  error (`core/network`, `ErrorMapping.kt`); stream events are `event` + `data` pairs.
 - **Validator.** [swagger-request-validator-core](https://bitbucket.org/atlassian/swagger-request-validator)
   (Atlassian, Apache-2.0), test dependency of `:mock:backend` only, with its defaults: every message is an error and
   objects without `additionalProperties` get `false`, so an undeclared field fails like a missing, mistyped or
-  `null` one; `allOf` is merged first so that holds for composed schemas too. Stream events are checked against their
-  `x-sse-events` schema, block `data` against its primitive (`heading` → `HeadingData`, …). `ContractValidatorTest`
-  pins what the validator must reject, so an update of the library or of its options cannot check less.
-- **What runs.** `ContractShapeTest` — every operation in its main states (empty, loaded, each kind, each terminal
-  event of a stream). `ContractErrorCodesTest` — every code of section 8 of `api.md` the mock can return, with the
+  `null` one. Two preparations (`Contract.kt`): every `allOf` of the copy is merged into one schema, keeping the
+  wrapper's `nullable`, so that holds for composed schemas, events and nested objects too; and a `null` for a field
+  the schema neither requires nor declares `nullable` is taken as the field left out, as a server writes it (the
+  Kotlin DTO has one `T? = null` for both). A `null` in a required or a declared non-nullable field still fails.
+  Stream events are checked against their `x-sse-events` schema, block `data` against its primitive (`heading` →
+  `HeadingData`, …). `ContractValidatorTest` pins what the validator must reject, so an update of the library or of
+  its options cannot check less.
+- **What runs.** `ContractShapeTest` — the success of every operation in its main states (empty, loaded, each kind,
+  each terminal event of a stream, which must come last; an answer stream also while it is generated). `ContractErrorCodesTest` — every code of section 8 of `api.md` the mock can return, with the
   registry's status and a body valid for the operation. `ContractBehaviourTest` — error order, idempotency (replay,
   another body, request in progress), 404 for an object the user never had or another user's.
   `ContractCoverageTest` fails when an operation or a code of the pinned contract has neither a case nor an exclusion.
 - **Exclusions.** `Exclusions.kt` lists the known mismatches, each with its reason and issue: a validation message of
-  one case, a code the mock cannot return, a behaviour it does not follow (run through `knownGap`, which fails once the
-  behaviour is fixed). An entry that no longer matches fails the test, so the list only shrinks; never weaken the
+  one case, a code the mock cannot return, a behaviour it does not follow (`knownGap` takes the code the contract wants
+  and the one the mock gives today, and fails when the gap is closed or the outcome is anything else). An entry that no longer matches fails the test, so the list only shrinks; never weaken the
   validator instead.
 - **A contract change.** Run `scripts/sync-contracts.sh <ref>` in a PR of its own (the contract issue's client
   issue), then `./gradlew :mock:backend:testDebugUnitTest --tests 'ru.finassist.pf.mock.contract.*'`: the failures

@@ -5,6 +5,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
@@ -58,10 +59,25 @@ class ContractShapeTest(private val name: String) {
     fun `response follows the contract`() = runBlocking {
         val case = cases.single { it.name == name }
         val exchange = case.run(Scene())
-        case.errorEvent?.let { code ->
+        // A shape case covers the success of its operation: an error response here is a failure, not coverage.
+        assertEquals("$name: $exchange is not the success of ${exchange.operation.id}", exchange.operation.success, exchange.status)
+        if (exchange.operation.events.isNotEmpty()) {
+            assertTrue("$name: a stream case names the event it ends with", (case.errorEvent == null) != (case.terminal == null))
+            assertTrue("$name: the stream ended without an event", exchange.events.isNotEmpty())
+            // The terminal event is the last one: a stream that ends otherwise is a drop (api.md, «SSE»).
             val (event, data) = exchange.events.last()
-            assertEquals("$name: the terminal event", "error", event)
-            assertEquals("$name: code of the error event", code, Json.parseToJsonElement(data).jsonObject["code"]?.jsonPrimitive?.content)
+            val json = Json.parseToJsonElement(data).jsonObject
+            case.errorEvent?.let { code ->
+                assertEquals("$name: the terminal event", "error", event)
+                assertEquals("$name: code of the error event", code, json["code"]?.jsonPrimitive?.content)
+            }
+            case.terminal?.let { terminal ->
+                val (expected, status) = terminal.split(':').let { it[0] to it.getOrNull(1) }
+                assertEquals("$name: the terminal event", expected, event)
+                status?.let { assertEquals("$name: status of the terminal event", it, json["status"]?.jsonPrimitive?.content) }
+            }
+            val terminals = exchange.events.count { (n, d) -> n == event && (case.terminal?.contains(':') != true || d == data) }
+            assertEquals("$name: the terminal event comes once, last", 1, terminals)
         }
         ContractCheck.assertContract(case.name, exchange)
     }
@@ -71,6 +87,8 @@ class ContractShapeTest(private val name: String) {
         val operationId: String,
         /** The code of the stream's terminal `error` event the case ends with (a stream-only code of section 8). */
         val errorEvent: String? = null,
+        /** The terminal event of a successful stream: `event`, or `event:status` for the phone verification. */
+        val terminal: String? = null,
         val run: suspend (Scene) -> Wire.Exchange,
     ) {
         override fun toString() = name
@@ -78,6 +96,9 @@ class ContractShapeTest(private val name: String) {
 
     companion object {
         private fun case(name: String, operationId: String, run: suspend (Scene) -> Wire.Exchange) = ShapeCase(name, operationId, run = run)
+
+        private fun stream(name: String, operationId: String, terminal: String, run: suspend (Scene) -> Wire.Exchange) =
+            ShapeCase(name, operationId, terminal = terminal, run = run)
 
         private fun streamError(code: String, operationId: String, run: suspend (Scene) -> Wire.Exchange) =
             ShapeCase("$operationId: $code", operationId, errorEvent = code, run = run)
@@ -106,17 +127,17 @@ class ContractShapeTest(private val name: String) {
             case("startPhoneVerification", "startPhoneVerification") { s ->
                 s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE) }
             },
-            case("streamPhoneVerification: new user", "streamPhoneVerification") { s ->
+            stream("streamPhoneVerification: new user", "streamPhoneVerification", "status:verified") { s ->
                 s.phoneEvents(s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken)
             },
-            case("streamPhoneVerification: existing user", "streamPhoneVerification") { s ->
+            stream("streamPhoneVerification: existing user", "streamPhoneVerification", "status:verified") { s ->
                 s.phoneEvents(s.auth.startPhoneVerification(IdempotencyKey.random(), FAST.existingPhone).verificationToken)
             },
-            case("streamPhoneVerification: pending, then verified", "streamPhoneVerification") { s ->
+            stream("streamPhoneVerification: pending, then verified", "streamPhoneVerification", "status:verified") { s ->
                 s.backend.config = s.backend.config.copy(callVerifyDelayMs = 50)
                 s.phoneEvents(s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken)
             },
-            case("streamPhoneVerification: expired", "streamPhoneVerification") { s ->
+            stream("streamPhoneVerification: expired", "streamPhoneVerification", "status:expired") { s ->
                 val token = s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken
                 s.clock.at = s.clock.at.plusMinutes(10)
                 s.phoneEvents(token)
@@ -169,18 +190,20 @@ class ContractShapeTest(private val name: String) {
             case("uploadStatement", "uploadStatement") { s ->
                 s.call("uploadStatement", UploadAccepted.serializer()) { s.statements.uploadStatement(IdempotencyKey.random(), s.statementFile()) }
             },
-            case("streamStatementProgress: complete, first upload", "streamStatementProgress") { _ ->
+            stream("streamStatementProgress: complete, first upload", "streamStatementProgress", "complete") { _ ->
                 val e = Scene(loaded = false)
                 e.progressEvents(e.statements.uploadStatement(IdempotencyKey.random(), e.statementFile()).uploadId)
             },
-            case("streamStatementProgress: complete, repeated statement", "streamStatementProgress") { s ->
+            stream("streamStatementProgress: complete, repeated statement", "streamStatementProgress", "complete") { s ->
                 s.progressEvents(s.statements.uploadStatement(IdempotencyKey.random(), s.statementFile()).uploadId)
             },
             streamError("CANCELLED", "streamStatementProgress") { _ ->
                 val e = Scene(FAST.copy(importStepDelayMs = 5_000), loaded = false)
                 val id = e.statements.uploadStatement(IdempotencyKey.random(), e.statementFile()).uploadId
+                // Connected before «Прервать разбор»: the cancelled upload is discarded, a later connection is 404.
+                val stream = e.statements.streamProgress(id)
                 e.statements.deleteStatement(id)
-                e.progressEvents(id)
+                e.progressEvents(id, stream)
             },
             case("deleteStatement", "deleteStatement") { s ->
                 val id = s.backend.uploads.first().id
@@ -269,8 +292,18 @@ class ContractShapeTest(private val name: String) {
             case("askAssistant", "askAssistant") { s ->
                 s.call("askAssistant", AskResponse.serializer()) { s.assistant.ask(IdempotencyKey.random(), AskRequest("Сколько я потратил?")) }
             },
-            case("streamAnswer: complete", "streamAnswer") { s -> s.answerEvents(s.finishedAnswer("Сколько я потратил?")) },
-            case("streamAnswer: category with blocks", "streamAnswer") { s -> s.answerEvents(s.finishedAnswer("Сколько уходит на рестораны")) },
+            stream("streamAnswer: complete", "streamAnswer", "done") { s -> s.answerEvents(s.finishedAnswer("Сколько я потратил?")) },
+            stream("streamAnswer: category with blocks", "streamAnswer", "done") { s -> s.answerEvents(s.finishedAnswer("Сколько уходит на рестораны")) },
+            stream("streamAnswer: live, connected while generating", "streamAnswer", "done") { s ->
+                // Each event of a generation in progress goes through Wire and the validator, not only the replay's snapshot.
+                s.backend.config = s.backend.config.copy(assistantChunkDelayMs = 20)
+                val id = s.assistant.ask(IdempotencyKey.random(), AskRequest("Сколько уходит на рестораны")).answerId
+                s.answerEvents(id).also { exchange ->
+                    val seen = exchange.events.map { it.first }
+                    assertEquals("event types of a live answer: $seen", setOf("snapshot", "chunk", "block", "source", "chip", "done"), seen.toSet())
+                    assertEquals("the first event is the snapshot", "snapshot", seen.first())
+                }
+            },
             streamError("CANNOT_ANSWER", "streamAnswer") { s -> s.answerEvents(s.finishedAnswer("Сколько я потрачу в следующем году?")) },
             streamError("OFF_TOPIC", "streamAnswer") { s -> s.answerEvents(s.finishedAnswer("Дай рецепт борща")) },
             streamError("MODEL_ERROR", "streamAnswer") { s ->

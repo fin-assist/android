@@ -118,12 +118,11 @@ class ContractBehaviourTest {
 
     @Test
     fun `retry of a complete answer without the consent is 403 before 422`() = runBlocking {
-        ContractCheck.knownGap(GAP_RETRY_ORDER) {
-            val s = Scene()
-            val done = s.answer("Сколько я потратил?")
-            s.profile.revokeAssistantConsent()
-            expect(ErrorCodes.CONSENT_REQUIRED, "403 before 422: retry", s.call("retryAnswer", null, done) { s.assistant.retry(IdempotencyKey.random(), done) })
-        }
+        val s = Scene()
+        val done = s.answer("Сколько я потратил?")
+        s.profile.revokeAssistantConsent()
+        val retry = s.call("retryAnswer", null, done) { s.assistant.retry(IdempotencyKey.random(), done) }
+        ContractCheck.knownGap(GAP_RETRY_ORDER, retry, contract = ErrorCodes.CONSENT_REQUIRED, now = ErrorCodes.RETRY_NOT_ALLOWED)
     }
 
     // Idempotency: the stored response for a repeat, before the state and limit checks.
@@ -188,31 +187,28 @@ class ContractBehaviourTest {
 
     @Test
     fun `the same key with another file or question is IDEMPOTENCY_CONFLICT`() = runBlocking {
-        ContractCheck.knownGap(GAP_CONFLICT) {
-            val s = Scene()
-            s.statements.uploadStatement(KEY, s.statementFile())
-            expect(
-                ErrorCodes.IDEMPOTENCY_CONFLICT, "conflict: upload",
-                s.call("uploadStatement", null) { s.statements.uploadStatement(KEY, s.statementFile("other.ofx", s.statementFile().open().readBytes().decodeToString() + "\n")) },
-            )
+        val s = Scene()
+        s.statements.uploadStatement(KEY, s.statementFile())
+        val upload = s.call("uploadStatement", UploadAccepted.serializer()) {
+            s.statements.uploadStatement(KEY, s.statementFile("other.ofx", s.statementFile().open().readBytes().decodeToString() + "\n"))
         }
-        ContractCheck.knownGap(GAP_CONFLICT) {
-            val s = Scene()
-            s.assistant.ask(KEY, AskRequest("Сколько я потратил?"))
-            expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "conflict: question", s.call("askAssistant", null) { s.assistant.ask(KEY, AskRequest("Сколько на такси?")) })
-        }
+        ContractCheck.knownGap(GAP_CONFLICT, upload, contract = ErrorCodes.IDEMPOTENCY_CONFLICT, now = null)
+
+        val q = Scene()
+        q.assistant.ask(KEY, AskRequest("Сколько я потратил?"))
+        val question = q.call("askAssistant", AskResponse.serializer()) { q.assistant.ask(KEY, AskRequest("Сколько на такси?")) }
+        ContractCheck.knownGap(GAP_CONFLICT, question, contract = ErrorCodes.IDEMPOTENCY_CONFLICT, now = null)
     }
 
     @Test
     fun `a 422 is stored under the key`() = runBlocking {
-        ContractCheck.knownGap(GAP_STORED_ERRORS) {
-            val s = Scene()
-            val pdf = s.statementFile("s.pdf", "%PDF-1.4")
-            expect(ErrorCodes.WRONG_FORMAT, "422 first", s.call("uploadStatement", null) { s.statements.uploadStatement(KEY, pdf) })
-            // Same key, same body: the stored 422, not a new run — here the limit was raised meanwhile.
-            s.backend.config = s.backend.config.copy(maxFileSizeBytes = 1)
-            expect(ErrorCodes.WRONG_FORMAT, "422 stored", s.call("uploadStatement", null) { s.statements.uploadStatement(KEY, pdf) })
-        }
+        val s = Scene()
+        val pdf = s.statementFile("s.pdf", "%PDF-1.4")
+        expect(ErrorCodes.WRONG_FORMAT, "422 first", s.call("uploadStatement", null) { s.statements.uploadStatement(KEY, pdf) })
+        // Same key, same body: the stored 422, not a new run — the limit was lowered meanwhile, so a new run gives 413.
+        s.backend.config = s.backend.config.copy(maxFileSizeBytes = 1)
+        val repeat = s.call("uploadStatement", null) { s.statements.uploadStatement(KEY, pdf) }
+        ContractCheck.knownGap(GAP_STORED_ERRORS, repeat, contract = ErrorCodes.WRONG_FORMAT, now = ErrorCodes.FILE_TOO_LARGE)
     }
 
     // 404: an object the user never had, or another user's.
@@ -235,9 +231,8 @@ class ContractBehaviourTest {
         expect(ErrorCodes.NOT_FOUND, "foreign: progress", s.progressEvents(upload))
         expect(ErrorCodes.NOT_FOUND, "foreign: answer", s.answerEvents(answer))
         expect(ErrorCodes.NOT_FOUND, "foreign: retry", s.call("retryAnswer", null, answer) { s.assistant.retry(IdempotencyKey.random(), answer) })
-        ContractCheck.knownGap(GAP_DELETE_UNKNOWN) {
-            expect(ErrorCodes.NOT_FOUND, "foreign: delete upload", s.call("deleteStatement", null, upload) { s.statements.deleteStatement(upload) })
-        }
+        val delete = s.call("deleteStatement", null, upload) { s.statements.deleteStatement(upload) }
+        ContractCheck.knownGap(GAP_DELETE_UNKNOWN, delete, contract = ErrorCodes.NOT_FOUND, now = null)
     }
 
     @Test
@@ -246,9 +241,8 @@ class ContractBehaviourTest {
         val upload = s.backend.uploads.first().id
         assertEquals(204, s.call("deleteStatement", null, upload) { s.statements.deleteStatement(upload) }.status)
         assertEquals(204, s.call("deleteStatement", null, upload) { s.statements.deleteStatement(upload) }.status)
-        ContractCheck.knownGap(GAP_DELETE_UNKNOWN) {
-            expect(ErrorCodes.NOT_FOUND, "never had: delete upload", s.call("deleteStatement", null, MISSING) { s.statements.deleteStatement(MISSING) })
-        }
+        val never = s.call("deleteStatement", null, MISSING) { s.statements.deleteStatement(MISSING) }
+        ContractCheck.knownGap(GAP_DELETE_UNKNOWN, never, contract = ErrorCodes.NOT_FOUND, now = null)
     }
 
     @Test
@@ -257,15 +251,16 @@ class ContractBehaviourTest {
         val upload = s.backend.uploads.first().id
         val answer = s.answer("Сколько я потратил?")
         s.backend.profile = s.backend.emptyProfile("", "")
-        ContractCheck.knownGap(GAP_STREAM_SESSION) { expect(ErrorCodes.INVALID_TOKEN, "stream without a session: progress", s.progressEvents(upload)) }
-        ContractCheck.knownGap(GAP_STREAM_SESSION) { expect(ErrorCodes.INVALID_TOKEN, "stream without a session: answer", s.answerEvents(answer)) }
+        ContractCheck.knownGap(GAP_STREAM_SESSION, s.progressEvents(upload), contract = ErrorCodes.INVALID_TOKEN, now = null)
+        ContractCheck.knownGap(GAP_STREAM_SESSION, s.answerEvents(answer), contract = ErrorCodes.INVALID_TOKEN, now = null)
     }
 
     @Test
     fun `logout and account deletion need a session`() = runBlocking {
         val s = Scene(signedIn = false)
-        ContractCheck.knownGap(GAP_SESSIONLESS) { expect(ErrorCodes.INVALID_TOKEN, "logout without a session", s.call("logout", null) { s.auth.logout("mock.unknown", "rt_unknown") }) }
-        ContractCheck.knownGap(GAP_SESSIONLESS) { expect(ErrorCodes.INVALID_TOKEN, "delete without a session", s.call("deleteAccount", null) { s.profile.deleteAccount() }) }
+        val logout = s.call("logout", null) { s.auth.logout("mock.unknown", "rt_unknown") }
+        ContractCheck.knownGap(GAP_SESSIONLESS, logout, contract = ErrorCodes.INVALID_TOKEN, now = null)
+        ContractCheck.knownGap(GAP_SESSIONLESS, s.call("deleteAccount", null) { s.profile.deleteAccount() }, contract = ErrorCodes.INVALID_TOKEN, now = null)
     }
 
     @Test
@@ -274,7 +269,7 @@ class ContractBehaviourTest {
         assertEquals("1", exchange.headers["Retry-After"])
     }
 
-    private companion object {
+    internal companion object {
         const val NEW_PHONE = "+79990000001"
         const val MISSING = "00000000-0000-0000-0000-000000000000"
         val KEY = IdempotencyKey("6f1e1b8a-3c2d-4e5f-8a9b-0c1d2e3f4a5b")
@@ -285,5 +280,8 @@ class ContractBehaviourTest {
         const val GAP_DELETE_UNKNOWN = "delete-unknown-upload"
         const val GAP_STREAM_SESSION = "stream-session"
         const val GAP_SESSIONLESS = "logout-delete-session"
+
+        /** Every gap a test here runs; [ContractCoverageTest] keeps it equal to [Exclusions.behaviours]. */
+        val GAPS = listOf(GAP_RETRY_ORDER, GAP_CONFLICT, GAP_STORED_ERRORS, GAP_DELETE_UNKNOWN, GAP_STREAM_SESSION, GAP_SESSIONLESS)
     }
 }

@@ -16,18 +16,7 @@ internal object Exclusions {
     /** A behaviour of the contract the fake backend does not follow; its test runs through [ContractCheck.knownGap]. */
     data class Behaviour(val id: String, val reason: String, val issue: String)
 
-    private const val CHANGED_SINCE_TEXT =
-        "openapi.yaml requires AnswerSource.changed_since_text (nullable), api.md 7.2 says `string?` — absent or null " +
-            "(«Нотация»); api.md wins, the client DTO omits null as everywhere else"
-    private const val ISSUE_CHANGED_SINCE_TEXT = "proposed: [contracts] AnswerSource.changed_since_text out of required, as api.md"
-
-    val schema: List<Schema> = listOf(
-        Schema("listMessages", "changed_since_text", CHANGED_SINCE_TEXT, ISSUE_CHANGED_SINCE_TEXT),
-        Schema("listMessages: a failed and a retried answer", "changed_since_text", CHANGED_SINCE_TEXT, ISSUE_CHANGED_SINCE_TEXT),
-        // In an event the schema is a component, where allOf is not merged: the same missing field, reported as allOf.
-        Schema("streamAnswer: complete", "validation.event.snapshot.schema.allOf | /source", CHANGED_SINCE_TEXT, ISSUE_CHANGED_SINCE_TEXT),
-        Schema("streamAnswer: category with blocks", "validation.event.snapshot.schema.allOf | /source", CHANGED_SINCE_TEXT, ISSUE_CHANGED_SINCE_TEXT),
-    )
+    val schema: List<Schema> = listOf()
 
     private const val FIN_22 =
         "the fake backend of release/0.2.8 has no version check and no maintenance mode: FIN-22 added both to the mock, but it is " +

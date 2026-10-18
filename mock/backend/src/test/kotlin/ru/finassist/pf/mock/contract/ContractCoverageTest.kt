@@ -46,6 +46,15 @@ class ContractCoverageTest {
     }
 
     @Test
+    fun `every behavioural exclusion is run by a test`() {
+        assertEquals(
+            "Exclusions.behaviours and the gaps ContractBehaviourTest runs",
+            ContractBehaviourTest.GAPS.toSet(), Exclusions.behaviours.map { it.id }.toSet(),
+        )
+        assertEquals("a gap listed twice in ContractBehaviourTest.GAPS", ContractBehaviourTest.GAPS.size, ContractBehaviourTest.GAPS.toSet().size)
+    }
+
+    @Test
     fun `the contract copies are of one commit`() {
         val calc = File("src/test/resources/calc/VERSION").readText().trim()
         assertEquals("calc fixtures and openapi.yaml come from one fin-assist/contracts commit (scripts/sync-contracts.sh)", calc, Contract.version)

@@ -26,6 +26,25 @@ class ContractValidatorTest {
 
     @Test fun `null in a field that is not nullable fails`() = assertTrue(check(valid.replace("\"remaining\":5", "\"remaining\":null")).isNotEmpty())
 
+    @Test fun `null in a required field fails`() =
+        assertTrue(check(valid.replace("\"resets_at\":\"2026-10-07T00:00:00+03:00\"", "\"resets_at\":null")).isNotEmpty())
+
+    @Test fun `null for an optional field that is not nullable is the field left out`() {
+        // `total_count` of a feed page: optional, not nullable — a server leaves it out, the DTO has it as null.
+        val list = Contract.operation("listOperations")
+        assertEquals(emptyList<String>(), Contract.validateResponse(list, "/v1/operations", 200, """{"items":[],"total_count":null}""", emptyMap()))
+        assertTrue(Contract.validateResponse(list, "/v1/operations", 200, """{"items":[],"total_count":"1"}""", emptyMap()).isNotEmpty())
+    }
+
+    @Test fun `null in a nullable allOf wrapper passes`() {
+        // `account` is `{nullable, allOf: [AccountDetails]}`: the merge keeps `nullable` of the wrapper.
+        val op = Contract.operation("getOperation")
+        val body = """{"id":"o1","kind":"own_transfer","occurred_at":"2026-10-01T10:00:00+03:00","amount":100,"currency":"RUB","title":"Перевод",
+            |"category_id":"cat_transfer","category_name":"Переводы","category_icon":"transfer","is_category_manual":false,"status":"posted",
+            |"source_name":"Выписка Т-Банка","account":null}""".trimMargin()
+        assertEquals(emptyList<String>(), Contract.validateResponse(op, "/v1/operations/o1", 200, body, emptyMap()))
+    }
+
     @Test fun `a date-time in another format fails`() = assertTrue(check(valid.replace("2026-10-07T00:00:00+03:00", "07.10.2026")).isNotEmpty())
 
     @Test fun `extra fields fail inside allOf schemas too`() {
@@ -57,6 +76,27 @@ class ContractValidatorTest {
         val ask = Contract.operation("streamAnswer")
         val event = """{"index":0,"block":{"type":"heading","v":1,"data":{"title":1}}}"""
         assertTrue(Contract.validateEvent(ask, "block", event).any { it.startsWith("block") })
+    }
+
+    @Test fun `a field an event does not declare fails`() {
+        val event = """{"index":0,"block":{"type":"text","v":1,"data":{"text":"Привет"}},"extra":1}"""
+        val messages = Contract.validateEvent(Contract.operation("streamAnswer"), "block", event)
+        assertTrue(messages.toString(), messages.any { "additionalProperties" in it && "extra" in it })
+    }
+
+    @Test fun `a field a nested object of an event does not declare fails, behind its allOf too`() {
+        // `snapshot.source` is `{nullable, allOf: [AnswerSource]}`: the nested cause is reported, not «allOf failed».
+        val event = """{"status":"complete","blocks":[],"chips":[],"currency":"RUB","source":{"calculated_at":"2026-10-01T10:00:00+03:00",
+            |"transfer_mode":"with","changed_since":[],"changed_since_text":null,"extra":1}}""".trimMargin()
+        val messages = Contract.validateEvent(Contract.operation("streamAnswer"), "snapshot", event)
+        assertTrue(messages.toString(), messages.isNotEmpty() && messages.all { "additionalProperties" in it && "extra" in it })
+    }
+
+    @Test fun `a missing field of a nested object of an event is reported by its name`() {
+        val event = """{"status":"complete","blocks":[],"chips":[],"currency":"RUB","source":{"calculated_at":"2026-10-01T10:00:00+03:00",
+            |"changed_since":[],"changed_since_text":null}}""".trimMargin()
+        val messages = Contract.validateEvent(Contract.operation("streamAnswer"), "snapshot", event)
+        assertTrue(messages.toString(), messages.any { "required" in it && "transfer_mode" in it })
     }
 
     @Test fun `an event the stream does not declare fails`() =

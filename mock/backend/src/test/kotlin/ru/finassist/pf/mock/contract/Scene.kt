@@ -71,8 +71,9 @@ internal class Scene(
             Wire.event("status", PhoneVerificationStatusEvent.serializer(), it)
         }
 
-    suspend fun progressEvents(uploadId: String) =
-        Wire.stream("streamStatementProgress", path("streamStatementProgress", uploadId), statements.streamProgress(uploadId)) { e ->
+    /** [flow] taken earlier stays the stream of an upload removed since (a cancelled import is discarded). */
+    suspend fun progressEvents(uploadId: String, flow: Flow<ImportEvent> = statements.streamProgress(uploadId)) =
+        Wire.stream("streamStatementProgress", path("streamStatementProgress", uploadId), flow) { e ->
             when (e) {
                 is ImportEvent.Progress -> Wire.event("progress", ImportProgress.serializer(), e.progress)
                 is ImportEvent.Complete -> Wire.event("complete", ImportResult.serializer(), e.result)

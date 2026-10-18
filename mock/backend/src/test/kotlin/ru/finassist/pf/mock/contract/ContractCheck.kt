@@ -21,6 +21,7 @@ internal object ContractCheck {
             }
         }
         problems += if (op.events.isNotEmpty() && exchange.status == op.success) {
+            // A stream without a terminal event is a drop (api.md, «SSE»): the shape cases check which one ends it.
             if (exchange.events.isEmpty()) listOf("the stream ended without an event") else exchange.events.flatMap { (name, data) -> Contract.validateEvent(op, name, data) }
         } else {
             Contract.validateResponse(op, exchange.path, exchange.status, exchange.body, exchange.headers)
@@ -42,16 +43,20 @@ internal object ContractCheck {
         }
     }
 
-    /** [check] reproduces a known behavioural gap ([Exclusions.behaviours], [id]); once it passes, the gap is closed. */
-    suspend fun knownGap(id: String, check: suspend () -> Unit) {
+    /**
+     * [exchange] shows a known behavioural gap ([Exclusions.behaviours], [id]): the contract wants [contract]
+     * (`error.code`), the fake backend gives [now] today (`error.code`, or null for a success). Fails when the gap is
+     * closed (remove the entry) and when the outcome is anything else (a change the gap does not explain); the outcome
+     * itself is still checked against the schema of its status.
+     */
+    fun knownGap(id: String, exchange: Wire.Exchange, contract: String, now: String?) {
         val gap = Exclusions.behaviours.singleOrNull { it.id == id } ?: error("no behavioural exclusion $id")
-        val stillThere = try {
-            check()
-            false
-        } catch (e: AssertionError) {
-            true
+        if (exchange.code == contract) fail("$id: $exchange now follows the contract: remove it from Exclusions.behaviours (${gap.issue})")
+        if (exchange.code != now) {
+            fail("$id: $exchange — the contract wants $contract, the known gap is ${now ?: "a success"}, the fake backend gives ${exchange.code ?: "a success"}")
         }
-        if (!stillThere) fail("$id now follows the contract: remove it from Exclusions.behaviours (${gap.issue})")
+        if (now == null && exchange.status != exchange.operation.success) fail("$id: $exchange — the known gap is a success")
+        assertContract("gap $id", exchange)
     }
 
     private const val BODY_PREVIEW = 2_000

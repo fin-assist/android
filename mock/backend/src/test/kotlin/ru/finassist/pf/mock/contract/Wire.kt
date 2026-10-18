@@ -28,10 +28,15 @@ import ru.finassist.pf.core.common.error.AppError
 internal object Wire {
     /**
      * [ApiJson] — the configuration the HTTP client reads responses with — writing every field, as a server does:
-     * `encodeDefaults` is off in [ApiJson] (it only ever writes requests, where a default need not be sent), and a
-     * response field equal to its Kotlin default would otherwise be missing from the body. `null` is still omitted.
+     * `encodeDefaults` and `explicitNulls` are off in [ApiJson] because it only ever writes requests, where a default
+     * need not be sent and `null` is never sent (api.md, «Нотация»). A server writes an empty field as `null` (the
+     * examples of api.md, the expected responses of `fixtures/calc`), so `null` is written here, and a field that is
+     * `null` where the schema is not `nullable` fails the check.
      */
-    val WireJson: Json = Json(ApiJson) { encodeDefaults = true }
+    val WireJson: Json = Json(ApiJson) {
+        encodeDefaults = true
+        explicitNulls = true
+    }
 
     class Exchange(
         val operation: Contract.Operation,
