@@ -24,6 +24,13 @@ def nsc(body: str, base: str = '<base-config cleartextTrafficPermitted="false" /
     return f"<network-security-config>{base}{body}</network-security-config>"
 
 
+HTTP_URL = "http://10.0.2.2:8080/"
+
+
+def local_debug(manifest_xml: str, nsc_xml: str, base_url: str = HTTP_URL) -> list[str]:
+    return module.local_debug_problems(manifest_xml, nsc_xml, base_url)
+
+
 ONE_HOST = '<domain-config cleartextTrafficPermitted="true"><domain includeSubdomains="false">10.0.2.2</domain></domain-config>'
 
 
@@ -67,46 +74,85 @@ class ReleaseTest(unittest.TestCase):
 
 class LocalDebugTest(unittest.TestCase):
     def test_one_cleartext_host_passes(self):
-        self.assertEqual([], module.local_debug_problems(LOCAL_MANIFEST, nsc(ONE_HOST)))
+        self.assertEqual([], local_debug(LOCAL_MANIFEST, nsc(ONE_HOST)))
 
     def test_https_config_without_exception_passes(self):
-        self.assertEqual([], module.local_debug_problems(LOCAL_MANIFEST, nsc("")))
+        self.assertEqual([], local_debug(LOCAL_MANIFEST, nsc("")))
 
     def test_manifest_without_config_fails(self):
-        self.assertEqual(1, len(module.local_debug_problems(manifest(), nsc(ONE_HOST))))
+        self.assertEqual(1, len(local_debug(manifest(), nsc(ONE_HOST))))
 
     def test_test_hook_fails(self):
         xml = manifest(
             'android:networkSecurityConfig="@xml/network_security_config"',
             '<activity android:name="ru.finassist.pf.e2e.E2eDocumentPickerActivity"/>',
         )
-        self.assertEqual(1, len(module.local_debug_problems(xml, nsc(ONE_HOST))))
+        self.assertEqual(1, len(local_debug(xml, nsc(ONE_HOST))))
 
     def test_base_config_allowing_cleartext_fails(self):
-        problems = module.local_debug_problems(LOCAL_MANIFEST, nsc("", '<base-config cleartextTrafficPermitted="true" />'))
+        problems = local_debug(LOCAL_MANIFEST, nsc("", '<base-config cleartextTrafficPermitted="true" />'))
         self.assertEqual(["base-config does not forbid cleartext"], problems)
-        self.assertEqual(1, len(module.local_debug_problems(LOCAL_MANIFEST, nsc("", ""))))
+        self.assertEqual(1, len(local_debug(LOCAL_MANIFEST, nsc("", ""))))
 
     def test_subdomains_fail(self):
-        body = '<domain-config cleartextTrafficPermitted="true"><domain includeSubdomains="true">example.ru</domain></domain-config>'
-        self.assertEqual(1, len(module.local_debug_problems(LOCAL_MANIFEST, nsc(body))))
+        body = '<domain-config cleartextTrafficPermitted="true"><domain includeSubdomains="true">10.0.2.2</domain></domain-config>'
+        self.assertEqual(["cleartext to subdomains of 10.0.2.2"], local_debug(LOCAL_MANIFEST, nsc(body)))
 
     def test_second_host_fails(self):
         body = (
             '<domain-config cleartextTrafficPermitted="true"><domain>10.0.2.2</domain><domain>localhost</domain>'
             "</domain-config>"
         )
-        self.assertEqual(1, len(module.local_debug_problems(LOCAL_MANIFEST, nsc(body))))
+        problems = local_debug(LOCAL_MANIFEST, nsc(body))
+        self.assertIn("cleartext to more than one host: 10.0.2.2, localhost", problems)
+        self.assertIn("cleartext to localhost, not the backend host 10.0.2.2", problems)
 
     def test_debug_overrides_and_trust_anchors_fail(self):
         body = "<debug-overrides><trust-anchors><certificates src=\"user\"/></trust-anchors></debug-overrides>"
-        self.assertEqual(1, len(module.local_debug_problems(LOCAL_MANIFEST, nsc(body))))
+        self.assertEqual(1, len(local_debug(LOCAL_MANIFEST, nsc(body))))
+
+
+    def test_other_host_than_the_backend_fails(self):
+        body = '<domain-config cleartextTrafficPermitted="true"><domain>unrelated.example</domain></domain-config>'
+        self.assertEqual(
+            ["cleartext to unrelated.example, not the backend host 10.0.2.2"], local_debug(LOCAL_MANIFEST, nsc(body))
+        )
+
+    def test_backend_host_is_compared_case_insensitively(self):
+        body = '<domain-config cleartextTrafficPermitted="true"><domain>Dev.Local</domain></domain-config>'
+        self.assertEqual([], local_debug(LOCAL_MANIFEST, nsc(body), "http://dev.local:8080/"))
+
+    def test_lan_backend_passes_with_its_host(self):
+        body = '<domain-config cleartextTrafficPermitted="true"><domain>192.168.1.20</domain></domain-config>'
+        self.assertEqual([], local_debug(LOCAL_MANIFEST, nsc(body), "http://192.168.1.20:9000/"))
+        self.assertEqual(1, len(local_debug(LOCAL_MANIFEST, nsc(ONE_HOST), "http://192.168.1.20:9000/")))
+
+    def test_https_backend_with_cleartext_exception_fails(self):
+        problems = local_debug(LOCAL_MANIFEST, nsc(ONE_HOST), "https://dev.example.ru/")
+        self.assertEqual(["cleartext to 10.0.2.2 although the backend https://dev.example.ru/ is https"], problems)
+
+    def test_https_backend_without_exception_passes(self):
+        self.assertEqual([], local_debug(LOCAL_MANIFEST, nsc(""), "https://dev.example.ru/"))
+
+    def test_base_url_that_is_not_http_fails(self):
+        self.assertEqual(1, len(local_debug(LOCAL_MANIFEST, nsc(""), "")))
+
+
+class ApiBaseUrlTest(unittest.TestCase):
+    def test_reads_the_field(self):
+        java = 'public final class BuildConfig {\n  public static final String API_BASE_URL = "http://10.0.2.2:8080/";\n}'
+        self.assertEqual("http://10.0.2.2:8080/", module.api_base_url(java))
+
+    def test_missing_field_fails(self):
+        with self.assertRaises(ValueError):
+            module.api_base_url("public final class BuildConfig {}")
 
 
 class MainTest(unittest.TestCase):
     def test_usage(self):
         self.assertEqual(2, module.main([]))
         self.assertEqual(2, module.main(["local-debug", "only-one"]))
+        self.assertEqual(2, module.main(["local-debug", "manifest", "config"]))
 
 
 if __name__ == "__main__":

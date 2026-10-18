@@ -206,6 +206,12 @@ tracer {
         // R8 mappings of minified builds, so stack traces in the console are readable. Needs the plugin token.
         uploadMapping = tracerPluginToken.isNotBlank()
     }
+    // `local` never reports to Tracer (see the flavor): no mappings of its builds either. The plugin takes each setting
+    // from the first config that has it — variant name, build type, flavors, then `defaultConfig`.
+    create("local") {
+        isDisabled = true
+        uploadMapping = false
+    }
 }
 
 /** Gradle property or environment variable (`pf.mytrackerSdkKey` → `PF_MYTRACKER_SDK_KEY`); empty when absent. */

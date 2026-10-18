@@ -5,15 +5,17 @@
 (`ru.finassist.pf.e2e.*`, the `pfe2e` control link, the document picker override), not debuggable, cleartext
 explicitly off and no network security config, so no exception to it either.
 
-`local-debug` — the merged manifest of localDebug and its network security config: no test hooks; the config is the
-app's own, forbids cleartext by default and allows it to a single host, without subdomains, user CAs or debug
-overrides.
+`local-debug` — the merged manifest of localDebug, its network security config and its BuildConfig.java: no test
+hooks; the config is the app's own, forbids cleartext by default and allows it only to the host of the compiled
+`API_BASE_URL` (pf.apiBaseUrl), without subdomains, user CAs or debug overrides, and not at all for an https backend.
 
 Usage:
   scripts/check-build-separation.py release <merged AndroidManifest.xml>...
-  scripts/check-build-separation.py local-debug <merged AndroidManifest.xml> <network_security_config.xml>
+  scripts/check-build-separation.py local-debug <merged AndroidManifest.xml> <network_security_config.xml> <BuildConfig.java>
 """
+import re
 import sys
+import urllib.parse
 import xml.etree.ElementTree as ET
 
 ANDROID = "{http://schemas.android.com/apk/res/android}"
@@ -47,7 +49,15 @@ def release_problems(manifest_xml: str) -> list[str]:
     return problems
 
 
-def local_debug_problems(manifest_xml: str, nsc_xml: str) -> list[str]:
+def api_base_url(build_config_java: str) -> str:
+    """`API_BASE_URL` of a generated BuildConfig.java."""
+    match = re.search(r'\bString\s+API_BASE_URL\s*=\s*"([^"]*)"', build_config_java)
+    if match is None:
+        raise ValueError("no API_BASE_URL in BuildConfig")
+    return match.group(1)
+
+
+def local_debug_problems(manifest_xml: str, nsc_xml: str, base_url: str) -> list[str]:
     root = ET.fromstring(manifest_xml)
     problems = [f"test hook: {hook}" for hook in test_hooks(root)]
     application = root.find("application")
@@ -69,6 +79,16 @@ def local_debug_problems(manifest_xml: str, nsc_xml: str) -> list[str]:
             if domain.get("includeSubdomains") == "true":
                 problems.append(f"cleartext to subdomains of {domain.text}")
             hosts.append((domain.text or "").strip())
+    url = urllib.parse.urlsplit(base_url)
+    if url.scheme == "https":
+        if hosts:
+            problems.append(f"cleartext to {', '.join(hosts)} although the backend {base_url} is https")
+    elif url.scheme == "http" and url.hostname:
+        others = [h for h in hosts if h.lower() != url.hostname]
+        if others:
+            problems.append(f"cleartext to {', '.join(others)}, not the backend host {url.hostname}")
+    else:
+        problems.append(f"API_BASE_URL {base_url!r} is not an http(s) URL")
     if len(hosts) > 1:
         problems.append(f"cleartext to more than one host: {', '.join(hosts)}")
     return problems
@@ -93,10 +113,10 @@ def main(args: list[str]) -> int:
         if not failed:
             print(f"No test hooks or cleartext in {len(args) - 1} release manifest(s)")
         return 1 if failed else 0
-    if len(args) == 3 and args[0] == "local-debug":
-        failed = report(args[1], local_debug_problems(read(args[1]), read(args[2])))
+    if len(args) == 4 and args[0] == "local-debug":
+        failed = report(args[1], local_debug_problems(read(args[1]), read(args[2]), api_base_url(read(args[3]))))
         if not failed:
-            print("localDebug: no test hooks, cleartext to one host only")
+            print("localDebug: no test hooks, cleartext only to the backend host")
         return 1 if failed else 0
     print(__doc__)
     return 2

@@ -174,8 +174,9 @@ jobs:
             $m/localDebug/processLocalDebugManifest/AndroidManifest.xml \
             $m/prodRelease/processProdReleaseManifest/AndroidManifest.xml 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
-      # No e2e/mock hooks and no cleartext in release builds; in localDebug cleartext to the local backend's host only
-      # (scripts/check-build-separation.py). Mock code on the HTTP flavors' classpath fails `:app:checkNoMockCode` above.
+      # No e2e/mock hooks and no cleartext in release builds; in localDebug cleartext only to the host of the compiled
+      # API_BASE_URL, none for https (scripts/check-build-separation.py). Mock code on the HTTP flavors' classpath fails
+      # `:app:checkNoMockCode` above.
       - name: Test hooks and cleartext stay out of release
         run: |
           m=app/build/intermediates/merged_manifests
@@ -185,7 +186,8 @@ jobs:
               $m/localRelease/processLocalReleaseManifest/AndroidManifest.xml &&
             python3 scripts/check-build-separation.py local-debug \
               $m/localDebug/processLocalDebugManifest/AndroidManifest.xml \
-              app/build/intermediates/packaged_res/localDebug/packageLocalDebugResources/xml/network_security_config.xml
+              app/build/intermediates/packaged_res/localDebug/packageLocalDebugResources/xml/network_security_config.xml \
+              app/build/generated/source/buildConfig/local/debug/ru/finassist/pf/BuildConfig.java
           } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       - uses: actions/upload-artifact@v4

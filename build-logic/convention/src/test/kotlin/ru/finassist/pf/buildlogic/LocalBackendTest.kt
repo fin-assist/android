@@ -46,6 +46,20 @@ class LocalBackendTest {
     }
 
     @Test
+    fun `ports at the edges of OkHttp's range pass`() {
+        assertEquals("http://10.0.2.2:1/", LocalBackend.parse("http://10.0.2.2:1/").url)
+        assertEquals("http://10.0.2.2:65535/", LocalBackend.parse("http://10.0.2.2:65535/").url)
+    }
+
+    @Test
+    fun `ports outside OkHttp's range fail at configuration`() {
+        listOf("http://10.0.2.2:0/", "http://10.0.2.2:65536/").forEach { value ->
+            val error = assertThrows(IllegalArgumentException::class.java) { LocalBackend.parse(value) }
+            assertTrue(value, error.message!!.contains("1..65535"))
+        }
+    }
+
+    @Test
     fun `invalid values fail with the property name`() {
         listOf(
             "ftp://10.0.2.2/",

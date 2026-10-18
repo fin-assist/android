@@ -31,8 +31,8 @@ object LocalBackend {
 
     /**
      * Checks and normalizes `pf.apiBaseUrl`; blank → [DEFAULT_BASE_URL]. Accepts `http` and `https` with a host and an
-     * optional port and path; the path gets a trailing `/` (Retrofit requires it). Credentials, a query or a fragment
-     * are rejected: they would end up in `BuildConfig` or be dropped silently.
+     * optional port (1..65535, as OkHttp) and path; the path gets a trailing `/` (Retrofit requires it). Credentials,
+     * a query or a fragment are rejected: they would end up in `BuildConfig` or be dropped silently.
      */
     fun parse(raw: String?): BaseUrl {
         val value = raw?.trim().orEmpty().ifEmpty { DEFAULT_BASE_URL }
@@ -46,6 +46,8 @@ object LocalBackend {
         val host = uri.host?.lowercase() ?: invalid(value, "no host")
         if (uri.rawUserInfo != null) invalid(value, "credentials are not allowed")
         if (uri.rawQuery != null || uri.rawFragment != null) invalid(value, "a query or a fragment is not allowed")
+        // `URI` takes any number; OkHttp (`toHttpUrl()` at app start) only 1..65535.
+        if (uri.port != -1 && uri.port !in 1..65535) invalid(value, "the port must be 1..65535")
         val port = if (uri.port == -1) "" else ":${uri.port}"
         val path = uri.rawPath.orEmpty().let { if (it.endsWith("/")) it else "$it/" }
         return BaseUrl(url = "$scheme://$host$port$path", host = host.removeSurrounding("[", "]"), cleartext = scheme == "http")
