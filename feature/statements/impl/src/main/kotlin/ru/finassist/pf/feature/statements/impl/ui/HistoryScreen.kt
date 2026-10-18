@@ -98,6 +98,9 @@ class HistoryViewModel @Inject constructor(
         }
     }
 
+    /** Uploads whose progress stream has already brought an event on this screen. */
+    private val openedStreams = HashSet<String>()
+
     private val watching = HashMap<String, Job>()
 
     /**
@@ -109,8 +112,15 @@ class HistoryViewModel @Inject constructor(
         if (watching[uploadId]?.isActive == true) return
         watching[uploadId] = viewModelScope.launch {
             try {
-                reopeningStream(isTerminal = { it !is ImportEvent.Progress }) { api.streamProgress(uploadId) }
-                    .collect { event -> if (event is ImportEvent.Complete) repository.importCompleted(uploadId, event.result) }
+                // Opening it again after the screen came back is a re-open: a 429 is waited for (api.md «SSE»).
+                reopeningStream(
+                    isTerminal = { it !is ImportEvent.Progress },
+                    continuesEarlierOpening = uploadId in openedStreams,
+                ) { api.streamProgress(uploadId) }
+                    .collect { event ->
+                        openedStreams += uploadId
+                        if (event is ImportEvent.Complete) repository.importCompleted(uploadId, event.result)
+                    }
             } catch (e: AppError) {
                 return@launch
             }

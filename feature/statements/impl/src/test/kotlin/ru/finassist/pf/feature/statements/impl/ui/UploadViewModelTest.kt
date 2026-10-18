@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -426,6 +428,36 @@ class UploadViewModelTest {
         }
         assertEquals(3, api.streamOpens.get())
         assertTrue(seen.none { it is UploadPhase.Error || it is UploadPhase.Offline }, "no error between the openings: $seen")
+    }
+
+    @Test fun `coming back to the screen during a 429 pause waits again instead of failing, one stream at a time`() {
+        var active = 0
+        var maxActive = 0
+        fun tracked(f: Flow<ImportEvent>) = f.onStart { synchronized(this) { active++; maxActive = maxOf(maxActive, active) } }
+            .onCompletion { synchronized(this) { active-- } }
+        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        api.streams += tracked(flowOf(ImportEvent.Progress(ImportProgress(ImportStage.PARSING, 30))))
+        api.streams += limited()
+        // The screen came back: the view model opens the stream itself, the server still says 429.
+        api.streams += limited()
+        api.streams += tracked(flowOf(ImportEvent.Complete(importResult())))
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        await("the first stream") { api.streamOpens.get() == 1 }
+        dispatcher.scheduler.advanceTimeBy(1_000)
+        dispatcher.scheduler.runCurrent()
+        assertEquals(2, api.streamOpens.get(), "the drop was re-opened and got 429")
+        vm.stopWatching()
+        vm.watch()
+        assertEquals(3, api.streamOpens.get())
+        assertIs<UploadPhase.Busy>(vm.state.value.phase, "a 429 on opening it again is not an error")
+        dispatcher.scheduler.advanceTimeBy(59_000)
+        dispatcher.scheduler.runCurrent()
+        assertEquals(3, api.streamOpens.get(), "not before Retry-After")
+        advanceUntil("the result") { vm.state.value.doneUploadId == "u1" }
+        assertEquals(4, api.streamOpens.get())
+        assertTrue(Events.STATEMENTS_UPLOAD_FAILED !in tracker.names())
+        assertEquals(1, maxActive, "never two streams at once")
     }
 
     @Test fun `a malformed progress event fails the upload instead of re-opening for ever`() {

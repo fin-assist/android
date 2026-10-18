@@ -100,6 +100,9 @@ class ChatViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(ChatUiState())
     val state: StateFlow<ChatUiState> = _state
+    /** Answers whose stream has already brought an event on this screen. */
+    private val openedStreams = HashSet<String>()
+
     private val streams = HashMap<String, Job>()
     private val retryKeys = HashMap<String, IdempotencyKey>()
     /** Failed answers whose «Повторить» is in flight: a second tap must not send the same key again (FIN-75). */
@@ -304,8 +307,13 @@ class ChatViewModel @Inject constructor(
             var reload = false
             try {
                 try {
-                    reopeningStream(isTerminal = ::isTerminal) { api.streamAnswer(answerId) }
-                        .collect { event -> applyEvent(answerId, event) }
+                    // Opening it again after the screen came back is a re-open: a 429 is waited for (api.md «SSE»).
+                    reopeningStream(isTerminal = ::isTerminal, continuesEarlierOpening = answerId in openedStreams) {
+                        api.streamAnswer(answerId)
+                    }.collect { event ->
+                        openedStreams += answerId
+                        applyEvent(answerId, event)
+                    }
                     _state.update { it.copy(offline = false) }
                 } catch (e: AppError) {
                     // Not a drop (404 and the like): the stream will not recover by itself.

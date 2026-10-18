@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -790,6 +792,41 @@ class ChatViewModelBehaviourTest {
         assertEquals(listOf(text("Начало")), vm.answerItem("a1").blocks)
         assertFalse(vm.state.value.offline)
         assertFalse(vm.state.value.sendFailed)
+    }
+
+    @Test fun `coming back to the chat during a 429 pause waits again, without a reload or an error, one stream at a time`() {
+        var active = 0
+        var maxActive = 0
+        fun tracked(f: Flow<AnswerEvent>) = f.onStart { active++; maxActive = maxOf(maxActive, active) }.onCompletion { active-- }
+        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        api.askOutcomes += askResponse("a1")
+        api.script(
+            "a1",
+            // Closed after the snapshot: a drop.
+            tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.GENERATING, listOf(text("Нач")), emptyList())))),
+            limited(),
+            // The screen came back: the view model opens the stream itself, the server still says 429.
+            limited(),
+            tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList())))),
+        )
+        val vm = newVm()
+        sendQuestion(vm)
+        advance(1_000)
+        assertEquals(2, api.streamOpens.size, "the drop was re-opened and got 429")
+        val lists = api.listCalls.size
+        vm.pauseStreams()
+        vm.resumeStreams()
+        assertEquals(3, api.streamOpens.size)
+        assertEquals(lists, api.listCalls.size, "a 429 on opening it again is not a reason to reload")
+        assertEquals(AnswerStatus.GENERATING, vm.answerItem("a1").status)
+        assertFalse(vm.state.value.sendFailed)
+        assertFalse(vm.state.value.offline)
+        advance(59_000)
+        assertEquals(3, api.streamOpens.size, "not before Retry-After")
+        advance(2_000)
+        assertEquals(4, api.streamOpens.size)
+        assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
+        assertEquals(1, maxActive, "never two streams at once")
     }
 
     @Test fun `a stream error other than the network stops watching and the history gives the answer its status`() {

@@ -85,6 +85,9 @@ class UploadViewModel @Inject constructor(
 
     /** A picked file is still being sent: another pick meanwhile is ignored. Tests wait on it before picking again. */
     internal val uploadInFlight: Boolean get() = uploadJob?.isActive == true
+    /** Uploads whose progress stream has already brought an event on this screen. */
+    private val openedStreams = HashSet<String>()
+
     private var progressJob: Job? = null
 
     /**
@@ -202,8 +205,15 @@ class UploadViewModel @Inject constructor(
         if (progressJob?.isActive == true) return
         progressJob = viewModelScope.launch {
             try {
-                reopeningStream(isTerminal = { it !is ImportEvent.Progress }) { api.streamProgress(uploadId) }
-                    .collect { event -> handle(uploadId, busy.fileName, event) }
+                // Opening it again after the screen came back is a re-open: a 429 is waited for, not an error (api.md «SSE»).
+                reopeningStream(
+                    isTerminal = { it !is ImportEvent.Progress },
+                    continuesEarlierOpening = uploadId in openedStreams,
+                ) { api.streamProgress(uploadId) }
+                    .collect { event ->
+                        openedStreams += uploadId
+                        handle(uploadId, busy.fileName, event)
+                    }
             } catch (e: AppError) {
                 fail(e, busy.fileName)
             }
