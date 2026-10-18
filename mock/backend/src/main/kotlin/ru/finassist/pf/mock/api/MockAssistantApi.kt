@@ -73,7 +73,7 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
                 store.usage[moscowToday()] = (store.usage[moscowToday()] ?: 0) + 1
                 // Read with the charge, before generation starts: a refund (CANNOT_ANSWER, not charged) is
                 // reported by the answer's own terminal event, never by this response (FIN-76).
-                AssistantStore.Answer(UUID.randomUUID().toString(), question.id, backend.now(), mode).also { store.answers[it.id] = it } to remaining()
+                AssistantStore.Answer(UUID.randomUUID().toString(), question.id, backend.now(), mode, store.changes).also { store.answers[it.id] = it } to remaining()
             }
             generate(answer, request.text)
             AskResponse(question = question, answerId = answer.id, remainingLimit = remainingLimit)
@@ -93,12 +93,16 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
         val mode = answer.transferMode
         backend.scope.launch {
             delay(backend.config.networkDelayMs * 2)
+            var calculatedAt = backend.now()
             val outcome = backend.mutex.withLock {
                 val modelErrors = backend.config.assistantModelErrors
                 if (modelErrors > 0) {
                     backend.config = backend.config.copy(assistantModelErrors = modelErrors - 1)
                     null
                 } else {
+                    // The data the answer is calculated on: `calculated_at` and the version `changed_since` counts from.
+                    calculatedAt = backend.now()
+                    answer.calculatedOn = store.changes.version
                     engine.answer(text, mode, moscowToday())
                 }
             }
@@ -127,7 +131,9 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
                         }
                         index++
                     }
-                    answer.append(AnswerEvent.Source(AnswerSource(calculatedAt = backend.now(), dataRange = a.dataRange, transferMode = mode, changedSince = emptyList())))
+                    // What changed while the answer was streaming is reported already here; the history recounts it (7.3).
+                    val source = AnswerSource(calculatedAt = calculatedAt, dataRange = a.dataRange, transferMode = mode, changedSince = emptyList())
+                    answer.append(AnswerEvent.Source(backend.mutex.withLock { store.changes.restamp(source, answer.calculatedOn) }))
                     a.chips.forEach { answer.append(AnswerEvent.ChipAdded(it)) }
                     if (!a.charged) refund()
                     answer.append(AnswerEvent.Done(AnswerDoneEvent(charged = a.charged, remainingLimit = remaining())))
@@ -187,7 +193,7 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
                 old.replaced = true
                 store.usage[moscowToday()] = (store.usage[moscowToday()] ?: 0) + 1
                 // Same question, same transfer mode; the limit is read with the charge, as in [ask].
-                val fresh = AssistantStore.Answer(UUID.randomUUID().toString(), old.questionId, backend.now(), old.transferMode)
+                val fresh = AssistantStore.Answer(UUID.randomUUID().toString(), old.questionId, backend.now(), old.transferMode, store.changes)
                     .also { store.answers[it.id] = it }
                 Triple(fresh, remaining(), question)
             }

@@ -35,6 +35,7 @@
     ".maestro/flows/statements/upload_unknown_codes.yaml": 32,
     ".maestro/flows/assistant/chip_after_statements_deleted.yaml": 24,
     ".maestro/flows/assistant/retry_without_transfers.yaml": 25,
-    ".maestro/flows/assistant/answer_retry.yaml": 26
+    ".maestro/flows/assistant/answer_retry.yaml": 26,
+    ".maestro/flows/assistant/answer_changed_since.yaml": 40
   }
 }

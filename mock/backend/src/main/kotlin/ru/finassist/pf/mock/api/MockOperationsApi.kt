@@ -125,6 +125,7 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
             } catch (e: IllegalArgumentException) {
                 throw AppError.Api(ErrorCodes.CATEGORY_NOT_ASSIGNABLE, 422, message = e.message)
             }
+            backend.dataChanges.categoriesChanged()
             ChangeCategoryResponse(
                 items = items.map { item ->
                     when (item) {
