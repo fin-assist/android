@@ -10,29 +10,34 @@ import ru.finassist.pf.core.api.model.ChangedSince
  * millisecond as the calculation (a pinned or coarse clock) is still seen as later. Mutated under the backend mutex.
  */
 class DataChanges {
+    /** One immutable value: a reader outside the backend mutex never sees one field updated and the other not. */
+    private data class State(val version: Long = 0, val categoriesAt: Long = 0, val uploadsAt: Long = 0)
+
+    @Volatile private var state = State()
+
     /** Version of the data: the number of changes recorded so far. */
-    @Volatile
-    var version: Long = 0
-        private set
+    val version: Long get() = state.version
 
-    @Volatile private var categoriesAt: Long = 0
-    @Volatile private var uploadsAt: Long = 0
-
-    /** An operation's category was changed by the user. */
+    /** An operation's category was changed by the user. Writers hold the backend mutex. */
     fun categoriesChanged() {
-        categoriesAt = ++version
+        val s = state
+        state = s.copy(version = s.version + 1, categoriesAt = s.version + 1)
     }
 
     /** A statement finished importing or was deleted. A failed or cancelled upload leaves the data as it was. */
     fun uploadsChanged() {
-        uploadsAt = ++version
+        val s = state
+        state = s.copy(version = s.version + 1, uploadsAt = s.version + 1)
     }
 
     /** Codes of what changed after [calculatedOn], in the order of api.md; empty — nothing did. */
-    fun since(calculatedOn: Long): List<ChangedSince> = listOfNotNull(
-        ChangedSince.CATEGORIES.takeIf { categoriesAt > calculatedOn },
-        ChangedSince.UPLOADS.takeIf { uploadsAt > calculatedOn },
-    )
+    fun since(calculatedOn: Long): List<ChangedSince> {
+        val s = state
+        return listOfNotNull(
+            ChangedSince.CATEGORIES.takeIf { s.categoriesAt > calculatedOn },
+            ChangedSince.UPLOADS.takeIf { s.uploadsAt > calculatedOn },
+        )
+    }
 
     /** [source] with `changed_since` and its ready text counted now for data of [calculatedOn]. */
     fun restamp(source: AnswerSource, calculatedOn: Long): AnswerSource {

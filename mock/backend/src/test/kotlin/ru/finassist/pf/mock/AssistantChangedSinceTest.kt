@@ -1,11 +1,13 @@
 package ru.finassist.pf.mock
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Test
 import ru.finassist.pf.core.api.model.AnswerEvent
 import ru.finassist.pf.core.api.model.AnswerSource
+import ru.finassist.pf.core.api.model.AnswerStatus
 import ru.finassist.pf.core.api.model.AskRequest
 import ru.finassist.pf.core.api.model.ChangeCategoryRequest
 import ru.finassist.pf.core.api.model.ChangedSince
@@ -15,11 +17,13 @@ import ru.finassist.pf.mock.api.MockAssistantApi
 import ru.finassist.pf.mock.api.MockOperationsApi
 import ru.finassist.pf.mock.api.MockStatementsApi
 import ru.finassist.pf.mock.domain.DataChanges
+import ru.finassist.pf.core.api.model.SystemCategories
 import java.time.OffsetDateTime
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * FIN-135: `source.changed_since` / `changed_since_text` of an answer (api.md 7.2) — category changes and uploaded or
@@ -31,6 +35,8 @@ class AssistantChangedSinceTest {
     private val doc = statement(
         "2026-04-01", "2026-09-30",
         *(4..9).map { m -> trn("k$m", "2026-%02d-15T12:00".format(m), 100L * m, "Krabsbir", "Рестораны") }.toTypedArray(),
+        trn("self", "2026-09-10T10:00", 5_000, "Между своими счетами", "Переводы"),
+        trn("self-in", "2026-09-10T11:00", 5_000, "Пополнение", "Переводы", debit = false, account = Acc.SAVINGS),
     )
 
     private val backend = testBackend(clock, assistantConsent = true)
@@ -44,11 +50,13 @@ class AssistantChangedSinceTest {
     /** Asks and waits for the answer to finish; returns its id and the `source` event of the live stream. */
     private suspend fun askAndFinish(key: String = "q1", text: String = "Сколько я трачу на Krabsbir?"): Pair<String, AnswerSource> {
         val answerId = assistant.ask(IdempotencyKey(key), AskRequest(text)).answerId
-        val events = withTimeout(10_000) { assistant.streamAnswer(answerId).toList() }
-        val live = events.filterIsInstance<AnswerEvent.Source>().singleOrNull()?.event
-            ?: (events.first() as AnswerEvent.Snapshot).event.source
-        return answerId to assertNotNull(live)
+        withTimeout(10_000) { assistant.streamAnswer(answerId).toList() }
+        return answerId to liveSource(backend, answerId)
     }
+
+    /** The `source` event as generation emitted it, from the answer's log: a stream may fold it into a snapshot. */
+    private fun liveSource(backend: MockBackend, answerId: String): AnswerSource =
+        backend.assistant.answers.getValue(answerId).log.filterIsInstance<AnswerEvent.Source>().single().event
 
     private suspend fun historySource(answerId: String): AnswerSource =
         assertNotNull(assistant.listMessages().messages.single { it.id == answerId }.source)
@@ -109,6 +117,48 @@ class AssistantChangedSinceTest {
         assertFailsWith<AppError.Api> { operations.changeCategory(opId("k5"), ChangeCategoryRequest("cat_no_such")) }
         assertFailsWith<AppError.Api> { operations.changeCategory("no-such-operation", ChangeCategoryRequest("cat_clothes")) }
         assertEquals(emptyList(), historySource(id).changedSince)
+    }
+
+    @Test
+    fun `the same category again is not a change`() = runBlocking<Unit> {
+        changeCategory()
+        val (id, _) = askAndFinish()
+        changeCategory()
+        // «Между своими счетами» for an operation already in a pair: the ledger keeps the pair as it is.
+        val pair = assertNotNull(backend.ledger.pairOf(backend.ledger.byId(opId("self"))!!)).id
+        operations.changeCategory(pair, ChangeCategoryRequest(SystemCategories.OWN_TRANSFER))
+        assertEquals(emptyList(), historySource(id).changedSince)
+    }
+
+    @Test
+    fun `a category changed while the answer is streaming is reported by its live source event`() = runBlocking<Unit> {
+        val jobs = ManualDispatcher()
+        val clock = TestClock(NOW)
+        val backend = testBackend(clock, config = FAST.copy(assistantChunkDelayMs = 1), assistantConsent = true, dispatcher = jobs)
+        backend.load(doc)
+        val assistant = MockAssistantApi(backend)
+        val answerId = assistant.ask(IdempotencyKey("q1"), AskRequest("Сколько я трачу на Krabsbir?")).answerId
+        // Generation calculates the answer and stops at the first chunk delay: the data is changed after the calculation.
+        jobs.runAll()
+        val answer = backend.assistant.answers.getValue(answerId)
+        assertEquals(AnswerStatus.GENERATING, answer.status)
+        assertTrue(answer.log.none { it is AnswerEvent.Source })
+        clock.at = clock.at.plusHours(1)
+        MockOperationsApi(backend).changeCategory(backend.ledger.all.single { it.fitId == "k5" }.id, ChangeCategoryRequest("cat_clothes"))
+
+        withTimeout(10_000) {
+            while (answer.status == AnswerStatus.GENERATING) {
+                jobs.runAll()
+                delay(1)
+            }
+        }
+        assertEquals(AnswerStatus.COMPLETE, answer.status)
+        val live = liveSource(backend, answerId)
+        assertEquals(listOf(ChangedSince.CATEGORIES), live.changedSince)
+        assertEquals("с тех пор категории менялись", live.changedSinceText)
+        // calculated_at is the time of the calculation, not of the event.
+        assertEquals(OffsetDateTime.parse(NOW), live.calculatedAt)
+        assertEquals(live, assistant.listMessages().messages.single { it.id == answerId }.source)
     }
 
     @Test
