@@ -79,9 +79,13 @@ in another rule of the check:
   `toBigDecimal*`, `java.io` stream extensions, `Charsets`, `.java` / `javaClass`, `@Volatile` of `kotlin.jvm`,
   `sortedMapOf` / `toSortedMap` (return `java.util.SortedMap`), `sortedSetOf` / `toSortedSet` (`java.util.TreeSet`),
   `String(bytes, charset)` / `toByteArray(charset)` (common: `decodeToString()` / `encodeToByteArray()`),
-  `Json.decodeFromStream` / `encodeToStream` of kotlinx.serialization;
+  `Json.decodeFromStream` / `encodeToStream` of kotlinx.serialization, `RegexOption` beyond `IGNORE_CASE` /
+  `MULTILINE` (`DOT_MATCHES_ALL`, `LITERAL`, `COMMENTS`, …; common: inline flags such as `(?s)`),
+  `Regex.toPattern()` (`java.util.regex.Pattern`), JDK default methods on Kotlin collections (`computeIfAbsent`,
+  `putIfAbsent`, `merge`, `removeIf`, `replaceAll`, `stream()`; common: `getOrPut`, `removeAll { }`, …);
 - a fully qualified call of a top-level function without a class (`kotlin.io.path.createTempFile()`,
-  `kotlin.concurrent.thread {}`), a member reached through a star import (`import kotlin.concurrent.*`), a name the
+  `kotlin.concurrent.thread {}`), a member reached through a star import of a common package with JVM-only members or Java bridges
+  (`import kotlin.concurrent.*`, `kotlin.time.*`, `kotlinx.datetime.*`), a name the
   file declares in a way the check does not see (`val Math = …`, `fun Thread(…)`), and a `java.lang` class outside
   the list above (`StringBuilder`, `Exception` and others have a common typealias).
 
@@ -118,7 +122,7 @@ Already multiplatform: kotlinx.serialization (`OpenEnumSerializer`, `ApiJson`), 
 | `api/MockStatementsApi.kt` | `ConcurrentHashMap` (+ `newKeySet`), `OffsetDateTime`, `UUID`, `InputStream.readBytes`, `Charsets.UTF_8` | `Mutex`-guarded maps (or atomicfu), kotlinx-datetime, `Uuid`, `ByteArray.decodeToString()` |
 | `api/MockAssistantApi.kt` | `java.time.LocalDate`, `UUID`, `synchronized(answer)` | kotlinx-datetime, `Uuid`, `Mutex` / atomicfu `synchronized` |
 | `api/MockOperationsApi.kt` | `java.time.YearMonth`, `ChronoUnit` | `kotlinx.datetime.YearMonth` (0.7+), `LocalDate.daysUntil` / `monthsUntil` |
-| `ofx/OfxParser.kt` | `java.math.BigDecimal`, `RoundingMode`, `LocalDateTime`, `ZoneOffset`, `DateTimeFormatter` | amounts parsed as text into `Long` minor units; `LocalDateTime.Format {}`, `UtcOffset` of kotlinx-datetime (a parse error is `DateTimeFormatException`) |
+| `ofx/OfxParser.kt` | `java.math.BigDecimal`, `RoundingMode`, `LocalDateTime`, `ZoneOffset`, `DateTimeFormatter`; `RegexOption.DOT_MATCHES_ALL` (JVM / Native stdlib, not common) | amounts parsed as text into `Long` minor units; `LocalDateTime.Format {}`, `UtcOffset` of kotlinx-datetime (a parse error is `DateTimeFormatException`); the inline flag `(?s)` in the pattern |
 | `domain/Search.kt` | `String.toBigDecimalOrNull` (JVM stdlib) | parse the digits into minor units by hand |
 | `domain/AnalyticsServerTexts.kt` | `java.time.YearMonth`, `"%.1f".format(...)` (JVM stdlib) | `kotlinx.datetime.YearMonth`, own decimal formatting |
 | `domain/AnalyticsComposer.kt`, `AnalyticsModel.kt` | `java.time.YearMonth` | `kotlinx.datetime.YearMonth` |
@@ -138,7 +142,7 @@ The choice of `Instant` is tied to the kotlinx-datetime version (the repository 
 the versions again at the move):
 
 - kotlinx-datetime 0.6.x — its own `kotlinx.datetime.Instant` / `Clock`, no opt-in, but no `YearMonth`;
-- kotlinx-datetime 0.7+ — `YearMonth` (needed by the `:mock:backend` rows below), while `Instant` / `Clock` are the
+- kotlinx-datetime 0.7+ — `YearMonth` (needed by the `:mock:backend` rows above), while `Instant` / `Clock` are the
   stdlib's `kotlin.time.Instant` / `Clock` (the old names stay as deprecated typealiases), so the whole contract
   carries `@OptIn(ExperimentalTime::class)` until a Kotlin version where they are stable.
 

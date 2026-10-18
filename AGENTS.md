@@ -388,7 +388,8 @@ Also check:
 - Check that changes in `core/api` and `mock/backend` add no JVM-only APIs or dependencies (see Code,
   `docs/kmp-readiness.md`): a new entry in `scripts/kmp-baseline.json` and a change of its `build` lines need a reason
   in the PR, a new library needs an iOS target, and what the check does not see is a finding — JVM-only stdlib members
-  (`synchronized`, `String.format`, `toBigDecimal*`, `java.io` stream extensions, `.java` / `javaClass`),
+  (`synchronized`, `String.format`, `toBigDecimal*`, `java.io` stream extensions, `.java` / `javaClass`,
+  `RegexOption.DOT_MATCHES_ALL`, JDK default methods on collections such as `computeIfAbsent`),
   dependencies added through the convention plugins of `build-logic` and code shaped to slip past the check (it is a
   heuristic against accidental JVM-only APIs, not a guard against a deliberate bypass; «Known limits»).
 - Check that new DTOs and mappers follow the extensibility rules (see Code): no closed `enum` for a set that grows,
