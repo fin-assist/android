@@ -103,7 +103,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 <!-- generated:modules:start (scripts/agent-docs.py) -->
 | Module | Convention plugins | Tests |
 |---|---|---|
-| `:app` | `pf.android.application`, `pf.hilt` | instrumented |
+| `:app` | `pf.android.application`, `pf.hilt` | unit, instrumented |
 | `:core:api` | `pf.jvm.library` | unit |
 | `:core:blocks` | `pf.android.library.compose` | unit |
 | `:core:common` | `pf.jvm.library` | unit |
@@ -116,7 +116,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:core:tracking` | `pf.jvm.library` | unit |
 | `:providers:crash-tracer` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:toggles-local` | `pf.android.library`, `pf.hilt` | unit |
-| `:providers:toggles-rustore` | `pf.android.library`, `pf.hilt` | - |
+| `:providers:toggles-rustore` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:tracking-log` | `pf.android.library`, `pf.hilt` | - |
 | `:providers:tracking-mytracker` | `pf.android.library`, `pf.hilt` | - |
 | `:mock:backend` | `pf.android.library`, `pf.hilt` | unit |
