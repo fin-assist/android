@@ -38,6 +38,7 @@
     ".maestro/flows/assistant/retry_without_transfers.yaml": 25,
     ".maestro/flows/assistant/answer_retry.yaml": 26,
     ".maestro/flows/assistant/off_topic.yaml": 39,
-    ".maestro/flows/assistant/answer_changed_since.yaml": 40
+    ".maestro/flows/assistant/answer_changed_since.yaml": 40,
+    ".maestro/flows/assistant/nothing_found_charged.yaml": 42
   }
 }
