@@ -54,13 +54,13 @@ tags:
       id: "availability.maintenance"
     timeout: 15000
 - assertVisible: "Идут технические работы"
-# The maintenance is over and the limit lifted: «Проверить сейчас» opens the app again.
+# The maintenance is over and the limit lifted: the server answers again. Back from the link, the upload screen (still
+# busy, FIN-177) opens its progress stream, the opening goes through and lifts the maintenance screen by itself — no
+# «Проверить сейчас» needed (availability/maintenance checks that button).
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?maintenance=off&stream_rate_limits=0"
-- tapOn:
-    id: "availability.maintenance.check"
 - extendedWaitUntil:
     notVisible:
       id: "availability.maintenance"
