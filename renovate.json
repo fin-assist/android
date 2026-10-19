@@ -2,5 +2,12 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "description": "FIN-184: fragment 1.9 pulls Compose UI 1.9 and lifecycle 2.10 past the Compose BOM; it moves together with the BOM, by hand",
+      "matchPackageNames": ["androidx.fragment:**"],
+      "allowedVersions": "<1.9.0"
+    }
   ]
 }
