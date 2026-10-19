@@ -11,6 +11,7 @@
         "androidx.activity:**",
         "androidx.core:**",
         "androidx.fragment:**",
+        "androidx.hilt:hilt-navigation-compose",
         "androidx.lifecycle:**",
         "androidx.navigation:**"
       ],
