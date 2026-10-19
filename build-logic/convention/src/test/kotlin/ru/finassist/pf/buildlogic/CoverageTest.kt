@@ -14,11 +14,13 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.util.Properties
 
 /**
  * The graph of [UNIT_TEST_TASK] in real modules: AGP, the Kotlin JVM plugin and Kover applied to ProjectBuilder
- * projects, then [configureCoverage] — as the convention plugins do. The Android cases need the SDK (`ANDROID_HOME`
- * or `ANDROID_SDK_ROOT`, set on the CI runner and by scripts/agent-setup.sh).
+ * projects, then [configureCoverage] — as the convention plugins do. The Android cases need the SDK: `ANDROID_HOME`
+ * or `ANDROID_SDK_ROOT` (the CI runner), else `sdk.dir` of the repo's `local.properties` (Android Studio,
+ * scripts/agent-setup.sh).
  */
 class CoverageTest {
 
@@ -152,7 +154,15 @@ class CoverageTest {
         return ProjectBuilder.builder().withName(name).withProjectDir(dir).build()
     }
 
-    private fun sdkDir(): String? = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+    /**
+     * The SDK as the build finds it: `ANDROID_HOME` / `ANDROID_SDK_ROOT`, else `sdk.dir` of the nearest
+     * `local.properties` above the working directory (Android Studio writes only that one).
+     */
+    private fun sdkDir(): String? =
+        System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT") ?: generateSequence(File("").absoluteFile) { it.parentFile }
+            .map { File(it, "local.properties") }
+            .firstOrNull { it.isFile }
+            ?.let { file -> Properties().apply { file.inputStream().use(::load) }.getProperty("sdk.dir") }
 
     private fun Project.evaluate() = (this as ProjectInternal).evaluate()
 
