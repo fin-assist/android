@@ -4,7 +4,7 @@ tags:
   - offline
 ---
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 # Every request of the fake backend fails from now on (until the process restarts or offline=false).
 - runFlow:
     file: ../../subflows/config.yaml

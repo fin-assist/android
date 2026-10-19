@@ -9,7 +9,7 @@ tags:
 # screen open the stream itself; the fake server counts the 429s it gave (`expect_stream_rate_limited`), which proves
 # those openings got 429 and were waited for, not shown as an upload error. Lifting the limit brings the result.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 - tapOn:
     id: "ds.tab.profile"
 - extendedWaitUntil:

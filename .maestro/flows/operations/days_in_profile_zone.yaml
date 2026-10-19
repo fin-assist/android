@@ -6,7 +6,7 @@ tags:
 # FIN-92. The emulator is in Moscow. The last fixture operation is 30 September 17:53 MSK — already 1 October in
 # Vladivostok. Once the profile zone is Vladivostok, the feed shows it under «1 октября».
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 # The day and the month are joined by a no-break space: any single character between them (FIN-101).
 - assertVisible: "30.сентября"
 - assertNotVisible: "1.октября"

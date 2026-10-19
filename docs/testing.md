@@ -5,7 +5,7 @@ checks what:
 
 | Layer | Checks | Where | Runs |
 |---|---|---|---|
-| Unit (JUnit 4, coroutines-test, Turbine) | logic: domain rules, mappers, repositories, view models, the fake backend, `core/*` helpers | `src/test/` of the module | CI on every push and PR |
+| Unit (JUnit 4, coroutines-test, Turbine) | logic: domain rules, mappers, repositories, view models, the fake backend, `core/*` helpers | `src/test/` of the module | CI: the coverage variant (`unitTest`) on a PR, every variant (`test`) on pushes to `main` and release branches |
 | Design check (Robolectric + Roborazzi) | how a screen, state, sheet or dialog looks next to its mockup | `*DesignCheckTest` in feature `:impl` | by hand, `-Ppf.designcheck` (design-check/README.md) |
 | Maestro | user scenarios end to end on the mock build | `.maestro/flows/<feature>/` | emulator; CI only after merges to `main` (docs/e2e.md) |
 | Native instrumented | what Maestro cannot drive: system dialogs, intents, permissions | `app/src/androidTestMock/` | same as Maestro |
@@ -100,7 +100,11 @@ python3 scripts/coverage-diff.py --base origin/<base>
 ```
 
 - Variant `unit`: the JVM tests of pure Kotlin modules, `debug` unit tests of Android libraries, `mockDebug` of
-  `:app`. Release, `local`, `prod` and `e2e` variants are not run for coverage.
+  `:app`. Release, `local`, `prod` and `e2e` variants are not run for coverage. `./gradlew unitTest` runs exactly
+  these tests: every module gets the task from the convention plugins (`Coverage.kt`, one list `COVERAGE_TARGETS`
+  of plugin, Kover variant and test task feeds both), so a new module needs no list. `pf.module.rules` fails the
+  configuration when a module with a build file has no `unitTest` or its plugin is not in `COVERAGE_TARGETS` (Kotlin
+  Multiplatform, FIN-144): such a module would otherwise drop out of the PR run silently.
 - Excluded from the report (root `build.gradle.kts`): generated code (Hilt/Dagger, kotlinx.serialization
   serializers, `R`, `BuildConfig`, `ComposableSingletons`, `HiltWrapper_*`, Dagger-generated factories — `@DaggerGenerated`,
   `*Module_*Factory`), `@Composable` and `@Preview` functions, and `:core:screenshot-testing`. Composables are
@@ -129,7 +133,10 @@ python3 scripts/coverage-diff.py --base origin/<base>
 
 ### In CI
 
-The `build` job (`.github/workflows/ci.yml`) builds the reports after the unit tests:
+The `unit-tests` job (`.github/workflows/ci.yml`; lint and the build of the variants run in parallel jobs, FIN-176)
+runs the unit tests and builds the reports after them. On a PR it runs `unitTest` — the tests of the variant the
+coverage is measured on; on pushes to `main`, `release/**` and `stage-*/**` it runs `test`, the unit tests of every
+variant (release, `local`, `prod`, `e2e`), so a test that fails only in another variant is caught there:
 
 - PR: a comment «Unit test coverage» in the PR conversation — project totals, coverage of changed lines against
   the PR's base branch, uncovered lines per file (files with gaps first, up to 50, long line lists cut to fit a
@@ -139,6 +146,21 @@ The `build` job (`.github/workflows/ci.yml`) builds the reports after the unit t
 - The HTML report is the `coverage-report` artifact of the run.
 
 Nothing fails on a low value or on a failed post: the 80 % target is checked in review.
+
+The time of the job is the time of compilation, not of the tests (FIN-181): the Kotlin, KSP and Hilt tasks of the
+modules run along the module graph, and each module's tests start as soon as it is compiled, next to the compilation
+of the others. So the job relies on the build cache: the Gradle jobs save `~/.gradle` (setup-gradle) on pushes to
+`main` and `release/**`, and a PR restores its base branch's entry first. A module comes from the cache, its tests
+included (with their Kover data), when neither it nor anything on its classpath changed: an edit in `core/common`
+reruns the tests of every module depending on it. A version bump in `gradle/libs.versions.toml` follows the same rule:
+it reaches the modules with the artifact on their classpath — a test library reruns the tests with the main code still
+cached, an `androidTest` one touches nothing — so most Renovate PRs keep the cache. Everything recompiles only when the
+build itself changes: `build-logic`, the Gradle wrapper, or a plugin or compiler version (`kotlin`, `ksp`, `agp`,
+`hilt`, `kover`, `tracer`). More test
+JVMs per task (`maxParallelForks`) were measured and left out: a Robolectric module holds one or two long test
+classes, so a second JVM only adds Robolectric's start-up, and the runner's four cores are already busy with the
+modules Gradle runs in parallel. A few lines of the race tests (`*RaceTest`) are covered in some runs and not in
+others, so the project total can move by a line or two between identical runs.
 
 ## UI test coverage
 
@@ -176,6 +198,12 @@ How it is measured:
 - Native tests: AGP pulls their data itself through the test storage service
   (`useTestStorageService`; `clearPackageData` would wipe the app's own directory first) into
   `app/build/outputs/code_coverage/`.
+- In CI the flows run in shards, one emulator each (docs/e2e.md, «Shards in CI»): every shard keeps its data in its
+  `build/e2e/` (the native tests' in `native-coverage/`, shard 1), and the `Reports` job puts all of it back where
+  the report reads it (`scripts/e2e-shards.py gather`: `build/e2e/coverage/ec/shard<i>-<process>.ec` and
+  `app/build/outputs/code_coverage/`) before `:e2eCoverageReport` — one report for every shard. The shards and the
+  report job build the same commit, mostly from the Gradle build cache; outputs it does not have are compiled
+  again, and the compilers and the Hilt transform give the same classes, so the class ids match the probes. A shard that failed still adds the data it saved; one that left nothing is named in the summary.
 - `:e2eCoverageReport` (root `build.gradle.kts`) reads both against the compiled classes of the modules in the
   mock APK (`e2eCoverageModules`: the ASM-transformed classes where Hilt transforms them, otherwise the compiler
   output, so that the class ids match the probes) and writes `build/reports/e2e-coverage/{report.xml,html}`. Excluded: the same

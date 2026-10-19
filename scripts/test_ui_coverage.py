@@ -38,6 +38,16 @@ class TagParsingTest(unittest.TestCase):
         self.assertEqual("ds.tab", ui.screen_of("ds.tab"))
         self.assertEqual("auth", ui.screen_of("auth"))
 
+    def test_alternatives_of_an_id_count_as_each_tag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".maestro" / "subflows").mkdir(parents=True)
+            (root / ".maestro" / "subflows" / "a.yaml").write_text(
+                '- extendedWaitUntil:\n    visible:\n      id: "operations.feed|applock.unlock"\n- tapOn:\n    id: "ds.back"\n',
+                encoding="utf-8",
+            )
+            self.assertEqual({"operations.feed", "applock.unlock", "ds.back"}, ui.flow_ids(root))
+
 
 class ScenarioCoverageTest(unittest.TestCase):
     def test_reached_tags_and_screens_per_feature(self):

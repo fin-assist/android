@@ -54,7 +54,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Events / crashes | `core/tracking/…/Tracker.kt`, `CrashReporter.kt` (typed context, no free-form strings); providers in `providers/*` (only `:app` depends on them; Tracer keys — README) |
 | Tokens, preferences, idempotency keys | `core/storage` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md` (mockups: Figma, exported by `design-check/export.py`), `*DesignCheckTest.kt` in feature `:impl` modules |
-| UI tests: Maestro flows, e2e build hooks, native gaps, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/qase-*` |
+| UI tests: Maestro flows, e2e build hooks (sign-in without the screens — `E2eSignIn`), native gaps, shards in CI, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/e2e-shards.py`, `scripts/qase-*` |
 | Multiplatform readiness of `:core:api` and `:mock:backend`: rule, JVM-only inventory, check | `docs/kmp-readiness.md`; `scripts/check-kmp-ready.py`, `scripts/kmp-baseline.json` |
 | Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
 | UI test coverage: JaCoCo on the e2e build, scenario coverage of the flows | `docs/testing.md` («UI test coverage»); `:e2eCoverageReport` in root `build.gradle.kts`, `app/src/mockE2e/…/E2eCoverage.kt`, `scripts/ui-coverage.py` |
@@ -167,11 +167,19 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 - Fresh Linux container: run `scripts/agent-setup.sh` once (Android SDK matching `gradle/libs.versions.toml`,
   `local.properties`, a Maven Central mirror in `~/.gradle/init.d`). Needs JDK 21 and network access to
   Google Maven, Gradle and Maven Central.
-- Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug testMockDebugUnitTest` — the main checks of CI;
-  CI also builds `assembleLocalDebug assembleProdRelease` (release unsigned), runs `:build-logic:convention:test`
-  and `:app:checkNoMockCode`, and checks the manifests (`scripts/check-build-separation.py`).
-- UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally, the `UI tests`
-  workflow in CI (after a merge to `main`, or started by hand for a branch; PRs never run them by themselves).
+- Then `ANDROID_HOME=/opt/android-sdk ./gradlew assembleMockDebug unitTest` — the main checks of CI. `unitTest`
+  (every module, `build-logic/…/buildlogic/Coverage.kt`) runs the unit tests of the coverage variant only: `test`
+  of JVM modules, `testDebugUnitTest` of Android libraries, `testMockDebugUnitTest` of `:app`.
+- CI (`.github/workflows/ci.yml`, FIN-176) runs the Gradle checks as parallel jobs: unit tests with coverage
+  (`unitTest :build-logic:convention:test` on a PR; `test`, the unit tests of every variant, on pushes to `main`,
+  `release/**` and `stage-*/**`), `lintMockDebug`, and the build of `assembleMockDebug assembleLocalDebug
+  assembleProdRelease` (release unsigned) with `:app:checkNoMockCode`, the Tracer check and the manifest checks
+  (`scripts/check-build-separation.py`, pinning included). A test that fails only in a release, `local`, `prod` or
+  `e2e` variant is caught after the merge, not on the PR; run `./gradlew test` locally when a change is variant-specific.
+- UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally (all flows and the native
+  tests; `--shard i/n` runs one CI shard), the `UI tests` workflow in CI (after a merge to `main`, or started by hand
+  for a branch; PRs never run them by themselves). CI splits the flows between four emulators
+  (`scripts/e2e-shards.py`, durations in `scripts/e2e-durations.json`) and merges their reports (docs/e2e.md).
   Their coverage: `./gradlew :e2eCoverageReport` after a run, then
   `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml`; the scenario part
   (`python3 scripts/ui-coverage.py summary`) needs no device (docs/testing.md).

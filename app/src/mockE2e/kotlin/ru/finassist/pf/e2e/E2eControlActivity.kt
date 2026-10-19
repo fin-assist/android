@@ -10,12 +10,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.designsystem.components.pfTestRoot
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.toggles.FlagOverrides
+import ru.finassist.pf.feature.applock.api.AppLock
+import ru.finassist.pf.feature.auth.api.SessionRepository
+import ru.finassist.pf.feature.auth.impl.data.SessionRepositoryImpl
 import ru.finassist.pf.mock.MockBackend
 import javax.inject.Inject
 
@@ -51,22 +59,56 @@ import javax.inject.Inject
  * - `maintenance=<minutes>|unknown|off` — every request and every stream opening gets 503 `MAINTENANCE` (a stream already
  *   open is cut at its next event), ending in that many minutes from the fake «now» or at an unknown time; `off` ends it (FIN-22).
  * - `maintenance_retry_after=<s>` — `Retry-After` of the maintenance answer (15 s by default, the shortest the app waits).
+ * - `sign_in=existing` — signs the existing mock account in and sets passcode 1234 the way the sign-in and passcode
+ *   screens would ([E2eSignIn], FIN-180); the app then opens on the feed, unlocked. Applied after the other values
+ *   (flags set in the same link are in place first). For flows that do not check the sign-in itself:
+ *   `.maestro/subflows/fast_login.yaml`. Fails ([TAG_UNMET]) when already signed in or when the sign-in does not finish.
  *
  * Backend values live until the process dies: set them after `launchApp`.
  *
- * The values are written before the activity shows anything; then it shows [TAG_APPLIED] for a moment and
- * finishes. Flows open the link through `.maestro/subflows/config.yaml`, which waits for the tag to come and go:
- * a `launchApp` right after a bare `openLink` could destroy this activity mid-write and drop the remaining values.
+ * The values are written before the activity shows anything (with `sign_in`, the sign-in finishes first, too); then
+ * it shows [TAG_APPLIED] for a moment and finishes. Flows open the link through `.maestro/subflows/config.yaml`,
+ * which waits for the tag to come and go: a `launchApp` right after a bare `openLink` could destroy this activity
+ * mid-write and drop the remaining values.
  */
 @AndroidEntryPoint
 class E2eControlActivity : ComponentActivity() {
     @Inject lateinit var overrides: FlagOverrides
     @Inject lateinit var backend: MockBackend
+    @Inject lateinit var authApi: AuthApi
+    @Inject lateinit var session: SessionRepository
+    @Inject lateinit var sessionImpl: SessionRepositoryImpl
+    @Inject lateinit var appLock: AppLock
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val uri = intent?.data
         // Synchronous on purpose (test build only, a few DataStore writes): nothing can cancel it half-way.
-        val unmet = runBlocking { apply(intent?.data) }
+        val unmet = runBlocking { apply(uri) }
+        val account = uri?.getQueryParameter(SIGN_IN)
+        if (unmet != null || account == null) {
+            show(unmet)
+            return
+        }
+        // Not on the blocked main thread: the «call» alone takes 1.5 s. NonCancellable, so the session and the passcode
+        // are both in place even if the activity goes away; the applied tag shows only after that.
+        lifecycleScope.launch {
+            show(withContext(NonCancellable) { signIn(account) })
+        }
+    }
+
+    private suspend fun signIn(account: String): String? {
+        if (account != SIGN_IN_EXISTING) return "sign_in=$account: only $SIGN_IN_EXISTING is supported"
+        val signIn = E2eSignIn(
+            authApi = authApi,
+            session = session,
+            startSession = { tokens -> sessionImpl.start(userId = null, tokens = tokens, registered = false) },
+            appLock = appLock,
+        )
+        return signIn.signIn(phone = backend.config.existingPhone, passcode = E2E_PASSCODE)
+    }
+
+    private fun show(unmet: String?) {
         setContent {
             if (unmet == null) {
                 Box(Modifier.fillMaxSize().pfTestRoot().testTag(TAG_APPLIED)) { Text("pfe2e: applied") }
@@ -104,6 +146,7 @@ class E2eControlActivity : ComponentActivity() {
                 name == "failing_blocks" -> backend.config = backend.config.copy(failingBlocks = value.split(',').map(String::trim).filter(String::isNotEmpty).toSet())
                 name == "profile_timezone" -> backend.mutex.withLock { backend.profile = backend.profile.copy(timezone = value) }
                 name == "min_version" -> backend.config = backend.config.copy(minVersion = value.ifBlank { null })
+                name == SIGN_IN -> Unit // after the other values, in onCreate
                 name == "maintenance_retry_after" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(maintenanceRetryAfterSeconds = it) }
                 name == "maintenance" -> backend.config = when (value) {
                     "off" -> backend.config.copy(maintenance = false, maintenanceUntil = null)
@@ -119,6 +162,10 @@ class E2eControlActivity : ComponentActivity() {
     private companion object {
         const val TAG = "PfE2e"
         const val FLAG_PREFIX = "flag."
+        const val SIGN_IN = "sign_in"
+        const val SIGN_IN_EXISTING = "existing"
+        /** The passcode the flows type (`.maestro/subflows/set_passcode.yaml`). */
+        const val E2E_PASSCODE = "1234"
         /** Test tag shown once the values are applied; `.maestro/subflows/config.yaml` waits on it. */
         const val TAG_APPLIED = "e2e.config.applied"
         /** Shown instead of [TAG_APPLIED] when an `expect_*` check fails. */

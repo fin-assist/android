@@ -30,6 +30,11 @@ object Events {
     val STATEMENTS_UPLOAD_STARTED = Event("statements.upload.started")
     val STATEMENTS_UPLOAD_COMPLETED = Event("statements.upload.completed")
     val STATEMENTS_UPLOAD_FAILED = Event("statements.upload.failed")
+    /**
+     * The upload was cut off by the app, not by the server (FIN-177): param `reason` — `maintenance` or
+     * `update_required`. Not a failure: the server may still finish parsing.
+     */
+    val STATEMENTS_UPLOAD_INTERRUPTED = Event("statements.upload.interrupted")
     val STATEMENTS_UPLOAD_CANCELLED = Event("statements.upload.cancelled")
     val STATEMENTS_UPLOAD_DELETED = Event("statements.upload.deleted")
 

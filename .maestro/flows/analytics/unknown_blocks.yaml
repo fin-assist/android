@@ -6,7 +6,7 @@ tags:
 # FIN-4/FIN-83 with `unknown_codes=true`: a block of a type this client cannot draw is shown by its text version, a card
 # locked for a reason it does not know — with the server's lock text.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 - runFlow:
     file: ../../subflows/config.yaml
     env:
