@@ -6,7 +6,7 @@ tags:
 # FIN-22. The fake server's minimum is above this build (0.2.x): the next request gets CLIENT_VERSION_UNSUPPORTED and
 # the update screen covers the app. Nothing else is reachable from it.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 - runFlow:
     file: ../../subflows/config.yaml
     env:

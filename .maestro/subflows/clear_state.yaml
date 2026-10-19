@@ -3,6 +3,9 @@
 # system then kills every process of the app — including one launched right after the wipe (logcat:
 # «Destroy timeout of remove-task … Killing <pid> … remove task»). The flow would wait on a blank window (FIN-44).
 # Every flow starts with this instead of a bare `clearState`.
+# A fixed pause, not a wait for a condition (checked for FIN-180): the end of the old task's removal shows nothing a
+# flow can see — no window, no tag, and the app must not be started to look, since a process started inside the window
+# is the one that gets killed.
 appId: ru.finassist.pf.mock.e2e
 ---
 - clearState

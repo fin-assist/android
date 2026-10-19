@@ -183,6 +183,12 @@ How it is measured:
 - Native tests: AGP pulls their data itself through the test storage service
   (`useTestStorageService`; `clearPackageData` would wipe the app's own directory first) into
   `app/build/outputs/code_coverage/`.
+- In CI the flows run in shards, one emulator each (docs/e2e.md, «Shards in CI»): every shard keeps its data in its
+  `build/e2e/` (the native tests' in `native-coverage/`, shard 1), and the `Reports` job puts all of it back where
+  the report reads it (`scripts/e2e-shards.py gather`: `build/e2e/coverage/ec/shard<i>-<process>.ec` and
+  `app/build/outputs/code_coverage/`) before `:e2eCoverageReport` — one report for every shard. The shards and the
+  report job build the same commit, mostly from the Gradle build cache; outputs it does not have are compiled
+  again, and the compilers and the Hilt transform give the same classes, so the class ids match the probes. A shard that failed still adds the data it saved; one that left nothing is named in the summary.
 - `:e2eCoverageReport` (root `build.gradle.kts`) reads both against the compiled classes of the modules in the
   mock APK (`e2eCoverageModules`: the ASM-transformed classes where Hilt transforms them, otherwise the compiler
   output, so that the class ids match the probes) and writes `build/reports/e2e-coverage/{report.xml,html}`. Excluded: the same

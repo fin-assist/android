@@ -6,7 +6,7 @@ tags:
 # FIN-22. The fake server answers 503 MAINTENANCE ending in 30 minutes of the fake «now» (8 October, 12:00 MSK): the
 # screen promises the end time.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 # A long Retry-After: the automatic check does not race the button below.
 - runFlow:
     file: ../../subflows/config.yaml

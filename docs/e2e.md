@@ -24,19 +24,52 @@ scripts/e2e.sh
 # Quick pass: flows tagged smoke, no native tests
 scripts/e2e.sh --tags smoke
 
-# One flow while writing it (Maestro Studio helps to find elements: `maestro studio`)
+# One flow while writing it (Maestro Studio helps to find elements: `maestro studio`); --flow may be repeated
 scripts/e2e.sh --no-build --flow .maestro/flows/assistant/ask_question.yaml
+
+# One shard of the CI split (below): the flows `scripts/e2e-shards.py list --shard 2/4` prints; native tests in 1/n only
+scripts/e2e.sh --shard 2/4
 ```
 
 Reports go to `build/e2e/`: JUnit XML, `maestro-output.tgz` (per flow: screenshot and view hierarchy of the failed
-step, commands, log), logcat, the preflight dump, and in `coverage/ec/` the JaCoCo execution data the flows left on
+step, commands, log), logcat, the preflight dump, in `coverage/ec/` the JaCoCo execution data the flows left on
 the device (`./gradlew :e2eCoverageReport` turns it into the UI test coverage report — docs/testing.md, «UI test
-coverage»).
+coverage»), and in `native/` and `native-coverage/` the native tests' results and execution data.
 
 In CI (`.github/workflows/e2e.yml`) the tests run after a merge to `main`; PRs never run them automatically. A
 failed run is re-run from the Actions tab («Re-run jobs»); any branch can be run by hand there («Run workflow» →
 the branch) to check a new flow or the coverage pipeline before the merge — such a run sends nothing to Qase. The
-run summary lists the flows and the UI test coverage; reports are in the `e2e-reports` artifact.
+run summary lists the shards, the flows and the UI test coverage; reports are in the `e2e-reports` artifact.
+
+### Shards in CI
+
+The flows run on four emulators at once (FIN-180), one job per shard, each with its own emulator:
+
+- **Split.** `scripts/e2e-shards.py` spreads the flows so that the shards take about the same time: longest flow
+  first, to the shard with the least so far, by the durations of the last measured run on CI
+  (`scripts/e2e-durations.json`; a flow not measured yet counts as the median). Shard 1 also runs the native tests
+  and gets fewer flows for them. The split is deterministic and every flow is in exactly one shard
+  (`scripts/test_e2e_shards.py`); `python3 scripts/e2e-shards.py plan --shards 4` prints it. After a run that changed
+  the durations a lot, refresh them from the merged report: `python3 scripts/e2e-shards.py durations
+  build/e2e/maestro-report.xml` (in the `e2e-reports` artifact).
+- **Build.** Every shard builds the APKs itself (`:app:assembleMockE2e :app:assembleMockE2eAndroidTest`, ~40 s from
+  the Gradle build cache): the native tests and `:e2eCoverageReport` need the Gradle build anyway, a separate build
+  job would add its time and an artifact round trip before every emulator starts, and outputs from the same build
+  cache are the same classes the JaCoCo report reads.
+- **Reports.** Each shard uploads its `build/e2e/` as `e2e-shard-<i>` (kept 3 days), whatever its result. The
+  `Reports` job runs after all shards, whatever they ended with, unless the run was cancelled (`if: !cancelled()`):
+  `e2e-shards.py gather` merges the
+  Maestro reports into one `build/e2e/maestro-report.xml` and puts the execution data of every shard and of the
+  native tests where `:e2eCoverageReport` reads them; then the coverage report, the summary, the FIN-63 check, one
+  Qase run and the `e2e-reports` artifact (merged report, coverage, every shard's folder). A shard that left no report
+  — its job failed or timed out before the flows ended — is not lost silently: its flows go into the merged report as
+  failures («shard i/n left no Maestro report»), and so does a flow missing from a shard's report. Flows are matched
+  to the report by its `file` attribute, or by the flow's `name` when a Maestro version writes none (names are unique,
+  `scripts/test_e2e_shards.py` checks it). Maestro is pinned in the workflow (`MAESTRO_VERSION`): a new version is
+  bumped there and checked with one run.
+- **Result.** The run is red when any shard failed, and also when the merged report is not a pass although every job
+  was green (a shard's report that never arrived, flows missing or failed — `gather` lists them): the `Reports` job
+  fails after it has published everything.
 
 ## Qase
 
@@ -46,8 +79,10 @@ steps and expected results in Russian, marked automated.
 - `scripts/qase-cases.json` maps tests to cases: a Maestro flow by its path (`.maestro/flows/<feature>/<flow>.yaml`),
   an instrumented test by `<class>#<method>`.
 - After a merge to `main` the `UI tests` workflow sends the results as one Qase run
-  (`scripts/qase-report.py`: JUnit reports → run → bulk results → complete). The run title is
-  `UI tests · <branch> · <sha>`, its description links the Actions run. Cancelled runs are not sent.
+  (`scripts/qase-report.py`: JUnit reports → run → bulk results → complete) — one for all shards, from the merged
+  report. The run title is `UI tests · <branch> · <sha>`, its description links the Actions run. Cancelled runs are
+  not sent, including a run where a shard was cancelled: its partial results would read as lost coverage. A shard
+  that failed without a report sends its flows as failed (see «Shards in CI»).
 - Statuses: passed, failed (an assertion `failure` and an unexpected `error` alike: in UI tests the latter is usually
   an app crash), skipped. A test found in several reports keeps its worst result.
 - If the results cannot be recorded, the script retries once (429, 5xx, network) and otherwise deletes the empty run.
@@ -107,6 +142,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `maintenance=<minutes>\|unknown\|off` | every request and every stream opening gets 503 `MAINTENANCE` (a stream already open is cut at its next event) ending in that many minutes of the fake «now» or at an unknown time; `off` ends it (FIN-22) | process |
   | `maintenance_retry_after=<s>` | `Retry-After` of the maintenance answer, 15 s by default (the shortest the app waits) | process |
   | `profile_timezone=<zone id>` | `profile.timezone` on the fake server, as if changed elsewhere; the app adopts it on the next profile read (opening «Профиль») | process |
+  | `sign_in=existing` | signs the existing account in and sets passcode 1234 without the screens (`E2eSignIn`, FIN-180): applied after the other values of the link, finishes before `e2e.config.applied` shows; `e2e.config.unmet` when already signed in or the sign-in fails. Use it through `fast_login.yaml` (see «Signing in») | app data (session, passcode); unlocked while the process lives |
 
   Flags are read when a screen opens: set them before the screen (usually right after `clear_state.yaml`, before
   `launchApp`). Process-scoped values are set after `launchApp`.
@@ -162,12 +198,13 @@ were.
 
 - One file per scenario under `.maestro/flows/<feature>/`, `name` in Russian, tags: the feature and `smoke` for the
   short set (one happy path per feature).
-- Start from a known state: `runFlow: ../../subflows/clear_state.yaml`, then `runFlow: ../../subflows/login.yaml`
-  (existing account, passcode 1234, ends on the feed) or `launchApp` for sign-in flows. Not a bare `clearState`:
+- Start from a known state: `runFlow: ../../subflows/clear_state.yaml`, then `runFlow: ../../subflows/fast_login.yaml`
+  (existing account, passcode 1234, ends on the feed — see «Signing in» for when `login.yaml` instead) or `launchApp`
+  for sign-in flows. Not a bare `clearState`:
   right after `pm clear` Android may still kill a freshly started app process while it removes the old task, and
   the flow waits on a blank window. `clear_state.yaml` pauses for 3 s after the wipe; `sign_in.yaml` relaunches
   the app once if the phone screen still does not show up.
-- Shared steps are in `.maestro/subflows/`: `clear_state`, `config` (env `LINK`), `login`, `sign_in` (env `PHONE`), `set_passcode`,
+- Shared steps are in `.maestro/subflows/`: `clear_state`, `config` (env `LINK`), `fast_login`, `login`, `sign_in` (env `PHONE`), `set_passcode`,
   `enter_code` (env `CODE`), `relaunch_and_unlock` (env `CODE`).
 - Wait for screens with `extendedWaitUntil` rather than fixed sleeps; scroll to below-the-fold elements with
   `scrollUntilVisible` before tapping them. Scroll to the node you tap, not to its container: Maestro measures
@@ -180,6 +217,27 @@ were.
   emulator's: 7 October 2026 is «Вчера».
 - A new flow needs a case in Qase and a line in `scripts/qase-cases.json`; a renamed or removed flow updates both.
   `scripts/test_qase_report.py` (CI, `agent-docs` job) fails on a flow without a case or a case without a flow.
+
+## Signing in
+
+Most flows check what comes after signing in. They sign in with `fast_login.yaml`: the control link `sign_in=existing`
+takes the path the sign-in screens take, through the same code under them — the phone verification request and its
+stream on the fake server, the session saved by `SessionRepositoryImpl.start`, the passcode set by `AppLock` — and
+skips only the typing (FIN-180: an estimated 10–20 s less per flow, to be confirmed by the next run). It signs in only the existing account: a new number
+needs the personal data consent, which only the screens give. If the app process dies between the link and the launch
+(FIN-44), the subflow unlocks the app with the code, as a user would.
+
+`login.yaml` — the full sign-in through the screens — stays where the sign-in, the passcode or a consent is what the
+flow checks:
+
+| Flow | Why the screens |
+|---|---|
+| `auth/sign_in_existing_user` | the sign-in of an existing account itself (phone, call, passcode setup) |
+| `applock/unlock`, `applock/forgot_code`, `applock/change_passcode` | the passcode set on the setup screen, then unlocked, forgotten or changed |
+| `profile/delete_account` | the passcode is checked again before the deletion |
+
+The other sign-in flows (`auth/*`, `availability/maintenance_on_sign_in`, `offline/stream_drops`) drive the screens
+themselves. Every other flow uses `fast_login.yaml`; a new one does too unless it checks one of the above.
 
 ## Coverage
 

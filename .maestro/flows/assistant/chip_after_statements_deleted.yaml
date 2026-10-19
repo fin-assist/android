@@ -6,7 +6,7 @@ tags:
 # FIN-76: the operations chip of an answer about a merchant, opened after every statement was deleted. The
 # merchant's selection is stale: the search drops it with a notice instead of failing.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:

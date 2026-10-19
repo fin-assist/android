@@ -98,8 +98,13 @@ def declared_tags(root: Path) -> Tags:
 def flow_ids(root: Path) -> set[str]:
     ids: set[str] = set()
     for path in sorted((root / ".maestro").rglob("*.yaml")):
-        ids.update(FLOW_ID.findall(path.read_text(encoding="utf-8")))
+        ids.update(split_alternatives(FLOW_ID.findall(path.read_text(encoding="utf-8"))))
     return {i for i in ids if not i.startswith(IGNORED_PREFIXES)}
+
+
+def split_alternatives(ids: list[str]) -> set[str]:
+    """Maestro ids are regular expressions: `operations.feed|applock.unlock` waits for either tag and refers to both."""
+    return {part for i in ids for part in i.split("|") if part}
 
 
 def screen_of(tag: str) -> str:

@@ -1,7 +1,11 @@
-# UI tests on an Android emulator: Maestro flows (.maestro/) and the native instrumented tests
+# UI tests on Android emulators: Maestro flows (.maestro/) and the native instrumented tests
 # (app/src/androidTestMock) against the mock e2e build, then their code coverage (JaCoCo, docs/testing.md).
 # Runs after a merge to main (a failed run is re-run from the Actions tab with «Re-run jobs»), or by hand for any
 # branch («Run workflow») to check a flow or the coverage pipeline before the merge. Details: docs/e2e.md.
+#
+# The flows are split into shards, one emulator each (scripts/e2e-shards.py, docs/e2e.md «Shards in CI»); the
+# native tests run in shard 1. The `reports` job merges what the shards left — whatever they ended with, unless the
+# run was cancelled — into one Maestro report, one coverage report, one Qase run and the `e2e-reports` artifact.
 name: UI tests
 
 on:
@@ -16,13 +20,32 @@ concurrency:
   group: e2e-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # The number of shards; the matrix below lists 1..SHARDS.
+  SHARDS: 4
+
 jobs:
-  e2e:
-    name: Maestro + instrumented (emulator)
+  shard:
+    name: Shard ${{ matrix.shard }} (emulator)
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 45
+    strategy:
+      # A failed shard must not cancel the others: their results still count, and the run is red anyway.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
+
+      # The split (scripts/e2e-shards.py) and the reports job count on SHARDS; the matrix must list exactly 1..SHARDS.
+      - name: Check the shard count
+        env:
+          JOBS: ${{ strategy.job-total }}
+        run: |
+          if [ "$JOBS" != "$SHARDS" ]; then
+            echo "::error::the matrix has $JOBS shards, SHARDS is $SHARDS"
+            exit 1
+          fi
 
       # The runner image leaves ~5 GB free; the emulator's userdata partition alone needs more.
       - name: Free disk space
@@ -43,14 +66,20 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      # Every shard builds the APKs itself, mostly from the build cache (~40 s): the native tests and the coverage
+      # report need the Gradle build anyway, and a separate build job would delay every emulator (docs/e2e.md).
       - uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' || matrix.shard != 1 }}
 
       - name: Build APKs
         run: ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest --no-daemon --console=plain
 
+      # Pinned: the reports job matches flows by the JUnit report Maestro writes, so a new version is a deliberate
+      # change (bump it here and check one run), not something that arrives with the next run.
       - name: Install Maestro
+        env:
+          MAESTRO_VERSION: 2.11.0
         run: |
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
@@ -67,12 +96,58 @@ jobs:
           disk-size: 4096M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -timezone Europe/Moscow
-          script: scripts/e2e.sh --no-build
+          script: scripts/e2e.sh --no-build --shard ${{ matrix.shard }}/${{ env.SHARDS }}
 
-      # Flows and instrumented tests leave JaCoCo execution data (scripts/e2e.sh pulls the flows', AGP the tests');
-      # the report does not fail the job: without data it is empty and the summary says so.
-      - name: UI test coverage report
+      # Whatever the shard ended with: the reports job needs the flows' report, execution data and logs of each one.
+      - uses: actions/upload-artifact@v4
         if: always()
+        with:
+          name: e2e-shard-${{ matrix.shard }}
+          path: build/e2e/
+          retention-days: 3
+
+  reports:
+    name: Reports
+    needs: shard
+    # Also after a failed or timed-out shard: the other shards' results and coverage must not be lost. Not for a
+    # cancelled run (a newer merge cancels it): nothing of it goes to Qase, and with fail-fast off a shard is cancelled
+    # only together with the run.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      # No artifact at all (every shard failed before uploading) is not an error here: gather reports it.
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: e2e-shard-*
+          path: build/e2e-shards
+
+      # One Maestro report (a shard without one: its flows as failures), every shard's execution data and the native
+      # tests' outputs where :e2eCoverageReport and qase-report.py read them.
+      - name: Merge shard reports
+        id: merge
+        run: |
+          {
+            echo "### UI tests"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          python3 scripts/e2e-shards.py gather --shards "$SHARDS" --dir build/e2e-shards --out build/e2e \
+            --summary "$GITHUB_STEP_SUMMARY" --github-output "$GITHUB_OUTPUT"
+
+      # The report does not fail the job: without data it is empty and the summary says so.
+      - name: UI test coverage report
         continue-on-error: true
         run: ./gradlew :e2eCoverageReport --no-daemon --console=plain
 
@@ -80,20 +155,19 @@ jobs:
         if: always()
         run: |
           {
-            echo "### UI tests"
             if [ -f build/e2e/maestro-report.xml ]; then
               python3 - <<'PY'
           import xml.etree.ElementTree as ET
           root = ET.parse("build/e2e/maestro-report.xml").getroot()
-          cases = root.iter("testcase")
           rows = []
-          for c in cases:
-              failed = c.find("failure") is not None or c.find("error") is not None
-              rows.append(f"| {'❌' if failed else '✅'} | {c.get('name')} | {float(c.get('time') or 0):.0f} s |")
-          print("| | Flow | Time |\n|---|---|---|\n" + "\n".join(rows))
+          for suite in root.iter("testsuite"):
+              for c in suite.iter("testcase"):
+                  failed = c.find("failure") is not None or c.find("error") is not None
+                  rows.append(f"| {'❌' if failed else '✅'} | {c.get('name')} | {suite.get('name')} | {float(c.get('time') or 0):.0f} s |")
+          print("| | Flow | Shard | Time |\n|---|---|---|---|\n" + "\n".join(rows))
           PY
             else
-              echo "No Maestro report (the run stopped before the flows)."
+              echo "No merged Maestro report (merging the shards' reports failed)."
             fi
             # A workaround in a test must stay visible: the native test logs «FIN-63 workaround» when it had to
             # recreate the activity after a stalled sign-in. The issue stays open while this line shows up.
@@ -109,12 +183,12 @@ jobs:
             echo "::warning title=FIN-63::StatementPickerTest recreated the activity after a stalled sign-in; evidence in the e2e-reports artifact"
           fi
 
-      # One Qase run per merge to main (project PLAINFIN, cases in scripts/qase-cases.json). Cancelled runs are not
-      # sent (a newer merge cancels the run: its partial results would read as lost coverage); manual runs of a
-      # branch are not either — Qase tracks main.
+      # One Qase run per merge to main for all shards (project PLAINFIN, cases in scripts/qase-cases.json). Cancelled
+      # runs are not sent — neither a cancelled workflow (a newer merge cancels the run) nor one with a cancelled shard:
+      # partial results would read as lost coverage; manual runs of a branch are not either — Qase tracks main.
       # Without the QASE_API_TOKEN secret the script only prints a notice; a Qase outage does not fail the job.
       - name: Send results to Qase
-        if: ${{ !cancelled() && github.event_name == 'push' }}
+        if: ${{ !cancelled() && needs.shard.result != 'cancelled' && github.event_name == 'push' }}
         continue-on-error: true
         env:
           QASE_API_TOKEN: ${{ secrets.QASE_API_TOKEN }}
@@ -130,9 +204,28 @@ jobs:
         with:
           name: e2e-reports
           path: |
-            build/e2e/
+            build/e2e/maestro-report.xml
+            build/e2e/coverage/
+            build/e2e-shards/
             build/reports/e2e-coverage/
             app/build/outputs/androidTest-results/
             app/build/outputs/code_coverage/
-            app/build/reports/androidTests/
           retention-days: 14
+
+      # Last, after everything is published: the run is red when any shard failed (fail-fast is off, so the matrix
+      # result is `failure` if one shard failed and `success` only if all passed), and also when the merged report is
+      # not a pass although every job was green — a shard's report that never arrived (the download above may fail),
+      # flows missing from a report or failed in it.
+      - name: Fail if a shard failed or its report is missing
+        if: needs.shard.result != 'success' || steps.merge.outputs.incomplete == 'true'
+        env:
+          RESULT: ${{ needs.shard.result }}
+          PROBLEMS: ${{ steps.merge.outputs.problems }}
+        run: |
+          if [ "$RESULT" != "success" ]; then
+            echo "::error::UI tests: at least one shard did not pass (matrix result: $RESULT); see the summary and the e2e-reports artifact"
+          fi
+          if [ -n "$PROBLEMS" ]; then
+            echo "::error::UI tests: the merged report is incomplete or failed: $PROBLEMS"
+          fi
+          exit 1

@@ -1,0 +1,38 @@
+# Signs in with the existing mock account and sets passcode 1234 without the sign-in screens (FIN-180): the control
+# link `sign_in=existing` takes the same path under them (verification on the fake server, the session, the
+# passcode — E2eControlActivity, E2eSignIn). Ends on the feed with the fixture statement, as login.yaml does.
+# For flows that check what comes after signing in. Flows that check the sign-in, the passcode or the consent keep
+# login.yaml (docs/e2e.md, «Signing in»).
+# Does not clear the app data: the caller starts with clear_state.yaml (and sets flags with config.yaml before this).
+appId: ru.finassist.pf.mock.e2e
+---
+- runFlow:
+    file: config.yaml
+    env:
+      LINK: "pfe2e://config?sign_in=existing"
+# stopApp: false — the process the link started holds the unlocked state (a cold start would lock the app).
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed|applock.unlock"
+    timeout: 40000
+# The process died between the link and the launch (see clear_state.yaml): the session and the passcode are saved,
+# so the app starts locked. Unlock it as a user would.
+- runFlow:
+    when:
+      visible:
+        id: "applock.unlock"
+    commands:
+      - runFlow:
+          file: enter_code.yaml
+          env:
+            CODE: "1234"
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 40000
+- extendedWaitUntil:
+    visible:
+      id: "operations.row"
+    timeout: 20000

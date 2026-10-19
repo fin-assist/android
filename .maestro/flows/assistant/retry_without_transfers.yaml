@@ -6,7 +6,7 @@ tags:
 # FIN-76: a question asked «Без переводов» whose answer fails (MODEL_ERROR) is answered without transfers after
 # «Повторить» too: the source line of the new answer says so.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 # The next answer fails like a model would (process-scoped: set after the app is up).
 - runFlow:
     file: ../../subflows/config.yaml

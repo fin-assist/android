@@ -9,7 +9,7 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?flag.analytics.block.tiles=false&flag.analytics.block.expense_categories=false&flag.analytics.filter.transfers=false&flag.assistant=false"
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:

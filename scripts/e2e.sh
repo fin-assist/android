@@ -5,13 +5,15 @@
 # Usage:
 #   scripts/e2e.sh                       # everything
 #   scripts/e2e.sh --tags smoke          # only Maestro flows tagged `smoke` (no native tests)
-#   scripts/e2e.sh --flow .maestro/flows/auth/register_new_user.yaml
+#   scripts/e2e.sh --flow .maestro/flows/auth/register_new_user.yaml   # --flow may be repeated
+#   scripts/e2e.sh --shard 2/4           # one shard of the flows (scripts/e2e-shards.py); native tests in 1/n only
 #   scripts/e2e.sh --no-build            # reuse the APK built last time
 #   scripts/e2e.sh --no-native           # skip the instrumented tests
 #
 # Needs: adb with one device attached, Maestro on PATH (https://maestro.dev), JDK 21 for Gradle.
 # Reports: build/e2e/ (JUnit XML, Maestro screenshots and logs of failed flows, JaCoCo execution data of the
-# flows in coverage/ec). Coverage report: `./gradlew :e2eCoverageReport`, then
+# flows in coverage/ec; the native tests' results and data in native/ and native-coverage/).
+# Coverage report: `./gradlew :e2eCoverageReport`, then
 # `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml` (docs/testing.md).
 set -euo pipefail
 
@@ -23,13 +25,15 @@ APP_ID="ru.finassist.pf.mock.e2e"
 DEVICE_COVERAGE="/sdcard/Download/pf-coverage"
 
 TAGS=""
-FLOW="$ROOT/.maestro"
+FLOWS=()
+SHARD=""
 BUILD=1
 NATIVE=1
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --tags) TAGS="$2"; NATIVE=0; shift 2 ;;
-        --flow) FLOW="$2"; NATIVE=0; shift 2 ;;
+        --flow) FLOWS+=("$2"); NATIVE=0; shift 2 ;;
+        --shard) SHARD="$2"; shift 2 ;;
         --no-build) BUILD=0; shift ;;
         --no-native) NATIVE=0; shift ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -37,6 +41,23 @@ while [[ $# -gt 0 ]]; do
 done
 
 log() { printf '[e2e] %s\n' "$*"; }
+
+if [[ -n "$SHARD" ]]; then
+    [[ ${#FLOWS[@]} -eq 0 ]] || { log "--shard and --flow do not combine"; exit 2; }
+    # The split is deterministic (durations in scripts/e2e-durations.json): every job computes the same shards.
+    shard_flows="$(python3 "$ROOT/scripts/e2e-shards.py" list --shard "$SHARD")" || { log "bad --shard $SHARD"; exit 2; }
+    mapfile -t FLOWS <<< "$shard_flows"
+    [[ "${SHARD%%/*}" == 1 ]] || NATIVE=0
+    if [[ ${#FLOWS[@]} -eq 0 || -z "${FLOWS[0]}" ]]; then
+        log "shard $SHARD has no flows"
+        FLOWS=()
+    else
+        log "shard $SHARD: ${#FLOWS[@]} flow(s)"
+        FLOWS=("${FLOWS[@]/#/$ROOT/}")
+    fi
+elif [[ ${#FLOWS[@]} -eq 0 ]]; then
+    FLOWS=("$ROOT/.maestro")
+fi
 
 command -v adb >/dev/null || { log "adb is not on PATH"; exit 1; }
 command -v maestro >/dev/null || { log "maestro is not on PATH: curl -Ls https://get.maestro.mobile.dev | bash"; exit 1; }
@@ -60,7 +81,8 @@ adb logcat -c || true
 # Execution data of an earlier run must not count: the device folder is pulled whole after the flows, and
 # :e2eCoverageReport reads every .ec AGP left from the native tests — of this run only.
 adb shell rm -rf "$DEVICE_COVERAGE" >/dev/null 2>&1 || true
-rm -rf "$OUT/coverage" "$ROOT/app/build/outputs/code_coverage" "$ROOT/build/reports/e2e-coverage"
+rm -rf "$OUT/coverage" "$OUT/native" "$OUT/native-coverage" "$OUT/native-report" "$OUT/maestro-report.xml" \
+    "$ROOT/app/build/outputs/code_coverage" "$ROOT/build/reports/e2e-coverage"
 
 # A freshly booted CI emulator often shows «Pixel Launcher isn't responding». The dialog takes window focus
 # from the app under test, so every flow and the Espresso test fail. Hide system error dialogs for the run.
@@ -103,11 +125,13 @@ adb shell rm -rf "$DEVICE_COVERAGE" >/dev/null 2>&1 || true
 
 mkdir -p "$OUT/maestro" "$OUT/maestro-log" "$OUT/shots"
 # --test-output-dir: failure screenshots and view hierarchies per flow; --debug-output: the session log.
-maestro_args=(test "$FLOW" --format junit --output "$OUT/maestro-report.xml" --test-output-dir "$OUT/maestro" --debug-output "$OUT/maestro-log")
+maestro_args=(test "${FLOWS[@]}" --format junit --output "$OUT/maestro-report.xml" --test-output-dir "$OUT/maestro" --debug-output "$OUT/maestro-log")
 [[ -n "$TAGS" ]] && maestro_args+=(--include-tags "$TAGS")
 log "maestro ${maestro_args[*]}"
 status=0
-(cd "$OUT/shots" && maestro "${maestro_args[@]}") || status=$?
+if [[ ${#FLOWS[@]} -gt 0 ]]; then
+    (cd "$OUT/shots" && maestro "${maestro_args[@]}") || status=$?
+fi
 adb logcat -d > "$OUT/logcat.txt" 2>/dev/null || true
 # JaCoCo execution data of every app process the flows started; `collect` keeps the newest complete file of each.
 # Never fails the run: coverage is a number next to the results, not a result.
@@ -129,6 +153,9 @@ if [[ "$NATIVE" == 1 ]]; then
     (cd "$ROOT" && ./gradlew :app:connectedMockE2eAndroidTest --console=plain) || native=$?
     [[ "$status" == 0 ]] && status=$native
     cp -r "$ROOT/app/build/outputs/androidTest-results" "$OUT/native" 2>/dev/null || true
+    # Execution data of the native tests: kept with the reports, so a shard's artifact carries it (e2e-shards.py gather).
+    cp -r "$ROOT/app/build/outputs/code_coverage" "$OUT/native-coverage" 2>/dev/null || true
+    cp -r "$ROOT/app/build/reports/androidTests" "$OUT/native-report" 2>/dev/null || true
 fi
 
 log "reports: $OUT"

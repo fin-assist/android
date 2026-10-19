@@ -5,7 +5,7 @@ tags:
 ---
 # FIN-5: a block that fails on the server comes as `unavailable` with its text; the other blocks are shown as usual.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 - runFlow:
     file: ../../subflows/config.yaml
     env:
