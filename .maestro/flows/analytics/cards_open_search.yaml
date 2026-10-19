@@ -20,9 +20,10 @@ tags:
 
 # «Мелкие частые траты» opens its first group — the category «Фастфуд» of September — as a selection: the search
 # shows the group's name on the «как на Аналитике» chip and the operations it is made of (docs/calc.md, section 5).
+# Scroll to the title itself, the node the tap goes to: Maestro measures visibility on bounds already clipped by the
+# list, and a strip of the block above the tab bar passed as fully visible while the title was under the bar (FIN-179).
 - scrollUntilVisible:
-    element:
-      id: "analytics.block.small_frequent"
+    element: "Мелкие частые траты"
 - tapOn: "Мелкие частые траты"
 - extendedWaitUntil:
     visible:
