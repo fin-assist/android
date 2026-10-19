@@ -5,7 +5,19 @@
   ],
   "packageRules": [
     {
-      "description": "FIN-184: fragment 1.9 pulls Compose UI 1.9 and lifecycle 2.10 past the Compose BOM; it moves together with the BOM, by hand",
+      "description": "FIN-184: a new AndroidX line can pull Compose UI and lifecycle past the Compose BOM, and CI on a PR does not catch it; the stack moves as one PR, checked with a UI tests run",
+      "matchPackageNames": [
+        "androidx.compose:compose-bom",
+        "androidx.activity:**",
+        "androidx.core:**",
+        "androidx.fragment:**",
+        "androidx.lifecycle:**",
+        "androidx.navigation:**"
+      ],
+      "groupName": "androidx compose stack"
+    },
+    {
+      "description": "FIN-184: fragment 1.9 pulls Compose UI 1.9 and lifecycle 2.10 past the Compose BOM 2025.03.01; it moves together with the BOM, by hand",
       "matchPackageNames": ["androidx.fragment:**"],
       "allowedVersions": "<1.9.0"
     }
