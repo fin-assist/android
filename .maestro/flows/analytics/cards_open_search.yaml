@@ -74,6 +74,8 @@ tags:
 - scrollUntilVisible:
     element: "РБК"
     direction: UP
+    # Scrolling up, the row first shows as a strip under the screen title, where a tap lands on the title (FIN-188).
+    centerElement: true
 - tapOn: "РБК"
 - extendedWaitUntil:
     visible:
