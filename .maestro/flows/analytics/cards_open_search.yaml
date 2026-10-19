@@ -71,8 +71,10 @@ tags:
 
 # A row of «Подписки и регулярные платежи» opens the charges of that payment in the selected month. The card is
 # above the small frequent spending one: scrolling up, its last rows come in first and «РБК», the first row, last.
+# Scrolling up, a row first shows as a strip under the screen title, where a tap lands on the title (FIN-188): scroll
+# to the card's title above «РБК» instead — any of it in view means the whole row is in view.
 - scrollUntilVisible:
-    element: "РБК"
+    element: "Подписки и регулярные платежи"
     direction: UP
 - tapOn: "РБК"
 - extendedWaitUntil:

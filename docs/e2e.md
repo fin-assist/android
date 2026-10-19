@@ -211,7 +211,12 @@ were.
 - Wait for screens with `extendedWaitUntil` rather than fixed sleeps; scroll to below-the-fold elements with
   `scrollUntilVisible` before tapping them. Scroll to the node you tap, not to its container: Maestro measures
   visibility on bounds already clipped by the list, so a strip of a tall block above the tab bar passes as fully
-  visible while the text inside it is still under the bar (FIN-179).
+  visible while the text inside it is still under the bar (FIN-179). Scrolling up stops the same way on a strip of
+  a row under the screen title, and a tap there lands on the title: scroll to the nearest element above the row in
+  the same list (the card's title) — it must stand closer to the row than a viewport, or the row ends up under the
+  tab bar instead — or, for a row near the top of the list (what stands above it is shorter than a swipe), swipe
+  once more to the top and wait for an element above the row — a strip of the row itself would pass the check too
+  (FIN-188).
 - Type ASCII where you can (merchant `Krabsbir`, digits): non-ASCII input depends on the emulator keyboard.
 - `id` and `text` in one selector must match the same node. A tag on a container (`PfLink`, `PfPageHeader`, a
   row) has no text of its own — its text is a child node: check the id and the text in two steps.
