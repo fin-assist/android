@@ -612,6 +612,50 @@ class UploadViewModelTest {
         assertEquals(result, repository.lastResult("u1"))
     }
 
+    @Test fun `maintenance on the stream while the cancel is in flight - a successful cancel still returns to the guide`() {
+        val cut = CompletableDeferred<Unit>()
+        api.streams += flow { cut.await(); throw AppError.Maintenance(until = null, retryAfterSeconds = 600) }
+        val gate = CompletableDeferred<Unit>()
+        api.deleteGate = gate
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        await("the stream") { api.streamOpens.get() == 1 }
+        vm.cancelImport()
+        cut.complete(Unit)
+        await("the interruption") { Events.STATEMENTS_UPLOAD_INTERRUPTED in tracker.names() }
+        assertTrue(assertIs<UploadPhase.Busy>(vm.state.value.phase).cancelling, "the cancel is still in flight")
+
+        gate.complete(Unit)
+        await("the guide") { it.phase is UploadPhase.Guide }
+        assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
+        assertNull(vm.state.value.doneUploadId)
+        assertTrue(Events.STATEMENTS_UPLOAD_CANCELLED in tracker.names())
+        assertTrue(Events.STATEMENTS_UPLOAD_FAILED !in tracker.names())
+    }
+
+    @Test fun `maintenance on the stream and on the cancel - the upload stays and its result shows once the screen is back`() {
+        val cut = CompletableDeferred<Unit>()
+        api.streams += flow { cut.await(); throw AppError.Maintenance(until = null, retryAfterSeconds = 600) }
+        val gate = CompletableDeferred<Unit>()
+        api.deleteGate = gate
+        api.deleteFailure = AppError.Maintenance(until = null, retryAfterSeconds = 600)
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        await("the stream") { api.streamOpens.get() == 1 }
+        vm.cancelImport()
+        cut.complete(Unit)
+        await("the interruption") { Events.STATEMENTS_UPLOAD_INTERRUPTED in tracker.names() }
+        gate.complete(Unit)
+        await("the failed cancel") { (it.phase as? UploadPhase.Busy)?.cancelling == false }
+
+        api.streams += flowOf(ImportEvent.Complete(importResult()))
+        vm.stopWatching()
+        vm.watch()
+        await("the result") { it.doneUploadId == "u1" }
+        assertTrue(Events.STATEMENTS_UPLOAD_FAILED !in tracker.names())
+        assertTrue(Events.STATEMENTS_UPLOAD_CANCELLED !in tracker.names())
+    }
+
     @Test fun `cancel with nothing being parsed does nothing`() {
         vm.cancelImport()
         assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
