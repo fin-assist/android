@@ -4,7 +4,7 @@ tags:
   - analytics
 ---
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:

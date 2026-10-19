@@ -7,7 +7,7 @@ tags:
 # stale.ofx: its period ends on 20 September, its last operation is on the 15th. More than two weeks have passed, so
 # both screens show the banner, dated by the end of the statement (`state.data_to`), not by the last operation.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 - assertNotVisible:
     id: "operations.feed.stale"
 # Fresh data: the caption under the summary is dated by the end of the statement too — the preloaded one runs to

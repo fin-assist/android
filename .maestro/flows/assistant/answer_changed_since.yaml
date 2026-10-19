@@ -6,7 +6,7 @@ tags:
 # FIN-135: after an answer, the user changes a category and then deletes the statement. The line under the answer in
 # the history says what changed since it was calculated (api.md 7.2–7.3); before the fix it never appeared.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:

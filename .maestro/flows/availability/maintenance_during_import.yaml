@@ -10,7 +10,7 @@ tags:
 # the app (the screens under it are created anew after the maintenance, FIN-22). The 503 is not a parsing failure
 # (FIN-177): the server goes on parsing, and after the maintenance the history shows the upload done, not failed.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 - tapOn:
     id: "ds.tab.profile"
 - extendedWaitUntil:

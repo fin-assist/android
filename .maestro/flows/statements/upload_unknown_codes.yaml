@@ -6,7 +6,7 @@ tags:
 # FIN-83. With `unknown_codes=true` the import result carries a notice code and an analytics feature the client does
 # not know: the screen shows the server's texts for both instead of dropping them.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/fast_login.yaml
 - runFlow:
     file: ../../subflows/config.yaml
     env:
