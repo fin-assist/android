@@ -391,8 +391,10 @@ class UploadViewModelTest {
     @Test fun `parsing cancelled on the server returns to the guide`() {
         api.streams += flowOf(ImportEvent.Error(ErrorCodes.CANCELLED, "cancelled"))
         vm.onFilePicked(uri)
-        // The guide is on screen before the pick as well: wait for the stream to end.
+        // The guide is on screen before the pick as well: wait for the stream to end. The event is tracked on the IO
+        // thread just before the state changes, so the guide is awaited after it, not read at once.
         await("the cancellation") { Events.STATEMENTS_UPLOAD_CANCELLED in tracker.names() }
+        await("the guide") { it.phase is UploadPhase.Guide }
         assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
     }
 
@@ -456,6 +458,8 @@ class UploadViewModelTest {
         api.uploadFailures += AppError.Maintenance(until = null, retryAfterSeconds = null)
         vm.onFilePicked(uri)
         await("the interruption") { Events.STATEMENTS_UPLOAD_INTERRUPTED in tracker.names() }
+        // Tracked just before the state changes (IO thread): await the guide instead of reading it at once.
+        await("the guide") { it.phase is UploadPhase.Guide }
         assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
         assertFalse(vm.state.value.uploadOffline)
         assertTrue(Events.STATEMENTS_UPLOAD_FAILED !in tracker.names())
@@ -508,12 +512,12 @@ class UploadViewModelTest {
         vm.onFilePicked(uri)
         awaitAccepted()
         await("the first stream") { api.streamOpens.get() == 1 }
-        dispatcher.scheduler.advanceTimeBy(1_000)
-        dispatcher.scheduler.runCurrent()
-        assertEquals(2, api.streamOpens.get(), "the drop was re-opened and got 429")
+        // The re-open pause starts only once the first stream has ended on the IO thread: move the test clock on
+        // until it has, not once (a single step could run before the pause was scheduled).
+        advanceUntil("the drop was re-opened and got 429") { api.streamOpens.get() == 2 }
         vm.stopWatching()
         vm.watch()
-        assertEquals(3, api.streamOpens.get())
+        await("the stream opened again") { api.streamOpens.get() == 3 }
         assertIs<UploadPhase.Busy>(vm.state.value.phase, "a 429 on opening it again is not an error")
         dispatcher.scheduler.advanceTimeBy(59_000)
         dispatcher.scheduler.runCurrent()
@@ -542,7 +546,7 @@ class UploadViewModelTest {
         vm.stopWatching()
         liveStream()
         vm.watch()
-        assertEquals(2, api.streamOpens.get())
+        await("the stream opened again") { api.streamOpens.get() == 2 }
     }
 
     @Test fun `watch outside of an accepted upload does nothing`() {

@@ -121,7 +121,9 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
 - **Control link.** `pfe2e://config?…` changes state from a flow (`E2eControlActivity`). Open it through the subflow,
   not a bare `openLink`: `runFlow: {file: ../../subflows/config.yaml, env: {LINK: "pfe2e://config?…"}}`. The activity
   writes the values, shows `e2e.config.applied` and finishes; the subflow waits for that, so a `launchApp` right
-  after cannot cut the writes short.
+  after cannot cut the writes short. Maestro counts the timeout of every wait from the last interaction (here
+  `openLink`), not from the start of the wait: the wait for the tag to go must cover the wait for it to come (a
+  `sign_in` takes several seconds) plus the 4 s it stays up — `config.yaml` sets both accordingly (FIN-180).
 
   | Parameter | Effect | Lifetime |
   |---|---|---|
@@ -285,7 +287,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `availability/update_required` | `min_version=9.0.0`: the next request gets `CLIENT_VERSION_UNSUPPORTED`, the update screen covers the app — FIN-22 |
 | `availability/maintenance` | `maintenance=30` with a long `Retry-After`: the screen promises the end time, after `maintenance=off` «Проверить сейчас» opens the app; then with 15 s the app leaves the screen by itself — FIN-22 |
 | `availability/maintenance_on_sign_in` | `maintenance=unknown` before sign-in: «Продолжить» on the phone screen gets the maintenance screen over sign-in, without an end time — FIN-22 |
-| `availability/maintenance_during_import` | `maintenance=30` while an upload is parsing (its stream kept re-opening with 429): the next opening of the progress stream gets 503 before the 429, the re-open loop stops and the maintenance screen covers the upload; after `maintenance=off` «Проверить сейчас» opens the app and the history has the upload done, not failed — FIN-22, FIN-170, FIN-177 |
+| `availability/maintenance_during_import` | `maintenance=30` while an upload is parsing (its stream kept re-opening with 429): the next opening of the progress stream gets 503 before the 429, the re-open loop stops and the maintenance screen covers the upload; after `maintenance=off` the upload screen's next stream opening goes through and lifts the maintenance screen by itself (the button is checked by `availability/maintenance`), and the history has the upload done, not failed — FIN-22, FIN-170, FIN-177 |
 | `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |

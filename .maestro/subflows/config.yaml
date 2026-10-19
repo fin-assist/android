@@ -2,14 +2,19 @@
 # The control activity writes the values, shows `e2e.config.applied` for a moment and finishes; waiting for the tag
 # to come and go keeps the next step (often `launchApp`) from cutting the writes short.
 # env: LINK — the whole link, e.g. "pfe2e://config?flag.auth.registration=false".
+#
+# Both timeouts count from `openLink`, not from the start of each wait: Maestro deducts the time since the last
+# interaction (`adjustedToLatestInteraction` in its Orchestra). The tag comes after the values are applied — with
+# `sign_in`, after a sign-in of several seconds — and stays up for 4 s (E2eControlActivity.VISIBLE_MS), so the wait
+# for it to go covers the whole first wait plus those 4 s. With 10 s it ran out mid-way after a sign-in (FIN-180).
 appId: ru.finassist.pf.mock.e2e
 ---
 - openLink: ${LINK}
 - extendedWaitUntil:
     visible:
       id: "e2e.config.applied"
-    timeout: 30000
+    timeout: 40000
 - extendedWaitUntil:
     notVisible:
       id: "e2e.config.applied"
-    timeout: 10000
+    timeout: 50000
