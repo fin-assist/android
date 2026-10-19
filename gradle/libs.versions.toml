@@ -43,7 +43,7 @@ roborazzi = "1.43.1"
 turbine = "1.2.1"
 androidxTestExt = "1.2.1"
 espresso = "3.6.1"
-androidxTestRunner = "1.6.2"
+androidxTestRunner = "1.7.0"
 androidxTestOrchestrator = "1.5.1"
 androidxTestServices = "1.5.0"
 # Contract tests of the fake backend against openapi.yaml (FIN-123); Apache-2.0
