@@ -147,6 +147,21 @@ variant (release, `local`, `prod`, `e2e`), so a test that fails only in another 
 
 Nothing fails on a low value or on a failed post: the 80 % target is checked in review.
 
+The time of the job is the time of compilation, not of the tests (FIN-181): the Kotlin, KSP and Hilt tasks of the
+modules run along the module graph, and each module's tests start as soon as it is compiled, next to the compilation
+of the others. So the job relies on the build cache: the Gradle jobs save `~/.gradle` (setup-gradle) on pushes to
+`main` and `release/**`, and a PR restores its base branch's entry first. A module comes from the cache, its tests
+included (with their Kover data), when neither it nor anything on its classpath changed: an edit in `core/common`
+reruns the tests of every module depending on it. A version bump in `gradle/libs.versions.toml` follows the same rule:
+it reaches the modules with the artifact on their classpath — a test library reruns the tests with the main code still
+cached, an `androidTest` one touches nothing — so most Renovate PRs keep the cache. Everything recompiles only when the
+build itself changes: `build-logic`, the Gradle wrapper, or a plugin or compiler version (`kotlin`, `ksp`, `agp`,
+`hilt`, `kover`, `tracer`). More test
+JVMs per task (`maxParallelForks`) were measured and left out: a Robolectric module holds one or two long test
+classes, so a second JVM only adds Robolectric's start-up, and the runner's four cores are already busy with the
+modules Gradle runs in parallel. A few lines of the race tests (`*RaceTest`) are covered in some runs and not in
+others, so the project total can move by a line or two between identical runs.
+
 ## UI test coverage
 
 What the Maestro flows and the native instrumented tests reach — two numbers, next to the unit one and never
