@@ -16,7 +16,9 @@ concurrency:
 # The Gradle checks run as three parallel jobs (FIN-176): unit tests with coverage, lint, and the build of the
 # variants with the build separation checks. Each one configures the project, so a violation of the module dependency
 # rules fails all three in their first Gradle call. Every job reads the shared Gradle cache (setup-gradle) and writes
-# it from main only; on failure each posts the tail of its own build.log as a commit comment.
+# it from main and release branches only: a PR reads its base branch's cache first, and PRs target the current release
+# branch, so a cache written from main alone would be from older code and miss the compile tasks (FIN-181). On failure
+# each job posts the tail of its own build.log as a commit comment.
 jobs:
   # AGENTS.md is the agents' map of the repo; stale generated blocks or registries out of sync with the code
   # fail here, in seconds and without Gradle (scripts/agent-docs.py).
@@ -67,7 +69,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
 
       # Robolectric fetches the Android framework jars (android-all-instrumented, one per SDK) into ~/.m2 the first time
       # a test needs them; setup-gradle caches ~/.gradle only. Without this cache every job downloads them from Maven
@@ -206,7 +208,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
 
       - name: Lint
         run: ./gradlew lintMockDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
@@ -244,7 +246,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
 
       # Environments (FIN-120, AGENTS.md «Flavors»): mock as the working product, localDebug for the local backend,
       # prodRelease as what users get (unsigned: CI has no signing key). The localRelease manifest is checked below.
