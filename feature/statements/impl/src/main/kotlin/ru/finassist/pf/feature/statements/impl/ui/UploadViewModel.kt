@@ -252,6 +252,7 @@ class UploadViewModel @Inject constructor(
     }
 
     private fun fail(e: AppError, fileName: String) {
+        if (e is AppError.Maintenance || e is AppError.UpdateRequired) return interrupted(e)
         val code = when (e) {
             is AppError.Api -> e.code
             is AppError.Offline -> OFFLINE
@@ -262,6 +263,21 @@ class UploadViewModel @Inject constructor(
             // No network: nothing reached the server — back to the guide with «Повторить» for the same file.
             if (code == OFFLINE) it.copy(phase = UploadPhase.Guide(fallbackConfig()), uploadOffline = true, askCancel = false)
             else it.copy(phase = UploadPhase.Error(code, fileName, config), askCancel = false)
+        }
+    }
+
+    /**
+     * Maintenance or an unsupported version (FIN-177): the server did not reject the file, the app is covered by its
+     * screen. Not a failure of the upload — no error, no `statements.upload.failed`. Before the 202 nothing was
+     * accepted: back to the guide, the key kept (a 503 is not a final answer). After it parsing may go on on the server:
+     * the upload stays on screen, and [watch] picks up its state when the screen is started again.
+     */
+    private fun interrupted(e: AppError) {
+        val reason = if (e is AppError.Maintenance) "maintenance" else "update_required"
+        tracker.track(Events.STATEMENTS_UPLOAD_INTERRUPTED, mapOf("reason" to reason))
+        _state.update { s ->
+            if ((s.phase as? UploadPhase.Busy)?.uploadId != null) s
+            else s.copy(phase = UploadPhase.Guide(fallbackConfig()), askCancel = false)
         }
     }
 

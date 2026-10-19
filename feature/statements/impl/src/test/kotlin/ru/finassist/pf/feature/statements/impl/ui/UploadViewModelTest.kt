@@ -403,6 +403,55 @@ class UploadViewModelTest {
         assertEquals(UploadPhase.Error(ErrorCodes.NOT_FOUND, name, config), vm.state.value.phase)
     }
 
+    // ---- maintenance and an unsupported version (FIN-177) ----
+
+    @Test fun `maintenance on re-opening the stream is not a parsing failure - the result shows once the screen is back`() {
+        api.streams += flowOf(ImportEvent.Progress(ImportProgress(ImportStage.PARSING, 30)))
+        api.streams += flow { throw AppError.Maintenance(until = null, retryAfterSeconds = 600) }
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        advanceUntil("the interruption") { Events.STATEMENTS_UPLOAD_INTERRUPTED in tracker.names() }
+        assertEquals(2, api.streamOpens.get())
+        val busy = assertIs<UploadPhase.Busy>(vm.state.value.phase, "the upload stays on screen")
+        assertEquals("u1", busy.uploadId)
+        assertEquals(mapOf("reason" to "maintenance"), tracker.events.single { it.first == Events.STATEMENTS_UPLOAD_INTERRUPTED }.second)
+        assertTrue(Events.STATEMENTS_UPLOAD_FAILED !in tracker.names())
+
+        // After the maintenance the screen is started again: the same upload, its result.
+        api.streams += flowOf(ImportEvent.Complete(importResult(newCount = 3)))
+        vm.stopWatching()
+        vm.watch()
+        await("the result") { it.doneUploadId == "u1" }
+        assertEquals(3, api.streamOpens.get())
+        assertTrue(Events.STATEMENTS_UPLOAD_COMPLETED in tracker.names())
+        assertTrue(Events.STATEMENTS_UPLOAD_FAILED !in tracker.names())
+    }
+
+    @Test fun `an unsupported version on opening the stream is not a parsing failure`() {
+        api.streams += flow { throw AppError.UpdateRequired() }
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        await("the interruption") { Events.STATEMENTS_UPLOAD_INTERRUPTED in tracker.names() }
+        assertIs<UploadPhase.Busy>(vm.state.value.phase)
+        assertEquals(mapOf("reason" to "update_required"), tracker.events.single { it.first == Events.STATEMENTS_UPLOAD_INTERRUPTED }.second)
+        assertTrue(Events.STATEMENTS_UPLOAD_FAILED !in tracker.names())
+    }
+
+    @Test fun `maintenance before the file was accepted returns to the guide and keeps the key`() {
+        api.uploadFailures += AppError.Maintenance(until = null, retryAfterSeconds = null)
+        vm.onFilePicked(uri)
+        await("the interruption") { Events.STATEMENTS_UPLOAD_INTERRUPTED in tracker.names() }
+        assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
+        assertFalse(vm.state.value.uploadOffline)
+        assertTrue(Events.STATEMENTS_UPLOAD_FAILED !in tracker.names())
+
+        // A 503 is not a final answer: the same file after the maintenance is the same upload.
+        awaitIdle()
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        assertEquals(api.keys[0], api.keys[1])
+    }
+
     @Test fun `a dropped stream is re-opened and picks up the result`() {
         api.streams += flow { throw AppError.Offline() }
         api.streams += flowOf(ImportEvent.Complete(importResult()))
