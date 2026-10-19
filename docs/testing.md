@@ -150,8 +150,10 @@ Nothing fails on a low value or on a failed post: the 80 % target is checked in 
 The time of the job is the time of compilation, not of the tests (FIN-181): the Kotlin, KSP and Hilt tasks of the
 modules run along the module graph, and each module's tests start as soon as it is compiled, next to the compilation
 of the others. So the job relies on the build cache: the Gradle jobs save `~/.gradle` (setup-gradle) on pushes to
-`main` and `release/**`, and a PR restores its base branch's entry first. The modules a PR does not change come from
-the cache, their tests included (with their Kover data); a change to `build-logic` recompiles everything. More test
+`main` and `release/**`, and a PR restores its base branch's entry first. A module comes from the cache, its tests
+included (with their Kover data), when neither it nor anything on its classpath changed: an edit in `core/common`
+reruns the tests of every module depending on it. A change to the build itself — `build-logic`, `gradle/`
+(versions, wrapper), `gradle.properties`, `settings.gradle.kts`, so every Renovate PR — recompiles everything. More test
 JVMs per task (`maxParallelForks`) were measured and left out: a Robolectric module holds one or two long test
 classes, so a second JVM only adds Robolectric's start-up, and the runner's four cores are already busy with the
 modules Gradle runs in parallel. A few lines of the race tests (`*RaceTest`) are covered in some runs and not in
