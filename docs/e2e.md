@@ -121,7 +121,9 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
 - **Control link.** `pfe2e://config?…` changes state from a flow (`E2eControlActivity`). Open it through the subflow,
   not a bare `openLink`: `runFlow: {file: ../../subflows/config.yaml, env: {LINK: "pfe2e://config?…"}}`. The activity
   writes the values, shows `e2e.config.applied` and finishes; the subflow waits for that, so a `launchApp` right
-  after cannot cut the writes short.
+  after cannot cut the writes short. Maestro counts the timeout of every wait from the last interaction (here
+  `openLink`), not from the start of the wait: the wait for the tag to go must cover the wait for it to come (a
+  `sign_in` takes several seconds) plus the 4 s it stays up — `config.yaml` sets both accordingly (FIN-180).
 
   | Parameter | Effect | Lifetime |
   |---|---|---|
