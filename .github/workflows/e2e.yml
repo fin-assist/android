@@ -4,8 +4,8 @@
 # branch («Run workflow») to check a flow or the coverage pipeline before the merge. Details: docs/e2e.md.
 #
 # The flows are split into shards, one emulator each (scripts/e2e-shards.py, docs/e2e.md «Shards in CI»); the
-# native tests run in shard 1. The `reports` job merges what the shards left — whatever they ended with — into one
-# Maestro report, one coverage report, one Qase run and the `e2e-reports` artifact.
+# native tests run in shard 1. The `reports` job merges what the shards left — whatever they ended with, unless the
+# run was cancelled — into one Maestro report, one coverage report, one Qase run and the `e2e-reports` artifact.
 name: UI tests
 
 on:
@@ -75,7 +75,11 @@ jobs:
       - name: Build APKs
         run: ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest --no-daemon --console=plain
 
+      # Pinned: the reports job matches flows by the JUnit report Maestro writes, so a new version is a deliberate
+      # change (bump it here and check one run), not something that arrives with the next run.
       - name: Install Maestro
+        env:
+          MAESTRO_VERSION: 2.11.0
         run: |
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
@@ -105,8 +109,10 @@ jobs:
   reports:
     name: Reports
     needs: shard
-    # Also after a failed or cancelled shard: the other shards' results and coverage must not be lost.
-    if: always()
+    # Also after a failed or timed-out shard: the other shards' results and coverage must not be lost. Not for a
+    # cancelled run (a newer merge cancels it): nothing of it goes to Qase, and with fail-fast off a shard is cancelled
+    # only together with the run.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -131,13 +137,14 @@ jobs:
       # One Maestro report (a shard without one: its flows as failures), every shard's execution data and the native
       # tests' outputs where :e2eCoverageReport and qase-report.py read them.
       - name: Merge shard reports
+        id: merge
         run: |
           {
             echo "### UI tests"
             echo
           } >> "$GITHUB_STEP_SUMMARY"
           python3 scripts/e2e-shards.py gather --shards "$SHARDS" --dir build/e2e-shards --out build/e2e \
-            --summary "$GITHUB_STEP_SUMMARY"
+            --summary "$GITHUB_STEP_SUMMARY" --github-output "$GITHUB_OUTPUT"
 
       # The report does not fail the job: without data it is empty and the summary says so.
       - name: UI test coverage report
@@ -206,11 +213,19 @@ jobs:
           retention-days: 14
 
       # Last, after everything is published: the run is red when any shard failed (fail-fast is off, so the matrix
-      # result is `failure` if one shard failed and `success` only if all passed).
-      - name: Fail if a shard failed
-        if: needs.shard.result != 'success'
+      # result is `failure` if one shard failed and `success` only if all passed), and also when the merged report is
+      # not a pass although every job was green — a shard's report that never arrived (the download above may fail),
+      # flows missing from a report or failed in it.
+      - name: Fail if a shard failed or its report is missing
+        if: needs.shard.result != 'success' || steps.merge.outputs.incomplete == 'true'
         env:
           RESULT: ${{ needs.shard.result }}
+          PROBLEMS: ${{ steps.merge.outputs.problems }}
         run: |
-          echo "::error::UI tests: at least one shard did not pass (matrix result: $RESULT); see the summary and the e2e-reports artifact"
+          if [ "$RESULT" != "success" ]; then
+            echo "::error::UI tests: at least one shard did not pass (matrix result: $RESULT); see the summary and the e2e-reports artifact"
+          fi
+          if [ -n "$PROBLEMS" ]; then
+            echo "::error::UI tests: the merged report is incomplete or failed: $PROBLEMS"
+          fi
           exit 1

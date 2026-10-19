@@ -106,13 +106,21 @@ def flow_name(root: Path, flow: str) -> str:
     return match.group(1).strip("\"'") if match else Path(flow).stem
 
 
-def flow_of(case: ET.Element) -> str | None:
-    """Repository-relative flow path of a Maestro test case (its `file` attribute is absolute)."""
+def flow_of(case: ET.Element, by_name: dict[str, str] | None = None) -> str | None:
+    """
+    Repository-relative flow path of a Maestro test case: from its `file` attribute (absolute), else — a Maestro
+    version that writes no such path — from its name, the flow's `name:` ([by_name]; names are unique per flow).
+    """
     file = (case.get("file") or "").replace("\\", "/")
     marker = "/.maestro/"
     if marker in file:
         return ".maestro/" + file.split(marker, 1)[1]
-    return None
+    return (by_name or {}).get(case.get("name") or "")
+
+
+def flows_by_name(root: Path, flows: list[str]) -> dict[str, str]:
+    """`name:` of each flow → its path: the fallback of [flow_of]."""
+    return {flow_name(root, flow): flow for flow in flows}
 
 
 def _failed(case: ET.Element) -> bool:
@@ -146,6 +154,7 @@ def merge_reports(root: Path, shards: list[Shard], reports: dict[int, Path | Non
     merged = ET.Element("testsuites")
     outcomes = []
     count = len(shards)
+    by_name = flows_by_name(root, [f for s in shards for f in s.flows])
     for shard in shards:
         suite = ET.SubElement(merged, "testsuite", {"name": f"Shard {shard.index}/{count}"})
         report = reports.get(shard.index)
@@ -159,7 +168,7 @@ def merge_reports(root: Path, shards: list[Shard], reports: dict[int, Path | Non
             else:
                 for case in parsed.iter("testcase"):
                     suite.append(case)
-                    flow = flow_of(case)
+                    flow = flow_of(case, by_name)
                     if flow:
                         seen.add(flow)
                     if _failed(case):
@@ -209,6 +218,21 @@ def gather(root: Path, shards: list[Shard], shards_dir: Path, out: Path) -> list
     return outcomes
 
 
+def problems(outcomes: list[ShardOutcome]) -> list[str]:
+    """What keeps the merged result from a pass, per shard: the run must be red for each, even if every job was green."""
+    count = len(outcomes)
+    found = []
+    for o in outcomes:
+        if not o.reported and o.planned:
+            found.append(f"shard {o.index}/{count}: no Maestro report received ({o.planned} flow(s) not run)")
+            continue
+        if o.missing:
+            found.append(f"shard {o.index}/{count}: {o.missing} flow(s) missing from its report")
+        if o.failed:
+            found.append(f"shard {o.index}/{count}: {o.failed} flow(s) failed")
+    return found
+
+
 def outcomes_markdown(outcomes: list[ShardOutcome]) -> str:
     rows = ["| Shard | Flows | Passed | Failed | Not run | Flow time |", "|---|---|---|---|---|---|"]
     for o in outcomes:
@@ -227,12 +251,14 @@ def plan_markdown(shards: list[Shard]) -> str:
     return "\n".join(rows)
 
 
-def updated_durations(current: dict[str, int], reports: list[Path]) -> dict[str, int]:
+def updated_durations(
+    current: dict[str, int], reports: list[Path], by_name: dict[str, str] | None = None,
+) -> dict[str, int]:
     """Durations of the passed flows of the reports replace the stored ones; failed flows keep theirs."""
     result = dict(current)
     for report in reports:
         for case in ET.parse(report).getroot().iter("testcase"):
-            flow = flow_of(case)
+            flow = flow_of(case, by_name)
             if flow and not _failed(case):
                 result[flow] = max(1, round(float(case.get("time") or 0)))
     return dict(sorted(result.items()))
@@ -251,6 +277,10 @@ def main(argv: list[str] | None = None) -> int:
     gatherer.add_argument("--dir", type=Path, required=True, help="folder with e2e-shard-<i>/ of every shard")
     gatherer.add_argument("--out", type=Path, required=True)
     gatherer.add_argument("--summary", type=Path, help="append the Markdown status to this file as well")
+    gatherer.add_argument(
+        "--github-output", type=Path,
+        help="append `incomplete=true|false` and `problems=<text>` (GitHub Actions step outputs) to this file",
+    )
     refresher = commands.add_parser("durations", help="update the durations file from JUnit reports")
     refresher.add_argument("reports", nargs="+", type=Path)
 
@@ -271,14 +301,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "gather":
         outcomes = gather(root, plan(flows, durations, args.shards), args.dir, args.out)
+        found = problems(outcomes)
         text = "#### Shards\n\n" + outcomes_markdown(outcomes) + "\n"
+        if found:
+            text += "\n" + "\n".join(f"- {p}" for p in found) + "\n"
         sys.stdout.write(text)
         if args.summary is not None:
             with args.summary.open("a", encoding="utf-8") as summary:
                 summary.write(text + "\n")
+        if args.github_output is not None:
+            # The workflow's last step fails on it: a shard whose report never arrived must not leave the run green.
+            with args.github_output.open("a", encoding="utf-8") as output:
+                output.write(f"incomplete={'true' if found else 'false'}\n")
+                output.write(f"problems={'; '.join(found)}\n")
         return 0
     stored = json.loads(args.durations.read_text(encoding="utf-8")) if args.durations.is_file() else {}
-    stored["flows"] = updated_durations(durations, args.reports)
+    stored["flows"] = updated_durations(durations, args.reports, flows_by_name(root, flows))
     args.durations.write_text(json.dumps(stored, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"durations: {len(stored['flows'])} flow(s) in {args.durations}")
     return 0

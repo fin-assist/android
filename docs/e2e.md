@@ -57,13 +57,19 @@ The flows run on four emulators at once (FIN-180), one job per shard, each with 
   job would add its time and an artifact round trip before every emulator starts, and outputs from the same build
   cache are the same classes the JaCoCo report reads.
 - **Reports.** Each shard uploads its `build/e2e/` as `e2e-shard-<i>` (kept 3 days), whatever its result. The
-  `Reports` job runs after all shards, whatever they ended with (`if: always()`): `e2e-shards.py gather` merges the
+  `Reports` job runs after all shards, whatever they ended with, unless the run was cancelled (`if: !cancelled()`):
+  `e2e-shards.py gather` merges the
   Maestro reports into one `build/e2e/maestro-report.xml` and puts the execution data of every shard and of the
   native tests where `:e2eCoverageReport` reads them; then the coverage report, the summary, the FIN-63 check, one
   Qase run and the `e2e-reports` artifact (merged report, coverage, every shard's folder). A shard that left no report
   — its job failed or timed out before the flows ended — is not lost silently: its flows go into the merged report as
-  failures («shard i/n left no Maestro report»), and so does a flow missing from a shard's report.
-- **Result.** The run is red when any shard failed: the `Reports` job fails after it has published everything.
+  failures («shard i/n left no Maestro report»), and so does a flow missing from a shard's report. Flows are matched
+  to the report by its `file` attribute, or by the flow's `name` when a Maestro version writes none (names are unique,
+  `scripts/test_e2e_shards.py` checks it). Maestro is pinned in the workflow (`MAESTRO_VERSION`): a new version is
+  bumped there and checked with one run.
+- **Result.** The run is red when any shard failed, and also when the merged report is not a pass although every job
+  was green (a shard's report that never arrived, flows missing or failed — `gather` lists them): the `Reports` job
+  fails after it has published everything.
 
 ## Qase
 
