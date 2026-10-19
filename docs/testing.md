@@ -5,7 +5,7 @@ checks what:
 
 | Layer | Checks | Where | Runs |
 |---|---|---|---|
-| Unit (JUnit 4, coroutines-test, Turbine) | logic: domain rules, mappers, repositories, view models, the fake backend, `core/*` helpers | `src/test/` of the module | CI on every push and PR |
+| Unit (JUnit 4, coroutines-test, Turbine) | logic: domain rules, mappers, repositories, view models, the fake backend, `core/*` helpers | `src/test/` of the module | CI: the coverage variant (`unitTest`) on a PR, every variant (`test`) on pushes to `main` and release branches |
 | Design check (Robolectric + Roborazzi) | how a screen, state, sheet or dialog looks next to its mockup | `*DesignCheckTest` in feature `:impl` | by hand, `-Ppf.designcheck` (design-check/README.md) |
 | Maestro | user scenarios end to end on the mock build | `.maestro/flows/<feature>/` | emulator; CI only after merges to `main` (docs/e2e.md) |
 | Native instrumented | what Maestro cannot drive: system dialogs, intents, permissions | `app/src/androidTestMock/` | same as Maestro |
@@ -100,7 +100,8 @@ python3 scripts/coverage-diff.py --base origin/<base>
 ```
 
 - Variant `unit`: the JVM tests of pure Kotlin modules, `debug` unit tests of Android libraries, `mockDebug` of
-  `:app`. Release, `local`, `prod` and `e2e` variants are not run for coverage.
+  `:app`. Release, `local`, `prod` and `e2e` variants are not run for coverage. `./gradlew unitTest` runs exactly
+  these tests: every module gets the task from the convention plugins (`Coverage.kt`), so a new module needs no list.
 - Excluded from the report (root `build.gradle.kts`): generated code (Hilt/Dagger, kotlinx.serialization
   serializers, `R`, `BuildConfig`, `ComposableSingletons`, `HiltWrapper_*`, Dagger-generated factories — `@DaggerGenerated`,
   `*Module_*Factory`), `@Composable` and `@Preview` functions, and `:core:screenshot-testing`. Composables are
@@ -129,7 +130,10 @@ python3 scripts/coverage-diff.py --base origin/<base>
 
 ### In CI
 
-The `build` job (`.github/workflows/ci.yml`) builds the reports after the unit tests:
+The `unit-tests` job (`.github/workflows/ci.yml`; lint and the build of the variants run in parallel jobs, FIN-176)
+runs the unit tests and builds the reports after them. On a PR it runs `unitTest` — the tests of the variant the
+coverage is measured on; on pushes to `main`, `release/**` and `stage-*/**` it runs `test`, the unit tests of every
+variant (release, `local`, `prod`, `e2e`), so a test that fails only in another variant is caught there:
 
 - PR: a comment «Unit test coverage» in the PR conversation — project totals, coverage of changed lines against
   the PR's base branch, uncovered lines per file (files with gaps first, up to 50, long line lists cut to fit a

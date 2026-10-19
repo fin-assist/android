@@ -5,14 +5,18 @@ on:
     branches: [main, 'release/**', 'stage-*/**']
   pull_request:
 
+# Read-only by default; each job asks for what it writes (commit comments on failure, the coverage comment on the PR).
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# The Gradle checks run as three parallel jobs (FIN-176): unit tests with coverage, lint, and the build of the
+# variants with the build separation checks. Each one configures the project, so a violation of the module dependency
+# rules fails all three in their first Gradle call. Every job reads the shared Gradle cache (setup-gradle) and writes
+# it from main only; on failure each posts the tail of its own build.log as a commit comment.
 jobs:
   # AGENTS.md is the agents' map of the repo; stale generated blocks or registries out of sync with the code
   # fail here, in seconds and without Gradle (scripts/agent-docs.py).
@@ -43,10 +47,13 @@ jobs:
       - name: No new JVM-only code in core/api and mock/backend
         run: python3 scripts/check-kmp-ready.py
 
-  build:
-    name: Build, test, lint (mock flavor)
+  unit-tests:
+    name: Unit tests and coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 40
+    permissions:
+      contents: write        # commit comment on failure
+      pull-requests: write   # coverage comment on the PR
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,10 +68,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
-
-      # Module dependency rules are checked during configuration: a violation fails the first step.
-      - name: Configure
-        run: ./gradlew help --no-daemon --stacktrace 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Robolectric fetches the Android framework jars (android-all-instrumented, one per SDK) into ~/.m2 the first time
       # a test needs them; setup-gradle caches ~/.gradle only. Without this cache every job downloads them from Maven
@@ -90,9 +93,14 @@ jobs:
           key: ${{ steps.robolectric.outputs.key }}
           restore-keys: ${{ steps.robolectric.outputs.prefix }}
 
+      # PR: `unitTest` of every module — the variant the coverage is measured on (jvm, debug of libraries, mockDebug
+      # of the app; build-logic Coverage.kt). Push (main, release/**, stage-*/**): `test`, the unit tests of every
+      # variant — release, local, prod and e2e included — so a test failing only there is caught before a release.
       - name: Unit tests
         id: unit-tests
-        run: ./gradlew testMockDebugUnitTest testDebugUnitTest test :build-logic:convention:test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        env:
+          TEST_TASK: ${{ github.event_name == 'pull_request' && 'unitTest' || 'test' }}
+        run: ./gradlew "$TEST_TASK" :build-logic:convention:test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Saved from main and release branches only, like the Gradle cache: their caches are the ones every PR can read.
       # Only after green tests: then every jar a test needed has been fetched, and an entry, once saved, never changes.
@@ -162,8 +170,81 @@ jobs:
           path: build/reports/kover/
           retention-days: 14
 
+      # Raw logs are not reachable through the API from every environment; the tail of a failed build is posted
+      # as a commit comment so it can be read via REST.
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_NAME: Unit tests and coverage
+        run: |
+          {
+            echo "CI failed on \`${{ github.workflow }} / $JOB_NAME\` — last lines of the build log:"
+            echo
+            echo '```'
+            # Compiler errors and failed tests first (these are what matters), then the Gradle failure summary.
+            grep -E "^e: |error:|Unresolved reference|Test.*FAILED|tests completed|FAILED$" build.log | head -n 120
+            echo "--- summary ---"
+            grep -E "^(> Task .* FAILED|FAILURE|\* What went wrong|\* Where|Caused by|Execution failed|Could not|Build file|Line:)" build.log | tail -n 40
+            echo '```'
+          } > comment.md
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$(cat comment.md)" >/dev/null
+
+  lint:
+    name: Lint (mock flavor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write        # commit comment on failure
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
       - name: Lint
         run: ./gradlew lintMockDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_NAME: Lint (mock flavor)
+        run: |
+          {
+            echo "CI failed on \`${{ github.workflow }} / $JOB_NAME\` — last lines of the build log:"
+            echo
+            echo '```'
+            grep -E "^e: |error:|Error:|Unresolved reference|FAILED$" build.log | head -n 120
+            echo "--- summary ---"
+            grep -E "^(> Task .* FAILED|FAILURE|\* What went wrong|\* Where|Caused by|Execution failed|Could not|Build file|Line:)" build.log | tail -n 40
+            echo '```'
+          } > comment.md
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$(cat comment.md)" >/dev/null
+
+  assemble:
+    name: Build variants and separation checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write        # commit comment on failure
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       # Environments (FIN-120, AGENTS.md «Flavors»): mock as the working product, localDebug for the local backend,
       # prodRelease as what users get (unsigned: CI has no signing key). The localRelease manifest is checked below.
@@ -224,19 +305,17 @@ jobs:
           path: app/build/outputs/apk/mock/debug/*.apk
           retention-days: 14
 
-      # Raw logs are not reachable through the API from every environment; the tail of a failed build is posted
-      # as a commit comment so it can be read via REST.
       - name: Report failure
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
+          JOB_NAME: Build variants and separation checks
         run: |
           {
-            echo "CI failed on \`${{ github.workflow }}\` — last lines of the build log:"
+            echo "CI failed on \`${{ github.workflow }} / $JOB_NAME\` — last lines of the build log:"
             echo
             echo '```'
-            # Compiler errors and failed tests first (these are what matters), then the Gradle failure summary.
-            grep -E "^e: |error:|Unresolved reference|Test.*FAILED|tests completed|FAILED$" build.log | head -n 120
+            grep -E "^e: |error:|Unresolved reference|FAILED$" build.log | head -n 120
             echo "--- summary ---"
             grep -E "^(> Task .* FAILED|FAILURE|\* What went wrong|\* Where|Caused by|Execution failed|Could not|Build file|Line:)" build.log | tail -n 40
             echo '```'
