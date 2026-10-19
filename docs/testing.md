@@ -152,10 +152,11 @@ modules run along the module graph, and each module's tests start as soon as it 
 of the others. So the job relies on the build cache: the Gradle jobs save `~/.gradle` (setup-gradle) on pushes to
 `main` and `release/**`, and a PR restores its base branch's entry first. A module comes from the cache, its tests
 included (with their Kover data), when neither it nor anything on its classpath changed: an edit in `core/common`
-reruns the tests of every module depending on it. A change to the build reruns what its inputs reach: a new
-Kotlin, AGP, KSP, Hilt or Compose version or a convention plugin of `build-logic` that adds actions or arguments to
-the tasks can recompile every module, while a Renovate PR for a library reruns the modules using it, and one for a
-test-only artifact of `androidTest` none of the unit tests. More test
+reruns the tests of every module depending on it. A version bump in `gradle/libs.versions.toml` follows the same rule:
+it reaches the modules with the artifact on their classpath — a test library reruns the tests with the main code still
+cached, an `androidTest` one touches nothing — so most Renovate PRs keep the cache. Everything recompiles only when the
+build itself changes: `build-logic`, the Gradle wrapper, or a plugin or compiler version (`kotlin`, `ksp`, `agp`,
+`hilt`, `kover`, `tracer`). More test
 JVMs per task (`maxParallelForks`) were measured and left out: a Robolectric module holds one or two long test
 classes, so a second JVM only adds Robolectric's start-up, and the runner's four cores are already busy with the
 modules Gradle runs in parallel. A few lines of the race tests (`*RaceTest`) are covered in some runs and not in
