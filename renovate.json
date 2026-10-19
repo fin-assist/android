@@ -14,11 +14,14 @@
         "androidx.lifecycle:**",
         "androidx.navigation:**"
       ],
-      "groupName": "androidx compose stack"
+      "groupName": "androidx compose stack",
+      "separateMajorMinor": false
     },
     {
       "description": "FIN-184: fragment 1.9 pulls Compose UI 1.9 and lifecycle 2.10 past the Compose BOM 2025.03.01; it moves together with the BOM, by hand",
-      "matchPackageNames": ["androidx.fragment:**"],
+      "matchPackageNames": [
+        "androidx.fragment:**"
+      ],
       "allowedVersions": "<1.9.0"
     }
   ]
