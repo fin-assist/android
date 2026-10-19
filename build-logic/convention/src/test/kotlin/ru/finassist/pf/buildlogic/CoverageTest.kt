@@ -18,9 +18,8 @@ import java.util.Properties
 
 /**
  * The graph of [UNIT_TEST_TASK] in real modules: AGP, the Kotlin JVM plugin and Kover applied to ProjectBuilder
- * projects, then [configureCoverage] — as the convention plugins do. The Android cases need the SDK: `ANDROID_HOME`
- * or `ANDROID_SDK_ROOT` (the CI runner), else `sdk.dir` of the repo's `local.properties` (Android Studio,
- * scripts/agent-setup.sh).
+ * projects, then [configureCoverage] — as the convention plugins do. The Android cases need the SDK, found as AGP finds
+ * it ([findAndroidSdk]): `sdk.dir` of the repo's `local.properties`, then `ANDROID_HOME`, then `ANDROID_SDK_ROOT`.
  */
 class CoverageTest {
 
@@ -149,20 +148,14 @@ class CoverageTest {
 
     private fun project(name: String, buildFile: Boolean = false): Project {
         val dir = tmp.newFolder(name)
-        sdkDir()?.let { File(dir, "local.properties").writeText("sdk.dir=${it.replace("\\", "\\\\")}\n") }
+        sdkDir()?.let { sdk ->
+            File(dir, "local.properties").outputStream().use { Properties().apply { setProperty("sdk.dir", sdk) }.store(it, null) }
+        }
         if (buildFile) File(dir, "build.gradle.kts").writeText("")
         return ProjectBuilder.builder().withName(name).withProjectDir(dir).build()
     }
 
-    /**
-     * The SDK as the build finds it: `ANDROID_HOME` / `ANDROID_SDK_ROOT`, else `sdk.dir` of the nearest
-     * `local.properties` above the working directory (Android Studio writes only that one).
-     */
-    private fun sdkDir(): String? =
-        System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT") ?: generateSequence(File("").absoluteFile) { it.parentFile }
-            .map { File(it, "local.properties") }
-            .firstOrNull { it.isFile }
-            ?.let { file -> Properties().apply { file.inputStream().use(::load) }.getProperty("sdk.dir") }
+    private fun sdkDir(): String? = findAndroidSdk(System::getenv, File(""))
 
     private fun Project.evaluate() = (this as ProjectInternal).evaluate()
 
