@@ -391,8 +391,10 @@ class UploadViewModelTest {
     @Test fun `parsing cancelled on the server returns to the guide`() {
         api.streams += flowOf(ImportEvent.Error(ErrorCodes.CANCELLED, "cancelled"))
         vm.onFilePicked(uri)
-        // The guide is on screen before the pick as well: wait for the stream to end.
+        // The guide is on screen before the pick as well: wait for the stream to end. The event is tracked on the IO
+        // thread just before the state changes, so the guide is awaited after it, not read at once.
         await("the cancellation") { Events.STATEMENTS_UPLOAD_CANCELLED in tracker.names() }
+        await("the guide") { it.phase is UploadPhase.Guide }
         assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
     }
 
@@ -456,6 +458,8 @@ class UploadViewModelTest {
         api.uploadFailures += AppError.Maintenance(until = null, retryAfterSeconds = null)
         vm.onFilePicked(uri)
         await("the interruption") { Events.STATEMENTS_UPLOAD_INTERRUPTED in tracker.names() }
+        // Tracked just before the state changes (IO thread): await the guide instead of reading it at once.
+        await("the guide") { it.phase is UploadPhase.Guide }
         assertEquals(UploadPhase.Guide(config), vm.state.value.phase)
         assertFalse(vm.state.value.uploadOffline)
         assertTrue(Events.STATEMENTS_UPLOAD_FAILED !in tracker.names())
