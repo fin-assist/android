@@ -171,6 +171,9 @@ def merge_reports(root: Path, shards: list[Shard], reports: dict[int, Path | Non
                     flow = flow_of(case, by_name)
                     if flow:
                         seen.add(flow)
+                        # Matched by name: give the case its path, so qase-report.py (keyed by `file`) finds it.
+                        if not flow_of(case):
+                            case.set("file", str(root / flow))
                     if _failed(case):
                         outcome.failed += 1
                     else:

@@ -186,6 +186,17 @@ class MergeTest(unittest.TestCase):
         self.assertEqual([(o.passed, o.failed, o.missing) for o in outcomes], [(1, 0, 0), (2, 0, 0)])
         self.assertEqual(shards.problems(outcomes), [])
         self.assertTrue(all(c.find("failure") is None for c in merged.iter("testcase")))
+        # The merged report carries the path again: Qase finds every case.
+        self.assertEqual(sorted(shards.flow_of(c) for c in merged.iter("testcase")), sorted(self.flows))
+        spec = importlib.util.spec_from_file_location("qase_report_by_name", ROOT / "scripts" / "qase-report.py")
+        qase = importlib.util.module_from_spec(spec)
+        sys.modules["qase_report_by_name"] = qase
+        spec.loader.exec_module(qase)
+        results = qase.parse_report((self.root / "build" / "e2e" / "maestro-report.xml").read_text(encoding="utf-8"))
+        cases = {flow: 100 + i for i, flow in enumerate(self.flows)}
+        payload, unmapped = qase.map_results(results, cases)
+        self.assertEqual(unmapped, [])
+        self.assertEqual(sorted((p["case_id"], p["status"]) for p in payload), [(100, "passed"), (101, "passed"), (102, "passed")])
 
     def test_merged_report_is_read_by_qase_report_as_before(self):
         spec = importlib.util.spec_from_file_location("qase_report_for_shards", ROOT / "scripts" / "qase-report.py")
