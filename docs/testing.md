@@ -101,7 +101,10 @@ python3 scripts/coverage-diff.py --base origin/<base>
 
 - Variant `unit`: the JVM tests of pure Kotlin modules, `debug` unit tests of Android libraries, `mockDebug` of
   `:app`. Release, `local`, `prod` and `e2e` variants are not run for coverage. `./gradlew unitTest` runs exactly
-  these tests: every module gets the task from the convention plugins (`Coverage.kt`), so a new module needs no list.
+  these tests: every module gets the task from the convention plugins (`Coverage.kt`, one list `COVERAGE_TARGETS`
+  of plugin, Kover variant and test task feeds both), so a new module needs no list. `pf.module.rules` fails the
+  configuration when a module with a build file has no `unitTest` or its plugin is not in `COVERAGE_TARGETS` (Kotlin
+  Multiplatform, FIN-144): such a module would otherwise drop out of the PR run silently.
 - Excluded from the report (root `build.gradle.kts`): generated code (Hilt/Dagger, kotlinx.serialization
   serializers, `R`, `BuildConfig`, `ComposableSingletons`, `HiltWrapper_*`, Dagger-generated factories — `@DaggerGenerated`,
   `*Module_*Factory`), `@Composable` and `@Preview` functions, and `:core:screenshot-testing`. Composables are

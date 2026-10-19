@@ -2,6 +2,7 @@ import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.ProjectDependency
+import ru.finassist.pf.buildlogic.unitTestProblem
 
 /**
  * `pf.module.rules`: dependency rules between modules, checked at configuration time (see docs/modules.md).
@@ -12,12 +13,18 @@ import org.gradle.api.artifacts.ProjectDependency
  * - `:core:*` may not depend on `:feature:*`, `:providers:*`, `:mock:*`, `:app`.
  * - `:providers:*` and `:mock:*` may depend only on `:core:*`.
  * - `:app` may depend on anything — it is the composition root.
+ *
+ * Also every module with a build file has a `unitTest` task that runs its tests (`unitTestProblem`, Coverage.kt).
  */
 class ModuleRulesPlugin : Plugin<Project> {
     override fun apply(target: Project) {
         require(target == target.rootProject) { "pf.module.rules must be applied to the root project" }
         target.subprojects.forEach { sub ->
-            sub.afterEvaluate { checkRules(sub) }
+            sub.afterEvaluate {
+                checkRules(sub)
+                // A module without the PR unit test task would silently drop out of CI on PRs (FIN-176).
+                unitTestProblem(sub)?.let { throw GradleException(it) }
+            }
         }
     }
 

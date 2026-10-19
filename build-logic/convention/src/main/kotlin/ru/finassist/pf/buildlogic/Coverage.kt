@@ -17,32 +17,30 @@ const val COVERAGE_VARIANT = "unit"
  */
 const val UNIT_TEST_TASK = "unitTest"
 
-/** Plugins that decide which test task belongs to the [COVERAGE_VARIANT] variant of a module. */
-internal val COVERAGE_TEST_PLUGINS = listOf("org.jetbrains.kotlin.jvm", "com.android.library", "com.android.application")
+/**
+ * What a module kind contributes to the [COVERAGE_VARIANT] variant: with [pluginId] applied, the Kover variant
+ * [koverVariant] goes into the report and [testTask] into [UNIT_TEST_TASK].
+ */
+internal data class CoverageTarget(val pluginId: String, val koverVariant: String, val testTask: String)
 
 /**
- * Test task of the [COVERAGE_VARIANT] variant in a module with [pluginId] applied, or null for another plugin. Must
- * match the variants added to Kover in [configureCoverage]: `jvm`, `debug`, `mockDebug`.
+ * The one list both Kover and [UNIT_TEST_TASK] are built from: the JVM target of a pure Kotlin module, `debug` of an
+ * Android library, `mockDebug` of the app. Release, `local`, `prod` and `e2e` variants stay out — they run the same
+ * unit tests over the same code, and running them would only multiply the test time.
  */
-internal fun coverageTestTask(pluginId: String): String? = when (pluginId) {
-    "org.jetbrains.kotlin.jvm" -> "test"
-    "com.android.library" -> "testDebugUnitTest"
-    "com.android.application" -> "testMockDebugUnitTest"
-    else -> null
-}
+internal val COVERAGE_TARGETS = listOf(
+    CoverageTarget("org.jetbrains.kotlin.jvm", koverVariant = "jvm", testTask = "test"),
+    CoverageTarget("com.android.library", koverVariant = "debug", testTask = "testDebugUnitTest"),
+    CoverageTarget("com.android.application", koverVariant = "mockDebug", testTask = "testMockDebugUnitTest"),
+)
 
-/**
- * Applies Kover and defines the `unit` variant: the JVM target of a pure Kotlin module, `debug` of an Android
- * library, `mockDebug` of the app. Release, `local`, `prod` and `e2e` variants stay out — they run the same unit
- * tests over the same code, and running them would only multiply the test time. Registers [UNIT_TEST_TASK], which
- * runs the tests of the same variant.
- */
+/** Applies Kover with the [COVERAGE_VARIANT] variant and registers [UNIT_TEST_TASK], both from [COVERAGE_TARGETS]. */
 internal fun Project.configureCoverage() {
     pluginManager.apply("org.jetbrains.kotlinx.kover")
     extensions.configure<KoverProjectExtension> {
         currentProject {
             createVariant(COVERAGE_VARIANT) {
-                add("jvm", "debug", "mockDebug", optional = true)
+                add(*COVERAGE_TARGETS.map { it.koverVariant }.toTypedArray(), optional = true)
             }
         }
     }
@@ -50,10 +48,26 @@ internal fun Project.configureCoverage() {
         group = "verification"
         description = "Runs the unit tests of the '$COVERAGE_VARIANT' coverage variant: jvm, debug or mockDebug."
     }
-    COVERAGE_TEST_PLUGINS.forEach { id ->
-        pluginManager.withPlugin(id) {
-            val testTask = checkNotNull(coverageTestTask(id)) { "no coverage test task for plugin $id" }
-            unitTest.configure { dependsOn(testTask) }
+    COVERAGE_TARGETS.forEach { target ->
+        pluginManager.withPlugin(target.pluginId) {
+            unitTest.configure { dependsOn(target.testTask) }
         }
     }
+}
+
+/**
+ * Why [module] would drop out of the PR test run, or null when it is in: a module with a build file must have a
+ * [UNIT_TEST_TASK] that runs some tests — no convention plugin applied, or a plugin outside [COVERAGE_TARGETS] (Kotlin
+ * Multiplatform, FIN-144), leaves it without one. Checked at configuration time by `pf.module.rules`.
+ */
+internal fun unitTestProblem(module: Project): String? {
+    if (!module.buildFile.exists()) return null
+    val task = module.tasks.findByName(UNIT_TEST_TASK)
+        ?: return "${module.path} has no '$UNIT_TEST_TASK' task: apply a pf.* convention plugin, which calls " +
+            "configureCoverage() (build-logic Coverage.kt)."
+    if (task.dependsOn.isEmpty()) {
+        return "'$UNIT_TEST_TASK' of ${module.path} runs no tests: none of ${COVERAGE_TARGETS.map { it.pluginId }} is " +
+            "applied. Add the module's plugin to COVERAGE_TARGETS (build-logic Coverage.kt)."
+    }
+    return null
 }

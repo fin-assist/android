@@ -17,6 +17,10 @@ dependencies {
 
     // Logic of the build without Gradle types (LocalBackend): `./gradlew :build-logic:convention:test`, run by CI.
     testImplementation(libs.junit4)
+    // Plugins the tests apply to ProjectBuilder projects (CoverageTest): the task graph of real modules.
+    testImplementation(libs.android.gradlePlugin)
+    testImplementation(libs.kotlin.gradlePlugin)
+    testImplementation(libs.kover.gradlePlugin)
 }
 
 gradlePlugin {
