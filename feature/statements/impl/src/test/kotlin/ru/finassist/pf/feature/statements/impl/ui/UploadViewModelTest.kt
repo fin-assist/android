@@ -508,12 +508,12 @@ class UploadViewModelTest {
         vm.onFilePicked(uri)
         awaitAccepted()
         await("the first stream") { api.streamOpens.get() == 1 }
-        dispatcher.scheduler.advanceTimeBy(1_000)
-        dispatcher.scheduler.runCurrent()
-        assertEquals(2, api.streamOpens.get(), "the drop was re-opened and got 429")
+        // The re-open pause starts only once the first stream has ended on the IO thread: move the test clock on
+        // until it has, not once (a single step could run before the pause was scheduled).
+        advanceUntil("the drop was re-opened and got 429") { api.streamOpens.get() == 2 }
         vm.stopWatching()
         vm.watch()
-        assertEquals(3, api.streamOpens.get())
+        await("the stream opened again") { api.streamOpens.get() == 3 }
         assertIs<UploadPhase.Busy>(vm.state.value.phase, "a 429 on opening it again is not an error")
         dispatcher.scheduler.advanceTimeBy(59_000)
         dispatcher.scheduler.runCurrent()
@@ -542,7 +542,7 @@ class UploadViewModelTest {
         vm.stopWatching()
         liveStream()
         vm.watch()
-        assertEquals(2, api.streamOpens.get())
+        await("the stream opened again") { api.streamOpens.get() == 2 }
     }
 
     @Test fun `watch outside of an accepted upload does nothing`() {
