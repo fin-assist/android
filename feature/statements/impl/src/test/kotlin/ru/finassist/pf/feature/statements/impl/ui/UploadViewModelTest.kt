@@ -427,6 +427,21 @@ class UploadViewModelTest {
         assertTrue(Events.STATEMENTS_UPLOAD_FAILED !in tracker.names())
     }
 
+    @Test fun `the screen started again under the same maintenance tracks the interruption once`() {
+        api.streams += flow { throw AppError.Maintenance(until = null, retryAfterSeconds = 600) }
+        api.streams += flow { throw AppError.Maintenance(until = null, retryAfterSeconds = 600) }
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        await("the interruption") { Events.STATEMENTS_UPLOAD_INTERRUPTED in tracker.names() }
+        await("the first stream ended") { api.streamOpens.get() == 1 }
+        vm.stopWatching()
+        vm.watch()
+        await("the second opening") { api.streamOpens.get() == 2 }
+        vm.stopWatching()
+        assertEquals(1, tracker.names().count { it == Events.STATEMENTS_UPLOAD_INTERRUPTED })
+        assertIs<UploadPhase.Busy>(vm.state.value.phase)
+    }
+
     @Test fun `an unsupported version on opening the stream is not a parsing failure`() {
         api.streams += flow { throw AppError.UpdateRequired() }
         vm.onFilePicked(uri)

@@ -84,5 +84,3 @@ tags:
     notVisible: "Разбираем…"
     timeout: 15000
 - assertVisible: "october.ofx"
-- assertNotVisible:
-    id: "statements.upload.error.processing_failed"

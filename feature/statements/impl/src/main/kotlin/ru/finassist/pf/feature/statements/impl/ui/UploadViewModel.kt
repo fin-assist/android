@@ -91,6 +91,9 @@ class UploadViewModel @Inject constructor(
 
     private var progressJob: Job? = null
 
+    /** Uploads whose interruption has been tracked: a screen started again under the same maintenance does not repeat it. */
+    private val interruptedTracked = HashSet<String>()
+
     /**
      * `complete` that arrived while «Прервать» was in flight. DELETE of a finished upload removes its
      * operations (api.md 3.5), so the result screen must not open until DELETE is known to have failed.
@@ -273,8 +276,11 @@ class UploadViewModel @Inject constructor(
      * the upload stays on screen, and [watch] picks up its state when the screen is started again.
      */
     private fun interrupted(e: AppError) {
-        val reason = if (e is AppError.Maintenance) "maintenance" else "update_required"
-        tracker.track(Events.STATEMENTS_UPLOAD_INTERRUPTED, mapOf("reason" to reason))
+        val uploadId = (_state.value.phase as? UploadPhase.Busy)?.uploadId
+        if (uploadId == null || interruptedTracked.add(uploadId)) {
+            val reason = if (e is AppError.Maintenance) "maintenance" else "update_required"
+            tracker.track(Events.STATEMENTS_UPLOAD_INTERRUPTED, mapOf("reason" to reason))
+        }
         _state.update { s ->
             if ((s.phase as? UploadPhase.Busy)?.uploadId != null) s
             else s.copy(phase = UploadPhase.Guide(fallbackConfig()), askCancel = false)
