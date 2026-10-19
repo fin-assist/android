@@ -36,13 +36,17 @@ tags:
       id: "ds.period.pick"
     direction: UP
 # Scrolling up stops on the first strip of the period row, and that strip can lie under the screen title, where a tap
-# lands on the title (FIN-188). The row is the top of the list: one more swipe brings the list to its top.
+# lands on the title (FIN-188). Only the assistant card stands above the row, shorter than this swipe: one more
+# swipe brings the list to its top. The card in view means the whole row is in view; a visible strip of the row
+# alone would pass a check the same way `ds.period.pick` passed `scrollUntilVisible`.
 - swipe:
     start: "50%, 30%"
     end: "50%, 60%"
 - extendedWaitUntil:
-    visible: "Сентябрь 2026"
+    visible:
+      id: "analytics.ask"
     timeout: 5000
+- assertVisible: "Сентябрь 2026"
 
 # Previous month, then quarter / year / month again.
 - tapOn:
