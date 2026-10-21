@@ -188,6 +188,7 @@ internal fun SearchContent(
                     PfButton("Сбросить фильтры", onClick = actions.reset, variant = ButtonVariant.SECONDARY, modifier = Modifier.testTag(OperationsTags.SEARCH_RESET))
                 }
             } else {
+                val operationsById = remember(r.items) { r.items.associateBy { it.id } }
                 val months = remember(r.items, zone, today) { OperationFormat.searchGroups(r.items, zone, today) }
                 LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space4, bottom = d.space6)) {
                     item(key = "count") {
@@ -201,7 +202,7 @@ internal fun SearchContent(
                         item(key = "m-$label") {
                             PfTransactionGroup(label, first = index == 0, modifier = if (index == 0) Modifier.padding(top = d.space3) else Modifier) {
                                 rows.forEach { row ->
-                                    OperationRow(row, onClick = { onOpenOperation(row) }, divider = row !== rows.last())
+                                    OperationRow(row, onClick = { operationsById[row.id]?.let(onOpenOperation) }, divider = row !== rows.last())
                                 }
                             }
                         }
