@@ -241,4 +241,94 @@ class FeedViewModelTest {
         assertEquals(listOf("2026-10"), vm.state.value.summary.map { it.month })
     }
 
+    private fun pendingReplies(vararg replies: CompletableDeferred<OperationsList>) {
+        val queue = ArrayDeque(replies.toList())
+        api.listReply = { queue.removeFirst().await() }
+    }
+
+    @Test fun `old first page cannot roll back the timestamp received from details`() {
+        api.lists += page("op_1", next = 1)
+        val vm = vm()
+        val old = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        pendingReplies(old, fresh)
+        vm.refresh()
+        val updated = details("op_1").copy(occurredAt = at(25).plusMonths(1))
+        operations.updateRecords(listOf(updated))
+        val canonical = page("op_1", month = "2026-10").copy(items = listOf(updated.toItem()))
+        fresh.complete(canonical)
+        old.complete(page("op_1", next = 1))
+        assertEquals(canonical.items, vm.state.value.items)
+        assertEquals(canonical.summary, vm.state.value.summary)
+        assertEquals(null, vm.state.value.nextBefore)
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `old first page error cannot clear a newer refresh state`() {
+        api.lists += page("op_1")
+        val vm = vm()
+        val old = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        pendingReplies(old, fresh)
+        vm.refresh()
+        vm.refresh()
+        old.completeExceptionally(AppError.Offline())
+        assertTrue(vm.state.value.refreshing)
+        assertFalse(vm.state.value.offline)
+        fresh.complete(page("op_2"))
+        assertEquals(listOf("op_2"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `old next page cannot append rows or change cursor after a timestamp refresh`() {
+        api.lists += page("op_1", next = 1)
+        val vm = vm()
+        val oldPage = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        pendingReplies(oldPage, fresh)
+        vm.loadMore()
+        val updated = details("op_1").copy(occurredAt = at(25).plusMonths(1))
+        operations.updateRecords(listOf(updated))
+        assertFalse(vm.state.value.loadingMore)
+        val canonical = page("op_1", next = 2, month = "2026-10").copy(items = listOf(updated.toItem()))
+        fresh.complete(canonical)
+        oldPage.complete(page("op_old", month = "2026-08"))
+        assertEquals(canonical.items, vm.state.value.items)
+        assertEquals(canonical.summary, vm.state.value.summary)
+        assertEquals(at(2), vm.state.value.nextBefore)
+        assertFalse(vm.state.value.loadingMore)
+    }
+
+    @Test fun `old next page error cannot fail a newer pagination request`() {
+        api.lists += page("op_1", next = 1)
+        val vm = vm()
+        val oldPage = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        val newPage = CompletableDeferred<OperationsList>()
+        pendingReplies(oldPage, fresh, newPage)
+        vm.loadMore()
+        vm.refresh()
+        fresh.complete(page("op_2", next = 2))
+        vm.loadMore()
+        oldPage.completeExceptionally(AppError.Offline())
+        assertTrue(vm.state.value.loadingMore)
+        assertFalse(vm.state.value.moreFailed)
+        newPage.complete(page("op_3"))
+        assertEquals(listOf("op_2", "op_3"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.loadingMore)
+        assertFalse(vm.state.value.moreFailed)
+    }
+
+    @Test fun `pagination waits while a shown feed is refreshing`() {
+        api.lists += page("op_1", next = 1)
+        val vm = vm()
+        val fresh = CompletableDeferred<OperationsList>()
+        pendingReplies(fresh)
+        vm.refresh()
+        vm.loadMore()
+        assertEquals(2, api.queries.size)
+        assertFalse(vm.state.value.loadingMore)
+        fresh.complete(page("op_2"))
+    }
+
 }

@@ -46,6 +46,7 @@ internal class FakeOperationsApi : OperationsApi {
     /** Answers to `listOperations` in order; the last one repeats. An [AppError] in the list is thrown. */
     val lists = ArrayDeque<Any>()
     var gate: CompletableDeferred<Unit>? = null
+    var listReply: (suspend (OperationsQuery) -> OperationsList)? = null
 
     val openedAt = mutableListOf<String>()
     val changedAt = mutableListOf<String>()
@@ -59,6 +60,7 @@ internal class FakeOperationsApi : OperationsApi {
 
     override suspend fun listOperations(query: OperationsQuery): OperationsList {
         queries += query
+        listReply?.let { return it(query) }
         gate?.await()
         val next = if (lists.size > 1) lists.removeFirst() else lists.firstOrNull() ?: OperationsList(emptyList())
         if (next is AppError) throw next
