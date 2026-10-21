@@ -25,6 +25,21 @@ import kotlin.test.assertTrue
 class SerializationTest {
 
     @Test
+    fun `upload period is a pair of calendar dates and unknown fields and status are tolerated`() {
+        val value = ApiJson.decodeFromString(ru.finassist.pf.core.api.model.Upload.serializer(), """
+            {"upload_id":"u","file_name":"statement.ofx","status":"future_status","uploaded_at":"2026-09-25T12:00:00+03:00",
+             "operation_count":1,"unread_count":0,"source_name":"Т-Банк","period_from":"2026-09-01","period_to":"2026-09-30",
+             "unknown_field":true}
+        """)
+        assertEquals("2026-09-01", value.periodFrom)
+        assertEquals("2026-09-30", value.periodTo)
+        assertEquals(ru.finassist.pf.core.api.model.UploadStatus.UNKNOWN, value.status)
+        val encoded = ApiJson.encodeToString(ru.finassist.pf.core.api.model.Upload.serializer(), value)
+        assertFalse(encoded.contains("first_operation_at"))
+        assertFalse(encoded.contains("last_operation_at"))
+    }
+
+    @Test
     fun `operations feed from api md decodes with snake_case and nullable fields`() {
         val json = """
         {"items":[

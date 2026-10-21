@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.di
 
+import ru.finassist.pf.feature.operations.impl.domain.OperationTimestamp.toWire
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import dagger.Binds
@@ -11,6 +12,8 @@ import ru.finassist.pf.core.navigation.FeatureEntry
 import ru.finassist.pf.core.navigation.Navigator
 import ru.finassist.pf.core.navigation.PfNavTypes
 import ru.finassist.pf.feature.operations.api.CategoriesRepository
+import ru.finassist.pf.feature.operations.api.OperationRecords
+import ru.finassist.pf.feature.operations.api.OperationChangesPublisher
 import ru.finassist.pf.feature.operations.api.OperationsRepository
 import ru.finassist.pf.feature.operations.api.OperationsRoutes
 import ru.finassist.pf.feature.operations.impl.data.CategoriesRepositoryImpl
@@ -26,12 +29,12 @@ class OperationsEntry @Inject constructor() : FeatureEntry {
         composable<OperationsRoutes.Feed> {
             FeedScreen(
                 onOpenSearch = { navigator.navigate(OperationsRoutes.Search()) },
-                onOpenOperation = { id -> navigator.navigate(OperationsRoutes.Detail(id)) },
+                onOpenOperation = { op -> navigator.navigate(OperationsRoutes.Detail(op.id, op.occurredAt.toWire())) },
                 onUpload = { navigator.navigate(StatementsRoutes.Upload()) },
             )
         }
         composable<OperationsRoutes.Search>(typeMap = PfNavTypes.MAP) {
-            SearchScreen(onBack = { navigator.back() }, onOpenOperation = { id -> navigator.navigate(OperationsRoutes.Detail(id)) })
+            SearchScreen(onBack = { navigator.back() }, onOpenOperation = { op -> navigator.navigate(OperationsRoutes.Detail(op.id, op.occurredAt.toWire())) })
         }
         composable<OperationsRoutes.Detail> {
             DetailScreen(onBack = { navigator.back() })
@@ -45,6 +48,8 @@ internal abstract class OperationsModule {
     @Binds abstract fun categories(impl: CategoriesRepositoryImpl): CategoriesRepository
 
     @Binds abstract fun operations(impl: OperationsRepositoryImpl): OperationsRepository
+    @Binds abstract fun operationRecords(impl: OperationsRepositoryImpl): OperationRecords
+    @Binds abstract fun operationChangesPublisher(impl: OperationsRepositoryImpl): OperationChangesPublisher
 
     @Binds @IntoSet
     abstract fun entry(impl: OperationsEntry): FeatureEntry

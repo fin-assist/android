@@ -610,13 +610,13 @@ paths:
                 - upload_id: 01a10812-9d00-77d9-8c3d-b350e0119cd5
                   file_name: operations_2026.ofx
                   status: done
-                  uploaded_at: '2026-09-25T21:50:00+03:00'
+                  uploaded_at: '2026-10-01T10:15:00+03:00'
                   operation_count: 1086
                   unread_count: 0
                   resolved_unread_count: 2
                   resolved_by_uploaded_at: '2026-10-12T10:05:00+03:00'
-                  first_operation_at: '2026-04-01T09:12:00+03:00'
-                  last_operation_at: '2026-09-25T21:40:00+03:00'
+                  period_from: '2026-04-01'
+                  period_to: '2026-09-30'
                   source_name: Выписка Т-Банка
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -1025,6 +1025,16 @@ paths:
       description: Необязательные поля приходят, только если источник их поставляет; клиент показывает строку по наличию поля.
       parameters:
       - $ref: '#/components/parameters/OperationId'
+      - name: occurred_at
+        in: query
+        required: true
+        description: Время совершения записи — значение `occurred_at` из записи списка или поиска (`listOperations`)
+          как есть; у пары — время списания. `+` в смещении кодируется как `%2B`. Нет — 400 `VALIDATION_ERROR`.
+          Неверное время — не ошибка — сервер ищет запись по ID за всё время (FIN-202).
+        schema:
+          type: string
+          format: date-time
+        example: '2026-09-25T19:11:00+03:00'
       - $ref: '#/components/parameters/XRequestId'
       - $ref: '#/components/parameters/XClientVersion'
       responses:
@@ -1096,6 +1106,7 @@ paths:
               $ref: '#/components/schemas/ChangeCategoryRequest'
             example:
               category_id: cat_restaurants
+              occurred_at: '2026-09-25T19:11:00+03:00'
       responses:
         '200':
           description: Изменённые записи
@@ -2943,14 +2954,25 @@ components:
           description: |
             Когда загружена самая поздняя из загрузок, дочитавших строки («Строки дочитаны в загрузке от 12 октября»).
             Есть, только если `resolved_unread_count` > 0.
-        first_operation_at:
+        period_from:
           type: string
-          format: date-time
+          format: date
           nullable: true
-        last_operation_at:
+          description: |
+            Первый день периода файла `YYYY-MM-DD` в поясе профиля, включительно (api.md 3.4; FIN-197): день
+            минимального `DTSTART` по счетам файла (блоки, где есть и `DTSTART`, и `DTEND`); если таких блоков нет —
+            день первой операции файла (docs/calc.md, раздел 4). Приходит вместе с `period_to`: оба есть или обоих нет.
+            Нет у загрузки в статусе `processing` и у файла без периода и без операций.
+          example: '2026-04-01'
+        period_to:
           type: string
-          format: date-time
+          format: date
           nullable: true
+          description: |
+            Последний день периода файла `YYYY-MM-DD` в поясе профиля, включительно (api.md 3.4; FIN-197): день
+            максимального `DTEND` по счетам файла (блоки, где есть оба тега); если таких блоков нет — день последней
+            операции файла. Приходит вместе с `period_from`.
+          example: '2026-09-30'
         source_name:
           type: string
           description: Название источника для показа («Выписка Т-Банка»); клиент по нему не ветвится.
@@ -3256,11 +3278,18 @@ components:
       type: object
       required:
       - category_id
+      - occurred_at
       properties:
         category_id:
           type: string
           description: Категория с `assignable`, у которой `kinds` включает `kind` записи; для пары — любая с `assignable`.
             Иначе 422 `CATEGORY_NOT_ASSIGNABLE` — клиент перечитывает справочник (`listCategories`) и перестраивает выбор.
+        occurred_at:
+          type: string
+          format: date-time
+          description: Время совершения записи — значение `occurred_at` из записи списка, поиска или деталей как есть;
+            у пары — время списания. Нет — 400 `VALIDATION_ERROR`. Неверное время — не ошибка — сервер ищет запись по
+            ID за всё время (FIN-202).
     ChangeCategoryResponse:
       type: object
       required:
@@ -3440,7 +3469,10 @@ components:
           format: date-time
         recalculating:
           type: boolean
-          description: Идёт пересчёт — цифры могут измениться, клиент обновит экран позже.
+          description: |
+            Идёт пересчёт, вызванный действием пользователя (импорт выписки, смена категории, удаление загрузки, смена
+            часового пояса, «Не подписка») — цифры могут измениться, клиент обновит экран позже. Пересчёт после релиза, меняющего реестр,
+            признак не ставит: снимки заменяются молча, по месяцам (FIN-196).
     AnalyticsPeriodsList:
       type: object
       required:
@@ -3675,8 +3707,9 @@ components:
       nullable: true
       description: |
         `ready` (нет поля — тоже) — посчитано; `tentative` — предварительно, данных мало; `locked` — пока не считаем,
-        причина в `lock`; `none` — проверили, ничего нет; `unavailable` — не удалось посчитать, остальной экран
-        показывается. Неизвестное — как `locked`.
+        причина в `lock`; `none` — проверили, ничего нет; `unavailable` — значения нет: не удалось посчитать или
+        показатель новый и ещё не посчитан (при смене правил расчёта до пересчёта приходит прежнее значение, FIN-196);
+        остальной экран показывается. Неизвестное — как `locked`.
       x-extensible-enum:
       - ready
       - tentative

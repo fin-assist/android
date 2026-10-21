@@ -19,6 +19,8 @@ import ru.finassist.pf.mock.domain.OwnTransferPair
 import ru.finassist.pf.mock.domain.Record
 import ru.finassist.pf.mock.domain.Search
 import java.time.YearMonth
+import ru.finassist.pf.core.api.model.FieldErrorCodes
+import ru.finassist.pf.core.common.time.parseApiDateTime
 import java.time.temporal.ChronoUnit
 
 /** Feed, search, details and category change (api.md 4–5). */
@@ -107,9 +109,10 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
         )
     }
 
-    override suspend fun getOperation(id: String): OperationDetails {
+    override suspend fun getOperation(id: String, occurredAt: String): OperationDetails {
         backend.simulateNetwork()
         backend.requireSession()
+        validateOccurredAt(occurredAt)
         val record = views.record(id) ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
         return views.details(record)
     }
@@ -120,6 +123,7 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
     override suspend fun changeCategory(id: String, request: ChangeCategoryRequest): ChangeCategoryResponse {
         backend.simulateNetwork()
         backend.requireSession()
+        validateOccurredAt(request.occurredAt)
         return backend.mutex.withLock {
             // 404 before 422 (api.md, «Ошибки»): an operation that is not there is not found, whatever the category.
             views.record(id) ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
@@ -149,6 +153,15 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
         backend.simulateNetwork()
         backend.requireSession()
         return CategoriesList(backend.catalog.categories)
+    }
+
+    private fun validateOccurredAt(value: String) {
+        if (runCatching { parseApiDateTime(value) }.isFailure) {
+            throw AppError.Api(
+                ErrorCodes.VALIDATION_ERROR, 400,
+                details = listOf(AppError.FieldError("occurred_at", FieldErrorCodes.INVALID_FORMAT, "Нужны дата и время со смещением")),
+            )
+        }
     }
 
     private companion object {

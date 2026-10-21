@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.feature.statements.impl.domain.uploadPeriodLabel
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
 import ru.finassist.pf.core.designsystem.components.PfLink
@@ -282,11 +283,7 @@ internal fun HistoryContent(
 private fun UploadRow(u: Upload, divider: Boolean, onDelete: () -> Unit, onOpenUnread: () -> Unit) {
     val d = PfTheme.dimens
     val c = PfTheme.colors
-    val period = if (u.firstOperationAt != null && u.lastOperationAt != null) {
-        RussianDates.dayRange(u.firstOperationAt!!.toLocalDate(), u.lastOperationAt!!.toLocalDate())
-    } else {
-        null
-    }
+    val period = uploadPeriodLabel(u)
     Column(Modifier.testTag(StatementsTags.HISTORY_ROW)) {
         // `.pf-card-flush { padding: 0 16px }`: the row and its divider keep 16 dp from the card's frame.
         Row(Modifier.fillMaxWidth().padding(horizontal = d.space4, vertical = d.space3), horizontalArrangement = Arrangement.spacedBy(d.space2), verticalAlignment = Alignment.CenterVertically) {

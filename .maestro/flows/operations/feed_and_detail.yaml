@@ -49,3 +49,17 @@ tags:
     id: "ds.back"
 - assertVisible:
     id: "operations.feed"
+
+# FIN-203: both reopening and saving require the list/details timestamp in the mock contract.
+- tapOn:
+    id: "operations.row"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "operations.detail"
+    timeout: 10000
+- assertVisible: "Вы выбрали сами"
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "operations.feed"

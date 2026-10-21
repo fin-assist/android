@@ -326,6 +326,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         return StatementsList(
             summary = summary,
             uploads = backend.uploads.filter { !it.isFailed }.map { u ->
+                val period = historyPeriod(u)
                 Upload(
                     uploadId = u.id, fileName = u.fileName,
                     status = if (u.isDone) UploadStatus.DONE else UploadStatus.PROCESSING,
@@ -333,11 +334,24 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
                     resolvedUnreadCount = u.readClosures.size,
                     resolvedByUploadedAt = u.readClosures.map { it.uploadId }.toSet()
                         .mapNotNull { id -> backend.uploads.firstOrNull { it.id == id }?.uploadedAt }.maxOrNull(),
-                    firstOperationAt = u.firstOperationAt, lastOperationAt = u.lastOperationAt,
+                    periodFrom = period?.first,
+                    periodTo = period?.second,
                     sourceName = MockBackend.SOURCE_NAME,
                 )
             },
         )
+    }
+
+    /** Calendar days, not instants: only complete account periods participate (calc.md 4). */
+    private fun historyPeriod(upload: MockBackend.Upload): Pair<String, String>? {
+        if (!upload.isDone) return null
+        val zone = backend.profileZone()
+        val periods = upload.accountPeriods.values
+        val from = periods.minOfOrNull { it.from.atZoneSameInstant(zone).toLocalDate() }
+            ?: upload.firstOperationAt?.atZoneSameInstant(zone)?.toLocalDate()
+        val to = periods.maxOfOrNull { it.to.atZoneSameInstant(zone).toLocalDate() }
+            ?: upload.lastOperationAt?.atZoneSameInstant(zone)?.toLocalDate()
+        return if (from != null && to != null) from.toString() to to.toString() else null
     }
 
     override suspend fun deleteStatement(uploadId: String) {

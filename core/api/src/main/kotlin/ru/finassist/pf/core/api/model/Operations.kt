@@ -119,7 +119,8 @@ data class OperationsQuery(
 )
 
 @Serializable
-data class ChangeCategoryRequest(val categoryId: String)
+/** The latest timestamp from details, or the list row before details were loaded (api.md 4.3). */
+data class ChangeCategoryRequest(val categoryId: String, val occurredAt: String)
 
 @Serializable
 data class ChangeCategoryResponse(

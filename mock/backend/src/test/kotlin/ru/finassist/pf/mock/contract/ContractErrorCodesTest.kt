@@ -151,7 +151,7 @@ class ContractErrorCodesTest(private val name: String) {
             },
             case(ErrorCodes.NOT_FOUND, "an operation that does not exist") {
                 val s = Scene()
-                s.call("getOperation", null, MISSING) { s.operations.getOperation(MISSING) }
+                s.call("getOperation", null, MISSING) { s.operations.getOperation(MISSING, "2026-09-25T12:00:00+03:00") }
             },
             case(ErrorCodes.NOT_FOUND, "unread lines of an unknown upload") {
                 val s = Scene()
@@ -231,7 +231,7 @@ class ContractErrorCodesTest(private val name: String) {
             case(ErrorCodes.CATEGORY_NOT_ASSIGNABLE, "an unknown category") {
                 val s = Scene()
                 val id = s.operations.listOperations(OperationsQuery()).items.first().id
-                s.call("changeOperationCategory", null, id) { s.operations.changeCategory(id, ChangeCategoryRequest("cat_nope")) }
+                s.call("changeOperationCategory", null, id) { s.operations.changeCategory(id, ChangeCategoryRequest("cat_nope", "2026-09-25T12:00:00+03:00")) }
             },
             case(ErrorCodes.RETRY_NOT_ALLOWED, "a retry of a complete answer") {
                 val s = Scene()

@@ -100,7 +100,7 @@ internal class CalcScenario(private val root: File) {
             val record = checkNotNull(backend.ledger.byKey(op.string("account"), op.string("fitid"))) { "no operation $op" }
             encode(
                 ChangeCategoryResponse.serializer(),
-                operations.changeCategory(record.id, ChangeCategoryRequest(step.string("category_id"))),
+                operations.changeCategory(record.id, ChangeCategoryRequest(step.string("category_id"), "2026-09-25T12:00:00+03:00")),
             )
         }
         "dismiss_regular_payment" -> {
