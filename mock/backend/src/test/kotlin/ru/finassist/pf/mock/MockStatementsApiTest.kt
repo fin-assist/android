@@ -82,8 +82,48 @@ class MockStatementsApiTest {
         val upload = api.listStatements().uploads.single()
         assertEquals(UploadStatus.DONE, upload.status)
         assertEquals(MockBackend.SOURCE_NAME, upload.sourceName)
-        assertEquals(dt("2026-09-05T12:00:00+03:00"), upload.firstOperationAt)
-        assertEquals(dt("2026-09-06T12:00:00+03:00"), upload.lastOperationAt)
+        assertEquals("2026-09-01", upload.periodFrom)
+        assertEquals("2026-09-30", upload.periodTo)
+    }
+
+    @Test
+    fun `history uses complete statement periods and otherwise operation days in the current profile zone`() = runBlocking<Unit> {
+        val backend = testBackend(clock)
+        val api = MockStatementsApi(backend)
+        suspend fun period(text: String): Pair<String?, String?> {
+            val upload = api.uploadStatement(key(text), file("period.ofx", text))
+            api.await(upload.uploadId)
+            return api.listStatements().uploads.first().let { it.periodFrom to it.periodTo }
+        }
+        assertEquals("2026-09-01" to "2026-09-30", period(ofx(line("1", "20260925120000", "-100"))))
+        assertEquals("2026-09-01" to "2026-09-30", period(ofx()))
+        val noPeriod = ofx(line("2", "20260905233000[+0:UTC]", "-100"), line("3", "20260906233000[+0:UTC]", "-100"))
+            .replace(Regex("<DTSTART>.*?</DTSTART>|<DTEND>.*?</DTEND>"), "")
+        assertEquals("2026-09-06" to "2026-09-07", period(noPeriod))
+        backend.profile = backend.profile.copy(timezone = "America/Los_Angeles")
+        assertEquals("2026-09-05" to "2026-09-06", api.listStatements().uploads.first().let { it.periodFrom to it.periodTo })
+        assertEquals(null to null, period(ofx().replace(Regex("<DTSTART>.*?</DTSTART>|<DTEND>.*?</DTEND>"), "")))
+        // A lone boundary cannot be combined with another account's incomplete period.
+        assertEquals("2026-09-05" to "2026-09-05", period(ofx(line("4", "20260905120000", "-100")).replace(Regex("<DTEND>.*?</DTEND>"), "")))
+    }
+
+    @Test
+    fun `history combines only complete account periods across offsets`() = runBlocking<Unit> {
+        val backend = testBackend(clock)
+        val api = MockStatementsApi(backend)
+        val text = ofx(from = "20260901003000[+0:UTC]", to = "20260930233000[+0:UTC]")
+            .replace("</BANKMSGSRSV1>", """
+                <STMTTRNRS><STMTRS><BANKACCTFROM><BANKID>T-BANK</BANKID><ACCTID>2222</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM>
+                <BANKTRANLIST><DTSTART>20260801000000</DTSTART></BANKTRANLIST></STMTRS></STMTTRNRS>
+                <STMTTRNRS><STMTRS><BANKACCTFROM><BANKID>T-BANK</BANKID><ACCTID>3333</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM>
+                <BANKTRANLIST><DTSTART>20260905120000</DTSTART><DTEND>20261002120000</DTEND></BANKTRANLIST></STMTRS></STMTTRNRS>
+                </BANKMSGSRSV1>
+            """.trimIndent())
+        val accepted = api.uploadStatement(key("multi"), file("multi.ofx", text))
+        api.await(accepted.uploadId)
+        val upload = api.listStatements().uploads.single()
+        assertEquals("2026-09-01", upload.periodFrom)
+        assertEquals("2026-10-02", upload.periodTo)
     }
 
     @Test
@@ -142,6 +182,8 @@ class MockStatementsApiTest {
         val api = MockStatementsApi(backend)
         val accepted = api.uploadStatement(key("k"), file("a.ofx", ofx(line("1", "20260905120000", "-100.00"))))
         assertEquals(UploadStatus.PROCESSING, api.listStatements().uploads.single().status)
+        assertNull(api.listStatements().uploads.single().periodFrom)
+        assertNull(api.listStatements().uploads.single().periodTo)
         // Wait until the import job has started: it is now pausing in the parsing stage.
         withTimeout(10_000) { api.streamProgress(accepted.uploadId).first { (it as? ImportEvent.Progress)?.progress?.percent == 20 } }
 

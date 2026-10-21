@@ -166,8 +166,9 @@ data class Upload(
     val operationCount: Int,
     /** Open unread lines only: lines a later upload has read are not counted (api.md 3.4, FIN-79). */
     val unreadCount: Int,
-    val firstOperationAt: ApiDateTime? = null,
-    val lastOperationAt: ApiDateTime? = null,
+    /** Inclusive calendar days in the profile zone, supplied together; absent while processing or without a period. */
+    val periodFrom: String? = null,
+    val periodTo: String? = null,
     val sourceName: String,
     /** Lines of this upload that later uploads have read (FIN-79); 0 when none. */
     val resolvedUnreadCount: Int = 0,

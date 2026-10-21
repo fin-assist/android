@@ -5,6 +5,8 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -34,7 +36,7 @@ class E2eDocumentPickerActivity : ComponentActivity() {
             assets.list(DIR).orEmpty().sorted().map { "$DIR/$it" }
         setContent {
             PfTheme {
-                Column(Modifier.fillMaxSize().background(PfTheme.colors.bg).safeDrawingPadding().pfTestRoot().testTag("e2e.picker")) {
+                Column(Modifier.fillMaxSize().background(PfTheme.colors.bg).safeDrawingPadding().verticalScroll(rememberScrollState()).pfTestRoot().testTag("e2e.picker")) {
                     Text("Тестовые файлы", style = PfTheme.type.title2, color = PfTheme.colors.text, modifier = Modifier.padding(16.dp))
                     files.forEach { path ->
                         val name = path.substringAfterLast('/')
