@@ -1,4 +1,4 @@
-package ru.finassist.pf.feature.statements.impl.ui
+package ru.finassist.pf.feature.statements.impl.domain
 
 import org.junit.Test
 import ru.finassist.pf.core.api.model.UploadStatus

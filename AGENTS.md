@@ -261,6 +261,10 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   - a new DTO or open code comes with a unit test that parses an unknown field and an unknown code.
 - When the server sends a ready text for a code (`*_name`, `text`, lock texts), the UI shows that text for a code it does
   not know instead of building one itself or skipping it (FIN-83: import features and notices, `changed_since_text`).
+- Upload history uses inclusive profile calendar days `period_from` / `period_to`, without device-zone conversion
+  (FIN-198); old `uploads[].first_operation_at` / `last_operation_at` are removed. Import result 3.3 is unchanged.
+- Operation details 4.2 and category change 4.3 require `occurred_at` from the selected record, including offset
+  and fractional seconds (FIN-203); use the latest returned timestamp for retries and reopening the record.
 - A new block type or code value changes both `:core:api` and the fake backend `:mock:backend` in the same PR.
 - `:core:api` and `:mock:backend` move to Kotlin Multiplatform when iOS starts (FIN-144): new code and dependencies
   there use only what KMP has — kotlinx.serialization, kotlinx-coroutines, kotlinx-datetime, the common stdlib
