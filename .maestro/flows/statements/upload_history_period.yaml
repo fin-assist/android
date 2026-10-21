@@ -94,10 +94,24 @@ tags:
     visible:
       id: "statements.result"
     timeout: 20000
-# An empty import has no history link; Back returns to the history it was opened from.
+# An empty import has no history link; system Back finishes the import at Operations.
+- assertVisible:
+    id: "statements.result.empty"
 - back
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
 - extendedWaitUntil:
     visible:
       id: "statements.history"
     timeout: 10000
-- assertVisible: "0.операций"
+- assertVisible: "^0.операций$"
