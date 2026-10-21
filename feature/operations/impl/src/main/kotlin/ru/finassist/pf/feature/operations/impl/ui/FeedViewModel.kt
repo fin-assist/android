@@ -66,6 +66,15 @@ class FeedViewModel @Inject constructor(
         viewModelScope.launch {
             merge(statements.events, operations.categoryChanges).collect { refresh() }
         }
+        viewModelScope.launch {
+            operations.records.collect { updated ->
+                val timeChanged = _state.value.items.any { row -> updated.any { it.id == row.id && it.occurredAt != row.occurredAt } }
+                _state.update { state ->
+                    state.copy(items = state.items.map { row -> updated.firstOrNull { it.id == row.id }?.toItem() ?: row })
+                }
+                if (timeChanged) refresh()
+            }
+        }
         // The first known zone is not a change: the first portion was asked for already.
         viewModelScope.launch { reportZone.profile.drop(1).filterNotNull().distinctUntilChanged().collect { refresh() } }
         viewModelScope.launch { flags.changes.collect { _state.update { it.copy(uploadEnabled = flags.isEnabled(Flag.STATEMENTS_UPLOAD)) } } }

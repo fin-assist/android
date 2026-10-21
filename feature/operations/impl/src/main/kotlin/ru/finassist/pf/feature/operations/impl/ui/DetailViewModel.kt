@@ -17,6 +17,7 @@ import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.OperationDetails
 import ru.finassist.pf.core.api.model.OperationKind
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.feature.operations.impl.domain.OperationTimestamp.toWire
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.operations.api.CategoriesRepository
@@ -57,6 +58,8 @@ class DetailViewModel @Inject constructor(
 ) : ViewModel() {
     /** After a split/merge the record id changes; kept in the saved state so process death reopens the new one. */
     private var id: String = savedState.get<String>(KEY_ID) ?: savedState.toRoute<OperationsRoutes.Detail>().id
+    private var occurredAt: String = savedState.get<String>(KEY_OCCURRED_AT)
+        ?: savedState.toRoute<OperationsRoutes.Detail>().occurredAt
     private val _state = MutableStateFlow(DetailUiState())
     val state: StateFlow<DetailUiState> = _state
 
@@ -69,7 +72,9 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(loading = it.operation == null, error = false, notFound = false) }
             try {
-                val op = api.getOperation(id)
+                val op = api.getOperation(id, occurredAt)
+                remember(op)
+                operations.updateRecords(listOf(op))
                 val cats = runCatching { categories.categories() }.getOrDefault(emptyList())
                 _state.update { it.copy(loading = false, operation = op, categories = cats) }
             } catch (e: AppError) {
@@ -96,11 +101,11 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(saving = true, pickerError = null) }
             try {
-                val response = api.changeCategory(op.id, ChangeCategoryRequest(target))
+                val response = api.changeCategory(op.id, ChangeCategoryRequest(target, op.occurredAt.toWire()))
                 // A pair split in two or a debit that became a pair: keep showing the record that carries the choice.
                 val shown = response.items.firstOrNull { it.categoryId == target } ?: response.items.firstOrNull() ?: op
-                id = shown.id
-                savedState[KEY_ID] = shown.id
+                remember(shown)
+                operations.updateRecords(response.items)
                 val message = when {
                     response.replacedId != null && response.items.size > 1 -> "Перевод разделили на две операции"
                     response.replacedId != null && shown.kind == OperationKind.OWN_TRANSFER -> "Нашли вторую сторону — это перевод между своими счетами"
@@ -120,9 +125,17 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    private fun remember(op: OperationDetails) {
+        id = op.id
+        occurredAt = op.occurredAt.toWire()
+        savedState[KEY_ID] = id
+        savedState[KEY_OCCURRED_AT] = occurredAt
+    }
+
     fun consumeSnackbar() = _state.update { it.copy(snackbar = null) }
 
     private companion object {
         const val KEY_ID = "detail.current_id"
+        const val KEY_OCCURRED_AT = "detail.current_occurred_at"
     }
 }

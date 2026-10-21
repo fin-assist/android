@@ -35,7 +35,7 @@ class DetailViewModelTest {
     private val categories = FakeCategories(listOf(category("cat_supermarkets"), category("cat_restaurants")))
     private val operations = OperationsRepositoryImpl()
     private val tracker = FakeTracker()
-    private val savedState = SavedStateHandle(mapOf("id" to "op_1"))
+    private val savedState = SavedStateHandle(mapOf("id" to "op_1", "occurredAt" to "2026-09-25T12:00:00+03:00"))
 
     @Before fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -219,4 +219,16 @@ class DetailViewModelTest {
         vm.consumeSnackbar()
         assertNull(vm.state.value.snackbar)
     }
+    @Test fun `details refreshes the timestamp used by patch and process recreation`() {
+        val latest = java.time.OffsetDateTime.parse("2026-10-01T00:00:00.123456789+03:00")
+        api.operations["op_1"] = details("op_1").copy(occurredAt = latest)
+        val vm = picked("cat_restaurants")
+        assertEquals("2026-09-25T12:00:00+03:00", api.openedAt.single())
+        api.changeResponse = ChangeCategoryResponse(listOf(details("op_1", categoryId = "cat_restaurants").copy(occurredAt = latest.plusDays(1))))
+        vm.save()
+        assertEquals("2026-10-01T00:00:00.123456789+03:00", api.changedAt.single())
+        DetailViewModel(savedState, api, categories, operations, tracker)
+        assertEquals("2026-10-02T00:00:00.123456789+03:00", api.openedAt.last())
+    }
+
 }

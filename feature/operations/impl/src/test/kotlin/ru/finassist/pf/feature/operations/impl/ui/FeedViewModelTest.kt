@@ -220,4 +220,25 @@ class FeedViewModelTest {
         flags.set(Flag.STATEMENTS_UPLOAD, true)
         assertTrue(vm.state.value.uploadEnabled)
     }
+    @Test fun `a timestamp from details stays in the feed when the canonical refresh fails`() {
+        api.lists += page("op_1")
+        api.lists += AppError.Offline()
+        val vm = vm()
+        val updated = details("op_1").copy(occurredAt = at(25).plusMonths(1))
+        operations.updateRecords(listOf(updated))
+        assertEquals(updated.occurredAt, vm.state.value.items.single().occurredAt)
+        assertEquals(2, api.queries.size)
+        assertFalse(vm.state.value.offline)
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `a timestamp crossing a month reloads canonical feed totals and rows`() {
+        api.lists += page("op_1")
+        api.lists += page("op_2", month = "2026-10")
+        val vm = vm()
+        operations.updateRecords(listOf(details("op_1").copy(occurredAt = at(25).plusMonths(1))))
+        assertEquals(listOf("op_2"), vm.state.value.items.map { it.id })
+        assertEquals(listOf("2026-10"), vm.state.value.summary.map { it.month })
+    }
+
 }

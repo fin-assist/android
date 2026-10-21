@@ -226,7 +226,7 @@ internal class HttpOperationsApi(private val service: OperationsService) : Opera
         )
     }
 
-    override suspend fun getOperation(id: String): OperationDetails = call { service.getOperation(id) }
+    override suspend fun getOperation(id: String, occurredAt: String): OperationDetails = call { service.getOperation(id, occurredAt) }
 
     override suspend fun changeCategory(id: String, request: ChangeCategoryRequest): ChangeCategoryResponse =
         call { service.changeCategory(id, request) }

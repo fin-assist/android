@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import ru.finassist.pf.core.api.CategoriesApi
+import ru.finassist.pf.core.api.model.OperationDetails
 import ru.finassist.pf.core.api.model.Category
 import ru.finassist.pf.feature.operations.api.CategoriesRepository
 import ru.finassist.pf.feature.operations.api.OperationsRepository
@@ -27,6 +28,13 @@ class CategoriesRepositoryImpl @Inject constructor(private val api: CategoriesAp
 class OperationsRepositoryImpl @Inject constructor() : OperationsRepository {
     private val _changes = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     override val categoryChanges: Flow<Unit> = _changes.asSharedFlow()
+
+    private val _records = MutableSharedFlow<List<OperationDetails>>(extraBufferCapacity = 4)
+    val records = _records.asSharedFlow()
+
+    fun updateRecords(items: List<OperationDetails>) {
+        _records.tryEmit(items)
+    }
 
     fun notifyCategoryChanged() {
         _changes.tryEmit(Unit)

@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,7 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import ru.finassist.pf.core.api.model.MonthSummary
-import ru.finassist.pf.core.api.model.OperationItem
+import OperationItem
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.RussianDates
 import ru.finassist.pf.core.common.time.StaleData
@@ -57,7 +58,7 @@ import kotlin.math.roundToInt
 @Composable
 fun FeedScreen(
     onOpenSearch: () -> Unit,
-    onOpenOperation: (id: String) -> Unit,
+    onOpenOperation: (OperationItem) -> Unit,
     onUpload: () -> Unit,
     vm: FeedViewModel = hiltViewModel(),
 ) {
@@ -81,7 +82,7 @@ internal fun FeedContent(
     today: LocalDate,
     zone: ZoneId,
     onOpenSearch: () -> Unit,
-    onOpenOperation: (id: String) -> Unit,
+    onOpenOperation: (OperationItem) -> Unit,
     onUpload: () -> Unit,
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
@@ -156,7 +157,7 @@ internal fun FeedContent(
                         item(key = "day-$label-${ops.first().id}") {
                             // The days start 8 dp under the summary block; no divider under a day's last row (mockup `Main`).
                             PfTransactionGroup(label, first = index == 0, modifier = if (index == 0) Modifier.padding(top = d.space2) else Modifier) {
-                                ops.forEach { op -> OperationRow(op, onClick = { onOpenOperation(op.id) }, divider = op !== ops.last()) }
+                                ops.forEach { op -> OperationRow(op, onClick = { onOpenOperation(op) }, divider = op !== ops.last()) }
                             }
                         }
                     }

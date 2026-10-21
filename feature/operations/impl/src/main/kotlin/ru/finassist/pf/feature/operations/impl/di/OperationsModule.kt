@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.di
 
+import ru.finassist.pf.feature.operations.impl.domain.OperationTimestamp.toWire
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import dagger.Binds
@@ -26,12 +27,12 @@ class OperationsEntry @Inject constructor() : FeatureEntry {
         composable<OperationsRoutes.Feed> {
             FeedScreen(
                 onOpenSearch = { navigator.navigate(OperationsRoutes.Search()) },
-                onOpenOperation = { id -> navigator.navigate(OperationsRoutes.Detail(id)) },
+                onOpenOperation = { op -> navigator.navigate(OperationsRoutes.Detail(op.id, op.occurredAt.toWire())) },
                 onUpload = { navigator.navigate(StatementsRoutes.Upload()) },
             )
         }
         composable<OperationsRoutes.Search>(typeMap = PfNavTypes.MAP) {
-            SearchScreen(onBack = { navigator.back() }, onOpenOperation = { id -> navigator.navigate(OperationsRoutes.Detail(id)) })
+            SearchScreen(onBack = { navigator.back() }, onOpenOperation = { op -> navigator.navigate(OperationsRoutes.Detail(op.id, op.occurredAt.toWire())) })
         }
         composable<OperationsRoutes.Detail> {
             DetailScreen(onBack = { navigator.back() })

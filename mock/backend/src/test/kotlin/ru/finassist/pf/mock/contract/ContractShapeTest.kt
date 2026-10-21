@@ -235,20 +235,20 @@ class ContractShapeTest(private val name: String) {
             },
             case("getOperation: expense", "getOperation") { s ->
                 val id = s.itemOf(OperationKind.EXPENSE)
-                s.call("getOperation", OperationDetails.serializer(), id) { s.operations.getOperation(id) }
+                s.call("getOperation", OperationDetails.serializer(), id) { s.operations.getOperation(id, "2026-09-25T12:00:00+03:00") }
             },
             case("getOperation: income", "getOperation") { s ->
                 val id = s.itemOf(OperationKind.INCOME)
-                s.call("getOperation", OperationDetails.serializer(), id) { s.operations.getOperation(id) }
+                s.call("getOperation", OperationDetails.serializer(), id) { s.operations.getOperation(id, "2026-09-25T12:00:00+03:00") }
             },
             case("getOperation: own transfer", "getOperation") { s ->
                 val id = s.itemOf(OperationKind.OWN_TRANSFER)
-                s.call("getOperation", OperationDetails.serializer(), id) { s.operations.getOperation(id) }
+                s.call("getOperation", OperationDetails.serializer(), id) { s.operations.getOperation(id, "2026-09-25T12:00:00+03:00") }
             },
             case("changeOperationCategory", "changeOperationCategory") { s ->
                 val id = s.itemOf(OperationKind.EXPENSE)
-                val category = s.operations.listCategories().categories.first { it.assignable && it.id != s.operations.getOperation(id).categoryId && CategoryKind.EXPENSE in it.kinds }
-                s.call("changeOperationCategory", ChangeCategoryResponse.serializer(), id) { s.operations.changeCategory(id, ChangeCategoryRequest(category.id)) }
+                val category = s.operations.listCategories().categories.first { it.assignable && it.id != s.operations.getOperation(id, "2026-09-25T12:00:00+03:00").categoryId && CategoryKind.EXPENSE in it.kinds }
+                s.call("changeOperationCategory", ChangeCategoryResponse.serializer(), id) { s.operations.changeCategory(id, ChangeCategoryRequest(category.id, "2026-09-25T12:00:00+03:00")) }
             },
             case("listCategories", "listCategories") { s -> s.call("listCategories", CategoriesList.serializer()) { s.operations.listCategories() } },
 

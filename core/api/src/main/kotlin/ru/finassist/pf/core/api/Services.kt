@@ -106,7 +106,8 @@ interface StatementsApi {
 
 interface OperationsApi {
     suspend fun listOperations(query: OperationsQuery): OperationsList
-    suspend fun getOperation(id: String): OperationDetails
+    /** [occurredAt] is the list row timestamp, including its offset (api.md 4.2). */
+    suspend fun getOperation(id: String, occurredAt: String): OperationDetails
     suspend fun changeCategory(id: String, request: ChangeCategoryRequest): ChangeCategoryResponse
 }
 

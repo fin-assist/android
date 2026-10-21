@@ -47,6 +47,8 @@ internal class FakeOperationsApi : OperationsApi {
     val lists = ArrayDeque<Any>()
     var gate: CompletableDeferred<Unit>? = null
 
+    val openedAt = mutableListOf<String>()
+    val changedAt = mutableListOf<String>()
     val opened = mutableListOf<String>()
     val operations = mutableMapOf<String, OperationDetails>()
     var getFailure: AppError? = null
@@ -63,13 +65,15 @@ internal class FakeOperationsApi : OperationsApi {
         return next as OperationsList
     }
 
-    override suspend fun getOperation(id: String): OperationDetails {
+    override suspend fun getOperation(id: String, occurredAt: String): OperationDetails {
+        openedAt += occurredAt
         opened += id
         getFailure?.let { throw it }
         return operations.getValue(id)
     }
 
     override suspend fun changeCategory(id: String, request: ChangeCategoryRequest): ChangeCategoryResponse {
+        changedAt += request.occurredAt
         changes += id to request.categoryId
         changeFailure?.let { throw it }
         return changeResponse ?: error("no response set")

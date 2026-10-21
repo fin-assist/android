@@ -66,7 +66,7 @@ class AssistantChangedSinceTest {
         assertNotNull((withTimeout(10_000) { assistant.streamAnswer(answerId).toList() }.first() as AnswerEvent.Snapshot).event.source)
 
     private suspend fun changeCategory() {
-        operations.changeCategory(opId("k5"), ChangeCategoryRequest("cat_clothes"))
+        operations.changeCategory(opId("k5"), ChangeCategoryRequest("cat_clothes", "2026-09-25T12:00:00+03:00"))
     }
 
     @Test
@@ -115,8 +115,8 @@ class AssistantChangedSinceTest {
     @Test
     fun `a rejected category change is not a change`() = runBlocking<Unit> {
         val (id, _) = askAndFinish()
-        assertFailsWith<AppError.Api> { operations.changeCategory(opId("k5"), ChangeCategoryRequest("cat_no_such")) }
-        assertFailsWith<AppError.Api> { operations.changeCategory("no-such-operation", ChangeCategoryRequest("cat_clothes")) }
+        assertFailsWith<AppError.Api> { operations.changeCategory(opId("k5"), ChangeCategoryRequest("cat_no_such", "2026-09-25T12:00:00+03:00")) }
+        assertFailsWith<AppError.Api> { operations.changeCategory("no-such-operation", ChangeCategoryRequest("cat_clothes", "2026-09-25T12:00:00+03:00")) }
         assertEquals(emptyList(), historySource(id).changedSince)
     }
 
@@ -127,7 +127,7 @@ class AssistantChangedSinceTest {
         changeCategory()
         // «Между своими счетами» for an operation already in a pair: the ledger keeps the pair as it is.
         val pair = assertNotNull(backend.ledger.pairOf(backend.ledger.byId(opId("self"))!!)).id
-        operations.changeCategory(pair, ChangeCategoryRequest(SystemCategories.OWN_TRANSFER))
+        operations.changeCategory(pair, ChangeCategoryRequest(SystemCategories.OWN_TRANSFER, "2026-09-25T12:00:00+03:00"))
         assertEquals(emptyList(), historySource(id).changedSince)
     }
 
@@ -147,7 +147,7 @@ class AssistantChangedSinceTest {
         assertTrue(answer.log.isNotEmpty())
         assertTrue(answer.log.none { it is AnswerEvent.Source })
         clock.at = clock.at.plusHours(1)
-        MockOperationsApi(backend).changeCategory(backend.ledger.all.single { it.fitId == "k5" }.id, ChangeCategoryRequest("cat_clothes"))
+        MockOperationsApi(backend).changeCategory(backend.ledger.all.single { it.fitId == "k5" }.id, ChangeCategoryRequest("cat_clothes", "2026-09-25T12:00:00+03:00"))
 
         scheduler.advanceUntilIdle()
         assertEquals(AnswerStatus.COMPLETE, answer.status)

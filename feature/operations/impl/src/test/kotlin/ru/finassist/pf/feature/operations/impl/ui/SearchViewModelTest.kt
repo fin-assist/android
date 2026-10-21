@@ -336,4 +336,22 @@ class SearchViewModelTest {
         vm.toggleKind()
         assertEquals(ru.finassist.pf.core.api.model.OperationKindFilter.EXPENSE, api.queries.last().filter.kind)
     }
+    @Test fun `details timestamp stays in search when its canonical refresh fails`() {
+        api.lists += found("op_1")
+        api.lists += AppError.Offline()
+        val vm = vm(OperationsFilter(q = "Пятёрочка"))
+        val updated = details("op_1").copy(occurredAt = at(25).plusMonths(1))
+        operations.updateRecords(listOf(updated))
+        assertEquals(updated.occurredAt, assertIs<SearchResult.Found>(vm.state.value.result).items.single().occurredAt)
+        assertEquals(2, api.queries.size)
+    }
+
+    @Test fun `a timestamp outside search period triggers canonical filtering`() {
+        api.lists += found("op_1")
+        api.lists += found()
+        val vm = vm(OperationsFilter(from = window.from, to = window.to))
+        operations.updateRecords(listOf(details("op_1").copy(occurredAt = at(25).plusMonths(1))))
+        assertTrue(assertIs<SearchResult.Found>(vm.state.value.result).items.isEmpty())
+    }
+
 }

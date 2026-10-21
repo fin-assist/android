@@ -165,7 +165,7 @@ class ContractBehaviourTest {
     @Test
     fun `no session is 401 before 404`() = runBlocking {
         val s = Scene(signedIn = false)
-        expect(ErrorCodes.INVALID_TOKEN, "401 before 404: operation", s.call("getOperation", null, MISSING) { s.operations.getOperation(MISSING) })
+        expect(ErrorCodes.INVALID_TOKEN, "401 before 404: operation", s.call("getOperation", null, MISSING) { s.operations.getOperation(MISSING, "2026-09-25T12:00:00+03:00") })
         expect(ErrorCodes.INVALID_TOKEN, "401 before 404: unread lines", s.call("listUnreadLines", null) { s.statements.listUnreadLines(MISSING) })
         expect(ErrorCodes.INVALID_TOKEN, "401 before 404: retry", s.call("retryAnswer", null, MISSING) { s.assistant.retry(IdempotencyKey.random(), MISSING) })
     }
@@ -185,7 +185,7 @@ class ContractBehaviourTest {
     @Test
     fun `an unknown operation is 404 before the category is checked`() = runBlocking {
         val s = Scene()
-        expect(ErrorCodes.NOT_FOUND, "404 before 422", s.call("changeOperationCategory", null, MISSING) { s.operations.changeCategory(MISSING, ChangeCategoryRequest("cat_nope")) })
+        expect(ErrorCodes.NOT_FOUND, "404 before 422", s.call("changeOperationCategory", null, MISSING) { s.operations.changeCategory(MISSING, ChangeCategoryRequest("cat_nope", "2026-09-25T12:00:00+03:00")) })
     }
 
     @Test
@@ -324,10 +324,10 @@ class ContractBehaviourTest {
         s.profile.deleteAccount()
         s.backend.profile = s.backend.emptyProfile("+79990000004", "u2")
 
-        expect(ErrorCodes.NOT_FOUND, "foreign: operation", s.call("getOperation", null, operation) { s.operations.getOperation(operation) })
+        expect(ErrorCodes.NOT_FOUND, "foreign: operation", s.call("getOperation", null, operation) { s.operations.getOperation(operation, "2026-09-25T12:00:00+03:00") })
         expect(
             ErrorCodes.NOT_FOUND, "foreign: category change",
-            s.call("changeOperationCategory", null, operation) { s.operations.changeCategory(operation, ChangeCategoryRequest("cat_clothes")) },
+            s.call("changeOperationCategory", null, operation) { s.operations.changeCategory(operation, ChangeCategoryRequest("cat_clothes", "2026-09-25T12:00:00+03:00")) },
         )
         expect(ErrorCodes.NOT_FOUND, "foreign: unread lines", s.call("listUnreadLines", null) { s.statements.listUnreadLines(upload) })
         expect(ErrorCodes.NOT_FOUND, "foreign: progress", s.progressEvents(upload))

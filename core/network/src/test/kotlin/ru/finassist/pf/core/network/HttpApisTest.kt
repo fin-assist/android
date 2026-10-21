@@ -404,15 +404,17 @@ class HttpApisTest {
         reply("""{"items":[$OPERATION_JSON],"replaced_id":"op-0"}""")
         reply("""{"categories":[]}""")
 
-        assertEquals("op-1", api.operations.getOperation("op-1").id)
-        val changed = api.operations.changeCategory("op-1", ChangeCategoryRequest("cat_food"))
+        assertEquals("op-1", api.operations.getOperation("op-1", "2026-09-25T12:00:00+03:00").id)
+        val changed = api.operations.changeCategory("op-1", ChangeCategoryRequest("cat_food", "2026-09-25T12:00:00+03:00"))
         assertEquals("op-0", changed.replacedId)
         assertEquals(emptyList(), api.categories.listCategories().categories)
 
-        assertEquals("GET /v1/operations/op-1", taken().let { "${it.method} ${it.path}" })
+        val get = taken()
+        assertEquals("2026-09-25T12:00:00+03:00", get.query("occurred_at"))
+        assertEquals("GET /v1/operations/op-1?occurred_at=2026-09-25T12%3A00%3A00%2B03%3A00", "${get.method} ${get.path}")
         val patch = taken()
         assertEquals("PATCH /v1/operations/op-1", "${patch.method} ${patch.path}")
-        assertEquals("""{"category_id":"cat_food"}""", patch.body.readUtf8())
+        assertEquals("""{"category_id":"cat_food","occurred_at":"2026-09-25T12:00:00+03:00"}""", patch.body.readUtf8())
         assertEquals("GET /v1/categories", taken().let { "${it.method} ${it.path}" })
     }
 
@@ -577,4 +579,16 @@ class HttpApisTest {
              "is_category_manual":true,"status":"posted","source_name":"Т-Банк"}
         """.trimIndent().replace("\n", "")
     }
+    @Test fun `operation timestamp preserves fractional seconds and positive offset on both requests`() = runBlocking {
+        val timestamp = "2026-10-01T00:00:00.123456789+03:00"
+        reply(OPERATION_JSON)
+        reply("""{"items":[$OPERATION_JSON]}""")
+        api.operations.getOperation("op-1", timestamp)
+        api.operations.changeCategory("op-1", ChangeCategoryRequest("cat_food", timestamp))
+        val get = taken()
+        assertEquals(timestamp, get.query("occurred_at"))
+        assertTrue(get.path!!.contains(".123456789%2B03%3A00"))
+        assertEquals("""{"category_id":"cat_food","occurred_at":"$timestamp"}""", taken().body.readUtf8())
+    }
+
 }

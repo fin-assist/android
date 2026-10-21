@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
@@ -71,7 +72,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 
 @Composable
-fun SearchScreen(onBack: () -> Unit, onOpenOperation: (String) -> Unit, vm: SearchViewModel = hiltViewModel()) {
+fun SearchScreen(onBack: () -> Unit, onOpenOperation: (OperationItem) -> Unit, vm: SearchViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val clock = LocalPfClock.current
     val zone = clock.zone
@@ -111,7 +112,7 @@ internal fun SearchContent(
     zone: ZoneId,
     today: LocalDate,
     onBack: () -> Unit,
-    onOpenOperation: (String) -> Unit,
+    onOpenOperation: (OperationItem) -> Unit,
     actions: SearchActions,
 ) {
     val d = PfTheme.dimens
@@ -200,7 +201,7 @@ internal fun SearchContent(
                         item(key = "m-$label") {
                             PfTransactionGroup(label, first = index == 0, modifier = if (index == 0) Modifier.padding(top = d.space3) else Modifier) {
                                 rows.forEach { row ->
-                                    OperationRow(row, onClick = { onOpenOperation(row.id) }, divider = row !== rows.last())
+                                    OperationRow(row, onClick = { onOpenOperation(row) }, divider = row !== rows.last())
                                 }
                             }
                         }
