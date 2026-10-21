@@ -144,24 +144,36 @@ class DetailViewModelTest {
         watcher.cancel()
     }
 
-    @Test fun `a split pair shows the record that carries the chosen category and reopens it after process death`() {
-        api.operations["op_1"] = details("op_1", OperationKind.OWN_TRANSFER, categoryId = "cat_own_transfer")
-        api.changeResponse = ChangeCategoryResponse(
-            items = listOf(details("op_1a", categoryId = "cat_own_transfer"), details("op_1b", categoryId = "cat_restaurants")),
-            replacedId = "op_1",
+    @Test fun `a split pair keeps the chosen sides timestamp for reload recreation and another patch`() {
+        val debitAt = "2026-09-25T12:00:00+03:00"
+        val creditAt = "2026-09-26T15:00:00.123456789+03:00"
+        val debit = details("op_1a", categoryId = "cat_own_transfer")
+        val credit = details("op_1b", categoryId = "cat_restaurants").copy(
+            occurredAt = java.time.OffsetDateTime.parse(creditAt),
         )
+        api.operations["op_1"] = details("op_1", OperationKind.OWN_TRANSFER, categoryId = "cat_own_transfer")
+        api.operations[credit.id] = credit
+        api.changeResponse = ChangeCategoryResponse(items = listOf(debit, credit), replacedId = "op_1")
         val vm = picked("cat_restaurants")
         vm.save()
+        assertEquals(debitAt, api.changedAt.single())
         assertEquals("op_1b", vm.state.value.operation?.id)
+        assertEquals(credit.occurredAt, vm.state.value.operation?.occurredAt)
         assertEquals("Перевод разделили на две операции", vm.state.value.snackbar)
         assertEquals(mapOf("split" to "true"), tracker.events.last().second)
 
-        // The new id is what a reload (and a view model recreated from the saved state) opens.
         vm.load()
         assertEquals("op_1b", api.opened.last())
-        api.operations["op_1b"] = details("op_1b", categoryId = "cat_restaurants")
-        DetailViewModel(savedState, api, categories, operations, tracker)
+        assertEquals(creditAt, api.openedAt.last())
+        val recreated = DetailViewModel(savedState, api, categories, operations, tracker)
         assertEquals("op_1b", api.opened.last())
+        assertEquals(creditAt, api.openedAt.last())
+        api.changeResponse = ChangeCategoryResponse(listOf(credit.copy(categoryId = "cat_supermarkets")))
+        recreated.openPicker()
+        recreated.choose("cat_supermarkets")
+        recreated.save()
+        assertEquals("op_1b" to "cat_supermarkets", api.changes.last())
+        assertEquals(creditAt, api.changedAt.last())
     }
 
     @Test fun `a debit that found its pair is announced as an own transfer`() {

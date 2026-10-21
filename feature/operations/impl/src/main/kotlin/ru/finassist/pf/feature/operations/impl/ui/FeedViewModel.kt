@@ -60,6 +60,9 @@ class FeedViewModel @Inject constructor(
     private val _state = MutableStateFlow(FeedUiState(uploadEnabled = flags.isEnabled(Flag.STATEMENTS_UPLOAD)))
     val state: StateFlow<FeedUiState> = _state
     private var generation = 0L
+    private var firstPagePending = false
+    // Keep the near-end demand across refresh: the UI may not emit it again for the same cursor.
+    private var pendingLoadMore = false
 
     init {
         tracker.track(Events.OPERATIONS_FEED_OPENED)
@@ -83,6 +86,8 @@ class FeedViewModel @Inject constructor(
 
     fun load() {
         val requestGeneration = ++generation
+        pendingLoadMore = pendingLoadMore || _state.value.loadingMore
+        firstPagePending = true
         viewModelScope.launch {
             if (requestGeneration != generation) return@launch
             _state.update { it.copy(loading = it.items.isEmpty(), offline = false, loadingMore = false) }
@@ -92,6 +97,8 @@ class FeedViewModel @Inject constructor(
 
     fun refresh() {
         val requestGeneration = ++generation
+        pendingLoadMore = pendingLoadMore || _state.value.loadingMore
+        firstPagePending = true
         viewModelScope.launch {
             if (requestGeneration != generation) return@launch
             _state.update { it.copy(refreshing = true, loadingMore = false) }
@@ -113,13 +120,23 @@ class FeedViewModel @Inject constructor(
             if (requestGeneration != generation) return
             _state.update { it.copy(loading = false, refreshing = false, offline = it.items.isEmpty()) }
         }
+        firstPagePending = false
+        if (pendingLoadMore) {
+            pendingLoadMore = false
+            loadMore()
+        }
     }
 
     /** Called when the list scrolls near its end. */
     fun loadMore() {
+        if (firstPagePending) {
+            pendingLoadMore = true
+            return
+        }
         val s = _state.value
         val before = s.nextBefore ?: return
-        if (s.loadingMore || s.loading || s.refreshing) return
+        if (s.loadingMore || s.loading || s.refreshing || pendingLoadMore) return
+        pendingLoadMore = true
         val requestGeneration = generation
         viewModelScope.launch {
             if (requestGeneration != generation) return@launch
@@ -127,6 +144,7 @@ class FeedViewModel @Inject constructor(
             try {
                 val page = api.listOperations(OperationsQuery(before = before))
                 if (requestGeneration != generation) return@launch
+                pendingLoadMore = false
                 _state.update {
                     it.copy(
                         loadingMore = false,
@@ -137,6 +155,7 @@ class FeedViewModel @Inject constructor(
                 }
             } catch (e: AppError) {
                 if (requestGeneration != generation) return@launch
+                pendingLoadMore = false
                 _state.update { it.copy(loadingMore = false, moreFailed = true) }
             }
         }
