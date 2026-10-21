@@ -230,10 +230,9 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
     (`ContentResolver`, `PackageManager`). `SavedStateHandle` is allowed: it keeps the state through process death and
     is built in unit tests without Android.
   - Known gaps, left as they are until a PR changes that dependency: `UploadViewModel` and `HistoryViewModel` (in
-    `HistoryScreen.kt`) — `@ApplicationContext` in the first, `StatementsRepositoryImpl` in both; `DetailViewModel`
-    (`OperationsRepositoryImpl`); `CallViewModel` and `ConsentViewModel` (`SessionRepositoryImpl`) — they reach
-    methods the `:api` interfaces do not have. `FeedViewModel` and `SearchViewModel` take `OperationsRepositoryImpl`
-    where `OperationsRepository` would do.
+    `HistoryScreen.kt`) — `@ApplicationContext` in the first, `StatementsRepositoryImpl` in both;
+    `CallViewModel` and `ConsentViewModel` (`SessionRepositoryImpl`) — they reach methods the `:api` interfaces
+    do not have.
 - System bar insets go through `PfInsets.statusBars` / `PfInsets.navigationBars`, never `WindowInsets.*`
   directly: design-check snapshots replace them with the mockups' fixed bars.
 - "Now" and "today" come from the injected `Clock` (`LocalPfClock` in composables), never `LocalDate.now()` /
