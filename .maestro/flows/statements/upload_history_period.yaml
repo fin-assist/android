@@ -94,11 +94,8 @@ tags:
     visible:
       id: "statements.result"
     timeout: 20000
-- scrollUntilVisible:
-    element:
-      id: "statements.result.history"
-- tapOn:
-    id: "statements.result.history"
+# An empty import has no history link; Back returns to the history it was opened from.
+- back
 - extendedWaitUntil:
     visible:
       id: "statements.history"
