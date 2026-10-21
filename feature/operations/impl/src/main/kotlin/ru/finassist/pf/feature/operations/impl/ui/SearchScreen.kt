@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
@@ -71,7 +72,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 
 @Composable
-fun SearchScreen(onBack: () -> Unit, onOpenOperation: (String) -> Unit, vm: SearchViewModel = hiltViewModel()) {
+fun SearchScreen(onBack: () -> Unit, onOpenOperation: (OperationItem) -> Unit, vm: SearchViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val clock = LocalPfClock.current
     val zone = clock.zone
@@ -111,7 +112,7 @@ internal fun SearchContent(
     zone: ZoneId,
     today: LocalDate,
     onBack: () -> Unit,
-    onOpenOperation: (String) -> Unit,
+    onOpenOperation: (OperationItem) -> Unit,
     actions: SearchActions,
 ) {
     val d = PfTheme.dimens
@@ -187,6 +188,7 @@ internal fun SearchContent(
                     PfButton("Сбросить фильтры", onClick = actions.reset, variant = ButtonVariant.SECONDARY, modifier = Modifier.testTag(OperationsTags.SEARCH_RESET))
                 }
             } else {
+                val operationsById = remember(r.items) { r.items.associateBy { it.id } }
                 val months = remember(r.items, zone, today) { OperationFormat.searchGroups(r.items, zone, today) }
                 LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space4, bottom = d.space6)) {
                     item(key = "count") {
@@ -200,7 +202,7 @@ internal fun SearchContent(
                         item(key = "m-$label") {
                             PfTransactionGroup(label, first = index == 0, modifier = if (index == 0) Modifier.padding(top = d.space3) else Modifier) {
                                 rows.forEach { row ->
-                                    OperationRow(row, onClick = { onOpenOperation(row.id) }, divider = row !== rows.last())
+                                    OperationRow(row, onClick = { operationsById[row.id]?.let(onOpenOperation) }, divider = row !== rows.last())
                                 }
                             }
                         }

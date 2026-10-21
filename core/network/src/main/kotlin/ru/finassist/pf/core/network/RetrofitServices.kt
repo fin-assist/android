@@ -133,7 +133,7 @@ internal interface OperationsService {
     ): Response<OperationsList>
 
     @GET("v1/operations/{id}")
-    suspend fun getOperation(@Path("id") id: String): Response<OperationDetails>
+    suspend fun getOperation(@Path("id") id: String, @Query("occurred_at") occurredAt: String): Response<OperationDetails>
 
     @PATCH("v1/operations/{id}")
     suspend fun changeCategory(@Path("id") id: String, @Body body: ChangeCategoryRequest): Response<ChangeCategoryResponse>

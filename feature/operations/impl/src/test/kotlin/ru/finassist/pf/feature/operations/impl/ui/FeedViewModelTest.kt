@@ -15,7 +15,6 @@ import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.tracking.Events
-import ru.finassist.pf.feature.operations.impl.data.OperationsRepositoryImpl
 import ru.finassist.pf.feature.statements.api.StatementsEvent
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -28,7 +27,7 @@ import kotlin.test.assertTrue
 class FeedViewModelTest {
     private val api = FakeOperationsApi()
     private val statements = FakeStatements()
-    private val operations = OperationsRepositoryImpl()
+    private val operations = FakeOperationChanges()
     private val flags = FakeFlags()
     private val tracker = FakeTracker()
 
@@ -38,7 +37,7 @@ class FeedViewModelTest {
 
     private val reportZone = ru.finassist.pf.core.common.time.ReportZone { java.time.ZoneId.of("Europe/Moscow") }
 
-    private fun vm() = FeedViewModel(api, statements, operations, flags, tracker, reportZone)
+    private fun vm() = FeedViewModel(api, statements, operations, operations, flags, tracker, reportZone)
 
     @Test fun `a new profile zone reloads the feed from the top, the first known zone does not (FIN-92)`() {
         api.lists += page("op_1", next = 1)
@@ -220,4 +219,212 @@ class FeedViewModelTest {
         flags.set(Flag.STATEMENTS_UPLOAD, true)
         assertTrue(vm.state.value.uploadEnabled)
     }
+    @Test fun `a timestamp from details stays in the feed when the canonical refresh fails`() {
+        api.lists += page("op_1")
+        api.lists += AppError.Offline()
+        val vm = vm()
+        val updated = details("op_1").copy(occurredAt = at(25).plusMonths(1))
+        operations.updateRecords(listOf(updated))
+        assertEquals(updated.occurredAt, vm.state.value.items.single().occurredAt)
+        assertEquals(2, api.queries.size)
+        assertFalse(vm.state.value.offline)
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `a timestamp crossing a month reloads canonical feed totals and rows`() {
+        api.lists += page("op_1")
+        api.lists += page("op_2", month = "2026-10")
+        val vm = vm()
+        operations.updateRecords(listOf(details("op_1").copy(occurredAt = at(25).plusMonths(1))))
+        assertEquals(listOf("op_2"), vm.state.value.items.map { it.id })
+        assertEquals(listOf("2026-10"), vm.state.value.summary.map { it.month })
+    }
+
+    private fun pendingReplies(vararg replies: CompletableDeferred<OperationsList>) {
+        val queue = ArrayDeque(replies.toList())
+        api.listReply = { queue.removeFirst().await() }
+    }
+
+    @Test fun `old first page cannot roll back the timestamp received from details`() {
+        api.lists += page("op_1", next = 1)
+        val vm = vm()
+        val old = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        pendingReplies(old, fresh)
+        vm.refresh()
+        val updated = details("op_1").copy(occurredAt = at(25).plusMonths(1))
+        operations.updateRecords(listOf(updated))
+        val canonical = page("op_1", month = "2026-10").copy(items = listOf(updated.toItem()))
+        fresh.complete(canonical)
+        old.complete(page("op_1", next = 1))
+        assertEquals(canonical.items, vm.state.value.items)
+        assertEquals(canonical.summary, vm.state.value.summary)
+        assertEquals(null, vm.state.value.nextBefore)
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `old first page error cannot clear a newer refresh state`() {
+        api.lists += page("op_1")
+        val vm = vm()
+        val old = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        pendingReplies(old, fresh)
+        vm.refresh()
+        vm.refresh()
+        old.completeExceptionally(AppError.Offline())
+        assertTrue(vm.state.value.refreshing)
+        assertFalse(vm.state.value.offline)
+        fresh.complete(page("op_2"))
+        assertEquals(listOf("op_2"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `old next page cannot append rows or change cursor after a timestamp refresh`() {
+        api.lists += page("op_1", next = 1)
+        val vm = vm()
+        val oldPage = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        val resumed = CompletableDeferred<OperationsList>()
+        pendingReplies(oldPage, fresh, resumed)
+        vm.loadMore()
+        val updated = details("op_1").copy(occurredAt = at(25).plusMonths(1))
+        operations.updateRecords(listOf(updated))
+        assertFalse(vm.state.value.loadingMore)
+        val canonical = page("op_1", next = 2, month = "2026-10").copy(items = listOf(updated.toItem()))
+        fresh.complete(canonical)
+        oldPage.complete(page("op_old", month = "2026-08"))
+        assertEquals(canonical.items, vm.state.value.items)
+        assertEquals(canonical.summary, vm.state.value.summary)
+        assertEquals(at(2), vm.state.value.nextBefore)
+        assertTrue(vm.state.value.loadingMore)
+        assertEquals(OperationsQuery(before = at(2)), api.queries.last())
+        resumed.complete(page("op_new", month = "2026-09"))
+        assertEquals(listOf("op_1", "op_new"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.loadingMore)
+    }
+
+    @Test fun `old next page error cannot fail a newer pagination request`() {
+        api.lists += page("op_1", next = 1)
+        val vm = vm()
+        val oldPage = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        val newPage = CompletableDeferred<OperationsList>()
+        pendingReplies(oldPage, fresh, newPage)
+        vm.loadMore()
+        vm.refresh()
+        fresh.complete(page("op_2", next = 2))
+        vm.loadMore()
+        oldPage.completeExceptionally(AppError.Offline())
+        assertTrue(vm.state.value.loadingMore)
+        assertFalse(vm.state.value.moreFailed)
+        newPage.complete(page("op_3"))
+        assertEquals(listOf("op_2", "op_3"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.loadingMore)
+        assertFalse(vm.state.value.moreFailed)
+    }
+
+    @Test fun `pagination waits while a shown feed is refreshing`() {
+        api.lists += page("op_1", next = 1)
+        val vm = vm()
+        val fresh = CompletableDeferred<OperationsList>()
+        pendingReplies(fresh)
+        vm.refresh()
+        vm.loadMore()
+        assertEquals(2, api.queries.size)
+        assertFalse(vm.state.value.loadingMore)
+        fresh.complete(page("op_2"))
+        vm.loadMore()
+        assertEquals(2, api.queries.size)
+    }
+
+    @Test fun `pending pagination resumes after refresh with the same cursor without another scroll`() {
+        api.lists += page("op_1", next = 1)
+        val vm = vm()
+        val oldPage = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        val resumed = CompletableDeferred<OperationsList>()
+        pendingReplies(oldPage, fresh, resumed)
+        vm.loadMore()
+        vm.refresh()
+        fresh.complete(page("op_1", next = 1))
+        assertEquals(4, api.queries.size)
+        assertEquals(OperationsQuery(before = at(1)), api.queries.last())
+        oldPage.complete(page("op_stale"))
+        resumed.complete(page("op_2"))
+        assertEquals(listOf("op_1", "op_2"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.loadingMore)
+    }
+
+    @Test fun `pending pagination resumes with the retained cursor when refresh fails`() {
+        api.lists += page("op_1", next = 1)
+        val vm = vm()
+        val oldPage = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        val resumed = CompletableDeferred<OperationsList>()
+        pendingReplies(oldPage, fresh, resumed)
+        vm.loadMore()
+        vm.refresh()
+        fresh.completeExceptionally(AppError.Offline())
+        assertEquals(OperationsQuery(before = at(1)), api.queries.last())
+        assertTrue(vm.state.value.loadingMore)
+        oldPage.completeExceptionally(AppError.Offline())
+        assertFalse(vm.state.value.moreFailed)
+        resumed.complete(page("op_2"))
+        assertEquals(listOf("op_1", "op_2"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `pagination requested during refresh is deferred and coalesced until the current cursor is known`() {
+        api.lists += page("op_1", next = 1)
+        val vm = vm()
+        val fresh = CompletableDeferred<OperationsList>()
+        val resumed = CompletableDeferred<OperationsList>()
+        pendingReplies(fresh, resumed)
+        vm.refresh()
+        vm.loadMore()
+        vm.loadMore()
+        assertEquals(2, api.queries.size)
+        fresh.complete(page("op_2", next = 2))
+        assertEquals(3, api.queries.size)
+        assertEquals(OperationsQuery(before = at(2)), api.queries.last())
+        resumed.complete(page("op_3"))
+        assertEquals(listOf("op_2", "op_3"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `superseding refresh keeps pagination demand until only the latest response`() {
+        api.lists += page("op_1", next = 1)
+        val vm = vm()
+        val oldPage = CompletableDeferred<OperationsList>()
+        val firstRefresh = CompletableDeferred<OperationsList>()
+        val latestRefresh = CompletableDeferred<OperationsList>()
+        val resumed = CompletableDeferred<OperationsList>()
+        pendingReplies(oldPage, firstRefresh, latestRefresh, resumed)
+        vm.loadMore()
+        vm.refresh()
+        vm.refresh()
+        firstRefresh.complete(page("op_stale", next = 2))
+        assertEquals(4, api.queries.size)
+        assertTrue(vm.state.value.refreshing)
+        latestRefresh.complete(page("op_current", next = 1))
+        assertEquals(5, api.queries.size)
+        assertEquals(OperationsQuery(before = at(1)), api.queries.last())
+        oldPage.complete(page("op_old"))
+        resumed.complete(page("op_more"))
+        assertEquals(listOf("op_current", "op_more"), vm.state.value.items.map { it.id })
+        assertEquals(5, api.queries.size)
+    }
+
+    @Test fun `record updates can come from an independent read-only source`() {
+        api.lists += page("op_1")
+        val updates = kotlinx.coroutines.flow.MutableSharedFlow<List<ru.finassist.pf.core.api.model.OperationDetails>>(extraBufferCapacity = 4)
+        val records = object : ru.finassist.pf.feature.operations.api.OperationRecords {
+            override val records = updates
+        }
+        val vm = FeedViewModel(api, statements, operations, records, flags, tracker, reportZone)
+        val updated = details("op_1", categoryId = "cat_restaurants")
+        updates.tryEmit(listOf(updated))
+        assertEquals(updated.toItem(), vm.state.value.items.single())
+        assertEquals(1, api.queries.size)
+    }
+
 }

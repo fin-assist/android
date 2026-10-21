@@ -19,5 +19,5 @@ object OperationsRoutes {
 
     /** Operation (or own-transfer pair) details with the category picker. */
     @Serializable
-    data class Detail(val id: String)
+    data class Detail(val id: String, val occurredAt: String)
 }

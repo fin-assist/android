@@ -46,4 +46,16 @@ class RepositoriesTest {
             expectNoEvents()
         }
     }
+    @Test fun `details and category replies are published without changing their timestamp`() = runTest {
+        val operations = OperationsRepositoryImpl()
+        val updated = ru.finassist.pf.feature.operations.impl.ui.details("op_1").copy(
+            occurredAt = java.time.OffsetDateTime.parse("2026-10-01T00:00:00.123456789+03:00"),
+        )
+        operations.records.test {
+            operations.updateRecords(listOf(updated))
+            assertEquals(listOf(updated), awaitItem())
+            expectNoEvents()
+        }
+    }
+
 }

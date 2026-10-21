@@ -112,7 +112,7 @@ class NoDescriptionTest {
         val backend = backendWithBlanks()
         val api = MockOperationsApi(backend)
         val op = backend.ledger.all.first { it.isDebit && it.name.isEmpty() }
-        val details = api.getOperation(op.id)
+        val details = api.getOperation(op.id, "2026-09-25T12:00:00+03:00")
         assertEquals("", details.title)
         assertNull(details.description)
         assertEquals("Фастфуд", details.bankCategory)

@@ -32,7 +32,8 @@ import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.operations.api.CategoriesRepository
 import ru.finassist.pf.feature.operations.api.OperationsRoutes
-import ru.finassist.pf.feature.operations.impl.data.OperationsRepositoryImpl
+import ru.finassist.pf.feature.operations.api.OperationsRepository
+import ru.finassist.pf.feature.operations.api.OperationRecords
 import java.time.OffsetDateTime
 import ru.finassist.pf.feature.operations.impl.domain.OperationFormat
 import java.time.LocalDate
@@ -85,7 +86,8 @@ class SearchViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val api: OperationsApi,
     private val categoriesRepository: CategoriesRepository,
-    operations: OperationsRepositoryImpl,
+    operations: OperationsRepository,
+    records: OperationRecords,
     flags: FeatureFlags,
     private val tracker: Tracker,
     reportZone: ReportZone,
@@ -111,6 +113,19 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch { runCatching { categoriesRepository.categories() }.onSuccess { c -> _state.update { it.copy(categories = c) } } }
         // A category changed in the detail screen: refresh the visible result so the row moves out/in.
         viewModelScope.launch { operations.categoryChanges.collect { if (_state.value.hasFilters) search(debounce = false) } }
+        viewModelScope.launch {
+            records.records.collect { updated ->
+                val old = _state.value.result as? SearchResult.Found
+                val timeChanged = old?.items?.any { row -> updated.any { it.id == row.id && it.occurredAt != row.occurredAt } } == true
+                _state.update { state ->
+                    val found = state.result as? SearchResult.Found
+                    if (found == null) state else state.copy(result = found.copy(
+                        items = found.items.map { row -> updated.firstOrNull { it.id == row.id }?.toItem() ?: row },
+                    ))
+                }
+                if (timeChanged) search(debounce = false, quiet = true)
+            }
+        }
         // The 12-month window without a period is counted in the profile zone: a zone that changes the effective one
         // (the device's until the profile is known) asks again, quietly — the shown result stays until the new one (FIN-92).
         // An explicit period or «за всё время» does not depend on the zone.

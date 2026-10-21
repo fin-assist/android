@@ -219,22 +219,22 @@ class MockOperationsApiTest {
 
     @Test
     fun `details explain refunds and transfers to self`() = runBlocking<Unit> {
-        val back = api.getOperation(id("back"))
+        val back = api.getOperation(id("back"), "2026-09-25T12:00:00+03:00")
         assertEquals(OperationKind.INCOME, back.kind)
         assertEquals("возврат · Маркетплейсы", back.note)
         assertEquals("Уменьшает расходы «Маркетплейсы» в сентябре", back.noteDetails)
         assertEquals("текущий счёт, последние цифры 1111", back.account?.spoken)
 
-        val refund = api.getOperation(id("refund"))
+        val refund = api.getOperation(id("refund"), "2026-09-25T12:00:00+03:00")
         assertEquals("возврат", refund.note)
         assertEquals("Уменьшает общие расходы в сентябре", refund.noteDetails)
 
-        val abroad = api.getOperation(id("abroad"))
+        val abroad = api.getOperation(id("abroad"), "2026-09-25T12:00:00+03:00")
         assertEquals(OperationKind.EXPENSE, abroad.kind)
         assertEquals("не в тратах", abroad.note)
         assertEquals("Не считаем тратой и доходом", abroad.noteDetails)
 
-        val plain = api.getOperation(id("buy"))
+        val plain = api.getOperation(id("buy"), "2026-09-25T12:00:00+03:00")
         assertNull(plain.note)
         assertNull(plain.noteDetails)
         assertEquals("OZON", plain.description)
@@ -243,15 +243,15 @@ class MockOperationsApiTest {
 
     @Test
     fun `a pair is found by its own id and by the id of either side`() = runBlocking<Unit> {
-        val pair = api.getOperation(pairId)
+        val pair = api.getOperation(pairId, "2026-09-25T12:00:00+03:00")
         assertEquals(OperationKind.OWN_TRANSFER, pair.kind)
         assertEquals(Money(500_000), pair.amount)
         assertEquals("текущий счёт, последние цифры 1111", pair.fromAccount?.spoken)
         assertEquals("накопительный счёт, последние цифры 2222", pair.toAccount?.spoken)
-        assertEquals(pair, api.getOperation(id("self")))
-        assertEquals(pair, api.getOperation(id("self-in")))
+        assertEquals(pair, api.getOperation(id("self"), "2026-09-25T12:00:00+03:00"))
+        assertEquals(pair, api.getOperation(id("self-in"), "2026-09-25T12:00:00+03:00"))
 
-        val e = assertFailsWith<AppError.Api> { api.getOperation("missing") }
+        val e = assertFailsWith<AppError.Api> { api.getOperation("missing", "2026-09-25T12:00:00+03:00") }
         assertEquals(ErrorCodes.NOT_FOUND to 404, e.code to e.httpStatus)
     }
 
@@ -261,7 +261,7 @@ class MockOperationsApiTest {
             load(statement("2026-09-01", "2026-09-30", trn("x", "2026-09-05T10:00", 100, "Магазин", "Супермаркеты", account = Acc.OTHER_BANK)))
         }
         val api = MockOperationsApi(backend)
-        val op = api.getOperation(backend.ledger.all.single().id)
+        val op = api.getOperation(backend.ledger.all.single().id, "2026-09-25T12:00:00+03:00")
         assertEquals("счёт другого банка", op.account?.spoken)
         assertNull(op.account?.mask)
         assertEquals("Счёт другого банка", op.account?.typeName)
@@ -271,23 +271,23 @@ class MockOperationsApiTest {
 
     @Test
     fun `changing a category returns the changed record and is kept in the feed`() = runBlocking<Unit> {
-        val response = api.changeCategory(id("buy"), ChangeCategoryRequest("cat_clothes"))
+        val response = api.changeCategory(id("buy"), ChangeCategoryRequest("cat_clothes", "2026-09-25T12:00:00+03:00"))
         assertNull(response.replacedId)
         val item = response.items.single()
         assertEquals("cat_clothes", item.categoryId)
         assertTrue(item.isCategoryManual)
         // The refund of that purchase follows it.
-        assertEquals("возврат · Одежда и обувь", api.getOperation(id("back")).note)
+        assertEquals("возврат · Одежда и обувь", api.getOperation(id("back"), "2026-09-25T12:00:00+03:00").note)
     }
 
     @Test
     fun `splitting a pair returns both operations and the id that disappeared`() = runBlocking<Unit> {
         val pair = pairId
-        val response = api.changeCategory(pair, ChangeCategoryRequest("cat_restaurants"))
+        val response = api.changeCategory(pair, ChangeCategoryRequest("cat_restaurants", "2026-09-25T12:00:00+03:00"))
         assertEquals(pair, response.replacedId)
         assertEquals(listOf(OperationKind.EXPENSE, OperationKind.INCOME), response.items.map { it.kind })
         assertEquals(listOf("cat_restaurants", "cat_transfers"), response.items.map { it.categoryId })
-        assertEquals(ErrorCodes.NOT_FOUND, assertFailsWith<AppError.Api> { api.getOperation(pair) }.code)
+        assertEquals(ErrorCodes.NOT_FOUND, assertFailsWith<AppError.Api> { api.getOperation(pair, "2026-09-25T12:00:00+03:00") }.code)
     }
 
     @Test
@@ -303,7 +303,7 @@ class MockOperationsApiTest {
         }
         val api = MockOperationsApi(backend)
         val debit = backend.ledger.all.single { it.fitId == "d" }.id
-        val response = api.changeCategory(debit, ChangeCategoryRequest(SystemCategories.OWN_TRANSFER))
+        val response = api.changeCategory(debit, ChangeCategoryRequest(SystemCategories.OWN_TRANSFER, "2026-09-25T12:00:00+03:00"))
         assertEquals(debit, response.replacedId)
         assertEquals(OperationKind.OWN_TRANSFER, response.items.single().kind)
     }
@@ -321,9 +321,9 @@ class MockOperationsApiTest {
         }
         val api = MockOperationsApi(backend)
         val credit = backend.ledger.all.single { it.fitId == "in" }.id
-        assertNull(api.getOperation(credit).note)
+        assertNull(api.getOperation(credit, "2026-09-25T12:00:00+03:00").note)
 
-        val response = api.changeCategory(credit, ChangeCategoryRequest(SystemCategories.REFUND))
+        val response = api.changeCategory(credit, ChangeCategoryRequest(SystemCategories.REFUND, "2026-09-25T12:00:00+03:00"))
         assertNull(response.replacedId)
         val item = response.items.single()
         assertEquals(OperationKind.INCOME, item.kind)
@@ -331,29 +331,29 @@ class MockOperationsApiTest {
         assertTrue(item.isCategoryManual)
         assertEquals("возврат · Одежда и обувь", item.note)
         assertEquals("Уменьшает расходы «Одежда и обувь» в сентябре", item.noteDetails)
-        assertEquals(item, api.getOperation(credit))
+        assertEquals(item, api.getOperation(credit, "2026-09-25T12:00:00+03:00"))
     }
 
     @Test
     fun `a manual refund without a target reduces the total expenses`() = runBlocking<Unit> {
-        val response = api.changeCategory(id("salary"), ChangeCategoryRequest(SystemCategories.REFUND))
+        val response = api.changeCategory(id("salary"), ChangeCategoryRequest(SystemCategories.REFUND, "2026-09-25T12:00:00+03:00"))
         val item = response.items.single()
         assertEquals(SystemCategories.REFUND, item.categoryId)
         assertTrue(item.isCategoryManual)
         assertEquals("возврат", item.note)
         assertEquals("Уменьшает общие расходы в сентябре", item.noteDetails)
-        assertEquals(item, api.getOperation(id("salary")))
+        assertEquals(item, api.getOperation(id("salary"), "2026-09-25T12:00:00+03:00"))
     }
 
     @Test
     fun `an unknown, wrong-kind category or an unknown operation is rejected`() = runBlocking<Unit> {
-        val unknown = assertFailsWith<AppError.Api> { api.changeCategory(id("buy"), ChangeCategoryRequest("cat_nope")) }
+        val unknown = assertFailsWith<AppError.Api> { api.changeCategory(id("buy"), ChangeCategoryRequest("cat_nope", "2026-09-25T12:00:00+03:00")) }
         assertEquals(ErrorCodes.CATEGORY_NOT_ASSIGNABLE to 422, unknown.code to unknown.httpStatus)
-        val wrongKind = assertFailsWith<AppError.Api> { api.changeCategory(id("buy"), ChangeCategoryRequest("cat_salary")) }
+        val wrongKind = assertFailsWith<AppError.Api> { api.changeCategory(id("buy"), ChangeCategoryRequest("cat_salary", "2026-09-25T12:00:00+03:00")) }
         assertEquals(ErrorCodes.CATEGORY_NOT_ASSIGNABLE to 422, wrongKind.code to wrongKind.httpStatus)
-        val missing = assertFailsWith<AppError.Api> { api.changeCategory("missing", ChangeCategoryRequest("cat_clothes")) }
+        val missing = assertFailsWith<AppError.Api> { api.changeCategory("missing", ChangeCategoryRequest("cat_clothes", "2026-09-25T12:00:00+03:00")) }
         assertEquals(ErrorCodes.NOT_FOUND to 404, missing.code to missing.httpStatus)
-        assertEquals("cat_marketplaces", api.getOperation(id("buy")).categoryId)
+        assertEquals("cat_marketplaces", api.getOperation(id("buy"), "2026-09-25T12:00:00+03:00").categoryId)
     }
 
     @Test
@@ -366,8 +366,8 @@ class MockOperationsApiTest {
     fun `operations need a session`() = runBlocking<Unit> {
         val signedOut = MockOperationsApi(testBackend(userId = ""))
         assertFailsWith<AppError.Unauthorized> { signedOut.listOperations(OperationsQuery()) }
-        assertFailsWith<AppError.Unauthorized> { signedOut.getOperation("x") }
-        assertFailsWith<AppError.Unauthorized> { signedOut.changeCategory("x", ChangeCategoryRequest("cat_clothes")) }
+        assertFailsWith<AppError.Unauthorized> { signedOut.getOperation("x", "2026-09-25T12:00:00+03:00") }
+        assertFailsWith<AppError.Unauthorized> { signedOut.changeCategory("x", ChangeCategoryRequest("cat_clothes", "2026-09-25T12:00:00+03:00")) }
         assertFailsWith<AppError.Unauthorized> { signedOut.listCategories() }
     }
 
@@ -388,4 +388,30 @@ class MockOperationsApiTest {
             assertEquals(ErrorCodes.VALIDATION_ERROR to 400, e.code to e.httpStatus, before)
         }
     }
+    @Test fun `missing or malformed timestamps are validation errors before looking up an operation`() = runBlocking {
+        for (timestamp in listOf("", "not-a-date", "2026-09-01", "2026-09-01T12:00:00", "2026-02-30T12:00:00+03:00")) {
+            val get = assertFailsWith<AppError.Api> { api.getOperation("missing", timestamp) }
+            assertEquals(ErrorCodes.VALIDATION_ERROR, get.code)
+            assertEquals(400, get.httpStatus)
+            assertEquals("occurred_at", get.details.single().field)
+            val patch = assertFailsWith<AppError.Api> { api.changeCategory("missing", ChangeCategoryRequest("cat_nope", timestamp)) }
+            assertEquals(ErrorCodes.VALIDATION_ERROR, patch.code)
+            assertEquals("occurred_at", patch.details.single().field)
+        }
+    }
+
+    @Test fun `stale timestamps fall back to id and return the current timestamp for details and category`() = runBlocking {
+        val old = "2020-01-01T00:00:00.123456789+03:00"
+        val before = api.getOperation(id("buy"), old)
+        assertEquals(backend.ledger.byId(id("buy"))!!.occurredAt, before.occurredAt)
+        val after = api.changeCategory(before.id, ChangeCategoryRequest("cat_clothes", old)).items.single()
+        assertEquals(before.occurredAt, after.occurredAt)
+        assertEquals("cat_clothes", after.categoryId)
+    }
+
+    @Test fun `own transfer uses debit time even when credit time is different`() = runBlocking {
+        val debit = backend.ledger.byId(id("self"))!!.occurredAt
+        assertEquals(debit, api.getOperation(pairId, debit.toString()).occurredAt)
+    }
+
 }

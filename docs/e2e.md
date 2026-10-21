@@ -117,6 +117,9 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `no-description.ofx` | 1 new operation without a description (7 October 2026): «Без описания» in the feed, no unread line |
   | `stale.ofx` | 3 operations, statement period 1 August — 20 September 2026, the last operation on 15 September: once the preloaded statement is deleted, the data is stale on the pinned date — the banner says «по 20 сентября» (FIN-125) |
   | `other-bank.ofx` | `WRONG_BANK` |
+  | `zz-history-period.ofx` | one operation on 25 September, statement period 1–30 September 2026 |
+  | `zz-history-fallback.ofx` | no statement period: history falls back to the operation day, 25 September 2026 |
+  | `zz-history-empty.ofx` | no statement period or operations: history shows the count without a date label |
 
 - **Control link.** `pfe2e://config?…` changes state from a flow (`E2eControlActivity`). Open it through the subflow,
   not a bare `openLink`: `runFlow: {file: ../../subflows/config.yaml, env: {LINK: "pfe2e://config?…"}}`. The activity
@@ -259,7 +262,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `applock/unlock` (smoke) | cold start → unlock; wrong code error |
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |
 | `applock/change_passcode` | current → new → mismatch → new → repeat; the new code unlocks after restart |
-| `operations/feed_and_detail` (smoke) | feed → card → change category → saved as manual |
+| `operations/feed_and_detail` (smoke) | feed → card with required `occurred_at` → change category → back → reopen: the manual category persists (FIN-203) |
 | `operations/unknown_filter_kind` | `unknown_codes=true`: the expense tile sends a `kind` the client does not know; the search keeps it under «Как на „Аналитике“» and finds no incomes — FIN-83 |
 | `operations/days_in_profile_zone` | `profile_timezone=Asia/Vladivostok`: after the profile is read, the feed groups days in the profile zone, not the device's — an evening operation in Moscow moves to the next day — FIN-92 |
 | `operations/statement_stale` | on the preloaded statement the caption under the summary says «Данные по 1 октября» (the statement's end, not the last operation on 30 September); then the preloaded statement deleted, `stale.ofx` uploaded: «Операции» and «Аналитика» show «Данные в приложении по 20 сентября — с тех пор прошло больше двух недель», dated by the statement's end (`state.data_to`), not the last operation (15 September) — FIN-125 |
@@ -282,6 +285,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `statements/upload_errors` | CSV, not a statement, another bank; leaving the picker |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
+| `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → count without a date label (FIN-198) |
 | `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
 | `statements/upload_rate_limited_resume` | `stream_drops=1&stream_rate_limits=100&stream_retry_s=120`: the progress stream drops, every re-open gets 429; after the first 429 (`expect_stream_rate_limited=1`) the screen comes back from the control link and from the background and opens the stream itself, the server counts a 429 for each (`expect_stream_rate_limited=3`) — waited for, still parsing, no upload error; with the limit lifted the import result opens — FIN-170 |

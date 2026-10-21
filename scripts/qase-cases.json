@@ -24,6 +24,7 @@
     ".maestro/flows/assistant/ask_question.yaml": 12,
     ".maestro/flows/assistant/daily_limit.yaml": 13,
     ".maestro/flows/statements/upload_and_history.yaml": 14,
+    ".maestro/flows/statements/upload_history_period.yaml": 47,
     ".maestro/flows/statements/upload_errors.yaml": 15,
     "ru.finassist.pf.StatementPickerTest#uploadsTheDocumentReturnedBySystemPicker": 16,
     ".maestro/flows/profile/theme_and_logout.yaml": 17,

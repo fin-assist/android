@@ -20,7 +20,6 @@ import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.OperationKind
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.tracking.Events
-import ru.finassist.pf.feature.operations.impl.data.OperationsRepositoryImpl
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -33,9 +32,9 @@ import kotlin.test.assertTrue
 class DetailViewModelTest {
     private val api = FakeOperationsApi()
     private val categories = FakeCategories(listOf(category("cat_supermarkets"), category("cat_restaurants")))
-    private val operations = OperationsRepositoryImpl()
+    private val operations = FakeOperationChanges()
     private val tracker = FakeTracker()
-    private val savedState = SavedStateHandle(mapOf("id" to "op_1"))
+    private val savedState = SavedStateHandle(mapOf("id" to "op_1", "occurredAt" to "2026-09-25T12:00:00+03:00"))
 
     @Before fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -54,6 +53,7 @@ class DetailViewModelTest {
     @Test fun `the operation of the route is shown with the category directory`() {
         val s = vm().state.value
         assertEquals(listOf("op_1"), api.opened)
+        assertEquals(listOf(api.operations.getValue("op_1")), operations.published.single())
         assertEquals("op_1", s.operation?.id)
         assertEquals(listOf("cat_supermarkets", "cat_restaurants"), s.categories.map { it.id })
         assertFalse(s.loading)
@@ -141,27 +141,40 @@ class DetailViewModelTest {
         assertEquals("Категория изменена — аналитика пересчитается", s.snackbar)
         assertEquals(Events.OPERATIONS_CATEGORY_CHANGED to mapOf("split" to "false"), tracker.events.last())
         assertEquals(1, announced)
+        assertEquals(api.changeResponse!!.items, operations.published.last())
         watcher.cancel()
     }
 
-    @Test fun `a split pair shows the record that carries the chosen category and reopens it after process death`() {
-        api.operations["op_1"] = details("op_1", OperationKind.OWN_TRANSFER, categoryId = "cat_own_transfer")
-        api.changeResponse = ChangeCategoryResponse(
-            items = listOf(details("op_1a", categoryId = "cat_own_transfer"), details("op_1b", categoryId = "cat_restaurants")),
-            replacedId = "op_1",
+    @Test fun `a split pair keeps the chosen sides timestamp for reload recreation and another patch`() {
+        val debitAt = "2026-09-25T12:00:00+03:00"
+        val creditAt = "2026-09-26T15:00:00.123456789+03:00"
+        val debit = details("op_1a", categoryId = "cat_own_transfer")
+        val credit = details("op_1b", categoryId = "cat_restaurants").copy(
+            occurredAt = java.time.OffsetDateTime.parse(creditAt),
         )
+        api.operations["op_1"] = details("op_1", OperationKind.OWN_TRANSFER, categoryId = "cat_own_transfer")
+        api.operations[credit.id] = credit
+        api.changeResponse = ChangeCategoryResponse(items = listOf(debit, credit), replacedId = "op_1")
         val vm = picked("cat_restaurants")
         vm.save()
+        assertEquals(debitAt, api.changedAt.single())
         assertEquals("op_1b", vm.state.value.operation?.id)
+        assertEquals(credit.occurredAt, vm.state.value.operation?.occurredAt)
         assertEquals("Перевод разделили на две операции", vm.state.value.snackbar)
         assertEquals(mapOf("split" to "true"), tracker.events.last().second)
 
-        // The new id is what a reload (and a view model recreated from the saved state) opens.
         vm.load()
         assertEquals("op_1b", api.opened.last())
-        api.operations["op_1b"] = details("op_1b", categoryId = "cat_restaurants")
-        DetailViewModel(savedState, api, categories, operations, tracker)
+        assertEquals(creditAt, api.openedAt.last())
+        val recreated = DetailViewModel(savedState, api, categories, operations, tracker)
         assertEquals("op_1b", api.opened.last())
+        assertEquals(creditAt, api.openedAt.last())
+        api.changeResponse = ChangeCategoryResponse(listOf(credit.copy(categoryId = "cat_supermarkets")))
+        recreated.openPicker()
+        recreated.choose("cat_supermarkets")
+        recreated.save()
+        assertEquals("op_1b" to "cat_supermarkets", api.changes.last())
+        assertEquals(creditAt, api.changedAt.last())
     }
 
     @Test fun `a debit that found its pair is announced as an own transfer`() {
@@ -219,4 +232,16 @@ class DetailViewModelTest {
         vm.consumeSnackbar()
         assertNull(vm.state.value.snackbar)
     }
+    @Test fun `details refreshes the timestamp used by patch and process recreation`() {
+        val latest = java.time.OffsetDateTime.parse("2026-10-01T00:00:00.123456789+03:00")
+        api.operations["op_1"] = details("op_1").copy(occurredAt = latest)
+        val vm = picked("cat_restaurants")
+        assertEquals("2026-09-25T12:00:00+03:00", api.openedAt.single())
+        api.changeResponse = ChangeCategoryResponse(listOf(details("op_1", categoryId = "cat_restaurants").copy(occurredAt = latest.plusDays(1))))
+        vm.save()
+        assertEquals("2026-10-01T00:00:00.123456789+03:00", api.changedAt.single())
+        DetailViewModel(savedState, api, categories, operations, tracker)
+        assertEquals("2026-10-02T00:00:00.123456789+03:00", api.openedAt.last())
+    }
+
 }

@@ -23,7 +23,7 @@ class UploadHistoryDesignCheckTest {
     private fun upload(id: String, file: String, uploaded: String, from: String, to: String, count: Int) = Upload(
         uploadId = id, fileName = file, status = UploadStatus.DONE, uploadedAt = t("${uploaded}T10:00:00+03:00"),
         operationCount = count, unreadCount = 0,
-        firstOperationAt = t("${from}T09:00:00+03:00"), lastOperationAt = t("${to}T20:00:00+03:00"), sourceName = "Т-Банк",
+        periodFrom = from, periodTo = to, sourceName = "Т-Банк",
     )
 
     private val all = upload("u1", "operations_2026.ofx", "2026-09-25", "2026-04-01", "2026-09-25", 1086)
@@ -63,6 +63,17 @@ class UploadHistoryDesignCheckTest {
             .copy(resolvedUnreadCount = 2, resolvedByUploadedAt = t("2026-10-12T10:00:00+03:00"))
         capture("UploadHistoryResolved", state.copy(list = StatementsList(summary, listOf(fixed, sep, q2))))
     }
+
+    // No Figma artboard yet for a file without a period or for a processing upload (FIN-198).
+    @Test fun uploadHistoryWithoutPeriod() = capture(
+        "UploadHistoryWithoutPeriod",
+        state.copy(list = StatementsList(null, listOf(all.copy(periodFrom = null, periodTo = null, operationCount = 0)))),
+    )
+
+    @Test fun uploadHistoryProcessing() = capture(
+        "UploadHistoryProcessing",
+        state.copy(list = StatementsList(null, listOf(all.copy(status = UploadStatus.PROCESSING, periodFrom = null, periodTo = null)))),
+    )
 
     @Test fun uploadHistoryEmpty() = capture("UploadHistoryEmpty", HistoryUiState(loading = false, list = StatementsList(null, emptyList())))
 }
