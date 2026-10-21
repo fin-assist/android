@@ -23,7 +23,8 @@ import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
-import ru.finassist.pf.feature.operations.impl.data.OperationsRepositoryImpl
+import ru.finassist.pf.feature.operations.api.OperationsRepository
+import ru.finassist.pf.feature.operations.api.OperationRecords
 import ru.finassist.pf.feature.statements.api.StatementsRepository
 import javax.inject.Inject
 
@@ -52,7 +53,8 @@ data class FeedUiState(
 class FeedViewModel @Inject constructor(
     private val api: OperationsApi,
     statements: StatementsRepository,
-    operations: OperationsRepositoryImpl,
+    operations: OperationsRepository,
+    records: OperationRecords,
     private val flags: FeatureFlags,
     private val tracker: Tracker,
     reportZone: ReportZone,
@@ -71,7 +73,7 @@ class FeedViewModel @Inject constructor(
             merge(statements.events, operations.categoryChanges).collect { refresh() }
         }
         viewModelScope.launch {
-            operations.records.collect { updated ->
+            records.records.collect { updated ->
                 val timeChanged = _state.value.items.any { row -> updated.any { it.id == row.id && it.occurredAt != row.occurredAt } }
                 _state.update { state ->
                     state.copy(items = state.items.map { row -> updated.firstOrNull { it.id == row.id }?.toItem() ?: row })

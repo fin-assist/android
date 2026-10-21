@@ -9,6 +9,8 @@ import ru.finassist.pf.core.api.CategoriesApi
 import ru.finassist.pf.core.api.model.OperationDetails
 import ru.finassist.pf.core.api.model.Category
 import ru.finassist.pf.feature.operations.api.CategoriesRepository
+import ru.finassist.pf.feature.operations.api.OperationChangesPublisher
+import ru.finassist.pf.feature.operations.api.OperationRecords
 import ru.finassist.pf.feature.operations.api.OperationsRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -25,18 +27,18 @@ class CategoriesRepositoryImpl @Inject constructor(private val api: CategoriesAp
 }
 
 @Singleton
-class OperationsRepositoryImpl @Inject constructor() : OperationsRepository {
+class OperationsRepositoryImpl @Inject constructor() : OperationsRepository, OperationRecords, OperationChangesPublisher {
     private val _changes = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     override val categoryChanges: Flow<Unit> = _changes.asSharedFlow()
 
     private val _records = MutableSharedFlow<List<OperationDetails>>(extraBufferCapacity = 4)
-    val records = _records.asSharedFlow()
+    override val records = _records.asSharedFlow()
 
-    fun updateRecords(items: List<OperationDetails>) {
+    override fun updateRecords(items: List<OperationDetails>) {
         _records.tryEmit(items)
     }
 
-    fun notifyCategoryChanged() {
+    override fun notifyCategoryChanged() {
         _changes.tryEmit(Unit)
     }
 }

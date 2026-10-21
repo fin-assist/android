@@ -22,6 +22,9 @@ import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.tracking.Event
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.operations.api.CategoriesRepository
+import ru.finassist.pf.feature.operations.api.OperationRecords
+import ru.finassist.pf.feature.operations.api.OperationChangesPublisher
+import ru.finassist.pf.feature.operations.api.OperationsRepository
 import ru.finassist.pf.feature.statements.api.StatementsEvent
 import ru.finassist.pf.feature.statements.api.StatementsRepository
 import java.time.OffsetDateTime
@@ -128,3 +131,19 @@ internal class FakeTracker : Tracker {
 }
 
 internal fun category(id: String) = Category(id, id, "circle", isSystem = false, kinds = emptyList(), assignable = true)
+
+/** Test-owned event source and publisher: view models do not need the production repository. */
+internal class FakeOperationChanges : OperationsRepository, OperationRecords, OperationChangesPublisher {
+    override val categoryChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+    override val records = MutableSharedFlow<List<OperationDetails>>(extraBufferCapacity = 4)
+    val published = mutableListOf<List<OperationDetails>>()
+
+    override fun updateRecords(items: List<OperationDetails>) {
+        published += items
+        records.tryEmit(items)
+    }
+
+    override fun notifyCategoryChanged() {
+        categoryChanges.tryEmit(Unit)
+    }
+}

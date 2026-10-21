@@ -22,7 +22,7 @@ import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.operations.api.CategoriesRepository
 import ru.finassist.pf.feature.operations.api.OperationsRoutes
-import ru.finassist.pf.feature.operations.impl.data.OperationsRepositoryImpl
+import ru.finassist.pf.feature.operations.api.OperationChangesPublisher
 import javax.inject.Inject
 
 data class DetailUiState(
@@ -53,7 +53,7 @@ class DetailViewModel @Inject constructor(
     private val savedState: SavedStateHandle,
     private val api: OperationsApi,
     private val categories: CategoriesRepository,
-    private val operations: OperationsRepositoryImpl,
+    private val operations: OperationChangesPublisher,
     private val tracker: Tracker,
 ) : ViewModel() {
     /** After a split/merge the record id changes; kept in the saved state so process death reopens the new one. */

@@ -12,6 +12,8 @@ import ru.finassist.pf.core.navigation.FeatureEntry
 import ru.finassist.pf.core.navigation.Navigator
 import ru.finassist.pf.core.navigation.PfNavTypes
 import ru.finassist.pf.feature.operations.api.CategoriesRepository
+import ru.finassist.pf.feature.operations.api.OperationRecords
+import ru.finassist.pf.feature.operations.api.OperationChangesPublisher
 import ru.finassist.pf.feature.operations.api.OperationsRepository
 import ru.finassist.pf.feature.operations.api.OperationsRoutes
 import ru.finassist.pf.feature.operations.impl.data.CategoriesRepositoryImpl
@@ -46,6 +48,8 @@ internal abstract class OperationsModule {
     @Binds abstract fun categories(impl: CategoriesRepositoryImpl): CategoriesRepository
 
     @Binds abstract fun operations(impl: OperationsRepositoryImpl): OperationsRepository
+    @Binds abstract fun operationRecords(impl: OperationsRepositoryImpl): OperationRecords
+    @Binds abstract fun operationChangesPublisher(impl: OperationsRepositoryImpl): OperationChangesPublisher
 
     @Binds @IntoSet
     abstract fun entry(impl: OperationsEntry): FeatureEntry

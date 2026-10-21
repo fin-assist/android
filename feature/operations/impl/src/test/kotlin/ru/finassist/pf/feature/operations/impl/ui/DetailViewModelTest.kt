@@ -20,7 +20,6 @@ import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.OperationKind
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.tracking.Events
-import ru.finassist.pf.feature.operations.impl.data.OperationsRepositoryImpl
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -33,7 +32,7 @@ import kotlin.test.assertTrue
 class DetailViewModelTest {
     private val api = FakeOperationsApi()
     private val categories = FakeCategories(listOf(category("cat_supermarkets"), category("cat_restaurants")))
-    private val operations = OperationsRepositoryImpl()
+    private val operations = FakeOperationChanges()
     private val tracker = FakeTracker()
     private val savedState = SavedStateHandle(mapOf("id" to "op_1", "occurredAt" to "2026-09-25T12:00:00+03:00"))
 
@@ -54,6 +53,7 @@ class DetailViewModelTest {
     @Test fun `the operation of the route is shown with the category directory`() {
         val s = vm().state.value
         assertEquals(listOf("op_1"), api.opened)
+        assertEquals(listOf(api.operations.getValue("op_1")), operations.published.single())
         assertEquals("op_1", s.operation?.id)
         assertEquals(listOf("cat_supermarkets", "cat_restaurants"), s.categories.map { it.id })
         assertFalse(s.loading)
@@ -141,6 +141,7 @@ class DetailViewModelTest {
         assertEquals("Категория изменена — аналитика пересчитается", s.snackbar)
         assertEquals(Events.OPERATIONS_CATEGORY_CHANGED to mapOf("split" to "false"), tracker.events.last())
         assertEquals(1, announced)
+        assertEquals(api.changeResponse!!.items, operations.published.last())
         watcher.cancel()
     }
 

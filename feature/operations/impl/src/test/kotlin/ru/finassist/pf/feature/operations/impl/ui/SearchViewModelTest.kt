@@ -26,7 +26,6 @@ import ru.finassist.pf.core.navigation.PfNavTypes
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.toggles.StaticFlags
 import ru.finassist.pf.core.tracking.Events
-import ru.finassist.pf.feature.operations.impl.data.OperationsRepositoryImpl
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import kotlin.test.assertEquals
@@ -46,7 +45,7 @@ class SearchViewModelTest {
     private val scheduler = TestCoroutineScheduler()
     private val api = FakeOperationsApi()
     private val categories = FakeCategories(listOf(category("cat_taxi")))
-    private val operations = OperationsRepositoryImpl()
+    private val operations = FakeOperationChanges()
     private val tracker = FakeTracker()
     private val reportZone = ru.finassist.pf.core.common.time.ReportZone { java.time.ZoneId.of("Europe/Moscow") }
 
@@ -58,7 +57,7 @@ class SearchViewModelTest {
 
     private fun vm(preset: OperationsFilter? = null, flags: StaticFlags = StaticFlags()): SearchViewModel {
         val args = preset?.let { mapOf("filter" to PfNavTypes.operationsFilter.serializeAsValue(it)) }.orEmpty()
-        return SearchViewModel(SavedStateHandle(args), api, categories, operations, flags, tracker, reportZone)
+        return SearchViewModel(SavedStateHandle(args), api, categories, operations, operations, flags, tracker, reportZone)
     }
 
     private fun found(vararg ids: String, total: Int? = null, range: DateRange? = window, older: Boolean? = null) =

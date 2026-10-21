@@ -15,7 +15,6 @@ import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.tracking.Events
-import ru.finassist.pf.feature.operations.impl.data.OperationsRepositoryImpl
 import ru.finassist.pf.feature.statements.api.StatementsEvent
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -28,7 +27,7 @@ import kotlin.test.assertTrue
 class FeedViewModelTest {
     private val api = FakeOperationsApi()
     private val statements = FakeStatements()
-    private val operations = OperationsRepositoryImpl()
+    private val operations = FakeOperationChanges()
     private val flags = FakeFlags()
     private val tracker = FakeTracker()
 
@@ -38,7 +37,7 @@ class FeedViewModelTest {
 
     private val reportZone = ru.finassist.pf.core.common.time.ReportZone { java.time.ZoneId.of("Europe/Moscow") }
 
-    private fun vm() = FeedViewModel(api, statements, operations, flags, tracker, reportZone)
+    private fun vm() = FeedViewModel(api, statements, operations, operations, flags, tracker, reportZone)
 
     @Test fun `a new profile zone reloads the feed from the top, the first known zone does not (FIN-92)`() {
         api.lists += page("op_1", next = 1)
@@ -413,6 +412,19 @@ class FeedViewModelTest {
         resumed.complete(page("op_more"))
         assertEquals(listOf("op_current", "op_more"), vm.state.value.items.map { it.id })
         assertEquals(5, api.queries.size)
+    }
+
+    @Test fun `record updates can come from an independent read-only source`() {
+        api.lists += page("op_1")
+        val updates = kotlinx.coroutines.flow.MutableSharedFlow<List<ru.finassist.pf.core.api.model.OperationDetails>>(extraBufferCapacity = 4)
+        val records = object : ru.finassist.pf.feature.operations.api.OperationRecords {
+            override val records = updates
+        }
+        val vm = FeedViewModel(api, statements, operations, records, flags, tracker, reportZone)
+        val updated = details("op_1", categoryId = "cat_restaurants")
+        updates.tryEmit(listOf(updated))
+        assertEquals(updated.toItem(), vm.state.value.items.single())
+        assertEquals(1, api.queries.size)
     }
 
 }
