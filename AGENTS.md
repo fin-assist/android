@@ -345,8 +345,8 @@ commands: `docs/testing.md`.
   of use cases. Замечания — на русском, inline на изменённых строках. Особое внимание: <что именно и почему>.
   ```
 
-  - `@claude` — `.github/workflows/claude.yml` (runs from the default branch), Claude Fable 5.1 (`claude-fable-5-1`,
-    set in `claude_args`);
+  - `@claude` — `.github/workflows/claude.yml` (runs from the default branch), Claude Opus 5.5 (`claude-opus-5-5`,
+    with `--effort high`, set in `claude_args`; FIN-204);
   - `@codex` — the Codex GitHub integration, under the owner's ChatGPT subscription. Its model is chosen by
     OpenAI and cannot be pinned from here; a pinned model would need the OpenAI API with per-token billing, which was
     declined (FIN-103).
