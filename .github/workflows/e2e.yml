@@ -35,7 +35,7 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The split (scripts/e2e-shards.py) and the reports job count on SHARDS; the matrix must list exactly 1..SHARDS.
       - name: Check the shard count
@@ -116,7 +116,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-java@v5
         with:
