@@ -30,12 +30,12 @@ jobs:
       id-token: write
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
       # The contract (docs/api.md, openapi.yaml) for reviews of client changes (AGENTS.md, Code Review Rules; FIN-174).
       # The repo is public: read-only checkout without credentials, read with the Read tool, no extra tools allowed.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         # Without the contract the review still runs and says so (AGENTS.md, Code Review Rules).
         continue-on-error: true
         with:
