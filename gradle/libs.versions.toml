@@ -24,7 +24,7 @@ coroutines = "1.10.1"
 serialization = "1.8.0"
 
 # Network
-okhttp = "4.12.0"
+okhttp = "4.12.1"
 retrofit = "2.12.0"
 
 # Prod SDKs (stage 8)
