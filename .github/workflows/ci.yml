@@ -89,7 +89,7 @@ jobs:
 
       - name: Restore Robolectric jars
         id: robolectric-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/.m2/repository/org/robolectric
           key: ${{ steps.robolectric.outputs.key }}
@@ -110,7 +110,7 @@ jobs:
         if: >-
           steps.unit-tests.outcome == 'success' && steps.robolectric-cache.outputs.cache-hit != 'true' &&
           github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ~/.m2/repository/org/robolectric
           key: ${{ steps.robolectric.outputs.key }}
