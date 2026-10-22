@@ -25,7 +25,7 @@ serialization = "1.8.0"
 
 # Network
 okhttp = "4.12.0"
-retrofit = "2.11.0"
+retrofit = "2.12.0"
 
 # Prod SDKs (stage 8)
 rustoreRemoteConfig = "10.5.2"
