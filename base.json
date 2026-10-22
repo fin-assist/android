@@ -28,7 +28,9 @@
       "description": "FIN-211: AndroidX and Compose, including mixed groups, require owner review",
       "matchPackageNames": [
         "androidx.**",
-        "org.jetbrains.compose**"
+        "org.jetbrains.compose**",
+        "org.jetbrains.kotlin.plugin.compose**",
+        "org.jetbrains.kotlin:compose-compiler-gradle-plugin"
       ],
       "automerge": false
     }
