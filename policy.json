@@ -152,6 +152,24 @@
       "matchJsonata": [
         "$not($exists(newDigest)) or newDigest = null"
       ]
+    },
+    {
+      "description": "FIN-211: failed Compose stack requires grouped Dashboard approval",
+      "matchPackageNames": [
+        "androidx.compose:compose-bom",
+        "androidx.activity:**",
+        "androidx.core:**",
+        "androidx.fragment:**",
+        "androidx.hilt:hilt-navigation-compose",
+        "androidx.lifecycle:**",
+        "androidx.navigation:**"
+      ],
+      "groupName": "androidx compose stack",
+      "separateMajorMinor": false,
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "additionalBranchPrefix": "fin211-retry-173-",
+      "automerge": false
     }
   ]
 }
