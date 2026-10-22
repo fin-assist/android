@@ -69,6 +69,71 @@
       ]
     },
     {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin.plugin.serialization:org.jetbrains.kotlin.plugin.serialization.gradle.plugin"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 2"
+      ]
+    },
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin.android:org.jetbrains.kotlin.android.gradle.plugin"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 2"
+      ]
+    },
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin:kotlin-test"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 2"
+      ]
+    },
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin:compose-compiler-gradle-plugin"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 2"
+      ]
+    },
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin:kotlin-gradle-plugin"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 2"
+      ]
+    },
+    {
       "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
       "matchPackageNames": [
         "io.github.takahirom.roborazzi:roborazzi-compose"
@@ -170,6 +235,91 @@
       "recreateWhen": "never",
       "additionalBranchPrefix": "fin211-retry-173-",
       "automerge": false
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin.plugin.serialization:org.jetbrains.kotlin.plugin.serialization.gradle.plugin"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-152-",
+      "matchNewValue": "/^2\\.4\\.21$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin.android:org.jetbrains.kotlin.android.gradle.plugin"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-152-",
+      "matchNewValue": "/^2\\.4\\.21$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin:kotlin-test"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-152-",
+      "matchNewValue": "/^2\\.4\\.21$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin:compose-compiler-gradle-plugin"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-152-",
+      "matchNewValue": "/^2\\.4\\.21$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin:kotlin-gradle-plugin"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-152-",
+      "matchNewValue": "/^2\\.4\\.21$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
+      ]
     }
   ]
 }
