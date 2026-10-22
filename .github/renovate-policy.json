@@ -4,7 +4,8 @@
     "Build variants and separation checks",
     "Lint (mock flavor)",
     "Unit tests and coverage",
-    "Renovate policy tests"
+    "Renovate policy tests",
+    "Renovate runtime contract"
   ],
   "controllerLogin": "avtomon",
   "ciChecks": [
