@@ -1,0 +1,17 @@
+{
+  "requiredChecks": [
+    "Agent docs up to date",
+    "Build variants and separation checks",
+    "Lint (mock flavor)",
+    "Unit tests and coverage",
+    "Renovate policy tests",
+    "Renovate runtime contract"
+  ],
+  "controllerLogin": "avtomon",
+  "ciChecks": [
+    "Agent docs up to date",
+    "Build variants and separation checks",
+    "Lint (mock flavor)",
+    "Unit tests and coverage"
+  ]
+}

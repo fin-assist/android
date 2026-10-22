@@ -467,3 +467,7 @@ Also check:
 - Check that new functionality comes with tests (see Tests) and that the tests would fail if the behaviour
   broke; flag changed lines the «Unit test coverage» comment of the PR (posted by CI) shows as uncovered when
   the PR gives no reason for them.
+
+## Renovate automation
+
+FIN-211: dependency-only Renovate PRs may be merged/closed by the reviewed `renovate-policy.yml` controller, after exact-head required CI and bot-only commit checks. Ordinary PRs and release-to-main PRs still require the owner. Do not enable native automerge or bypass protections. Preserve base policy in `renovate-base.json` (schedules, groups, allowed versions and manual Go upgrades); generated target/version approvals live on the separate `renovate-policy` branch. Failed exact values are isolated for explicit Dashboard approval; new values keep their original groups. AndroidX/Compose and mixed groups never auto-merge. See `docs/renovate-policy.md` for credentials, safeguards, bootstrap and verification.

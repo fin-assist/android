@@ -36,3 +36,6 @@ __pycache__/
 app/src/local/assets/flags.json
 # Read-only checkout of fin-assist/contracts in the @claude review workflow (FIN-174).
 .contracts/
+
+# Local Renovate runtime dependencies
+node_modules/
