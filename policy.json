@@ -160,6 +160,19 @@
       ]
     },
     {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "com.atlassian.oai:swagger-request-validator-core"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 3"
+      ]
+    },
+    {
       "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
       "matchPackageNames": [
         "io.github.takahirom.roborazzi:roborazzi-compose"
@@ -377,6 +390,23 @@
       "groupName": null,
       "additionalBranchPrefix": "fin211-retry-155-",
       "matchNewValue": "/^2\\.4\\.21$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "com.atlassian.oai:swagger-request-validator-core"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-175-",
+      "matchNewValue": "/^3\\.0\\.0$/",
       "matchJsonata": [
         "$not($exists(newDigest)) or newDigest = null"
       ]
