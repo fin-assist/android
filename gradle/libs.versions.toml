@@ -47,7 +47,7 @@ androidxTestRunner = "1.6.2"
 androidxTestOrchestrator = "1.6.1"
 androidxTestServices = "1.5.0"
 # Contract tests of the fake backend against openapi.yaml (FIN-123); Apache-2.0
-openapiValidator = "2.46.1"
+openapiValidator = "3.0.0"
 # Unit test coverage (docs/testing.md)
 kover = "0.9.11"
 # UI test coverage (FIN-48): probes in the mock e2e build and the report task.
