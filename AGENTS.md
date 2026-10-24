@@ -164,6 +164,10 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 
 ## Build in an agent container
 
+Configuration caching is temporarily disabled for all builds (FIN-187): Gradle 8.11.1 can fail while serializing
+AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off and re-enable checks:
+`docs/gradle-configuration-cache.md`. Keep the default fail-on-problems policy; do not mask dependency errors.
+
 - Fresh Linux container: run `scripts/agent-setup.sh` once (Android SDK matching `gradle/libs.versions.toml`,
   `local.properties`, a Maven Central mirror in `~/.gradle/init.d`). Needs JDK 21 and network access to
   Google Maven, Gradle and Maven Central.
