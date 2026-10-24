@@ -99,7 +99,7 @@ jobs:
           script: scripts/e2e.sh --no-build --shard ${{ matrix.shard }}/${{ env.SHARDS }}
 
       # Whatever the shard ended with: the reports job needs the flows' report, execution data and logs of each one.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-shard-${{ matrix.shard }}
@@ -128,7 +128,7 @@ jobs:
           cache-read-only: true
 
       # No artifact at all (every shard failed before uploading) is not an error here: gather reports it.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           pattern: e2e-shard-*
@@ -199,7 +199,7 @@ jobs:
             build/e2e/maestro-report.xml \
             'app/build/outputs/androidTest-results/connected/**/TEST-*.xml'
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-reports
