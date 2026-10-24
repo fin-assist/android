@@ -68,7 +68,7 @@ jobs:
 
       # Every shard builds the APKs itself, mostly from the build cache (~40 s): the native tests and the coverage
       # report need the Gradle build anyway, and a separate build job would delay every emulator (docs/e2e.md).
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' || matrix.shard != 1 }}
 
@@ -123,7 +123,7 @@ jobs:
           distribution: temurin
           java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: true
 
