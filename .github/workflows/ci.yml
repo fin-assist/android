@@ -248,6 +248,15 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
 
+      # Resolve the actual e2e/prod graph before compiling, without changing dependency selection.
+      # The init script uses Gradle's resolution model; its one-off metadata task is not configuration-cache compatible.
+      - name: Compose runtime classpaths match the BOM and lifecycle baseline
+        run: |
+          {
+            ./gradlew -I scripts/compose-classpath.init.gradle :app:composeClasspathReport --no-daemon --no-configuration-cache &&
+            python3 scripts/check-compose-classpath.py app/build/reports/compose-classpath.json
+          } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
       # Environments (FIN-120, AGENTS.md «Flavors»): mock as the working product, localDebug for the local backend,
       # prodRelease as what users get (unsigned: CI has no signing key). The localRelease manifest is checked below.
       # Other variants (mockRelease, prodDebug, localRelease) are not built here.

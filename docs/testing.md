@@ -243,3 +243,23 @@ python3 scripts/ui-coverage.py summary            # Markdown to stdout; --summar
   starts with it). The table lists per feature the missing tags; an id no source declares is reported — a renamed
   tag shows up there, and `scripts/test_ui_coverage.py` fails on it.
 - The number says what the flows look at, not what they assert, and nothing about the native tests.
+
+## Compose runtime dependency guard (FIN-185)
+
+The assemble CI job resolves `mockE2eRuntimeClasspath` and `prodReleaseRuntimeClasspath` before compilation:
+
+```sh
+./gradlew -I scripts/compose-classpath.init.gradle :app:composeClasspathReport --no-configuration-cache
+python3 scripts/check-compose-classpath.py app/build/reports/compose-classpath.json
+```
+
+The metadata-only init task resolves a separate baseline for each variant, with the same Android attributes:
+Compose BOM enforced as a platform, `ui`, `foundation`, and the catalog's `navigation-compose` and
+`lifecycle-runtime-compose`. No application dependencies or version selection rules are changed. UI/foundation
+versions therefore come from the BOM; lifecycle comes from the selected BOM/navigation/catalog lifecycle line,
+without unrelated app SDKs. The validator requires exact alignment of UI, foundation and lifecycle-runtime,
+including their Android implementations if present. Missing modules/baselines and unresolved dependencies fail
+closed. Errors include the configuration, coordinate, actual and expected versions and a `dependencyInsight` hint.
+The generated JSON lives under `app/build/reports/`. The one-off metadata task requires `--no-configuration-cache`;
+it does not compile the app or run tests. The Python guard's positive, negative and FIN-184 regression cases run
+with the other script tests in CI. This guard does not authorize Compose/AndroidX automerge or UI-test execution.
