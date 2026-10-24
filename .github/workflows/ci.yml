@@ -165,7 +165,7 @@ jobs:
             gh api "repos/${{ github.repository }}/issues/$PR/comments" -F body=@comment.md > /dev/null
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && hashFiles('build/reports/kover/**') != ''
         with:
           name: coverage-report
@@ -309,7 +309,7 @@ jobs:
             fi
           } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: success()
         with:
           name: app-mock-debug
