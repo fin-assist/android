@@ -305,6 +305,7 @@ fun PfDialog(
     busy: Boolean = false,
     busyText: String? = null,
     cancelText: String = "Отмена",
+    confirmEnabled: Boolean = true,
     content: @Composable ColumnScope.() -> Unit = {},
 ) {
     if (LocalSuppressPopups.current) return
@@ -325,7 +326,7 @@ fun PfDialog(
             // `.pf-dialog-actions { margin-top: var(--space-4); gap: var(--space-2) }`
             Spacer(Modifier.height(PfTheme.dimens.space4))
             PfButton(
-                text = confirmText, onClick = onConfirm, block = true, busy = busy, busyText = busyText,
+                text = confirmText, onClick = onConfirm, block = true, busy = busy, busyText = busyText, enabled = !busy && confirmEnabled,
                 variant = if (danger) ButtonVariant.DANGER else ButtonVariant.PRIMARY,
                 modifier = Modifier.testTag(PfTestTags.DIALOG_CONFIRM),
             )
