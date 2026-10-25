@@ -292,9 +292,9 @@ class ContractBehaviourTest {
         val s = Scene()
         s.statements.uploadStatement(KEY, s.statementFile())
         val otherContent = s.call("uploadStatement", null) {
-            s.statements.uploadStatement(KEY, s.statementFile("other.ofx", s.statementFile().open().readBytes().decodeToString() + "\n"))
+            s.statements.uploadStatement(KEY, s.statementFile(text = s.statementFile().open().readBytes().decodeToString() + "\n"))
         }
-        expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "conflict: upload, other content", otherContent)
+        expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "conflict: upload, other content under the same name", otherContent)
         // 3.2 compares the content and the name (FIN-297): the same file under another name is another body.
         val renamed = s.call("uploadStatement", null) {
             s.statements.uploadStatement(KEY, s.statementFile("renamed.ofx", s.statementFile().open().readBytes().decodeToString()))

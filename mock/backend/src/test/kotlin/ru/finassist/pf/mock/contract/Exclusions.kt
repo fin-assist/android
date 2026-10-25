@@ -100,7 +100,7 @@ internal object Exclusions {
             "the fake backend stores only 2xx under a key; api.md «Идемпотентность» stores 400, 413 and 422 too (except 413 " +
                 "FILE_TOO_LARGE of 3.2, answered before the key and never stored — the fake does that, FIN-340): after a 422 the same key " +
                 "with another file runs again instead of 409 IDEMPOTENCY_CONFLICT",
-            "proposed: [Android] fake backend: idempotency and error order of statements and assistant",
+            "FIN-344",
         ),
         Behaviour(
             "delete-unknown-upload",

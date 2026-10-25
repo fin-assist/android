@@ -19,6 +19,7 @@ import ru.finassist.pf.core.api.model.UploadStatus
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.mock.api.MockStatementsApi
+import ru.finassist.pf.mock.api.UploadBody
 import ru.finassist.pf.mock.domain.AnalyticsEngine
 import ru.finassist.pf.mock.ofx.UnreadLine
 import java.io.File
@@ -158,6 +159,9 @@ class MockStatementsApiTest {
         assertEquals(first, api.uploadStatement(key("same"), file("a.ofx", text)))
         api.await(first.uploadId)
         assertEquals(listOf("a.ofx"), api.listStatements().uploads.map { it.fileName })
+        // The cache keeps the request hash, not the file: memory does not grow with every upload kept under a key.
+        val stored = assertNotNull(backend.idempotency["statements.upload:same"]).request
+        assertEquals(UploadBody.of(text.toByteArray(), "a.ofx"), stored)
     }
 
     @Test

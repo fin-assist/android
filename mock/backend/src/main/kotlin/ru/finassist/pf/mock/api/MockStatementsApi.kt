@@ -52,6 +52,7 @@ import ru.finassist.pf.mock.domain.Catalog
 import ru.finassist.pf.mock.domain.Coverage
 import ru.finassist.pf.mock.domain.Operation
 import ru.finassist.pf.mock.domain.ServerTexts
+import ru.finassist.pf.mock.domain.Sha256
 import ru.finassist.pf.mock.ofx.OfxCheck
 import ru.finassist.pf.mock.ofx.OfxDocument
 import ru.finassist.pf.mock.ofx.OfxParser
@@ -103,9 +104,9 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         // under it — the service answers it without reading the file, so a repeat with the same key gets it again.
         if (file.size > backend.config.maxFileSizeBytes) throw AppError.Api(ErrorCodes.FILE_TOO_LARGE, 413)
         // Every other answer compares the key at the end of the file, by its content and its name.
-        val body = UploadBody(file.name, file.open().use { it.readBytes() })
-        return backend.idempotent("statements.upload:${key.value}", request = body) {
-            val text = body.content.toString(Charsets.UTF_8)
+        val content = file.open().use { it.readBytes() }
+        return backend.idempotent("statements.upload:${key.value}", request = UploadBody.of(content, file.name)) {
+            val text = content.toString(Charsets.UTF_8)
             when (val check = OfxParser.check(text)) {
                 OfxCheck.Csv -> throw AppError.Api(ErrorCodes.CSV_NOT_ACCEPTED, 422)
                 OfxCheck.NotOfx -> throw AppError.Api(ErrorCodes.WRONG_FORMAT, 422)
@@ -410,13 +411,14 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
 }
 
 /**
- * The body of 3.2 as the idempotency key compares it: the file's bytes and its name as sent, without normalisation
- * (api.md «Идемпотентность»: the same file under another name is another body). The real service compares
- * `SHA-256(SHA-256(content) ‖ file_name)` (grpc-api.md 6); the fake compares the same pair exactly.
+ * The body of 3.2 as the idempotency key compares it: the request hash of grpc-api.md 6,
+ * `SHA-256(SHA-256(content) ‖ UTF-8 file_name)`, with the name as sent, without normalisation (api.md
+ * «Идемпотентность»: the same file under another name is another body). The idempotency cache keeps this
+ * 64-character fingerprint, never the file itself.
  */
-internal class UploadBody(val name: String, val content: ByteArray) {
-    override fun equals(other: Any?): Boolean =
-        other is UploadBody && name == other.name && content.contentEquals(other.content)
-
-    override fun hashCode(): Int = 31 * name.hashCode() + content.contentHashCode()
+internal data class UploadBody(val requestHash: String) {
+    companion object {
+        fun of(content: ByteArray, name: String) =
+            UploadBody(Sha256.hex(Sha256.digest(Sha256.digest(content), name.encodeToByteArray())))
+    }
 }
