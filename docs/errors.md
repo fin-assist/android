@@ -38,6 +38,14 @@ store instance retains its original in-process proof. Refresh additionally has i
 replay window. Corrective auth recovery and the existing single maintenance
 resume still require the original request's safety and a valid key window.
 
+Before a refresh RPC, `EncryptedTokenStore` durably reserves its token/key pair in a separately
+encrypted pending marker. Successful token replacement retires it atomically. A new authenticator
+cannot guess the original key's age after process death: an uncertain marker requires sign-in
+recovery instead of another refresh with a new key. The old session blob format is unchanged.
+Compare-and-set updates/clears and a masked request-session tag prevent a late response from
+replaying an old user's operation or removing a newer login. Failed refreshes respect their own
+request retry restriction and wait, independently of the original operation.
+
 ## Time
 
 Calendar dates and display still use the existing `Clock.zone` rules. Waiting uses `ElapsedClock`,
@@ -49,6 +57,8 @@ deadline, never proof of token validity, idempotency age or permission.
 `ResponseTiming` and `ServerDeadline` are process-local. Phone verification producers recompute
 fresh timing on replay instead of caching receipt anchors. Without an anchor, refresh state or omit
 an exact countdown; never subtract the device wall clock or restart a saved duration.
+The per-stream `SseReopenState` also retains a pending 429 wait across collector cancellation;
+returning to a screen cannot skip the wait or start its duration again.
 
 ## Mock and verification
 
