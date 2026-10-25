@@ -17,12 +17,13 @@ fun ErrorMessage(
     onRetry: (() -> Unit)? = null,
 ) {
     Box(modifier) {
-    PfNotice(
+        PfNotice(
         text = presentation.textOrFallback(fallback, legacySafeText),
         modifier = Modifier.testTag("ds.error.${presentation.severity.name.lowercase()}"),
         tone = when (presentation.severity) {
             ErrorSeverity.INFO -> NoticeTone.INFO
-            ErrorSeverity.WARNING, ErrorSeverity.ERROR -> NoticeTone.WARNING
+            ErrorSeverity.WARNING -> NoticeTone.WARNING
+            ErrorSeverity.ERROR -> NoticeTone.ERROR
         },
         alert = presentation.severity == ErrorSeverity.ERROR,
         action = if (onRetry != null) ({ PfNoticeLink("Повторить", onClick = onRetry) }) else null,

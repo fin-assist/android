@@ -63,7 +63,7 @@ import ru.finassist.pf.core.designsystem.theme.PfTheme
  */
 val LocalSuppressPopups = compositionLocalOf { false }
 
-enum class NoticeTone { INFO, WARNING, POSITIVE, LIMIT }
+enum class NoticeTone { INFO, WARNING, ERROR, POSITIVE, LIMIT }
 
 /**
  * Notice (mockup `.pf-notice`): `info` explains what the app did, `warning` asks to check something, `positive`
@@ -88,7 +88,7 @@ fun PfNotice(
     val d = PfTheme.dimens
     val (bg, fg, toneIcon) = when (tone) {
         NoticeTone.INFO -> Triple(c.infoSoft, c.infoText, PfIcons.INFO)
-        NoticeTone.WARNING -> Triple(c.warningSoft, c.warningText, PfIcons.ALERT)
+        NoticeTone.WARNING, NoticeTone.ERROR -> Triple(c.warningSoft, c.warningText, PfIcons.ALERT)
         NoticeTone.POSITIVE -> Triple(c.positiveSoft, c.positive, PfIcons.CHECK_CIRCLE)
         NoticeTone.LIMIT -> Triple(c.infoSoft, c.infoText, PfIcons.CLOCK)
     }
@@ -96,6 +96,7 @@ fun PfNotice(
         modifier = modifier
             .fillMaxWidth()
             .background(bg, RoundedCornerShape(d.radiusLg))
+            .then(if (tone == NoticeTone.ERROR) Modifier.border(2.dp, fg, RoundedCornerShape(d.radiusLg)) else Modifier)
             .padding(horizontal = d.space4, vertical = d.space3)
             .semantics(mergeDescendants = true) { liveRegion = if (alert) LiveRegionMode.Assertive else LiveRegionMode.Polite },
         horizontalArrangement = Arrangement.spacedBy(d.space2),
