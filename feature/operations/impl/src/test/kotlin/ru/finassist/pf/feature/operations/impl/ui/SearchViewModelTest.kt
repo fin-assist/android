@@ -353,4 +353,30 @@ class SearchViewModelTest {
         assertTrue(assertIs<SearchResult.Found>(vm.state.value.result).items.isEmpty())
     }
 
+    @Test fun `a stale selection refusal clears only the removed-selection context and recovers`() {
+        api.lists += AppError.Api(ErrorCodes.SELECTION_NOT_FOUND, 422,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo(ErrorCodes.SELECTION_NOT_FOUND, 422, requestRetryable = false))
+        api.lists += found("recovered")
+        val vm = vm(OperationsFilter(q = "кофе", selection = "stale", selectionName = "Такси"))
+        assertEquals(2, api.queries.size)
+        assertEquals("stale", api.queries.first().filter.selection)
+        assertEquals(OperationsFilter(q = "кофе"), api.queries.last().filter)
+        assertTrue(vm.state.value.selectionDropped)
+        assertTrue(vm.state.value.retryReady)
+        assertEquals(null, vm.state.value.requestRetryable)
+        assertEquals(listOf("recovered"), assertIs<SearchResult.Found>(vm.state.value.result).items.map { it.id })
+    }
+
+    @Test fun `selection-not-found without a selection keeps refusal and cannot loop or retry`() {
+        api.lists += AppError.Api(ErrorCodes.SELECTION_NOT_FOUND, 422,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo(ErrorCodes.SELECTION_NOT_FOUND, 422, requestRetryable = false))
+        val vm = vm(OperationsFilter(q = "кофе"))
+        assertEquals(1, api.queries.size)
+        assertFalse(vm.state.value.selectionDropped)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(SearchResult.Failed, vm.state.value.result)
+        vm.retry()
+        assertEquals(1, api.queries.size)
+    }
+
 }

@@ -477,4 +477,121 @@ class FeedViewModelTest {
         assertEquals(1, api.queries.size)
     }
 
+    private fun refusal() = AppError.Api("FUTURE_POLICY", 429,
+        response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_POLICY", 429, requestRetryable = false))
+
+    private fun waitFor(seconds: Long) = AppError.RateLimited(null, seconds,
+        ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = true,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = scheduler.currentTime)))
+
+    @Test fun `stale first-page refusal cannot restrict a newer successful feed`() {
+        api.lists += page("initial")
+        val vm = vm()
+        val old = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        pendingReplies(old, fresh)
+        vm.refresh()
+        vm.refresh()
+        fresh.complete(page("current"))
+        old.completeExceptionally(refusal())
+        assertTrue(vm.state.value.retryReady)
+        assertEquals(listOf("current"), vm.state.value.items.map { it.id })
+        assertEquals(null, vm.state.value.errorPresentation)
+        api.listReply = { page("latest") }
+        vm.refresh()
+        assertEquals(4, api.queries.size)
+        assertEquals(listOf("latest"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `stale pagination refusal cannot restrict the current request for the same cursor`() {
+        api.lists += page("initial", next = 1)
+        val vm = vm()
+        val old = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        val current = CompletableDeferred<OperationsList>()
+        pendingReplies(old, fresh, current)
+        vm.loadMore()
+        vm.refresh()
+        fresh.complete(page("fresh", next = 1))
+        assertTrue(vm.state.value.loadingMore)
+        old.completeExceptionally(refusal())
+        assertTrue(vm.state.value.retryReady)
+        assertTrue(vm.state.value.moreRetryReady)
+        assertEquals(null, vm.state.value.errorPresentation)
+        current.complete(page("current"))
+        assertEquals(listOf("fresh", "current"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `a forbidden cursor never blocks first-page refresh and stays forbidden when that cursor returns`() {
+        api.lists += page("initial", next = 1)
+        api.lists += refusal()
+        api.lists += page("refreshed", next = 1)
+        val vm = vm()
+        vm.loadMore()
+        assertTrue(vm.state.value.moreFailed)
+        assertTrue(vm.state.value.retryReady)
+        assertFalse(vm.state.value.moreRetryReady)
+        vm.refresh()
+        assertEquals(3, api.queries.size)
+        assertEquals(listOf("refreshed"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.moreRetryReady)
+        vm.loadMore()
+        assertEquals(3, api.queries.size)
+    }
+
+    @Test fun `a different cursor has its own retry permission`() {
+        api.lists += page("initial", next = 1)
+        api.lists += refusal()
+        api.lists += page("refreshed", next = 2)
+        api.lists += page("older")
+        val vm = vm()
+        vm.loadMore()
+        vm.refresh()
+        assertTrue(vm.state.value.moreRetryReady)
+        vm.loadMore()
+        assertEquals(OperationsQuery(before = at(2)), api.queries.last())
+        assertEquals(listOf("refreshed", "older"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `first-page refusal cannot erase a cursor wait or select pagination for its own error`() {
+        api.lists += page("initial", next = 1)
+        api.lists += waitFor(5)
+        api.lists += refusal()
+        api.lists += page("older")
+        val vm = vm()
+        vm.loadMore()
+        assertFalse(vm.state.value.moreRetryReady)
+        assertTrue(vm.state.value.retryReady)
+        vm.refresh()
+        assertFalse(vm.state.value.retryReady)
+        assertFalse(vm.state.value.moreFailed, "the latest error belongs to the first page")
+        vm.loadMore()
+        assertEquals(3, api.queries.size)
+        scheduler.advanceTimeBy(4999)
+        scheduler.runCurrent()
+        vm.loadMore()
+        assertEquals(3, api.queries.size)
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.moreRetryReady)
+        assertFalse(vm.state.value.retryReady)
+        vm.loadMore()
+        assertEquals(4, api.queries.size)
+        assertEquals(OperationsQuery(before = at(1)), api.queries.last())
+    }
+
+    @Test fun `an explicit data-context change releases an old cursor restriction`() {
+        api.lists += page("initial", next = 1)
+        api.lists += refusal()
+        api.lists += page("refreshed", next = 1)
+        api.lists += page("older")
+        val vm = vm()
+        vm.loadMore()
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("u1"))
+        assertTrue(vm.state.value.moreRetryReady)
+        vm.loadMore()
+        assertEquals(4, api.queries.size)
+        assertEquals(listOf("refreshed", "older"), vm.state.value.items.map { it.id })
+    }
+
 }

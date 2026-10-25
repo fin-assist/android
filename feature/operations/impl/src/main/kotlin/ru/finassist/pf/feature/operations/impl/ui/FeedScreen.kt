@@ -100,7 +100,7 @@ internal fun FeedContent(
             ErrorMessage(
                 presentation, "Не получилось загрузить операции. Попробуйте ещё раз",
                 modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
-                onRetry = if (!state.retryReady) null else if (state.moreFailed) onLoadMore else onRetry,
+                onRetry = if (state.moreFailed) onLoadMore.takeIf { state.moreRetryReady } else onRetry.takeIf { state.retryReady },
             )
         }
         when {
@@ -174,7 +174,8 @@ internal fun FeedContent(
                     } else if (state.moreFailed && state.errorPresentation == null) {
                         item(key = "more-failed") {
                             Box(Modifier.fillMaxWidth().padding(vertical = d.space3), contentAlignment = Alignment.Center) {
-                                PfLink("Не загрузилось — повторить", onClick = onLoadMore)
+                                if (state.moreRetryReady) PfLink("Не загрузилось — повторить", onClick = onLoadMore)
+                                else Text("Не загрузилось — повторить", style = PfTheme.type.body, color = PfTheme.colors.textMuted)
                             }
                         }
                     } else if (state.nextBefore == null && state.items.isNotEmpty()) {

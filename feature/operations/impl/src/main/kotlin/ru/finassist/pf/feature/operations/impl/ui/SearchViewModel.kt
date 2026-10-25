@@ -242,8 +242,9 @@ class SearchViewModel @Inject constructor(
                 when {
                     keep -> Unit
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.TOO_MANY_RESULTS -> _state.update { it.copy(result = SearchResult.TooMany) }
-                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.SELECTION_NOT_FOUND -> {
-                        // api.md: open the search without the stale selection.
+                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.SELECTION_NOT_FOUND && filter.selection != null -> {
+                        // Removing the stale selection changes the request context, including its retry restriction.
+                        retryGate.clear()
                         _state.update { it.copy(filter = it.filter.copy(selection = null, selectionName = null), selectionDropped = true) }
                         search(debounce = false)
                     }
