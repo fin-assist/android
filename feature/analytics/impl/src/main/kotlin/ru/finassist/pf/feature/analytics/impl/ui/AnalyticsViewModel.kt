@@ -187,9 +187,10 @@ class AnalyticsViewModel @Inject constructor(
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             if (!quiet) _state.update { it.copy(loading = it.data == null, offline = false, errorPresentation = null, requestRetryable = null) }
+            val requested = Triple(period, date, transferMode)
             try {
                 val exp = experiments
-                val a = api.getAnalytics(period, date, transferMode, supports = supports, exp = exp)
+                val a = api.getAnalytics(requested.first, requested.second, requested.third, supports = supports, exp = exp)
                 exposed.clear()
                 shownExperiments = exp
                 a.params?.let { p ->
@@ -216,6 +217,9 @@ class AnalyticsViewModel @Inject constructor(
                     date = p.date
                     transferMode = allowedMode(p.transferMode)
                 }
+                // The refusal belongs to the failed params, not the different period restored on screen.
+                // Keep its explanation until the user requests that restored context; never retry automatically.
+                if (requested != Triple(period, date, transferMode)) retryGate.clear()
                 _state.update {
                     it.copy(
                         loading = false,

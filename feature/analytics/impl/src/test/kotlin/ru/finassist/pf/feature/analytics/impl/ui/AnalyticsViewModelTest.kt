@@ -808,4 +808,30 @@ class AnalyticsViewModelTest {
         assertContextRefreshed(vm)
     }
 
+    @Test fun `a refused year switch keeps its explanation but cannot restrict the restored month request`() {
+        api.answers += data()
+        api.answers += refused()
+        api.answers += data()
+        api.answers += data(period = PeriodTypeCode.YEAR, date = "2026")
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(2, api.requests.size, "rollback does not automatically fetch anything")
+        assertEquals(PeriodTypeCode.YEAR, api.requests.last().period)
+        assertEquals(PeriodTypeCode.MONTH, vm.state.value.data?.params?.period)
+        val refusal = assertNotNull(vm.state.value.errorPresentation)
+        assertEquals(false, vm.state.value.requestRetryable)
+        assertTrue(vm.state.value.retryReady, "the restored month is a different request context")
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(2, api.requests.size, "selecting the already restored month is still a no-op")
+        assertEquals(refusal, vm.state.value.errorPresentation)
+        vm.load()
+        assertEquals(3, api.requests.size)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH), api.requests.last())
+        assertNull(vm.state.value.errorPresentation)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(4, api.requests.size, "the newly selected year is an explicit changed intent")
+        assertEquals(PeriodTypeCode.YEAR, api.requests.last().period)
+        assertEquals(PeriodTypeCode.YEAR, vm.state.value.data?.params?.period)
+    }
+
 }
