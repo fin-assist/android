@@ -218,11 +218,12 @@ class CallViewModelTest {
         fun tracked(f: kotlinx.coroutines.flow.Flow<PhoneVerificationStatusEvent>) = f
             .onStart { active++; maxActive = maxOf(maxActive, active) }
             .onCompletion { active-- }
-        val limited = { tracked(flow { throw AppError.RateLimited(now.plusSeconds(60), retryAfterSeconds = 60) }) }
+        val limitedAt = mutableListOf<Long>()
+        val limited = { tracked(flow { limitedAt += scheduler.currentTime; throw AppError.RateLimited(now.plusSeconds(60), retryAfterSeconds = 60) }) }
         val vm = h.scripted(
             tracked(flowOf(event(VerificationStatus.PENDING))),
             limited(),
-            // The screen came back: the view model opens the stream itself, the server still says 429.
+            // The next opening after the retained wait gets a fresh 429 with its own wait.
             limited(),
             tracked(flowOf(event(VerificationStatus.PENDING), newUser)),
         )
@@ -232,12 +233,22 @@ class CallViewModelTest {
         advanceSeconds(4)
         vm.stopWatching()
         vm.watch()
-        assertEquals(3, opened.size)
+        assertEquals(2, opened.size, "resume must not bypass the retained Retry-After")
         assertEquals(CallPhase.WAITING, vm.state.value.phase, "a 429 on opening the stream again does not lock the screen")
         assertNull(vm.state.value.lockText)
-        advanceSeconds(59)
-        assertEquals(3, opened.size, "not before Retry-After")
-        advanceSeconds(2)
+        fun advanceTo(target: Long) {
+            scheduler.advanceTimeBy(target - scheduler.currentTime)
+            scheduler.runCurrent()
+        }
+        val firstRefusal = limitedAt.single()
+        advanceTo(firstRefusal + 59_999)
+        assertEquals(2, opened.size, "not before the original Retry-After")
+        advanceTo(firstRefusal + 62_001) // retained wait + original jitter <= 1 s, not a new wait on resume
+        assertEquals(3, opened.size)
+        val secondRefusal = limitedAt.last()
+        advanceTo(secondRefusal + 59_999)
+        assertEquals(3, opened.size, "a fresh 429 gets its own Retry-After")
+        advanceTo(secondRefusal + 62_001)
         assertEquals(4, opened.size)
         assertEquals(CallEvent.NewUser, vm.events.value)
         assertEquals(1, maxActive, "never two streams at once")

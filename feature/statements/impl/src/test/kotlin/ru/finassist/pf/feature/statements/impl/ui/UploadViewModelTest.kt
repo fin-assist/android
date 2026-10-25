@@ -145,7 +145,7 @@ class UploadViewModelTest {
     }
 
     private fun newViewModel(flags: StaticFlags = StaticFlags()) =
-        UploadViewModel(context, api, repository, flags, tracker, IdempotencyKeys(store), clock, ElapsedClock { 0L })
+        UploadViewModel(context, api, repository, flags, tracker, IdempotencyKeys(store), clock, ElapsedClock { dispatcher.scheduler.currentTime })
 
     @After fun tearDown() = Dispatchers.resetMain()
 
@@ -529,10 +529,11 @@ class UploadViewModelTest {
         var maxActive = 0
         fun tracked(f: Flow<ImportEvent>) = f.onStart { synchronized(this) { active++; maxActive = maxOf(maxActive, active) } }
             .onCompletion { synchronized(this) { active-- } }
-        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        val limitedAt = java.util.Collections.synchronizedList(mutableListOf<Long>())
+        val limited = { tracked(flow { limitedAt += dispatcher.scheduler.currentTime; throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
         api.streams += tracked(flowOf(ImportEvent.Progress(ImportProgress(ImportStage.PARSING, 30))))
         api.streams += limited()
-        // The screen came back: the view model opens the stream itself, the server still says 429.
+        // The next opening after the retained wait gets a fresh 429 with its own wait.
         api.streams += limited()
         api.streams += tracked(flowOf(ImportEvent.Complete(importResult())))
         vm.onFilePicked(uri)
@@ -541,14 +542,26 @@ class UploadViewModelTest {
         // The re-open pause starts only once the first stream has ended on the IO thread: move the test clock on
         // until it has, not once (a single step could run before the pause was scheduled).
         advanceUntil("the drop was re-opened and got 429") { api.streamOpens.get() == 2 }
+        dispatcher.scheduler.advanceTimeBy(4_000)
+        dispatcher.scheduler.runCurrent()
         vm.stopWatching()
         vm.watch()
-        await("the stream opened again") { api.streamOpens.get() == 3 }
+        assertEquals(2, api.streamOpens.get(), "resume must not bypass the retained Retry-After")
         assertIs<UploadPhase.Busy>(vm.state.value.phase, "a 429 on opening it again is not an error")
-        dispatcher.scheduler.advanceTimeBy(59_000)
-        dispatcher.scheduler.runCurrent()
-        assertEquals(3, api.streamOpens.get(), "not before Retry-After")
-        advanceUntil("the result") { vm.state.value.doneUploadId == "u1" }
+        fun advanceTo(target: Long) {
+            dispatcher.scheduler.advanceTimeBy(target - dispatcher.scheduler.currentTime)
+            dispatcher.scheduler.runCurrent()
+        }
+        val firstRefusal = limitedAt.single()
+        advanceTo(firstRefusal + 59_999)
+        assertEquals(2, api.streamOpens.get(), "not before the original Retry-After")
+        advanceTo(firstRefusal + 62_001)
+        await("the retained wait ends") { api.streamOpens.get() == 3 }
+        val secondRefusal = limitedAt.last()
+        advanceTo(secondRefusal + 59_999)
+        assertEquals(3, api.streamOpens.get(), "a fresh 429 gets its own Retry-After")
+        advanceTo(secondRefusal + 62_001)
+        await("the result") { vm.state.value.doneUploadId == "u1" }
         assertEquals(4, api.streamOpens.get())
         assertTrue(Events.STATEMENTS_UPLOAD_FAILED !in tracker.names())
         assertEquals(1, maxActive, "never two streams at once")

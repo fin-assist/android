@@ -819,14 +819,15 @@ class ChatViewModelBehaviourTest {
         var active = 0
         var maxActive = 0
         fun tracked(f: Flow<AnswerEvent>) = f.onStart { active++; maxActive = maxOf(maxActive, active) }.onCompletion { active-- }
-        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        val limitedAt = mutableListOf<Long>()
+        val limited = { tracked(flow { limitedAt += dispatcher.scheduler.currentTime; throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
         api.askOutcomes += askResponse("a1")
         api.script(
             "a1",
             // Closed after the snapshot: a drop.
             tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.GENERATING, listOf(text("Нач")), emptyList())))),
             limited(),
-            // The screen came back: the view model opens the stream itself, the server still says 429.
+            // The next opening after the retained wait gets a fresh 429 with its own wait.
             limited(),
             tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList())))),
         )
@@ -835,16 +836,23 @@ class ChatViewModelBehaviourTest {
         advance(1_000)
         assertEquals(2, api.streamOpens.size, "the drop was re-opened and got 429")
         val lists = api.listCalls.size
+        advance(4_000) // consume part of the server wait before leaving the screen
         vm.pauseStreams()
         vm.resumeStreams()
-        assertEquals(3, api.streamOpens.size)
+        assertEquals(2, api.streamOpens.size, "resume must not bypass the retained Retry-After")
         assertEquals(lists, api.listCalls.size, "a 429 on opening it again is not a reason to reload")
         assertEquals(AnswerStatus.GENERATING, vm.answerItem("a1").status)
         assertFalse(vm.state.value.sendFailed)
         assertFalse(vm.state.value.offline)
-        advance(59_000)
-        assertEquals(3, api.streamOpens.size, "not before Retry-After")
-        advance(2_000)
+        val firstRefusal = limitedAt.single()
+        advance(firstRefusal + 59_999 - dispatcher.scheduler.currentTime)
+        assertEquals(2, api.streamOpens.size, "not before the original Retry-After")
+        advance(firstRefusal + 62_001 - dispatcher.scheduler.currentTime)
+        assertEquals(3, api.streamOpens.size, "the original wait is not restarted on resume")
+        val secondRefusal = limitedAt.last()
+        advance(secondRefusal + 59_999 - dispatcher.scheduler.currentTime)
+        assertEquals(3, api.streamOpens.size, "a fresh 429 gets its own Retry-After")
+        advance(secondRefusal + 62_001 - dispatcher.scheduler.currentTime)
         assertEquals(4, api.streamOpens.size)
         assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
         assertEquals(1, maxActive, "never two streams at once")
@@ -854,7 +862,8 @@ class ChatViewModelBehaviourTest {
         var active = 0
         var maxActive = 0
         fun tracked(f: Flow<AnswerEvent>) = f.onStart { active++; maxActive = maxOf(maxActive, active) }.onCompletion { active-- }
-        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        val limitedAt = mutableListOf<Long>()
+        val limited = { tracked(flow { limitedAt += dispatcher.scheduler.currentTime; throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
         api.askOutcomes += askResponse("a1")
         api.script(
             "a1",
@@ -869,14 +878,21 @@ class ChatViewModelBehaviourTest {
         advance(1_000)
         assertEquals(2, api.streamOpens.size, "the 503 was re-opened and got 429")
         val lists = api.listCalls.size
+        advance(4_000) // consume part of the server wait before leaving the screen
         vm.pauseStreams()
         vm.resumeStreams()
-        assertEquals(3, api.streamOpens.size)
+        assertEquals(2, api.streamOpens.size, "resume must not bypass the retained Retry-After")
         assertEquals(lists, api.listCalls.size, "the 429 after coming back is waited for, not a reason to reload")
         assertFalse(vm.state.value.sendFailed)
-        advance(59_000)
-        assertEquals(3, api.streamOpens.size, "not before Retry-After")
-        advance(2_000)
+        val firstRefusal = limitedAt.single()
+        advance(firstRefusal + 59_999 - dispatcher.scheduler.currentTime)
+        assertEquals(2, api.streamOpens.size, "not before the original Retry-After")
+        advance(firstRefusal + 62_001 - dispatcher.scheduler.currentTime)
+        assertEquals(3, api.streamOpens.size, "the original wait is not restarted on resume")
+        val secondRefusal = limitedAt.last()
+        advance(secondRefusal + 59_999 - dispatcher.scheduler.currentTime)
+        assertEquals(3, api.streamOpens.size, "a fresh 429 gets its own Retry-After")
+        advance(secondRefusal + 62_001 - dispatcher.scheduler.currentTime)
         assertEquals(4, api.streamOpens.size)
         assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
         assertEquals(listOf(text("Ответ")), vm.answerItem("a1").blocks)
