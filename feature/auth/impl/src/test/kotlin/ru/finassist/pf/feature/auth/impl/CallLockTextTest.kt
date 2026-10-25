@@ -30,4 +30,14 @@ class CallLockTextTest {
 
     @Test fun `without a retry time`() =
         assertEquals("Слишком много попыток. Позвонить можно будет позже", CallLockText.of(null, now, moscow))
+    @Test fun `anchored duration rounds up to complete minutes without requiring an absolute time`() {
+        assertEquals("Слишком много попыток. Позвонить можно будет через 1 минуту", CallLockText.withRemaining(null, 60_000, moscow))
+        assertEquals("Слишком много попыток. Позвонить можно будет через 2 минуты", CallLockText.withRemaining(null, 60_001, moscow))
+        assertEquals("Слишком много попыток. Позвонить можно будет через 5 минут", CallLockText.withRemaining(null, 300_000, moscow))
+    }
+
+    @Test fun `anchored remaining duration and absolute local display have independent meanings`() = assertEquals(
+        "Слишком много попыток. Позвонить можно будет через 2 минуты, в 14:32",
+        CallLockText.withRemaining(OffsetDateTime.parse("2026-09-25T11:32:00Z"), 61_000, moscow),
+    )
 }

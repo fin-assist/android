@@ -268,7 +268,10 @@ class AnalyticsViewModel @Inject constructor(
             _state.update { it.copy(sheet = sheet) }
             return
         }
-        _state.update { it.copy(sheet = sheet, periods = if (sheet == AnalyticsSheet.PERIODS) null else it.periods, periodsFailed = false, periodsErrorPresentation = null) }
+        _state.update {
+            if (sheet == AnalyticsSheet.PERIODS) it.copy(sheet = sheet, periods = null, periodsFailed = false, periodsErrorPresentation = null)
+            else it.copy(sheet = sheet) // closing or another sheet must not discard a still-restricted refusal
+        }
         periodsJob?.cancel()
         if (sheet == AnalyticsSheet.PERIODS) {
             // The list is requested when the sheet opens, not in advance (api.md 6.2); an older request for another

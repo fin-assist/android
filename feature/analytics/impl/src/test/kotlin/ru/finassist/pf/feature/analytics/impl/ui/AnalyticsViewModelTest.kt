@@ -461,10 +461,70 @@ class AnalyticsViewModelTest {
 
         api.periodsFailure = null
         vm.openSheet(null)
-        assertFalse(vm.state.value.periodsFailed)
+        assertTrue(vm.state.value.periodsFailed, "closing keeps the previous outcome until a real request starts")
         vm.openSheet(AnalyticsSheet.PERIODS)
         assertEquals(2, api.periodRequests.size)
         assertTrue(vm.state.value.periods != null)
+    }
+
+    @Test fun `reopening periods waits for the original server duration before another fetch`() {
+        api.answers += data()
+        val vm = opened()
+        api.periodsFailure = AppError.RateLimited(null, 3, ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "RATE_LIMITED", 429, requestRetryable = true,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = scheduler.currentTime),
+        ))
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(1, api.periodRequests.size)
+        assertTrue(vm.state.value.periodsFailed)
+        assertFalse(vm.state.value.periodsRetryReady)
+        val shownData = vm.state.value.data
+        api.periodsFailure = null
+
+        vm.openSheet(null)
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertTrue(vm.state.value.periodsFailed)
+        scheduler.advanceTimeBy(2_999)
+        scheduler.runCurrent()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(1, api.periodRequests.size, "reopening does not bypass or restart the wait")
+        assertEquals(AnalyticsSheet.PERIODS, vm.state.value.sheet)
+        assertEquals(shownData, vm.state.value.data)
+
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.periodsRetryReady)
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(2, api.periodRequests.size)
+        assertFalse(vm.state.value.periodsFailed)
+        assertNull(vm.state.value.periodsErrorPresentation)
+        assertEquals(listOf(PeriodKey("2026-09")), vm.state.value.periods?.map { it.key })
+        assertEquals(1, api.requests.size, "the sheet does not resend the main analytics request")
+    }
+
+    @Test fun `a forbidden period-list request stays forbidden when its sheet is reopened later`() {
+        api.answers += data()
+        val vm = opened()
+        val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
+            ru.finassist.pf.core.common.error.UserMessage.from("Периоды временно недоступны"),
+            ru.finassist.pf.core.common.error.ErrorSeverity.WARNING,
+        )
+        api.periodsFailure = AppError.Api("FUTURE_PERIOD_POLICY", 409,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_PERIOD_POLICY", 409, requestRetryable = false, presentation = presentation))
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        api.periodsFailure = null
+        scheduler.advanceTimeBy(60_000)
+        scheduler.runCurrent()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        vm.openSheet(null)
+        vm.openSheet(AnalyticsSheet.TRANSFERS)
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(1, api.periodRequests.size)
+        assertTrue(vm.state.value.periodsFailed, "blocked reopening shows the refusal, not a permanent loader")
+        assertEquals(presentation, vm.state.value.periodsErrorPresentation)
+        assertFalse(vm.state.value.periodsRetryReady)
+        assertEquals(AnalyticsSheet.PERIODS, vm.state.value.sheet)
+        assertEquals(1, api.requests.size)
     }
 
     @Test fun `closing the sheet drops the pending period list`() {

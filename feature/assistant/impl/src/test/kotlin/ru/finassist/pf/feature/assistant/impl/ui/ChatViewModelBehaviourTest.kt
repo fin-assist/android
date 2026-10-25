@@ -684,6 +684,33 @@ class ChatViewModelBehaviourTest {
         assertEquals(listOf("q1", "a2"), vm.state.value.items.map { it.id })
     }
 
+    @Test fun `an expired pending generation retry only reads history and never renews its original UUID`() {
+        api.retryOutcomes += AppError.Offline() // a lost response may hide an accepted replacement
+        api.retryOutcomes += RetryResponse("a3", remainingLimit = 1) // must remain unused
+        val vm = vmWithFailedAnswer()
+        vm.retry("a1")
+        val originalKey = api.retries.single().first
+        val readsBeforeRecovery = api.listCalls.size
+        val quotaBeforeRecovery = vm.state.value.limit
+        vm.setDraft("Черновик следующего вопроса")
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a2")), hasOlder = false)
+        advance(24L * 60 * 60 * 1000)
+
+        vm.retry("a1")
+        assertEquals(listOf(originalKey.value), api.retries.map { it.first.value }, "no second POST or fresh wire UUID")
+        assertEquals(readsBeforeRecovery + 1, api.listCalls.size, "recover the accepted replacement through a read")
+        assertEquals(listOf("q1", "a2"), vm.state.value.items.map { it.id })
+        assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a2").status)
+        assertEquals("Черновик следующего вопроса", vm.state.value.draft)
+        assertEquals(quotaBeforeRecovery, vm.state.value.limit)
+        assertEquals("a1", vm.state.value.blockedRetryAnswerId)
+
+        vm.retry("a1")
+        assertEquals(listOf(originalKey.value), api.retries.map { it.first.value }, "another tap cannot allocate a fresh attempt")
+        assertEquals(readsBeforeRecovery + 2, api.listCalls.size)
+        assertEquals(1, api.retryOutcomes.size, "the next generation response was not consumed")
+    }
+
     @Test fun `a second tap while the retry is on its way sends nothing`() {
         api.retryGate = CompletableDeferred()
         api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
