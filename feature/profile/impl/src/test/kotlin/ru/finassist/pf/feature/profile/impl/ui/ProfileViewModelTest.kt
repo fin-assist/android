@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.profile.impl.ui
 
+import androidx.lifecycle.SavedStateHandle
+import kotlinx.coroutines.launch
+import ru.finassist.pf.feature.assistant.api.AssistantRoutes
+import ru.finassist.pf.feature.profile.impl.di.collectAssistantConsentResults
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -83,6 +87,7 @@ class ProfileViewModelTest {
     private class FakeProfileApi : ProfileApi {
         var profile = profile()
         var getFailure: AppError? = null
+        var getReply: (suspend () -> Profile)? = null
         var gets = 0
         val updates = mutableListOf<ProfileUpdate>()
         var updateFailure: AppError? = null
@@ -92,6 +97,7 @@ class ProfileViewModelTest {
 
         override suspend fun getProfile(): Profile {
             gets++
+            getReply?.let { return it() }
             getFailure?.let { throw it }
             return profile
         }
@@ -389,6 +395,91 @@ class ProfileViewModelTest {
         assertEquals(currentPresentation, vm.state.value.errorPresentation)
         vm.setTheme(Theme.LIGHT)
         assertEquals(2, profileApi.updates.size, "a stale legacy failure cannot overwrite the current false")
+    }
+
+    @Test fun `a consumed successful consent result refreshes a refused profile and enables a real revoke`() {
+        val withoutConsent = profile().withConsent(profile().assistantConsent!!.copy(granted = false))
+        profileApi.profile = withoutConsent
+        val vm = loaded()
+        profileApi.getFailure = forbiddenProfileRequest()
+        vm.load()
+        vm.load()
+        assertEquals(2, profileApi.gets)
+        profileApi.getFailure = null
+        profileApi.profile = profile()
+        val handle = SavedStateHandle()
+        val resultJob = CoroutineScope(UnconfinedTestDispatcher()).launch {
+            collectAssistantConsentResults(handle, vm::onConsentResult)
+        }
+        try {
+            handle[AssistantRoutes.CONSENT_RESULT] = "true"
+            assertNull(handle.get<String>(AssistantRoutes.CONSENT_RESULT))
+            assertEquals(3, profileApi.gets)
+            assertEquals(true, vm.state.value.profile?.assistantConsent?.granted)
+            assertTrue(vm.state.value.retryReady)
+            // A read started before successful revoke must not restore its old consent value afterward.
+            var old: kotlin.coroutines.Continuation<Profile>? = null
+            profileApi.getReply = { kotlin.coroutines.suspendCoroutine { old = it } }
+            vm.load()
+            vm.revokeConsent()
+            old!!.resumeWith(Result.success(profile()))
+            assertEquals(1, profileApi.revokes)
+            assertEquals(false, vm.state.value.profile?.assistantConsent?.granted)
+        } finally { resultJob.cancel() }
+    }
+
+    @Test fun `cancelled or false consent results and ordinary resume preserve the same profile refusal`() {
+        val vm = loaded()
+        profileApi.getFailure = forbiddenProfileRequest()
+        vm.load()
+        val handle = SavedStateHandle()
+        val resultJob = CoroutineScope(UnconfinedTestDispatcher()).launch {
+            collectAssistantConsentResults(handle, vm::onConsentResult)
+        }
+        try {
+            vm.onConsentResult(null)
+            handle[AssistantRoutes.CONSENT_RESULT] = "false"
+            assertNull(handle.get<String>(AssistantRoutes.CONSENT_RESULT))
+            vm.load()
+            assertEquals(2, profileApi.gets)
+            assertFalse(vm.state.value.retryReady)
+        } finally { resultJob.cancel() }
+    }
+
+    @Test fun `an old profile refusal cannot poison the fresh read after successful consent`() {
+        val vm = loaded()
+        var old: kotlin.coroutines.Continuation<Profile>? = null
+        var replies = 0
+        profileApi.getReply = {
+            if (++replies == 1) kotlin.coroutines.suspendCoroutine { old = it }
+            else profile()
+        }
+        vm.load()
+        vm.onConsentResult("true")
+        old!!.resumeWith(Result.failure(forbiddenProfileRequest()))
+        assertEquals(profile(), vm.state.value.profile)
+        assertNull(vm.state.value.errorPresentation)
+        assertTrue(vm.state.value.retryReady)
+        vm.load()
+        assertEquals(4, profileApi.gets)
+    }
+
+    @Test fun `an old profile success cannot replace or release a fresh refusal after successful consent`() {
+        val vm = loaded()
+        var old: kotlin.coroutines.Continuation<Profile>? = null
+        var replies = 0
+        profileApi.getReply = {
+            if (++replies == 1) kotlin.coroutines.suspendCoroutine { old = it }
+            else throw forbiddenProfileRequest()
+        }
+        vm.load()
+        vm.onConsentResult("true")
+        old!!.resumeWith(Result.success(profile().withConsent(profile().assistantConsent!!.copy(granted = false))))
+        assertEquals(profile(), vm.state.value.profile)
+        assertEquals(false, vm.state.value.requestRetryable)
+        assertFalse(vm.state.value.retryReady)
+        vm.load()
+        assertEquals(3, profileApi.gets)
     }
 
     @Test fun `a failed refresh on resume keeps the shown profile`() {

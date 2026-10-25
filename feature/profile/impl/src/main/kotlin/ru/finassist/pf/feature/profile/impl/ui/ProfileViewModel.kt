@@ -78,6 +78,7 @@ class ProfileViewModel @Inject constructor(
     private var blockedTheme: Theme? = null
     private var themeGeneration = 0L
     private var statementsGeneration = 0L
+    private var profileGeneration = 0L
 
     private fun readFlags() = ProfileFlags(
         assistant = featureFlags.isEnabled(Flag.ASSISTANT),
@@ -107,15 +108,20 @@ class ProfileViewModel @Inject constructor(
 
     /** Called on every resume: the consent switch and the limit may have changed on other screens. */
     fun load() {
-        if (retryGate.isReady()) viewModelScope.launch {
-            _state.update { it.copy(loading = it.profile == null, offline = false, errorPresentation = null, requestRetryable = null) }
-            try {
-                val p = profileApi.getProfile()
-                _state.update { it.copy(loading = false, profile = p) }
-                syncFromServer(p)
-            } catch (e: AppError) {
-                retryGate.record(e)
-                _state.update { it.copy(loading = false, offline = it.profile == null, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+        if (retryGate.isReady()) {
+            val generation = ++profileGeneration
+            viewModelScope.launch {
+                _state.update { it.copy(loading = it.profile == null, offline = false, errorPresentation = null, requestRetryable = null) }
+                try {
+                    val p = profileApi.getProfile()
+                    if (generation != profileGeneration) return@launch
+                    _state.update { it.copy(loading = false, profile = p) }
+                    syncFromServer(p)
+                } catch (e: AppError) {
+                    if (generation != profileGeneration) return@launch
+                    retryGate.record(e)
+                    _state.update { it.copy(loading = false, offline = it.profile == null, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                }
             }
         }
         loadStatements()
@@ -127,6 +133,20 @@ class ProfileViewModel @Inject constructor(
                     if (failure !is AppError.Offline) _state.update { it.copy(errorPresentation = failure.presentation, snackbar = "Не получилось обновить лимит вопросов") }
                 } } }
         }
+    }
+
+    /** A successful consent screen result is a confirmed server mutation, not an ordinary resume. */
+    fun onConsentResult(result: String?) {
+        if (result != "true") return
+        changedProfileContext()
+        consentRetryGate.clear()
+        load()
+    }
+
+    private fun changedProfileContext() {
+        profileGeneration++
+        retryGate.clear()
+        _state.update { it.copy(errorPresentation = null, requestRetryable = null) }
     }
 
     private fun loadStatements() {
@@ -184,6 +204,8 @@ class ProfileViewModel @Inject constructor(
             _state.update { it.copy(consentBusy = true, errorPresentation = null) }
             try {
                 profileApi.revokeAssistantConsent()
+                changedProfileContext()
+                consentRetryGate.clear()
                 tracker.track(Events.ASSISTANT_CONSENT_REVOKED)
                 _state.update { s -> s.copy(consentBusy = false, profile = s.profile?.let { p -> p.assistantConsent?.let { c -> p.withConsent(c.copy(granted = false)) } ?: p }) }
             } catch (e: AppError) {
