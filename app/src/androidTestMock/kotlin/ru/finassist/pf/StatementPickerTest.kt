@@ -84,19 +84,9 @@ class StatementPickerTest {
         // call» between two polls. A miss here is the submit, not the session switch below.
         compose.waitUntilTagged("auth.call", "applock.setup", timeoutMs = 10_000)
         // Step 2: the mock «receives the call» after a few seconds, then asks for a new passcode twice.
-        val watch = MainThreadWatch().also { it.start() }
-        val setupShown = compose.hasTag("applock.setup", waitMs = 30_000)
-        val report = watch.stop()
-        if (!setupShown) {
-            // FIN-63: twice on CI the session was stored and reported («session signed_in») but this composition
-            // stayed on the call screen. The picker is what this test is for; a recreated activity composes on
-            // the stored session. The breadcrumbs in logcat keep the evidence of the stall.
-            // «FIN-63 workaround» is what the CI summary greps for (e2e.yml): the workaround must not hide the stall.
-            Log.e("PfTest", "FIN-63 workaround: applock.setup did not appear after sign-in ($report); recreating the activity")
-            compose.onRoot(useUnmergedTree = true).printToLog("PfTest")
-            compose.activityRule.scenario.recreate()
-            compose.waitForTag("applock.setup", timeoutMs = 10_000)
-        }
+        // FIN-88 fixed the session subscription race. A regression must fail with diagnostics, not recover by
+        // recreating the activity (the temporary FIN-63 workaround).
+        compose.waitForTag("applock.setup", timeoutMs = 30_000)
         enterCode()
         compose.waitForTag("applock.setup.repeat")
         enterCode()
