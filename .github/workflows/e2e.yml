@@ -64,11 +64,11 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 25
 
       # Every shard builds the APKs itself, mostly from the build cache (~40 s): the native tests and the coverage
       # report need the Gradle build anyway, and a separate build job would delay every emulator (docs/e2e.md).
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' || matrix.shard != 1 }}
 
@@ -99,7 +99,7 @@ jobs:
           script: scripts/e2e.sh --no-build --shard ${{ matrix.shard }}/${{ env.SHARDS }}
 
       # Whatever the shard ended with: the reports job needs the flows' report, execution data and logs of each one.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-shard-${{ matrix.shard }}
@@ -121,14 +121,14 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: true
 
       # No artifact at all (every shard failed before uploading) is not an error here: gather reports it.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           pattern: e2e-shard-*
@@ -169,19 +169,9 @@ jobs:
             else
               echo "No merged Maestro report (merging the shards' reports failed)."
             fi
-            # A workaround in a test must stay visible: the native test logs «FIN-63 workaround» when it had to
-            # recreate the activity after a stalled sign-in. The issue stays open while this line shows up.
-            if grep -rl "FIN-63 workaround" app/build/outputs/androidTest-results 2>/dev/null | grep -q .; then
-              echo
-              echo "> ⚠️ **FIN-63 workaround triggered**: the native test recreated the activity after a stalled sign-in — see \`logcat-*.txt\` in the \`e2e-reports\` artifact (breadcrumbs \`session …\` / \`ui session …\`)."
-            fi
             echo
             python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml || echo "UI test coverage: the summary script failed."
           } >> "$GITHUB_STEP_SUMMARY"
-          # Workflow commands are read from stdout, not from the summary file.
-          if grep -rl "FIN-63 workaround" app/build/outputs/androidTest-results 2>/dev/null | grep -q .; then
-            echo "::warning title=FIN-63::StatementPickerTest recreated the activity after a stalled sign-in; evidence in the e2e-reports artifact"
-          fi
 
       # One Qase run per merge to main for all shards (project PLAINFIN, cases in scripts/qase-cases.json). Cancelled
       # runs are not sent — neither a cancelled workflow (a newer merge cancels the run) nor one with a cancelled shard:
@@ -199,7 +189,7 @@ jobs:
             build/e2e/maestro-report.xml \
             'app/build/outputs/androidTest-results/connected/**/TEST-*.xml'
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-reports

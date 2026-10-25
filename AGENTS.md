@@ -164,6 +164,10 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 
 ## Build in an agent container
 
+Configuration caching is temporarily disabled for all builds (FIN-187): Gradle 8.11.1 can fail while serializing
+AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off and re-enable checks:
+`docs/gradle-configuration-cache.md`. Keep the default fail-on-problems policy; do not mask dependency errors.
+
 - Fresh Linux container: run `scripts/agent-setup.sh` once (Android SDK matching `gradle/libs.versions.toml`,
   `local.properties`, a Maven Central mirror in `~/.gradle/init.d`). Needs JDK 21 and network access to
   Google Maven, Gradle and Maven Central.
@@ -176,6 +180,10 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
   assembleProdRelease` (release unsigned) with `:app:checkNoMockCode`, the Tracer check and the manifest checks
   (`scripts/check-build-separation.py`, pinning included). A test that fails only in a release, `local`, `prod` or
   `e2e` variant is caught after the merge, not on the PR; run `./gradlew test` locally when a change is variant-specific.
+- FIN-185: the assemble job resolves `mockE2eRuntimeClasspath` and `prodReleaseRuntimeClasspath` using
+  `scripts/compose-classpath.init.gradle` (`:app:composeClasspathReport --no-configuration-cache`), then validates
+  the JSON with `scripts/check-compose-classpath.py`: Compose UI/foundation and lifecycle-runtime must match the
+  isolated BOM/navigation/catalog lifecycle baseline. Commands and failure diagnostics: docs/testing.md.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally (all flows and the native
   tests; `--shard i/n` runs one CI shard), the `UI tests` workflow in CI (after a merge to `main`, or started by hand
   for a branch; PRs never run them by themselves). CI splits the flows between four emulators

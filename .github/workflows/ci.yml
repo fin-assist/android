@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.15'
 
@@ -65,9 +65,9 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
 
@@ -89,7 +89,7 @@ jobs:
 
       - name: Restore Robolectric jars
         id: robolectric-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/.m2/repository/org/robolectric
           key: ${{ steps.robolectric.outputs.key }}
@@ -110,7 +110,7 @@ jobs:
         if: >-
           steps.unit-tests.outcome == 'success' && steps.robolectric-cache.outputs.cache-hit != 'true' &&
           github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ~/.m2/repository/org/robolectric
           key: ${{ steps.robolectric.outputs.key }}
@@ -165,7 +165,7 @@ jobs:
             gh api "repos/${{ github.repository }}/issues/$PR/comments" -F body=@comment.md > /dev/null
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && hashFiles('build/reports/kover/**') != ''
         with:
           name: coverage-report
@@ -204,9 +204,9 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
 
@@ -242,11 +242,20 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
+
+      # Resolve the actual e2e/prod graph before compiling, without changing dependency selection.
+      # The init script uses Gradle's resolution model; its one-off metadata task is not configuration-cache compatible.
+      - name: Compose runtime classpaths match the BOM and lifecycle baseline
+        run: |
+          {
+            ./gradlew -I scripts/compose-classpath.init.gradle :app:composeClasspathReport --no-daemon --no-configuration-cache &&
+            python3 scripts/check-compose-classpath.py app/build/reports/compose-classpath.json
+          } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Environments (FIN-120, AGENTS.md «Flavors»): mock as the working product, localDebug for the local backend,
       # prodRelease as what users get (unsigned: CI has no signing key). The localRelease manifest is checked below.
@@ -300,7 +309,7 @@ jobs:
             fi
           } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: success()
         with:
           name: app-mock-debug
