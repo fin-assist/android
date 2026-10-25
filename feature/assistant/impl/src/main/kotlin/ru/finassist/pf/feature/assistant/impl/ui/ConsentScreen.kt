@@ -84,10 +84,12 @@ class AiConsentViewModel @Inject constructor(
     private val _state = MutableStateFlow(AiConsentUiState())
     private val documentGate = RequestRetryGate(elapsedClock)
     private var documentFailure: AppError? = null
+    private var rejectedDocumentVersion: String? = null
+    private var documentGeneration = 0L
     private val retryGate = RequestRetryGate(elapsedClock)
     init {
-        viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready && documentGate.isReady()) } } }
-        viewModelScope.launch { documentGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready && retryGate.isReady()) } } }
+        viewModelScope.launch { retryGate.readiness.collect { updateReadiness() } }
+        viewModelScope.launch { documentGate.readiness.collect { updateReadiness() } }
     }
     val state: StateFlow<AiConsentUiState> = _state
 
@@ -95,17 +97,41 @@ class AiConsentViewModel @Inject constructor(
         loadDocument()
     }
 
-    private fun loadDocument() {
-        viewModelScope.launch {
-            runCatching { fetchDocument() }.onSuccess { d -> _state.update { it.copy(document = d) } }
-                .onFailure { failure -> if (failure is AppError) _state.update { it.copy(errorPresentation = failure.presentation.takeUnless { failure is AppError.Offline }, formError = "Не получилось загрузить документ согласия") } }
-        }
+    private fun updateReadiness() = _state.update {
+        it.copy(retryReady = retryGate.isReady() && documentGate.isReady() && rejectedDocumentVersion == null)
     }
 
-    private suspend fun fetchDocument(): ru.finassist.pf.core.api.model.ConsentDocument {
+    private fun loadDocument() {
+        viewModelScope.launch { try { fetchDocument() } catch (_: AppError) { /* fetchDocument retains the refusal. */ } }
+    }
+
+    private suspend fun fetchDocument(): ConsentDocument {
         if (!documentGate.isReady()) throw checkNotNull(documentFailure)
-        return try { authApi.getConsentDocument(ConsentType.ASSISTANT).also { documentFailure = null } }
-        catch (error: AppError) { documentFailure = error; documentGate.record(error); throw error }
+        val generation = ++documentGeneration
+        return try {
+            authApi.getConsentDocument(ConsentType.ASSISTANT).also { document ->
+                if (generation == documentGeneration) {
+                    documentFailure = null
+                    val changed = _state.value.document?.version?.let { it != document.version } == true
+                    val corrected = rejectedDocumentVersion?.let { it != document.version } == true
+                    _state.update { it.copy(document = document, accepted = if (changed) false else it.accepted,
+                        requestRetryable = if (corrected) null else it.requestRetryable) }
+                    if (corrected) {
+                        rejectedDocumentVersion = null
+                        retryGate.clear() // install the new document/reset tick before enabling its corrected PUT
+                    }
+                    updateReadiness()
+                }
+            }
+        } catch (error: AppError) {
+            if (generation == documentGeneration) {
+                documentFailure = error
+                documentGate.record(error)
+                _state.update { it.copy(errorPresentation = error.presentation.takeUnless { error is AppError.Offline },
+                    formError = "Не получилось загрузить документ согласия") }
+            }
+            throw error
+        }
     }
 
     fun setAccepted(v: Boolean) = _state.update { it.copy(accepted = v, error = null) }
@@ -113,30 +139,32 @@ class AiConsentViewModel @Inject constructor(
     /** PUT is idempotent by itself (api.md 2.3) — no key needed. */
     fun grant() {
         val s = _state.value
-        if (s.busy || !retryGate.isReady() || !documentGate.isReady()) return
+        if (s.busy || !retryGate.isReady() || !documentGate.isReady() || rejectedDocumentVersion != null) return
         if (!s.accepted) {
             _state.update { it.copy(error = CONSENT_REQUIRED) }
             return
         }
         viewModelScope.launch {
             _state.update { it.copy(busy = true, formError = null, errorPresentation = null) }
+            var attemptedVersion: String? = null
             try {
                 val version = s.document?.version ?: fetchDocument().version
+                attemptedVersion = version
                 profileApi.grantAssistantConsent(AssistantConsentGrant(version))
                 _state.update { it.copy(busy = false, granted = true) }
             } catch (e: AppError) {
                 retryGate.record(e)
-                val text = when {
-                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_OUTDATED -> {
-                        retryGate.clear()
-                        documentGate.clear()
-                        loadDocument()
-                        "Текст согласия обновился — прочитайте его ещё раз и подтвердите"
-                    }
-                    e is AppError.Offline -> "Нет сети — проверьте интернет и повторите"
-                    else -> "Не получилось сохранить. Попробуйте ещё раз"
+                if (attemptedVersion != null && e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_OUTDATED) {
+                    rejectedDocumentVersion = attemptedVersion
+                    _state.update { it.copy(busy = false, formError = "Текст согласия обновился — прочитайте его ещё раз и подтвердите",
+                        errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
+                    updateReadiness()
+                    documentGate.clear() // the known changed-document scenario permits a fresh document read, not an old PUT
+                    loadDocument()
+                } else {
+                    val text = if (e is AppError.Offline) "Нет сети — проверьте интернет и повторите" else "Не получилось сохранить. Попробуйте ещё раз"
+                    _state.update { it.copy(busy = false, formError = text, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
                 }
-                _state.update { it.copy(busy = false, formError = text, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable.takeUnless { e is AppError.Api && e.code == ErrorCodes.CONSENT_OUTDATED }) }
             }
         }
     }

@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -38,21 +39,33 @@ class AiConsentViewModelTest {
 
     private class FakeAuth(private val doc: ConsentDocument) : AuthApi {
         var documentRequests = 0
+        var nextDocument = doc
+        var documentGate: CompletableDeferred<Unit>? = null
+        var documentFailure: AppError? = null
+        var documentCall: (suspend (Int) -> ConsentDocument)? = null
         override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification = error("unused")
         override fun streamPhoneVerification(verificationToken: String): Flow<PhoneVerificationStatusEvent> = error("unused")
         override suspend fun register(key: IdempotencyKey, request: RegisterRequest): RegisterResponse = error("unused")
         override suspend fun refreshTokens(key: IdempotencyKey, refreshToken: String): TokenPair = error("unused")
         override suspend fun logout(accessToken: String, refreshToken: String) = Unit
-        override suspend fun getConsentDocument(type: ConsentType): ConsentDocument { documentRequests++; return doc }
+        override suspend fun getConsentDocument(type: ConsentType): ConsentDocument {
+            documentRequests++
+            documentCall?.let { return it(documentRequests) }
+            documentGate?.await()
+            documentFailure?.let { throw it }
+            return nextDocument
+        }
     }
 
     private class FakeProfile : ProfileApi {
         var failure: AppError? = null
         val grants = mutableListOf<String>()
+        val attempts = mutableListOf<String>()
         override suspend fun getProfile(): Profile = error("unused")
         override suspend fun updateProfile(update: ProfileUpdate): Profile = error("unused")
         override suspend fun deleteAccount() = Unit
         override suspend fun grantAssistantConsent(grant: AssistantConsentGrant): Profile {
+            attempts += grant.version
             failure?.let { throw it }
             grants += grant.version
             return Profile(
@@ -107,5 +120,101 @@ class AiConsentViewModelTest {
         assertEquals("Текст согласия обновился — прочитайте его ещё раз и подтвердите", vm.state.value.formError)
         assertEquals(before + 1, auth.documentRequests)
         assertEquals(document, vm.state.value.document)
+    }
+    private fun vm() = AiConsentViewModel(auth, profile, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
+
+    private fun outdatedFalse() = AppError.Api(ErrorCodes.CONSENT_OUTDATED, 409,
+        response = ru.finassist.pf.core.common.error.ErrorResponseInfo(ErrorCodes.CONSENT_OUTDATED, 409, requestRetryable = false))
+
+    @Test fun `delayed document reload never permits the old false-denied consent PUT`() {
+        val vm = vm()
+        val reply = CompletableDeferred<Unit>()
+        auth.documentGate = reply
+        auth.nextDocument = document.copy(version = "3")
+        profile.failure = outdatedFalse()
+        vm.setAccepted(true)
+        vm.grant()
+        assertFalse(vm.state.value.busy)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals("2", vm.state.value.document?.version)
+        profile.failure = null
+        vm.setAccepted(false)
+        vm.setAccepted(true)
+        vm.grant()
+        assertEquals(listOf("2"), profile.attempts, "a new tick is not a new document version")
+        reply.complete(Unit)
+        assertEquals("3", vm.state.value.document?.version)
+        assertFalse(vm.state.value.accepted, "the tick of the old document does not carry over")
+        assertTrue(vm.state.value.retryReady)
+    }
+
+    @Test fun `offline document reload retains the old consent prohibition`() {
+        val vm = vm()
+        auth.documentFailure = AppError.Offline()
+        profile.failure = outdatedFalse()
+        vm.setAccepted(true)
+        vm.grant()
+        assertEquals("2", vm.state.value.document?.version)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(false, vm.state.value.requestRetryable)
+        assertEquals("Не получилось загрузить документ согласия", vm.state.value.formError)
+        profile.failure = null
+        auth.documentFailure = null
+        vm.grant()
+        assertEquals(listOf("2"), profile.attempts)
+        assertFalse(vm.state.value.granted)
+    }
+
+    @Test fun `a successful GET of the same version cannot clear an explicit consent refusal`() {
+        val vm = vm()
+        profile.failure = outdatedFalse()
+        vm.setAccepted(true)
+        vm.grant()
+        assertEquals(2, auth.documentRequests)
+        assertEquals(document, vm.state.value.document)
+        assertTrue(vm.state.value.accepted, "a same-version GET does not pretend the displayed document changed")
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(false, vm.state.value.requestRetryable)
+        profile.failure = null
+        vm.grant()
+        assertEquals(listOf("2"), profile.attempts)
+    }
+
+    @Test fun `a different fetched version clears only the old context and requires a fresh tick`() {
+        val vm = vm()
+        auth.nextDocument = document.copy(version = "3")
+        profile.failure = outdatedFalse()
+        vm.setAccepted(true)
+        vm.grant()
+        assertEquals("3", vm.state.value.document?.version)
+        assertTrue(vm.state.value.retryReady)
+        assertNull(vm.state.value.requestRetryable)
+        assertFalse(vm.state.value.accepted)
+        profile.failure = null
+        vm.grant()
+        assertEquals(listOf("2"), profile.attempts)
+        vm.setAccepted(true)
+        vm.grant()
+        assertEquals(listOf("2", "3"), profile.attempts)
+        assertEquals(listOf("3"), profile.grants)
+        assertTrue(vm.state.value.granted)
+    }
+
+    @Test fun `a stale initial document read cannot replace the corrected version or its reset tick`() {
+        val initial = CompletableDeferred<ConsentDocument>()
+        auth.documentCall = { call -> when (call) { 1 -> initial.await(); 2 -> document; else -> document.copy(version = "3") } }
+        profile.failure = outdatedFalse()
+        val vm = vm()
+        vm.setAccepted(true)
+        vm.grant()
+        assertEquals("3", vm.state.value.document?.version)
+        initial.complete(document)
+        assertEquals("3", vm.state.value.document?.version)
+        assertFalse(vm.state.value.accepted)
+        assertTrue(vm.state.value.retryReady)
+        profile.failure = null
+        vm.setAccepted(true)
+        vm.grant()
+        assertEquals(listOf("2", "3"), profile.attempts)
     }
 }
