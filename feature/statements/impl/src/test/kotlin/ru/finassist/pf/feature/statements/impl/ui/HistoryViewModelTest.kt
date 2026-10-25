@@ -64,7 +64,7 @@ class HistoryViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun newVm(flags: StaticFlags = StaticFlags()) = HistoryViewModel(api, repository, tracker, flags, ElapsedClock { 0L })
+    private fun newVm(flags: StaticFlags = StaticFlags()) = HistoryViewModel(api, repository, tracker, flags, ElapsedClock { dispatcher.scheduler.currentTime })
 
     private fun advance(ms: Long) {
         dispatcher.scheduler.advanceTimeBy(ms)
@@ -182,7 +182,8 @@ class HistoryViewModelTest {
         fun tracked(f: kotlinx.coroutines.flow.Flow<ImportEvent>) = f
             .onStart { active++; maxActive = maxOf(maxActive, active) }
             .onCompletion { active-- }
-        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        val limitedAt = mutableListOf<Long>()
+        val limited = { tracked(flow { limitedAt += dispatcher.scheduler.currentTime; throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
         api.listOutcomes += processing
         api.listOutcomes += processing
         api.listOutcomes += done
@@ -192,7 +193,7 @@ class HistoryViewModelTest {
             // Closed after progress: a drop.
             tracked(flowOf(progress)),
             limited(),
-            // The screen came back (pause → load): the view model opens the stream itself, the server still says 429.
+            // The next opening after the retained wait gets a fresh 429 with its own wait.
             limited(),
             tracked(flowOf(ImportEvent.Complete(result))),
         )
@@ -200,13 +201,20 @@ class HistoryViewModelTest {
         vm.load()
         advance(1_000)
         assertEquals(2, api.streamOpens.size, "the drop was re-opened and got 429")
+        advance(4_000) // consume part of the original server wait before leaving
         vm.pause()
         vm.load()
-        assertEquals(3, api.streamOpens.size)
+        assertEquals(2, api.streamOpens.size, "resume must not bypass the retained Retry-After")
         assertEquals(2, api.listCalls, "no reload before the upload ends")
-        advance(59_000)
-        assertEquals(3, api.streamOpens.size, "not before Retry-After")
-        advance(2_000)
+        val firstRefusal = limitedAt.single()
+        advance(firstRefusal + 59_999 - dispatcher.scheduler.currentTime)
+        assertEquals(2, api.streamOpens.size, "not before the original Retry-After")
+        advance(firstRefusal + 62_001 - dispatcher.scheduler.currentTime)
+        assertEquals(3, api.streamOpens.size, "the original wait is not restarted on resume")
+        val secondRefusal = limitedAt.last()
+        advance(secondRefusal + 59_999 - dispatcher.scheduler.currentTime)
+        assertEquals(3, api.streamOpens.size, "a fresh 429 gets its own Retry-After")
+        advance(secondRefusal + 62_001 - dispatcher.scheduler.currentTime)
         assertEquals(4, api.streamOpens.size)
         assertEquals(3, api.listCalls, "the list is reloaded once the upload ended")
         assertEquals(done, vm.state.value.list)
