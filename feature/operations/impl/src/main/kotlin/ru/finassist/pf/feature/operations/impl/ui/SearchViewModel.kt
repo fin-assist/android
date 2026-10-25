@@ -100,7 +100,7 @@ class SearchViewModel @Inject constructor(
     reportZone: ReportZone,
     private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
-    private val preset = savedState.toRoute<OperationsRoutes.Search>(PfNavTypes.MAP).filter
+    private val preset = savedState.toRoute<OperationsRoutes.Search>(PfNavTypes.MAP).filter.let { it.copy(q = it.q?.takeIf(String::isNotBlank)) }
 
     private val _state = MutableStateFlow(
         SearchUiState(
@@ -169,7 +169,7 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    fun setQuery(q: String) = updateFilter(debounce = true) { it.copy(q = q.ifEmpty { null }) }
+    fun setQuery(q: String) = updateFilter(debounce = true) { it.copy(q = q.takeIf(String::isNotBlank)) }
 
     fun setPeriod(from: OffsetDateTime?, to: OffsetDateTime?, allTime: Boolean) {
         val effectiveAllTime = allTime && from == null && to == null
@@ -219,7 +219,9 @@ class SearchViewModel @Inject constructor(
 
     private fun updateFilter(debounce: Boolean = false, change: (OperationsFilter) -> OperationsFilter) {
         val changed = change(_state.value.filter)
-        if (changed != _state.value.filter) changedContext()
+        // Blank q and selectionName are omitted by the HTTP adapter; display-only changes cannot release a refusal.
+        fun requestFilter(filter: OperationsFilter) = filter.copy(q = filter.q?.takeIf(String::isNotBlank), selectionName = null)
+        if (requestFilter(changed) != requestFilter(_state.value.filter)) changedContext()
         _state.update { it.copy(filter = changed) }
         search(debounce)
     }

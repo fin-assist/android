@@ -396,6 +396,35 @@ class SearchViewModelTest {
     private fun forbiddenSearch() = AppError.Api("FUTURE_ERROR", 400,
         response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_ERROR", 400, requestRetryable = false))
 
+    @Test fun `blank search text never releases an unchanged category request refusal`() {
+        api.lists += forbiddenSearch()
+        val vm = vm(OperationsFilter(categoryId = "cat_taxi"))
+        typed(vm, " ")
+        typed(vm, "\t  ")
+        vm.retry()
+        assertEquals(1, api.queries.size)
+        assertNull(vm.state.value.filter.q)
+        assertFalse(vm.state.value.retryReady)
+    }
+
+    @Test fun `a restored blank preset has the same omitted-query context`() {
+        api.lists += forbiddenSearch()
+        val vm = vm(OperationsFilter(categoryId = "cat_taxi", q = " "))
+        typed(vm, "\t")
+        assertEquals(1, api.queries.size)
+        assertNull(api.queries.single().filter.q)
+        assertFalse(vm.state.value.retryReady)
+    }
+
+    @Test fun `removing only a display selection label cannot release a refused wire query`() {
+        api.lists += forbiddenSearch()
+        val vm = vm(OperationsFilter(categoryId = "cat_taxi", selectionName = "label"))
+        vm.clearAnalyticsScope()
+        assertNull(vm.state.value.filter.selectionName)
+        assertEquals(1, api.queries.size)
+        assertFalse(vm.state.value.retryReady)
+    }
+
     @Test fun `a confirmed category change refreshes a quiet-refused search and its membership`() {
         api.lists += found("op_1")
         api.lists += forbiddenSearch()
