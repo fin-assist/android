@@ -60,7 +60,7 @@ The flows run on four emulators at once (FIN-180), one job per shard, each with 
   `Reports` job runs after all shards, whatever they ended with, unless the run was cancelled (`if: !cancelled()`):
   `e2e-shards.py gather` merges the
   Maestro reports into one `build/e2e/maestro-report.xml` and puts the execution data of every shard and of the
-  native tests where `:e2eCoverageReport` reads them; then the coverage report, the summary, the FIN-63 check, one
+  native tests where `:e2eCoverageReport` reads them; then the coverage report, the summary, one
   Qase run and the `e2e-reports` artifact (merged report, coverage, every shard's folder). A shard that left no report
   — its job failed or timed out before the flows ended — is not lost silently: its flows go into the merged report as
   failures («shard i/n left no Maestro report»), and so does a flow missing from a shard's report. Flows are matched
@@ -300,6 +300,10 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
+
+`StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
+FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
+and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
 
 Not covered yet: voice input (needs a speech recognizer on the emulator), biometrics (needs an enrolled
 fingerprint), custom date ranges in search,
