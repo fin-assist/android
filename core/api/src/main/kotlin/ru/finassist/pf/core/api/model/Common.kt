@@ -8,11 +8,28 @@ import ru.finassist.pf.core.common.time.PeriodKey
 import java.util.UUID
 
 /** `Idempotency-Key`: one UUID per logical user action, kept until the final response. */
-@JvmInline
-@Serializable
-value class IdempotencyKey(val value: String) {
+@Serializable(with = IdempotencyKey.Serializer::class)
+class IdempotencyKey private constructor(
+    val value: String,
+    val replayWindow: ru.finassist.pf.core.common.time.RequestReplayWindow?,
+) {
+    /** Restored/external keys have unknown age. Never stamp them as newly created. */
+    constructor(value: String) : this(value, null)
+    override fun equals(other: Any?): Boolean = other is IdempotencyKey && value == other.value
+    override fun hashCode(): Int = value.hashCode()
+    override fun toString(): String = "IdempotencyKey"
+
     companion object {
         fun random() = IdempotencyKey(UUID.randomUUID().toString())
+        fun random(clock: ru.finassist.pf.core.common.time.ElapsedClock) = IdempotencyKey(
+            UUID.randomUUID().toString(),
+            ru.finassist.pf.core.common.time.RequestReplayWindow(clock.nowMillis(), 24 * 60 * 60 * 1000L),
+        )
+    }
+    object Serializer : kotlinx.serialization.KSerializer<IdempotencyKey> {
+        override val descriptor = kotlinx.serialization.descriptors.PrimitiveSerialDescriptor("IdempotencyKey", kotlinx.serialization.descriptors.PrimitiveKind.STRING)
+        override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: IdempotencyKey) = encoder.encodeString(value.value)
+        override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder) = IdempotencyKey(decoder.decodeString())
     }
 }
 

@@ -1,6 +1,12 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package ru.finassist.pf.core.api.model
 
 import kotlinx.serialization.Serializable
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorSeverity
+import ru.finassist.pf.core.common.error.UserMessage
+import ru.finassist.pf.core.common.error.OptionalBooleanSerializer
 import ru.finassist.pf.core.common.time.ApiDateTime
 
 /** Wire format of every error response: exactly one `error` object. */
@@ -16,7 +22,16 @@ data class ApiError(
     val resetsAt: ApiDateTime? = null,
     /** `MAINTENANCE`: expected end of the maintenance; absent — unknown (api.md, `error.until`). */
     val until: ApiDateTime? = null,
-)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val userMessage: UserMessage = UserMessage.Absent,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val severity: ErrorSeverity = ErrorSeverity.ERROR,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    @Serializable(with = OptionalBooleanSerializer::class)
+    val retryable: Boolean? = null,
+) {
+    val presentation: ErrorPresentation get() = ErrorPresentation(userMessage, severity)
+}
 
 @Serializable
 data class ApiErrorDetail(
