@@ -28,6 +28,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.TokenPair
+import ru.finassist.pf.core.api.model.IdempotencyKey
 import java.io.File
 import java.io.IOException
 import kotlin.test.assertEquals
@@ -274,6 +275,70 @@ class EncryptedTokenStoreTest {
         release.complete(Unit)
 
         withTimeout(5_000) { store.session.first { it == SESSION } }
+    }
+
+    @Test
+    fun `normal restored sessions can reserve a first refresh and the marker is encrypted separately`() = runBlocking {
+        store.save(SESSION)
+        val originalBlob = rawBlob()
+        val restarted = EncryptedTokenStore(context, dataStore)
+        assertTrue(restarted.reserveRefreshAttempt("refresh-1", IdempotencyKey("refresh-key")))
+        val marker = assertNotNull(dataStore.data.first()[stringPreferencesKey("session.refresh_pending")])
+        for (secret in listOf("refresh-1", "refresh-key", "access-1")) assertFalse(secret in marker)
+        assertEquals(originalBlob, rawBlob(), "the existing three-line session ciphertext is unchanged")
+        assertEquals(SESSION, restarted.current())
+    }
+
+    @Test
+    fun `pending marker survives a new store and only the same known key can reserve it`() = runBlocking {
+        store.save(SESSION)
+        assertTrue(store.reserveRefreshAttempt("refresh-1", IdempotencyKey("known-key")))
+        val restarted = EncryptedTokenStore(context, dataStore)
+        assertTrue(restarted.reserveRefreshAttempt("refresh-1", IdempotencyKey("known-key")))
+        assertFalse(restarted.reserveRefreshAttempt("refresh-1", IdempotencyKey("new-key")))
+        assertEquals(SESSION, restarted.current())
+    }
+
+    @Test
+    fun `malformed or wrong AAD marker is uncertainty rather than absence`() = runBlocking {
+        store.save(SESSION)
+        for (marker in listOf("not encrypted", assertNotNull(rawBlob()))) {
+            dataStore.edit { it[stringPreferencesKey("session.refresh_pending")] = marker }
+            assertFalse(store.reserveRefreshAttempt("refresh-1", IdempotencyKey("new-key")))
+            assertEquals(SESSION, store.current())
+        }
+    }
+
+    @Test
+    fun `successful token rotation and explicit save or clear retire the marker atomically`() = runBlocking {
+        val marker = stringPreferencesKey("session.refresh_pending")
+        store.save(SESSION)
+        assertTrue(store.reserveRefreshAttempt("refresh-1", IdempotencyKey("key-1")))
+        assertTrue(store.updateTokens("refresh-1", TokenPair("access-2", "refresh-2")))
+        assertNull(dataStore.data.first()[marker])
+        assertTrue(store.reserveRefreshAttempt("refresh-2", IdempotencyKey("key-2")))
+        store.save(SESSION)
+        assertNull(dataStore.data.first()[marker])
+        assertTrue(store.reserveRefreshAttempt("refresh-1", IdempotencyKey("key-3")))
+        store.clear()
+        assertNull(dataStore.data.first()[marker])
+        assertNull(store.current())
+    }
+
+    @Test
+    fun `late old-session clear cannot remove a new sign-in or its pending marker`() = runBlocking {
+        store.save(SESSION)
+        assertTrue(store.reserveRefreshAttempt("refresh-1", IdempotencyKey("old-key")))
+        val replacement = TokenStore.Session("new-user", TokenPair("new-access", "new-refresh"))
+        store.save(replacement)
+        assertTrue(store.reserveRefreshAttempt("new-refresh", IdempotencyKey("new-key")))
+        assertFalse(store.clearIfRefreshToken("refresh-1"))
+        assertFalse(store.updateTokens("refresh-1", TokenPair("late-access", "late-refresh")))
+        assertEquals(replacement, store.current())
+        assertTrue(store.reserveRefreshAttempt("new-refresh", IdempotencyKey("new-key")))
+        assertTrue(store.clearIfRefreshToken("new-refresh"))
+        assertNull(dataStore.data.first()[stringPreferencesKey("session.refresh_pending")])
+        assertNull(store.current())
     }
 
     private companion object {

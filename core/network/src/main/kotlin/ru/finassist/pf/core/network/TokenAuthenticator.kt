@@ -11,6 +11,7 @@ import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.error.RequestRetryGate
 import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.core.common.time.RequestReplayWindow
 import java.util.UUID
@@ -38,7 +39,7 @@ internal class TokenAuthenticator(
      * otherwise the server sees the old refresh token again and revokes the whole session (api.md 1.4).
      * Guarded by [mutex].
      */
-    private class PendingRefresh(val token: String, val key: IdempotencyKey, val window: RequestReplayWindow)
+    private class PendingRefresh(val token: String, val key: IdempotencyKey, val window: RequestReplayWindow, val retryGate: RequestRetryGate)
     private var pendingKey: PendingRefresh? = null
 
     override fun authenticate(route: Route?, response: Response): Request? {
@@ -50,10 +51,12 @@ internal class TokenAuthenticator(
         // Successful auth correction does not override the original operation's replay window.
         if (!mayResume(response.request)) return null
 
+        val originalSession = response.request.tag(RequestSession::class.java) ?: return null
         val failedAccess = response.request.header("Authorization")?.removePrefix("Bearer ")
         val newAccess = runBlocking {
             mutex.withLock {
                 val session = tokenStore.current() ?: return@withLock null
+                if (!originalSession.matches(session.userId)) return@withLock null
                 if (session.tokens.accessToken != failedAccess) {
                     // Someone else already refreshed while we waited.
                     return@withLock session.tokens.accessToken
@@ -64,13 +67,23 @@ internal class TokenAuthenticator(
                     // Reusing the old token outside its 60s replay window can revoke the whole session chain.
                     // Never silently issue a new key for the same uncertain refresh; recover by sign-in.
                     pendingKey = null
-                    tokenStore.clear()
+                    tokenStore.clearIfRefreshToken(refreshToken)
                     return@withLock null
                 }
-                val key = pending?.key ?: IdempotencyKey.random(elapsedClock).also {
-                    pendingKey = PendingRefresh(refreshToken, it, RequestReplayWindow(elapsedClock.nowMillis(), 60_000))
-                }
+                val attempt = pending ?: PendingRefresh(
+                    refreshToken, IdempotencyKey.random(elapsedClock),
+                    RequestReplayWindow(elapsedClock.nowMillis(), 60_000), RequestRetryGate(elapsedClock),
+                ).also { pendingKey = it }
+                if (!attempt.retryGate.isReady()) return@withLock null
+                val key = attempt.key
                 try {
+                    // A fresh process has no trusted key/window for an encrypted pending marker.
+                    // Reserving a different candidate fails closed before any RPC with the old token.
+                    if (!tokenStore.reserveRefreshAttempt(refreshToken, key)) {
+                        pendingKey = null
+                        tokenStore.clearIfRefreshToken(refreshToken)
+                        return@withLock null
+                    }
                     val pair = refresh(key, refreshToken)
                     // The key is retired only once the new pair is stored: if saving fails, the next attempt
                     // repeats the same refresh with the same key and gets the same pair back.
@@ -78,12 +91,13 @@ internal class TokenAuthenticator(
                     pendingKey = null
                     pair.accessToken
                 } catch (e: AppError) {
+                    attempt.retryGate.record(e)
                     when {
                         // The session is gone: clear it, the app shows the phone screen.
                         e is AppError.Unauthorized ||
                             (e is AppError.Api && e.httpStatus in 400..499 && e.httpStatus != 409 && e.httpStatus != 429) -> {
                             pendingKey = null
-                            tokenStore.clear()
+                            tokenStore.clearIfRefreshToken(refreshToken)
                         }
                         // Offline / 5xx / in progress: keep the session and the key for the next attempt.
                         else -> Unit
@@ -94,6 +108,8 @@ internal class TokenAuthenticator(
         } ?: return null
 
         if (!mayResume(response.request)) return null
+        val currentSession = runBlocking { tokenStore.current() } ?: return null
+        if (!originalSession.matches(currentSession.userId)) return null
         return response.request.newBuilder()
             .header(HEADER_REQUEST_ID, UUID.randomUUID().toString())
             .header("Authorization", "Bearer $newAccess")

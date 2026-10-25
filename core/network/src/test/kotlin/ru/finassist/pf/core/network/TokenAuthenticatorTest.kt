@@ -218,6 +218,8 @@ class TokenAuthenticatorTest {
             AppError.Offline(),
         )
         for (error in transient) {
+            // Independent fresh sign-ins: a separate test below covers reconstructing an uncertain attempt.
+            runBlocking { store.save(TokenStore.Session("u1", TokenPair("old-access", "old-refresh"))) }
             alwaysUnauthorized()
             val client = client { throw error }
 
@@ -274,6 +276,87 @@ class TokenAuthenticatorTest {
         client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
         assertEquals(1, keys.size)
         assertNull(runBlocking { store.current() })
+    }
+
+    @Test
+    fun `a new authenticator never refreshes an old token under a different pending key`() {
+        val clock = ElapsedClock { 1000L }
+        var calls = 0
+        fun newClient() = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+            .authenticator(TokenAuthenticator(store, clock) { _, _ -> calls++; throw AppError.Offline() }).build()
+        server.enqueue(MockResponse().setResponseCode(401))
+        newClient().newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        assertEquals(1, calls)
+        // A reconstructed authenticator has lost the trusted key/timebase but shares the persistent marker.
+        server.enqueue(MockResponse().setResponseCode(401))
+        newClient().newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        assertEquals(1, calls)
+        assertNull(runBlocking { store.current() })
+    }
+
+    @Test
+    fun `clock rollback abandons an uncertain refresh rather than creating a new key`() {
+        var elapsed = 1000L
+        var calls = 0
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+            .authenticator(TokenAuthenticator(store, ElapsedClock { elapsed }) { _, _ -> calls++; throw AppError.Offline() }).build()
+        server.enqueue(MockResponse().setResponseCode(401))
+        client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        elapsed = 0
+        server.enqueue(MockResponse().setResponseCode(401))
+        client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        assertEquals(1, calls)
+        assertNull(runBlocking { store.current() })
+    }
+
+    @Test
+    fun `failed refresh explicit false stops every further direct refresh under the cached key`() {
+        var elapsed = 1000L
+        var calls = 0
+        val clock = ElapsedClock { elapsed }
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+            .authenticator(TokenAuthenticator(store, clock) { _, _ ->
+                calls++
+                throw AppError.RateLimited(null, 10, ru.finassist.pf.core.common.error.ErrorResponseInfo(
+                    "RATE_LIMITED", 429, requestRetryable = false,
+                    timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = elapsed), retryAfterSeconds = 10,
+                ))
+            }).build()
+        for (time in listOf(1000L, 2000L, 12_000L)) {
+            elapsed = time
+            server.enqueue(MockResponse().setResponseCode(401))
+            client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        }
+        assertEquals(1, calls, "even after Retry-After elapsed false still prohibits the unchanged refresh")
+        assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken })
+    }
+
+    @Test
+    fun `refresh wait is captured once and same key may resume only after wait within sixty seconds`() {
+        var elapsed = 1000L
+        val clock = ElapsedClock { elapsed }
+        val keys = mutableListOf<String>()
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+            .authenticator(TokenAuthenticator(store, clock) { key, _ ->
+                keys += key.value
+                if (keys.size == 1) throw AppError.RateLimited(null, 10, ru.finassist.pf.core.common.error.ErrorResponseInfo(
+                    "RATE_LIMITED", 429, requestRetryable = true,
+                    timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = elapsed), retryAfterSeconds = 10,
+                ))
+                TokenPair("new-access", "new-refresh")
+            }).build()
+        for (time in listOf(1000L, 5000L)) {
+            elapsed = time
+            server.enqueue(MockResponse().setResponseCode(401))
+            client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        }
+        assertEquals(1, keys.size)
+        elapsed = 11_000
+        server.enqueue(MockResponse().setResponseCode(401))
+        server.enqueue(MockResponse().setBody("ok"))
+        client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().use { assertEquals(200, it.code) }
+        assertEquals(2, keys.size)
+        assertEquals(keys[0], keys[1])
     }
 
 }

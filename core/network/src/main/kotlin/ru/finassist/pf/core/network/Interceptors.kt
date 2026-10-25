@@ -34,14 +34,21 @@ internal class AuthInterceptor(private val tokenStore: TokenStore) : Interceptor
         if (original.header(NoAuth.HEADER) != null) {
             return chain.proceed(original.newBuilder().removeHeader(NoAuth.HEADER).build())
         }
-        val access = runBlocking { tokenStore.current()?.tokens?.accessToken }
-        val request = if (access != null) {
-            original.newBuilder().header("Authorization", "Bearer $access").build()
+        val session = runBlocking { tokenStore.current() }
+        val request = if (session != null) {
+            original.newBuilder().header("Authorization", "Bearer ${session.tokens.accessToken}")
+                .tag(RequestSession::class.java, RequestSession(session.userId)).build()
         } else {
             original
         }
         return chain.proceed(request)
     }
+}
+
+/** Ephemeral identity of the original authenticated call; deliberately has no generated value-bearing toString. */
+internal class RequestSession(private val userId: String) {
+    fun matches(candidate: String): Boolean = userId == candidate
+    override fun toString(): String = "RequestSession"
 }
 
 /** `X-Client-Version` on every request, auth and SSE included (api.md «Заголовки», FIN-20). */
