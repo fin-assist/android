@@ -73,6 +73,8 @@ data class AiConsentUiState(
     val errorPresentation: ErrorPresentation? = null,
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
+    val documentRefreshRequired: Boolean = false,
+    val documentRefreshReady: Boolean = false,
 )
 
 @HiltViewModel
@@ -86,6 +88,7 @@ class AiConsentViewModel @Inject constructor(
     private var documentFailure: AppError? = null
     private var rejectedDocumentVersion: String? = null
     private var documentGeneration = 0L
+    private var documentReads = 0
     private val retryGate = RequestRetryGate(elapsedClock)
     init {
         viewModelScope.launch { retryGate.readiness.collect { updateReadiness() } }
@@ -98,16 +101,31 @@ class AiConsentViewModel @Inject constructor(
     }
 
     private fun updateReadiness() = _state.update {
-        it.copy(retryReady = retryGate.isReady() && documentGate.isReady() && rejectedDocumentVersion == null)
+        it.copy(retryReady = retryGate.isReady() && documentGate.isReady() && rejectedDocumentVersion == null,
+            documentRefreshRequired = rejectedDocumentVersion != null,
+            documentRefreshReady = rejectedDocumentVersion != null && documentGate.isReady() && !it.busy && documentReads == 0)
     }
 
     private fun loadDocument() {
         viewModelScope.launch { try { fetchDocument() } catch (_: AppError) { /* fetchDocument retains the refusal. */ } }
     }
 
+    /** A rejected mutation stays blocked; this action retries only its independently gated document GET. */
+    fun refreshDocument() {
+        if (rejectedDocumentVersion == null || _state.value.busy || documentReads != 0 || !documentGate.isReady()) return
+        _state.update { it.copy(busy = true, formError = null, errorPresentation = null) }
+        updateReadiness()
+        viewModelScope.launch {
+            try { fetchDocument() } catch (_: AppError) { /* Only the GET gate receives this failure. */ }
+            finally { _state.update { it.copy(busy = false) }; updateReadiness() }
+        }
+    }
+
     private suspend fun fetchDocument(): ConsentDocument {
         if (!documentGate.isReady()) throw checkNotNull(documentFailure)
         val generation = ++documentGeneration
+        documentReads++
+        updateReadiness()
         return try {
             authApi.getConsentDocument(ConsentType.ASSISTANT).also { document ->
                 if (generation == documentGeneration) {
@@ -131,6 +149,9 @@ class AiConsentViewModel @Inject constructor(
                     formError = "Не получилось загрузить документ согласия") }
             }
             throw error
+        } finally {
+            documentReads--
+            updateReadiness()
         }
     }
 
@@ -153,8 +174,13 @@ class AiConsentViewModel @Inject constructor(
                 profileApi.grantAssistantConsent(AssistantConsentGrant(version))
                 _state.update { it.copy(busy = false, granted = true) }
             } catch (e: AppError) {
+                if (attemptedVersion == null) {
+                    _state.update { it.copy(busy = false) }
+                    updateReadiness()
+                    return@launch
+                }
                 retryGate.record(e)
-                if (attemptedVersion != null && e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_OUTDATED) {
+                if (e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_OUTDATED) {
                     rejectedDocumentVersion = attemptedVersion
                     _state.update { it.copy(busy = false, formError = "Текст согласия обновился — прочитайте его ещё раз и подтвердите",
                         errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
@@ -182,6 +208,7 @@ fun AiConsentScreen(onBack: () -> Unit, onGranted: () -> Unit, vm: AiConsentView
         onAccepted = vm::setAccepted,
         onOpenDocument = { doc -> runCatching { CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(doc.url)) } },
         onGrant = vm::grant,
+        onRefreshDocument = vm::refreshDocument,
     )
 }
 
@@ -199,6 +226,7 @@ internal fun AiConsentContent(
     onAccepted: (Boolean) -> Unit,
     onOpenDocument: (ConsentDocument) -> Unit,
     onGrant: () -> Unit,
+    onRefreshDocument: () -> Unit = {},
 ) {
     val d = PfTheme.dimens
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(AssistantTags.CONSENT)) {
@@ -248,7 +276,11 @@ internal fun AiConsentContent(
                 }
                 Spacer(Modifier.weight(1f).heightIn(min = d.space6))
                 PfButton(
-                    "Продолжить", enabled = state.retryReady, onClick = onGrant, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Сохраняем…",
+                    if (state.documentRefreshRequired) "Обновить документ" else "Продолжить",
+                    enabled = if (state.documentRefreshRequired) state.documentRefreshReady else state.retryReady,
+                    onClick = if (state.documentRefreshRequired) onRefreshDocument else onGrant,
+                    variant = ButtonVariant.PRIMARY, block = true, busy = state.busy,
+                    busyText = if (state.documentRefreshRequired) "Загружаем…" else "Сохраняем…",
                     modifier = Modifier.testTag(AssistantTags.CONSENT_SUBMIT),
                 )
                 Spacer(Modifier.height(d.space2))

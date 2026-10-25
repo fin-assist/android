@@ -38,6 +38,8 @@ data class ConsentUiState(
     val errorPresentation: ErrorPresentation? = null,
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
+    val documentRefreshRequired: Boolean = false,
+    val documentRefreshReady: Boolean = false,
     val replayUnavailable: Boolean = false,
 )
 
@@ -54,6 +56,7 @@ class ConsentViewModel @Inject constructor(
     private var documentFailure: AppError? = null
     private var rejectedRegistrationVersion: String? = null
     private var documentGeneration = 0L
+    private var documentReads = 0
     private val retryGate = RequestRetryGate(elapsedClock)
     init {
         viewModelScope.launch { retryGate.readiness.collect { updateReadiness() } }
@@ -68,12 +71,27 @@ class ConsentViewModel @Inject constructor(
     }
 
     private fun updateReadiness() = _state.update {
-        it.copy(retryReady = retryGate.isReady() && documentGate.isReady() && rejectedRegistrationVersion == null)
+        it.copy(retryReady = retryGate.isReady() && documentGate.isReady() && rejectedRegistrationVersion == null,
+            documentRefreshRequired = rejectedRegistrationVersion != null,
+            documentRefreshReady = rejectedRegistrationVersion != null && documentGate.isReady() && !it.busy && documentReads == 0)
+    }
+
+    /** A rejected mutation stays blocked; this action retries only its independently gated document GET. */
+    fun refreshDocument() {
+        if (rejectedRegistrationVersion == null || _state.value.busy || documentReads != 0 || !documentGate.isReady()) return
+        _state.update { it.copy(busy = true, formError = null, errorPresentation = null) }
+        updateReadiness()
+        viewModelScope.launch {
+            try { fetchDocument() } catch (_: AppError) { /* Only the GET gate receives this failure. */ }
+            finally { _state.update { it.copy(busy = false) }; updateReadiness() }
+        }
     }
 
     private suspend fun fetchDocument(): ConsentDocument {
         if (!documentGate.isReady()) throw checkNotNull(documentFailure)
         val generation = ++documentGeneration
+        documentReads++
+        updateReadiness()
         return try {
             authApi.getConsentDocument(ConsentType.PERSONAL_DATA).also { document ->
                 if (generation == documentGeneration) {
@@ -97,6 +115,9 @@ class ConsentViewModel @Inject constructor(
                     formError = "Не получилось загрузить документ согласия") }
             }
             throw error
+        } finally {
+            documentReads--
+            updateReadiness()
         }
     }
 
@@ -135,10 +156,15 @@ class ConsentViewModel @Inject constructor(
                 session.start(response.userId, TokenPair(response.accessToken, response.refreshToken), registered = true)
                 _registered.value = true
             } catch (e: AppError) {
+                if (attemptedVersion == null) {
+                    _state.update { it.copy(busy = false) }
+                    updateReadiness()
+                    return@launch
+                }
                 retryGate.record(e)
                 _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
                 when {
-                    attemptedVersion != null && e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_OUTDATED -> {
+                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_OUTDATED -> {
                         // Preserve the denied body/key until a successful GET actually changes its document version.
                         // Only that corrected body and a fresh affirmative tick may select a different action key.
                         rejectedRegistrationVersion = attemptedVersion
@@ -154,6 +180,7 @@ class ConsentViewModel @Inject constructor(
                 }
             } finally {
                 _state.update { it.copy(busy = false) }
+                updateReadiness()
             }
         }
     }

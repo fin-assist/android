@@ -4,6 +4,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -121,7 +124,7 @@ class AiConsentViewModelTest {
         assertEquals(before + 1, auth.documentRequests)
         assertEquals(document, vm.state.value.document)
     }
-    private fun vm() = AiConsentViewModel(auth, profile, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
+    private fun vm(clock: ru.finassist.pf.core.common.time.ElapsedClock = ru.finassist.pf.core.common.time.ElapsedClock { 0L }) = AiConsentViewModel(auth, profile, clock)
 
     private fun outdatedFalse() = AppError.Api(ErrorCodes.CONSENT_OUTDATED, 409,
         response = ru.finassist.pf.core.common.error.ErrorResponseInfo(ErrorCodes.CONSENT_OUTDATED, 409, requestRetryable = false))
@@ -217,4 +220,108 @@ class AiConsentViewModelTest {
         vm.grant()
         assertEquals(listOf("2", "3"), profile.attempts)
     }
+
+    @Test fun `offline corrective document GET recovers through an independent read then a fresh tick`() {
+        val vm = vm()
+        auth.documentFailure = AppError.Offline()
+        profile.failure = outdatedFalse()
+        vm.setAccepted(true)
+        vm.grant()
+        assertTrue(vm.state.value.documentRefreshRequired)
+        assertTrue(vm.state.value.documentRefreshReady)
+        auth.documentFailure = null
+        auth.nextDocument = document.copy(version = "3")
+        profile.failure = null
+        vm.refreshDocument()
+        assertEquals(3, auth.documentRequests)
+        assertEquals(listOf("2"), profile.attempts)
+        assertFalse(vm.state.value.documentRefreshRequired)
+        assertFalse(vm.state.value.accepted)
+        vm.grant()
+        assertEquals(listOf("2"), profile.attempts)
+        vm.setAccepted(true)
+        vm.grant()
+        assertEquals(listOf("2", "3"), profile.attempts)
+        assertTrue(vm.state.value.granted)
+    }
+
+    @Test fun `same-version manual reads keep the rejected PUT blocked and allow another read`() {
+        val vm = vm()
+        profile.failure = outdatedFalse()
+        vm.setAccepted(true)
+        vm.grant()
+        repeat(2) {
+            assertTrue(vm.state.value.documentRefreshReady)
+            vm.refreshDocument()
+            assertTrue(vm.state.value.documentRefreshRequired)
+            assertFalse(vm.state.value.retryReady)
+            vm.grant()
+        }
+        assertEquals(4, auth.documentRequests)
+        assertEquals(listOf("2"), profile.attempts)
+    }
+
+    @Test fun `pending manual document GET cannot be duplicated or converted into a PUT`() {
+        val vm = vm()
+        profile.failure = outdatedFalse()
+        vm.setAccepted(true)
+        vm.grant()
+        val reply = CompletableDeferred<Unit>()
+        auth.documentGate = reply
+        vm.refreshDocument()
+        assertTrue(vm.state.value.busy)
+        assertFalse(vm.state.value.documentRefreshReady)
+        repeat(3) { vm.refreshDocument(); vm.grant() }
+        assertEquals(3, auth.documentRequests)
+        assertEquals(listOf("2"), profile.attempts)
+        reply.complete(Unit)
+        assertFalse(vm.state.value.busy)
+        assertTrue(vm.state.value.documentRefreshReady)
+        assertFalse(vm.state.value.retryReady)
+    }
+
+    @Test fun `manual GET taps cannot restart the Retry-After document deadline`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val vm = vm(ru.finassist.pf.core.common.time.ElapsedClock { testScheduler.currentTime })
+        auth.documentFailure = documentReadRefusal(true)
+        profile.failure = outdatedFalse()
+        vm.setAccepted(true)
+        vm.grant()
+        auth.documentFailure = null
+        auth.nextDocument = document.copy(version = "3")
+        advanceTimeBy(2_000); runCurrent()
+        vm.refreshDocument()
+        assertEquals(2, auth.documentRequests)
+        assertFalse(vm.state.value.documentRefreshReady)
+        advanceTimeBy(2_999); runCurrent()
+        vm.refreshDocument()
+        assertEquals(2, auth.documentRequests)
+        advanceTimeBy(1); runCurrent()
+        assertTrue(vm.state.value.documentRefreshReady)
+        vm.refreshDocument()
+        assertEquals(3, auth.documentRequests)
+        assertTrue(vm.state.value.retryReady)
+        assertFalse(vm.state.value.documentRefreshRequired)
+        assertEquals(listOf("2"), profile.attempts)
+    }
+
+    @Test fun `explicit false on GET stays independent and blocks rereads after the wait`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val vm = vm(ru.finassist.pf.core.common.time.ElapsedClock { testScheduler.currentTime })
+        auth.documentFailure = documentReadRefusal(false)
+        profile.failure = outdatedFalse()
+        vm.setAccepted(true)
+        vm.grant()
+        advanceTimeBy(60_000); runCurrent()
+        repeat(3) { vm.refreshDocument(); vm.grant() }
+        assertEquals(2, auth.documentRequests)
+        assertEquals(listOf("2"), profile.attempts)
+        assertTrue(vm.state.value.documentRefreshRequired)
+        assertFalse(vm.state.value.documentRefreshReady)
+    }
+
+    private fun documentReadRefusal(retryable: Boolean) = AppError.RateLimited(null, 5,
+        ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = retryable,
+            retryAfterSeconds = 5, timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0)))
+
 }

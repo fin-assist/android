@@ -40,4 +40,9 @@ class AiConsentDesignCheckTest {
     // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
     @Test fun serverWarning() = capture("AiConsentServerWarning", state.copy(formError = "Не получилось сохранить согласие", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
 
+    @Test fun documentRecovery() = capture("AiConsentDocumentRecovery", state.copy(documentRefreshRequired = true, documentRefreshReady = true,
+        retryReady = false, requestRetryable = false, formError = "Не получилось загрузить документ согласия"))
+    @Test fun documentRecoveryDark() = capture("AiConsentDocumentRecoveryDark", state.copy(documentRefreshRequired = true, documentRefreshReady = true,
+        retryReady = false, requestRetryable = false, formError = "Не получилось загрузить документ согласия"), dark = true)
+
 }

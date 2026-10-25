@@ -270,6 +270,7 @@ fun ConsentScreen(onBack: () -> Unit, onExpired: () -> Unit, vm: ConsentViewMode
         onOpenDocument = { url -> runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } },
         onAccepted = vm::setAccepted,
         onSubmit = vm::submit,
+        onRefreshDocument = vm::refreshDocument,
     )
 }
 
@@ -280,6 +281,7 @@ internal fun ConsentContent(
     onOpenDocument: (url: String) -> Unit,
     onAccepted: (Boolean) -> Unit,
     onSubmit: () -> Unit,
+    onRefreshDocument: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize().testTag(AuthTags.CONSENT)) {
         PfPageHeader("Регистрация", onBack = onBack)
@@ -343,7 +345,11 @@ internal fun ConsentContent(
                     Spacer(Modifier.height(PfTheme.dimens.space3))
                 }
                 PfButton(
-                    "Создать аккаунт", enabled = state.retryReady && !state.replayUnavailable, onClick = onSubmit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Создаём…",
+                    if (state.documentRefreshRequired) "Обновить документ" else "Создать аккаунт",
+                    enabled = if (state.documentRefreshRequired) state.documentRefreshReady else state.retryReady && !state.replayUnavailable,
+                    onClick = if (state.documentRefreshRequired) onRefreshDocument else onSubmit,
+                    variant = ButtonVariant.PRIMARY, block = true, busy = state.busy,
+                    busyText = if (state.documentRefreshRequired) "Загружаем…" else "Создаём…",
                     modifier = Modifier.testTag(AuthTags.CONSENT_SUBMIT),
                 )
                 PfLinkedText(

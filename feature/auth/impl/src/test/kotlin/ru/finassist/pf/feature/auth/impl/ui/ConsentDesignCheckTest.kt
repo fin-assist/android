@@ -37,4 +37,9 @@ class ConsentDesignCheckTest {
     // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
     @Test fun serverWarning() = capture("ConsentServerWarning", state.copy(formError = "Не получилось создать аккаунт", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
 
+    @Test fun documentRecovery() = capture("ConsentDocumentRecovery", state.copy(documentRefreshRequired = true, documentRefreshReady = true,
+        retryReady = false, requestRetryable = false, formError = "Не получилось загрузить документ согласия"))
+    @Test fun documentRecoveryDark() = capture("ConsentDocumentRecoveryDark", state.copy(documentRefreshRequired = true, documentRefreshReady = true,
+        retryReady = false, requestRetryable = false, formError = "Не получилось загрузить документ согласия"), dark = true)
+
 }
