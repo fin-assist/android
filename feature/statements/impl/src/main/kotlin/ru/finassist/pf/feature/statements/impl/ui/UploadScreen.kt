@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.content.Intent
 import android.net.Uri
@@ -156,6 +157,9 @@ internal fun UploadContent(
                 .padding(horizontal = d.space5)
                 .padding(top = d.space4, bottom = d.space4),
         ) {
+            state.guideErrorPresentation?.let {
+                ErrorMessage(it, "Не получилось обновить условия загрузки. Используем сохранённые условия", modifier = Modifier.padding(horizontal = d.space5))
+            }
             when (val phase = state.phase) {
                 UploadPhase.Loading -> Unit
                 // First run has no back arrow: these states must offer a way on.
@@ -170,6 +174,7 @@ internal fun UploadContent(
                     config = state.config ?: (phase as? UploadPhase.Guide)?.config ?: return@Column,
                     busy = busy,
                     offline = state.uploadOffline,
+                    retryEnabled = state.uploadRetryReady,
                     canSkip = firstRun || (state.config ?: (phase as? UploadPhase.Guide)?.config)?.loaded == null,
                     onShowFallback = { onShowFallback(true) },
                     onDownload = { url -> onOpenUrl(url) },
@@ -207,6 +212,7 @@ private fun ColumnScope.Guide(
     config: ImportConfig,
     busy: UploadPhase.Busy?,
     offline: Boolean,
+    retryEnabled: Boolean = true,
     canSkip: Boolean,
     onShowFallback: () -> Unit,
     onDownload: (String) -> Unit,
@@ -266,7 +272,7 @@ private fun ColumnScope.Guide(
             modifier = Modifier.testTag(StatementsTags.UPLOAD_SEND_OFFLINE),
             action = {
                 Box(Modifier.padding(top = d.space2)) {
-                    PfButton("Повторить", onClick = onRetryUpload, variant = ButtonVariant.SECONDARY, modifier = Modifier.testTag(StatementsTags.UPLOAD_SEND_RETRY))
+                    PfButton("Повторить", onClick = onRetryUpload, enabled = retryEnabled, variant = ButtonVariant.SECONDARY, modifier = Modifier.testTag(StatementsTags.UPLOAD_SEND_RETRY))
                 }
             },
         )
@@ -340,7 +346,9 @@ private fun ColumnScope.ErrorBlock(phase: UploadPhase.Error, onPickAnother: () -
             PfStatusHero(tone = HeroTone.WARNING, icon = PfIcons.ALERT, centered = false)
             Spacer(Modifier.height(d.space5))
             Text("Не получилось прочитать файл", style = PfTheme.type.title1, color = c.text, modifier = Modifier.semantics { heading() })
-            Text(text.reason, style = PfTheme.type.lead, color = c.textMuted, modifier = Modifier.padding(top = d.space1))
+            val presentation = phase.presentation
+            if (presentation != null) ErrorMessage(presentation, text.reason, modifier = Modifier.padding(top = d.space1))
+            else Text(text.reason, style = PfTheme.type.lead, color = c.textMuted, modifier = Modifier.padding(top = d.space1))
             Spacer(Modifier.height(d.space5))
             PfCard(flush = true) {
                 FileRow("Файл", phase.fileName, divider = true)

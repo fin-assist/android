@@ -57,7 +57,7 @@ class SearchViewModelTest {
 
     private fun vm(preset: OperationsFilter? = null, flags: StaticFlags = StaticFlags()): SearchViewModel {
         val args = preset?.let { mapOf("filter" to PfNavTypes.operationsFilter.serializeAsValue(it)) }.orEmpty()
-        return SearchViewModel(SavedStateHandle(args), api, categories, operations, operations, flags, tracker, reportZone)
+        return SearchViewModel(SavedStateHandle(args), api, categories, operations, operations, flags, tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
     }
 
     private fun found(vararg ids: String, total: Int? = null, range: DateRange? = window, older: Boolean? = null) =

@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.availability.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,23 +30,33 @@ class AvailabilityViewModel @Inject constructor(
     val gate: ServiceGate,
     private val auth: AuthApi,
     private val clock: Clock,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     private val _checking = MutableStateFlow(false)
     val checking: StateFlow<Boolean> = _checking.asStateFlow()
 
     private var scheduled: Job? = null
+    private var automaticProbeUsed = false
 
     init {
         viewModelScope.launch {
-            gate.state.collect { s -> if (s is ServiceGate.State.Maintenance) schedule(s) else scheduled?.cancel() }
+            gate.state.collect { s ->
+                if (s is ServiceGate.State.Maintenance) {
+                    if (!automaticProbeUsed) schedule(s)
+                } else {
+                    scheduled?.cancel()
+                    automaticProbeUsed = false
+                }
+            }
         }
     }
 
     private fun schedule(s: ServiceGate.State.Maintenance) {
         scheduled?.cancel()
         scheduled = viewModelScope.launch {
-            val wait = Duration.between(clock.now(), s.retryAt).toMillis()
+            val wait = s.deadline?.remainingMillis(elapsedClock) ?: return@launch
             if (wait > 0) delay(wait)
+            automaticProbeUsed = true
             probe()
         }
     }
@@ -53,6 +64,9 @@ class AvailabilityViewModel @Inject constructor(
     /** «Проверить сейчас»: replaces the scheduled check (the new state of the gate schedules the next one). */
     fun checkNow() {
         if (_checking.value) return
+        val maintenance = gate.maintenance ?: return
+        if ((maintenance.deadline?.remainingMillis(elapsedClock) ?: 0L) > 0) return
+        automaticProbeUsed = true
         scheduled?.cancel()
         viewModelScope.launch { probe() }
     }
@@ -72,10 +86,7 @@ class AvailabilityViewModel @Inject constructor(
         } catch (e: AppError) {
             // Maintenance again: the gate already holds the new retry moment. Anything else (no network, a server
             // error): the screen stays, the next check after the same pause.
-            val s = gate.state.value
-            if (e !is AppError.Maintenance && s is ServiceGate.State.Maintenance) {
-                gate.maintenance(s.until, ServiceGate.DEFAULT_RETRY_SECONDS, clock.now())
-            }
+            // A fresh refusal never starts another automatic loop. A user may make a guarded manual check.
         } finally {
             _checking.value = false
             probing.unlock()

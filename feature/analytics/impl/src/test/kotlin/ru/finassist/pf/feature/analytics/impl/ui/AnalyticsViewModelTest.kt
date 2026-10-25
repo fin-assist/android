@@ -162,7 +162,7 @@ class AnalyticsViewModelTest {
 
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
-    private fun vm() = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker, reportZone)
+    private fun vm() = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
 
     private fun opened(params: AnalyticsParams? = null) = vm().apply { init(params) }
 
@@ -241,7 +241,7 @@ class AnalyticsViewModelTest {
 
     @Test fun `the blocks follow their flags`() {
         val off = Flag.entries.associateWith { false }.toMutableMap()
-        val vm = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(off), tracker, reportZone)
+        val vm = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(off), tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
         assertEquals(
             AnalyticsBlocks(
                 hidden = setOf(
@@ -253,7 +253,7 @@ class AnalyticsViewModelTest {
             vm.state.value.blocks,
         )
 
-        val on = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(Flag.entries.associateWith { true }.toMutableMap()), tracker, reportZone)
+        val on = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(Flag.entries.associateWith { true }.toMutableMap()), tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
         assertEquals(AnalyticsBlocks(), on.state.value.blocks)
     }
 
@@ -536,7 +536,7 @@ class AnalyticsViewModelTest {
         assertTrue(supports!!.contains("tile_group@1") && supports.contains("insight_card@1"))
         assertEquals("analytics_order:a", exp)
 
-        val b = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(variants = mutableMapOf(Experiment.ANALYTICS_ORDER to "b")), tracker, reportZone)
+        val b = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(variants = mutableMapOf(Experiment.ANALYTICS_ORDER to "b")), tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
         b.init(null)
         assertEquals("analytics_order:b", api.extras.last().second)
     }
@@ -564,7 +564,7 @@ class AnalyticsViewModelTest {
         api.answers += data()
         api.answers += data()
         val flags = FakeFlags()
-        val vm = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker, reportZone)
+        val vm = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
         vm.init(null)
         assertEquals(1, vm.state.value.response)
         val tiles = Block(id = "tiles", type = BlockType.TILE_GROUP)
@@ -587,7 +587,7 @@ class AnalyticsViewModelTest {
     @Test fun `a config change with the same variants does not ask again`() {
         api.answers += data()
         val flags = FakeFlags()
-        val vm = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker, reportZone)
+        val vm = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
         vm.init(null)
         flags.set(Flag.ANALYTICS_BLOCK_BANK_FEES, false)
         assertEquals(1, api.extras.size)

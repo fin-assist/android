@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -119,14 +120,17 @@ internal fun PhoneContent(state: PhoneUiState, onInput: (TextFieldValue) -> Unit
                 placeholder = "+7 900 000-00-00",
                 visualTransformation = PhoneMaskTransformation,
                 hint = "Для подтверждения позвоните нам с этого номера",
-                error = state.error,
+                error = state.error.takeIf { state.errorPresentation == null },
                 keyboardType = KeyboardType.Phone,
                 imeAction = ImeAction.Done,
                 onImeAction = onSubmit,
                 testTag = AuthTags.PHONE_INPUT,
             )
+            state.errorPresentation?.let { presentation ->
+                ErrorMessage(presentation, state.error ?: "Не получилось отправить номер. Попробуйте ещё раз")
+            }
             PfButton(
-                "Продолжить", onClick = onSubmit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Отправляем…",
+                "Продолжить", enabled = state.retryReady && !state.replayUnavailable, onClick = onSubmit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Отправляем…",
                 modifier = Modifier.testTag(AuthTags.PHONE_SUBMIT),
             )
         }
@@ -173,7 +177,7 @@ fun CallScreen(onBack: () -> Unit, onNewUser: () -> Unit, onRegistrationClosed: 
             runCatching { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${state.callbackNumber}"))) }
         },
         onRequestAgain = vm::requestAgain,
-        onRetry = vm::watch,
+        onRetry = vm::retry,
         onChangeNumber = onBack,
     )
 }
@@ -236,13 +240,12 @@ internal fun CallContent(
                 }
                 // The deadline passed by the device clock: the number is gone while the stream confirms the status.
                 CallPhase.CHECKING -> Unit
-                CallPhase.LOCKED -> PfNotice(
-                    state.lockText.orEmpty(),
-                    tone = NoticeTone.WARNING, alert = true,
-                )
+                CallPhase.LOCKED -> ErrorMessage(state.errorPresentation ?: ru.finassist.pf.core.common.error.ErrorPresentation(), state.lockText.orEmpty())
+                CallPhase.ERROR -> ErrorMessage(state.errorPresentation ?: ru.finassist.pf.core.common.error.ErrorPresentation(), "Не получилось проверить звонок. Попробуйте ещё раз",
+                    onRetry = if (!state.retryReady || state.replayUnavailable) null else onRetry)
                 CallPhase.OFFLINE -> {
                     PfNotice("Нет сети — не можем дождаться звонка. Проверьте интернет", tone = NoticeTone.WARNING, alert = true)
-                    PfButton("Повторить", onClick = onRetry, block = true)
+                    PfButton("Повторить", onClick = onRetry, enabled = state.retryReady && !state.replayUnavailable, block = true)
                 }
             }
             Row { PfLink("Изменить номер", onClick = onChangeNumber, modifier = Modifier.testTag(AuthTags.CALL_CHANGE_NUMBER)) }
@@ -334,9 +337,13 @@ internal fun ConsentContent(
                     modifier = Modifier.testTag(AuthTags.CONSENT_CHECKBOX),
                 )
                 Spacer(Modifier.weight(1f).heightIn(min = PfTheme.dimens.space6))
-                state.formError?.let { PfNotice(it, tone = NoticeTone.WARNING, alert = true); Spacer(Modifier.height(PfTheme.dimens.space3)) }
+                state.formError?.let {
+                    val presentation = state.errorPresentation
+                    if (presentation != null) ErrorMessage(presentation, it) else PfNotice(it, tone = NoticeTone.WARNING, alert = true)
+                    Spacer(Modifier.height(PfTheme.dimens.space3))
+                }
                 PfButton(
-                    "Создать аккаунт", onClick = onSubmit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Создаём…",
+                    "Создать аккаунт", enabled = state.retryReady && !state.replayUnavailable, onClick = onSubmit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Создаём…",
                     modifier = Modifier.testTag(AuthTags.CONSENT_SUBMIT),
                 )
                 PfLinkedText(

@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.availability.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -30,7 +31,8 @@ class AvailabilityViewModelTest {
         override fun now(): OffsetDateTime = start.plusNanos(scheduler.currentTime * 1_000_000)
         override val zone: ZoneId = Clock.MOSCOW
     }
-    private val gate = ServiceGate()
+    private val elapsedClock = ElapsedClock { scheduler.currentTime }
+    private val gate = ServiceGate(elapsedClock)
 
     /** Each probe takes the next answer: `null` — success; an [AppError] — thrown (and reported like the network layer). */
     private val answers = ArrayDeque<AppError?>()
@@ -52,8 +54,8 @@ class AvailabilityViewModelTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    @Test fun `the probe waits for Retry-After, another maintenance moves it, a success reopens`() {
-        val vm = AvailabilityViewModel(gate, auth, clock)
+    @Test fun `one automatic probe respects Retry-After and a fresh refusal needs a guarded manual check`() {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
         gate.maintenance(null, 60, clock.now())
         answers += AppError.Maintenance(null, 120)
         scheduler.advanceTimeBy(59_000); scheduler.runCurrent()
@@ -66,30 +68,35 @@ class AvailabilityViewModelTest {
         scheduler.advanceTimeBy(119_000); scheduler.runCurrent()
         assertEquals(1, probes, "the new Retry-After counts")
         scheduler.advanceTimeBy(1_000); scheduler.runCurrent()
+        assertEquals(1, probes, "a new refusal must not start an automatic loop")
+        vm.checkNow(); scheduler.runCurrent()
         assertEquals(2, probes)
         assertEquals(ServiceGate.State.Open, gate.state.value)
         vm.hashCode()
     }
 
     @Test fun `a maintenance that began during the probe stays after its success`() {
-        val vm = AvailabilityViewModel(gate, auth, clock)
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
         gate.maintenance(null, 15, clock.now())
         answers += null
         beforeSuccess = { gate.maintenance(null, 600, clock.now()) }
         scheduler.advanceTimeBy(15_000); scheduler.runCurrent()
         assertEquals(1, probes)
-        assertEquals(ServiceGate.State.Maintenance(null, clock.now().plusSeconds(600)), gate.state.value)
+        assertEquals(clock.now().plusSeconds(600), assertIs<ServiceGate.State.Maintenance>(gate.state.value).retryAt)
         vm.hashCode()
     }
 
-    @Test fun `the check button asks at once, no network keeps the screen and waits again`() {
-        val vm = AvailabilityViewModel(gate, auth, clock)
+    @Test fun `the check button cannot bypass Retry-After and network failure does not start a loop`() {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
         gate.maintenance(null, 600, clock.now())
         answers += AppError.Offline()
         vm.checkNow(); scheduler.runCurrent()
+        assertEquals(0, probes)
+        scheduler.advanceTimeBy(600_000); scheduler.runCurrent()
         assertEquals(1, probes)
-        val m = assertIs<ServiceGate.State.Maintenance>(gate.state.value)
-        assertEquals(clock.now().plusSeconds(ServiceGate.DEFAULT_RETRY_SECONDS.toLong()), m.retryAt)
+        assertIs<ServiceGate.State.Maintenance>(gate.state.value)
+        scheduler.advanceTimeBy(600_000); scheduler.runCurrent()
+        assertEquals(1, probes)
     }
 
     @Test fun `the time of the end reads as a promise for today or another day`() {
@@ -105,7 +112,7 @@ class AvailabilityViewModelTest {
     }
 
     @Test fun `the button during a scheduled check sends one request, not two`() {
-        val vm = AvailabilityViewModel(gate, auth, clock)
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
         gate.maintenance(null, 15, clock.now())
         scheduler.runCurrent()
         answers += null

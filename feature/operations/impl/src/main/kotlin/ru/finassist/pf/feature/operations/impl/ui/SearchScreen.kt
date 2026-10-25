@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfInsets
@@ -158,15 +159,23 @@ internal fun SearchContent(
         if (state.selectionDropped) {
             PfNotice("Выборка с «Аналитики» больше не действует — ищем без неё", tone = NoticeTone.INFO, modifier = Modifier.padding(horizontal = d.space5))
         }
+        state.errorPresentation?.let { presentation ->
+            ErrorMessage(
+                presentation,
+                if (state.result == SearchResult.TooMany) "Слишком много операций. Выберите период покороче или добавьте фильтр" else "Не получилось найти. Попробуйте ещё раз",
+                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
+                onRetry = if (!state.retryReady || state.result == SearchResult.TooMany) null else actions.retry,
+            )
+        }
         when (val r = state.result) {
             // Nothing under the chips until the first search (mockup `SearchInitial`).
             SearchResult.Initial -> Box(Modifier.weight(1f).fillMaxWidth().testTag(OperationsTags.SEARCH_INITIAL))
             SearchResult.Loading -> Unit
-            SearchResult.TooMany -> PfEmptyState(PfIcons.SLIDERS, "Слишком много операций", "Выберите период покороче или добавьте фильтр")
+            SearchResult.TooMany -> if (state.errorPresentation == null) PfEmptyState(PfIcons.SLIDERS, "Слишком много операций", "Выберите период покороче или добавьте фильтр")
             SearchResult.Offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
                 PfButton("Повторить", onClick = actions.retry, variant = ButtonVariant.PRIMARY)
             }
-            SearchResult.Failed -> PfEmptyState(PfIcons.ALERT, "Не получилось найти", "Попробуйте ещё раз") {
+            SearchResult.Failed -> if (state.errorPresentation == null) PfEmptyState(PfIcons.ALERT, "Не получилось найти", "Попробуйте ещё раз") {
                 PfButton("Повторить", onClick = actions.retry, variant = ButtonVariant.PRIMARY)
             }
             is SearchResult.Found -> if (r.totalCount == 0) {

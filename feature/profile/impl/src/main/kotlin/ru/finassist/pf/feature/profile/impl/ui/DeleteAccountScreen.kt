@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.profile.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Text
@@ -25,7 +29,7 @@ import ru.finassist.pf.feature.auth.api.SessionRepository
 import javax.inject.Inject
 
 /** The deletion dialog over the profile: shown after the passcode, busy while deleting, an error inside it. */
-data class DeleteUiState(val dialog: Boolean = false, val deleting: Boolean = false, val error: String? = null)
+data class DeleteUiState(val dialog: Boolean = false, val deleting: Boolean = false, val error: String? = null, val errorPresentation: ErrorPresentation? = null, val requestRetryable: Boolean? = null, val retryReady: Boolean = true)
 
 /**
  * Account deletion as on the mockups (`DeleteAccount*`, FIN-40): profile link → passcode (applock `Confirm`) →
@@ -37,27 +41,31 @@ class DeleteAccountViewModel @Inject constructor(
     private val profileApi: ProfileApi,
     private val session: SessionRepository,
     private val tracker: Tracker,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(DeleteUiState())
+    private val retryGate = RequestRetryGate(elapsedClock)
+    init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<DeleteUiState> = _state
 
     /** The passcode step reported success: ask for the final confirmation. */
-    fun onPasscodeConfirmed() = _state.update { DeleteUiState(dialog = true) }
+    fun onPasscodeConfirmed() = _state.update { DeleteUiState(dialog = true, retryReady = retryGate.isReady()) }
 
     /** «Отмена» or system back; ignored while the request runs. */
     fun dismiss() = _state.update { if (it.deleting) it else DeleteUiState() }
 
     /** «Удалить навсегда». A repeat after success also returns 204 (api.md 2.5). */
     fun delete() {
-        if (_state.value.deleting) return
+        if (_state.value.deleting || !retryGate.isReady()) return
         viewModelScope.launch {
-            _state.update { it.copy(deleting = true, error = null) }
+            _state.update { it.copy(deleting = true, error = null, errorPresentation = null, requestRetryable = null) }
             try {
                 profileApi.deleteAccount()
                 tracker.track(Events.PROFILE_ACCOUNT_DELETED)
                 session.clearLocal(reason = AuthRoutes.Phone.REASON_DELETED)
             } catch (e: AppError) {
-                _state.update { it.copy(deleting = false, error = if (e is AppError.Offline) OFFLINE else FAILED) }
+                retryGate.record(e)
+                _state.update { it.copy(deleting = false, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable, error = if (e is AppError.Offline) OFFLINE else FAILED) }
             }
         }
     }
@@ -79,13 +87,15 @@ internal fun DeleteAccountDialog(state: DeleteUiState, onDelete: () -> Unit, onD
         onConfirm = onDelete,
         onDismiss = onDismiss,
         busy = state.deleting,
+        confirmEnabled = state.retryReady,
         busyText = "Удаляем…",
     ) {
         Spacer(Modifier.height(PfTheme.dimens.space2))
         Text("Копию данных можно запросить в поддержке до удаления.", style = PfTheme.type.body, color = PfTheme.colors.textMuted)
         state.error?.let {
             Spacer(Modifier.height(PfTheme.dimens.space3))
-            PfNotice(it, tone = NoticeTone.WARNING, alert = true)
+            val presentation = state.errorPresentation
+            if (presentation != null) ErrorMessage(presentation, it) else PfNotice(it, tone = NoticeTone.WARNING, alert = true)
         }
     }
 }

@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
 import java.time.ZoneId
 import ru.finassist.pf.core.common.time.Clock
 import android.content.Context
@@ -144,7 +145,7 @@ class UploadViewModelTest {
     }
 
     private fun newViewModel(flags: StaticFlags = StaticFlags()) =
-        UploadViewModel(context, api, repository, flags, tracker, IdempotencyKeys(store), clock)
+        UploadViewModel(context, api, repository, flags, tracker, IdempotencyKeys(store), clock, ElapsedClock { 0L })
 
     @After fun tearDown() = Dispatchers.resetMain()
 
@@ -301,7 +302,7 @@ class UploadViewModelTest {
         api.uploadFailures += AppError.Api(ErrorCodes.WRONG_FORMAT, 400)
         vm.onFilePicked(uri)
         await("the rejection") { it.phase is UploadPhase.Error }
-        assertEquals(UploadPhase.Error(ErrorCodes.WRONG_FORMAT, name, config), vm.state.value.phase)
+        assertEquals(UploadPhase.Error(ErrorCodes.WRONG_FORMAT, name, config, presentation = ru.finassist.pf.core.common.error.ErrorPresentation()), vm.state.value.phase)
         assertEquals(mapOf("code" to ErrorCodes.WRONG_FORMAT), tracker.events.last { it.first == Events.STATEMENTS_UPLOAD_FAILED }.second)
 
         vm.backToGuide()
@@ -316,13 +317,26 @@ class UploadViewModelTest {
         api.uploadFailures += AppError.Server(500)
         vm.onFilePicked(uri)
         await("the failure") { it.phase is UploadPhase.Error }
-        assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, name, config), vm.state.value.phase)
+        assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, name, config, presentation = ru.finassist.pf.core.common.error.ErrorPresentation()), vm.state.value.phase)
 
         vm.backToGuide()
         awaitIdle()
         vm.onFilePicked(uri)
         awaitAccepted()
         assertEquals(api.keys[0], api.keys[1])
+    }
+
+    @Test fun `a restored upload UUID is kept without resending the same file`() {
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest("OFXHEADER:100".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val keys = IdempotencyKeys(store)
+        val oldKey = kotlinx.coroutines.runBlocking { keys.keyFor("statements.upload:$hash") }
+        vm.onFilePicked(uri)
+        await("unsafe replay blocked") { it.phase is UploadPhase.Error }
+        awaitIdle()
+        assertTrue(api.keys.isEmpty())
+        assertFalse(vm.state.value.uploadRetryReady)
+        assertEquals(oldKey, kotlinx.coroutines.runBlocking { keys.keyFor("statements.upload:$hash") })
     }
 
     @Test fun `an accepted file is a final answer - the same file later is a new upload`() {
@@ -384,7 +398,7 @@ class UploadViewModelTest {
         api.streams += flowOf(ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, "failed"))
         vm.onFilePicked(uri)
         await("the parsing error") { it.phase is UploadPhase.Error }
-        assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, name, config), vm.state.value.phase)
+        assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, name, config, presentation = ru.finassist.pf.core.common.error.ErrorPresentation()), vm.state.value.phase)
         assertNull(vm.state.value.doneUploadId)
     }
 
@@ -402,7 +416,7 @@ class UploadViewModelTest {
         api.streams += flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) }
         vm.onFilePicked(uri)
         await("the error") { it.phase is UploadPhase.Error }
-        assertEquals(UploadPhase.Error(ErrorCodes.NOT_FOUND, name, config), vm.state.value.phase)
+        assertEquals(UploadPhase.Error(ErrorCodes.NOT_FOUND, name, config, presentation = ru.finassist.pf.core.common.error.ErrorPresentation()), vm.state.value.phase)
     }
 
     // ---- maintenance and an unsupported version (FIN-177) ----

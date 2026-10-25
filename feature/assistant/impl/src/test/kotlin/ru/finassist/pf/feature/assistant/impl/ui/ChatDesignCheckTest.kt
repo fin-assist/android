@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorSeverity
+import ru.finassist.pf.core.common.error.UserMessage
 import androidx.compose.foundation.lazy.rememberLazyListState
 import org.junit.After
 import org.junit.Before
@@ -210,4 +213,8 @@ class ChatDesignCheckTest {
     @Test fun chatOffline() = capture("ChatOffline", answered.copy(offline = true), heightDp = 853)
 
     @Test fun chatLimit() = capture("ChatLimit", answered.copy(limit = limit(0)))
+    // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
+    @Test fun serverRefusal() = capture("ChatServerRefusal", answered.copy(draft = "Вопрос о расходах", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING), requestRetryable = false, askRetryReady = false, askBlocked = true))
+    @Test fun serverRefusalDark() = capture("ChatServerRefusalDark", answered.copy(draft = "Вопрос о расходах", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING), requestRetryable = false, askRetryReady = false, askBlocked = true), dark = true)
+
 }

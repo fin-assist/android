@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.time.ResponseTiming
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import kotlinx.coroutines.Dispatchers
@@ -73,7 +75,7 @@ class PhoneViewModelTest {
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
     private fun submitted(digits: String = "9161234567"): PhoneViewModel {
-        val vm = PhoneViewModel(auth, flow, tracker, clock)
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { 0L })
         vm.onInput(TextFieldValue(digits, TextRange(digits.length)))
         vm.submit()
         return vm
@@ -140,6 +142,16 @@ class PhoneViewModelTest {
         assertEquals("+79031234567", flow.phone)
     }
 
+    @Test fun `unknown origin phone key is preserved without a POST replay`() {
+        flow.phone = "+79161234567"
+        flow.phoneRequestKey = "restored-key"
+        val vm = submitted()
+        assertTrue(auth.keys.isEmpty())
+        assertEquals("restored-key", flow.phoneRequestKey)
+        assertTrue(vm.state.value.replayUnavailable)
+        assertEquals("9161234567", vm.state.value.digits)
+    }
+
     @Test fun `a new number drops the previous verification request`() {
         flow.phone = "+79031234567"
         flow.phoneRequestKey = "old"
@@ -171,7 +183,7 @@ class PhoneViewModelTest {
 
     @Test fun `the number typed before is restored with the cursor at the end`() {
         flow.phone = "+79161234567"
-        val vm = PhoneViewModel(auth, flow, tracker, clock)
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { 0L })
         assertEquals("9161234567", vm.state.value.digits)
         assertEquals(TextRange(10), vm.state.value.input.selection)
     }

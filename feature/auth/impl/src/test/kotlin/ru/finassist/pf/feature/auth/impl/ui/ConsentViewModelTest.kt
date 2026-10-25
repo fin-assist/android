@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
@@ -61,7 +62,7 @@ class ConsentViewModelTest {
         harnesses.forEach { it.close() }
     }
 
-    private fun vm() = ConsentViewModel(h.auth, h.flow, h.repo, keys)
+    private fun vm() = ConsentViewModel(h.auth, h.flow, h.repo, keys, ElapsedClock { 0L })
 
     /** Submits and waits for the request to settle: the idempotency key is read from DataStore off the main thread. */
     private fun ConsentViewModel.send() {
@@ -144,6 +145,17 @@ class ConsentViewModelTest {
         val sha = java.security.MessageDigest.getInstance("SHA-256").digest("reg_1|pd-1".toByteArray())
             .joinToString("") { "%02x".format(it) }
         keys.keyFor("auth.register:$sha").value
+    }
+
+    @Test fun `restored registration key has no fresh replay proof and is never renewed implicitly`() {
+        val restored = keysFor() // legacy constructor/storage record has unknown origin
+        val vm = vm()
+        vm.acceptAndSubmit()
+        assertTrue(requests.isEmpty())
+        assertTrue(vm.state.value.replayUnavailable)
+        assertFalse(vm.state.value.busy)
+        assertEquals(restored, keysFor())
+        assertEquals("reg_1", h.flow.registrationToken)
     }
 
     @Test fun `an outdated consent reloads the document and asks for a new tick`() {

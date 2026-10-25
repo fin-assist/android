@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,6 +35,10 @@ data class ConsentUiState(
     val document: ConsentDocument? = null,
     /** Registration token expired: the user has to call again. */
     val expired: Boolean = false,
+    val errorPresentation: ErrorPresentation? = null,
+    val requestRetryable: Boolean? = null,
+    val retryReady: Boolean = true,
+    val replayUnavailable: Boolean = false,
 )
 
 @HiltViewModel
@@ -39,17 +47,32 @@ class ConsentViewModel @Inject constructor(
     private val flow: SignInFlow,
     private val session: SessionRepositoryImpl,
     private val keys: IdempotencyKeys,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ConsentUiState(phoneDisplay = PhoneFormat.display(PhoneFormat.digits(flow.phone))))
+    private val documentGate = RequestRetryGate(elapsedClock)
+    private var documentFailure: AppError? = null
+    private val retryGate = RequestRetryGate(elapsedClock)
+    init {
+        viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready && documentGate.isReady()) } } }
+        viewModelScope.launch { documentGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready && retryGate.isReady()) } } }
+    }
     val state: StateFlow<ConsentUiState> = _state
     private val _registered = MutableStateFlow(false)
     val registered: StateFlow<Boolean> = _registered
 
     init {
         viewModelScope.launch {
-            runCatching { authApi.getConsentDocument(ConsentType.PERSONAL_DATA) }
+            runCatching { fetchDocument() }
                 .onSuccess { doc -> _state.update { it.copy(document = doc) } }
+                .onFailure { failure -> if (failure is AppError) _state.update { it.copy(errorPresentation = failure.presentation.takeUnless { failure is AppError.Offline }, formError = "Не получилось загрузить документ согласия") } }
         }
+    }
+
+    private suspend fun fetchDocument(): ru.finassist.pf.core.api.model.ConsentDocument {
+        if (!documentGate.isReady()) throw checkNotNull(documentFailure)
+        return try { authApi.getConsentDocument(ConsentType.PERSONAL_DATA).also { documentFailure = null } }
+        catch (error: AppError) { documentFailure = error; documentGate.record(error); throw error }
     }
 
     private fun sha256(text: String): String =
@@ -59,31 +82,40 @@ class ConsentViewModel @Inject constructor(
 
     fun submit() {
         val s = _state.value
+        if (s.busy || !retryGate.isReady() || !documentGate.isReady()) return
         if (!s.accepted) {
             _state.update { it.copy(error = "Без согласия мы не сможем создать аккаунт и хранить ваши данные") }
             return
         }
         val token = flow.registrationToken ?: run { _state.update { it.copy(expired = true) }; return }
         viewModelScope.launch {
-            _state.update { it.copy(busy = true, formError = null) }
+            _state.update { it.copy(busy = true, formError = null, errorPresentation = null) }
             try {
-                val version = s.document?.version ?: authApi.getConsentDocument(ConsentType.PERSONAL_DATA).version
+                val version = s.document?.version ?: fetchDocument().version
                 // The registration token is one-time: a repeat after a lost 201 (even after process death) must
                 // carry the same key, or the user would have to call again (api.md 1.3).
                 val action = "auth.register:" + sha256("$token|$version")
+                val key = keys.keyFor(action, elapsedClock)
+                if (key.replayWindow?.isOpen(elapsedClock) != true) {
+                    _state.update { it.copy(replayUnavailable = true, formError = "Не получилось восстановить создание аккаунта. Начните вход заново") }
+                    return@launch
+                }
                 val response = authApi.register(
-                    keys.keyFor(action),
+                    key,
                     RegisterRequest(registrationToken = token, pdConsentAccepted = true, pdConsentVersion = version, timezone = TimeZone.getDefault().id),
                 )
                 keys.complete(action)
                 session.start(response.userId, TokenPair(response.accessToken, response.refreshToken), registered = true)
                 _registered.value = true
             } catch (e: AppError) {
+                retryGate.record(e)
+                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
                 when {
-                    e is AppError.Api && e.code == ErrorCodes.CONSENT_OUTDATED -> {
+                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_OUTDATED -> {
                         // Document moved on while the screen was open: reload it; the new version means a new key.
                         // A new version needs a new, affirmative tick: the old one does not carry over.
-                        runCatching { authApi.getConsentDocument(ConsentType.PERSONAL_DATA) }.onSuccess { doc -> _state.update { it.copy(document = doc, accepted = false) } }
+                        documentGate.clear()
+                        runCatching { fetchDocument() }.onSuccess { doc -> retryGate.clear(); _state.update { it.copy(document = doc, accepted = false, requestRetryable = null) } }
                         _state.update { it.copy(accepted = false) }
                         _state.update { it.copy(formError = "Текст согласия обновился — прочитайте его ещё раз и подтвердите") }
                     }

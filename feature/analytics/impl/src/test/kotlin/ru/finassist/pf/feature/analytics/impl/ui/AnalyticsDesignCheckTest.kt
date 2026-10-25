@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.analytics.impl.ui
 
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorSeverity
+import ru.finassist.pf.core.common.error.UserMessage
 import ru.finassist.pf.core.api.ApiJson
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockAction
@@ -109,4 +112,7 @@ class AnalyticsDesignCheckTest {
 
     @Test fun analyticsPartial() =
         capture("AnalyticsPartial", ui(september().copy(state = analyticsState.copy(unreadLinesCount = 5))), heightDp = 2900)
+    // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
+    @Test fun serverWarning() = capture("AnalyticsServerWarning", ui(september()).copy(errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)), heightDp = 2960)
+
 }

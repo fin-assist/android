@@ -1,5 +1,10 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorResponseInfo
+import ru.finassist.pf.core.common.error.ErrorSeverity
+import ru.finassist.pf.core.common.error.UserMessage
+import ru.finassist.pf.core.common.time.ElapsedClock
 import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -9,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -163,7 +169,7 @@ class ChatViewModelBehaviourTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private fun newVm(savedState: SavedStateHandle = SavedStateHandle()) = ChatViewModel(savedState, api, tracker, clock)
+    private fun newVm(savedState: SavedStateHandle = SavedStateHandle()) = ChatViewModel(savedState, api, tracker, clock, ElapsedClock { dispatcher.scheduler.currentTime })
 
     private fun advance(ms: Long) {
         dispatcher.scheduler.advanceTimeBy(ms)
@@ -605,15 +611,30 @@ class ChatViewModelBehaviourTest {
         assertTrue(vm.state.value.sendFailed)
     }
 
-    @Test fun `a question left unsent before process death is restored and sent with its key`() {
+    @Test fun `a restored question retains unknown-origin key and draft without replaying POST`() {
         api.askOutcomes += askResponse("a1")
         val saved = SavedStateHandle(mapOf("chat.pending.text" to "Сколько я трачу на такси?", "chat.pending.key" to "k-1"))
         val vm = newVm(saved)
         assertEquals("Сколько я трачу на такси?", vm.state.value.draft)
         vm.send()
-        assertEquals(IdempotencyKey("k-1"), api.asks.single().key)
-        // A final response ends the action.
-        assertNull(saved.get<String>("chat.pending.key"))
+        assertTrue(api.asks.isEmpty())
+        assertEquals("k-1", saved.get<String>("chat.pending.key"))
+        assertEquals("Сколько я трачу на такси?", vm.state.value.draft)
+        assertTrue(vm.state.value.askBlocked)
+    }
+
+    @Test fun `an expired pending Ask cannot be replayed or silently receive a new key`() {
+        api.askOutcomes += AppError.Offline()
+        val saved = SavedStateHandle()
+        val vm = newVm(saved)
+        sendQuestion(vm)
+        val oldKey = api.asks.single().key
+        advance(24L * 60 * 60 * 1000)
+        vm.retryAfterFailure()
+        assertEquals(1, api.asks.size)
+        assertEquals(oldKey.value, saved.get<String>("chat.pending.key"))
+        assertTrue(vm.state.value.askBlocked)
+        assertTrue(vm.state.value.draft.isNotEmpty())
     }
 
     @Test fun `editing the waiting question makes it a new action`() {
@@ -919,4 +940,69 @@ class ChatViewModelBehaviourTest {
         live.tryEmit(done(remaining = 3))
         assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
     }
+    @Test fun `unknown request message preserves draft history quota and forbids direct retry`() {
+        val presentation = ErrorPresentation(UserMessage.from("Подождите: действие временно недоступно"), ErrorSeverity.WARNING)
+        api.askOutcomes += AppError.Api("FUTURE_FAILURE", 429, response = ErrorResponseInfo(
+            code = "FUTURE_FAILURE", httpStatus = 429, presentation = presentation, requestRetryable = false))
+        val vm = newVm()
+        val draft = "Сколько осталось на покупки?"
+        sendQuestion(vm, draft)
+        assertEquals(draft, vm.state.value.draft)
+        assertEquals(limit, vm.state.value.limit)
+        assertTrue(vm.state.value.items.isEmpty())
+        assertEquals(presentation, vm.state.value.errorPresentation)
+        vm.retryAfterFailure()
+        vm.setDraft(draft + " ") // whitespace keeps the same normalized request and its denial
+        vm.send()
+        advance(60_000)
+        assertEquals(1, api.asks.size)
+        api.askOutcomes += askResponse()
+        vm.setDraft("Другой вопрос о расходах")
+        vm.send()
+        assertEquals(2, api.asks.size)
+        assertTrue(api.asks.first().key != api.asks.last().key)
+    }
+
+    @Test fun `manual Ask retry waits and retains exactly the original key and draft`() {
+        api.askOutcomes += AppError.RateLimited(null, 3, ErrorResponseInfo("RATE_LIMITED", 429,
+            requestRetryable = true, timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0)))
+        api.askOutcomes += askResponse()
+        val vm = newVm()
+        sendQuestion(vm, "Сколько осталось на покупки?")
+        assertFalse(vm.state.value.askRetryReady)
+        vm.retryAfterFailure()
+        assertEquals(1, api.asks.size)
+        advance(2999)
+        vm.send()
+        assertEquals(1, api.asks.size)
+        advance(1)
+        assertTrue(vm.state.value.askRetryReady)
+        vm.retryAfterFailure()
+        assertEquals(2, api.asks.size)
+        assertEquals(api.asks.first().key, api.asks.last().key)
+        assertEquals(api.asks.first().request, api.asks.last().request)
+    }
+
+    @Test fun `terminal unknown code never activates REST consent action and keeps new attempt permission`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val event = AnswerErrorEvent(AnswerErrorCode.UNKNOWN, "SQL secret", 5, text = "legacy text", retryable = true,
+            userMessage = UserMessage.from("Безопасный ответ новой ошибки"), severity = ErrorSeverity.WARNING, rawCode = ErrorCodes.CONSENT_REQUIRED)
+        api.script("a1", flowOf(AnswerEvent.Error(event)))
+        val vm = newVm()
+        assertNull(vm.state.value.event)
+        assertEquals("Безопасный ответ новой ошибки", vm.answerItem("a1").failureText)
+        assertTrue(vm.answerItem("a1").retryable)
+        assertEquals(ErrorCodes.CONSENT_REQUIRED, vm.answerItem("a1").errorCode)
+        assertEquals(5, vm.state.value.limit?.remaining)
+    }
+
+    @Test fun `invalid canonical answer text never revives legacy diagnostic text`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        api.script("a1", flowOf(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "SQL secret", 5,
+            text = "legacy text must not be used", retryable = false, userMessage = UserMessage.Invalid))))
+        val vm = newVm()
+        assertEquals(GENERIC_ANSWER_ERROR, vm.answerItem("a1").failureText)
+        assertFalse(vm.answerItem("a1").retryable)
+    }
+
 }

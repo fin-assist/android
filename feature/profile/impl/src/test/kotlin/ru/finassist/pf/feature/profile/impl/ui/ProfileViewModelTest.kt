@@ -218,7 +218,7 @@ class ProfileViewModelTest {
         TimeZoneChecker(profileApi, session, tempPendingStore(), FakeClock(), FakeDeviceZone(MOSCOW), reportZone, tempKnownStore())
     }
 
-    private fun vm() = ProfileViewModel(profileApi, statementsApi, assistant, preferences, session, statements, flags, tracker, appLock, zoneChecker)
+    private fun vm() = ProfileViewModel(profileApi, statementsApi, assistant, preferences, session, statements, flags, tracker, appLock, zoneChecker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
 
     private fun loaded() = vm().apply { load() }
 
@@ -269,6 +269,26 @@ class ProfileViewModelTest {
         vm.load()
         assertFalse(vm.state.value.offline)
         assertEquals(profileApi.profile, vm.state.value.profile)
+    }
+
+    @Test fun `canonical theme warning stays visible and its false does not block profile reads`() {
+        val vm = loaded()
+        val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
+            ru.finassist.pf.core.common.error.UserMessage.from("Тема временно недоступна"),
+            ru.finassist.pf.core.common.error.ErrorSeverity.WARNING,
+        )
+        profileApi.updateFailure = AppError.Api("FUTURE_THEME", 409, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "FUTURE_THEME", 409, presentation = presentation, requestRetryable = false,
+        ))
+        vm.setTheme(Theme.DARK)
+        assertEquals(presentation, vm.state.value.errorPresentation)
+        assertEquals(profileApi.profile, vm.state.value.profile)
+        vm.setTheme(Theme.DARK)
+        assertEquals(1, profileApi.updates.size, "the refused unchanged mutation stays blocked")
+        vm.load()
+        assertEquals(2, profileApi.gets, "GET is a different request")
+        vm.setTheme(Theme.LIGHT)
+        assertEquals(2, profileApi.updates.size, "a changed selection is a new action")
     }
 
     @Test fun `a failed refresh on resume keeps the shown profile`() {

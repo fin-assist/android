@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorSeverity
+import ru.finassist.pf.core.common.error.UserMessage
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import org.junit.Test
@@ -27,4 +30,8 @@ class PhoneDesignCheckTest {
     @Test fun phoneLoggedOut() = capture("PhoneLoggedOut", PhoneUiState(notice = "Вы вышли из аккаунта. Войдите по номеру телефона"))
 
     @Test fun phoneDeleted() = DesignCheck.capture("PhoneDeleted") { DeletedScreen(onDone = {}) }
+    // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
+    @Test fun serverWarning() = capture("PhoneServerWarning", PhoneUiState(error = "Не получилось отправить номер", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
+    @Test fun serverWarningDark() = capture("PhoneServerWarningDark", PhoneUiState(error = "Не получилось отправить номер", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)), dark = true)
+
 }

@@ -1,0 +1,89 @@
+appId: ru.finassist.pf.mock.e2e
+name: REST retryable=false не подменяет новую попытку генерации
+tags:
+  - assistant
+  - errors
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+
+# FIN-223: a question not about the user's finances is OFF_TOPIC (the fake server recognises «weather»).
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "What is the weather today?"
+- tapOn:
+    id: "ds.chat.send"
+# The first question asks for consent; after it the question goes out by itself.
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- tapOn:
+    id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.failed"
+    timeout: 20000
+# The server's text is shown as is; retryable is false, so there is no «Повторить».
+- assertVisible: "Вопрос не по теме — помощник отвечает только на вопросы о ваших финансах.*"
+- assertNotVisible:
+    id: "assistant.answer.failed.retry"
+# The attempt is returned: still 5 of 5.
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=assistant_ask&error_scenario=retry_forbidden"
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Krabsbir"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat.send_failed"
+    timeout: 20000
+- assertVisible: "Krabsbir"
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
+# This control link backgrounds and resumes the chat, and waits longer than Retry-After: 3.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_error_requests=1"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_error_requests=1&error_operation=off&assistant_model_errors=1"
+# Corrected input is a new explicit logical operation. Its failed result can allow RetryAnswer.
+- tapOn:
+    id: "ds.chat.input"
+- eraseText
+- inputText: "Krabsbir expenses"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.failed.retry"
+    timeout: 20000
+- tapOn:
+    id: "assistant.answer.failed.retry"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 20000
+- assertVisible: ".*[Оо]сталось 4 из 5.*"

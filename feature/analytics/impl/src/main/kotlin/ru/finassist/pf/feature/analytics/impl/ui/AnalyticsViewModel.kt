@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.analytics.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.error.ErrorPresentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -66,8 +69,15 @@ data class AnalyticsUiState(
     val snackbar: String? = null,
     val hint: AnalyticsHint? = null,
     val periodsFailed: Boolean = false,
+    val periodsErrorPresentation: ErrorPresentation? = null,
+    val periodsRetryable: Boolean? = null,
+    val periodsRetryReady: Boolean = true,
     /** Number of the response on screen: the blocks of each one are exposed anew (FIN-9). */
     val response: Int = 0,
+    val errorPresentation: ErrorPresentation? = null,
+    val limitErrorPresentation: ErrorPresentation? = null,
+    val requestRetryable: Boolean? = null,
+    val retryReady: Boolean = true,
 )
 
 /**
@@ -84,15 +94,23 @@ class AnalyticsViewModel @Inject constructor(
     private val flags: FeatureFlags,
     private val tracker: Tracker,
     reportZone: ReportZone,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel(), AnalyticsHandlers {
     private var period: PeriodTypeCode = PeriodTypeCode.MONTH
     private var date: PeriodKey? = null
     private var transferMode: TransferMode = TransferMode.WITH
     private var loadJob: Job? = null
 
+    private val limitRetryGate = RequestRetryGate(elapsedClock)
     private val _state = MutableStateFlow(AnalyticsUiState(blocks = readBlocks(flags)))
+    private val retryGate = RequestRetryGate(elapsedClock)
+    init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<AnalyticsUiState> = _state
     private var periodsJob: Job? = null
+    private val periodsRetryGate = RequestRetryGate(elapsedClock)
+    private val dismissalGates = mutableMapOf<String, RequestRetryGate>()
+
+    init { viewModelScope.launch { periodsRetryGate.readiness.collect { ready -> _state.update { it.copy(periodsRetryReady = ready) } } } }
 
     private fun readBlocks(flags: FeatureFlags) = AnalyticsBlocks(
         hidden = Flag.entries.filter { it.key.startsWith(BLOCK_FLAG_PREFIX) && !flags.isEnabled(it) }
@@ -147,9 +165,10 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     override fun load(quiet: Boolean) {
+        if (!retryGate.isReady()) return
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            if (!quiet) _state.update { it.copy(loading = it.data == null, offline = false) }
+            if (!quiet) _state.update { it.copy(loading = it.data == null, offline = false, errorPresentation = null, requestRetryable = null) }
             try {
                 val exp = experiments
                 val a = api.getAnalytics(period, date, transferMode, supports = supports, exp = exp)
@@ -160,7 +179,7 @@ class AnalyticsViewModel @Inject constructor(
                     date = p.date
                     transferMode = allowedMode(p.transferMode)
                 }
-                _state.update { it.copy(loading = false, offline = false, data = a, response = it.response + 1) }
+                _state.update { it.copy(loading = false, offline = false, errorPresentation = null, requestRetryable = null, data = a, response = it.response + 1) }
                 if (a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
                     _state.update { it.copy(hint = AnalyticsHint.CATEGORIES) }
                 }
@@ -171,6 +190,7 @@ class AnalyticsViewModel @Inject constructor(
                     load(quiet = true)
                 }
             } catch (e: AppError) {
+                retryGate.record(e)
                 // The screen keeps showing the previous data: return the parameters to what it shows, or the
                 // segment, the chip and the transfers sheet would describe a request that never succeeded.
                 _state.value.data?.params?.let { p ->
@@ -181,6 +201,7 @@ class AnalyticsViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         loading = false,
+                        errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable,
                         offline = it.data == null,
                         snackbar = if (quiet || it.data == null) it.snackbar
                         else if (e is AppError.Offline) "Нет сети — показываем прежний период" else "Не получилось обновить. Попробуйте ещё раз",
@@ -191,11 +212,19 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     private suspend fun refreshLimit() {
-        runCatching { assistantApi.getLimit() }.onSuccess { l -> _state.update { it.copy(limit = l) } }
+        if (!limitRetryGate.isReady()) return
+        runCatching { assistantApi.getLimit() }.onSuccess { l -> _state.update { it.copy(limit = l, limitErrorPresentation = null) } }
+            .onFailure { failure -> if (failure is AppError) {
+                limitRetryGate.record(failure)
+                if (failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
+            } }
     }
 
     /** Segmented control: keeps the current date so «Месяц → Квартал» opens the quarter containing it. */
     override fun setPeriodType(type: PeriodTypeCode) {
+        retryGate.clear()
+        periodsRetryGate.clear()
+        _state.update { it.copy(requestRetryable = null, errorPresentation = null, periodsRetryable = null) }
         if (type == period) return
         period = type
         tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to type.code))
@@ -203,6 +232,9 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     override fun goTo(key: PeriodKey) {
+        retryGate.clear()
+        periodsRetryGate.clear()
+        _state.update { it.copy(requestRetryable = null, errorPresentation = null, periodsRetryable = null) }
         date = key
         _state.update { it.copy(sheet = null) }
         tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to period.code))
@@ -210,6 +242,9 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     override fun setTransferMode(mode: TransferMode) {
+        retryGate.clear()
+        periodsRetryGate.clear()
+        _state.update { it.copy(requestRetryable = null, errorPresentation = null, periodsRetryable = null) }
         _state.update { it.copy(sheet = null) }
         if (mode == transferMode) return
         transferMode = mode
@@ -229,7 +264,11 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     override fun openSheet(sheet: AnalyticsSheet?) {
-        _state.update { it.copy(sheet = sheet, periods = if (sheet == AnalyticsSheet.PERIODS) null else it.periods, periodsFailed = false) }
+        if (sheet == AnalyticsSheet.PERIODS && !periodsRetryGate.isReady()) {
+            _state.update { it.copy(sheet = sheet) }
+            return
+        }
+        _state.update { it.copy(sheet = sheet, periods = if (sheet == AnalyticsSheet.PERIODS) null else it.periods, periodsFailed = false, periodsErrorPresentation = null) }
         periodsJob?.cancel()
         if (sheet == AnalyticsSheet.PERIODS) {
             // The list is requested when the sheet opens, not in advance (api.md 6.2); an older request for another
@@ -240,7 +279,8 @@ class AnalyticsViewModel @Inject constructor(
                     val list = api.listPeriods(type)
                     _state.update { it.copy(periods = list.periods) }
                 } catch (e: AppError) {
-                    _state.update { it.copy(periodsFailed = true) }
+                    periodsRetryGate.record(e)
+                    _state.update { it.copy(periodsFailed = true, periodsErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, periodsRetryable = e.requestRetryable) }
                 }
             }
         }
@@ -273,6 +313,8 @@ class AnalyticsViewModel @Inject constructor(
 
     /** «Не подписка» (api.md 6.3): the payment disappears and the total is recalculated. */
     fun dismissRegular(id: String) {
+        val gate = dismissalGates.getOrPut(id) { RequestRetryGate(elapsedClock) }
+        if (!gate.isReady()) return
         viewModelScope.launch {
             try {
                 api.dismissRegularPayment(id)
@@ -280,12 +322,13 @@ class AnalyticsViewModel @Inject constructor(
                 _state.update { it.copy(snackbar = "Убрали из регулярных платежей") }
                 load(quiet = true)
             } catch (e: AppError) {
-                _state.update { it.copy(snackbar = if (e is AppError.Offline) "Нет сети — не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
+                gate.record(e)
+                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, snackbar = if (e is AppError.Offline) "Нет сети — не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
             }
         }
     }
 
-    override fun consumeSnackbar() = _state.update { it.copy(snackbar = null) }
+    override fun consumeSnackbar() = _state.update { it.copy(snackbar = null, errorPresentation = null) }
 
     private companion object {
         const val RECALC_POLL_MS = 3_000L

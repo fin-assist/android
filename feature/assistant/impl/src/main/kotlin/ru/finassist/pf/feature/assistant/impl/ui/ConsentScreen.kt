@@ -1,5 +1,10 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
+import ru.finassist.pf.core.common.error.ErrorContext
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
@@ -65,14 +70,25 @@ data class AiConsentUiState(
     val formError: String? = null,
     val busy: Boolean = false,
     val granted: Boolean = false,
+    val errorPresentation: ErrorPresentation? = null,
+    val requestRetryable: Boolean? = null,
+    val retryReady: Boolean = true,
 )
 
 @HiltViewModel
 class AiConsentViewModel @Inject constructor(
     private val authApi: AuthApi,
     private val profileApi: ProfileApi,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(AiConsentUiState())
+    private val documentGate = RequestRetryGate(elapsedClock)
+    private var documentFailure: AppError? = null
+    private val retryGate = RequestRetryGate(elapsedClock)
+    init {
+        viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready && documentGate.isReady()) } } }
+        viewModelScope.launch { documentGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready && retryGate.isReady()) } } }
+    }
     val state: StateFlow<AiConsentUiState> = _state
 
     init {
@@ -81,8 +97,15 @@ class AiConsentViewModel @Inject constructor(
 
     private fun loadDocument() {
         viewModelScope.launch {
-            runCatching { authApi.getConsentDocument(ConsentType.ASSISTANT) }.onSuccess { d -> _state.update { it.copy(document = d) } }
+            runCatching { fetchDocument() }.onSuccess { d -> _state.update { it.copy(document = d) } }
+                .onFailure { failure -> if (failure is AppError) _state.update { it.copy(errorPresentation = failure.presentation.takeUnless { failure is AppError.Offline }, formError = "Не получилось загрузить документ согласия") } }
         }
+    }
+
+    private suspend fun fetchDocument(): ru.finassist.pf.core.api.model.ConsentDocument {
+        if (!documentGate.isReady()) throw checkNotNull(documentFailure)
+        return try { authApi.getConsentDocument(ConsentType.ASSISTANT).also { documentFailure = null } }
+        catch (error: AppError) { documentFailure = error; documentGate.record(error); throw error }
     }
 
     fun setAccepted(v: Boolean) = _state.update { it.copy(accepted = v, error = null) }
@@ -90,26 +113,30 @@ class AiConsentViewModel @Inject constructor(
     /** PUT is idempotent by itself (api.md 2.3) — no key needed. */
     fun grant() {
         val s = _state.value
+        if (s.busy || !retryGate.isReady() || !documentGate.isReady()) return
         if (!s.accepted) {
             _state.update { it.copy(error = CONSENT_REQUIRED) }
             return
         }
         viewModelScope.launch {
-            _state.update { it.copy(busy = true, formError = null) }
+            _state.update { it.copy(busy = true, formError = null, errorPresentation = null) }
             try {
-                val version = s.document?.version ?: authApi.getConsentDocument(ConsentType.ASSISTANT).version
+                val version = s.document?.version ?: fetchDocument().version
                 profileApi.grantAssistantConsent(AssistantConsentGrant(version))
                 _state.update { it.copy(busy = false, granted = true) }
             } catch (e: AppError) {
+                retryGate.record(e)
                 val text = when {
-                    e is AppError.Api && e.code == ErrorCodes.CONSENT_OUTDATED -> {
+                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_OUTDATED -> {
+                        retryGate.clear()
+                        documentGate.clear()
                         loadDocument()
                         "Текст согласия обновился — прочитайте его ещё раз и подтвердите"
                     }
                     e is AppError.Offline -> "Нет сети — проверьте интернет и повторите"
                     else -> "Не получилось сохранить. Попробуйте ещё раз"
                 }
-                _state.update { it.copy(busy = false, formError = text) }
+                _state.update { it.copy(busy = false, formError = text, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable.takeUnless { e is AppError.Api && e.code == ErrorCodes.CONSENT_OUTDATED }) }
             }
         }
     }
@@ -188,11 +215,12 @@ internal fun AiConsentContent(
                 )
                 state.formError?.let {
                     Spacer(Modifier.height(d.space3))
-                    PfNotice(it, tone = NoticeTone.WARNING, alert = true)
+                    val presentation = state.errorPresentation
+                    if (presentation != null) ErrorMessage(presentation, it) else PfNotice(it, tone = NoticeTone.WARNING, alert = true)
                 }
                 Spacer(Modifier.weight(1f).heightIn(min = d.space6))
                 PfButton(
-                    "Продолжить", onClick = onGrant, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Сохраняем…",
+                    "Продолжить", enabled = state.retryReady, onClick = onGrant, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Сохраняем…",
                     modifier = Modifier.testTag(AssistantTags.CONSENT_SUBMIT),
                 )
                 Spacer(Modifier.height(d.space2))

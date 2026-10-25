@@ -24,6 +24,8 @@ import ru.finassist.pf.core.toggles.FlagOverrides
 import ru.finassist.pf.feature.applock.api.AppLock
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import ru.finassist.pf.feature.auth.impl.data.SessionRepositoryImpl
+import ru.finassist.pf.mock.MockErrorOperation
+import ru.finassist.pf.mock.MockErrorScenario
 import ru.finassist.pf.mock.MockBackend
 import javax.inject.Inject
 
@@ -50,6 +52,9 @@ import javax.inject.Inject
  *   already turned away at least n stream openings with 429; otherwise [TAG_UNMET] shows, and the flow fails on the
  *   missing applied tag. The check is instant: stream openings run on the main thread this activity holds, and the
  *   app's screen is paused under it, so the openings to count must have happened before the link is opened.
+ * - `error_operation=profile_update|operations_list|assistant_ask|off` — inject only a fixed safe failure at that API method.
+ * - `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden` — closed wire fixtures.
+ * - `expect_error_requests=<n>` — require exactly n injected failures; proves a refused request was not resent.
  * - `unknown_codes=true|false` — the fake server sends codes the client does not know (`MockCodes`, FIN-83).
  * - `failing_blocks=<id>,<id>` — those Analytics blocks fail to build and come as `unavailable` (FIN-5); empty — none.
  * - `profile_timezone=<zone id>` — `profile.timezone` on the server, as if changed from another device; the app
@@ -141,6 +146,19 @@ class E2eControlActivity : ComponentActivity() {
                 name == "expect_stream_rate_limited" -> value.toIntOrNull()?.let { expected ->
                     val given = backend.streamRateLimited.value
                     if (given < expected) unmet = "expected $expected stream 429s, got $given"
+                }
+                name == "error_operation" -> {
+                    val operation = MockErrorOperation.entries.firstOrNull { it.name.equals(value, ignoreCase = true) }
+                    if (value != "off" && operation == null) unmet = "unknown error operation"
+                    else backend.config = backend.config.copy(errorOperation = operation)
+                }
+                name == "error_scenario" -> {
+                    val scenario = MockErrorScenario.entries.firstOrNull { it.name.equals(value, ignoreCase = true) }
+                    if (scenario == null) unmet = "unknown error scenario"
+                    else backend.config = backend.config.copy(errorScenario = scenario)
+                }
+                name == "expect_error_requests" -> value.toIntOrNull()?.let { expected ->
+                    if (backend.injectedErrorCount.value != expected) unmet = "expected $expected injected failures, got ${backend.injectedErrorCount.value}"
                 }
                 name == "unknown_codes" -> backend.config = backend.config.copy(unknownCodes = value.toBoolean())
                 name == "failing_blocks" -> backend.config = backend.config.copy(failingBlocks = value.split(',').map(String::trim).filter(String::isNotEmpty).toSet())

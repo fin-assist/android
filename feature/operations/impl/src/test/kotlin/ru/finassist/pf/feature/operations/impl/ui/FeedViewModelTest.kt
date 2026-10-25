@@ -25,19 +25,20 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FeedViewModelTest {
+    private val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
     private val api = FakeOperationsApi()
     private val statements = FakeStatements()
     private val operations = FakeOperationChanges()
     private val flags = FakeFlags()
     private val tracker = FakeTracker()
 
-    @BeforeTest fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+    @BeforeTest fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
 
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
     private val reportZone = ru.finassist.pf.core.common.time.ReportZone { java.time.ZoneId.of("Europe/Moscow") }
 
-    private fun vm() = FeedViewModel(api, statements, operations, operations, flags, tracker, reportZone)
+    private fun vm() = FeedViewModel(api, statements, operations, operations, flags, tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
 
     @Test fun `a new profile zone reloads the feed from the top, the first known zone does not (FIN-92)`() {
         api.lists += page("op_1", next = 1)
@@ -107,6 +108,55 @@ class FeedViewModelTest {
         assertEquals(listOf("op_1"), s.items.map { it.id })
         assertFalse(s.offline)
         assertFalse(s.refreshing)
+    }
+
+    @Test fun `unknown safe server warning preserves loaded rows and false blocks direct refresh`() {
+        val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
+            ru.finassist.pf.core.common.error.UserMessage.from("Сервис временно ограничил чтение"),
+            ru.finassist.pf.core.common.error.ErrorSeverity.WARNING,
+        )
+        api.lists += page("op_1")
+        api.lists += AppError.Api("FUTURE_POLICY", 429, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "FUTURE_POLICY", 429, presentation = presentation, requestRetryable = false,
+        ))
+        val vm = vm()
+        vm.refresh()
+        assertEquals(listOf("op_1"), vm.state.value.items.map { it.id })
+        assertEquals(presentation, vm.state.value.errorPresentation)
+        assertFalse(vm.state.value.offline)
+        vm.load()
+        vm.refresh()
+        assertEquals(2, api.queries.size)
+        // A real import changes the data context and may refresh it.
+        api.lists.clear()
+        api.lists += page("op_2")
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("u1"))
+        assertEquals(listOf("op_2"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `manual retry waits server duration without losing loaded rows`() {
+        api.lists += page("op_1")
+        api.lists += AppError.RateLimited(null, 3, ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "RATE_LIMITED", 429, requestRetryable = true,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0),
+        ))
+        val vm = vm()
+        vm.refresh()
+        assertFalse(vm.state.value.retryReady)
+        vm.load()
+        assertEquals(2, api.queries.size)
+        scheduler.advanceTimeBy(2999)
+        scheduler.runCurrent()
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(listOf("op_1"), vm.state.value.items.map { it.id })
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.retryReady)
+        api.lists.clear()
+        api.lists += page("op_2")
+        vm.load()
+        assertEquals(3, api.queries.size)
+        assertEquals(listOf("op_2"), vm.state.value.items.map { it.id })
     }
 
     @Test fun `a reload with items on screen does not show the full-screen loader`() {
@@ -420,7 +470,7 @@ class FeedViewModelTest {
         val records = object : ru.finassist.pf.feature.operations.api.OperationRecords {
             override val records = updates
         }
-        val vm = FeedViewModel(api, statements, operations, records, flags, tracker, reportZone)
+        val vm = FeedViewModel(api, statements, operations, records, flags, tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
         val updated = details("op_1", categoryId = "cat_restaurants")
         updates.tryEmit(listOf(updated))
         assertEquals(updated.toItem(), vm.state.value.items.single())

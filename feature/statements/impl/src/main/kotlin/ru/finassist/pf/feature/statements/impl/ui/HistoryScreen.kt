@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.feature.statements.impl.domain.uploadPeriodLabel
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +42,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.SseReopenState
@@ -75,6 +80,10 @@ data class HistoryUiState(
     val deleting: Boolean = false,
     val snackbar: String? = null,
     val uploadEnabled: Boolean = true,
+    val errorPresentation: ErrorPresentation? = null,
+    val requestRetryable: Boolean? = null,
+    val retryReady: Boolean = true,
+    val resultErrorPresentation: ErrorPresentation? = null,
 )
 
 @HiltViewModel
@@ -83,19 +92,24 @@ class HistoryViewModel @Inject constructor(
     private val repository: StatementsRepositoryImpl,
     private val tracker: Tracker,
     flags: FeatureFlags,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(HistoryUiState(uploadEnabled = flags.isEnabled(Flag.STATEMENTS_UPLOAD)))
+    private val retryGate = RequestRetryGate(elapsedClock)
+    init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<HistoryUiState> = _state
 
     fun load() {
+        if (!retryGate.isReady()) return
         viewModelScope.launch {
-            _state.update { it.copy(loading = it.list == null, offline = false) }
+            _state.update { it.copy(loading = it.list == null, offline = false, errorPresentation = null, requestRetryable = null) }
             try {
                 val list = api.listStatements()
                 _state.update { it.copy(loading = false, list = list) }
                 list.uploads.filter { it.status == UploadStatus.PROCESSING }.forEach { watch(it.uploadId) }
             } catch (e: AppError) {
-                _state.update { it.copy(loading = false, offline = it.list == null) }
+                retryGate.record(e)
+                _state.update { it.copy(loading = false, offline = it.list == null, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
             }
         }
     }
@@ -104,6 +118,7 @@ class HistoryViewModel @Inject constructor(
     private val reopenStates = HashMap<String, SseReopenState>()
 
     private val watching = HashMap<String, Job>()
+    private val deleteGates = mutableMapOf<String, RequestRetryGate>()
 
     /**
      * api.md 3.4: a `processing` upload → open its progress stream; reload the list once it reports the end.
@@ -118,9 +133,17 @@ class HistoryViewModel @Inject constructor(
                 reopeningStream(
                     isTerminal = { it !is ImportEvent.Progress },
                     state = reopenStates.getOrPut(uploadId) { SseReopenState() },
+                    elapsedClock = elapsedClock,
                 ) { api.streamProgress(uploadId) }
-                    .collect { event -> if (event is ImportEvent.Complete) repository.importCompleted(uploadId, event.result) }
+                    .collect { event -> when (event) {
+                        is ImportEvent.Complete -> repository.importCompleted(uploadId, event.result)
+                        is ImportEvent.Error -> if (event.code != ErrorCodes.CANCELLED) {
+                            _state.update { it.copy(resultErrorPresentation = event.presentation) }
+                        }
+                        is ImportEvent.Progress -> Unit
+                    } }
             } catch (e: AppError) {
+                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }) }
                 return@launch
             }
             watching.remove(uploadId)
@@ -137,8 +160,10 @@ class HistoryViewModel @Inject constructor(
 
     fun delete() {
         val upload = _state.value.confirmDelete ?: return
+        val deleteGate = deleteGates.getOrPut(upload.uploadId) { RequestRetryGate(elapsedClock) }
+        if (!deleteGate.isReady()) return
         viewModelScope.launch {
-            _state.update { it.copy(deleting = true) }
+            _state.update { it.copy(deleting = true, errorPresentation = null) }
             try {
                 api.deleteStatement(upload.uploadId)
                 repository.uploadDeleted(upload.uploadId)
@@ -146,14 +171,15 @@ class HistoryViewModel @Inject constructor(
                 _state.update { it.copy(deleting = false, confirmDelete = null, snackbar = "Загрузка удалена, аналитика пересчитана") }
                 load()
             } catch (e: AppError) {
+                deleteGate.record(e)
                 _state.update {
-                    it.copy(deleting = false, confirmDelete = null, snackbar = if (e is AppError.Offline) "Нет сети — загрузка не удалена" else "Не получилось удалить. Попробуйте ещё раз")
+                    it.copy(deleting = false, confirmDelete = null, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, snackbar = if (e is AppError.Offline) "Нет сети — загрузка не удалена" else "Не получилось удалить. Попробуйте ещё раз")
                 }
             }
         }
     }
 
-    fun consumeSnackbar() = _state.update { it.copy(snackbar = null) }
+    fun consumeSnackbar() = _state.update { it.copy(snackbar = null, errorPresentation = null) }
 }
 
 /** Profile → «История загрузок» (api.md 3.4, 3.5). */
@@ -202,8 +228,17 @@ internal fun HistoryContent(
         Column(Modifier.fillMaxSize()) {
             PfPageHeader("История загрузок", onBack = onBack)
             val list = state.list
+            state.resultErrorPresentation?.let {
+                ErrorMessage(it, "Не получилось обработать загрузку. Можно выбрать файл снова",
+                    modifier = Modifier.padding(d.space4))
+            }
+            state.errorPresentation?.let { presentation ->
+                ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить историю. Попробуйте ещё раз",
+                    modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else onRetry)
+            }
             when {
                 state.loading -> Unit
+                state.errorPresentation != null && list == null -> Unit
                 state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
                     PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
                 }
@@ -249,7 +284,7 @@ internal fun HistoryContent(
                 }
             }
         }
-        state.snackbar?.let { text ->
+        state.snackbar?.takeIf { state.errorPresentation == null }?.let { text ->
             androidx.compose.runtime.LaunchedEffect(text) {
                 kotlinx.coroutines.delay(3000)
                 onSnackbarShown()

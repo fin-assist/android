@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.auth.impl.domain
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.api.model.IdempotencyKey
+import ru.finassist.pf.core.common.time.ServerDeadline
 import ru.finassist.pf.core.api.model.PhoneVerification
 import java.time.Instant
 import javax.inject.Inject
@@ -17,6 +20,9 @@ class SignInFlow @Inject constructor() {
     /** Device deadline of [verification] ([CallDeadline]); null when the response gave no way to compute it. */
     @Volatile var callDeadline: Instant? = null
         private set
+    @Volatile var callServerDeadline: ServerDeadline? = null
+        private set
+    private var trackedPhoneKey: IdempotencyKey? = null
     @Volatile var registrationToken: String? = null
     /** `Idempotency-Key` of the current phone verification request (reused on retry of the same action). */
     @Volatile var phoneRequestKey: String? = null
@@ -25,17 +31,29 @@ class SignInFlow @Inject constructor() {
     fun verificationReceived(v: PhoneVerification, receivedAt: Instant) {
         verification = v
         callDeadline = CallDeadline.of(v, receivedAt)
+        callServerDeadline = v.responseTiming.deadline(v.expiresIn?.toLong(), v.expiresAt.toInstant())
     }
 
     fun clearVerification() {
         verification = null
         callDeadline = null
+        callServerDeadline = null
+    }
+
+    fun newPhoneRequest(clock: ElapsedClock): IdempotencyKey = IdempotencyKey.random(clock).also {
+        trackedPhoneKey = it
+        phoneRequestKey = it.value
+    }
+
+    fun currentPhoneKey(): IdempotencyKey? = phoneRequestKey?.let { value ->
+        trackedPhoneKey?.takeIf { it.value == value } ?: IdempotencyKey(value)
     }
 
     fun reset() {
         clearVerification()
         registrationToken = null
         phoneRequestKey = null
+        trackedPhoneKey = null
     }
 }
 

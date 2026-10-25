@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorContext
+import ru.finassist.pf.core.common.time.ElapsedClock
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -53,7 +57,7 @@ sealed interface UploadPhase {
     data class Busy(val fileName: String, val progress: Float, val uploadId: String?, val cancelling: Boolean = false) : UploadPhase
 
     /** Upload rejected or parsing failed; [code] is from api.md 3.2 / 3.3. */
-    data class Error(val code: String, val fileName: String, val config: ImportConfig?) : UploadPhase
+    data class Error(val code: String, val fileName: String, val config: ImportConfig?, val presentation: ErrorPresentation? = null) : UploadPhase
 }
 
 data class UploadUiState(
@@ -62,6 +66,8 @@ data class UploadUiState(
     val config: ImportConfig? = null,
     /** The file was not sent for lack of network: the guide shows a notice with «Повторить» (mockup `ImportGuideOffline`). */
     val uploadOffline: Boolean = false,
+    val uploadRetryReady: Boolean = true,
+    val guideErrorPresentation: ErrorPresentation? = null,
     /** «Не скачивается?» sheet open. */
     val fallbackOpen: Boolean = false,
     val askCancel: Boolean = false,
@@ -78,8 +84,12 @@ class UploadViewModel @Inject constructor(
     private val tracker: Tracker,
     private val keys: IdempotencyKeys,
     private val clock: Clock,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(UploadUiState())
+    private val uploadGates = mutableMapOf<String, RequestRetryGate>()
+    private var uploadReadinessJob: Job? = null
+    private val configGate = RequestRetryGate(elapsedClock)
     val state: StateFlow<UploadUiState> = _state
     private var config: ImportConfig? = null
     private var uploadJob: Job? = null
@@ -108,6 +118,7 @@ class UploadViewModel @Inject constructor(
     }
 
     fun load() {
+        if (!configGate.isReady()) return
         if (!flags.isEnabled(Flag.STATEMENTS_UPLOAD)) {
             _state.update { it.copy(phase = UploadPhase.Disabled) }
             return
@@ -119,8 +130,9 @@ class UploadViewModel @Inject constructor(
                 config = c
                 _state.update { it.copy(phase = UploadPhase.Guide(c), config = c) }
             } catch (e: AppError) {
+                configGate.record(e)
                 _state.update {
-                    if (e is AppError.Offline) it.copy(phase = UploadPhase.Offline) else it.copy(phase = UploadPhase.Guide(fallbackConfig()), config = fallbackConfig())
+                    if (e is AppError.Offline) it.copy(phase = UploadPhase.Offline) else it.copy(phase = UploadPhase.Guide(fallbackConfig()), config = fallbackConfig(), guideErrorPresentation = e.presentation)
                 }
             }
         }
@@ -162,7 +174,15 @@ class UploadViewModel @Inject constructor(
             // api.md: the key belongs to «загрузить этот файл» — same content → same key until a final response
             // (survives process death); another file → another key.
             val action = "statements.upload:${file.sha256}"
-            val key = keys.keyFor(action)
+            val retryGate = uploadGates.getOrPut(action) { RequestRetryGate(elapsedClock) }
+            if (!retryGate.isReady()) return@launch
+            uploadReadinessJob?.cancel()
+            uploadReadinessJob = viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(uploadRetryReady = ready) } } }
+            val key = keys.keyFor(action, elapsedClock)
+            if (key.replayWindow?.isOpen(elapsedClock) != true) {
+                _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, file.name, config), uploadRetryReady = false) }
+                return@launch
+            }
             tracker.track(Events.STATEMENTS_UPLOAD_STARTED)
             _state.update { it.copy(phase = UploadPhase.Busy(file.name, 0f, uploadId = null)) }
             try {
@@ -172,8 +192,9 @@ class UploadViewModel @Inject constructor(
                 _state.update { it.copy(phase = UploadPhase.Busy(accepted.fileName, 0.05f, accepted.uploadId)) }
                 watch()
             } catch (e: AppError) {
+                retryGate.record(e)
                 // 4xx answers are final as well (stored by the server); network failures keep the key for a retry.
-                if (e is AppError.Api) keys.complete(action)
+                if (e is AppError.Api && e.requestRetryable != false) keys.complete(action)
                 fail(e, file.name)
             }
         }
@@ -185,7 +206,9 @@ class UploadViewModel @Inject constructor(
             try {
                 return api.uploadStatement(key, UploadFile(name = file.name, size = file.size, open = { open(uri) }))
             } catch (e: AppError.InProgress) {
-                delay((e.retryAfterSeconds ?: 2).coerceIn(1, 30) * 1000L)
+                if (e.requestRetryable == false || key.replayWindow?.isOpen(elapsedClock) != true) throw e
+                delay((e.retryAfterSeconds ?: 2).coerceAtLeast(1) * 1000L)
+                if (key.replayWindow?.isOpen(elapsedClock) != true) throw e
             }
         }
         return api.uploadStatement(key, UploadFile(name = file.name, size = file.size, open = { open(uri) }))
@@ -213,6 +236,7 @@ class UploadViewModel @Inject constructor(
                 reopeningStream(
                     isTerminal = { it !is ImportEvent.Progress },
                     state = reopenStates.getOrPut(uploadId) { SseReopenState() },
+                    elapsedClock = elapsedClock,
                 ) { api.streamProgress(uploadId) }
                     .collect { event -> handle(uploadId, busy.fileName, event) }
             } catch (e: AppError) {
@@ -237,7 +261,7 @@ class UploadViewModel @Inject constructor(
                     _state.update { it.copy(phase = UploadPhase.Guide(fallbackConfig()), askCancel = false) }
                 } else {
                     tracker.track(Events.STATEMENTS_UPLOAD_FAILED, mapOf("code" to event.code))
-                    _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, fileName, config), askCancel = false) }
+                    _state.update { it.copy(phase = UploadPhase.Error(event.code, fileName, config, event.presentation), askCancel = false) }
                 }
             }
         }
@@ -255,7 +279,7 @@ class UploadViewModel @Inject constructor(
     }
 
     private fun fail(e: AppError, fileName: String) {
-        if (e is AppError.Maintenance || e is AppError.UpdateRequired) return interrupted(e)
+        if (e.response?.context != ErrorContext.RESULT_EVENT && (e is AppError.Maintenance || e is AppError.UpdateRequired)) return interrupted(e)
         val code = when (e) {
             is AppError.Api -> e.code
             is AppError.Offline -> OFFLINE
@@ -265,7 +289,7 @@ class UploadViewModel @Inject constructor(
         _state.update {
             // No network: nothing reached the server — back to the guide with «Повторить» for the same file.
             if (code == OFFLINE) it.copy(phase = UploadPhase.Guide(fallbackConfig()), uploadOffline = true, askCancel = false)
-            else it.copy(phase = UploadPhase.Error(code, fileName, config), askCancel = false)
+            else it.copy(phase = UploadPhase.Error(code, fileName, config, e.presentation), askCancel = false)
         }
     }
 
@@ -289,6 +313,7 @@ class UploadViewModel @Inject constructor(
 
     /** «Повторить» in the no-network notice: sends the same file again (the same content keeps its key). */
     fun retryUpload() {
+        if (!_state.value.uploadRetryReady) return
         val uri = lastPicked ?: return
         onFilePicked(uri)
     }

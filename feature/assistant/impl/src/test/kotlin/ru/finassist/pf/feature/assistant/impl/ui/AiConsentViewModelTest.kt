@@ -72,7 +72,7 @@ class AiConsentViewModelTest {
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
     @Test fun `without the tick the checkbox says why`() {
-        val vm = AiConsentViewModel(auth, profile)
+        val vm = AiConsentViewModel(auth, profile, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
         vm.grant()
         assertEquals("Без согласия помощник не сможет ответить", vm.state.value.error)
         assertTrue(profile.grants.isEmpty())
@@ -81,7 +81,7 @@ class AiConsentViewModelTest {
     }
 
     @Test fun `with the tick the current document version is granted`() {
-        val vm = AiConsentViewModel(auth, profile)
+        val vm = AiConsentViewModel(auth, profile, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
         vm.setAccepted(true)
         vm.grant()
         assertEquals(listOf("2"), profile.grants)
@@ -90,7 +90,7 @@ class AiConsentViewModelTest {
 
     @Test fun `no network is shown under the form`() {
         profile.failure = AppError.Offline()
-        val vm = AiConsentViewModel(auth, profile)
+        val vm = AiConsentViewModel(auth, profile, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
         vm.setAccepted(true)
         vm.grant()
         assertEquals("Нет сети — проверьте интернет и повторите", vm.state.value.formError)
@@ -100,7 +100,7 @@ class AiConsentViewModelTest {
 
     @Test fun `an outdated consent reloads the document`() {
         profile.failure = AppError.Api(ErrorCodes.CONSENT_OUTDATED, 409)
-        val vm = AiConsentViewModel(auth, profile)
+        val vm = AiConsentViewModel(auth, profile, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
         val before = auth.documentRequests
         vm.setAccepted(true)
         vm.grant()

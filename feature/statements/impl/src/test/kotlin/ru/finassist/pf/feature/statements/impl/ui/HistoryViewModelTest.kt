@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -63,7 +64,7 @@ class HistoryViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun newVm(flags: StaticFlags = StaticFlags()) = HistoryViewModel(api, repository, tracker, flags)
+    private fun newVm(flags: StaticFlags = StaticFlags()) = HistoryViewModel(api, repository, tracker, flags, ElapsedClock { 0L })
 
     private fun advance(ms: Long) {
         dispatcher.scheduler.advanceTimeBy(ms)
@@ -128,6 +129,22 @@ class HistoryViewModelTest {
         vm.load()
         assertEquals(2, api.listCalls)
         assertNull(repository.lastResult("u1"))
+        assertTrue(repoEvents.isEmpty())
+    }
+
+    @Test fun `terminal import warning survives the list refresh without REST action dispatch`() {
+        val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
+            ru.finassist.pf.core.common.error.UserMessage.from("Проверьте выбранную выписку"),
+            ru.finassist.pf.core.common.error.ErrorSeverity.WARNING,
+        )
+        api.listOutcomes += processing
+        api.listOutcomes += done
+        api.script("u1", flowOf(ImportEvent.Error("MAINTENANCE", "diagnostic", presentation)))
+        val vm = newVm()
+        vm.load()
+        assertEquals(done, vm.state.value.list)
+        assertEquals(presentation, vm.state.value.resultErrorPresentation)
+        assertNull(vm.state.value.requestRetryable)
         assertTrue(repoEvents.isEmpty())
     }
 

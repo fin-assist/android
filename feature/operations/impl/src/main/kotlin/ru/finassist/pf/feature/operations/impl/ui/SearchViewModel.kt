@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorContext
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -71,6 +75,9 @@ data class SearchUiState(
     val selectionDropped: Boolean = false,
     /** First day of the default 12-month window, from the last search made with it (period sheet: «С октября 2025»). */
     val windowFrom: LocalDate? = null,
+    val errorPresentation: ErrorPresentation? = null,
+    val requestRetryable: Boolean? = null,
+    val retryReady: Boolean = true,
 ) {
     val hasFilters: Boolean get() = !filter.isEmpty || allTime
     /** Nothing to reset besides the text: «Сбросить фильтры» on the empty result then clears the query instead of repeating it. */
@@ -91,6 +98,7 @@ class SearchViewModel @Inject constructor(
     flags: FeatureFlags,
     private val tracker: Tracker,
     reportZone: ReportZone,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     private val preset = savedState.toRoute<OperationsRoutes.Search>(PfNavTypes.MAP).filter
 
@@ -105,6 +113,8 @@ class SearchViewModel @Inject constructor(
             ),
         ),
     )
+    private val retryGate = RequestRetryGate(elapsedClock)
+    init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<SearchUiState> = _state
     private var searchJob: Job? = null
 
@@ -140,6 +150,7 @@ class SearchViewModel @Inject constructor(
     fun setQuery(q: String) = updateFilter(debounce = true) { it.copy(q = q.ifEmpty { null }) }
 
     fun setPeriod(from: OffsetDateTime?, to: OffsetDateTime?, allTime: Boolean) {
+        if (allTime != _state.value.allTime) retryGate.clear()
         _state.update { it.copy(allTime = allTime && from == null && to == null, sheet = null) }
         updateFilter { it.copy(from = from, to = to) }
     }
@@ -166,6 +177,7 @@ class SearchViewModel @Inject constructor(
     }
 
     fun searchAllTime() {
+        retryGate.clear()
         _state.update { it.copy(allTime = true) }
         updateFilter { it.copy(from = null, to = null) }
     }
@@ -179,10 +191,12 @@ class SearchViewModel @Inject constructor(
 
     fun openSheet(sheet: SearchSheet?) = _state.update { it.copy(sheet = sheet) }
 
-    fun retry() = search(debounce = false)
+    fun retry() { if (retryGate.isReady()) search(debounce = false) }
 
     private fun updateFilter(debounce: Boolean = false, change: (OperationsFilter) -> OperationsFilter) {
-        _state.update { it.copy(filter = change(it.filter)) }
+        val changed = change(_state.value.filter)
+        if (changed != _state.value.filter) retryGate.clear()
+        _state.update { it.copy(filter = changed) }
         search(debounce)
     }
 
@@ -192,6 +206,7 @@ class SearchViewModel @Inject constructor(
      * ordinary search then.
      */
     private fun search(debounce: Boolean, quiet: Boolean = false) {
+        if (!retryGate.isReady()) return
         val refresh = quiet && searchJob?.isActive != true
         searchJob?.cancel()
         val s = _state.value
@@ -202,6 +217,7 @@ class SearchViewModel @Inject constructor(
         searchJob = viewModelScope.launch {
             if (debounce) delay(350)
             val keep = refresh && _state.value.result is SearchResult.Found
+            _state.update { it.copy(errorPresentation = null, requestRetryable = null) }
             if (!keep) _state.update { it.copy(result = SearchResult.Loading) }
             val filter = _state.value.filter
             try {
@@ -221,10 +237,12 @@ class SearchViewModel @Inject constructor(
                     )
                 }
             } catch (e: AppError) {
+                retryGate.record(e)
+                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
                 when {
                     keep -> Unit
-                    e is AppError.Api && e.code == ErrorCodes.TOO_MANY_RESULTS -> _state.update { it.copy(result = SearchResult.TooMany) }
-                    e is AppError.Api && e.code == ErrorCodes.SELECTION_NOT_FOUND -> {
+                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.TOO_MANY_RESULTS -> _state.update { it.copy(result = SearchResult.TooMany) }
+                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.SELECTION_NOT_FOUND -> {
                         // api.md: open the search without the stale selection.
                         _state.update { it.copy(filter = it.filter.copy(selection = null, selectionName = null), selectionDropped = true) }
                         search(debounce = false)

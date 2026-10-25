@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import androidx.compose.foundation.layout.Arrangement
@@ -95,8 +96,16 @@ internal fun FeedContent(
                 PfIconButton(PfIcons.SEARCH, contentDescription = "Поиск операций", onClick = onOpenSearch, modifier = Modifier.testTag(OperationsTags.FEED_SEARCH))
             }
         }
+        state.errorPresentation?.let { presentation ->
+            ErrorMessage(
+                presentation, "Не получилось загрузить операции. Попробуйте ещё раз",
+                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
+                onRetry = if (!state.retryReady) null else if (state.moreFailed) onLoadMore else onRetry,
+            )
+        }
         when {
             state.loading -> Unit
+            state.errorPresentation != null && state.items.isEmpty() -> Unit
             state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(OperationsTags.FEED_OFFLINE)) {
                 PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(OperationsTags.FEED_RETRY))
             }
@@ -162,7 +171,7 @@ internal fun FeedContent(
                     }
                     if (state.loadingMore) {
                         item(key = "more") { Text("Загружаем…", style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(vertical = d.space4)) }
-                    } else if (state.moreFailed) {
+                    } else if (state.moreFailed && state.errorPresentation == null) {
                         item(key = "more-failed") {
                             Box(Modifier.fillMaxWidth().padding(vertical = d.space3), contentAlignment = Alignment.Center) {
                                 PfLink("Не загрузилось — повторить", onClick = onLoadMore)

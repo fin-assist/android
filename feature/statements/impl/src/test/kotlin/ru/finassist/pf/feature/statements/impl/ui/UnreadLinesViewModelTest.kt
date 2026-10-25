@@ -36,7 +36,7 @@ class UnreadLinesViewModelTest {
     @After fun tearDown() = Dispatchers.resetMain()
 
     private fun newVm(vararg route: Pair<String, Any?>) =
-        UnreadLinesViewModel(SavedStateHandle(mapOf(*route)), api, FakeTokens("user-1"))
+        UnreadLinesViewModel(SavedStateHandle(mapOf(*route)), api, FakeTokens("user-1"), ru.finassist.pf.core.common.time.ElapsedClock { 0L })
 
     @Test fun `the lines of one upload are loaded with the user id for the report`() {
         api.unreadResult = UnreadLinesList(listOf(line))

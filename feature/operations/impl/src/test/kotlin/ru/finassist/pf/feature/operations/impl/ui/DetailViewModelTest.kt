@@ -43,7 +43,7 @@ class DetailViewModelTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private fun vm() = DetailViewModel(savedState, api, categories, operations, tracker)
+    private fun vm() = DetailViewModel(savedState, api, categories, operations, tracker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
 
     private fun picked(categoryId: String) = vm().apply {
         openPicker()
@@ -166,7 +166,7 @@ class DetailViewModelTest {
         vm.load()
         assertEquals("op_1b", api.opened.last())
         assertEquals(creditAt, api.openedAt.last())
-        val recreated = DetailViewModel(savedState, api, categories, operations, tracker)
+        val recreated = DetailViewModel(savedState, api, categories, operations, tracker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
         assertEquals("op_1b", api.opened.last())
         assertEquals(creditAt, api.openedAt.last())
         api.changeResponse = ChangeCategoryResponse(listOf(credit.copy(categoryId = "cat_supermarkets")))
@@ -240,7 +240,7 @@ class DetailViewModelTest {
         api.changeResponse = ChangeCategoryResponse(listOf(details("op_1", categoryId = "cat_restaurants").copy(occurredAt = latest.plusDays(1))))
         vm.save()
         assertEquals("2026-10-01T00:00:00.123456789+03:00", api.changedAt.single())
-        DetailViewModel(savedState, api, categories, operations, tracker)
+        DetailViewModel(savedState, api, categories, operations, tracker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
         assertEquals("2026-10-02T00:00:00.123456789+03:00", api.openedAt.last())
     }
 

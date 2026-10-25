@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.profile.impl.ui
 
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorSeverity
+import ru.finassist.pf.core.common.error.UserMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -42,4 +45,8 @@ class ProfileDesignCheckTest {
     )
 
     @Test fun profileThemeSheet() = capture("ProfileThemeSheet", state = state.copy(themeSheet = true), popups = true)
+    // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
+    @Test fun serverWarning() = capture("ProfileServerWarning", state = state.copy(errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
+    @Test fun serverWarningDark() = capture("ProfileServerWarningDark", dark = true, state = state.copy(errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
+
 }

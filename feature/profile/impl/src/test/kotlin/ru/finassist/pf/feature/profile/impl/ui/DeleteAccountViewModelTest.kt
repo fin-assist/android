@@ -67,7 +67,7 @@ class DeleteAccountViewModelTest {
 
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
-    private fun vm() = DeleteAccountViewModel(api, session, tracker)
+    private fun vm() = DeleteAccountViewModel(api, session, tracker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
 
     @Test fun `the passcode opens the dialog and «Отмена» closes it`() {
         val vm = vm()

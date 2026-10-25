@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorContext
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -37,6 +41,12 @@ data class DetailUiState(
     val saving: Boolean = false,
     val pickerError: String? = null,
     val snackbar: String? = null,
+    val errorPresentation: ErrorPresentation? = null,
+    val pickerErrorPresentation: ErrorPresentation? = null,
+    val requestRetryable: Boolean? = null,
+    val retryReady: Boolean = true,
+    val pickerRequestRetryable: Boolean? = null,
+    val pickerRetryReady: Boolean = true,
 ) {
     /** Kinds of categories the record accepts: debit → expense, credit → income, own transfer pair → both. */
     val pickerKinds: Set<CategoryKind>
@@ -55,12 +65,17 @@ class DetailViewModel @Inject constructor(
     private val categories: CategoriesRepository,
     private val operations: OperationChangesPublisher,
     private val tracker: Tracker,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     /** After a split/merge the record id changes; kept in the saved state so process death reopens the new one. */
     private var id: String = savedState.get<String>(KEY_ID) ?: savedState.toRoute<OperationsRoutes.Detail>().id
     private var occurredAt: String = savedState.get<String>(KEY_OCCURRED_AT)
         ?: savedState.toRoute<OperationsRoutes.Detail>().occurredAt
     private val _state = MutableStateFlow(DetailUiState())
+    private val retryGate = RequestRetryGate(elapsedClock)
+    init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
+    private val pickerRetryGate = RequestRetryGate(elapsedClock)
+    init { viewModelScope.launch { pickerRetryGate.readiness.collect { ready -> _state.update { it.copy(pickerRetryReady = ready) } } } }
     val state: StateFlow<DetailUiState> = _state
 
     init {
@@ -69,8 +84,9 @@ class DetailViewModel @Inject constructor(
     }
 
     fun load() {
+        if (!retryGate.isReady()) return
         viewModelScope.launch {
-            _state.update { it.copy(loading = it.operation == null, error = false, notFound = false) }
+            _state.update { it.copy(loading = it.operation == null, error = false, notFound = false, errorPresentation = null, requestRetryable = null) }
             try {
                 val op = api.getOperation(id, occurredAt)
                 remember(op)
@@ -78,28 +94,34 @@ class DetailViewModel @Inject constructor(
                 val cats = runCatching { categories.categories() }.getOrDefault(emptyList())
                 _state.update { it.copy(loading = false, operation = op, categories = cats) }
             } catch (e: AppError) {
-                val notFound = e is AppError.Api && e.code == ErrorCodes.NOT_FOUND
-                _state.update { it.copy(loading = false, error = !notFound, notFound = notFound) }
+                retryGate.record(e)
+                val notFound = e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.NOT_FOUND
+                _state.update { it.copy(loading = false, error = !notFound, notFound = notFound, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
             }
         }
     }
 
-    fun openPicker() = _state.update { it.copy(picker = true, draftCategoryId = it.operation?.categoryId, pickerError = null) }
+    fun openPicker() = _state.update { it.copy(picker = true, draftCategoryId = it.operation?.categoryId, pickerError = null, pickerErrorPresentation = null, pickerRequestRetryable = null) }
 
-    fun closePicker() = _state.update { it.copy(picker = false, draftCategoryId = null, pickerError = null) }
+    fun closePicker() = _state.update { it.copy(picker = false, draftCategoryId = null, pickerError = null, pickerErrorPresentation = null, pickerRequestRetryable = null) }
 
-    fun choose(categoryId: String) = _state.update { it.copy(draftCategoryId = categoryId, pickerError = null) }
+    fun choose(categoryId: String) {
+        if (categoryId == _state.value.draftCategoryId) return
+        pickerRetryGate.clear()
+        _state.update { it.copy(draftCategoryId = categoryId, pickerError = null, pickerErrorPresentation = null, pickerRequestRetryable = null) }
+    }
 
     fun save() {
         val s = _state.value
         val op = s.operation ?: return
         val target = s.draftCategoryId ?: return
+        if (!pickerRetryGate.isReady()) return
         if (target == op.categoryId) {
             closePicker()
             return
         }
         viewModelScope.launch {
-            _state.update { it.copy(saving = true, pickerError = null) }
+            _state.update { it.copy(saving = true, pickerError = null, pickerErrorPresentation = null, pickerRequestRetryable = null) }
             try {
                 val response = api.changeCategory(op.id, ChangeCategoryRequest(target, op.occurredAt.toWire()))
                 // A pair split in two or a debit that became a pair: keep showing the record that carries the choice.
@@ -115,12 +137,13 @@ class DetailViewModel @Inject constructor(
                 operations.notifyCategoryChanged()
                 _state.update { it.copy(saving = false, picker = false, draftCategoryId = null, operation = shown, snackbar = message) }
             } catch (e: AppError) {
+                pickerRetryGate.record(e)
                 val text = when {
-                    e is AppError.Api && e.code == ErrorCodes.CATEGORY_NOT_ASSIGNABLE -> "Эту категорию нельзя назначить этой операции"
+                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CATEGORY_NOT_ASSIGNABLE -> "Эту категорию нельзя назначить этой операции"
                     e is AppError.Offline -> "Нет сети — категория не изменилась"
                     else -> "Не получилось сохранить. Попробуйте ещё раз"
                 }
-                _state.update { it.copy(saving = false, pickerError = text) }
+                _state.update { it.copy(saving = false, pickerError = text, pickerErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, pickerRequestRetryable = e.requestRetryable) }
             }
         }
     }
