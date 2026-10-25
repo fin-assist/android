@@ -143,9 +143,9 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     init {
-        viewModelScope.launch { merge(statements.events, operations.categoryChanges).collect { load(quiet = true) } }
+        viewModelScope.launch { merge(statements.events, operations.categoryChanges).collect { reloadChangedData() } }
         viewModelScope.launch {
-            reportZone.profile.drop(1).filterNotNull().distinctUntilChanged().collect { if (_state.value.data != null) load(quiet = true) }
+            reportZone.profile.drop(1).filterNotNull().distinctUntilChanged().collect { if (loadJob != null) reloadChangedData() }
         }
         // Remote config can land after the screen opened (first launch, background sync): re-read the blocks.
         viewModelScope.launch {
@@ -159,9 +159,27 @@ class AnalyticsViewModel @Inject constructor(
                 }
                 // A new experiment variant: the server composes the screen anew (FIN-9).
                 if (shownExperiments != null && shownExperiments != experiments) reload = true
-                if (reload && _state.value.data != null) load(quiet = true)
+                if (reload && loadJob != null) {
+                    clearRestriction()
+                    load(quiet = true)
+                }
             }
         }
+    }
+
+    /** Actual data/zone changes invalidate the old request context, including the period directory. */
+    private fun reloadChangedData() {
+        clearRestriction(periodsChanged = true)
+        load(quiet = true)
+    }
+
+    private fun clearRestriction(periodsChanged: Boolean = false) {
+        retryGate.clear()
+        if (periodsChanged) periodsRetryGate.clear()
+        _state.update { it.copy(
+            requestRetryable = null, errorPresentation = null,
+            periodsRetryable = if (periodsChanged) null else it.periodsRetryable,
+        ) }
     }
 
     override fun load(quiet: Boolean) {
@@ -222,31 +240,26 @@ class AnalyticsViewModel @Inject constructor(
 
     /** Segmented control: keeps the current date so «Месяц → Квартал» opens the quarter containing it. */
     override fun setPeriodType(type: PeriodTypeCode) {
-        retryGate.clear()
-        periodsRetryGate.clear()
-        _state.update { it.copy(requestRetryable = null, errorPresentation = null, periodsRetryable = null) }
         if (type == period) return
+        clearRestriction(periodsChanged = true)
         period = type
         tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to type.code))
         load()
     }
 
     override fun goTo(key: PeriodKey) {
-        retryGate.clear()
-        periodsRetryGate.clear()
-        _state.update { it.copy(requestRetryable = null, errorPresentation = null, periodsRetryable = null) }
-        date = key
         _state.update { it.copy(sheet = null) }
+        if (key == date) return
+        clearRestriction()
+        date = key
         tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to period.code))
         load()
     }
 
     override fun setTransferMode(mode: TransferMode) {
-        retryGate.clear()
-        periodsRetryGate.clear()
-        _state.update { it.copy(requestRetryable = null, errorPresentation = null, periodsRetryable = null) }
         _state.update { it.copy(sheet = null) }
         if (mode == transferMode) return
+        clearRestriction()
         transferMode = mode
         tracker.track(Events.ANALYTICS_TRANSFERS_CHANGED, mapOf("mode" to mode.code))
         load()
@@ -323,7 +336,7 @@ class AnalyticsViewModel @Inject constructor(
                 api.dismissRegularPayment(id)
                 tracker.track(Events.ANALYTICS_REGULAR_DISMISSED)
                 _state.update { it.copy(snackbar = "Убрали из регулярных платежей") }
-                load(quiet = true)
+                reloadChangedData()
             } catch (e: AppError) {
                 gate.record(e)
                 _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, snackbar = if (e is AppError.Offline) "Нет сети — не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
