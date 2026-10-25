@@ -14,7 +14,6 @@ import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.core.common.time.ShiftedClock
 import ru.finassist.pf.core.common.time.SystemClock
-import ru.finassist.pf.core.network.AndroidElapsedClock
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.MinVersionCheck
 import ru.finassist.pf.core.tracking.CompositeCrashReporter
@@ -61,7 +60,7 @@ object AppModule {
     /** Server durations use a boot-based clock that includes sleep and ignores wall-clock changes. */
     @Provides
     @Singleton
-    fun elapsedClock(): ElapsedClock = AndroidElapsedClock
+    fun elapsedClock(): ElapsedClock = ElapsedClock { android.os.SystemClock.elapsedRealtime() }
 
     /** `true` when the build has a Tracer app token; otherwise the SDK is not even started. */
     @Provides
