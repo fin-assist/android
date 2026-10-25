@@ -106,6 +106,7 @@ class ChatViewModelBehaviourTest {
         /** Each `ask` takes the next outcome: an [AskResponse] or an [AppError] to throw. */
         val askOutcomes = ArrayDeque<Any>()
         val asks = mutableListOf<Recorded>()
+        var askGate: CompletableDeferred<Unit>? = null
 
         val retryOutcomes = ArrayDeque<Any>()
         val retries = mutableListOf<Pair<IdempotencyKey, String>>()
@@ -126,6 +127,7 @@ class ChatViewModelBehaviourTest {
 
         override suspend fun ask(key: IdempotencyKey, request: AskRequest): AskResponse {
             asks += Recorded(key, request)
+            askGate?.await()
             return when (val o = askOutcomes.removeFirst()) {
                 is AppError -> throw o
                 else -> o as AskResponse
@@ -1220,5 +1222,111 @@ class ChatViewModelBehaviourTest {
         assertEquals(GENERIC_ANSWER_ERROR, vm.answerItem("a1").failureText)
         assertFalse(vm.answerItem("a1").retryable)
     }
+
+
+    @Test fun `another voice question changes the refused Ask context before its gate is checked`() {
+        api.askOutcomes += voiceAskRefusal(false)
+        api.askOutcomes += askResponse()
+        val vm = newVm()
+        sendQuestion(vm, "Сколько потрачено на такси?")
+        val original = api.asks.single().key
+        vm.send(voiceText = "Сколько потрачено на продукты?")
+        assertEquals(2, api.asks.size)
+        assertEquals("Сколько потрачено на продукты?", api.asks.last().request.text)
+        assertTrue(original != api.asks.last().key)
+    }
+
+    @Test fun `the same trimmed voice question preserves false denial and its pending key`() {
+        api.askOutcomes += voiceAskRefusal(false)
+        val saved = SavedStateHandle()
+        val vm = newVm(saved)
+        val question = "Сколько потрачено на такси?"
+        sendQuestion(vm, question)
+        val original = api.asks.single().key
+        val pendingBefore = saved.get<String>("chat.pending.key")
+        vm.send(voiceText = "  $question ")
+        advance(60_000)
+        assertEquals(1, api.asks.size)
+        assertEquals("  $question ", vm.state.value.draft)
+        assertEquals(false, vm.state.value.requestRetryable)
+        assertFalse(vm.state.value.askRetryReady)
+        assertEquals(pendingBefore, saved.get<String>("chat.pending.key"))
+        assertEquals(original.value, pendingBefore)
+    }
+
+    @Test fun `a new voice question does not inherit the previous question wait`() {
+        api.askOutcomes += voiceAskRefusal(true)
+        api.askOutcomes += askResponse()
+        val vm = newVm()
+        sendQuestion(vm, "Сколько потрачено на такси?")
+        assertFalse(vm.state.value.askRetryReady)
+        val original = api.asks.single().key
+        vm.send(voiceText = "Сколько потрачено на продукты?")
+        assertEquals(2, api.asks.size, "a different request is not a resend of the rate-limited request")
+        assertTrue(original != api.asks.last().key)
+    }
+
+    @Test fun `same voice preserves the original wait deadline and replays its exact key`() {
+        api.askOutcomes += voiceAskRefusal(true)
+        api.askOutcomes += askResponse()
+        val vm = newVm()
+        val question = "Сколько потрачено на такси?"
+        sendQuestion(vm, question)
+        val original = api.asks.single().key
+        advance(2_000)
+        vm.send(voiceText = " $question  ")
+        assertEquals(1, api.asks.size)
+        advance(999)
+        vm.send(voiceText = question)
+        assertEquals(1, api.asks.size)
+        advance(1)
+        vm.send(voiceText = " $question ")
+        assertEquals(2, api.asks.size)
+        assertEquals(original, api.asks.last().key)
+        assertEquals(question, api.asks.last().request.text)
+    }
+
+    @Test fun `a voice result while an Ask is busy stays in the draft after the old Ask fails`() {
+        val pending = CompletableDeferred<Unit>()
+        api.askGate = pending
+        api.askOutcomes += voiceAskRefusal(false)
+        val vm = newVm()
+        sendQuestion(vm, "Сколько потрачено на такси?")
+        vm.send(voiceText = "Сколько потрачено на продукты?")
+        assertEquals(1, api.asks.size)
+        assertEquals("Сколько потрачено на продукты?", vm.state.value.draft)
+        pending.complete(Unit)
+        assertFalse(vm.state.value.sending)
+        assertEquals("Сколько потрачено на продукты?", vm.state.value.draft)
+        assertNull(vm.state.value.requestRetryable)
+        assertFalse(vm.state.value.askBlocked)
+        assertTrue(vm.state.value.askRetryReady)
+        api.askGate = null
+        api.askOutcomes += askResponse()
+        vm.send()
+        assertEquals(2, api.asks.size)
+        assertTrue(api.asks.first().key != api.asks.last().key)
+    }
+
+    @Test fun `a voice result while an Ask is busy survives old success with the usual length bound`() {
+        val pending = CompletableDeferred<Unit>()
+        api.askGate = pending
+        api.askOutcomes += askResponse()
+        val vm = newVm()
+        sendQuestion(vm, "Сколько потрачено на такси?")
+        val recognized = "б".repeat(2_100)
+        vm.send(voiceText = recognized)
+        assertEquals("б".repeat(2_000), vm.state.value.draft)
+        assertEquals(1, api.asks.size)
+        pending.complete(Unit)
+        assertEquals("б".repeat(2_000), vm.state.value.draft)
+        assertEquals(listOf("q-a1", "a1"), vm.state.value.items.map { it.id }, "the accepted original Ask still belongs in history")
+        assertEquals(3, vm.state.value.limit?.remaining)
+        assertFalse(vm.state.value.sending)
+    }
+
+    private fun voiceAskRefusal(retryable: Boolean) = AppError.RateLimited(null, 3,
+        ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = retryable,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0)))
 
 }

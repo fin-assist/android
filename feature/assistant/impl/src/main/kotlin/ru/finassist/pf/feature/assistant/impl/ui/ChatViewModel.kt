@@ -270,7 +270,8 @@ class ChatViewModel @Inject constructor(
 
     /** Sends the draft (or [voiceText] right away — voice input is sent immediately, api.md / mvp-scope). */
     fun send(voiceText: String? = null) {
-        val text = (voiceText ?: _state.value.draft).trim()
+        voiceText?.let(::setDraft) // voice is the same bounded, normalized user-input context as typing
+        val text = _state.value.draft.trim()
         if (!askGate.isReady() || text.isEmpty() || _state.value.sending || _state.value.generating || blockedAskText == text) return
         val key = pending?.takeIf { it.first == text }?.second ?: IdempotencyKey.random(elapsedClock)
         pending = text to key
@@ -290,7 +291,7 @@ class ChatViewModel @Inject constructor(
                 val answer = ChatItem.Answer(r.answerId, r.question.createdAt, AnswerStatus.GENERATING)
                 _state.update {
                     it.copy(
-                        sending = false, draft = "", offline = false,
+                        sending = false, draft = if (it.draft.trim() == text) "" else it.draft, offline = false,
                         // A replayed 201 carries ids the reloaded history may already hold: keep those.
                         items = (it.items + question + answer).distinctById(),
                         limit = it.limit?.copy(remaining = r.remainingLimit),
@@ -298,6 +299,10 @@ class ChatViewModel @Inject constructor(
                 }
                 watch(r.answerId)
             } catch (e: AppError) {
+                if (_state.value.draft.trim() != text) {
+                    _state.update { it.copy(sending = false) } // a late result cannot overwrite a newer voice/typed draft
+                    return@launch
+                }
                 askGate.record(e)
                 if (e.requestRetryable == false) blockedAskText = text
                 _state.update { it.copy(sending = false, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable, askBlocked = e.requestRetryable == false) }
