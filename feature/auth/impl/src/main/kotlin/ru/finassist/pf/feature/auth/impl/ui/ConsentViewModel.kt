@@ -52,27 +52,52 @@ class ConsentViewModel @Inject constructor(
     private val _state = MutableStateFlow(ConsentUiState(phoneDisplay = PhoneFormat.display(PhoneFormat.digits(flow.phone))))
     private val documentGate = RequestRetryGate(elapsedClock)
     private var documentFailure: AppError? = null
+    private var rejectedRegistrationVersion: String? = null
+    private var documentGeneration = 0L
     private val retryGate = RequestRetryGate(elapsedClock)
     init {
-        viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready && documentGate.isReady()) } } }
-        viewModelScope.launch { documentGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready && retryGate.isReady()) } } }
+        viewModelScope.launch { retryGate.readiness.collect { updateReadiness() } }
+        viewModelScope.launch { documentGate.readiness.collect { updateReadiness() } }
     }
     val state: StateFlow<ConsentUiState> = _state
     private val _registered = MutableStateFlow(false)
     val registered: StateFlow<Boolean> = _registered
 
     init {
-        viewModelScope.launch {
-            runCatching { fetchDocument() }
-                .onSuccess { doc -> _state.update { it.copy(document = doc) } }
-                .onFailure { failure -> if (failure is AppError) _state.update { it.copy(errorPresentation = failure.presentation.takeUnless { failure is AppError.Offline }, formError = "Не получилось загрузить документ согласия") } }
-        }
+        viewModelScope.launch { try { fetchDocument() } catch (_: AppError) { /* The current document failure is retained below. */ } }
     }
 
-    private suspend fun fetchDocument(): ru.finassist.pf.core.api.model.ConsentDocument {
+    private fun updateReadiness() = _state.update {
+        it.copy(retryReady = retryGate.isReady() && documentGate.isReady() && rejectedRegistrationVersion == null)
+    }
+
+    private suspend fun fetchDocument(): ConsentDocument {
         if (!documentGate.isReady()) throw checkNotNull(documentFailure)
-        return try { authApi.getConsentDocument(ConsentType.PERSONAL_DATA).also { documentFailure = null } }
-        catch (error: AppError) { documentFailure = error; documentGate.record(error); throw error }
+        val generation = ++documentGeneration
+        return try {
+            authApi.getConsentDocument(ConsentType.PERSONAL_DATA).also { document ->
+                if (generation == documentGeneration) {
+                    documentFailure = null
+                    val changed = _state.value.document?.version?.let { it != document.version } == true
+                    val corrected = rejectedRegistrationVersion?.let { it != document.version } == true
+                    _state.update { it.copy(document = document, accepted = if (changed) false else it.accepted,
+                        requestRetryable = if (corrected) null else it.requestRetryable) }
+                    if (corrected) {
+                        rejectedRegistrationVersion = null
+                        retryGate.clear() // only a different fetched version corrects the rejected registration body
+                    }
+                    updateReadiness()
+                }
+            }
+        } catch (error: AppError) {
+            if (generation == documentGeneration) {
+                documentFailure = error
+                documentGate.record(error)
+                _state.update { it.copy(errorPresentation = error.presentation.takeUnless { error is AppError.Offline },
+                    formError = "Не получилось загрузить документ согласия") }
+            }
+            throw error
+        }
     }
 
     private fun sha256(text: String): String =
@@ -82,7 +107,7 @@ class ConsentViewModel @Inject constructor(
 
     fun submit() {
         val s = _state.value
-        if (s.busy || !retryGate.isReady() || !documentGate.isReady()) return
+        if (s.busy || !retryGate.isReady() || !documentGate.isReady() || rejectedRegistrationVersion != null) return
         if (!s.accepted) {
             _state.update { it.copy(error = "Без согласия мы не сможем создать аккаунт и хранить ваши данные") }
             return
@@ -90,6 +115,7 @@ class ConsentViewModel @Inject constructor(
         val token = flow.registrationToken ?: run { _state.update { it.copy(expired = true) }; return }
         viewModelScope.launch {
             _state.update { it.copy(busy = true, formError = null, errorPresentation = null) }
+            var attemptedVersion: String? = null
             try {
                 val version = s.document?.version ?: fetchDocument().version
                 // The registration token is one-time: a repeat after a lost 201 (even after process death) must
@@ -100,6 +126,7 @@ class ConsentViewModel @Inject constructor(
                     _state.update { it.copy(replayUnavailable = true, formError = "Не получилось восстановить создание аккаунта. Начните вход заново") }
                     return@launch
                 }
+                attemptedVersion = version
                 val response = authApi.register(
                     key,
                     RegisterRequest(registrationToken = token, pdConsentAccepted = true, pdConsentVersion = version, timezone = TimeZone.getDefault().id),
@@ -111,11 +138,13 @@ class ConsentViewModel @Inject constructor(
                 retryGate.record(e)
                 _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
                 when {
-                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_OUTDATED -> {
-                        // Document moved on while the screen was open: reload it; the new version means a new key.
-                        // A new version needs a new, affirmative tick: the old one does not carry over.
+                    attemptedVersion != null && e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_OUTDATED -> {
+                        // Preserve the denied body/key until a successful GET actually changes its document version.
+                        // Only that corrected body and a fresh affirmative tick may select a different action key.
+                        rejectedRegistrationVersion = attemptedVersion
+                        updateReadiness()
                         documentGate.clear()
-                        runCatching { fetchDocument() }.onSuccess { doc -> retryGate.clear(); _state.update { it.copy(document = doc, accepted = false, requestRetryable = null) } }
+                        runCatching { fetchDocument() }
                         _state.update { it.copy(accepted = false) }
                         _state.update { it.copy(formError = "Текст согласия обновился — прочитайте его ещё раз и подтвердите") }
                     }

@@ -1,6 +1,7 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
 import ru.finassist.pf.core.common.time.ElapsedClock
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
@@ -37,6 +38,7 @@ class ConsentViewModelTest {
     private var version = "pd-1"
     private var consentFailure: AppError? = null
     private var consentCalls = 0
+    private var documentGate: CompletableDeferred<Unit>? = null
     private val requests = mutableListOf<Pair<String, RegisterRequest>>()
     private val registerFailures = ArrayDeque<AppError>()
 
@@ -47,6 +49,7 @@ class ConsentViewModelTest {
         h.auth.consent = { type ->
             consentCalls++
             assertEquals(ConsentType.PERSONAL_DATA, type)
+            documentGate?.await()
             consentFailure?.let { throw it }
             ConsentDocument(type, version, "Согласие", "https://example.org/pd/$version")
         }
@@ -185,6 +188,61 @@ class ConsentViewModelTest {
         assertFalse(vm.state.value.accepted)
         assertEquals("pd-1", vm.state.value.document?.version)
         assertEquals("Текст согласия обновился — прочитайте его ещё раз и подтвердите", vm.state.value.formError)
+    }
+
+    private fun outdatedFalse() = AppError.Api(ErrorCodes.CONSENT_OUTDATED, 409,
+        response = ru.finassist.pf.core.common.error.ErrorResponseInfo(ErrorCodes.CONSENT_OUTDATED, 409, requestRetryable = false))
+
+    @Test fun `same-version GET cannot lift a false-denied registration or replace its key`() {
+        registerFailures += outdatedFalse()
+        val vm = vm()
+        vm.acceptAndSubmit()
+        val original = requests.single().first
+        assertEquals("pd-1", vm.state.value.document?.version)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(false, vm.state.value.requestRetryable)
+        vm.acceptAndSubmit()
+        assertEquals(1, requests.size, "a new tick on the same document cannot resend the forbidden body")
+        assertEquals(original, keysFor(), "the old operation UUID remains intact")
+    }
+
+    @Test fun `different fetched version permits corrected registration only after a new tick`() {
+        registerFailures += outdatedFalse()
+        val vm = vm()
+        version = "pd-2"
+        vm.acceptAndSubmit()
+        val original = requests.single().first
+        assertEquals("pd-2", vm.state.value.document?.version)
+        assertFalse(vm.state.value.accepted)
+        assertTrue(vm.state.value.retryReady)
+        assertNull(vm.state.value.requestRetryable)
+        vm.send()
+        assertEquals(1, requests.size)
+        vm.acceptAndSubmit()
+        assertTrue(vm.registered.value)
+        assertEquals(listOf("pd-1", "pd-2"), requests.map { it.second.pdConsentVersion })
+        assertNotEquals(original, requests.last().first, "only the corrected version creates another logical registration")
+        assertEquals(original, keysFor(), "the used old UUID was not renewed or replaced")
+    }
+
+    @Test fun `a delayed same-version document read never re-enables the denied registration`() {
+        registerFailures += outdatedFalse()
+        val vm = vm()
+        val reply = CompletableDeferred<Unit>()
+        documentGate = reply
+        vm.setAccepted(true)
+        vm.submit()
+        eventually { requests.size == 1 && consentCalls == 2 }
+        val original = requests.single().first
+        assertTrue(vm.state.value.busy)
+        vm.submit()
+        assertEquals(1, requests.size)
+        reply.complete(Unit)
+        eventually { !vm.state.value.busy }
+        assertFalse(vm.state.value.retryReady)
+        vm.acceptAndSubmit()
+        assertEquals(1, requests.size)
+        assertEquals(original, keysFor())
     }
 
     @Test fun `a spent registration token sends the user back to the call`() {
