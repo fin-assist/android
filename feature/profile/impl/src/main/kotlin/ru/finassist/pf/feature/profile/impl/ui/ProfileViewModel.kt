@@ -76,6 +76,8 @@ class ProfileViewModel @Inject constructor(
     private val consentRetryGate = RequestRetryGate(elapsedClock)
     private val themeRetryGate = RequestRetryGate(elapsedClock)
     private var blockedTheme: Theme? = null
+    private var themeGeneration = 0L
+    private var statementsGeneration = 0L
 
     private fun readFlags() = ProfileFlags(
         assistant = featureFlags.isEnabled(Flag.ASSISTANT),
@@ -90,7 +92,13 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             preferences.theme.collect { code -> _state.update { it.copy(theme = Theme.entries.firstOrNull { t -> t.name.equals(code, true) } ?: Theme.SYSTEM) } }
         }
-        viewModelScope.launch { statementsRepository.events.collect { statementsRetryGate.clear(); loadStatements() } }
+        viewModelScope.launch {
+            statementsRepository.events.collect {
+                statementsGeneration++
+                statementsRetryGate.clear()
+                loadStatements()
+            }
+        }
         viewModelScope.launch { featureFlags.changes.collect { _state.update { it.copy(flags = readFlags()) } } }
         if (appLock.biometricAvailability() != BiometricAvailability.NONE) {
             viewModelScope.launch { appLock.biometricEnabled.collect { on -> _state.update { it.copy(biometric = on) } } }
@@ -99,8 +107,7 @@ class ProfileViewModel @Inject constructor(
 
     /** Called on every resume: the consent switch and the limit may have changed on other screens. */
     fun load() {
-        if (!retryGate.isReady()) return
-        viewModelScope.launch {
+        if (retryGate.isReady()) viewModelScope.launch {
             _state.update { it.copy(loading = it.profile == null, offline = false, errorPresentation = null, requestRetryable = null) }
             try {
                 val p = profileApi.getProfile()
@@ -124,12 +131,16 @@ class ProfileViewModel @Inject constructor(
 
     private fun loadStatements() {
         if (!statementsRetryGate.isReady()) return
+        val generation = ++statementsGeneration
         viewModelScope.launch {
-            runCatching { statementsApi.listStatements() }.onSuccess { list -> _state.update { it.copy(statements = list.summary, statementsLoaded = true) } }
-                .onFailure { failure -> if (failure is AppError) {
+            runCatching { statementsApi.listStatements() }.onSuccess { list ->
+                if (generation == statementsGeneration) _state.update { it.copy(statements = list.summary, statementsLoaded = true) }
+            }.onFailure { failure ->
+                if (generation == statementsGeneration && failure is AppError) {
                     statementsRetryGate.record(failure)
                     if (failure !is AppError.Offline) _state.update { it.copy(errorPresentation = failure.presentation, snackbar = "Не получилось обновить историю загрузок") }
-                } }
+                }
+            }
         }
     }
 
@@ -148,17 +159,21 @@ class ProfileViewModel @Inject constructor(
 
     fun setTheme(theme: Theme) {
         if (blockedTheme == theme && !themeRetryGate.isReady()) return
+        val generation = ++themeGeneration
         if (blockedTheme != theme) themeRetryGate.clear()
         blockedTheme = theme
         _state.update { it.copy(themeSheet = false) }
         viewModelScope.launch {
             preferences.setTheme(theme.name.lowercase())
             tracker.track(Events.PROFILE_THEME_CHANGED, mapOf("theme" to theme.name.lowercase()))
-            runCatching { profileApi.updateProfile(ProfileUpdate(theme = theme)) }.onSuccess { zoneChecker.observed(it) }
-                .onFailure { failure -> if (failure is AppError) {
+            runCatching { profileApi.updateProfile(ProfileUpdate(theme = theme)) }.onSuccess {
+                if (generation == themeGeneration) zoneChecker.observed(it)
+            }.onFailure { failure ->
+                if (generation == themeGeneration && failure is AppError) {
                     themeRetryGate.record(failure)
                     _state.update { it.copy(errorPresentation = failure.presentation.takeUnless { failure is AppError.Offline }, snackbar = "Не получилось сохранить тему. Попробуйте ещё раз") }
-                } }
+                }
+            }
         }
     }
 

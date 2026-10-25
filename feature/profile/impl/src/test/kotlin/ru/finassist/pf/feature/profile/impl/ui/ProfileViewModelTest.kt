@@ -86,6 +86,7 @@ class ProfileViewModelTest {
         var gets = 0
         val updates = mutableListOf<ProfileUpdate>()
         var updateFailure: AppError? = null
+        var updateReply: (suspend (ProfileUpdate) -> Profile)? = null
         var revokeFailure: AppError? = null
         var revokes = 0
 
@@ -96,6 +97,7 @@ class ProfileViewModelTest {
         }
         override suspend fun updateProfile(update: ProfileUpdate): Profile {
             updates += update
+            updateReply?.let { return it(update) }
             updateFailure?.let { throw it }
             return profile.copy(timezone = update.timezone ?: profile.timezone, theme = update.theme ?: profile.theme)
         }
@@ -111,8 +113,10 @@ class ProfileViewModelTest {
         var calls = 0
         var failure: AppError? = null
         var summary: StatementsSummary? = summary(2)
+        var listReply: (suspend () -> StatementsList)? = null
         override suspend fun listStatements(): StatementsList {
             calls++
+            listReply?.let { return it() }
             failure?.let { throw it }
             return StatementsList(summary, emptyList())
         }
@@ -126,11 +130,12 @@ class ProfileViewModelTest {
 
     private class FakeAssistant : AssistantApi {
         var calls = 0
+        var limit = LIMIT
         var failure: AppError? = null
         override suspend fun getLimit(): AssistantLimit {
             calls++
             failure?.let { throw it }
-            return LIMIT
+            return limit
         }
         override suspend fun listMessages(limit: Int?, beforeId: String?): MessagesList = error("unused")
         override suspend fun ask(key: IdempotencyKey, request: AskRequest): AskResponse = error("unused")
@@ -289,6 +294,101 @@ class ProfileViewModelTest {
         assertEquals(2, profileApi.gets, "GET is a different request")
         vm.setTheme(Theme.LIGHT)
         assertEquals(2, profileApi.updates.size, "a changed selection is a new action")
+    }
+
+    private fun forbiddenProfileRequest() = AppError.Api("FUTURE_ERROR", 400,
+        response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_ERROR", 400, requestRetryable = false))
+
+    @Test fun `a forbidden profile GET does not block independent summary and limit reads on resume`() {
+        val vm = loaded()
+        profileApi.getFailure = forbiddenProfileRequest()
+        vm.load()
+        assertEquals(2, profileApi.gets)
+        statementsApi.summary = summary(3)
+        assistant.limit = LIMIT.copy(remaining = 1)
+        vm.load()
+        assertEquals(2, profileApi.gets, "the unchanged profile request remains forbidden")
+        assertEquals(3, statementsApi.calls)
+        assertEquals(3, assistant.calls)
+        assertEquals(summary(3), vm.state.value.statements)
+        assertEquals(1, vm.state.value.limit?.remaining)
+        assertFalse(vm.state.value.retryReady)
+    }
+
+    @Test fun `an older summary failure cannot poison a successful read after an actual statement change`() {
+        val vm = loaded()
+        var old: kotlin.coroutines.Continuation<StatementsList>? = null
+        var replies = 0
+        statementsApi.listReply = {
+            if (++replies == 1) kotlin.coroutines.suspendCoroutine { old = it }
+            else StatementsList(summary(3), emptyList())
+        }
+        vm.load()
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("u1"))
+        assertEquals(summary(3), vm.state.value.statements)
+        old!!.resumeWith(Result.failure(forbiddenProfileRequest()))
+        assertEquals(summary(3), vm.state.value.statements)
+        assertNull(vm.state.value.errorPresentation)
+        vm.load()
+        assertEquals(4, statementsApi.calls, "the stale refusal did not block the current context")
+    }
+
+    @Test fun `an older summary success cannot replace or release a newer refusal after a statement change`() {
+        val vm = loaded()
+        var old: kotlin.coroutines.Continuation<StatementsList>? = null
+        var replies = 0
+        statementsApi.listReply = {
+            if (++replies == 1) kotlin.coroutines.suspendCoroutine { old = it }
+            else throw forbiddenProfileRequest()
+        }
+        vm.load()
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("u1"))
+        old!!.resumeWith(Result.success(StatementsList(summary(9), emptyList())))
+        assertEquals(summary(2), vm.state.value.statements, "the pre-change result stays obsolete")
+        vm.load()
+        assertEquals(3, statementsApi.calls, "the current summary refusal remains in force")
+    }
+
+    @Test fun `repeated resume preserves an unchanged summary refusal`() {
+        val vm = loaded()
+        statementsApi.failure = forbiddenProfileRequest()
+        vm.load()
+        vm.load()
+        assertEquals(2, statementsApi.calls)
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("u1"))
+        assertEquals(3, statementsApi.calls, "only an actual statement change releases that context")
+    }
+
+    @Test fun `an older theme refusal cannot block the newer successful choice`() {
+        val vm = loaded()
+        var old: kotlin.coroutines.Continuation<Profile>? = null
+        profileApi.updateReply = { update ->
+            if (update.theme == Theme.DARK) kotlin.coroutines.suspendCoroutine { old = it }
+            else profile(theme = update.theme!!)
+        }
+        vm.setTheme(Theme.DARK)
+        vm.setTheme(Theme.LIGHT)
+        old!!.resumeWith(Result.failure(forbiddenProfileRequest()))
+        assertNull(vm.state.value.errorPresentation)
+        assertEquals("light", localTheme())
+        vm.setTheme(Theme.LIGHT)
+        assertEquals(3, profileApi.updates.size, "the older theme's false does not belong to LIGHT")
+    }
+
+    @Test fun `an older theme failure cannot release the newer choice refusal`() {
+        val vm = loaded()
+        var old: kotlin.coroutines.Continuation<Profile>? = null
+        profileApi.updateReply = { update ->
+            if (update.theme == Theme.DARK) kotlin.coroutines.suspendCoroutine { old = it }
+            else throw forbiddenProfileRequest()
+        }
+        vm.setTheme(Theme.DARK)
+        vm.setTheme(Theme.LIGHT)
+        val currentPresentation = vm.state.value.errorPresentation
+        old!!.resumeWith(Result.failure(AppError.Offline()))
+        assertEquals(currentPresentation, vm.state.value.errorPresentation)
+        vm.setTheme(Theme.LIGHT)
+        assertEquals(2, profileApi.updates.size, "a stale legacy failure cannot overwrite the current false")
     }
 
     @Test fun `a failed refresh on resume keeps the shown profile`() {
