@@ -99,16 +99,30 @@ class HistoryViewModel @Inject constructor(
     private val retryGate = RequestRetryGate(elapsedClock)
     init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<HistoryUiState> = _state
+    private var loadGeneration = 0L
+
+    /** Only an observed data change ends the previous list-request context; ordinary retry/resume does not. */
+    private fun listDataChanged() {
+        loadGeneration++ // invalidate pending old reads before any local event delivery or another suspension
+        retryGate.clear()
+        _state.update { it.copy(errorPresentation = null, requestRetryable = null, retryReady = true) }
+    }
 
     fun load() {
         if (!retryGate.isReady()) return
+        val generation = ++loadGeneration
         viewModelScope.launch {
+            if (generation != loadGeneration) return@launch
             _state.update { it.copy(loading = it.list == null, offline = false, errorPresentation = null, requestRetryable = null) }
             try {
                 val list = api.listStatements()
+                if (generation != loadGeneration) return@launch
                 _state.update { it.copy(loading = false, list = list) }
-                list.uploads.filter { it.status == UploadStatus.PROCESSING }.forEach { watch(it.uploadId) }
+                list.uploads.filter { it.status == UploadStatus.PROCESSING }.forEach {
+                    if (generation == loadGeneration) watch(it.uploadId)
+                }
             } catch (e: AppError) {
+                if (generation != loadGeneration) return@launch
                 retryGate.record(e)
                 _state.update { it.copy(loading = false, offline = it.list == null, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
             }
@@ -138,9 +152,13 @@ class HistoryViewModel @Inject constructor(
                     recoverOnceAfter = { ServiceGate.recoveryDeadline(it, elapsedClock) },
                 ) { api.streamProgress(uploadId) }
                     .collect { event -> when (event) {
-                        is ImportEvent.Complete -> repository.importCompleted(uploadId, event.result)
-                        is ImportEvent.Error -> if (event.code != ErrorCodes.CANCELLED) {
-                            _state.update { it.copy(resultErrorPresentation = event.presentation) }
+                        is ImportEvent.Complete -> {
+                            listDataChanged()
+                            repository.importCompleted(uploadId, event.result)
+                        }
+                        is ImportEvent.Error -> {
+                            listDataChanged()
+                            if (event.code != ErrorCodes.CANCELLED) _state.update { it.copy(resultErrorPresentation = event.presentation) }
                         }
                         is ImportEvent.Progress -> Unit
                     } }
@@ -168,6 +186,7 @@ class HistoryViewModel @Inject constructor(
             _state.update { it.copy(deleting = true, errorPresentation = null) }
             try {
                 api.deleteStatement(upload.uploadId)
+                listDataChanged()
                 repository.uploadDeleted(upload.uploadId)
                 tracker.track(Events.STATEMENTS_UPLOAD_DELETED)
                 _state.update { it.copy(deleting = false, confirmDelete = null, snackbar = "Загрузка удалена, аналитика пересчитана") }

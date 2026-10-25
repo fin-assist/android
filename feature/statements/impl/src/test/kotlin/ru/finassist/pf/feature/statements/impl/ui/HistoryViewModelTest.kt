@@ -1,6 +1,7 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
 import ru.finassist.pf.core.common.time.ElapsedClock
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -18,6 +19,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.ImportProgress
@@ -64,7 +66,7 @@ class HistoryViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun newVm(flags: StaticFlags = StaticFlags()) = HistoryViewModel(api, repository, tracker, flags, ElapsedClock { dispatcher.scheduler.currentTime })
+    private fun newVm(flags: StaticFlags = StaticFlags(), source: StatementsApi = api) = HistoryViewModel(source, repository, tracker, flags, ElapsedClock { dispatcher.scheduler.currentTime })
 
     private fun advance(ms: Long) {
         dispatcher.scheduler.advanceTimeBy(ms)
@@ -104,6 +106,113 @@ class HistoryViewModelTest {
         vm.load()
         assertFalse(vm.state.value.offline)
         assertEquals(done, vm.state.value.list)
+    }
+
+    private fun forbiddenListRead() = AppError.Api("FUTURE_READ_REFUSAL", 409,
+        response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_READ_REFUSAL", 409, requestRetryable = false))
+
+    @Test fun `a successful delete starts a new list context while same-context retries stay forbidden`() {
+        val empty = StatementsList(uploads = emptyList())
+        api.listOutcomes += done
+        api.listOutcomes += forbiddenListRead()
+        api.listOutcomes += empty
+        val vm = newVm()
+        vm.load()
+        vm.load()
+        assertFalse(vm.state.value.retryReady)
+        vm.load()
+        assertEquals(2, api.listCalls, "ordinary resume must respect the refusal")
+
+        vm.askDelete(upload("u1"))
+        vm.delete()
+        assertEquals(listOf("u1"), api.deleted)
+        assertEquals(3, api.listCalls, "actual deletion makes the previous list context obsolete")
+        assertEquals(empty, vm.state.value.list)
+        assertNull(vm.state.value.requestRetryable)
+        assertTrue(vm.state.value.retryReady)
+    }
+
+    @Test fun `a terminal import outcome refreshes a previously forbidden list in its new data context`() {
+        for (success in listOf(true, false)) {
+            val finish = CompletableDeferred<Unit>()
+            val result = importResult()
+            val after = if (success) done else StatementsList(uploads = emptyList())
+            api.listOutcomes.clear()
+            api.listOutcomes += processing
+            api.listOutcomes += forbiddenListRead()
+            api.listOutcomes += after
+            api.script("u1", flow {
+                emit(progress)
+                finish.await()
+                if (success) emit(ImportEvent.Complete(result))
+                else emit(ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, "private diagnostic"))
+            })
+            val callsBefore = api.listCalls
+            val vm = newVm()
+            vm.load()
+            vm.load()
+            vm.load()
+            assertEquals(callsBefore + 2, api.listCalls)
+            assertFalse(vm.state.value.retryReady)
+            finish.complete(Unit)
+            assertEquals(callsBefore + 3, api.listCalls)
+            assertEquals(after, vm.state.value.list)
+            assertTrue(vm.state.value.retryReady)
+            assertNull(vm.state.value.requestRetryable)
+            vm.pause()
+        }
+    }
+
+    @Test fun `an old read refusal cannot poison the successful post-delete list context`() {
+        val releaseOld = CompletableDeferred<Unit>()
+        val empty = StatementsList(uploads = emptyList())
+        var calls = 0
+        val source = object : StatementsApi by api {
+            override suspend fun listStatements(): StatementsList = when (++calls) {
+                1 -> done
+                2 -> { releaseOld.await(); throw forbiddenListRead() }
+                else -> empty
+            }
+        }
+        val vm = newVm(source = source)
+        vm.load()
+        vm.load() // old context still in flight
+        vm.askDelete(upload("u1"))
+        vm.delete()
+        assertEquals(empty, vm.state.value.list)
+        releaseOld.complete(Unit)
+        assertEquals(empty, vm.state.value.list)
+        assertNull(vm.state.value.errorPresentation)
+        assertNull(vm.state.value.requestRetryable)
+        assertTrue(vm.state.value.retryReady)
+        vm.load()
+        assertEquals(4, calls, "the stale refusal must not close the new context's retry gate")
+    }
+
+    @Test fun `an old successful read cannot watch deleted uploads or reopen a newer forbidden context`() {
+        val releaseOld = CompletableDeferred<Unit>()
+        var calls = 0
+        val source = object : StatementsApi by api {
+            override suspend fun listStatements(): StatementsList = when (++calls) {
+                1 -> done
+                2 -> { releaseOld.await(); processing }
+                else -> throw forbiddenListRead()
+            }
+        }
+        api.script("u1", flowOf(ImportEvent.Complete(importResult())))
+        val vm = newVm(source = source)
+        vm.load()
+        vm.load()
+        vm.askDelete(upload("u1"))
+        vm.delete()
+        assertEquals(3, calls)
+        assertFalse(vm.state.value.retryReady)
+        releaseOld.complete(Unit)
+        assertTrue(api.streamOpens.isEmpty(), "a stale list must not start watchers for deleted data")
+        assertEquals(false, vm.state.value.requestRetryable)
+        assertFalse(vm.state.value.retryReady)
+        vm.load()
+        assertEquals(3, calls, "the new response's false still controls the current request")
     }
 
     @Test fun `an upload being parsed is watched and the list reloads when it completes`() {
