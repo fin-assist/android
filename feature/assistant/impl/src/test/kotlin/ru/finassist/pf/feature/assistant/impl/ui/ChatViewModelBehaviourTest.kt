@@ -196,7 +196,7 @@ class ChatViewModelBehaviourTest {
                 answer("a1"),
                 // Unknown role is dropped, an unknown status reads as failed, a duplicate id is shown once.
                 Message(id = "x", role = MessageRole.UNKNOWN, createdAt = now),
-                // Error fields of a status the client does not know are not trusted: the generic text, no retry (api.md 7.3).
+                // Unknown status shares safe text fallback, but does not supply a known code or new-attempt policy.
                 answer("a2", status = AnswerStatus.UNKNOWN, errorCode = AnswerErrorCode.MODEL_ERROR, errorText = "x", retryable = true),
                 answer("a1"),
             ),
@@ -211,10 +211,70 @@ class ChatViewModelBehaviourTest {
         assertEquals("Вопрос q1", assertIs<ChatItem.Question>(s.items[0]).text)
         val failed = vm.answerItem("a2")
         assertEquals(AnswerStatus.FAILED, failed.status)
-        assertNull(failed.errorText)
+        assertEquals("x", failed.failureText)
+        assertNull(failed.errorCode)
         assertFalse(failed.retryable)
         assertEquals(limit, s.limit)
         assertEquals(Events.ASSISTANT_OPENED, tracker.names().first())
+    }
+
+    @Test fun `unknown history status preserves canonical warning without granting code actions or a new attempt`() {
+        api.pages[null] = MessagesList(listOf(answer("a1", AnswerStatus.UNKNOWN, AnswerErrorCode.MODEL_ERROR,
+            errorText = "Прежний текст", retryable = true).copy(
+                errorUserMessage = UserMessage.from("Ответ пока недоступен"), errorSeverity = ErrorSeverity.WARNING,
+                errorRawCode = ErrorCodes.CONSENT_REQUIRED,
+            )), hasOlder = false)
+        val vm = newVm()
+        val shown = vm.answerItem("a1")
+        assertEquals(AnswerStatus.FAILED, shown.status)
+        assertEquals("Ответ пока недоступен", shown.failureText)
+        assertEquals(ErrorSeverity.WARNING, shown.errorPresentation.severity)
+        assertNull(shown.errorCode)
+        assertFalse(shown.retryable)
+        assertNull(vm.state.value.event)
+        assertTrue(api.retries.isEmpty())
+    }
+
+    @Test fun `missing history status preserves canonical presentation and never infers legacy retry`() {
+        api.pages[null] = MessagesList(listOf(Message("a1", MessageRole.ASSISTANT, status = null,
+            errorCode = AnswerErrorCode.MODEL_ERROR, errorText = "Прежний текст", createdAt = now,
+            errorUserMessage = UserMessage.from("Проверьте ответ позднее"), errorSeverity = ErrorSeverity.INFO,
+        )), hasOlder = false)
+        val shown = newVm().answerItem("a1")
+        assertEquals(AnswerStatus.FAILED, shown.status)
+        assertEquals("Проверьте ответ позднее", shown.failureText)
+        assertEquals(ErrorSeverity.INFO, shown.errorPresentation.severity)
+        assertNull(shown.errorCode)
+        assertFalse(shown.retryable, "MODEL_ERROR on an unrecognized status must not infer a new generation")
+    }
+
+    @Test fun `unknown and missing history statuses respect invalid versus absent canonical text`() {
+        val inputs = listOf(AnswerStatus.UNKNOWN, null).flatMapIndexed { index, status ->
+            listOf(
+                Message("invalid-$index", MessageRole.ASSISTANT, status = status, createdAt = now,
+                    errorText = "Legacy must not replace malformed canonical text", errorUserMessage = UserMessage.Invalid,
+                    errorSeverity = ErrorSeverity.WARNING, errorCode = AnswerErrorCode.MODEL_ERROR, retryable = true),
+                Message("legacy-$index", MessageRole.ASSISTANT, status = status, createdAt = now,
+                    errorText = "Прежнее пользовательское сообщение", errorCode = AnswerErrorCode.MODEL_ERROR, retryable = true),
+                Message("empty-$index", MessageRole.ASSISTANT, status = status, createdAt = now,
+                    errorText = "   ", errorCode = AnswerErrorCode.MODEL_ERROR, retryable = true),
+            )
+        }
+        api.pages[null] = MessagesList(inputs, hasOlder = false)
+        val vm = newVm()
+        repeat(2) { index ->
+            val invalid = vm.answerItem("invalid-$index")
+            assertEquals(GENERIC_ANSWER_ERROR, invalid.failureText)
+            assertEquals(UserMessage.Invalid, invalid.errorPresentation.userMessage)
+            assertEquals(ErrorSeverity.WARNING, invalid.errorPresentation.severity)
+            assertEquals("Прежнее пользовательское сообщение", vm.answerItem("legacy-$index").failureText)
+            assertEquals(GENERIC_ANSWER_ERROR, vm.answerItem("empty-$index").failureText)
+        }
+        vm.state.value.items.filterIsInstance<ChatItem.Answer>().forEach {
+            assertEquals(AnswerStatus.FAILED, it.status)
+            assertNull(it.errorCode)
+            assertFalse(it.retryable)
+        }
     }
 
     @Test fun `the thread failing to load offline shows the offline screen`() {

@@ -452,20 +452,22 @@ class ChatViewModel @Inject constructor(
     private fun toItem(m: Message): ChatItem? = when (m.role) {
         MessageRole.USER -> ChatItem.Question(m.id, m.createdAt, m.text.orEmpty())
         MessageRole.ASSISTANT -> {
-            // Error fields belong to `failed` only: an unknown (or missing) status shown as failed has no code, so it gets
-            // the generic text and no «Повторить» (api.md 7.3).
-            val failed = m.status == AnswerStatus.FAILED
+            // Unknown/missing status is displayed as failed and uses the same canonical/legacy text rules (7.3).
+            // Its presentation does not make the unknown status's code or new-attempt permission actionable.
+            val status = m.status?.effective ?: AnswerStatus.FAILED
+            val shownFailure = status == AnswerStatus.FAILED
+            val knownFailure = m.status == AnswerStatus.FAILED
             ChatItem.Answer(
                 id = m.id,
                 createdAt = m.createdAt,
-                status = m.status?.effective ?: AnswerStatus.FAILED,
+                status = status,
                 blocks = m.blocks.orEmpty(),
                 chips = m.chips.orEmpty(),
                 source = m.source,
-                errorText = m.errorText.takeIf { failed }.presentText(),
-                errorPresentation = if (failed) m.errorPresentation else ErrorPresentation(),
-                errorCode = m.errorRawCode.takeIf { failed },
-                retryable = failed && answerRetryable(m.errorCode, m.retryable),
+                errorText = m.errorText.takeIf { shownFailure }.presentText(),
+                errorPresentation = if (shownFailure) m.errorPresentation else ErrorPresentation(),
+                errorCode = m.errorRawCode.takeIf { knownFailure },
+                retryable = knownFailure && answerRetryable(m.errorCode, m.retryable),
                 currency = m.currency,
             )
         }
