@@ -18,6 +18,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.api.AuthApi
+import ru.finassist.pf.core.storage.IdempotencyKeys
+import java.security.MessageDigest
 import ru.finassist.pf.core.designsystem.components.pfTestRoot
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.toggles.FlagOverrides
@@ -55,6 +57,9 @@ import javax.inject.Inject
  * - `error_operation=profile_update|operations_list|assistant_ask|off` — inject only a fixed safe failure at that API method.
  * - `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden` — closed wire fixtures.
  * - `expect_error_requests=<n>` — require exactly n injected failures; proves a refused request was not resent.
+ * - `pending_upload_fixture=october` — seed an unknown-age pending UUID for the closed bundled OFX fixture.
+ *   This simulates a restored record, not process death; the in-process fake's server state stays intact.
+ * - `expect_uploads=<n>` — require exactly n uploads on the fake server.
  * - `unknown_codes=true|false` — the fake server sends codes the client does not know (`MockCodes`, FIN-83).
  * - `failing_blocks=<id>,<id>` — those Analytics blocks fail to build and come as `unavailable` (FIN-5); empty — none.
  * - `profile_timezone=<zone id>` — `profile.timezone` on the server, as if changed from another device; the app
@@ -84,6 +89,7 @@ class E2eControlActivity : ComponentActivity() {
     @Inject lateinit var session: SessionRepository
     @Inject lateinit var sessionImpl: SessionRepositoryImpl
     @Inject lateinit var appLock: AppLock
+    @Inject lateinit var keys: IdempotencyKeys
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -159,6 +165,28 @@ class E2eControlActivity : ComponentActivity() {
                 }
                 name == "expect_error_requests" -> value.toIntOrNull()?.let { expected ->
                     if (backend.injectedErrorCount.value != expected) unmet = "expected $expected injected failures, got ${backend.injectedErrorCount.value}"
+                }
+                name == "pending_upload_fixture" -> {
+                    if (value != "october") unmet = "unknown pending upload fixture"
+                    else {
+                        val digest = MessageDigest.getInstance("SHA-256")
+                        assets.open("e2e/statements/october.ofx").use { input ->
+                            val buffer = ByteArray(8192)
+                            while (true) {
+                                val read = input.read(buffer)
+                                if (read < 0) break
+                                digest.update(buffer, 0, read)
+                            }
+                        }
+                        val hash = digest.digest().joinToString("") { "%02x".format(it) }
+                        // No elapsed clock: intentionally no proof of age, as with a restored legacy record.
+                        keys.keyFor("statements.upload:$hash")
+                    }
+                }
+                name == "expect_uploads" -> {
+                    val expected = value.toIntOrNull()?.takeIf { it >= 0 }
+                    val actual = backend.mutex.withLock { backend.uploads.size }
+                    if (expected == null || actual != expected) unmet = "unexpected upload count"
                 }
                 name == "unknown_codes" -> backend.config = backend.config.copy(unknownCodes = value.toBoolean())
                 name == "failing_blocks" -> backend.config = backend.config.copy(failingBlocks = value.split(',').map(String::trim).filter(String::isNotEmpty).toSet())

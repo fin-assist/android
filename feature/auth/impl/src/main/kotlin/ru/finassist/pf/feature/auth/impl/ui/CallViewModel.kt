@@ -1,6 +1,8 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
 import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.error.ErrorContext
+import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.ErrorPresentation
 import ru.finassist.pf.core.common.time.ElapsedClock
 import androidx.lifecycle.ViewModel
@@ -129,6 +131,7 @@ class CallViewModel @Inject constructor(
                     reopenFirstFailure = false,
                     state = reopenStates.getOrPut(token) { SseReopenState() },
                     elapsedClock = elapsedClock,
+                    recoverOnceAfter = { ServiceGate.recoveryDeadline(it, elapsedClock) },
                 ) { authApi.streamPhoneVerification(token) }.collect { event ->
                     when (event.status) {
                         VerificationStatus.PENDING -> _state.update { it.copy(phase = CallPhase.WAITING) }
@@ -137,7 +140,9 @@ class CallViewModel @Inject constructor(
                     }
                 }
             } catch (e: AppError) {
-                retryGate.record(e)
+                // This known correction is constrained by the stream's one-shot permit and deadline.
+                // A second generic latch here would prevent that authorized recovery from collecting at all.
+                if (e !is AppError.Maintenance || e.response?.context != ErrorContext.REQUEST || e.requestRetryable != false) retryGate.record(e)
                 _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
                 when (e) {
                     is AppError.Offline -> _state.update { it.copy(phase = CallPhase.OFFLINE) }

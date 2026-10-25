@@ -46,6 +46,19 @@ Compare-and-set updates/clears and a masked request-session tag prevent a late r
 replaying an old user's operation or removing a newer login. Failed refreshes respect their own
 request retry restriction and wait, independently of the original operation.
 
+A validated first refusal before key/body admission (REQUEST 429 RATE_LIMITED, 503 MAINTENANCE or
+400 CLIENT_VERSION_UNSUPPORTED) can retire only its matching pending marker by compare-and-set.
+The same UUID and its original origin remain unchanged; the refresh's first possible-use window
+has not started. The wait and explicit `false` still apply. Any earlier uncertain outcome remains
+sticky: a later pre-admission refusal cannot prove that an older request did not use the token or
+renew its 60-second window. Unknown/restored markers remain conservative. Update requires an actual
+update; maintenance has only the documented guarded correction.
+
+An unknown-age upload or assistant request has a separate visible recovery state. It preserves the
+old key and explains the unknown outcome; checking history does not send a new mutation. Only an
+explicit new-intent action retires that pending action and creates a new tracked key. A new
+RetryAnswer additionally needs permission from the current failed result, checked through fresh history.
+
 ## Time
 
 Calendar dates and display still use the existing `Clock.zone` rules. Waiting uses `ElapsedClock`,
@@ -59,6 +72,10 @@ fresh timing on replay instead of caching receipt anchors. Without an anchor, re
 an exact countdown; never subtract the device wall clock or restart a saved duration.
 The per-stream `SseReopenState` also retains a pending 429 wait across collector cancellation;
 returning to a screen cannot skip the wait or start its duration again.
+Features explicitly opt into the known maintenance correction through
+`ServiceGate.recoveryDeadline` and the generic `reopeningStream(recoverOnceAfter = …)` callback.
+It permits one opening after the captured wait; a second refusal before any successful event stays
+blocked. Cancellation cannot renew the permit or deadline. UpdateRequired gets no automatic permit.
 
 ## Mock and verification
 

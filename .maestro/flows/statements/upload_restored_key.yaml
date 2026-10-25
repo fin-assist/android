@@ -1,0 +1,57 @@
+appId: ru.finassist.pf.mock.e2e
+name: Загрузка — неизвестный возраст ключа и явное новое действие
+tags:
+  - statements
+  - errors
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+# Seed the same persisted key shape an old process would leave. Do not claim a real process restart:
+# killing the in-process fake would also reset the remote operation whose outcome we need to preserve.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?pending_upload_fixture=october&expect_uploads=0"
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload.recovery"
+    timeout: 10000
+- assertVisible: "Результат предыдущей загрузки неизвестен.*"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_uploads=0"
+- tapOn:
+    id: "statements.upload.new_intent"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_uploads=1"

@@ -21,6 +21,8 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /** Maintenance asks the server again once `Retry-After` passes and on «Проверить сейчас», never by polling (FIN-22). */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -92,11 +94,36 @@ class AvailabilityViewModelTest {
         answers += AppError.Offline()
         vm.checkNow(); scheduler.runCurrent()
         assertEquals(0, probes)
+        assertFalse(vm.canCheck.value)
         scheduler.advanceTimeBy(600_000); scheduler.runCurrent()
         assertEquals(1, probes)
+        assertTrue(vm.canCheck.value, "a failed one-shot probe leaves the guarded manual action available")
         assertIs<ServiceGate.State.Maintenance>(gate.state.value)
         scheduler.advanceTimeBy(600_000); scheduler.runCurrent()
         assertEquals(1, probes)
+    }
+
+    @Test fun `manual readiness follows each refusal deadline without an automatic loop`() {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
+        gate.maintenance(null, 15, clock.now())
+        answers += AppError.Maintenance(null, 30)
+        scheduler.runCurrent()
+        assertFalse(vm.canCheck.value)
+        scheduler.advanceTimeBy(15_000); scheduler.runCurrent()
+        assertEquals(1, probes)
+        assertFalse(vm.canCheck.value, "the fresh refusal has its own wait")
+        scheduler.advanceTimeBy(29_999); scheduler.runCurrent()
+        assertFalse(vm.canCheck.value)
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(1, probes)
+        scheduler.advanceTimeBy(1); scheduler.runCurrent()
+        assertTrue(vm.canCheck.value)
+        assertEquals(1, probes, "readiness does not start a second automatic probe")
+        answers += null
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(2, probes)
+        assertEquals(ServiceGate.State.Open, gate.state.value)
+        assertFalse(vm.canCheck.value)
     }
 
     @Test fun `the time of the end reads as a promise for today or another day`() {

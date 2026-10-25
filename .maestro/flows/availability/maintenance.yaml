@@ -1,5 +1,5 @@
 appId: ru.finassist.pf.mock.e2e
-name: Техработы — экран со временем окончания; приложение открывается по проверке и само после Retry-After
+name: Техработы — ожидание Retry-After, одна автопроверка и ручная проверка после нового отказа
 tags:
   - availability
 ---
@@ -7,11 +7,11 @@ tags:
 # screen promises the end time.
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/fast_login.yaml
-# A long Retry-After: the automatic check does not race the button below.
+# The button visibly stays disabled until the server wait ends.
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=600"
+      LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=15"
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
@@ -22,12 +22,28 @@ tags:
 - assertVisible: "Закончим примерно к 12:\\d\\d"
 - assertVisible:
     id: "availability.maintenance.check"
+    enabled: false
 
-# The maintenance is over: «Проверить сейчас» asks the server and the app opens again.
+# Each control acknowledgement is visible for 4 seconds. Keep maintenance enabled for at least 20 seconds:
+# the one automatic probe receives a fresh refusal, which must not start another automatic loop.
+- repeat:
+    times: 5
+    commands:
+      - runFlow:
+          file: ../../subflows/config.yaml
+          env:
+            LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=15"
+
+# End maintenance, then wait for the fresh refusal's original deadline before the manual check.
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?maintenance=off"
+- extendedWaitUntil:
+    visible:
+      id: "availability.maintenance.check"
+      enabled: true
+    timeout: 20000
 - tapOn:
     id: "availability.maintenance.check"
 - extendedWaitUntil:
@@ -39,7 +55,7 @@ tags:
       id: "operations.feed"
     timeout: 15000
 
-# Again, with the shortest Retry-After: the app leaves the screen by itself, without a tap.
+# A new maintenance episode receives its own one-shot automatic probe.
 - runFlow:
     file: ../../subflows/config.yaml
     env:

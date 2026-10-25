@@ -21,6 +21,7 @@ import ru.finassist.pf.core.api.model.PhoneVerificationStatusEvent
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.api.model.VerificationStatus
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.error.ErrorResponseInfo
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.feature.auth.impl.SessionHarness
@@ -158,6 +159,25 @@ class CallViewModelTest {
     }
 
     private val newUser = PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = true, registrationToken = "reg_1")
+
+    @Test fun `maintenance refusal allows one guarded read recovery without replacing verification`() {
+        val h = harness()
+        val refused = AppError.Maintenance(null, 15, ErrorResponseInfo(
+            code = "MAINTENANCE", httpStatus = 503, requestRetryable = false,
+            timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime), retryAfterSeconds = 15,
+        ))
+        val vm = h.scripted(flow { throw refused }, flowOf(newUser))
+        vm.watch()
+        assertEquals(listOf("vt_1"), opened)
+        vm.stopWatching()
+        vm.watch()
+        scheduler.advanceTimeBy(14_999); scheduler.runCurrent()
+        assertEquals(listOf("vt_1"), opened, "the corrected stream cannot bypass Retry-After")
+        scheduler.advanceTimeBy(1); scheduler.runCurrent()
+        assertEquals(listOf("vt_1", "vt_1"), opened)
+        assertEquals("vt_1", h.flow.verification?.verificationToken, "the original verification is retained")
+        assertEquals(CallEvent.NewUser, vm.events.value)
+    }
 
     @Test fun `a stream closed after pending is re-opened after a pause and the wait goes on without an error`() {
         val h = harness()

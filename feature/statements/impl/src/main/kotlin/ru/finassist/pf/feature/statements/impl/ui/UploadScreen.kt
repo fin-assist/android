@@ -189,7 +189,7 @@ internal fun UploadContent(
                     onPrivacy = { onOpenUrl(LegalLinks.PRIVACY) },
                 )
                 is UploadPhase.RecoveryRequired -> Column(Modifier.testTag(StatementsTags.UPLOAD_RECOVERY), verticalArrangement = Arrangement.spacedBy(d.space4)) {
-                    PfNotice("Результат предыдущей загрузки неизвестен: файл мог уже загрузиться. Проверьте историю. Новая загрузка создаст отдельную запись.", tone = NoticeTone.WARNING)
+                    PfNotice("Результат предыдущей загрузки неизвестен: файл мог уже загрузиться. Проверьте историю. Новая загрузка не отменяет предыдущую попытку.", tone = NoticeTone.WARNING)
                     FileRow("Файл", phase.fileName, divider = false)
                     PfButton("Загрузить заново", onClick = onStartNewUpload, block = true, modifier = Modifier.testTag(StatementsTags.UPLOAD_NEW_INTENT))
                     PfLink("Проверить историю загрузок", onClick = onOpenHistory)

@@ -63,6 +63,7 @@ internal class AvailabilityScreensImpl @Inject constructor() : AvailabilityScree
         val vm: AvailabilityViewModel = hiltViewModel()
         val state by vm.gate.state.collectAsStateWithLifecycle()
         val checking by vm.checking.collectAsStateWithLifecycle()
+        val canCheck by vm.canCheck.collectAsStateWithLifecycle()
         val context = LocalContext.current
         when (val s = state) {
             ServiceGate.State.Open -> Unit
@@ -75,6 +76,7 @@ internal class AvailabilityScreensImpl @Inject constructor() : AvailabilityScree
                 until = s.until,
                 presentation = s.presentation,
                 checking = checking,
+                canCheck = canCheck,
                 onCheck = vm::checkNow,
                 onSupport = { writeToSupport(context, "Технические работы") },
             )
@@ -100,7 +102,7 @@ internal fun UpdateContent(onUpdate: () -> Unit, onSupport: () -> Unit, presenta
 
 /** Mockups `Maintenance` and `MaintenanceNoTime` (without `error.until`). */
 @Composable
-internal fun MaintenanceContent(until: OffsetDateTime?, checking: Boolean, onCheck: () -> Unit, onSupport: () -> Unit, presentation: ErrorPresentation = ErrorPresentation()) = GateScreen(
+internal fun MaintenanceContent(until: OffsetDateTime?, checking: Boolean, onCheck: () -> Unit, onSupport: () -> Unit, presentation: ErrorPresentation = ErrorPresentation(), canCheck: Boolean = true) = GateScreen(
     presentation = presentation,
     tag = AvailabilityTags.MAINTENANCE,
     tone = HeroTone.WARNING,
@@ -113,6 +115,7 @@ internal fun MaintenanceContent(until: OffsetDateTime?, checking: Boolean, onChe
     action = {
         PfButton(
             "Проверить сейчас", onClick = onCheck, variant = ButtonVariant.SECONDARY, block = true, busy = checking,
+            enabled = canCheck,
             modifier = Modifier.testTag(AvailabilityTags.MAINTENANCE_CHECK),
         )
     },

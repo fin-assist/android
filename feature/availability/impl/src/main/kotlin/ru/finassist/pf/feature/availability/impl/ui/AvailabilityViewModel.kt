@@ -34,16 +34,30 @@ class AvailabilityViewModel @Inject constructor(
 ) : ViewModel() {
     private val _checking = MutableStateFlow(false)
     val checking: StateFlow<Boolean> = _checking.asStateFlow()
+    private val _canCheck = MutableStateFlow(false)
+    val canCheck: StateFlow<Boolean> = _canCheck.asStateFlow()
 
     private var scheduled: Job? = null
+    private var readiness: Job? = null
     private var automaticProbeUsed = false
 
     init {
         viewModelScope.launch {
             gate.state.collect { s ->
+                readiness?.cancel()
                 if (s is ServiceGate.State.Maintenance) {
+                    _canCheck.value = s.deadline?.remainingMillis(elapsedClock) == 0L
+                    readiness = viewModelScope.launch {
+                        while (true) {
+                            val left = s.deadline?.remainingMillis(elapsedClock)
+                            _canCheck.value = left == 0L
+                            if (left == null || left == 0L) break
+                            delay(minOf(left, 250L))
+                        }
+                    }
                     if (!automaticProbeUsed) schedule(s)
                 } else {
+                    _canCheck.value = false
                     scheduled?.cancel()
                     automaticProbeUsed = false
                 }
@@ -65,7 +79,7 @@ class AvailabilityViewModel @Inject constructor(
     fun checkNow() {
         if (_checking.value) return
         val maintenance = gate.maintenance ?: return
-        if ((maintenance.deadline?.remainingMillis(elapsedClock) ?: 0L) > 0) return
+        if (maintenance.deadline?.remainingMillis(elapsedClock) != 0L) return
         automaticProbeUsed = true
         scheduled?.cancel()
         viewModelScope.launch { probe() }
