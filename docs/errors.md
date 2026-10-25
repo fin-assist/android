@@ -58,6 +58,11 @@ refresh with no remaining maintenance correction, compare-and-set clearing retur
 A temporary wait, an unused maintenance correction and an update requirement retain the session;
 a newer login cannot be cleared by an old request.
 
+Upload action identity includes the content digest and the raw filename (FIN-340). A pending legacy
+content-only record cannot become a fresh named action during an upgrade: it enters unknown-outcome
+recovery without creating an alias UUID. Only explicit new intent retires that legacy action. Manual
+retry preserves the picked name; changed file content requires recovery before another upload.
+
 An unknown-age upload or assistant request has a separate visible recovery state. It preserves the
 old key and explains the unknown outcome; checking history does not send a new mutation. Only an
 explicit new-intent action retires that pending action and creates a new tracked key. A new

@@ -147,7 +147,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `min_version=<MAJOR.MINOR.PATCH>` | the fake server's minimum client version; below it every request and every stream opening gets `CLIENT_VERSION_UNSUPPORTED` and the app shows the update screen (FIN-22); empty — none | process |
   | `maintenance=<minutes>\|unknown\|off` | every request and every stream opening gets 503 `MAINTENANCE` (a stream already open is cut at its next event) ending in that many minutes of the fake «now» or at an unknown time; `off` ends it (FIN-22) | process |
   | `maintenance_retry_after=<s>` | `Retry-After` of the maintenance answer, 15 s by default (the shortest the app waits) | process |
-  | `pending_upload_fixture=october` | seeds an unknown-age pending UUID for the closed bundled october.ofx file using the legacy key API; simulated restoration, not a process restart | app data |
+  | `pending_upload_fixture=october` | seeds an unknown-age pending UUID under the current content-and-raw-name hash without an elapsed anchor; simulated restoration, not a process restart | app data |
   | `expect_uploads=<n>` | requires exactly n uploads, including the preloaded statement; unchanged baseline proves no upload happened before explicit new intent | — |
   | `profile_timezone=<zone id>` | `profile.timezone` on the fake server, as if changed elsewhere; the app adopts it on the next profile read (opening «Профиль») | process |
   | `sign_in=existing` | signs the existing account in and sets passcode 1234 without the screens (`E2eSignIn`, FIN-180): applied after the other values of the link, finishes before `e2e.config.applied` shows; `e2e.config.unmet` when already signed in or the sign-in fails. Use it through `fast_login.yaml` (see «Signing in») | app data (session, passcode); unlocked while the process lives |
@@ -345,6 +345,14 @@ The update or maintenance screen over the passcode screen (FIN-22): while the ap
 so a server answer can arrive under the lock only from background work (the time zone sync, Remote Config) at a moment
 a flow cannot pick. The overlay is one layer above all others in `PfApp`; `availability/maintenance_on_sign_in`
 checks it over sign-in, the other flows over the main screens.
+A renamed copy of a statement sent again after a lost answer (FIN-340): the server compares the file's content and
+its name under a key (FIN-297), so a client that reused the key of the same bytes under the old name would get 409
+`IDEMPOTENCY_CONFLICT`. The case needs a first request that the server stored under the key while the client lost its
+answer; the mock has no such hook — `offline` fails before the key is taken, and the upload has no 5xx — and the
+bundled files hold no two copies of one statement under different names. `UploadViewModelTest` checks that the copy
+gets its own key and that a retry sends the first attempt's name; `MockStatementsApiTest` and `ContractBehaviourTest`
+check the server side.
+
 
 Consent-document refresh after `CONSENT_OUTDATED` is not covered by a mock UI flow
 ([Qase54](https://app.qase.io/case/PLAINFIN-54), [Qase55](https://app.qase.io/case/PLAINFIN-55), manual cases authored, not executed).

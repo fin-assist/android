@@ -8,6 +8,7 @@ import android.net.Uri
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -79,6 +80,8 @@ class UploadViewModelTest {
         var currentConfig = config
         var configCalls = 0
         val keys: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+        /** `file.name` of every upload attempt, in the order of [keys]. */
+        val names: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
         /** Thrown by the next uploads, one each, before the file is accepted. */
         val uploadFailures = ArrayDeque<AppError>()
         /** While set, the upload waits for it: the request is «in flight». */
@@ -96,6 +99,7 @@ class UploadViewModelTest {
         }
         override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted {
             keys += key.value
+            names += file.name
             uploadGate?.await()
             if (offline) throw AppError.Offline()
             synchronized(uploadFailures) { uploadFailures.removeFirstOrNull() }?.let { throw it }
@@ -199,6 +203,8 @@ class UploadViewModelTest {
         assertEquals("operations_2026.ofx", assertIs<UploadPhase.Busy>(vm.state.value.phase).fileName)
         assertEquals(2, api.keys.size)
         assertEquals(api.keys[0], api.keys[1])
+        // The server compares the name too (FIN-297): the retry sends the name of the first attempt.
+        assertEquals(listOf(name, name), api.names)
     }
 
     @Test fun `retry without a picked file does nothing`() {
@@ -338,9 +344,73 @@ class UploadViewModelTest {
         assertEquals(api.keys.first(), api.keys.last(), "retry=true applies to the same original key, not a fresh upload")
     }
 
-    @Test fun `a restored upload UUID is kept without resending the same file`() {
-        val hash = java.security.MessageDigest.getInstance("SHA-256").digest("OFXHEADER:100".toByteArray())
+    private fun uploadBodyHash(fileName: String = name, text: String = "OFXHEADER:100"): String {
+        val content = java.security.MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
+        return java.security.MessageDigest.getInstance("SHA-256").digest(content + fileName.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
+    }
+
+    @Test fun `a legacy content-only pending action cannot silently become a fresh named action`() {
+        val contentHash = java.security.MessageDigest.getInstance("SHA-256").digest("OFXHEADER:100".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val legacyAction = "statements.upload:$contentHash"
+        val currentAction = "statements.upload:${uploadBodyHash()}"
+        val keys = IdempotencyKeys(store)
+        val old = kotlinx.coroutines.runBlocking { keys.keyFor(legacyAction) }
+        vm.onFilePicked(uri)
+        await("legacy unknown outcome is preserved") { it.phase is UploadPhase.RecoveryRequired }
+        awaitIdle()
+        assertTrue(api.keys.isEmpty())
+        assertEquals(old, kotlinx.coroutines.runBlocking { keys.pendingKey(legacyAction) })
+        assertNull(kotlinx.coroutines.runBlocking { keys.pendingKey(currentAction) }, "upgrade must not create a fresh alias")
+        vm.startNewUpload()
+        awaitAccepted()
+        assertTrue(api.keys.single() != old.value)
+        assertNull(kotlinx.coroutines.runBlocking { keys.pendingKey(legacyAction) })
+    }
+
+    @Test fun `manual retry preserves the picked name when the document provider changes its display name`() {
+        var displayedName = name
+        val provider = object : android.content.ContentProvider() {
+            override fun onCreate() = true
+            override fun getType(uri: Uri): String = "application/x-ofx"
+            override fun insert(uri: Uri, values: android.content.ContentValues?): Uri? = null
+            override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?) = 0
+            override fun update(uri: Uri, values: android.content.ContentValues?, selection: String?, selectionArgs: Array<out String>?) = 0
+            override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): android.database.Cursor =
+                android.database.MatrixCursor(arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)).apply { addRow(arrayOf(displayedName)) }
+        }
+        org.robolectric.shadows.ShadowContentResolver.registerProviderInternal("test", provider)
+        api.uploadFailures += AppError.Server(500)
+        vm.onFilePicked(uri)
+        await("the first named attempt fails") { it.phase is UploadPhase.Error }
+        awaitIdle()
+        displayedName = "provider_renamed.ofx"
+        vm.retryUpload()
+        awaitAccepted()
+        assertEquals(listOf(name, name), api.names)
+        assertEquals(api.keys.first(), api.keys.last())
+    }
+
+    @Test fun `manual retry cannot silently send changed file content under a new action`() {
+        api.uploadFailures += AppError.Server(500)
+        vm.onFilePicked(uri)
+        await("the uncertain failure") { it.phase is UploadPhase.Error }
+        awaitIdle()
+        val original = api.keys.single()
+        shadowOf(context.contentResolver).registerInputStreamSupplier(uri) { ByteArrayInputStream("OFXHEADER:100\n".toByteArray()) }
+        vm.retryUpload()
+        await("changed content requires explicit new intent") { it.phase is UploadPhase.RecoveryRequired }
+        awaitIdle()
+        assertEquals(listOf(original), api.keys)
+        vm.startNewUpload()
+        awaitAccepted()
+        assertEquals(2, api.keys.size)
+        assertTrue(api.keys.last() != original)
+    }
+
+    @Test fun `a restored upload UUID is kept without resending the same file`() {
+        val hash = uploadBodyHash()
         val keys = IdempotencyKeys(store)
         val oldKey = kotlinx.coroutines.runBlocking { keys.keyFor("statements.upload:$hash") }
         vm.onFilePicked(uri)
@@ -375,6 +445,62 @@ class UploadViewModelTest {
         awaitAccepted()
         assertEquals(2, api.keys.size)
         assertTrue(api.keys.last() != originalKey)
+    }
+
+    @Test fun `the same content under another name is another upload with its own key (FIN-340)`() {
+        // The server compares the content and the name under a key: reusing the key for a renamed copy would be
+        // 409 IDEMPOTENCY_CONFLICT. Every attempt of one pick sends the name it was picked with.
+        val renamed: Uri = Uri.parse("content://test/operations_2026_copy.ofx")
+        shadowOf(context.contentResolver).registerInputStreamSupplier(renamed) { ByteArrayInputStream("OFXHEADER:100".toByteArray()) }
+        api.uploadFailures += AppError.Server(500)
+        vm.onFilePicked(uri)
+        await("the failure") { it.phase is UploadPhase.Error }
+
+        vm.backToGuide()
+        awaitIdle()
+        vm.onFilePicked(renamed)
+        awaitAccepted()
+        assertTrue(api.keys[0] != api.keys[1])
+        assertEquals(listOf("operations_2026.ofx", "operations_2026_copy.ofx"), api.names)
+        assertEquals("operations_2026_copy.ofx", assertIs<UploadPhase.Busy>(vm.state.value.phase).fileName)
+    }
+
+    @Test fun `after process death the same file and name keep an unknown key while a renamed copy is a new action (FIN-340)`() {
+        // A store of its own over one file: the first «process» ends by cancelling its scope, the second reads the file again.
+        val file = File(context.cacheDir, "upload-death-${System.nanoTime()}.preferences_pb")
+        val firstScope = kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+        val firstStore = PreferenceDataStoreFactory.create(scope = firstScope) { file }
+        vm = UploadViewModel(context, api, StatementsRepositoryImpl(firstStore, NoTokens), StaticFlags(), tracker, IdempotencyKeys(firstStore), clock, ElapsedClock { dispatcher.scheduler.currentTime })
+        api.uploadFailures += AppError.Server(500)
+        vm.onFilePicked(uri)
+        await("the failure") { it.phase is UploadPhase.Error }
+        awaitIdle()
+        kotlinx.coroutines.runBlocking { firstScope.coroutineContext[kotlinx.coroutines.Job]!!.cancelAndJoin() }
+
+        val secondStore = PreferenceDataStoreFactory.create { file }
+        vm = UploadViewModel(context, api, StatementsRepositoryImpl(secondStore, NoTokens), StaticFlags(), tracker, IdempotencyKeys(secondStore), clock, ElapsedClock { dispatcher.scheduler.currentTime })
+        val renamed: Uri = Uri.parse("content://test/operations_2026_copy.ofx")
+        shadowOf(context.contentResolver).registerInputStreamSupplier(renamed) { ByteArrayInputStream("OFXHEADER:100".toByteArray()) }
+        api.uploadFailures += AppError.Server(500)
+        vm.onFilePicked(renamed)
+        await("the copy's failure") { it.phase is UploadPhase.Error }
+        awaitIdle()
+        vm.backToGuide()
+        vm.onFilePicked(uri)
+        await("the original action has unknown age") { it.phase is UploadPhase.RecoveryRequired }
+        awaitIdle()
+        assertEquals(listOf(name, "operations_2026_copy.ofx"), api.names)
+        val retained = kotlinx.coroutines.runBlocking { IdempotencyKeys(secondStore).pendingKey("statements.upload:${uploadBodyHash()}") }
+        assertEquals(api.keys[0], retained?.value)
+        assertNull(retained?.replayWindow)
+        vm.retryUpload()
+        awaitIdle()
+        assertEquals(2, api.keys.size, "restoration does not authorize another POST")
+        vm.startNewUpload()
+        awaitAccepted()
+        assertEquals(listOf(name, "operations_2026_copy.ofx", name), api.names)
+        assertTrue(api.keys[0] != api.keys[2], "only explicit new intent replaces the retained unknown-age UUID")
+        assertTrue(api.keys[1] != api.keys[0], "a renamed copy is another action")
     }
 
     @Test fun `an accepted file is a final answer - the same file later is a new upload`() {

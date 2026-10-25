@@ -116,6 +116,7 @@ class UploadViewModel @Inject constructor(
 
     /** The last picked file: «Повторить» after a network failure sends it again. */
     private var lastPicked: Uri? = null
+    private var lastInspected: Pair<Uri, PickedFile>? = null
     private data class PendingUploadRecovery(val action: String, val uri: Uri, val key: IdempotencyKey)
     private var pendingUploadRecovery: PendingUploadRecovery? = null
 
@@ -173,7 +174,7 @@ class UploadViewModel @Inject constructor(
         launchUpload(previous.uri, completePreviousAction = previous.action)
     }
 
-    private fun launchUpload(uri: Uri, completePreviousAction: String? = null) {
+    private fun launchUpload(uri: Uri, completePreviousAction: String? = null, retryOf: PickedFile? = null) {
         lastPicked = uri
         _state.update { it.copy(uploadOffline = false, config = it.config ?: fallbackConfig()) }
         uploadJob = viewModelScope.launch {
@@ -184,7 +185,7 @@ class UploadViewModel @Inject constructor(
             val max = config?.maxFileSizeBytes ?: (10L * 1024 * 1024)
             // One pass off the main thread: real size (providers may not report it) and a content hash for the key.
             val file = try {
-                withContext(Dispatchers.IO) { inspect(uri, max) }
+                withContext(Dispatchers.IO) { inspect(uri, max, retryOf?.name) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -196,9 +197,32 @@ class UploadViewModel @Inject constructor(
                 _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.FILE_TOO_LARGE, file.name, config)) }
                 return@launch
             }
+            if (retryOf != null && retryOf.bodyHash != file.bodyHash) {
+                val oldAction = "statements.upload:${retryOf.bodyHash}"
+                val oldKey = keys.pendingKey(oldAction)
+                uploadReadinessJob?.cancel()
+                if (oldKey != null) {
+                    pendingUploadRecovery = PendingUploadRecovery(oldAction, uri, oldKey)
+                    _state.update { it.copy(phase = UploadPhase.RecoveryRequired(file.name), uploadRetryReady = false) }
+                } else {
+                    _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, file.name, config)) }
+                }
+                return@launch
+            }
+            lastInspected = uri to file
+            // Upload identity includes content and the raw name (FIN-340); retry permission still belongs to the original action.
             // The pending UUID survives restoration, but its elapsed-age proof does not. Same-file retry uses
             // that UUID only while proven safe; after restoration/expiry an explicit new intent is required.
-            val action = "statements.upload:${file.sha256}"
+            val action = "statements.upload:${file.bodyHash}"
+            // Pre-FIN-340 records have no filename. Never reinterpret that pending UUID as a fresh named action.
+            val legacyAction = "statements.upload:${file.contentHash}"
+            val legacyKey = if (keys.pendingKey(action) == null) keys.pendingKey(legacyAction) else null
+            if (legacyKey != null) {
+                uploadReadinessJob?.cancel()
+                pendingUploadRecovery = PendingUploadRecovery(legacyAction, uri, legacyKey)
+                _state.update { it.copy(phase = UploadPhase.RecoveryRequired(file.name), uploadRetryReady = false, uploadOffline = false) }
+                return@launch
+            }
             val retryGate = uploadGates.getOrPut(action) { RequestRetryGate(elapsedClock) }
             if (!retryGate.isReady()) return@launch
             uploadReadinessJob?.cancel()
@@ -347,7 +371,8 @@ class UploadViewModel @Inject constructor(
     fun retryUpload() {
         if (!_state.value.uploadRetryReady) return
         val uri = lastPicked ?: return
-        onFilePicked(uri)
+        if (uploadInFlight) return
+        launchUpload(uri, retryOf = lastInspected?.takeIf { it.first == uri }?.second)
     }
 
     fun askCancel(show: Boolean) = _state.update { it.copy(askCancel = show) }
@@ -397,12 +422,17 @@ class UploadViewModel @Inject constructor(
 
     fun consumeDone() = _state.update { it.copy(doneUploadId = null) }
 
-    private class PickedFile(val name: String, val size: Long, val sha256: String)
+    /**
+     * [name] is what every attempt sends: read once per pick, so the retries of one pick cannot differ in it.
+     * [bodyHash] is `SHA-256(SHA-256(content) ‖ UTF-8 name)`, the formula the server compares bodies of 3.2 by
+     * (grpc-api.md 6).
+     */
+    private class PickedFile(val name: String, val size: Long, val bodyHash: String, val contentHash: String)
 
-    /** Reads the file once: display name, real byte count (stops counting past [max]) and SHA-256. */
-    private fun inspect(uri: Uri, max: Long): PickedFile {
-        var name = uri.lastPathSegment ?: "statement.ofx"
-        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+    /** Reads the file once: display name, real byte count (stops counting past [max]) and the body hash. */
+    private fun inspect(uri: Uri, max: Long, requestName: String?): PickedFile {
+        var name = requestName ?: uri.lastPathSegment ?: "statement.ofx"
+        if (requestName == null) context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
             if (c.moveToFirst()) {
                 val n = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (n >= 0 && !c.isNull(n)) name = c.getString(n)
@@ -420,7 +450,13 @@ class UploadViewModel @Inject constructor(
                 digest.update(buffer, 0, read)
             }
         }
-        return PickedFile(name, size, digest.digest().joinToString("") { "%02x".format(it) })
+        val contentDigest = digest.digest()
+        val body = MessageDigest.getInstance("SHA-256").apply {
+            update(contentDigest)
+            update(name.toByteArray(Charsets.UTF_8))
+        }
+        return PickedFile(name, size, body.digest().joinToString("") { "%02x".format(it) },
+            contentDigest.joinToString("") { "%02x".format(it) })
     }
 
     private companion object {

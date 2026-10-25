@@ -11,7 +11,7 @@ import javax.inject.Singleton
 
 /**
  * `Idempotency-Key` for an action must survive process death (api.md: "клиент хранит его до окончательного
- * ответа"). A feature asks for the key of a logical action (`"statements.upload:<file-hash>"`); the same action
+ * ответа"). A feature asks for the key of a logical action (`"statements.upload:<hash of content and raw name>"`); the same action
  * gets the same key until [complete] is called. An expired/unknown replay window never silently turns
  * a pending request into a new logical action. Only complete removes that action.
  */
@@ -43,6 +43,18 @@ class IdempotencyKeys @Inject constructor(private val dataStore: DataStore<Prefe
             }
         }
         return checkNotNull(result)
+    }
+
+    /** Read a pending action without creating a UUID or renewing its replay proof (for action-format upgrades). */
+    suspend fun pendingKey(action: String): IdempotencyKey? {
+        var result: IdempotencyKey? = null
+        dataStore.edit { prefs ->
+            val raw = prefs[stringPreferencesKey(PREFIX + action)]
+            val stored = raw?.substringBefore("|")?.takeIf { it.isNotBlank() }
+            check(raw == null || stored != null) { "Invalid pending request record" }
+            result = stored?.let { id -> inProcess[action]?.takeIf { it.value == id } ?: IdempotencyKey(id) }
+        }
+        return result
     }
 
     suspend fun complete(action: String) {

@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
@@ -25,18 +26,27 @@ class IdempotencyKeysTest {
             var now = 1000L
             val clock = ElapsedClock { now }
             val firstOwner = IdempotencyKeys(store)
+            val empty = store.data.first()
+            assertNull(firstOwner.pendingKey("absent"))
+            assertEquals(empty, store.data.first(), "lookup cannot create a pending record")
             val first = firstOwner.keyFor("upload", clock)
+            assertSame(first, firstOwner.pendingKey("upload"))
             assertTrue(first.replayWindow!!.isOpen(clock))
             assertSame(first, firstOwner.keyFor("upload", clock))
             now += 24 * 60 * 60 * 1000L
             assertFalse(firstOwner.keyFor("upload", clock).replayWindow!!.isOpen(clock))
-            val restored = IdempotencyKeys(store).keyFor("upload", clock)
+            val restoredOwner = IdempotencyKeys(store)
+            val lookup = restoredOwner.pendingKey("upload")
+            assertEquals(first.value, lookup?.value)
+            assertNull(lookup?.replayWindow)
+            val restored = restoredOwner.keyFor("upload", clock)
             assertEquals(first.value, restored.value)
             assertNull(restored.replayWindow)
             store.edit { it[stringPreferencesKey("idem.old")] = "fixed-uuid|0" }
             assertEquals("fixed-uuid", firstOwner.keyFor("old", clock).value)
             assertNull(firstOwner.keyFor("old", clock).replayWindow)
             firstOwner.complete("upload")
+            assertNull(firstOwner.pendingKey("upload"))
             val nextAction = firstOwner.keyFor("upload", clock)
             assertNotEquals(first.value, nextAction.value)
             assertTrue(nextAction.replayWindow!!.isOpen(clock))

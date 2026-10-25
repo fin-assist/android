@@ -183,7 +183,10 @@ class E2eControlActivity : ComponentActivity() {
                                 digest.update(buffer, 0, read)
                             }
                         }
-                        val hash = digest.digest().joinToString("") { "%02x".format(it) }
+                        val hash = MessageDigest.getInstance("SHA-256").apply {
+                            update(digest.digest())
+                            update("october.ofx".toByteArray(Charsets.UTF_8))
+                        }.digest().joinToString("") { "%02x".format(it) }
                         // No elapsed clock: intentionally no proof of age, as with a restored legacy record.
                         keys.keyFor("statements.upload:$hash")
                     }
