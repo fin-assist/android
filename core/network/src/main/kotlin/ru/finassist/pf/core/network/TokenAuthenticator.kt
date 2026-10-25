@@ -9,9 +9,13 @@ import okhttp3.Response
 import okhttp3.Route
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.IdempotencyKey
+import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.error.ErrorContext
 import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.availability.ServiceGate
+import ru.finassist.pf.core.common.time.ServerDeadline
 import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.core.common.time.RequestReplayWindow
 import java.util.UUID
@@ -39,7 +43,14 @@ internal class TokenAuthenticator(
      * otherwise the server sees the old refresh token again and revokes the whole session (api.md 1.4).
      * Guarded by [mutex].
      */
-    private class PendingRefresh(val token: String, val key: IdempotencyKey, val window: RequestReplayWindow, val retryGate: RequestRetryGate)
+    private class PendingRefresh(val token: String, val key: IdempotencyKey, val retryGate: RequestRetryGate) {
+        // This is the first possible token-use window, not the UUID's immutable creation/origin window.
+        var window: RequestReplayWindow? = null
+        var mayHaveUsedToken: Boolean = false
+        var requiresAppUpdate: Boolean = false
+        var maintenanceRecovery: ServerDeadline? = null
+        var maintenanceRecoveryConsumed: Boolean = false
+    }
     private var pendingKey: PendingRefresh? = null
 
     override fun authenticate(route: Route?, response: Response): Request? {
@@ -63,7 +74,7 @@ internal class TokenAuthenticator(
                 }
                 val refreshToken = session.tokens.refreshToken
                 val pending = pendingKey?.takeIf { it.token == refreshToken }
-                if (pending != null && !pending.window.isOpen(elapsedClock)) {
+                if (pending?.window?.isOpen(elapsedClock) == false) {
                     // Reusing the old token outside its 60s replay window can revoke the whole session chain.
                     // Never silently issue a new key for the same uncertain refresh; recover by sign-in.
                     pendingKey = null
@@ -71,11 +82,14 @@ internal class TokenAuthenticator(
                     return@withLock null
                 }
                 val attempt = pending ?: PendingRefresh(
-                    refreshToken, IdempotencyKey.random(elapsedClock),
-                    RequestReplayWindow(elapsedClock.nowMillis(), 60_000), RequestRetryGate(elapsedClock),
+                    refreshToken, IdempotencyKey.random(elapsedClock), RequestRetryGate(elapsedClock),
                 ).also { pendingKey = it }
-                if (!attempt.retryGate.isReady()) return@withLock null
+                if (attempt.requiresAppUpdate) return@withLock null
+                val useMaintenanceCorrection = !attempt.retryGate.isReady() && !attempt.maintenanceRecoveryConsumed &&
+                    attempt.maintenanceRecovery?.remainingMillis(elapsedClock) == 0L
+                if (!attempt.retryGate.isReady() && !useMaintenanceCorrection) return@withLock null
                 val key = attempt.key
+                val priorUncertainty = attempt.mayHaveUsedToken
                 try {
                     // A fresh process has no trusted key/window for an encrypted pending marker.
                     // Reserving a different candidate fails closed before any RPC with the old token.
@@ -84,6 +98,18 @@ internal class TokenAuthenticator(
                         tokenStore.clearIfRefreshToken(refreshToken)
                         return@withLock null
                     }
+                    // Recheck after durable I/O, immediately before sending. A prior uncertain window never renews.
+                    if (attempt.window?.isOpen(elapsedClock) == false) {
+                        pendingKey = null
+                        tokenStore.clearIfRefreshToken(refreshToken)
+                        return@withLock null
+                    }
+                    if (useMaintenanceCorrection) {
+                        if (attempt.maintenanceRecovery?.remainingMillis(elapsedClock) != 0L) return@withLock null
+                    } else if (!attempt.retryGate.isReady()) return@withLock null
+                    if (attempt.window == null) attempt.window = RequestReplayWindow(elapsedClock.nowMillis(), 60_000)
+                    attempt.mayHaveUsedToken = true
+                    if (useMaintenanceCorrection) attempt.maintenanceRecoveryConsumed = true
                     val pair = refresh(key, refreshToken)
                     // The key is retired only once the new pair is stored: if saving fails, the next attempt
                     // repeats the same refresh with the same key and gets the same pair back.
@@ -91,7 +117,19 @@ internal class TokenAuthenticator(
                     pendingKey = null
                     pair.accessToken
                 } catch (e: AppError) {
+                    // A definitive no-effect response resolves ONLY a never-uncertain attempt. Later pre-key
+                    // responses cannot disprove an earlier lost/committed call or restart its 60-second window.
+                    if (!priorUncertainty && isDefinitiveNoEffect(e) && tokenStore.retireRefreshAttempt(refreshToken, key)) {
+                        attempt.mayHaveUsedToken = false
+                        attempt.window = null
+                    }
                     attempt.retryGate.record(e)
+                    if (isDefinitiveNoEffect(e)) {
+                        if (e is AppError.UpdateRequired) attempt.requiresAppUpdate = true
+                        if (e is AppError.Maintenance && e.requestRetryable == false && !attempt.maintenanceRecoveryConsumed && attempt.maintenanceRecovery == null) {
+                            attempt.maintenanceRecovery = ServiceGate.recoveryDeadline(e, elapsedClock)
+                        }
+                    }
                     when {
                         // The session is gone: clear it, the app shows the phone screen.
                         e is AppError.Unauthorized ||
@@ -114,6 +152,17 @@ internal class TokenAuthenticator(
             .header(HEADER_REQUEST_ID, UUID.randomUUID().toString())
             .header("Authorization", "Bearer $newAccess")
             .build()
+    }
+
+    private fun isDefinitiveNoEffect(error: AppError): Boolean {
+        val response = error.response ?: return false
+        if (response.context != ErrorContext.REQUEST) return false
+        return when (error) {
+            is AppError.Maintenance -> response.code == ErrorCodes.MAINTENANCE && response.httpStatus == 503
+            is AppError.UpdateRequired -> response.code == ErrorCodes.CLIENT_VERSION_UNSUPPORTED && response.httpStatus == 400
+            is AppError.RateLimited -> response.code == ErrorCodes.RATE_LIMITED && response.httpStatus == 429
+            else -> false
+        }
     }
 
     private fun mayResume(request: Request): Boolean = when (request.method) {

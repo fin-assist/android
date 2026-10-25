@@ -29,6 +29,11 @@ internal class InMemoryTokenStore(initial: TokenStore.Session? = null) : TokenSt
         pending = wanted
         true
     }
+    override suspend fun retireRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey): Boolean = mutex.withLock {
+        if (state.value?.tokens?.refreshToken != expectedRefreshToken || pending != (expectedRefreshToken to key.value)) return@withLock false
+        pending = null
+        true
+    }
     override suspend fun clearIfRefreshToken(expectedRefreshToken: String): Boolean = mutex.withLock {
         if (state.value?.tokens?.refreshToken != expectedRefreshToken) return@withLock false
         state.value = null

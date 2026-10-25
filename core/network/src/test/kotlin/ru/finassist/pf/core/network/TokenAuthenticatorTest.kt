@@ -359,4 +359,237 @@ class TokenAuthenticatorTest {
         assertEquals(keys[0], keys[1])
     }
 
+    private fun freshLimit(at: Long, allowed: Boolean?) = AppError.RateLimited(null, 120,
+        ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = allowed,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = at), retryAfterSeconds = 120))
+
+    @Test
+    fun `first definitive rate refusal keeps session and same key beyond sixty seconds before first possible use`() {
+        var elapsed = 0L
+        val keys = mutableListOf<IdempotencyKey>()
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+            .authenticator(TokenAuthenticator(store, ElapsedClock { elapsed }) { key, _ ->
+                keys += key
+                if (keys.size == 1) throw freshLimit(elapsed, true)
+                TokenPair("new-access", "new-refresh")
+            }).build()
+        for (time in listOf(0L, 60_000L)) {
+            elapsed = time
+            server.enqueue(MockResponse().setResponseCode(401))
+            client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+            assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken })
+        }
+        assertEquals(1, keys.size)
+        elapsed = 121_000
+        server.enqueue(MockResponse().setResponseCode(401)); server.enqueue(MockResponse().setBody("ok"))
+        client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().use { assertEquals(200, it.code) }
+        assertEquals(2, keys.size)
+        kotlin.test.assertSame(keys[0], keys[1], "the UUID and its immutable origin must never be replaced")
+        assertEquals(0L, keys[1].replayWindow?.startedElapsedMillis)
+    }
+
+    @Test
+    fun `first definitive rate false does not grant a retry or force logout at sixty seconds`() {
+        var elapsed = 0L
+        var calls = 0
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+            .authenticator(TokenAuthenticator(store, ElapsedClock { elapsed }) { _, _ -> calls++; throw freshLimit(elapsed, false) }).build()
+        for (time in listOf(0L, 60_000L, 121_000L, 240_000L)) {
+            elapsed = time
+            server.enqueue(MockResponse().setResponseCode(401))
+            client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        }
+        assertEquals(1, calls)
+        assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken })
+    }
+
+    @Test
+    fun `a later definitive refusal never erases an earlier uncertain refresh outcome`() {
+        var elapsed = 0L
+        var calls = 0
+        var retireCalls = 0
+        val guardedStore = object : TokenStore by store {
+            override suspend fun retireRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey): Boolean {
+                retireCalls++; return store.retireRefreshAttempt(expectedRefreshToken, key)
+            }
+        }
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(guardedStore))
+            .authenticator(TokenAuthenticator(guardedStore, ElapsedClock { elapsed }) { _, _ ->
+                calls++
+                if (calls == 1) throw AppError.Offline()
+                throw freshLimit(elapsed, true)
+            }).build()
+        for (time in listOf(0L, 1000L, 121_000L)) {
+            elapsed = time
+            server.enqueue(MockResponse().setResponseCode(401))
+            client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        }
+        assertEquals(2, calls)
+        assertEquals(0, retireCalls)
+        assertNull(runBlocking { store.current() })
+    }
+
+    @Test
+    fun `wrong context code or HTTP status cannot prove no token effect`() {
+        val wrong = listOf(
+            AppError.RateLimited(null, 120, ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429,
+                context = ru.finassist.pf.core.common.error.ErrorContext.RESULT_EVENT)),
+            AppError.RateLimited(null, 120, ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 503)),
+            AppError.RateLimited(null, 120, ru.finassist.pf.core.common.error.ErrorResponseInfo("MAINTENANCE", 429)),
+            AppError.Maintenance(null, 120, ru.finassist.pf.core.common.error.ErrorResponseInfo("MAINTENANCE", 400)),
+        )
+        for (error in wrong) {
+            runBlocking { store.save(TokenStore.Session("u1", TokenPair("old-access", "old-refresh"))) }
+            var elapsed = 0L
+            var calls = 0
+            val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+                .authenticator(TokenAuthenticator(store, ElapsedClock { elapsed }) { _, _ -> calls++; throw error }).build()
+            for (time in listOf(0L, 121_000L)) {
+                elapsed = time
+                server.enqueue(MockResponse().setResponseCode(401))
+                client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+            }
+            assertEquals(1, calls)
+            assertNull(runBlocking { store.current() }, "an unproven effect keeps the original uncertain window")
+        }
+    }
+
+    @Test
+    fun `failed durable retirement keeps the uncertain window closed rather than refreshing it`() {
+        var elapsed = 0L
+        var calls = 0
+        val guardedStore = object : TokenStore by store {
+            override suspend fun retireRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey) = false
+        }
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(guardedStore))
+            .authenticator(TokenAuthenticator(guardedStore, ElapsedClock { elapsed }) { _, _ -> calls++; throw freshLimit(elapsed, true) }).build()
+        for (time in listOf(0L, 121_000L)) {
+            elapsed = time
+            server.enqueue(MockResponse().setResponseCode(401))
+            client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        }
+        assertEquals(1, calls)
+        assertNull(runBlocking { store.current() })
+    }
+
+    @Test
+    fun `known maintenance may correct once after its wait without broadly clearing false`() {
+        var elapsed = 0L
+        val keys = mutableListOf<IdempotencyKey>()
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+            .authenticator(TokenAuthenticator(store, ElapsedClock { elapsed }) { key, _ ->
+                keys += key
+                throw AppError.Maintenance(null, 15, ru.finassist.pf.core.common.error.ErrorResponseInfo("MAINTENANCE", 503,
+                    requestRetryable = false, timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = elapsed), retryAfterSeconds = 15))
+            }).build()
+        for (time in listOf(0L, 1000L, 15_000L, 60_000L, 121_000L)) {
+            elapsed = time
+            server.enqueue(MockResponse().setResponseCode(401))
+            client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        }
+        assertEquals(2, keys.size)
+        kotlin.test.assertSame(keys[0], keys[1])
+        assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken })
+    }
+
+    @Test
+    fun `a definitive update refusal never automatically refreshes before an actual app update`() {
+        for (advice in listOf<Boolean?>(null, true, false)) {
+            runBlocking { store.save(TokenStore.Session("u1", TokenPair("old-access", "old-refresh"))) }
+            var elapsed = 0L
+            var calls = 0
+            val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+                .authenticator(TokenAuthenticator(store, ElapsedClock { elapsed }) { _, _ ->
+                    calls++; throw AppError.UpdateRequired(ru.finassist.pf.core.common.error.ErrorResponseInfo(
+                        "CLIENT_VERSION_UNSUPPORTED", 400, requestRetryable = advice))
+                }).build()
+            for (time in listOf(0L, 121_000L)) {
+                elapsed = time
+                server.enqueue(MockResponse().setResponseCode(401))
+                client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+            }
+            assertEquals(1, calls)
+            assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken })
+        }
+    }
+
+    @Test
+    fun `after a proven wait the first possible use starts its own fixed window and a loss never renews it`() {
+        for (retryAt in listOf(122_000L, 182_001L)) {
+            runBlocking { store.save(TokenStore.Session("u1", TokenPair("old-access", "old-refresh"))) }
+            var elapsed = 0L
+            val keys = mutableListOf<String>()
+            val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+                .authenticator(TokenAuthenticator(store, ElapsedClock { elapsed }) { key, _ ->
+                    keys += key.value
+                    when (keys.size) {
+                        1 -> throw freshLimit(elapsed, true)
+                        2 -> throw AppError.Offline()
+                        else -> TokenPair("new-access", "new-refresh")
+                    }
+                }).build()
+            for (time in listOf(0L, 121_000L)) {
+                elapsed = time
+                server.enqueue(MockResponse().setResponseCode(401))
+                client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+            }
+            elapsed = retryAt
+            server.enqueue(MockResponse().setResponseCode(401))
+            if (retryAt == 122_000L) server.enqueue(MockResponse().setBody("ok"))
+            client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().use {
+                assertEquals(if (retryAt == 122_000L) 200 else 401, it.code)
+            }
+            assertEquals(if (retryAt == 122_000L) 3 else 2, keys.size)
+            assertEquals(1, keys.toSet().size)
+            if (retryAt > 181_000) assertNull(runBlocking { store.current() })
+        }
+    }
+
+    @Test
+    fun `a prior uncertain window is checked again after durable I O before sending`() {
+        var elapsed = 0L
+        var calls = 0
+        var reservations = 0
+        val guardedStore = object : TokenStore by store {
+            override suspend fun reserveRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey): Boolean {
+                val result = store.reserveRefreshAttempt(expectedRefreshToken, key)
+                if (++reservations == 2) elapsed = 61_000
+                return result
+            }
+        }
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(guardedStore))
+            .authenticator(TokenAuthenticator(guardedStore, ElapsedClock { elapsed }) { _, _ -> calls++; throw AppError.Offline() }).build()
+        for (time in listOf(0L, 1000L)) {
+            elapsed = time
+            server.enqueue(MockResponse().setResponseCode(401))
+            client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        }
+        assertEquals(1, calls)
+        assertNull(runBlocking { store.current() })
+    }
+
+    @Test
+    fun `an earlier permitted maintenance never lends its old deadline to a later false refusal`() {
+        var elapsed = 0L
+        var calls = 0
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse =
+                if (request.getHeader("Authorization") == "Bearer new-access") MockResponse().setBody("ok")
+                else MockResponse().setResponseCode(401)
+        }
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+            .authenticator(TokenAuthenticator(store, ElapsedClock { elapsed }) { _, _ ->
+                calls++
+                if (calls < 3) throw AppError.Maintenance(null, 15,
+                    ru.finassist.pf.core.common.error.ErrorResponseInfo("MAINTENANCE", 503, requestRetryable = calls == 1,
+                        timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = elapsed), retryAfterSeconds = 15))
+                TokenPair("new-access", "new-refresh")
+            }).build()
+        for ((time, expectedCalls) in listOf(0L to 1, 15_000L to 2, 16_000L to 2, 30_000L to 3)) {
+            elapsed = time
+            client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+            assertEquals(expectedCalls, calls)
+        }
+    }
+
 }

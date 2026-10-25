@@ -341,6 +341,40 @@ class EncryptedTokenStoreTest {
         assertNull(store.current())
     }
 
+    @Test
+    fun `no effect proof retires only the matching marker without changing the session`() = runBlocking {
+        val marker = stringPreferencesKey("session.refresh_pending")
+        store.save(SESSION)
+        val sessionBlob = rawBlob()
+        assertTrue(store.reserveRefreshAttempt("refresh-1", IdempotencyKey("known")))
+        assertFalse(store.retireRefreshAttempt("refresh-1", IdempotencyKey("different")))
+        assertNotNull(dataStore.data.first()[marker])
+        assertTrue(store.retireRefreshAttempt("refresh-1", IdempotencyKey("known")))
+        assertNull(dataStore.data.first()[marker])
+        assertEquals(sessionBlob, rawBlob())
+        assertEquals(SESSION, store.current())
+        assertFalse(store.retireRefreshAttempt("refresh-1", IdempotencyKey("known")), "absence is not proof of ownership")
+    }
+
+    @Test
+    fun `retiring an old or malformed marker cannot alter a new session or unknown proof`() = runBlocking {
+        val marker = stringPreferencesKey("session.refresh_pending")
+        store.save(SESSION)
+        assertTrue(store.reserveRefreshAttempt("refresh-1", IdempotencyKey("old-key")))
+        val replacement = TokenStore.Session("new-user", TokenPair("new-access", "new-refresh"))
+        store.save(replacement)
+        assertTrue(store.reserveRefreshAttempt("new-refresh", IdempotencyKey("new-key")))
+        assertFalse(store.retireRefreshAttempt("refresh-1", IdempotencyKey("old-key")))
+        assertEquals(replacement, store.current())
+        assertTrue(store.reserveRefreshAttempt("new-refresh", IdempotencyKey("new-key")))
+        for (invalid in listOf("malformed", assertNotNull(rawBlob()))) {
+            dataStore.edit { it[marker] = invalid }
+            assertFalse(store.retireRefreshAttempt("new-refresh", IdempotencyKey("new-key")))
+            assertEquals(invalid, dataStore.data.first()[marker])
+            assertEquals(replacement, store.current())
+        }
+    }
+
     private companion object {
         val SESSION = TokenStore.Session("user-1", TokenPair("access-1", "refresh-1"))
         val BLOB = stringPreferencesKey("session.blob")

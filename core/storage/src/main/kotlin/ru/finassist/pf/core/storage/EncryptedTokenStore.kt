@@ -240,6 +240,21 @@ class EncryptedTokenStore @Inject constructor(
         return reserved
     }
 
+    override suspend fun retireRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey): Boolean {
+        var retired = false
+        writing {
+            dataStore.edit { prefs ->
+                val existing = prefs[KEY_BLOB]?.let(::decode) ?: return@edit
+                if (existing.tokens.refreshToken != expectedRefreshToken) return@edit
+                val marker = prefs[KEY_REFRESH_PENDING]?.let(::decodeRefreshMarker) ?: return@edit
+                if (marker.first != expectedRefreshToken || marker.second != key.value) return@edit
+                prefs.remove(KEY_REFRESH_PENDING)
+                retired = true
+            }
+        }
+        return retired
+    }
+
     override suspend fun clearIfRefreshToken(expectedRefreshToken: String): Boolean {
         var cleared = false
         writing {
