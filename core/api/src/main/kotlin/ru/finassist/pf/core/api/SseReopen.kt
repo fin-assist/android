@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.onEach
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.error.ErrorContext
 import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.time.ServerDeadline
 import java.time.Instant
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
@@ -65,6 +66,14 @@ class SseBackoff(private val random: Random = Random.Default) {
 class SseReopenState {
     /** Retained across collections of this same request context; creating a new context is caller-owned. */
     internal var blockedError: AppError? = null
+    internal var recoveryDeadline: ServerDeadline? = null
+    internal var recoveryConsumed: Boolean = false
+
+    internal fun authorizeRecoveryOnce(error: AppError, after: ServerDeadline): Boolean {
+        if (blockedError !== error || recoveryConsumed) return false
+        if (recoveryDeadline == null) recoveryDeadline = after
+        return true
+    }
     internal var retryPauseError: AppError.RateLimited? = null
     internal var retryPauseStartedMillis: Long? = null
     internal var retryPauseMillis: Long = 0
@@ -104,6 +113,11 @@ class SseReopenState {
  *   [reopenFirstFailure] still looks at this collection only: a stream that cannot be opened after the screen came
  *   back shows the screen's «нет сети» state, as on the first visit.
  *
+ * [recoverOnceAfter] is an explicit caller-owned correction policy, not an exemption for a raw error code.
+ * It can arm one opening after an anchored deadline; the first refusal still reaches the caller. Cancellation
+ * retains that deadline, and a second REST refusal before an event cannot re-arm a loop. A successful event
+ * starts a new independent episode. Without this policy, explicit false remains blocked.
+ *
  * The flow completes after the stream that brought the terminal event ends. Cancelling the collector stops it,
  * pauses included.
  */
@@ -115,9 +129,20 @@ fun <T> reopeningStream(
     timeSource: TimeSource = TimeSource.Monotonic,
     wallClock: () -> Instant = Instant::now,
     elapsedClock: ElapsedClock? = null,
+    recoverOnceAfter: ((AppError) -> ServerDeadline?)? = null,
     open: () -> Flow<T>,
 ): Flow<T> = flow {
-    state.blockedError?.let { throw it }
+    var guardedRecoveryOpening = false
+    state.blockedError?.let { previous ->
+        val deadline = state.recoveryDeadline ?: throw previous
+        if (state.recoveryConsumed) throw previous
+        val remaining = elapsedClock?.let(deadline::remainingMillis) ?: throw previous
+        delay(remaining) // cancellation retains the same permission/deadline, without consuming the opening
+        state.recoveryConsumed = true
+        state.recoveryDeadline = null
+        state.blockedError = null
+        guardedRecoveryOpening = true
+    }
     state.retryPauseError?.let { previous ->
         val started = state.retryPauseStartedMillis ?: throw previous
         val now = elapsedClock?.nowMillis() ?: throw previous
@@ -134,6 +159,9 @@ fun <T> reopeningStream(
         var failure: Throwable? = null
         open()
             .onEach { event ->
+                // An actual successful event ends this refusal episode; mere re-collection does not.
+                state.recoveryConsumed = false
+                guardedRecoveryOpening = false
                 if (openedAt == null) {
                     openedAt = timeSource.markNow()
                     state.reopening = true
@@ -153,8 +181,14 @@ fun <T> reopeningStream(
             return@flow
         }
         val error = failure
+        if (guardedRecoveryOpening && openedAt == null) {
+            // One corrected opening is not a new automatic retry loop. A new REST refusal stays latched.
+            if (error is AppError && error.response?.context == ErrorContext.REQUEST) state.blockedError = error
+            throw error ?: AppError.Offline()
+        }
         if (error is AppError && error.response?.context == ErrorContext.REQUEST && error.requestRetryable == false) {
             state.blockedError = error
+            if (!state.recoveryConsumed) recoverOnceAfter?.invoke(error)?.let { state.authorizeRecoveryOnce(error, it) }
             throw error
         }
         val pause = when {

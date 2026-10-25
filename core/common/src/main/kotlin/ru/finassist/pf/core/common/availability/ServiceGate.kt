@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.time.OffsetDateTime
+import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.error.ErrorContext
 import ru.finassist.pf.core.common.error.ErrorPresentation
 import ru.finassist.pf.core.common.error.ErrorResponseInfo
 import ru.finassist.pf.core.common.time.ElapsedClock
@@ -111,6 +113,16 @@ class ServiceGate(private val elapsedClock: ElapsedClock? = null) {
     }
 
     companion object {
+        /** Known maintenance-screen correction only; generic error/SSE code never selects this policy. */
+        fun recoveryDeadline(error: AppError, clock: ElapsedClock): ServerDeadline? {
+            if (error !is AppError.Maintenance) return null
+            if (error.response != null && error.response.context != ErrorContext.REQUEST) return null
+            val wait = (error.retryAfterSeconds ?: DEFAULT_RETRY_SECONDS).coerceAtLeast(MIN_RETRY_SECONDS).toLong()
+            val timing = error.response?.timing?.takeIf { it.receivedElapsedMillis != null }
+                ?: ResponseTiming(receivedElapsedMillis = clock.nowMillis())
+            return timing.deadline(durationSeconds = wait)?.takeIf { it.remainingMillis(clock) != null }
+        }
+
         const val DEFAULT_RETRY_SECONDS = 60
         /** Not more often than this, whatever `Retry-After` says: no frequent polling (FIN-22). */
         const val MIN_RETRY_SECONDS = 15
