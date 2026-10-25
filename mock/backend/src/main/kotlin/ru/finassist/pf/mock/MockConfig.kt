@@ -62,6 +62,9 @@ data class MockConfig(
     val maintenanceUntil: java.time.OffsetDateTime? = null,
     /** `Retry-After` of the maintenance answer, seconds. */
     val maintenanceRetryAfterSeconds: Int = 15,
+    /** A targeted error after authentication/availability checks; unrelated calls remain usable. */
+    val errorOperation: MockErrorOperation? = null,
+    val errorScenario: MockErrorScenario = MockErrorScenario.UNKNOWN_CODE,
 ) {
     companion object {
         /** Git-ignored: `app/src/mock/assets/private/statement.ofx`. */

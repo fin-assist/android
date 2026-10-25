@@ -299,7 +299,7 @@ class ContractBehaviourTest {
         val q = Scene()
         q.assistant.ask(KEY, AskRequest("Сколько я потратил?"))
         val question = q.call("askAssistant", AskResponse.serializer()) { q.assistant.ask(KEY, AskRequest("Сколько на такси?")) }
-        ContractCheck.knownGap(GAP_CONFLICT, question, contract = ErrorCodes.IDEMPOTENCY_CONFLICT, now = null)
+        expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "conflict: another assistant question", question)
     }
 
     @Test

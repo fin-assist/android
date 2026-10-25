@@ -18,6 +18,8 @@ import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.api.model.VerificationStatus
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.mock.MockBackend
+import ru.finassist.pf.mock.apiError
+import ru.finassist.pf.mock.unauthorizedError
 import java.security.SecureRandom
 import java.time.OffsetDateTime
 import java.util.Base64
@@ -47,7 +49,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
     override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification {
         backend.simulateNetwork()
         if (!PHONE.matches(phone)) {
-            throw AppError.Api(
+            throw backend.apiError(
                 ErrorCodes.VALIDATION_ERROR, 400,
                 details = listOf(AppError.FieldError(PHONE_FIELD, FieldErrorCodes.INVALID_FORMAT, "Номер — +7 и 10 цифр")),
             )
@@ -69,8 +71,8 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
 
     private fun verificationEvents(verificationToken: String): Flow<PhoneVerificationStatusEvent> = flow {
         val v = backend.mutex.withLock { verifications[verificationToken] }
-            ?: throw AppError.Unauthorized(ErrorCodes.INVALID_TOKEN)
-        if (v.consumed) throw AppError.Unauthorized(ErrorCodes.INVALID_TOKEN)
+            ?: throw backend.unauthorizedError(ErrorCodes.INVALID_TOKEN)
+        if (v.consumed) throw backend.unauthorizedError(ErrorCodes.INVALID_TOKEN)
         val verifiedAt = v.createdAt.plusNanos(backend.config.callVerifyDelayMs * 1_000_000)
         val now = backend.now()
         if (now.isAfter(v.expiresAt)) {
@@ -120,9 +122,9 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         backend.simulateNetwork()
         return backend.idempotent("auth.register:${key.value}", request = request) {
             val phone = backend.mutex.withLock { registrationTokens[request.registrationToken] }
-                ?: throw AppError.Unauthorized(ErrorCodes.INVALID_TOKEN)
-            if (!request.pdConsentAccepted) throw AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403)
-            if (request.pdConsentVersion != MockBackend.CONSENT_VERSION_PD) throw AppError.Api(ErrorCodes.CONSENT_OUTDATED, 422)
+                ?: throw backend.unauthorizedError(ErrorCodes.INVALID_TOKEN)
+            if (!request.pdConsentAccepted) throw backend.apiError(ErrorCodes.CONSENT_REQUIRED, 403)
+            if (request.pdConsentVersion != MockBackend.CONSENT_VERSION_PD) throw backend.apiError(ErrorCodes.CONSENT_OUTDATED, 422)
             val tokens = issueTokens()
             val userId = backend.newUserId()
             backend.mutex.withLock {
@@ -138,7 +140,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         backend.simulateNetwork()
         return backend.idempotent("auth.token:${key.value}", request = refreshToken) {
             val known = backend.mutex.withLock { refreshTokens.remove(refreshToken) }
-            if (!known) throw AppError.Unauthorized(ErrorCodes.TOKEN_REVOKED)
+            if (!known) throw backend.unauthorizedError(ErrorCodes.TOKEN_REVOKED)
             issueTokens()
         }
     }
@@ -153,7 +155,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         return when (type) {
             ConsentType.PERSONAL_DATA -> ConsentDocument(type, MockBackend.CONSENT_VERSION_PD, "Согласие на обработку персональных данных", "https://example.ru/legal/pd-consent/${MockBackend.CONSENT_VERSION_PD}")
             ConsentType.ASSISTANT -> ConsentDocument(type, MockBackend.CONSENT_VERSION_ASSISTANT, "Согласие на передачу данных помощнику", "https://example.ru/legal/assistant-consent/${MockBackend.CONSENT_VERSION_ASSISTANT}")
-            ConsentType.UNKNOWN -> throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+            ConsentType.UNKNOWN -> throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
         }
     }
 

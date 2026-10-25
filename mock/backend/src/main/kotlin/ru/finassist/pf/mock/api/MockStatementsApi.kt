@@ -45,7 +45,9 @@ import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.core.common.time.toApiMonth
+import ru.finassist.pf.mock.MockErrorCatalog
 import ru.finassist.pf.mock.MockBackend
+import ru.finassist.pf.mock.apiError
 import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.mock.domain.AnalyticsEngine
 import ru.finassist.pf.mock.domain.Catalog
@@ -100,12 +102,12 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         backend.simulateNetwork()
         backend.requireSession()
         return backend.idempotent("statements.upload:${key.value}") {
-            if (file.size > backend.config.maxFileSizeBytes) throw AppError.Api(ErrorCodes.FILE_TOO_LARGE, 413)
+            if (file.size > backend.config.maxFileSizeBytes) throw backend.apiError(ErrorCodes.FILE_TOO_LARGE, 413)
             val text = file.open().use { it.readBytes() }.toString(Charsets.UTF_8)
             when (val check = OfxParser.check(text)) {
-                OfxCheck.Csv -> throw AppError.Api(ErrorCodes.CSV_NOT_ACCEPTED, 422)
-                OfxCheck.NotOfx -> throw AppError.Api(ErrorCodes.WRONG_FORMAT, 422)
-                is OfxCheck.WrongBank -> throw AppError.Api(ErrorCodes.WRONG_BANK, 422, message = "bank ${check.bankId}")
+                OfxCheck.Csv -> throw backend.apiError(ErrorCodes.CSV_NOT_ACCEPTED, 422)
+                OfxCheck.NotOfx -> throw backend.apiError(ErrorCodes.WRONG_FORMAT, 422)
+                is OfxCheck.WrongBank -> throw backend.apiError(ErrorCodes.WRONG_BANK, 422, message = "bank ${check.bankId}")
                 OfxCheck.Ok -> Unit
             }
             val doc = OfxParser.parse(text)
@@ -171,11 +173,11 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             upload.events.value = ImportEvent.Complete(result)
         } catch (e: TimeoutCancellationException) {
             // Caught before CancellationException, its parent: a timeout is a failed parse, not a cancel by the user.
-            failWith(upload, ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, "parsing did not finish in time"))
+            failWith(upload, ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, "parsing did not finish in time", MockErrorCatalog.presentation(ErrorCodes.PROCESSING_FAILED)))
         } catch (e: kotlinx.coroutines.CancellationException) {
-            failWith(upload, ImportEvent.Error(ErrorCodes.CANCELLED, "cancelled by user"))
+            failWith(upload, ImportEvent.Error(ErrorCodes.CANCELLED, "cancelled by user", MockErrorCatalog.presentation(ErrorCodes.CANCELLED)))
         } catch (e: Exception) {
-            failWith(upload, ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, e.message ?: "failed"))
+            failWith(upload, ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, e.message ?: "failed", MockErrorCatalog.presentation(ErrorCodes.PROCESSING_FAILED)))
         } finally {
             cancelled.remove(upload.id)
         }
@@ -296,7 +298,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         // Every opening goes through droppable: maintenance and the client version come before 404 (api.md «Ошибки»).
         val upload = backend.uploads.firstOrNull { it.id == uploadId }
             ?: return backend.droppable(
-                failures[uploadId]?.let { flowOf(it) } ?: kotlinx.coroutines.flow.flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) },
+                failures[uploadId]?.let { flowOf(it) } ?: kotlinx.coroutines.flow.flow { throw backend.apiError(ErrorCodes.NOT_FOUND, 404) },
             ) { true }
         return backend.droppable(
             upload.events.transformWhile { event ->
@@ -376,7 +378,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         backend.simulateNetwork()
         backend.requireSession()
         return backend.mutex.withLock {
-            val upload = backend.uploads.firstOrNull { it.id == uploadId } ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+            val upload = backend.uploads.firstOrNull { it.id == uploadId } ?: throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
             UnreadLinesList(upload.openUnreadLines.map { toDto(upload, it) })
         }
     }

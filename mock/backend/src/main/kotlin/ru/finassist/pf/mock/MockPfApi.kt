@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.withLock
 import ru.finassist.pf.core.api.PfApi
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.common.time.Clock
+import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.mock.api.MockAnalyticsApi
 import ru.finassist.pf.mock.api.MockAssistantApi
 import ru.finassist.pf.mock.api.MockAuthApi
@@ -30,8 +31,9 @@ class MockPfApi(
     config: MockConfig = MockConfig(),
     clientVersion: ClientVersion = ClientVersion("0.0.0", 0),
     gate: ServiceGate = ServiceGate(),
+    elapsedClock: ElapsedClock? = null,
 ) : PfApi {
-    val backend = MockBackend(config, clock, clientVersion = clientVersion, gate = gate)
+    val backend = MockBackend(config, clock, clientVersion = clientVersion, gate = gate, elapsedClock = elapsedClock)
 
     override val auth = MockAuthApi(backend)
     override val profile = MockProfileApi(backend)

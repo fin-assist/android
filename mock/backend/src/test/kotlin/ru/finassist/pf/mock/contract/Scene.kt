@@ -77,7 +77,7 @@ internal class Scene(
             when (e) {
                 is ImportEvent.Progress -> Wire.event("progress", ImportProgress.serializer(), e.progress)
                 is ImportEvent.Complete -> Wire.event("complete", ImportResult.serializer(), e.result)
-                is ImportEvent.Error -> Wire.errorEvent(e.code, e.message)
+                is ImportEvent.Error -> Wire.errorEvent(e.code, e.message, e.presentation)
             }
         }
 
