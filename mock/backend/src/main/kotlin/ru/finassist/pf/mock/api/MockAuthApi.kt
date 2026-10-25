@@ -17,6 +17,7 @@ import ru.finassist.pf.core.api.model.RegisterResponse
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.api.model.VerificationStatus
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.time.ResponseTiming
 import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.apiError
 import ru.finassist.pf.mock.unauthorizedError
@@ -62,8 +63,12 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
             PhoneVerification(verificationToken = token, callbackNumber = CALLBACK_NUMBER, expiresAt = expiresAt)
         }
         // `expires_in` is computed on every send, a replay by the same key included (api.md 1.1): floor, not below 0.
-        val left = java.time.Duration.between(backend.now(), stored.expiresAt).seconds.coerceAtLeast(0)
-        return stored.copy(expiresIn = left.toInt())
+        val sentAt = backend.now().toInstant()
+        val left = java.time.Duration.between(sentAt, stored.expiresAt.toInstant()).seconds.coerceAtLeast(0)
+        return stored.copy(
+            expiresIn = left.toInt(), serverTime = sentAt,
+            responseTiming = ResponseTiming(serverDate = sentAt, receivedElapsedMillis = backend.elapsedClock?.nowMillis()),
+        )
     }
 
     override fun streamPhoneVerification(verificationToken: String): Flow<PhoneVerificationStatusEvent> =

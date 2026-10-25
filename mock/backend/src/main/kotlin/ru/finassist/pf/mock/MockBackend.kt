@@ -187,12 +187,14 @@ class MockBackend(
     private fun checkAvailability() {
         val c = config
         if (c.maintenance) {
-            gate.maintenance(c.maintenanceUntil, c.maintenanceRetryAfterSeconds, now())
-            throw maintenanceError(c.maintenanceUntil, c.maintenanceRetryAfterSeconds)
+            val error = maintenanceError(c.maintenanceUntil, c.maintenanceRetryAfterSeconds)
+            gate.maintenance(c.maintenanceUntil, c.maintenanceRetryAfterSeconds, now(), response = error.response)
+            throw error
         }
         if (clientVersion.isBelow(c.minVersion)) {
-            gate.updateRequired()
-            throw updateRequiredError()
+            val error = updateRequiredError()
+            gate.updateRequired(error.presentation)
+            throw error
         }
         gate.reopen()
     }
