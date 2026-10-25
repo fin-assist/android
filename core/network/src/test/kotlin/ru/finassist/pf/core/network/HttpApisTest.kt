@@ -33,6 +33,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -96,6 +97,8 @@ class HttpApisTest {
 
         assertEquals(300, verification.expiresIn)
         assertEquals(java.time.Instant.parse("2026-10-04T19:12:00Z"), verification.serverTime)
+        assertNotNull(verification.responseTiming.receivedElapsedMillis)
+        assertEquals(verification.serverTime, verification.responseTiming.serverDate)
     }
 
     @Test
@@ -300,7 +303,8 @@ class HttpApisTest {
         }
 
         assertEquals("WRONG_BANK", error.code)
-        assertEquals("Не Т-Банк", error.message)
+        assertEquals("WRONG_BANK", error.message)
+        assertEquals("Не Т-Банк", (error.response!!.metadata["message"] as kotlinx.serialization.json.JsonPrimitive).content)
     }
 
     @Test

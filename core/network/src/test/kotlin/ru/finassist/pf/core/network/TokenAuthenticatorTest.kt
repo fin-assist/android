@@ -7,6 +7,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.api.model.IdempotencyKey
+import ru.finassist.pf.core.common.time.RequestReplayWindow
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -40,7 +44,7 @@ class TokenAuthenticatorTest {
         return OkHttpClient.Builder()
             .addInterceptor(AuthInterceptor(store))
             .authenticator(
-                TokenAuthenticator(store) { _, _ ->
+                TokenAuthenticator(store, ElapsedClock { System.nanoTime() / 1_000_000 }) { _, _ ->
                     refreshMutex.withLock {
                         refreshCalls.incrementAndGet()
                         refreshResult()
@@ -130,7 +134,7 @@ class TokenAuthenticatorTest {
         val client = OkHttpClient.Builder()
             .addInterceptor(AuthInterceptor(store))
             .authenticator(
-                TokenAuthenticator(store) { key, _ ->
+                TokenAuthenticator(store, ElapsedClock { System.nanoTime() / 1_000_000 }) { key, _ ->
                     keys += key.value
                     // First attempt: the server rotated the pair but the response was lost.
                     if (attempt++ == 0) throw AppError.Offline() else TokenPair("new-access", "new-refresh")
@@ -223,4 +227,53 @@ class TokenAuthenticatorTest {
             assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken }, "after $error")
         }
     }
+    @Test
+    fun `auth correction resumes only a fresh tracked POST with the same key and a new request id`() {
+        var elapsed = 1000L
+        val clock = ElapsedClock { elapsed }
+        val key = IdempotencyKey.random(clock)
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+            .authenticator(TokenAuthenticator(store, clock) { _, _ -> TokenPair("new-access", "new-refresh") }).build()
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"code":"INVALID_TOKEN","message":"private","retryable":false}}"""))
+        server.enqueue(MockResponse().setBody("ok"))
+        val request = Request.Builder().url(server.url("/v1/assistant/messages"))
+            .post("{}".toRequestBody()).header(HEADER_IDEMPOTENCY_KEY, key.value).header(HEADER_REQUEST_ID, "original-id")
+            .tag(RequestReplayWindow::class.java, key.replayWindow).build()
+        client.newCall(request).execute().use { assertEquals(200, it.code) }
+        val first = server.takeRequest(); val second = server.takeRequest()
+        assertEquals(first.getHeader(HEADER_IDEMPOTENCY_KEY), second.getHeader(HEADER_IDEMPOTENCY_KEY))
+        kotlin.test.assertNotEquals(first.getHeader(HEADER_REQUEST_ID), second.getHeader(HEADER_REQUEST_ID))
+        assertEquals("Bearer new-access", second.getHeader("Authorization"))
+    }
+    @Test
+    fun `unknown expired or rebooted POST origin never grants an automatic auth resend`() {
+        for (window in listOf(null, RequestReplayWindow(0, 100), RequestReplayWindow(2000, 1000))) {
+            val clock = ElapsedClock { 1000L }
+            val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+                .authenticator(TokenAuthenticator(store, clock) { _, _ -> refreshCalls.incrementAndGet(); TokenPair("new", "new") }).build()
+            server.enqueue(MockResponse().setResponseCode(401))
+            val request = Request.Builder().url(server.url("/v1/assistant/messages"))
+                .post("{}".toRequestBody()).header(HEADER_IDEMPOTENCY_KEY, "existing")
+                .tag(RequestReplayWindow::class.java, window).build()
+            client.newCall(request).execute().use { assertEquals(401, it.code) }
+            server.takeRequest()
+        }
+        assertEquals(0, refreshCalls.get())
+    }
+    @Test
+    fun `uncertain refresh after 60 seconds never rotates to a new key for the old token`() {
+        var elapsed = 1000L
+        val clock = ElapsedClock { elapsed }
+        val keys = mutableListOf<String>()
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
+            .authenticator(TokenAuthenticator(store, clock) { key, _ -> keys += key.value; throw AppError.Offline() }).build()
+        server.enqueue(MockResponse().setResponseCode(401))
+        client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        elapsed += 60_000
+        server.enqueue(MockResponse().setResponseCode(401))
+        client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        assertEquals(1, keys.size)
+        assertNull(runBlocking { store.current() })
+    }
+
 }

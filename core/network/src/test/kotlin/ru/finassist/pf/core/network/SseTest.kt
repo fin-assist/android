@@ -156,7 +156,8 @@ class SseTest {
             val error = assertIs<AppError.Api>(awaitError())
             assertEquals("RATE_LIMITED", error.code)
             assertEquals(200, error.httpStatus)
-            assertEquals("Слишком часто", error.message)
+            assertEquals("RATE_LIMITED", error.message)
+            assertEquals(ru.finassist.pf.core.common.error.ErrorContext.GENERIC_EVENT, error.response?.context)
         }
     }
 
@@ -273,4 +274,29 @@ class SseTest {
              "notices":[]}
         """.trimIndent().replace("\n", "")
     }
+    @Test
+    fun `generic event with REST code spelling remains an event and keeps its canonical text`() = runBlocking {
+        server.enqueue(stream("error" to """{"code":"MAINTENANCE","message":"PRIVATE","user_message":"Безопасно","severity":"future"}"""))
+        val api = HttpAuthApi(Retrofit.Builder().baseUrl(server.url("/")).build().create(AuthService::class.java), sse)
+        api.streamPhoneVerification("vt").test {
+            val error = assertIs<AppError.Api>(awaitError())
+            assertEquals("MAINTENANCE", error.rawCode)
+            assertEquals(ru.finassist.pf.core.common.error.ErrorContext.GENERIC_EVENT, error.response?.context)
+            assertEquals("Безопасно", error.presentation.textOrFallback("fallback"))
+            assertNull(error.requestRetryable)
+        }
+    }
+    @Test
+    fun `import cancellation keeps its result presentation without a REST action`() = runBlocking {
+        server.enqueue(stream("error" to """{"code":"CANCELLED","message":"PRIVATE","user_message":"Разбор отменён","severity":null}"""))
+        val api = HttpStatementsApi(Retrofit.Builder().baseUrl(server.url("/")).build().create(StatementsService::class.java), sse)
+        api.streamProgress("upload").test {
+            val error = assertIs<ImportEvent.Error>(awaitItem())
+            assertEquals("CANCELLED", error.code)
+            assertEquals("Разбор отменён", error.presentation.textOrFallback("fallback"))
+            assertEquals(ru.finassist.pf.core.common.error.ErrorSeverity.ERROR, error.presentation.severity)
+            awaitComplete()
+        }
+    }
+
 }
