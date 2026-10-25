@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -93,7 +93,7 @@ class AnalyticsViewModel @Inject constructor(
     operations: OperationsRepository,
     private val flags: FeatureFlags,
     private val tracker: Tracker,
-    reportZone: ReportZone,
+    private val reportZone: ReportZone,
     private val elapsedClock: ElapsedClock,
 ) : ViewModel(), AnalyticsHandlers {
     private var period: PeriodTypeCode = PeriodTypeCode.MONTH
@@ -107,6 +107,7 @@ class AnalyticsViewModel @Inject constructor(
     init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<AnalyticsUiState> = _state
     private var periodsJob: Job? = null
+    private var periodsGeneration = 0L
     private val periodsRetryGate = RequestRetryGate(elapsedClock)
     private val dismissalGates = mutableMapOf<String, RequestRetryGate>()
 
@@ -145,7 +146,7 @@ class AnalyticsViewModel @Inject constructor(
     init {
         viewModelScope.launch { merge(statements.events, operations.categoryChanges).collect { reloadChangedData() } }
         viewModelScope.launch {
-            reportZone.profile.drop(1).filterNotNull().distinctUntilChanged().collect { if (loadJob != null) reloadChangedData() }
+            reportZone.profile.map { reportZone.current }.distinctUntilChanged().drop(1).collect { if (loadJob != null) reloadChangedData() }
         }
         // Remote config can land after the screen opened (first launch, background sync): re-read the blocks.
         viewModelScope.launch {
@@ -174,12 +175,16 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     private fun clearRestriction(periodsChanged: Boolean = false) {
+        if (periodsChanged) resetPeriodsContext()
         retryGate.clear()
-        if (periodsChanged) periodsRetryGate.clear()
-        _state.update { it.copy(
-            requestRetryable = null, errorPresentation = null,
-            periodsRetryable = if (periodsChanged) null else it.periodsRetryable,
-        ) }
+        _state.update { it.copy(requestRetryable = null, errorPresentation = null) }
+    }
+
+    private fun resetPeriodsContext() {
+        invalidatePeriodsRequest()
+        periodsRetryGate.clear()
+        _state.update { it.copy(periodsRetryable = null) }
+        if (_state.value.sheet == AnalyticsSheet.PERIODS) requestPeriods()
     }
 
     override fun load(quiet: Boolean) {
@@ -194,9 +199,11 @@ class AnalyticsViewModel @Inject constructor(
                 exposed.clear()
                 shownExperiments = exp
                 a.params?.let { p ->
+                    val periodsChanged = period != p.period
                     period = p.period
                     date = p.date
                     transferMode = allowedMode(p.transferMode)
+                    if (periodsChanged) resetPeriodsContext()
                 }
                 _state.update { it.copy(loading = false, offline = false, errorPresentation = null, requestRetryable = null, data = a, response = it.response + 1) }
                 if (a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
@@ -213,9 +220,11 @@ class AnalyticsViewModel @Inject constructor(
                 // The screen keeps showing the previous data: return the parameters to what it shows, or the
                 // segment, the chip and the transfers sheet would describe a request that never succeeded.
                 _state.value.data?.params?.let { p ->
+                    val periodsChanged = period != p.period
                     period = p.period
                     date = p.date
                     transferMode = allowedMode(p.transferMode)
+                    if (periodsChanged) resetPeriodsContext()
                 }
                 // The refusal belongs to the failed params, not the different period restored on screen.
                 // Keep its explanation until the user requests that restored context; never retry automatically.
@@ -245,8 +254,8 @@ class AnalyticsViewModel @Inject constructor(
     /** Segmented control: keeps the current date so «Месяц → Квартал» opens the quarter containing it. */
     override fun setPeriodType(type: PeriodTypeCode) {
         if (type == period) return
-        clearRestriction(periodsChanged = true)
         period = type
+        clearRestriction(periodsChanged = true)
         tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to type.code))
         load()
     }
@@ -281,27 +290,33 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     override fun openSheet(sheet: AnalyticsSheet?) {
-        if (sheet == AnalyticsSheet.PERIODS && !periodsRetryGate.isReady()) {
-            _state.update { it.copy(sheet = sheet) }
-            return
-        }
-        _state.update {
-            if (sheet == AnalyticsSheet.PERIODS) it.copy(sheet = sheet, periods = null, periodsFailed = false, periodsErrorPresentation = null)
-            else it.copy(sheet = sheet) // closing or another sheet must not discard a still-restricted refusal
-        }
+        _state.update { it.copy(sheet = sheet) }
+        if (sheet == AnalyticsSheet.PERIODS) requestPeriods()
+        else invalidatePeriodsRequest() // Closing preserves the current context's refusal/wait.
+    }
+
+    private fun invalidatePeriodsRequest() {
+        periodsGeneration++
         periodsJob?.cancel()
-        if (sheet == AnalyticsSheet.PERIODS) {
-            // The list is requested when the sheet opens, not in advance (api.md 6.2); an older request for another
-            // period type is cancelled so its answer cannot land in this sheet.
-            val type = period
-            periodsJob = viewModelScope.launch {
-                try {
-                    val list = api.listPeriods(type)
-                    _state.update { it.copy(periods = list.periods) }
-                } catch (e: AppError) {
-                    periodsRetryGate.record(e)
-                    _state.update { it.copy(periodsFailed = true, periodsErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, periodsRetryable = e.requestRetryable) }
-                }
+        periodsJob = null
+    }
+
+    private fun requestPeriods() {
+        if (!periodsRetryGate.isReady()) return
+        invalidatePeriodsRequest()
+        val generation = periodsGeneration
+        val type = period
+        val zone = reportZone.current
+        _state.update { it.copy(periods = null, periodsFailed = false, periodsErrorPresentation = null, periodsRetryable = null) }
+        periodsJob = viewModelScope.launch {
+            try {
+                val list = api.listPeriods(type)
+                if (generation != periodsGeneration || type != period || zone != reportZone.current) return@launch
+                _state.update { it.copy(periods = list.periods) }
+            } catch (e: AppError) {
+                if (generation != periodsGeneration || type != period || zone != reportZone.current) return@launch
+                periodsRetryGate.record(e)
+                _state.update { it.copy(periodsFailed = true, periodsErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, periodsRetryable = e.requestRetryable) }
             }
         }
     }

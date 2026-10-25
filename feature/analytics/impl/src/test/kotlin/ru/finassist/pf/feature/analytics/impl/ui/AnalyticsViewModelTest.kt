@@ -68,6 +68,7 @@ class AnalyticsViewModelTest {
         val periodRequests = mutableListOf<PeriodTypeCode?>()
         var periodsFailure: AppError? = null
         var periodsGate: CompletableDeferred<Unit>? = null
+        var periodsReply: (suspend (PeriodTypeCode?) -> AnalyticsPeriodsList)? = null
         val dismissed = mutableListOf<String>()
         var dismissFailure: AppError? = null
 
@@ -84,6 +85,7 @@ class AnalyticsViewModelTest {
 
         override suspend fun listPeriods(period: PeriodTypeCode?): AnalyticsPeriodsList {
             periodRequests += period
+            periodsReply?.let { return it(period) }
             periodsGate?.await()
             periodsFailure?.let { throw it }
             return AnalyticsPeriodsList(listOf(AnalyticsPeriodItem(PeriodKey("2026-09"), DateRange(at(1), at(30)), Coverage.COMPLETE)))
@@ -528,6 +530,117 @@ class AnalyticsViewModelTest {
         assertEquals(1, api.requests.size)
     }
 
+    private fun periodList(key: String) = AnalyticsPeriodsList(listOf(
+        AnalyticsPeriodItem(PeriodKey(key), DateRange(at(1), at(30)), Coverage.COMPLETE),
+    ))
+
+    @Test fun `a previous-zone period refusal cannot poison the visible new-zone directory`() {
+        reportZone.set("Europe/Moscow")
+        api.answers += data()
+        var old: kotlin.coroutines.Continuation<AnalyticsPeriodsList>? = null
+        var replies = 0
+        api.periodsReply = {
+            if (++replies == 1) kotlin.coroutines.suspendCoroutine { old = it }
+            else periodList("2026-08")
+        }
+        val vm = opened()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        reportZone.set("Asia/Vladivostok")
+        assertEquals(2, api.periodRequests.size, "a visible directory refreshes for the new zone")
+        old!!.resumeWith(Result.failure(refused()))
+        assertEquals(listOf(PeriodKey("2026-08")), vm.state.value.periods?.map { it.key })
+        assertFalse(vm.state.value.periodsFailed)
+        assertNull(vm.state.value.periodsRetryable)
+        assertTrue(vm.state.value.periodsRetryReady)
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(3, api.periodRequests.size)
+    }
+
+    @Test fun `a pre-mutation period success cannot replace or release the current directory refusal`() {
+        api.answers += data()
+        var old: kotlin.coroutines.Continuation<AnalyticsPeriodsList>? = null
+        var replies = 0
+        api.periodsReply = {
+            if (++replies == 1) kotlin.coroutines.suspendCoroutine { old = it }
+            else throw refused()
+        }
+        val vm = opened()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("u1"))
+        old!!.resumeWith(Result.success(periodList("2026-07")))
+        assertNull(vm.state.value.periods)
+        assertTrue(vm.state.value.periodsFailed)
+        assertEquals(false, vm.state.value.periodsRetryable)
+        assertFalse(vm.state.value.periodsRetryReady)
+        vm.openSheet(null)
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(2, api.periodRequests.size, "the current unchanged refusal remains in force")
+    }
+
+    @Test fun `a previous period-type refusal cannot overwrite the new type directory`() {
+        api.answers += data()
+        api.answers += data(period = PeriodTypeCode.QUARTER, date = "2026-Q3")
+        var old: kotlin.coroutines.Continuation<AnalyticsPeriodsList>? = null
+        api.periodsReply = { type ->
+            if (type == PeriodTypeCode.MONTH) kotlin.coroutines.suspendCoroutine { old = it }
+            else periodList("2026-Q3")
+        }
+        val vm = opened()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        old!!.resumeWith(Result.failure(refused()))
+        assertEquals(listOf<PeriodTypeCode?>(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER), api.periodRequests)
+        assertEquals(listOf(PeriodKey("2026-Q3")), vm.state.value.periods?.map { it.key })
+        assertFalse(vm.state.value.periodsFailed)
+        assertTrue(vm.state.value.periodsRetryReady)
+    }
+
+    @Test fun `restoring the shown period type refreshes an open directory for that restored context`() {
+        api.answers += data()
+        api.answers += refused()
+        api.periodsReply = { type -> periodList(if (type == PeriodTypeCode.QUARTER) "2026-Q3" else "2026-09") }
+        val vm = opened()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        assertEquals(PeriodTypeCode.MONTH, vm.state.value.data?.params?.period)
+        assertEquals(listOf<PeriodTypeCode?>(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.MONTH), api.periodRequests)
+        assertEquals(listOf(PeriodKey("2026-09")), vm.state.value.periods?.map { it.key })
+    }
+
+    @Test fun `the first known profile zone equal to the device zone does not release a directory refusal`() {
+        api.answers += data()
+        val vm = opened()
+        api.periodsFailure = refused()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        api.periodsFailure = null
+        reportZone.set("Europe/Moscow")
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(1, api.periodRequests.size)
+        assertFalse(vm.state.value.periodsRetryReady)
+        reportZone.set("Asia/Vladivostok")
+        assertEquals(2, api.periodRequests.size, "an actual effective-zone change releases the old context")
+        assertTrue(vm.state.value.periodsRetryReady)
+    }
+
+    @Test fun `same-zone publication does not clear or restart the current period wait`() {
+        api.answers += data()
+        val vm = opened()
+        api.periodsFailure = AppError.RateLimited(null, 3, ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "RATE_LIMITED", 429, requestRetryable = true,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = scheduler.currentTime),
+        ))
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        api.periodsFailure = null
+        scheduler.advanceTimeBy(1_000)
+        reportZone.set("Europe/Moscow")
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(1, api.periodRequests.size)
+        scheduler.advanceTimeBy(2_000)
+        scheduler.runCurrent()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(2, api.periodRequests.size, "the original duration remains anchored at the first refusal")
+    }
+
     @Test fun `closing the sheet drops the pending period list`() {
         api.answers += data()
         val vm = opened()
@@ -796,7 +909,6 @@ class AnalyticsViewModelTest {
         assertEquals(1, api.periodRequests.size)
         assertFalse(vm.state.value.periodsRetryReady)
         vm.setPeriodType(PeriodTypeCode.QUARTER)
-        vm.openSheet(AnalyticsSheet.PERIODS)
         assertEquals(listOf<PeriodTypeCode?>(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER), api.periodRequests)
         assertTrue(vm.state.value.periodsRetryReady)
     }
