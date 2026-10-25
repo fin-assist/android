@@ -60,6 +60,7 @@ internal class FakeOperationsApi : OperationsApi {
     val changes = mutableListOf<Pair<String, String>>()
     var changeResponse: ChangeCategoryResponse? = null
     var changeFailure: AppError? = null
+    var changeReply: (suspend (ChangeCategoryRequest) -> ChangeCategoryResponse)? = null
 
     override suspend fun listOperations(query: OperationsQuery): OperationsList {
         queries += query
@@ -80,6 +81,7 @@ internal class FakeOperationsApi : OperationsApi {
     override suspend fun changeCategory(id: String, request: ChangeCategoryRequest): ChangeCategoryResponse {
         changedAt += request.occurredAt
         changes += id to request.categoryId
+        changeReply?.let { return it(request) }
         changeFailure?.let { throw it }
         return changeResponse ?: error("no response set")
     }

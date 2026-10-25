@@ -75,6 +75,7 @@ class DetailViewModel @Inject constructor(
     private val retryGate = RequestRetryGate(elapsedClock)
     init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     private val pickerRetryGate = RequestRetryGate(elapsedClock)
+    private var pickerGeneration = 0L
     init { viewModelScope.launch { pickerRetryGate.readiness.collect { ready -> _state.update { it.copy(pickerRetryReady = ready) } } } }
     val state: StateFlow<DetailUiState> = _state
 
@@ -107,6 +108,7 @@ class DetailViewModel @Inject constructor(
 
     fun choose(categoryId: String) {
         if (categoryId == _state.value.draftCategoryId) return
+        pickerGeneration++
         pickerRetryGate.clear()
         _state.update { it.copy(draftCategoryId = categoryId, pickerError = null, pickerErrorPresentation = null, pickerRequestRetryable = null) }
     }
@@ -115,11 +117,12 @@ class DetailViewModel @Inject constructor(
         val s = _state.value
         val op = s.operation ?: return
         val target = s.draftCategoryId ?: return
-        if (!pickerRetryGate.isReady()) return
+        if (s.saving || !pickerRetryGate.isReady()) return
         if (target == op.categoryId) {
             closePicker()
             return
         }
+        val generation = pickerGeneration
         viewModelScope.launch {
             _state.update { it.copy(saving = true, pickerError = null, pickerErrorPresentation = null, pickerRequestRetryable = null) }
             try {
@@ -137,6 +140,11 @@ class DetailViewModel @Inject constructor(
                 operations.notifyCategoryChanged()
                 _state.update { it.copy(saving = false, picker = false, draftCategoryId = null, operation = shown, snackbar = message) }
             } catch (e: AppError) {
+                // An old PATCH failure cannot restrict the different draft selected while it was pending.
+                if (generation != pickerGeneration || _state.value.draftCategoryId != target) {
+                    _state.update { it.copy(saving = false) }
+                    return@launch
+                }
                 pickerRetryGate.record(e)
                 val text = when {
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CATEGORY_NOT_ASSIGNABLE -> "Эту категорию нельзя назначить этой операции"
