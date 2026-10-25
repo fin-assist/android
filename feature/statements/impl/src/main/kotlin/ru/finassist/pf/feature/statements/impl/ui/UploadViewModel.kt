@@ -193,8 +193,12 @@ class UploadViewModel @Inject constructor(
                 watch()
             } catch (e: AppError) {
                 retryGate.record(e)
-                // 4xx answers are final as well (stored by the server); network failures keep the key for a retry.
-                if (e is AppError.Api && e.requestRetryable != false) keys.complete(action)
+                // Explicit retry advice retains this exact original operation/key. Only the existing legacy
+                // final file-rejection flow may finish it; fixing/reselecting a rejected file is a new intent.
+                if (e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.requestRetryable == null &&
+                    e.code in setOf(ErrorCodes.WRONG_FORMAT, ErrorCodes.WRONG_BANK, ErrorCodes.CSV_NOT_ACCEPTED, ErrorCodes.FILE_TOO_LARGE)) {
+                    keys.complete(action)
+                }
                 fail(e, file.name)
             }
         }

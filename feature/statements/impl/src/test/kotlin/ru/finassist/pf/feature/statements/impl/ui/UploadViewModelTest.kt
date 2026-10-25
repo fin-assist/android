@@ -326,6 +326,18 @@ class UploadViewModelTest {
         assertEquals(api.keys[0], api.keys[1])
     }
 
+    @Test fun `explicit REST retry permission reuses the original upload key even for an unknown 400`() {
+        api.uploadFailures += AppError.Api("FUTURE_UPLOAD_ERROR", 400,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_UPLOAD_ERROR", 400, requestRetryable = true))
+        vm.onFilePicked(uri)
+        await("the controlled refusal") { it.phase is UploadPhase.Error }
+        awaitIdle()
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        assertEquals(2, api.keys.size)
+        assertEquals(api.keys.first(), api.keys.last(), "retry=true applies to the same original key, not a fresh upload")
+    }
+
     @Test fun `a restored upload UUID is kept without resending the same file`() {
         val hash = java.security.MessageDigest.getInstance("SHA-256").digest("OFXHEADER:100".toByteArray())
             .joinToString("") { "%02x".format(it) }
