@@ -310,7 +310,7 @@ class TokenAuthenticatorTest {
     }
 
     @Test
-    fun `failed refresh explicit false stops every further direct refresh under the cached key`() {
+    fun `failed refresh explicit false keeps its first session but the next 401 exits without another RPC`() {
         var elapsed = 1000L
         var calls = 0
         val clock = ElapsedClock { elapsed }
@@ -322,13 +322,16 @@ class TokenAuthenticatorTest {
                     timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = elapsed), retryAfterSeconds = 10,
                 ))
             }).build()
-        for (time in listOf(1000L, 2000L, 12_000L)) {
+        server.enqueue(MockResponse().setResponseCode(401))
+        client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken }, "first refusal retains the session")
+        for (time in listOf(2000L, 12_000L)) {
             elapsed = time
             server.enqueue(MockResponse().setResponseCode(401))
             client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+            assertNull(runBlocking { store.current() }, "the next 401 recovers through sign-in")
         }
-        assertEquals(1, calls, "even after Retry-After elapsed false still prohibits the unchanged refresh")
-        assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken })
+        assertEquals(1, calls, "neither waiting nor sign-in recovery retries the forbidden refresh")
     }
 
     @Test
@@ -349,6 +352,7 @@ class TokenAuthenticatorTest {
             elapsed = time
             server.enqueue(MockResponse().setResponseCode(401))
             client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+            assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken }, "a temporary wait must not force sign-in")
         }
         assertEquals(1, keys.size)
         elapsed = 11_000
@@ -389,18 +393,48 @@ class TokenAuthenticatorTest {
     }
 
     @Test
-    fun `first definitive rate false does not grant a retry or force logout at sixty seconds`() {
+    fun `first proven no-effect false retires uncertainty but a later 401 requires sign-in`() {
         var elapsed = 0L
-        var calls = 0
+        val keys = mutableListOf<String>()
         val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
-            .authenticator(TokenAuthenticator(store, ElapsedClock { elapsed }) { _, _ -> calls++; throw freshLimit(elapsed, false) }).build()
-        for (time in listOf(0L, 60_000L, 121_000L, 240_000L)) {
+            .authenticator(TokenAuthenticator(store, ElapsedClock { elapsed }) { key, _ -> keys += key.value; throw freshLimit(elapsed, false) }).build()
+        server.enqueue(MockResponse().setResponseCode(401))
+        client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken })
+        for (time in listOf(60_000L, 121_000L, 240_000L)) {
             elapsed = time
             server.enqueue(MockResponse().setResponseCode(401))
             client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+            assertNull(runBlocking { store.current() })
         }
-        assertEquals(1, calls)
+        assertEquals(1, keys.size, "there is no automatic refresh or replacement UUID after an explicit refusal")
+    }
+
+    @Test
+    fun `forbidden refresh recovery cannot clear a newer login that wins the session CAS`() {
+        val newer = TokenStore.Session("u2", TokenPair("new-login-access", "new-login-refresh"))
+        var calls = 0
+        var clearCalls = 0
+        val guardedStore = object : TokenStore by store {
+            override suspend fun clearIfRefreshToken(expectedRefreshToken: String): Boolean {
+                clearCalls++
+                assertEquals("old-refresh", expectedRefreshToken)
+                store.save(newer) // login linearizes after the authenticator read but before its conditional clear
+                return store.clearIfRefreshToken(expectedRefreshToken)
+            }
+        }
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(guardedStore))
+            .authenticator(TokenAuthenticator(guardedStore, ElapsedClock { 0L }) { _, _ -> calls++; throw freshLimit(0, false) }).build()
+        server.enqueue(MockResponse().setResponseCode(401))
+        client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        assertEquals(0, clearCalls)
         assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken })
+        server.enqueue(MockResponse().setResponseCode(401))
+        client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().use { assertEquals(401, it.code) }
+        assertEquals(1, calls)
+        assertEquals(1, clearCalls)
+        assertEquals(newer, runBlocking { store.current() })
+        assertEquals(2, server.requestCount, "the old request is not replayed as the newly signed-in user")
     }
 
     @Test
@@ -473,7 +507,7 @@ class TokenAuthenticatorTest {
     }
 
     @Test
-    fun `known maintenance may correct once after its wait without broadly clearing false`() {
+    fun `maintenance waits for one correction then a consumed false permit exits on the next 401`() {
         var elapsed = 0L
         val keys = mutableListOf<IdempotencyKey>()
         val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(store))
@@ -482,14 +516,15 @@ class TokenAuthenticatorTest {
                 throw AppError.Maintenance(null, 15, ru.finassist.pf.core.common.error.ErrorResponseInfo("MAINTENANCE", 503,
                     requestRetryable = false, timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = elapsed), retryAfterSeconds = 15))
             }).build()
-        for (time in listOf(0L, 1000L, 15_000L, 60_000L, 121_000L)) {
+        for (time in listOf(0L, 1000L, 14_999L, 15_000L, 60_000L, 121_000L)) {
             elapsed = time
             server.enqueue(MockResponse().setResponseCode(401))
             client.newCall(Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+            if (time <= 15_000L) assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken }, "waiting/first corrective refusal retains the session")
+            else assertNull(runBlocking { store.current() }, "a consumed corrective permit cannot leave a forbidden refresh signed in forever")
         }
         assertEquals(2, keys.size)
-        kotlin.test.assertSame(keys[0], keys[1])
-        assertEquals("old-refresh", runBlocking { store.current()?.tokens?.refreshToken })
+        kotlin.test.assertSame(keys[0], keys[1], "the one correction never renews the UUID")
     }
 
     @Test

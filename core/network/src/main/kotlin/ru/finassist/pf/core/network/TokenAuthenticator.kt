@@ -27,8 +27,11 @@ import java.util.UUID
  *   (the access token in the store differs from the one the failed request carried).
  * - The refresh call itself is idempotent with a key that lives 60 s on the server: a retry of the same refresh
  *   after a dropped connection gets the same new pair instead of revoking the session chain.
- * - Refresh failure clears the session; the original request fails with [AppError.Unauthorized] and the app
- *   shows the sign-in screen.
+ * - Temporary failures retain the session and original key while waiting/replay remains possible. A first
+ *   no-effect refusal never automatically rotates a new key or logs the user out.
+ * - On a later 401, an explicit refresh prohibition without a usable corrective flow recovers through sign-in.
+ *   Known maintenance keeps its one guarded correction; an update requirement waits for the actual update.
+ *   Authentication rejection or an unusable uncertain replay window also ends only the matching session.
  */
 internal class TokenAuthenticator(
     private val tokenStore: TokenStore,
@@ -85,9 +88,19 @@ internal class TokenAuthenticator(
                     refreshToken, IdempotencyKey.random(elapsedClock), RequestRetryGate(elapsedClock),
                 ).also { pendingKey = it }
                 if (attempt.requiresAppUpdate) return@withLock null
-                val useMaintenanceCorrection = !attempt.retryGate.isReady() && !attempt.maintenanceRecoveryConsumed &&
-                    attempt.maintenanceRecovery?.remainingMillis(elapsedClock) == 0L
-                if (!attempt.retryGate.isReady() && !useMaintenanceCorrection) return@withLock null
+                val maintenanceRemaining = attempt.maintenanceRecovery?.remainingMillis(elapsedClock)
+                val hasMaintenanceCorrection = !attempt.maintenanceRecoveryConsumed && maintenanceRemaining != null
+                val useMaintenanceCorrection = !attempt.retryGate.isReady() && hasMaintenanceCorrection && maintenanceRemaining == 0L
+                if (!attempt.retryGate.isReady() && !useMaintenanceCorrection) {
+                    if (attempt.retryGate.isExplicitlyForbidden() && !hasMaintenanceCorrection) {
+                        // This later 401 cannot obtain usable credentials. End the old session rather than leave
+                        // every protected screen permanently signed in but unable to proceed. A concurrent login
+                        // wins the CAS; no new refresh key or RPC is created to escape the prohibition.
+                        pendingKey = null
+                        tokenStore.clearIfRefreshToken(refreshToken)
+                    }
+                    return@withLock null
+                }
                 val key = attempt.key
                 val priorUncertainty = attempt.mayHaveUsedToken
                 try {

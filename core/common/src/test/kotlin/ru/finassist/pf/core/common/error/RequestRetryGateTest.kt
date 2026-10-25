@@ -21,6 +21,7 @@ class RequestRetryGateTest {
         gate.record(AppError.Api("FUTURE", 429, response = ErrorResponseInfo("FUTURE", 429,
             requestRetryable = true, retryAfterSeconds = 3, timing = ResponseTiming(receivedElapsedMillis = 0))))
         assertFalse(gate.isReady())
+        assertFalse(gate.isExplicitlyForbidden(), "a permitted wait is distinct from an explicit refusal")
         advanceTimeBy(1000)
         assertEquals(2000L, gate.remainingMillis())
         val updates = async { gate.readiness.take(2).toList() }
@@ -38,8 +39,10 @@ class RequestRetryGateTest {
             requestRetryable = false, timing = ResponseTiming(receivedElapsedMillis = 0))))
         elapsed = 10000
         assertFalse(gate.isReady())
+        assertTrue(gate.isExplicitlyForbidden(), "the explicit refusal survives the wait")
         gate.clear()
         assertTrue(gate.isReady())
+        assertFalse(gate.isExplicitlyForbidden())
     }
 
     @Test fun `Date gives approximate wait and lost anchor never grants a retry`() {
@@ -60,6 +63,7 @@ class RequestRetryGateTest {
         val gate = RequestRetryGate(ElapsedClock { elapsed })
         gate.record(AppError.RateLimited(null, 2))
         assertFalse(gate.isReady())
+        assertFalse(gate.isExplicitlyForbidden(), "absence does not manufacture a prohibition")
         elapsed = 2000
         assertTrue(gate.isReady())
         gate.record(AppError.Api("MAINTENANCE", 503, response = ErrorResponseInfo("MAINTENANCE", 503,

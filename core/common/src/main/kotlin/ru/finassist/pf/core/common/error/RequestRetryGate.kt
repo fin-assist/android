@@ -47,6 +47,9 @@ class RequestRetryGate(private val clock: ElapsedClock) {
 
     fun remainingMillis(): Long? = restriction.value.let { if (it.needsWait) it.deadline?.remainingMillis(clock) else 0L }
 
+    /** Explicit original-request refusal, independent of waiting; any recovery action remains caller-owned. */
+    fun isExplicitlyForbidden(): Boolean = restriction.value.forbidden
+
     fun isReady(): Boolean = restriction.value.let { !it.forbidden && (!it.needsWait || (it.deadline?.remainingMillis(clock) == 0L)) }
 
     /** VM lifecycle collectors update button state with the same sleep-aware monotonic deadline. */
