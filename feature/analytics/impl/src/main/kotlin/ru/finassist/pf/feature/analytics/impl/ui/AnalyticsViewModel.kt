@@ -301,6 +301,14 @@ class AnalyticsViewModel @Inject constructor(
         periodsJob = null
     }
 
+    private fun periodsContextIsCurrent(generation: Long, type: PeriodTypeCode, zone: java.time.ZoneId): Boolean {
+        if (generation != periodsGeneration || type != period) return false
+        if (zone == reportZone.current) return true
+        // Device fallback changes do not emit profile state. Refresh the visible directory instead of leaving a loader.
+        if (reportZone.profile.value == null) resetPeriodsContext()
+        return false
+    }
+
     private fun requestPeriods() {
         if (!periodsRetryGate.isReady()) return
         invalidatePeriodsRequest()
@@ -311,10 +319,10 @@ class AnalyticsViewModel @Inject constructor(
         periodsJob = viewModelScope.launch {
             try {
                 val list = api.listPeriods(type)
-                if (generation != periodsGeneration || type != period || zone != reportZone.current) return@launch
+                if (!periodsContextIsCurrent(generation, type, zone)) return@launch
                 _state.update { it.copy(periods = list.periods) }
             } catch (e: AppError) {
-                if (generation != periodsGeneration || type != period || zone != reportZone.current) return@launch
+                if (!periodsContextIsCurrent(generation, type, zone)) return@launch
                 periodsRetryGate.record(e)
                 _state.update { it.copy(periodsFailed = true, periodsErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, periodsRetryable = e.requestRetryable) }
             }

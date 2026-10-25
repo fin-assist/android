@@ -165,7 +165,7 @@ class AnalyticsViewModelTest {
 
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
-    private fun vm() = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
+    private fun vm(zone: ReportZone = reportZone) = AnalyticsViewModel(api, assistant, statements, operations, flags, tracker, zone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
 
     private fun opened(params: AnalyticsParams? = null) = vm().apply { init(params) }
 
@@ -533,6 +533,41 @@ class AnalyticsViewModelTest {
     private fun periodList(key: String) = AnalyticsPeriodsList(listOf(
         AnalyticsPeriodItem(PeriodKey(key), DateRange(at(1), at(30)), Coverage.COMPLETE),
     ))
+
+    @Test fun `a device fallback zone change refreshes a pending directory without a profile emission`() {
+        var device = java.time.ZoneId.of("Europe/Moscow")
+        val zone = ReportZone { device }
+        api.answers += data()
+        val old = CompletableDeferred<AnalyticsPeriodsList>()
+        var replies = 0
+        api.periodsReply = { if (++replies == 1) old.await() else periodList("2026-08") }
+        val vm = vm(zone).apply { init(null) }
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        device = java.time.ZoneId.of("Asia/Vladivostok")
+        old.complete(periodList("2026-07"))
+        assertNull(zone.profile.value)
+        assertEquals(2, api.periodRequests.size)
+        assertEquals(listOf(PeriodKey("2026-08")), vm.state.value.periods?.map { it.key })
+        assertFalse(vm.state.value.periodsFailed)
+    }
+
+    @Test fun `a device-zone old refusal is discarded while a new-context refusal remains effective`() {
+        var device = java.time.ZoneId.of("Europe/Moscow")
+        val zone = ReportZone { device }
+        api.answers += data()
+        val old = CompletableDeferred<AnalyticsPeriodsList>()
+        var replies = 0
+        api.periodsReply = { if (++replies == 1) old.await() else throw refused() }
+        val vm = vm(zone).apply { init(null) }
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        device = java.time.ZoneId.of("Asia/Vladivostok")
+        old.completeExceptionally(refused())
+        assertEquals(2, api.periodRequests.size)
+        assertTrue(vm.state.value.periodsFailed)
+        assertFalse(vm.state.value.periodsRetryReady)
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(2, api.periodRequests.size)
+    }
 
     @Test fun `a previous-zone period refusal cannot poison the visible new-zone directory`() {
         reportZone.set("Europe/Moscow")
