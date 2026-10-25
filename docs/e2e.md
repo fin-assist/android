@@ -337,3 +337,10 @@ The update or maintenance screen over the passcode screen (FIN-22): while the ap
 so a server answer can arrive under the lock only from background work (the time zone sync, Remote Config) at a moment
 a flow cannot pick. The overlay is one layer above all others in `PfApp`; `availability/maintenance_on_sign_in`
 checks it over sign-in, the other flows over the main screens.
+A renamed copy of a statement sent again after a lost answer (FIN-340): the server compares the file's content and
+its name under a key (FIN-297), so a client that reused the key of the same bytes under the old name would get 409
+`IDEMPOTENCY_CONFLICT`. The case needs a first request that the server stored under the key while the client lost its
+answer; the mock has no such hook — `offline` fails before the key is taken, and the upload has no 5xx — and the
+bundled files hold no two copies of one statement under different names. `UploadViewModelTest` checks that the copy
+gets its own key and that a retry sends the first attempt's name; `MockStatementsApiTest` and `ContractBehaviourTest`
+check the server side.

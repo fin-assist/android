@@ -291,10 +291,15 @@ class ContractBehaviourTest {
     fun `the same key with another file or question is IDEMPOTENCY_CONFLICT`() = runBlocking {
         val s = Scene()
         s.statements.uploadStatement(KEY, s.statementFile())
-        val upload = s.call("uploadStatement", UploadAccepted.serializer()) {
+        val otherContent = s.call("uploadStatement", null) {
             s.statements.uploadStatement(KEY, s.statementFile("other.ofx", s.statementFile().open().readBytes().decodeToString() + "\n"))
         }
-        ContractCheck.knownGap(GAP_CONFLICT, upload, contract = ErrorCodes.IDEMPOTENCY_CONFLICT, now = null)
+        expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "conflict: upload, other content", otherContent)
+        // 3.2 compares the content and the name (FIN-297): the same file under another name is another body.
+        val renamed = s.call("uploadStatement", null) {
+            s.statements.uploadStatement(KEY, s.statementFile("renamed.ofx", s.statementFile().open().readBytes().decodeToString()))
+        }
+        expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "conflict: upload, other name", renamed)
 
         val q = Scene()
         q.assistant.ask(KEY, AskRequest("Сколько я потратил?"))
@@ -307,10 +312,10 @@ class ContractBehaviourTest {
         val s = Scene()
         val pdf = s.statementFile("s.pdf", "%PDF-1.4")
         expect(ErrorCodes.WRONG_FORMAT, "422 first", s.call("uploadStatement", null) { s.statements.uploadStatement(KEY, pdf) })
-        // Same key, same body: the stored 422, not a new run — the limit was lowered meanwhile, so a new run gives 413.
-        s.backend.config = s.backend.config.copy(maxFileSizeBytes = 1)
-        val repeat = s.call("uploadStatement", null) { s.statements.uploadStatement(KEY, pdf) }
-        ContractCheck.knownGap(GAP_STORED_ERRORS, repeat, contract = ErrorCodes.WRONG_FORMAT, now = ErrorCodes.FILE_TOO_LARGE)
+        // The stored 422 makes the key taken: another file under it is IDEMPOTENCY_CONFLICT, not a new run. (A lowered
+        // limit no longer shows it: 413 FILE_TOO_LARGE of 3.2 comes before the key, FIN-297.)
+        val repeat = s.call("uploadStatement", UploadAccepted.serializer()) { s.statements.uploadStatement(KEY, s.statementFile()) }
+        ContractCheck.knownGap(GAP_STORED_ERRORS, repeat, contract = ErrorCodes.IDEMPOTENCY_CONFLICT, now = null)
     }
 
     // 404: an object the user never had, or another user's.

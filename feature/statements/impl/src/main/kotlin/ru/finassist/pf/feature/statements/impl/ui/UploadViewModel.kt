@@ -159,9 +159,10 @@ class UploadViewModel @Inject constructor(
                 _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.FILE_TOO_LARGE, file.name, config)) }
                 return@launch
             }
-            // api.md: the key belongs to «загрузить этот файл» — same content → same key until a final response
-            // (survives process death); another file → another key.
-            val action = "statements.upload:${file.sha256}"
+            // api.md: the key belongs to «загрузить этот файл» — same content and name → same key until a final
+            // response (survives process death); another file, or the same bytes under another name → another key:
+            // the server compares both and answers a renamed copy under an old key with IDEMPOTENCY_CONFLICT (FIN-297).
+            val action = "statements.upload:${file.bodyHash}"
             val key = keys.keyFor(action)
             tracker.track(Events.STATEMENTS_UPLOAD_STARTED)
             _state.update { it.copy(phase = UploadPhase.Busy(file.name, 0f, uploadId = null)) }
@@ -340,9 +341,14 @@ class UploadViewModel @Inject constructor(
 
     fun consumeDone() = _state.update { it.copy(doneUploadId = null) }
 
-    private class PickedFile(val name: String, val size: Long, val sha256: String)
+    /**
+     * [name] is what every attempt sends: read once per pick, so the retries of one pick cannot differ in it.
+     * [bodyHash] is `SHA-256(SHA-256(content) ‖ UTF-8 name)`, the formula the server compares bodies of 3.2 by
+     * (grpc-api.md 6).
+     */
+    private class PickedFile(val name: String, val size: Long, val bodyHash: String)
 
-    /** Reads the file once: display name, real byte count (stops counting past [max]) and SHA-256. */
+    /** Reads the file once: display name, real byte count (stops counting past [max]) and the body hash. */
     private fun inspect(uri: Uri, max: Long): PickedFile {
         var name = uri.lastPathSegment ?: "statement.ofx"
         context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
@@ -363,7 +369,11 @@ class UploadViewModel @Inject constructor(
                 digest.update(buffer, 0, read)
             }
         }
-        return PickedFile(name, size, digest.digest().joinToString("") { "%02x".format(it) })
+        val body = MessageDigest.getInstance("SHA-256").apply {
+            update(digest.digest())
+            update(name.toByteArray(Charsets.UTF_8))
+        }
+        return PickedFile(name, size, body.digest().joinToString("") { "%02x".format(it) })
     }
 
     private companion object {

@@ -91,14 +91,15 @@ internal object Exclusions {
         ),
         Behaviour(
             "idempotency-conflict-statements-assistant",
-            "uploadStatement, askAssistant, retryAnswer do not compare the body of a repeat: the same key with another file or question " +
-                "gets the stored response, not 409 IDEMPOTENCY_CONFLICT (auth endpoints do, FIN-123); $FIN_170_FILES",
+            "askAssistant, retryAnswer do not compare the body of a repeat: the same key with another question " +
+                "gets the stored response, not 409 IDEMPOTENCY_CONFLICT (auth endpoints do, FIN-123; uploadStatement does, FIN-340); $FIN_170_FILES",
             "proposed: [Android] fake backend: idempotency and error order of statements and assistant",
         ),
         Behaviour(
             "idempotency-stored-errors",
-            "the fake backend stores only 2xx under a key; api.md «Идемпотентность» stores 400, 413 and 422 too. Safe only with the body " +
-                "comparison of the entry above (a stored 422 must not answer another file)",
+            "the fake backend stores only 2xx under a key; api.md «Идемпотентность» stores 400, 413 and 422 too (except 413 " +
+                "FILE_TOO_LARGE of 3.2, answered before the key and never stored — the fake does that, FIN-340): after a 422 the same key " +
+                "with another file runs again instead of 409 IDEMPOTENCY_CONFLICT",
             "proposed: [Android] fake backend: idempotency and error order of statements and assistant",
         ),
         Behaviour(

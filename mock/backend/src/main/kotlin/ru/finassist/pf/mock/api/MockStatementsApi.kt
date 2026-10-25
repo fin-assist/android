@@ -99,9 +99,13 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted {
         backend.simulateNetwork()
         backend.requireSession()
-        return backend.idempotent("statements.upload:${key.value}") {
-            if (file.size > backend.config.maxFileSizeBytes) throw AppError.Api(ErrorCodes.FILE_TOO_LARGE, 413)
-            val text = file.open().use { it.readBytes() }.toString(Charsets.UTF_8)
+        // api.md «Идемпотентность», 3.2: 413 FILE_TOO_LARGE comes before the key is looked at and is never stored
+        // under it — the service answers it without reading the file, so a repeat with the same key gets it again.
+        if (file.size > backend.config.maxFileSizeBytes) throw AppError.Api(ErrorCodes.FILE_TOO_LARGE, 413)
+        // Every other answer compares the key at the end of the file, by its content and its name.
+        val body = UploadBody(file.name, file.open().use { it.readBytes() })
+        return backend.idempotent("statements.upload:${key.value}", request = body) {
+            val text = body.content.toString(Charsets.UTF_8)
             when (val check = OfxParser.check(text)) {
                 OfxCheck.Csv -> throw AppError.Api(ErrorCodes.CSV_NOT_ACCEPTED, 422)
                 OfxCheck.NotOfx -> throw AppError.Api(ErrorCodes.WRONG_FORMAT, 422)
@@ -403,4 +407,16 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             else -> "строка оборвана"
         },
     )
+}
+
+/**
+ * The body of 3.2 as the idempotency key compares it: the file's bytes and its name as sent, without normalisation
+ * (api.md «Идемпотентность»: the same file under another name is another body). The real service compares
+ * `SHA-256(SHA-256(content) ‖ file_name)` (grpc-api.md 6); the fake compares the same pair exactly.
+ */
+internal class UploadBody(val name: String, val content: ByteArray) {
+    override fun equals(other: Any?): Boolean =
+        other is UploadBody && name == other.name && content.contentEquals(other.content)
+
+    override fun hashCode(): Int = 31 * name.hashCode() + content.contentHashCode()
 }

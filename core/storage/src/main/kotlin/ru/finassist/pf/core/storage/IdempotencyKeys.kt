@@ -10,7 +10,7 @@ import javax.inject.Singleton
 
 /**
  * `Idempotency-Key` for an action must survive process death (api.md: "клиент хранит его до окончательного
- * ответа"). A feature asks for the key of a logical action (`"statements.upload:<file-hash>"`); the same action
+ * ответа"). A feature asks for the key of a logical action (`"statements.upload:<hash of the content and the name>"`); the same action
  * gets the same key until [complete] is called. Entries older than 24 h are dropped lazily — the server
  * forgets them at the same age, so a retry after that is a new action anyway.
  */

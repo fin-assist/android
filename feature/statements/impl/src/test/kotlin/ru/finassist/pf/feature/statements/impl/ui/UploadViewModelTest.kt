@@ -78,6 +78,8 @@ class UploadViewModelTest {
         var currentConfig = config
         var configCalls = 0
         val keys: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+        /** `file.name` of every upload attempt, in the order of [keys]. */
+        val names: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
         /** Thrown by the next uploads, one each, before the file is accepted. */
         val uploadFailures = ArrayDeque<AppError>()
         /** While set, the upload waits for it: the request is «in flight». */
@@ -95,6 +97,7 @@ class UploadViewModelTest {
         }
         override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted {
             keys += key.value
+            names += file.name
             uploadGate?.await()
             if (offline) throw AppError.Offline()
             synchronized(uploadFailures) { uploadFailures.removeFirstOrNull() }?.let { throw it }
@@ -198,6 +201,8 @@ class UploadViewModelTest {
         assertEquals("operations_2026.ofx", assertIs<UploadPhase.Busy>(vm.state.value.phase).fileName)
         assertEquals(2, api.keys.size)
         assertEquals(api.keys[0], api.keys[1])
+        // The server compares the name too (FIN-297): the retry sends the name of the first attempt.
+        assertEquals(listOf(name, name), api.names)
     }
 
     @Test fun `retry without a picked file does nothing`() {
@@ -323,6 +328,24 @@ class UploadViewModelTest {
         vm.onFilePicked(uri)
         awaitAccepted()
         assertEquals(api.keys[0], api.keys[1])
+    }
+
+    @Test fun `the same content under another name is another upload with its own key (FIN-340)`() {
+        // The server compares the content and the name under a key: reusing the key for a renamed copy would be
+        // 409 IDEMPOTENCY_CONFLICT. Every attempt of one pick sends the name it was picked with.
+        val renamed: Uri = Uri.parse("content://test/operations_2026_copy.ofx")
+        shadowOf(context.contentResolver).registerInputStreamSupplier(renamed) { ByteArrayInputStream("OFXHEADER:100".toByteArray()) }
+        api.uploadFailures += AppError.Server(500)
+        vm.onFilePicked(uri)
+        await("the failure") { it.phase is UploadPhase.Error }
+
+        vm.backToGuide()
+        awaitIdle()
+        vm.onFilePicked(renamed)
+        awaitAccepted()
+        assertTrue(api.keys[0] != api.keys[1])
+        assertEquals(listOf("operations_2026.ofx", "operations_2026_copy.ofx"), api.names)
+        assertEquals("operations_2026_copy.ofx", assertIs<UploadPhase.Busy>(vm.state.value.phase).fileName)
     }
 
     @Test fun `an accepted file is a final answer - the same file later is a new upload`() {
