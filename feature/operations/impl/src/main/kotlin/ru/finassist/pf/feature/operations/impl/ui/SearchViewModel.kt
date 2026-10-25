@@ -117,12 +117,27 @@ class SearchViewModel @Inject constructor(
     init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<SearchUiState> = _state
     private var searchJob: Job? = null
+    private var searchGeneration = 0L
+
+    /** A confirmed context change invalidates old responses before releasing that context's restriction. */
+    private fun changedContext() {
+        searchGeneration++
+        retryGate.clear()
+        _state.update { it.copy(errorPresentation = null, requestRetryable = null, retryReady = true) }
+    }
 
     init {
         if (!preset.isEmpty) search(debounce = false)
         viewModelScope.launch { runCatching { categoriesRepository.categories() }.onSuccess { c -> _state.update { it.copy(categories = c) } } }
         // A category changed in the detail screen: refresh the visible result so the row moves out/in.
-        viewModelScope.launch { operations.categoryChanges.collect { if (_state.value.hasFilters) search(debounce = false) } }
+        viewModelScope.launch {
+            operations.categoryChanges.collect {
+                if (_state.value.hasFilters) {
+                    changedContext()
+                    search(debounce = false)
+                }
+            }
+        }
         viewModelScope.launch {
             records.records.collect { updated ->
                 val old = _state.value.result as? SearchResult.Found
@@ -133,7 +148,10 @@ class SearchViewModel @Inject constructor(
                         items = found.items.map { row -> updated.firstOrNull { it.id == row.id }?.toItem() ?: row },
                     ))
                 }
-                if (timeChanged) search(debounce = false, quiet = true)
+                if (timeChanged) {
+                    changedContext()
+                    search(debounce = false, quiet = true)
+                }
             }
         }
         // The 12-month window without a period is counted in the profile zone: a zone that changes the effective one
@@ -144,7 +162,7 @@ class SearchViewModel @Inject constructor(
                 val s = _state.value
                 if (s.hasFilters && !s.allTime && s.filter.from == null && s.filter.to == null) {
                     // A changed zone changes the effective window, so this is a new request context.
-                    retryGate.clear()
+                    changedContext()
                     search(debounce = false, quiet = true)
                 }
             }
@@ -154,8 +172,9 @@ class SearchViewModel @Inject constructor(
     fun setQuery(q: String) = updateFilter(debounce = true) { it.copy(q = q.ifEmpty { null }) }
 
     fun setPeriod(from: OffsetDateTime?, to: OffsetDateTime?, allTime: Boolean) {
-        if (allTime != _state.value.allTime) retryGate.clear()
-        _state.update { it.copy(allTime = allTime && from == null && to == null, sheet = null) }
+        val effectiveAllTime = allTime && from == null && to == null
+        if (effectiveAllTime != _state.value.allTime) changedContext()
+        _state.update { it.copy(allTime = effectiveAllTime, sheet = null) }
         updateFilter { it.copy(from = from, to = to) }
     }
 
@@ -181,7 +200,7 @@ class SearchViewModel @Inject constructor(
     }
 
     fun searchAllTime() {
-        if (!_state.value.allTime) retryGate.clear()
+        if (!_state.value.allTime) changedContext()
         _state.update { it.copy(allTime = true) }
         updateFilter { it.copy(from = null, to = null) }
     }
@@ -189,6 +208,7 @@ class SearchViewModel @Inject constructor(
     /** Drops the filters and keeps the query — unless the query is the only filter: then it is the one to drop. */
     fun reset() {
         val onlyQuery = _state.value.onlyQuery
+        if (_state.value.allTime) changedContext()
         _state.update { it.copy(allTime = false, selectionDropped = false) }
         updateFilter { if (onlyQuery) OperationsFilter() else OperationsFilter(q = it.q) }
     }
@@ -199,7 +219,7 @@ class SearchViewModel @Inject constructor(
 
     private fun updateFilter(debounce: Boolean = false, change: (OperationsFilter) -> OperationsFilter) {
         val changed = change(_state.value.filter)
-        if (changed != _state.value.filter) retryGate.clear()
+        if (changed != _state.value.filter) changedContext()
         _state.update { it.copy(filter = changed) }
         search(debounce)
     }
@@ -212,6 +232,7 @@ class SearchViewModel @Inject constructor(
     private fun search(debounce: Boolean, quiet: Boolean = false) {
         if (!retryGate.isReady()) return
         val refresh = quiet && searchJob?.isActive != true
+        val generation = ++searchGeneration
         searchJob?.cancel()
         val s = _state.value
         if (!s.hasFilters) {
@@ -220,6 +241,7 @@ class SearchViewModel @Inject constructor(
         }
         searchJob = viewModelScope.launch {
             if (debounce) delay(350)
+            if (generation != searchGeneration) return@launch
             val keep = refresh && _state.value.result is SearchResult.Found
             _state.update { it.copy(errorPresentation = null, requestRetryable = null) }
             if (!keep) _state.update { it.copy(result = SearchResult.Loading) }
@@ -227,6 +249,7 @@ class SearchViewModel @Inject constructor(
             try {
                 val allTime = _state.value.allTime
                 val list = api.listOperations(OperationsQuery(filter = filter, allTime = allTime))
+                if (generation != searchGeneration) return@launch
                 tracker.track(Events.OPERATIONS_SEARCH_SUBMITTED, mapOf("count" to (list.totalCount ?: list.items.size).toString()))
                 val window = OperationFormat.defaultWindowStart(list.range, filter, allTime)
                 _state.update {
@@ -241,6 +264,7 @@ class SearchViewModel @Inject constructor(
                     )
                 }
             } catch (e: AppError) {
+                if (generation != searchGeneration) return@launch
                 retryGate.record(e)
                 _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
                 when {
@@ -248,7 +272,7 @@ class SearchViewModel @Inject constructor(
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.TOO_MANY_RESULTS -> _state.update { it.copy(result = SearchResult.TooMany) }
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.SELECTION_NOT_FOUND && filter.selection != null -> {
                         // Removing the stale selection changes the request context, including its retry restriction.
-                        retryGate.clear()
+                        changedContext()
                         _state.update { it.copy(filter = it.filter.copy(selection = null, selectionName = null), selectionDropped = true) }
                         search(debounce = false)
                     }
