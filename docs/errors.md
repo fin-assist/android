@@ -102,3 +102,9 @@ not. Existing streams, history and quota reads remain available.
 Unit tests cover decoding, context isolation, timers, replay safety, mock policy and feature state.
 Design-check fixtures and Maestro flows are authored separately; their execution is subject to the
 owner's UI-test permission. Qase mappings and flow coverage live in [e2e.md](e2e.md).
+
+Background time-zone synchronization is a separate tracked consumer: `TimeZoneChecker` currently
+swallows API failures and retries at its next lifecycle trigger. It does not yet retain request
+false/wait advice. [FIN-345](https://finassist.youtrack.cloud/issue/FIN-345) depends on FIN-223 and
+owns independent GET/PATCH restrictions and recovery of its persisted pending action after lost
+monotonic anchors. The UI implementation here does not claim that background lifecycle is covered.
