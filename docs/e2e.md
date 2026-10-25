@@ -346,6 +346,14 @@ so a server answer can arrive under the lock only from background work (the time
 a flow cannot pick. The overlay is one layer above all others in `PfApp`; `availability/maintenance_on_sign_in`
 checks it over sign-in, the other flows over the main screens.
 
+Consent-document refresh after `CONSENT_OUTDATED` is not covered by a mock UI flow
+([Qase54](https://app.qase.io/case/PLAINFIN-54), [Qase55](https://app.qase.io/case/PLAINFIN-55), manual cases authored, not executed).
+The fake backend's personal-data and assistant document versions are fixed constants, and the control
+link cannot rotate them between GET and the mutation; that transition needs a separate controllable
+REST/peer fixture. `ConsentViewModelTest` and `AiConsentViewModelTest` cover Offline/same-version
+recovery, independent GET false/wait, duplicate clicks and stale reads. Light/dark recovery fixtures
+show the explicit «Обновить документ» action; fixtures were authored without executing DesignCheck.
+
 Real client process-death recovery of an uncertain assistant request is not covered by a mock UI flow
 (Qase53). The fake backend, its token state and idempotency cache live in the client process: killing it
 also destroys the independent server outcome that recovery must reconcile. A separate persistent BFF/peer

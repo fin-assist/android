@@ -63,6 +63,13 @@ old key and explains the unknown outcome; checking history does not send a new m
 explicit new-intent action retires that pending action and creates a new tracked key. A new
 RetryAnswer additionally needs permission from the current failed result, checked through fresh history.
 
+After `CONSENT_OUTDATED`, the rejected registration/consent version remains forbidden until a
+successful document GET returns a different version. The new document is installed and its acceptance
+is reset before releasing the old mutation restriction. A failed, same-version or stale GET cannot
+permit the old POST/PUT. Both screens expose «Обновить документ»: it performs only the independently
+permitted document GET, with its own captured wait/false restriction and one pending read at a time.
+This recovery does not create a key, renew its age, submit a mutation or renew the registration token.
+
 ## Time
 
 Calendar dates and display still use the existing `Clock.zone` rules. Waiting uses `ElapsedClock`,
