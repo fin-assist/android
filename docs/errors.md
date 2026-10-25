@@ -34,8 +34,8 @@ new-generation retry remains a different operation, with its own key and REST re
 Fresh `IdempotencyKey.random(elapsedClock)` carries an ephemeral replay window. String construction
 and deserialization preserve the UUID with unknown age. `IdempotencyKeys` persists a pending action
 until explicit completion; expiry never silently replaces its key. Only a key created by the same
-store instance retains its original in-process proof. Phone registration and refresh retain their
-shorter method-specific constraints. Corrective auth recovery and the existing single maintenance
+store instance retains its original in-process proof. Refresh additionally has its own 60-second
+replay window. Corrective auth recovery and the existing single maintenance
 resume still require the original request's safety and a valid key window.
 
 ## Time
