@@ -52,7 +52,11 @@ The same UUID and its original origin remain unchanged; the refresh's first poss
 has not started. The wait and explicit `false` still apply. Any earlier uncertain outcome remains
 sticky: a later pre-admission refusal cannot prove that an older request did not use the token or
 renew its 60-second window. Unknown/restored markers remain conservative. Update requires an actual
-update; maintenance has only the documented guarded correction.
+update; maintenance has only the documented guarded correction. A first explicit false refusal keeps
+the session without renewing the token window. If a later 401 reaches that permanently forbidden
+refresh with no remaining maintenance correction, compare-and-set clearing returns to sign-in.
+A temporary wait, an unused maintenance correction and an update requirement retain the session;
+a newer login cannot be cleared by an old request.
 
 An unknown-age upload or assistant request has a separate visible recovery state. It preserves the
 old key and explains the unknown outcome; checking history does not send a new mutation. Only an

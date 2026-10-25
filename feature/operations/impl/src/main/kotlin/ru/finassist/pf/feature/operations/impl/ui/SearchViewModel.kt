@@ -142,7 +142,11 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             reportZone.profile.map { reportZone.current }.distinctUntilChanged().drop(1).collect {
                 val s = _state.value
-                if (s.hasFilters && !s.allTime && s.filter.from == null && s.filter.to == null) search(debounce = false, quiet = true)
+                if (s.hasFilters && !s.allTime && s.filter.from == null && s.filter.to == null) {
+                    // A changed zone changes the effective window, so this is a new request context.
+                    retryGate.clear()
+                    search(debounce = false, quiet = true)
+                }
             }
         }
     }
@@ -177,7 +181,7 @@ class SearchViewModel @Inject constructor(
     }
 
     fun searchAllTime() {
-        retryGate.clear()
+        if (!_state.value.allTime) retryGate.clear()
         _state.update { it.copy(allTime = true) }
         updateFilter { it.copy(from = null, to = null) }
     }

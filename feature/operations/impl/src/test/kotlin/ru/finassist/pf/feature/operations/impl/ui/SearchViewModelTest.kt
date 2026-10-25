@@ -276,6 +276,46 @@ class SearchViewModelTest {
         assertEquals(2, api.queries.size)
     }
 
+    @Test fun `a changed effective zone releases only the default-window request refusal`() {
+        api.lists += AppError.Api("FUTURE_ERROR", 400,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_ERROR", 400, requestRetryable = false))
+        api.lists += found("recovered")
+        val vm = vm(OperationsFilter(q = "кофе"))
+        assertFalse(vm.state.value.retryReady)
+        reportZone.set("Europe/Moscow")
+        vm.retry()
+        assertEquals(1, api.queries.size, "the same effective zone is still the refused context")
+        reportZone.set("Asia/Vladivostok")
+        assertEquals(2, api.queries.size)
+        assertTrue(vm.state.value.retryReady)
+        assertNull(vm.state.value.requestRetryable)
+        assertEquals(listOf("recovered"), assertIs<SearchResult.Found>(vm.state.value.result).items.map { it.id })
+    }
+
+    @Test fun `a changed zone does not release an explicit-period request refusal`() {
+        api.lists += AppError.Api("FUTURE_ERROR", 400,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_ERROR", 400, requestRetryable = false))
+        val vm = vm(OperationsFilter(q = "кофе", from = window.from, to = window.to))
+        reportZone.set("Asia/Vladivostok")
+        vm.retry()
+        assertEquals(1, api.queries.size)
+        assertFalse(vm.state.value.retryReady)
+    }
+
+    @Test fun `a changed zone and repeated all-time choice keep an all-time refusal`() {
+        api.lists += found("initial")
+        api.lists += AppError.Api("FUTURE_ERROR", 400,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_ERROR", 400, requestRetryable = false))
+        val vm = vm(OperationsFilter(q = "кофе"))
+        vm.searchAllTime()
+        assertFalse(vm.state.value.retryReady)
+        reportZone.set("Asia/Vladivostok")
+        vm.searchAllTime()
+        vm.retry()
+        assertEquals(2, api.queries.size)
+        assertFalse(vm.state.value.retryReady)
+    }
+
     @Test fun `a new zone keeps the shown result while asking again (FIN-92 review)`() {
         api.lists += found("op_1")
         api.lists += found("op_1", "op_2")

@@ -54,12 +54,13 @@ import javax.inject.Inject
  *   already turned away at least n stream openings with 429; otherwise [TAG_UNMET] shows, and the flow fails on the
  *   missing applied tag. The check is instant: stream openings run on the main thread this activity holds, and the
  *   app's screen is paused under it, so the openings to count must have happened before the link is opened.
+ * - `expect_stream_rate_limited_exact=<n>` — exact count, including a check that resume did not open early.
  * - `error_operation=profile_update|operations_list|assistant_ask|off` — inject only a fixed safe failure at that API method.
  * - `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden` — closed wire fixtures.
  * - `expect_error_requests=<n>` — require exactly n injected failures; proves a refused request was not resent.
  * - `pending_upload_fixture=october` — seed an unknown-age pending UUID for the closed bundled OFX fixture.
  *   This simulates a restored record, not process death; the in-process fake's server state stays intact.
- * - `expect_uploads=<n>` — require exactly n uploads on the fake server.
+ * - `expect_uploads=<n>` — require exactly n uploads on the fake server, including the preloaded statement.
  * - `unknown_codes=true|false` — the fake server sends codes the client does not know (`MockCodes`, FIN-83).
  * - `failing_blocks=<id>,<id>` — those Analytics blocks fail to build and come as `unavailable` (FIN-5); empty — none.
  * - `profile_timezone=<zone id>` — `profile.timezone` on the server, as if changed from another device; the app
@@ -152,6 +153,10 @@ class E2eControlActivity : ComponentActivity() {
                 name == "expect_stream_rate_limited" -> value.toIntOrNull()?.let { expected ->
                     val given = backend.streamRateLimited.value
                     if (given < expected) unmet = "expected $expected stream 429s, got $given"
+                }
+                name == "expect_stream_rate_limited_exact" -> {
+                    val expected = value.toIntOrNull()?.takeIf { it >= 0 }
+                    if (expected == null || backend.streamRateLimited.value != expected) unmet = "unexpected stream rate-limit count"
                 }
                 name == "error_operation" -> {
                     val operation = MockErrorOperation.entries.firstOrNull { it.name.equals(value, ignoreCase = true) }

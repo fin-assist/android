@@ -11,7 +11,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?pending_upload_fixture=october&expect_uploads=0"
+      LINK: "pfe2e://config?pending_upload_fixture=october&expect_uploads=1"
 - tapOn:
     id: "ds.tab.profile"
 - tapOn:
@@ -44,7 +44,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?expect_uploads=0"
+      LINK: "pfe2e://config?expect_uploads=1"
 - tapOn:
     id: "statements.upload.new_intent"
 - extendedWaitUntil:
@@ -54,4 +54,4 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?expect_uploads=1"
+      LINK: "pfe2e://config?expect_uploads=2"

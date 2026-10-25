@@ -1,13 +1,12 @@
 appId: ru.finassist.pf.mock.e2e
-name: Загрузка — обрыв потока, 429, сворачивание и возврат, снова 429 — итог без ошибки
+name: Загрузка — 429 сохраняет исходную паузу при возврате на экран
 tags:
   - statements
 ---
 # FIN-170 (api.md «SSE»): the progress stream drops after its first event (`stream_drops=1`), and every opening after the
-# drop is turned away with 429 `Retry-After: 120` (`stream_rate_limits=100&stream_retry_s=120`), so the app keeps waiting
-# for as long as the flow needs. Each return to the screen — from the control link and from the background — makes the
-# screen open the stream itself; the fake server counts the 429s it gave (`expect_stream_rate_limited`), which proves
-# those openings got 429 and were waited for, not shown as an upload error. Lifting the limit brings the result.
+# drop is turned away with 429 Retry-After: 30. Returning from a control link or background must retain the original
+# deadline: the exact counter stays 1, rather than opening another stream early. After lifting the limit, wait for
+# that same deadline and get the result without treating a temporary transport refusal as a parsing failure.
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/fast_login.yaml
 - tapOn:
@@ -30,7 +29,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?stream_drops=1&stream_rate_limits=100&stream_retry_s=120"
+      LINK: "pfe2e://config?stream_drops=1&stream_rate_limits=100&stream_retry_s=30"
 - scrollUntilVisible:
     element:
       id: "statements.upload.pick"
@@ -49,12 +48,12 @@ tags:
       id: "e2e.never"
     timeout: 3000
     optional: true
-# First 429 given (the app's loop). Opening the link pauses the screen; its return opens the stream again: 429 #2.
+# The first 429 is already given. Returning from this link must not skip its wait.
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?expect_stream_rate_limited=1"
-# To the background and back: the screen opens the stream itself once more and gets 429 #3.
+      LINK: "pfe2e://config?expect_stream_rate_limited_exact=1"
+# To the background and back: still the same server deadline, no extra opening.
 - pressKey: Home
 - launchApp:
     stopApp: false
@@ -65,8 +64,8 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?expect_stream_rate_limited=3"
-# Every 429 after a return was waited for: still parsing, no upload error.
+      LINK: "pfe2e://config?expect_stream_rate_limited_exact=1"
+# Still parsing, no upload error; cancellation never restarts or skips the wait.
 - extendedWaitUntil:
     visible:
       id: "statements.upload.busy"
@@ -75,7 +74,7 @@ tags:
     id: "statements.upload.error.processing_failed"
 - assertNotVisible:
     id: "statements.upload.offline"
-# The limit lifted: the next opening (the return from this link) gets the stream, and the result opens.
+# The next opening happens only when the retained wait ends, even after returning from this link.
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -83,6 +82,6 @@ tags:
 - extendedWaitUntil:
     visible:
       id: "statements.result"
-    timeout: 20000
+    timeout: 45000
 - assertVisible:
     id: "statements.result.new"
