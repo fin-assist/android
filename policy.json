@@ -1,6 +1,6 @@
 {
   "baseBranchPatterns": [
-    "main"
+    "release/0.2.13"
   ],
   "packageRules": [
     {
