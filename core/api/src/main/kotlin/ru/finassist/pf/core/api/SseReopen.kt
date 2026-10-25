@@ -65,6 +65,15 @@ class SseBackoff(private val random: Random = Random.Default) {
 class SseReopenState {
     /** Retained across collections of this same request context; creating a new context is caller-owned. */
     internal var blockedError: AppError? = null
+    internal var retryPauseError: AppError.RateLimited? = null
+    internal var retryPauseStartedMillis: Long? = null
+    internal var retryPauseMillis: Long = 0
+
+    internal fun clearRetryPause() {
+        retryPauseError = null
+        retryPauseStartedMillis = null
+        retryPauseMillis = 0
+    }
     var reopening: Boolean = false
         internal set
 }
@@ -109,6 +118,13 @@ fun <T> reopeningStream(
     open: () -> Flow<T>,
 ): Flow<T> = flow {
     state.blockedError?.let { throw it }
+    state.retryPauseError?.let { previous ->
+        val started = state.retryPauseStartedMillis ?: throw previous
+        val now = elapsedClock?.nowMillis() ?: throw previous
+        if (now < started) throw previous
+        delay((state.retryPauseMillis - (now - started)).coerceAtLeast(0))
+        state.clearRetryPause()
+    }
     val backoff = SseBackoff(random)
     // A drop has happened in this collection (the first-failure rule looks at this one only).
     var reopening = false
@@ -159,7 +175,15 @@ fun <T> reopeningStream(
         }
         reopening = true
         state.reopening = true
+        if (error is AppError.RateLimited) {
+            // Keep the already selected server wait+jitter across cancellation/background collection changes.
+            // A missing/lost elapsed anchor cannot grant an early opening on the next collection.
+            state.retryPauseError = error
+            state.retryPauseStartedMillis = elapsedClock?.nowMillis()
+            state.retryPauseMillis = pause
+        }
         delay(pause)
+        if (error is AppError.RateLimited) state.clearRetryPause()
     }
 }
 
