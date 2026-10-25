@@ -84,5 +84,7 @@ class UploadDesignCheckTest {
         capture("ImportServerWarning", base.copy(phase = (base.phase as UploadPhase.Error).copy(presentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING))))
     }
 
+    @Test fun uploadRecovery() = capture("ImportRecovery", guide.copy(phase = UploadPhase.RecoveryRequired("statement.ofx")))
+    @Test fun uploadRecoveryDark() = capture("ImportRecoveryDark", guide.copy(phase = UploadPhase.RecoveryRequired("statement.ofx")), dark = true)
 }
 

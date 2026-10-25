@@ -217,4 +217,11 @@ class ChatDesignCheckTest {
     @Test fun serverRefusal() = capture("ChatServerRefusal", answered.copy(draft = "Вопрос о расходах", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING), requestRetryable = false, askRetryReady = false, askBlocked = true))
     @Test fun serverRefusalDark() = capture("ChatServerRefusalDark", answered.copy(draft = "Вопрос о расходах", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING), requestRetryable = false, askRetryReady = false, askBlocked = true), dark = true)
 
+    @Test fun askRecovery() = capture("ChatAskRecovery", answered.copy(draft = "Вопрос о расходах", askBlocked = true,
+        recovery = ChatRecovery(ChatRecoveryTarget.ASK)))
+    @Test fun askRecoveryDark() = capture("ChatAskRecoveryDark", answered.copy(draft = "Вопрос о расходах", askBlocked = true,
+        recovery = ChatRecovery(ChatRecoveryTarget.ASK)), dark = true)
+    @Test fun retryRecovery() = capture("ChatRetryRecovery", answered.copy(
+        items = listOf(ChatItem.Answer("a1", calculated, AnswerStatus.FAILED, retryable = true)),
+        recovery = ChatRecovery(ChatRecoveryTarget.RETRY_ANSWER, "a1", historyChecked = true)))
 }

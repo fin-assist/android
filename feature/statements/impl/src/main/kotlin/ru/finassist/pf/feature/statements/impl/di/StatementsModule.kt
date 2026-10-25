@@ -29,6 +29,12 @@ class StatementsEntry @Inject constructor() : FeatureEntry {
                 firstRun = route.firstRun,
                 onBack = { navigator.back() },
                 onLater = { navigator.finishTo(OperationsRoutes.Feed) },
+                onOpenHistory = {
+                    navigator.navigate(StatementsRoutes.History) {
+                        popUpTo<StatementsRoutes.Upload> { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
                 // The guide is replaced by the result: «back» from the result goes where the upload was opened from.
                 onDone = { id -> navigator.navigate(StatementsRoutes.Result(id)) { popUpTo<StatementsRoutes.Upload> { inclusive = true } } },
             )

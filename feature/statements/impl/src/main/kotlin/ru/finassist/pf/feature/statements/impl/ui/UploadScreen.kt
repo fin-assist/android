@@ -72,6 +72,7 @@ fun UploadScreen(
     onLater: () -> Unit,
     onDone: (uploadId: String) -> Unit,
     vm: UploadViewModel = hiltViewModel(),
+    onOpenHistory: () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -104,6 +105,8 @@ fun UploadScreen(
         onCancelImport = vm::cancelImport,
         onRetryUpload = vm::retryUpload,
         onSupport = { writeToSupport(context, "Не получилось загрузить выписку") },
+        onStartNewUpload = vm::startNewUpload,
+        onOpenHistory = onOpenHistory,
     )
 }
 
@@ -124,6 +127,8 @@ internal fun UploadContent(
     onCancelImport: () -> Unit,
     onRetryUpload: () -> Unit,
     onSupport: () -> Unit,
+    onStartNewUpload: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
 ) {
     val d = PfTheme.dimens
     val busy = state.phase as? UploadPhase.Busy
@@ -183,6 +188,12 @@ internal fun UploadContent(
                     onLater = if (firstRun) onLater else onBack,
                     onPrivacy = { onOpenUrl(LegalLinks.PRIVACY) },
                 )
+                is UploadPhase.RecoveryRequired -> Column(Modifier.testTag(StatementsTags.UPLOAD_RECOVERY), verticalArrangement = Arrangement.spacedBy(d.space4)) {
+                    PfNotice("Результат предыдущей загрузки неизвестен: файл мог уже загрузиться. Проверьте историю. Новая загрузка создаст отдельную запись.", tone = NoticeTone.WARNING)
+                    FileRow("Файл", phase.fileName, divider = false)
+                    PfButton("Загрузить заново", onClick = onStartNewUpload, block = true, modifier = Modifier.testTag(StatementsTags.UPLOAD_NEW_INTENT))
+                    PfLink("Проверить историю загрузок", onClick = onOpenHistory)
+                }
                 is UploadPhase.Error -> Unit
             }
         }
@@ -401,6 +412,8 @@ private fun openUrl(context: android.content.Context, url: String) {
 
 /** Test tags of the statement screens (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object StatementsTags {
+    const val UPLOAD_RECOVERY = "statements.upload.recovery"
+    const val UPLOAD_NEW_INTENT = "statements.upload.new_intent"
     const val UPLOAD = "statements.upload"
     const val UPLOAD_PICK = "statements.upload.pick"
     const val UPLOAD_LATER = "statements.upload.later"

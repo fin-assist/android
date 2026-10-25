@@ -222,6 +222,29 @@ class HistoryViewModelTest {
         assertEquals(1, maxActive, "never two streams at once")
     }
 
+    @Test fun `known false maintenance resumes only the existing history stream after its wait`() {
+        api.listOutcomes += processing
+        api.listOutcomes += processing
+        api.listOutcomes += done
+        val result = importResult()
+        api.script("u1", flow { throw AppError.Maintenance(null, 15,
+            ru.finassist.pf.core.common.error.ErrorResponseInfo("MAINTENANCE", 503, requestRetryable = false,
+                timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0))) },
+            flowOf(ImportEvent.Complete(result)))
+        val vm = newVm()
+        vm.load()
+        assertEquals(1, api.streamOpens.size)
+        vm.pause()
+        vm.load() // a stream denial must not poison the distinct list request's retry gate
+        assertEquals(2, api.listCalls)
+        advance(14_999)
+        assertEquals(1, api.streamOpens.size)
+        advance(1)
+        assertEquals(2, api.streamOpens.size)
+        assertEquals(done, vm.state.value.list)
+        assertEquals(result, repository.lastResult("u1"))
+    }
+
     @Test fun `a stream error other than the network ends watching without a reload`() {
         api.listOutcomes += processing
         api.script("u1", flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) })

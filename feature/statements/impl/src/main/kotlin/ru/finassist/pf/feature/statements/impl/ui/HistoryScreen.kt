@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.RequestRetryGate
 import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.core.common.error.ErrorPresentation
@@ -134,6 +135,7 @@ class HistoryViewModel @Inject constructor(
                     isTerminal = { it !is ImportEvent.Progress },
                     state = reopenStates.getOrPut(uploadId) { SseReopenState() },
                     elapsedClock = elapsedClock,
+                    recoverOnceAfter = { ServiceGate.recoveryDeadline(it, elapsedClock) },
                 ) { api.streamProgress(uploadId) }
                     .collect { event -> when (event) {
                         is ImportEvent.Complete -> repository.importCompleted(uploadId, event.result)

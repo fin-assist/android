@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.RequestRetryGate
 import ru.finassist.pf.core.common.error.ErrorPresentation
 import ru.finassist.pf.core.common.error.ErrorContext
@@ -55,6 +56,9 @@ sealed interface UploadPhase {
 
     /** File sent, server is parsing; [uploadId] is null until `202` arrives. */
     data class Busy(val fileName: String, val progress: Float, val uploadId: String?, val cancelling: Boolean = false) : UploadPhase
+
+    /** Previous upload outcome is unknown: ordinary replay has no age proof, so only an explicit new intent may renew it. */
+    data class RecoveryRequired(val fileName: String) : UploadPhase
 
     /** Upload rejected or parsing failed; [code] is from api.md 3.2 / 3.3. */
     data class Error(val code: String, val fileName: String, val config: ImportConfig?, val presentation: ErrorPresentation? = null) : UploadPhase
@@ -112,6 +116,8 @@ class UploadViewModel @Inject constructor(
 
     /** The last picked file: «Повторить» after a network failure sends it again. */
     private var lastPicked: Uri? = null
+    private data class PendingUploadRecovery(val action: String, val uri: Uri, val key: IdempotencyKey)
+    private var pendingUploadRecovery: PendingUploadRecovery? = null
 
     init {
         load()
@@ -153,9 +159,28 @@ class UploadViewModel @Inject constructor(
 
     fun onFilePicked(uri: Uri) {
         if (uploadInFlight) return
+        launchUpload(uri)
+    }
+
+    /** Explicit new intent after the unknown-outcome warning; ordinary retry never replaces the old UUID. */
+    fun startNewUpload() {
+        val previous = pendingUploadRecovery ?: return
+        val recovery = _state.value.phase as? UploadPhase.RecoveryRequired ?: return
+        if (uploadInFlight) return
+        pendingUploadRecovery = null
+        _state.update { it.copy(phase = UploadPhase.Busy(recovery.fileName, 0f, null),
+            uploadOffline = false, askCancel = false) }
+        launchUpload(previous.uri, completePreviousAction = previous.action)
+    }
+
+    private fun launchUpload(uri: Uri, completePreviousAction: String? = null) {
         lastPicked = uri
         _state.update { it.copy(uploadOffline = false, config = it.config ?: fallbackConfig()) }
         uploadJob = viewModelScope.launch {
+            if (completePreviousAction != null) {
+                keys.complete(completePreviousAction)
+                uploadGates.remove(completePreviousAction)
+            }
             val max = config?.maxFileSizeBytes ?: (10L * 1024 * 1024)
             // One pass off the main thread: real size (providers may not report it) and a content hash for the key.
             val file = try {
@@ -171,8 +196,8 @@ class UploadViewModel @Inject constructor(
                 _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.FILE_TOO_LARGE, file.name, config)) }
                 return@launch
             }
-            // api.md: the key belongs to «загрузить этот файл» — same content → same key until a final response
-            // (survives process death); another file → another key.
+            // The pending UUID survives restoration, but its elapsed-age proof does not. Same-file retry uses
+            // that UUID only while proven safe; after restoration/expiry an explicit new intent is required.
             val action = "statements.upload:${file.sha256}"
             val retryGate = uploadGates.getOrPut(action) { RequestRetryGate(elapsedClock) }
             if (!retryGate.isReady()) return@launch
@@ -180,9 +205,11 @@ class UploadViewModel @Inject constructor(
             uploadReadinessJob = viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(uploadRetryReady = ready) } } }
             val key = keys.keyFor(action, elapsedClock)
             if (key.replayWindow?.isOpen(elapsedClock) != true) {
-                _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, file.name, config), uploadRetryReady = false) }
+                pendingUploadRecovery = PendingUploadRecovery(action, uri, key)
+                _state.update { it.copy(phase = UploadPhase.RecoveryRequired(file.name), uploadRetryReady = false, uploadOffline = false) }
                 return@launch
             }
+            pendingUploadRecovery = null
             tracker.track(Events.STATEMENTS_UPLOAD_STARTED)
             _state.update { it.copy(phase = UploadPhase.Busy(file.name, 0f, uploadId = null)) }
             try {
@@ -241,6 +268,7 @@ class UploadViewModel @Inject constructor(
                     isTerminal = { it !is ImportEvent.Progress },
                     state = reopenStates.getOrPut(uploadId) { SseReopenState() },
                     elapsedClock = elapsedClock,
+                    recoverOnceAfter = { ServiceGate.recoveryDeadline(it, elapsedClock) },
                 ) { api.streamProgress(uploadId) }
                     .collect { event -> handle(uploadId, busy.fileName, event) }
             } catch (e: AppError) {
@@ -315,7 +343,7 @@ class UploadViewModel @Inject constructor(
         }
     }
 
-    /** «Повторить» in the no-network notice: sends the same file again (the same content keeps its key). */
+    /** Ordinary retry keeps the same proven key; unknown/expired proof shows recovery and never renews it. */
     fun retryUpload() {
         if (!_state.value.uploadRetryReady) return
         val uri = lastPicked ?: return

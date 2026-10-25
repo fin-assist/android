@@ -123,6 +123,7 @@ fun ChatScreen(
                 onVoice = voice.start,
                 onOpenSearch = onOpenSearch,
                 onOpenAnalytics = onOpenAnalytics,
+                onStartNewRequest = vm::startNewRequest,
             )
         },
     )
@@ -141,6 +142,7 @@ internal class ChatActions(
     val onVoice: () -> Unit,
     val onOpenSearch: (OperationsFilter) -> Unit,
     val onOpenAnalytics: (AnalyticsParams) -> Unit,
+    val onStartNewRequest: () -> Unit = {},
 )
 
 @Composable
@@ -225,6 +227,23 @@ internal fun ChatContent(
         }
         if (voiceListening) {
             Text("Слушаю…", style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(horizontal = d.space5, vertical = d.space1))
+        }
+        state.recovery?.let { recovery ->
+            Column(Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(AssistantTags.RECOVERY)) {
+                PfNotice(
+                    if (recovery.target == ChatRecoveryTarget.ASK)
+                        "Результат предыдущей отправки неизвестен: вопрос мог уже сохраниться. Проверьте историю. Новая отправка создаст отдельный вопрос."
+                    else "Результат предыдущей попытки неизвестен. Проверьте историю: новая попытка доступна, только если ответ всё ещё можно повторить.",
+                    tone = NoticeTone.WARNING,
+                )
+                val canStart = recovery.target == ChatRecoveryTarget.ASK || (recovery.historyChecked && state.items.filterIsInstance<ChatItem.Answer>().any {
+                    it.id == recovery.answerId && it.status == AnswerStatus.FAILED && it.retryable
+                })
+                PfButton(if (recovery.target == ChatRecoveryTarget.ASK) "Отправить заново" else "Начать новую попытку",
+                    onClick = actions.onStartNewRequest, enabled = canStart && !state.sending && !state.generating && !state.limitExhausted,
+                    modifier = Modifier.testTag(AssistantTags.NEW_INTENT))
+                if (state.loadRetryReady && !state.loading) PfLink("Проверить историю", onClick = actions.onReload)
+            }
         }
         if (state.errorPresentation != null && !state.offline) {
             ErrorMessage(state.errorPresentation, "Не получилось отправить вопрос",
@@ -409,6 +428,8 @@ internal const val GENERIC_ANSWER_ERROR = "Не получилось ответ�
 
 /** Test tags of the assistant screens (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object AssistantTags {
+    const val RECOVERY = "assistant.chat.recovery"
+    const val NEW_INTENT = "assistant.chat.new_intent"
     const val CHAT = "assistant.chat"
     const val QUESTION = "assistant.question"
     /** A complete answer; while it streams the message carries [ANSWER_GENERATING]. */

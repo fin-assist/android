@@ -589,6 +589,25 @@ class ChatViewModelBehaviourTest {
         assertTrue(Events.ASSISTANT_CONSENT_GRANTED in tracker.names())
     }
 
+    @Test fun `restored Ask after consent requires explicit new intent before generating a fresh key`() {
+        val text = "Сколько я трачу на такси?"
+        val saved = SavedStateHandle(mapOf("chat.pending.text" to text, "chat.pending.key" to "old-unknown-key"))
+        val vm = newVm(saved)
+        vm.onConsentGranted()
+        assertTrue(api.asks.isEmpty())
+        assertEquals("old-unknown-key", saved.get<String>("chat.pending.key"))
+        assertEquals(text, vm.state.value.draft)
+        assertEquals(ChatRecoveryTarget.ASK, vm.state.value.recovery?.target)
+        vm.retryAfterFailure()
+        assertTrue(api.asks.isEmpty(), "ordinary retry cannot replace unknown origin proof")
+        api.askOutcomes += askResponse("a1")
+        vm.startNewRequest()
+        assertEquals(1, api.asks.size)
+        assertTrue(api.asks.single().key.value != "old-unknown-key")
+        assertEquals(text, api.asks.single().request.text)
+        assertNull(vm.state.value.recovery)
+    }
+
     @Test fun `consent granted with nothing waiting sends nothing`() {
         val vm = newVm()
         vm.onConsentGranted()
@@ -769,6 +788,8 @@ class ChatViewModelBehaviourTest {
         assertEquals(listOf(originalKey.value), api.retries.map { it.first.value }, "another tap cannot allocate a fresh attempt")
         assertEquals(readsBeforeRecovery + 2, api.listCalls.size)
         assertEquals(1, api.retryOutcomes.size, "the next generation response was not consumed")
+        vm.startNewRequest()
+        assertEquals(1, api.retries.size, "history already recovered the replacement, so no new attempt is offered")
     }
 
     @Test fun `a second tap while the retry is on its way sends nothing`() {
@@ -830,6 +851,58 @@ class ChatViewModelBehaviourTest {
         vm.retry("a1")
         assertTrue(vm.state.value.limitExhausted)
         assertEquals(AnswerStatus.FAILED, vm.answerItem("a1").status)
+    }
+
+    @Test fun `corrected consent resumes the denied RetryAnswer with its same key even after explicit false`() {
+        api.retryOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        val vm = vmWithFailedAnswer()
+        vm.retry("a1")
+        val originalKey = api.retries.single().first
+        assertEquals(ChatEvent.OPEN_CONSENT, vm.state.value.event)
+        vm.consumeEvent()
+        vm.onConsentGranted()
+        assertEquals(2, api.retries.size)
+        assertEquals(originalKey, api.retries.last().first)
+        assertEquals("a1", api.retries.last().second)
+        assertTrue(api.asks.isEmpty(), "corrective consent must not send Ask instead of RetryAnswer")
+        assertEquals(listOf("q1", "a2"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `expired denied RetryAnswer needs fresh history permission and an explicit new attempt`() {
+        api.retryOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        val vm = vmWithFailedAnswer()
+        vm.retry("a1")
+        val oldKey = api.retries.single().first
+        advance(24L * 60 * 60 * 1000)
+        vm.onConsentGranted()
+        assertEquals(1, api.retries.size)
+        assertEquals(ChatRecoveryTarget.RETRY_ANSWER, vm.state.value.recovery?.target)
+        assertTrue(vm.state.value.recovery?.historyChecked == true)
+        vm.startNewRequest()
+        assertEquals(2, api.retries.size)
+        assertTrue(api.retries.last().first != oldKey)
+        assertEquals("a1", api.retries.last().second)
+        assertTrue(api.asks.isEmpty())
+    }
+
+    @Test fun `a fresh history refusal of new generation removes the expired recovery action`() {
+        api.retryOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        val vm = vmWithFailedAnswer()
+        vm.retry("a1")
+        advance(24L * 60 * 60 * 1000)
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED,
+            AnswerErrorCode.MODEL_ERROR, retryable = false)), hasOlder = false)
+        vm.onConsentGranted()
+        assertEquals(1, api.retries.size)
+        assertNull(vm.state.value.recovery)
+        assertFalse(vm.answerItem("a1").retryable)
+        vm.startNewRequest()
+        assertEquals(1, api.retries.size)
     }
 
     @Test fun `retry without consent opens the consent screen`() {
@@ -984,6 +1057,46 @@ class ChatViewModelBehaviourTest {
         assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
         assertEquals(listOf(text("Ответ")), vm.answerItem("a1").blocks)
         assertEquals(1, maxActive, "never two streams at once")
+    }
+
+    @Test fun `false maintenance permits one delayed stream recovery without resending Ask`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        api.script("a1", flow { throw AppError.Maintenance(null, 15,
+            ErrorResponseInfo("MAINTENANCE", 503, requestRetryable = false,
+                timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0))) },
+            events(done(3)))
+        val vm = newVm()
+        assertEquals(1, api.streamOpens.size)
+        vm.resumeStreams()
+        advance(14_000)
+        assertEquals(1, api.streamOpens.size)
+        vm.pauseStreams()
+        vm.resumeStreams()
+        advance(999)
+        assertEquals(1, api.streamOpens.size)
+        advance(1)
+        assertEquals(2, api.streamOpens.size)
+        assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
+        assertTrue(api.asks.isEmpty())
+        assertTrue(api.retries.isEmpty())
+    }
+
+    @Test fun `a second false stream refusal before an event cannot start another maintenance recovery loop`() {
+        fun refusal() = flow<AnswerEvent> { throw AppError.Maintenance(null, 15,
+            ErrorResponseInfo("MAINTENANCE", 503, requestRetryable = false,
+                timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = dispatcher.scheduler.currentTime))) }
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        api.script("a1", refusal(), refusal(), events(done(3)))
+        val vm = newVm()
+        vm.resumeStreams()
+        advance(15_000)
+        assertEquals(2, api.streamOpens.size)
+        vm.resumeStreams()
+        advance(60_000)
+        vm.resumeStreams()
+        assertEquals(2, api.streamOpens.size, "a fresh refusal cannot arm another permit without a successful event")
+        assertTrue(api.asks.isEmpty())
+        assertTrue(api.retries.isEmpty())
     }
 
     @Test fun `a stream error other than the network stops watching and the history gives the answer its status`() {

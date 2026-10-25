@@ -344,11 +344,37 @@ class UploadViewModelTest {
         val keys = IdempotencyKeys(store)
         val oldKey = kotlinx.coroutines.runBlocking { keys.keyFor("statements.upload:$hash") }
         vm.onFilePicked(uri)
-        await("unsafe replay blocked") { it.phase is UploadPhase.Error }
+        await("unsafe replay blocked") { it.phase is UploadPhase.RecoveryRequired }
         awaitIdle()
         assertTrue(api.keys.isEmpty())
         assertFalse(vm.state.value.uploadRetryReady)
         assertEquals(oldKey, kotlinx.coroutines.runBlocking { keys.keyFor("statements.upload:$hash") })
+        vm.startNewUpload()
+        vm.startNewUpload() // double tap cannot create two new logical uploads
+        awaitAccepted()
+        assertEquals(1, api.keys.size)
+        assertTrue(api.keys.single() != oldKey.value)
+        assertEquals(name, assertIs<UploadPhase.Busy>(vm.state.value.phase).fileName)
+    }
+
+    @Test fun `expired upload proof shows unknown outcome and renews the key only on explicit new upload`() {
+        api.offline = true
+        vm.onFilePicked(uri)
+        await("the lost response") { it.uploadOffline }
+        awaitIdle()
+        val originalKey = api.keys.single()
+        dispatcher.scheduler.advanceTimeBy(24L * 60 * 60 * 1000)
+        dispatcher.scheduler.runCurrent()
+        api.offline = false
+        vm.retryUpload()
+        await("unknown previous outcome") { it.phase is UploadPhase.RecoveryRequired }
+        awaitIdle()
+        assertEquals(listOf(originalKey), api.keys)
+        assertIs<UploadPhase.RecoveryRequired>(vm.state.value.phase)
+        vm.startNewUpload()
+        awaitAccepted()
+        assertEquals(2, api.keys.size)
+        assertTrue(api.keys.last() != originalKey)
     }
 
     @Test fun `an accepted file is a final answer - the same file later is a new upload`() {
@@ -432,6 +458,32 @@ class UploadViewModelTest {
     }
 
     // ---- maintenance and an unsupported version (FIN-177) ----
+
+    @Test fun `false maintenance resumes an existing upload stream once after its original wait`() {
+        api.streams += flow { throw AppError.Maintenance(null, 15,
+            ru.finassist.pf.core.common.error.ErrorResponseInfo("MAINTENANCE", 503, requestRetryable = false,
+                timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0))) }
+        api.streams += flowOf(ImportEvent.Complete(importResult()))
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        await("known maintenance interruption") { Events.STATEMENTS_UPLOAD_INTERRUPTED in tracker.names() }
+        assertIs<UploadPhase.Busy>(vm.state.value.phase)
+        vm.stopWatching()
+        vm.watch()
+        dispatcher.scheduler.advanceTimeBy(14_000)
+        dispatcher.scheduler.runCurrent()
+        assertEquals(1, api.streamOpens.get())
+        vm.stopWatching()
+        vm.watch()
+        dispatcher.scheduler.advanceTimeBy(999)
+        dispatcher.scheduler.runCurrent()
+        assertEquals(1, api.streamOpens.get())
+        dispatcher.scheduler.advanceTimeBy(1)
+        dispatcher.scheduler.runCurrent()
+        await("the existing upload result") { it.doneUploadId == "u1" }
+        assertEquals(2, api.streamOpens.get())
+        assertEquals(1, api.keys.size, "only the read resumes; original upload POST is not resent")
+    }
 
     @Test fun `maintenance on re-opening the stream is not a parsing failure - the result shows once the screen is back`() {
         api.streams += flowOf(ImportEvent.Progress(ImportProgress(ImportStage.PARSING, 30)))
