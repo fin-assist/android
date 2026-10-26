@@ -15,8 +15,8 @@ import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.error.RequestRetryGate
 import ru.finassist.pf.core.common.time.Clock
-import java.time.Duration
 import javax.inject.Inject
 
 /**
@@ -37,20 +37,22 @@ class AvailabilityViewModel @Inject constructor(
     private val _canCheck = MutableStateFlow(false)
     val canCheck: StateFlow<Boolean> = _canCheck.asStateFlow()
 
+    private val probeRetryGate = RequestRetryGate(elapsedClock)
     private var scheduled: Job? = null
     private var readiness: Job? = null
     private var automaticProbeUsed = false
 
     init {
+        viewModelScope.launch { probeRetryGate.readiness.collect { updateReadiness() } }
         viewModelScope.launch {
             gate.state.collect { s ->
                 readiness?.cancel()
                 if (s is ServiceGate.State.Maintenance) {
-                    _canCheck.value = s.deadline?.remainingMillis(elapsedClock) == 0L
+                    updateReadiness()
                     readiness = viewModelScope.launch {
                         while (true) {
                             val left = s.deadline?.remainingMillis(elapsedClock)
-                            _canCheck.value = left == 0L
+                            updateReadiness()
                             if (left == null || left == 0L) break
                             delay(minOf(left, 250L))
                         }
@@ -60,6 +62,7 @@ class AvailabilityViewModel @Inject constructor(
                     _canCheck.value = false
                     scheduled?.cancel()
                     automaticProbeUsed = false
+                    if (s == ServiceGate.State.Open) probeRetryGate.clear()
                 }
             }
         }
@@ -78,31 +81,43 @@ class AvailabilityViewModel @Inject constructor(
     /** «Проверить сейчас»: replaces the scheduled check (the new state of the gate schedules the next one). */
     fun checkNow() {
         if (_checking.value) return
-        val maintenance = gate.maintenance ?: return
-        if (maintenance.deadline?.remainingMillis(elapsedClock) != 0L) return
+        if (!probeReady()) return
         automaticProbeUsed = true
         scheduled?.cancel()
         viewModelScope.launch { probe() }
+    }
+
+    private fun probeReady(): Boolean {
+        val maintenance = gate.state.value as? ServiceGate.State.Maintenance ?: return false
+        return maintenance.deadline?.remainingMillis(elapsedClock) == 0L && probeRetryGate.isReady()
+    }
+
+    private fun updateReadiness() {
+        _canCheck.value = !_checking.value && probeReady()
     }
 
     /** One probe at a time, whoever asked: the button and the timer never send two requests. */
     private val probing = Mutex()
 
     private suspend fun probe() {
-        if (!probing.tryLock()) return
+        if (!probeReady() || !probing.tryLock()) return
         _checking.value = true
+        updateReadiness()
         // Only the maintenance this probe was sent under ends with its answer: requests of the screens re-created right
         // after it may have met a new one.
         val before = gate.maintenance
         try {
             auth.getConsentDocument(ConsentType.PERSONAL_DATA)
+            probeRetryGate.clear()
             gate.reopen(before)
         } catch (e: AppError) {
-            // Maintenance again: the gate already holds the new retry moment. Anything else (no network, a server
-            // error): the screen stays, the next check after the same pause.
-            // A fresh refusal never starts another automatic loop. A user may make a guarded manual check.
+            // Only the known maintenance correction uses ServiceGate's deadline. A later independent refusal of
+            // this GET retains its own original-request prohibition/wait, even if maintenance's old deadline expired.
+            if (ServiceGate.recoveryDeadline(e, elapsedClock) == null) probeRetryGate.record(e)
+            // A fresh refusal never starts another automatic loop. Manual checks obey both independent gates.
         } finally {
             _checking.value = false
+            updateReadiness()
             probing.unlock()
         }
     }

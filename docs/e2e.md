@@ -354,6 +354,18 @@ gets its own key and that a retry sends the first attempt's name; `MockStatement
 check the server side.
 
 
+
+The independent refusal of the availability probe after maintenance is not covered by a mock UI flow
+(FIN-223). The probe uses `GET /v1/consents/personal_data` to check availability, not to grant consent.
+The existing maintenance controls produce only `MAINTENANCE`; `offline` fails before a REST response,
+and the closed `error_operation` controls do not target this GET. They cannot produce a subsequent
+`INTERNAL_ERROR` 503 with its own `retryable:false` or `Retry-After`; that branch needs a controllable
+REST/peer fixture. `AvailabilityViewModelTest` checks the independent prohibition/wait, direct calls
+before readiness, unchanged original deadlines and preservation of the scoped maintenance correction.
+The existing authored `MaintenanceWaiting` fixture covers the disabled check button; no UI or DesignCheck
+execution is claimed. The existing maintenance flows and Qase34/35/46 cover the maintenance paths only.
+
+
 Consent-document refresh after `CONSENT_OUTDATED` is not covered by a mock UI flow
 ([Qase54](https://app.qase.io/case/PLAINFIN-54), [Qase55](https://app.qase.io/case/PLAINFIN-55), manual cases authored, not executed).
 The fake backend's personal-data and assistant document versions are fixed constants, and the control

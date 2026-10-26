@@ -16,6 +16,8 @@ import ru.finassist.pf.core.api.model.ConsentDocument
 import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.error.ErrorResponseInfo
+import ru.finassist.pf.core.common.time.ResponseTiming
 import ru.finassist.pf.core.common.time.Clock
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -46,7 +48,7 @@ class AvailabilityViewModelTest {
             probes++
             when (val e = answers.removeFirstOrNull()) {
                 null -> return beforeSuccess().let { ConsentDocument(type = ConsentType.PERSONAL_DATA, version = "1", url = "https://plainfin.ru", title = "Согласие") }
-                is AppError.Maintenance -> { gate.maintenance(e.until, e.retryAfterSeconds, clock.now()); throw e }
+                is AppError.Maintenance -> { gate.maintenance(e.until, e.retryAfterSeconds, clock.now(), e.response); throw e }
                 else -> throw e
             }
         }
@@ -125,6 +127,75 @@ class AvailabilityViewModelTest {
         assertEquals(ServiceGate.State.Open, gate.state.value)
         assertFalse(vm.canCheck.value)
     }
+
+    @Test fun `independent probe refusal forbids repeat despite expired or renewed maintenance deadline`() {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
+        gate.maintenance(null, 15, clock.now())
+        scheduler.advanceTimeBy(15_000)
+        answers += probeFailure(retryable = false, wait = 30)
+        scheduler.runCurrent()
+        assertEquals(1, probes)
+        assertEquals(0L, gate.maintenance?.deadline?.remainingMillis(elapsedClock))
+        assertFalse(vm.canCheck.value)
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(1, probes)
+        scheduler.advanceTimeBy(600_000); scheduler.runCurrent()
+        assertFalse(vm.canCheck.value, "elapsed wait cannot override explicit original-GET false")
+        gate.maintenance(null, 15, clock.now())
+        scheduler.advanceTimeBy(15_000); scheduler.runCurrent()
+        vm.checkNow(); scheduler.runCurrent()
+        assertFalse(vm.canCheck.value, "fresh global maintenance is not a corrected original GET")
+        assertEquals(1, probes)
+    }
+
+    @Test fun `independent probe wait keeps its original deadline and needs a manual retry afterwards`() {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
+        gate.maintenance(null, 15, clock.now())
+        scheduler.advanceTimeBy(15_000)
+        answers += probeFailure(retryable = true, wait = 30)
+        scheduler.runCurrent()
+        assertEquals(1, probes)
+        assertFalse(vm.canCheck.value)
+        vm.checkNow(); scheduler.runCurrent()
+        scheduler.advanceTimeBy(29_999); scheduler.runCurrent()
+        vm.checkNow(); scheduler.runCurrent()
+        assertFalse(vm.canCheck.value)
+        assertEquals(1, probes, "taps cannot send early or restart the response deadline")
+        scheduler.advanceTimeBy(1); scheduler.runCurrent()
+        assertTrue(vm.canCheck.value)
+        assertEquals(1, probes, "expiry only enables the manual action")
+        answers += null
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(2, probes)
+        assertEquals(ServiceGate.State.Open, gate.state.value)
+        assertFalse(vm.canCheck.value)
+    }
+
+    @Test fun `known maintenance false still permits its scoped correction after its fresh wait`() {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
+        gate.maintenance(null, 15, clock.now())
+        scheduler.advanceTimeBy(15_000)
+        answers += AppError.Maintenance(null, 30, ErrorResponseInfo(
+            "MAINTENANCE", 503, requestRetryable = false,
+            timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime), retryAfterSeconds = 30,
+        ))
+        scheduler.runCurrent()
+        assertFalse(vm.canCheck.value)
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(1, probes)
+        scheduler.advanceTimeBy(30_000); scheduler.runCurrent()
+        assertTrue(vm.canCheck.value)
+        assertEquals(1, probes)
+        answers += null
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(2, probes)
+        assertEquals(ServiceGate.State.Open, gate.state.value)
+    }
+
+    private fun probeFailure(retryable: Boolean, wait: Long) = AppError.Server(503, response = ErrorResponseInfo(
+        "INTERNAL_ERROR", 503, requestRetryable = retryable, retryAfterSeconds = wait,
+        timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime),
+    ))
 
     @Test fun `the time of the end reads as a promise for today or another day`() {
         val now = OffsetDateTime.parse("2026-10-15T12:00:00+03:00")
