@@ -135,8 +135,10 @@ private fun identityPreferences(
     }
 }
 
-internal fun tempZoneSyncStore(session: SessionRepository): ZoneSyncStateStore {
+internal fun tempZoneSyncPreferences(session: SessionRepository): androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
     val dir = createTempDirectory("tz-retry").toFile().apply { deleteOnExit() }
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-    return ZoneSyncStateStore(identityPreferences(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") }, session))
+    return identityPreferences(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") }, session)
 }
+
+internal fun tempZoneSyncStore(session: SessionRepository): ZoneSyncStateStore = ZoneSyncStateStore(tempZoneSyncPreferences(session))

@@ -15,19 +15,21 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class TimeZoneDurableRetryTest {
     private val api = FakeProfileApi()
     private val session = FakeSession()
-    private val pending = tempPendingStore(session)
-    private val known = tempKnownStore(session)
-    private val retry = tempZoneSyncStore(session)
+    private val preferences = tempZoneSyncPreferences(session)
+    private val pending = PendingZoneStore(preferences)
+    private val known = KnownZoneStore(preferences)
     private val clock = FakeClock()
     private val device = FakeDeviceZone("Asia/Novosibirsk")
     private var elapsed = 100L
     private var boot: Int? = 7
     private val report = ReportZone { ZoneId.of("Europe/Moscow") }
-    private fun checker() = TimeZoneChecker(api, session, pending, clock, device, report, known, retry, ElapsedClock { elapsed }, BootCounter { boot })
+    private fun checker() = TimeZoneChecker(api, session, PendingZoneStore(preferences), clock, device, report,
+        KnownZoneStore(preferences), ZoneSyncStateStore(preferences), ElapsedClock { elapsed }, BootCounter { boot })
     private fun failure(flag: Boolean? = null, seconds: Long? = null) = AppError.Server(503, response =
         ErrorResponseInfo("FUTURE_ERROR", 503, requestRetryable = flag, retryAfterSeconds = seconds,
             timing = ResponseTiming(receivedElapsedMillis = elapsed)))
@@ -141,6 +143,55 @@ class TimeZoneDurableRetryTest {
         api.onGet = {}
         checker().check()
         assertEquals(1, api.gets.get())
+    }
+
+    @Test fun `applied PATCH interrupted before outcome converges through independent GET after restart`() = runBlocking<Unit> {
+        val active = checker()
+        active.check()
+        clock.advance(Duration.ofHours(72))
+        api.onUpdate = {
+            api.timezone = device.zone // server committed; client never persisted the success
+            throw CancellationException("process ended before durable PATCH outcome")
+        }
+        assertFailsWith<CancellationException> { active.check() }
+        val saved = assertNotNull(pending.get("u1"))
+        val owner = assertNotNull(active.captureOwner())
+        assertEquals(ZoneSyncStateStore.Phase.IN_FLIGHT, ZoneSyncStateStore(preferences).current(owner)?.patch?.attempt?.phase)
+        assertEquals(1, api.updates.size)
+        val getsBeforeRestart = api.gets.get()
+        api.onUpdate = {}
+
+        checker().check() // new checker AND all store wrappers over the durable preferences
+
+        assertTrue(api.gets.get() > getsBeforeRestart, "PATCH InFlight must not block independent GET")
+        assertNull(pending.get("u1"), "fresh profile proves the recorded target already reached the server")
+        assertEquals(saved.zone, known.get("u1"))
+        assertEquals(1, api.updates.size, "do not send another PATCH after GET proved convergence")
+    }
+
+    @Test fun `unapplied interrupted PATCH remains blocked while independent GET runs after restart`() = runBlocking<Unit> {
+        val active = checker()
+        active.check()
+        clock.advance(Duration.ofHours(72))
+        api.onUpdate = { throw CancellationException("process ended before durable PATCH outcome") }
+        assertFailsWith<CancellationException> { active.check() }
+        val saved = assertNotNull(pending.get("u1"))
+        val owner = assertNotNull(active.captureOwner())
+        val actionId = assertNotNull(ZoneSyncStateStore(preferences).current(owner)?.patch?.attempt?.id)
+        val getsBeforeRestart = api.gets.get()
+        api.onUpdate = {}
+        clock.advance(Duration.ofDays(8))
+        elapsed += Duration.ofDays(8).toMillis()
+
+        checker().check()
+        checker().check()
+
+        assertTrue(api.gets.get() > getsBeforeRestart, "GET remains independently available")
+        assertEquals(saved, pending.get("u1"), "GET showing the old zone does not resolve the uncertain PATCH")
+        assertEquals(1, api.updates.size, "elapsed time and fresh GET must not authorize another uncertain PATCH")
+        val restored = assertNotNull(ZoneSyncStateStore(preferences).current(owner)?.patch?.attempt)
+        assertEquals(ZoneSyncStateStore.Phase.IN_FLIGHT, restored.phase)
+        assertEquals(actionId, restored.id)
     }
 
     @Test fun `late response of previous same user login cannot remember or clear new owner's state`() = runBlocking<Unit> {
