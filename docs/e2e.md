@@ -355,6 +355,13 @@ bundled files hold no two copies of one statement under different names. `Upload
 gets its own key and that a retry sends the first attempt's name; `MockStatementsApiTest` and `ContractBehaviourTest`
 check the server side.
 
+The initial retry-readiness collector racing an unknown-age upload key (FIN-353) is not controllable
+through a UI flow: it needs the first collector emission to run after the recovery state was published.
+`UploadViewModelTest` queues Main and makes the pending-key cache immediate to reproduce that ordering;
+it asserts disabled ordinary retry, no POST, retention of the original UUID and a new key only after explicit
+new intent. `statements/upload_restored_key` / Qase51 already cover the visible recovery path with the
+closed unknown-age seed. No additional production hooks or UI/DesignCheck execution are used.
+
 
 
 The independent refusal of the availability probe after maintenance is not covered by a mock UI flow

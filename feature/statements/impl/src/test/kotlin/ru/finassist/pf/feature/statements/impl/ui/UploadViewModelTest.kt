@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -425,6 +426,38 @@ class UploadViewModelTest {
         assertEquals(1, api.keys.size)
         assertTrue(api.keys.single() != oldKey.value)
         assertEquals(name, assertIs<UploadPhase.Busy>(vm.state.value.phase).fileName)
+    }
+
+    @Test fun `queued initial retry readiness cannot enable an unknown upload key`() {
+        // Cache hits need not suspend. Keep storage immediate and queue Main so a newly launched readiness
+        // collector runs only after the upload continuation has published its unknown-outcome state.
+        val cached = object : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+            private var preferences: androidx.datastore.preferences.core.Preferences = androidx.datastore.preferences.core.emptyPreferences()
+            override val data get() = flowOf(preferences)
+            override suspend fun updateData(transform: suspend (androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences): androidx.datastore.preferences.core.Preferences =
+                transform(preferences).also { preferences = it }
+        }
+        val action = "statements.upload:${uploadBodyHash()}"
+        val keys = IdempotencyKeys(cached)
+        val original = kotlinx.coroutines.runBlocking { keys.keyFor(action) }
+        Dispatchers.setMain(StandardTestDispatcher(dispatcher.scheduler))
+        vm = UploadViewModel(context, api, repository, StaticFlags(), tracker, IdempotencyKeys(cached), clock,
+            ElapsedClock { dispatcher.scheduler.currentTime })
+        dispatcher.scheduler.runCurrent()
+
+        vm.onFilePicked(uri)
+        advanceUntil("the unknown-key recovery") { vm.state.value.phase is UploadPhase.RecoveryRequired }
+        dispatcher.scheduler.runCurrent()
+        assertFalse(vm.state.value.uploadRetryReady, "a ready REST gate is not proof of a replayable key")
+        vm.retryUpload()
+        dispatcher.scheduler.runCurrent()
+        assertTrue(api.keys.isEmpty())
+        assertEquals(original, kotlinx.coroutines.runBlocking { keys.pendingKey(action) })
+
+        vm.startNewUpload()
+        advanceUntil("the explicitly new upload") { (vm.state.value.phase as? UploadPhase.Busy)?.uploadId == "u1" }
+        assertEquals(1, api.keys.size)
+        assertTrue(api.keys.single() != original.value)
     }
 
     @Test fun `expired upload proof shows unknown outcome and renews the key only on explicit new upload`() {

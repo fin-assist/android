@@ -226,7 +226,6 @@ class UploadViewModel @Inject constructor(
             val retryGate = uploadGates.getOrPut(action) { RequestRetryGate(elapsedClock) }
             if (!retryGate.isReady()) return@launch
             uploadReadinessJob?.cancel()
-            uploadReadinessJob = viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(uploadRetryReady = ready) } } }
             val key = keys.keyFor(action, elapsedClock)
             if (key.replayWindow?.isOpen(elapsedClock) != true) {
                 pendingUploadRecovery = PendingUploadRecovery(action, uri, key)
@@ -234,6 +233,8 @@ class UploadViewModel @Inject constructor(
                 return@launch
             }
             pendingUploadRecovery = null
+            // A ready request gate alone cannot enable replay of an unknown-age key.
+            uploadReadinessJob = viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(uploadRetryReady = ready) } } }
             tracker.track(Events.STATEMENTS_UPLOAD_STARTED)
             _state.update { it.copy(phase = UploadPhase.Busy(file.name, 0f, uploadId = null)) }
             try {
