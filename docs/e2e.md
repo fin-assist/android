@@ -359,9 +359,11 @@ The independent refusal of the availability probe after maintenance is not cover
 (FIN-223). The probe uses `GET /v1/consents/personal_data` to check availability, not to grant consent.
 The existing maintenance controls produce only `MAINTENANCE`; `offline` fails before a REST response,
 and the closed `error_operation` controls do not target this GET. They cannot produce a subsequent
-`INTERNAL_ERROR` 503 with its own `retryable:false` or `Retry-After`; that branch needs a controllable
+`INTERNAL_ERROR` 500 with its own `retryable:false` or `Retry-After`; that branch needs a controllable
 REST/peer fixture. `AvailabilityViewModelTest` checks the independent prohibition/wait, direct calls
 before readiness, unchanged original deadlines and preservation of the scoped maintenance correction.
+The faithful interceptor fixture also checks that a late 429 refusal after Open cannot restrict a later
+maintenance episode, including when StateFlow conflates Open with the next Maintenance.
 The existing authored `MaintenanceWaiting` fixture covers the disabled check button; no UI or DesignCheck
 execution is claimed. The existing maintenance flows and Qase34/35/46 cover the maintenance paths only.
 

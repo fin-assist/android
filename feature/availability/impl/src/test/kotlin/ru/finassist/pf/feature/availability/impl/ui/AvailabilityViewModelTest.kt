@@ -3,6 +3,7 @@ package ru.finassist.pf.feature.availability.impl.ui
 import ru.finassist.pf.core.common.time.ElapsedClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -43,14 +44,35 @@ class AvailabilityViewModelTest {
     private var probes = 0
     /** Runs before a successful answer: what happened on the server while the probe was on its way. */
     private var beforeSuccess: () -> Unit = {}
+    /** Allows the Main collector to observe the interceptor's report before the API error reaches the VM. */
+    private var beforeFailure: suspend (AppError) -> Unit = {}
     private val auth = object : AuthApi by unused() {
         override suspend fun getConsentDocument(type: ConsentType): ConsentDocument {
             probes++
-            when (val e = answers.removeFirstOrNull()) {
-                null -> return beforeSuccess().let { ConsentDocument(type = ConsentType.PERSONAL_DATA, version = "1", url = "https://plainfin.ru", title = "Согласие") }
-                is AppError.Maintenance -> { gate.maintenance(e.until, e.retryAfterSeconds, clock.now(), e.response); throw e }
-                else -> throw e
+            val before = gate.maintenance
+            val failure = answers.removeFirstOrNull()
+            if (failure == null) {
+                beforeSuccess()
+                gate.reopen(before)
+                return ConsentDocument(type = ConsentType.PERSONAL_DATA, version = "1", url = "https://plainfin.ru", title = "Согласие")
             }
+            // Faithful ServiceGateInterceptor order: special gates first, then non-special HTTP <500 reopens.
+            // An ordinary 500 or 503 retains maintenance; Offline has no HTTP response at all.
+            when (failure) {
+                is AppError.Maintenance -> gate.maintenance(failure.until, failure.retryAfterSeconds, clock.now(), failure.response)
+                is AppError.UpdateRequired -> gate.updateRequired(failure.presentation)
+                else -> {
+                    val status = failure.response?.httpStatus ?: when (failure) {
+                        is AppError.Server -> failure.httpStatus
+                        is AppError.Api -> failure.httpStatus
+                        is AppError.RateLimited -> 429
+                        else -> null
+                    }
+                    if (status != null && status < 500 && before != null) gate.reopen(before)
+                }
+            }
+            beforeFailure(failure)
+            throw failure
         }
     }
 
@@ -192,8 +214,52 @@ class AvailabilityViewModelTest {
         assertEquals(ServiceGate.State.Open, gate.state.value)
     }
 
-    private fun probeFailure(retryable: Boolean, wait: Long) = AppError.Server(503, response = ErrorResponseInfo(
-        "INTERNAL_ERROR", 503, requestRetryable = retryable, retryAfterSeconds = wait,
+    @Test fun `a late 429 refusal after Open cannot restrict the next maintenance episode`() {
+        assertOldRefusalDoesNotBlockNextEpisode(conflateOpen = false)
+    }
+
+    @Test fun `a late 429 refusal cannot restrict a conflated Open to Maintenance transition`() {
+        assertOldRefusalDoesNotBlockNextEpisode(conflateOpen = true)
+    }
+
+    private fun assertOldRefusalDoesNotBlockNextEpisode(conflateOpen: Boolean) {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
+        gate.maintenance(null, 15, clock.now())
+        answers += AppError.Server(500)
+        scheduler.advanceTimeBy(15_000); scheduler.runCurrent()
+        assertEquals(1, probes)
+        assertIs<ServiceGate.State.Maintenance>(gate.state.value, "500 does not reopen the network gate")
+        assertTrue(vm.canCheck.value)
+        beforeFailure = { error ->
+            if (error is AppError.RateLimited) {
+                assertEquals(ServiceGate.State.Open, gate.state.value, "429 reopens before the API error is delivered")
+                if (conflateOpen) gate.maintenance(null, 15, clock.now())
+                yield()
+            }
+        }
+        answers += AppError.RateLimited(null, 30, ErrorResponseInfo(
+            "RATE_LIMITED", 429, requestRetryable = false, retryAfterSeconds = 30,
+            timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime),
+        ))
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(2, probes)
+        assertFalse(vm.checking.value)
+        if (!conflateOpen) {
+            assertEquals(ServiceGate.State.Open, gate.state.value)
+            gate.maintenance(null, 15, clock.now())
+        }
+        scheduler.runCurrent()
+        assertFalse(vm.canCheck.value)
+        scheduler.advanceTimeBy(14_999); scheduler.runCurrent()
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(2, probes, "the next episode keeps its own maintenance deadline")
+        scheduler.advanceTimeBy(1); scheduler.runCurrent()
+        assertEquals(3, probes, "a refusal from the closed episode cannot block the next one-shot probe")
+        assertEquals(ServiceGate.State.Open, gate.state.value)
+    }
+
+    private fun probeFailure(retryable: Boolean, wait: Long) = AppError.Server(500, response = ErrorResponseInfo(
+        "INTERNAL_ERROR", 500, requestRetryable = retryable, retryAfterSeconds = wait,
         timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime),
     ))
 

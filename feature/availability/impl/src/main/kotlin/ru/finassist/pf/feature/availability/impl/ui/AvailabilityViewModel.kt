@@ -38,6 +38,8 @@ class AvailabilityViewModel @Inject constructor(
     val canCheck: StateFlow<Boolean> = _canCheck.asStateFlow()
 
     private val probeRetryGate = RequestRetryGate(elapsedClock)
+    private var restrictionEpisode: Int? = null
+    private var automaticEpisode = gate.reopened.value
     private var scheduled: Job? = null
     private var readiness: Job? = null
     private var automaticProbeUsed = false
@@ -46,6 +48,12 @@ class AvailabilityViewModel @Inject constructor(
         viewModelScope.launch { probeRetryGate.readiness.collect { updateReadiness() } }
         viewModelScope.launch {
             gate.state.collect { s ->
+                // Open can be conflated with the next Maintenance. Its existing counter still identifies a new episode.
+                val episode = gate.reopened.value
+                if (automaticEpisode != episode) {
+                    automaticEpisode = episode
+                    automaticProbeUsed = false
+                }
                 readiness?.cancel()
                 if (s is ServiceGate.State.Maintenance) {
                     updateReadiness()
@@ -62,7 +70,10 @@ class AvailabilityViewModel @Inject constructor(
                     _canCheck.value = false
                     scheduled?.cancel()
                     automaticProbeUsed = false
-                    if (s == ServiceGate.State.Open) probeRetryGate.clear()
+                    if (s == ServiceGate.State.Open) {
+                        restrictionEpisode = null
+                        probeRetryGate.clear()
+                    }
                 }
             }
         }
@@ -89,7 +100,8 @@ class AvailabilityViewModel @Inject constructor(
 
     private fun probeReady(): Boolean {
         val maintenance = gate.state.value as? ServiceGate.State.Maintenance ?: return false
-        return maintenance.deadline?.remainingMillis(elapsedClock) == 0L && probeRetryGate.isReady()
+        val requestReady = restrictionEpisode != gate.reopened.value || probeRetryGate.isReady()
+        return maintenance.deadline?.remainingMillis(elapsedClock) == 0L && requestReady
     }
 
     private fun updateReadiness() {
@@ -106,14 +118,22 @@ class AvailabilityViewModel @Inject constructor(
         // Only the maintenance this probe was sent under ends with its answer: requests of the screens re-created right
         // after it may have met a new one.
         val before = gate.maintenance
+        val episode = gate.reopened.value
         try {
             auth.getConsentDocument(ConsentType.PERSONAL_DATA)
+            restrictionEpisode = null
             probeRetryGate.clear()
             gate.reopen(before)
         } catch (e: AppError) {
             // Only the known maintenance correction uses ServiceGate's deadline. A later independent refusal of
             // this GET retains its own original-request prohibition/wait, even if maintenance's old deadline expired.
-            if (ServiceGate.recoveryDeadline(e, elapsedClock) == null) probeRetryGate.record(e)
+            if (before != null && gate.maintenance === before && gate.reopened.value == episode &&
+                ServiceGate.recoveryDeadline(e, elapsedClock) == null
+            ) {
+                // Tag before publishing: even an Open racing this snapshot cannot apply the refusal to a later episode.
+                restrictionEpisode = episode
+                probeRetryGate.record(e)
+            }
             // A fresh refusal never starts another automatic loop. Manual checks obey both independent gates.
         } finally {
             _checking.value = false
