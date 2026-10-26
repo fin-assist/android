@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
@@ -76,7 +77,7 @@ class EncryptedTokenStoreTest {
     fun `saved session reads back and is not stored in the clear`() = runBlocking {
         store.save(SESSION)
 
-        assertEquals(SESSION, store.current())
+        assertEquals(SESSION, store.current()?.copy(authSessionEpoch = null))
         val blob = assertNotNull(rawBlob())
         for (secret in listOf("user-1", "access-1", "refresh-1")) assertFalse(secret in blob, "blob leaks $secret")
     }
@@ -88,14 +89,14 @@ class EncryptedTokenStoreTest {
         store.save(SESSION)
 
         assertNotEquals(first, rawBlob())
-        assertEquals(SESSION, store.current())
+        assertEquals(SESSION, store.current()?.copy(authSessionEpoch = null))
     }
 
     @Test
     fun `a new store instance over the same data reads the session`() = runBlocking {
         store.save(SESSION)
 
-        assertEquals(SESSION, EncryptedTokenStore(context, dataStore).current())
+        assertEquals(SESSION, EncryptedTokenStore(context, dataStore).current()?.copy(authSessionEpoch = null))
     }
 
     @Test
@@ -104,7 +105,7 @@ class EncryptedTokenStoreTest {
 
         assertTrue(store.updateTokens("refresh-1", TokenPair("access-2", "refresh-2")))
 
-        assertEquals(TokenStore.Session("user-1", TokenPair("access-2", "refresh-2")), store.current())
+        assertEquals(TokenStore.Session("user-1", TokenPair("access-2", "refresh-2")), store.current()?.copy(authSessionEpoch = null))
     }
 
     @Test
@@ -114,7 +115,7 @@ class EncryptedTokenStoreTest {
         store.save(newSignIn)
 
         assertFalse(store.updateTokens("refresh-1", TokenPair("access-2", "refresh-2")))
-        assertEquals(newSignIn, store.current())
+        assertEquals(newSignIn, store.current()?.copy(authSessionEpoch = null))
     }
 
     @Test
@@ -132,9 +133,10 @@ class EncryptedTokenStoreTest {
         store.session.test {
             assertNull(awaitItem())
             store.save(SESSION)
-            assertEquals(SESSION, awaitItem())
-            // Same content, different ciphertext: not a new emission.
+            assertEquals(SESSION, awaitItem()?.copy(authSessionEpoch = null))
+            // A new login has a new epoch even when user and tokens happen to match.
             store.save(SESSION)
+            assertEquals(SESSION, awaitItem()?.copy(authSessionEpoch = null))
             store.updateTokens("refresh-1", TokenPair("access-2", "refresh-2"))
             assertEquals("access-2", awaitItem()?.tokens?.accessToken)
             store.clear()
@@ -161,7 +163,7 @@ class EncryptedTokenStoreTest {
         assertNull(restored.current())
         val next = TokenStore.Session("user-1", TokenPair("access-3", "refresh-3"))
         restored.save(next)
-        assertEquals(next, restored.current())
+        assertEquals(next, restored.current()?.copy(authSessionEpoch = null))
     }
 
     @Test
@@ -171,7 +173,7 @@ class EncryptedTokenStoreTest {
 
         fresh.save(SESSION)
 
-        assertEquals(SESSION, fresh.current())
+        assertEquals(SESSION, fresh.current()?.copy(authSessionEpoch = null))
         assertNotEquals("not a keyset", keysetPrefs().getString(KEYSET_NAME, null))
     }
 
@@ -187,12 +189,12 @@ class EncryptedTokenStoreTest {
         }
         val store = EncryptedTokenStore(context, flaky)
         store.save(SESSION)
-        withTimeout(5_000) { store.session.first { it == SESSION } }
+        withTimeout(5_000) { store.session.first { it?.copy(authSessionEpoch = null) == SESSION } }
 
         flaky.failReads = true
         store.clear() // the write lands; the read after it fails and must not surface here
         assertNull(rawBlob())
-        assertEquals(SESSION, withTimeout(5_000) { store.session.first() }, "the last read stays while reads fail")
+        assertEquals(SESSION, withTimeout(5_000) { store.session.first() }?.copy(authSessionEpoch = null), "the last read stays while reads fail")
 
         flaky.failReads = false // no further write: the retried read publishes the sign-out
         withTimeout(5_000) { store.session.first { it == null } }
@@ -212,7 +214,7 @@ class EncryptedTokenStoreTest {
         }
         val fresh = EncryptedTokenStore(context, flaky)
 
-        assertEquals(SESSION, withTimeout(5_000) { fresh.session.first() })
+        assertEquals(SESSION, withTimeout(5_000) { fresh.session.first() }?.copy(authSessionEpoch = null))
     }
 
     @Test
@@ -231,7 +233,7 @@ class EncryptedTokenStoreTest {
         }
         val store = EncryptedTokenStore(context, flaky)
         store.save(SESSION)
-        withTimeout(5_000) { store.session.first { it == SESSION } }
+        withTimeout(5_000) { store.session.first { it?.copy(authSessionEpoch = null) == SESSION } }
         flaky.failReads = true
         repeat(10) { if (it % 2 == 1) store.clear() else store.save(SESSION) }
 
@@ -259,7 +261,7 @@ class EncryptedTokenStoreTest {
         }
         val store = EncryptedTokenStore(context, flaky)
         store.save(SESSION)
-        withTimeout(5_000) { store.session.first { it == SESSION } }
+        withTimeout(5_000) { store.session.first { it?.copy(authSessionEpoch = null) == SESSION } }
         val read = kotlinx.coroutines.CompletableDeferred<Unit>()
         val release = kotlinx.coroutines.CompletableDeferred<Unit>()
         store.afterRetryRead = { if (!read.isCompleted) { read.complete(Unit); release.await() } }
@@ -274,7 +276,7 @@ class EncryptedTokenStoreTest {
         flaky.failReads = false
         release.complete(Unit)
 
-        withTimeout(5_000) { store.session.first { it == SESSION } }
+        withTimeout(5_000) { store.session.first { it?.copy(authSessionEpoch = null) == SESSION } }
     }
 
     @Test
@@ -286,7 +288,7 @@ class EncryptedTokenStoreTest {
         val marker = assertNotNull(dataStore.data.first()[stringPreferencesKey("session.refresh_pending")])
         for (secret in listOf("refresh-1", "refresh-key", "access-1")) assertFalse(secret in marker)
         assertEquals(originalBlob, rawBlob(), "the existing three-line session ciphertext is unchanged")
-        assertEquals(SESSION, restarted.current())
+        assertEquals(SESSION, restarted.current()?.copy(authSessionEpoch = null))
     }
 
     @Test
@@ -296,7 +298,7 @@ class EncryptedTokenStoreTest {
         val restarted = EncryptedTokenStore(context, dataStore)
         assertTrue(restarted.reserveRefreshAttempt("refresh-1", IdempotencyKey("known-key")))
         assertFalse(restarted.reserveRefreshAttempt("refresh-1", IdempotencyKey("new-key")))
-        assertEquals(SESSION, restarted.current())
+        assertEquals(SESSION, restarted.current()?.copy(authSessionEpoch = null))
     }
 
     @Test
@@ -305,7 +307,7 @@ class EncryptedTokenStoreTest {
         for (marker in listOf("not encrypted", assertNotNull(rawBlob()))) {
             dataStore.edit { it[stringPreferencesKey("session.refresh_pending")] = marker }
             assertFalse(store.reserveRefreshAttempt("refresh-1", IdempotencyKey("new-key")))
-            assertEquals(SESSION, store.current())
+            assertEquals(SESSION, store.current()?.copy(authSessionEpoch = null))
         }
     }
 
@@ -334,7 +336,7 @@ class EncryptedTokenStoreTest {
         assertTrue(store.reserveRefreshAttempt("new-refresh", IdempotencyKey("new-key")))
         assertFalse(store.clearIfRefreshToken("refresh-1"))
         assertFalse(store.updateTokens("refresh-1", TokenPair("late-access", "late-refresh")))
-        assertEquals(replacement, store.current())
+        assertEquals(replacement, store.current()?.copy(authSessionEpoch = null))
         assertTrue(store.reserveRefreshAttempt("new-refresh", IdempotencyKey("new-key")))
         assertTrue(store.clearIfRefreshToken("new-refresh"))
         assertNull(dataStore.data.first()[stringPreferencesKey("session.refresh_pending")])
@@ -352,7 +354,7 @@ class EncryptedTokenStoreTest {
         assertTrue(store.retireRefreshAttempt("refresh-1", IdempotencyKey("known")))
         assertNull(dataStore.data.first()[marker])
         assertEquals(sessionBlob, rawBlob())
-        assertEquals(SESSION, store.current())
+        assertEquals(SESSION, store.current()?.copy(authSessionEpoch = null))
         assertFalse(store.retireRefreshAttempt("refresh-1", IdempotencyKey("known")), "absence is not proof of ownership")
     }
 
@@ -365,14 +367,65 @@ class EncryptedTokenStoreTest {
         store.save(replacement)
         assertTrue(store.reserveRefreshAttempt("new-refresh", IdempotencyKey("new-key")))
         assertFalse(store.retireRefreshAttempt("refresh-1", IdempotencyKey("old-key")))
-        assertEquals(replacement, store.current())
+        assertEquals(replacement, store.current()?.copy(authSessionEpoch = null))
         assertTrue(store.reserveRefreshAttempt("new-refresh", IdempotencyKey("new-key")))
         for (invalid in listOf("malformed", assertNotNull(rawBlob()))) {
             dataStore.edit { it[marker] = invalid }
             assertFalse(store.retireRefreshAttempt("new-refresh", IdempotencyKey("new-key")))
             assertEquals(invalid, dataStore.data.first()[marker])
-            assertEquals(replacement, store.current())
+            assertEquals(replacement, store.current()?.copy(authSessionEpoch = null))
         }
+    }
+
+    @Test
+    fun `login identity survives restart and refresh but never another login`() = runBlocking {
+        store.save(SESSION)
+        val first = assertNotNull(store.current()?.authSessionEpoch)
+        assertEquals(first, EncryptedTokenStore(context, dataStore).current()?.authSessionEpoch)
+        assertTrue(store.updateTokens("refresh-1", TokenPair("a2", "r2")))
+        assertEquals(first, store.current()?.authSessionEpoch)
+        assertTrue(AuthSessionIdentityPreferences.matches(dataStore.data.first(), "user-1", first))
+        store.save(SESSION)
+        val second = assertNotNull(store.current()?.authSessionEpoch)
+        assertNotEquals(first, second)
+        assertFalse(AuthSessionIdentityPreferences.matches(dataStore.data.first(), "user-1", first))
+        store.clear()
+        assertFalse(AuthSessionIdentityPreferences.matches(dataStore.data.first(), "user-1", second))
+        store.save(SESSION)
+        assertNotEquals(second, store.current()?.authSessionEpoch)
+    }
+
+    @Test
+    fun `legacy encrypted blob acquires exactly one stable epoch without changing ciphertext`() = runBlocking {
+        store.save(SESSION)
+        val blob = rawBlob()
+        dataStore.edit { AuthSessionIdentityPreferences.clear(it) }
+        val reads = kotlinx.coroutines.coroutineScope {
+            List(12) { async { store.current() } }.map { it.await() }
+        }
+        val epoch = assertNotNull(reads.first()?.authSessionEpoch)
+        assertTrue(reads.all { it?.authSessionEpoch == epoch })
+        assertEquals(blob, rawBlob())
+    }
+
+    @Test
+    fun `epoch CAS rejects stale refresh writes and clearing after same user logs in again`() = runBlocking {
+        store.save(SESSION)
+        val old = assertNotNull(store.current()?.authSessionEpoch)
+        store.save(SESSION) // same user AND same tokens still represent a different login
+        val current = assertNotNull(store.current())
+        val key = IdempotencyKey("refresh-key")
+        assertFalse(store.updateTokens("refresh-1", TokenPair("stale-a", "stale-r"), old))
+        assertFalse(store.reserveRefreshAttempt("refresh-1", key, old))
+        assertFalse(store.retireRefreshAttempt("refresh-1", key, old))
+        assertFalse(store.clearIfRefreshToken("refresh-1", old))
+        assertEquals(current, store.current())
+        assertTrue(store.reserveRefreshAttempt("refresh-1", key, current.authSessionEpoch!!))
+        assertTrue(store.retireRefreshAttempt("refresh-1", key, current.authSessionEpoch!!))
+        assertTrue(store.updateTokens("refresh-1", TokenPair("fresh-a", "fresh-r"), current.authSessionEpoch!!))
+        assertEquals(current.authSessionEpoch, store.current()?.authSessionEpoch)
+        assertTrue(store.clearIfRefreshToken("fresh-r", current.authSessionEpoch!!))
+        assertNull(store.current())
     }
 
     private companion object {

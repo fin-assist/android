@@ -36,7 +36,7 @@ class MockPfApi(
     val backend = MockBackend(config, clock, clientVersion = clientVersion, gate = gate, elapsedClock = elapsedClock)
 
     override val auth = MockAuthApi(backend)
-    override val profile = MockProfileApi(backend)
+    override val profile = MockProfileApi(backend, tokenStore)
     override val statements = MockStatementsApi(backend)
     override val operations = MockOperationsApi(backend)
     override val categories = operations

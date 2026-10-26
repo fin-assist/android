@@ -113,10 +113,11 @@ class ProfileViewModel @Inject constructor(
             viewModelScope.launch {
                 _state.update { it.copy(loading = it.profile == null, offline = false, errorPresentation = null, requestRetryable = null) }
                 try {
+                    val origin = zoneChecker.captureObservation()
                     val p = profileApi.getProfile()
                     if (generation != profileGeneration) return@launch
                     _state.update { it.copy(loading = false, profile = p) }
-                    syncFromServer(p)
+                    syncFromServer(p, origin)
                 } catch (e: AppError) {
                     if (generation != profileGeneration) return@launch
                     retryGate.record(e)
@@ -170,9 +171,9 @@ class ProfileViewModel @Inject constructor(
      * new device zone has held for 72 hours (FIN-91). The zone read here becomes the report zone (FIN-92): it may
      * have changed on the server since the start of the process.
      */
-    private suspend fun syncFromServer(p: Profile) {
+    private suspend fun syncFromServer(p: Profile, origin: TimeZoneChecker.Observation?) {
         if (preferences.theme.first() == null) preferences.setTheme(p.theme.name.lowercase())
-        zoneChecker.observed(p)
+        zoneChecker.observed(p, origin)
     }
 
     fun openThemeSheet(open: Boolean) = _state.update { it.copy(themeSheet = open) }
@@ -186,8 +187,9 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             preferences.setTheme(theme.name.lowercase())
             tracker.track(Events.PROFILE_THEME_CHANGED, mapOf("theme" to theme.name.lowercase()))
+            val origin = zoneChecker.captureObservation()
             runCatching { profileApi.updateProfile(ProfileUpdate(theme = theme)) }.onSuccess {
-                if (generation == themeGeneration) zoneChecker.observed(it)
+                if (generation == themeGeneration) zoneChecker.observed(it, origin)
             }.onFailure { failure ->
                 if (generation == themeGeneration && failure is AppError) {
                     themeRetryGate.record(failure)

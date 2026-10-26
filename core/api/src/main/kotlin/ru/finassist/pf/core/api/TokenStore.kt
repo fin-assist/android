@@ -30,7 +30,13 @@ interface TokenStore {
     suspend fun retireRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey): Boolean = false
     /** Clear only the failed session; never erase a new sign-in racing with an old response. */
     suspend fun clearIfRefreshToken(expectedRefreshToken: String): Boolean = false
+    /** Epoch-bound CAS variants for a captured background request. Unsupported stores fail closed. */
+    suspend fun updateTokens(expectedRefreshToken: String, tokens: TokenPair, authSessionEpoch: String): Boolean = false
+    suspend fun reserveRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey, authSessionEpoch: String): Boolean = false
+    suspend fun retireRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey, authSessionEpoch: String): Boolean = false
+    suspend fun clearIfRefreshToken(expectedRefreshToken: String, authSessionEpoch: String): Boolean = false
     suspend fun clear()
 
-    data class Session(val userId: String, val tokens: TokenPair)
+    /** Opaque login identity: stable across refresh/process death, replaced by a new login. Null is unknown. */
+    data class Session(val userId: String, val tokens: TokenPair, val authSessionEpoch: String? = null)
 }

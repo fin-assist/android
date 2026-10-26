@@ -108,8 +108,37 @@ Unit tests cover decoding, context isolation, timers, replay safety, mock policy
 Design-check fixtures and Maestro flows are authored separately; their execution is subject to the
 owner's UI-test permission. Qase mappings and flow coverage live in [e2e.md](e2e.md).
 
-Background time-zone synchronization is a separate tracked consumer: `TimeZoneChecker` currently
-swallows API failures and retries at its next lifecycle trigger. It does not yet retain request
-false/wait advice. [FIN-345](https://finassist.youtrack.cloud/issue/FIN-345) depends on FIN-223 and
-owns independent GET/PATCH restrictions and recovery of its persisted pending action after lost
-monotonic anchors. The UI implementation here does not claim that background lifecycle is covered.
+## Background time-zone synchronization (FIN-345)
+
+`TimeZoneChecker` keeps independent durable restrictions for GET profile (login context) and PATCH
+profile (login plus the exact target time zone). Foreground, sign-in and system time-zone triggers
+share the same state. Repeating a trigger or observing the same profile does not clear a refusal.
+Only an actual new login resets GET; an actual target change resets PATCH without resetting GET.
+The existing silent UX, profile-zone cache and domain 72-hour threshold are unchanged. These are
+Android consumers of the existing profile endpoints; this change adds no bank-bff route.
+
+The encrypted token store assigns an opaque `authSessionEpoch` atomically with a new login, including
+a new login by the same user. Refresh retains it. Legacy encrypted sessions acquire an epoch once,
+without rewriting their ciphertext. DataStore state uses a versioned record, owner and revision CAS;
+GET and PATCH each write `IN_FLIGHT` **before** dispatch. A process interrupted before the outcome is
+stored leaves uncertainty blocked until a valid new context. Failed storage never grants a request.
+A received ordinary offline error permits a later legacy retry; explicit false remains forbidden.
+No tokens, diagnostics or server message catalog are persisted in these records.
+
+A wait captures a separate typed `{bootCount, capturedElapsedMillis, deadlineElapsedMillis}` once.
+[`elapsedRealtime`](https://developer.android.com/reference/android/os/SystemClock#elapsedRealtime())
+includes device sleep; [`BOOT_COUNT`](https://developer.android.com/reference/android/provider/Settings.Global#BOOT_COUNT)
+proves that a restored elapsed deadline belongs to this boot. A same-boot process restart continues
+the remaining wait without a background timer. Reboot, unknown boot identity, elapsed regression or
+a missing valid response anchor fail closed; they do not restart the old relative duration and do
+not consult the phone wall clock. False remains false after the wait expires. This durable consumer
+snapshot does not change the process-local meaning of `ResponseTiming` or `ServerDeadline`.
+
+Background requests carry a local coroutine owner converted to a Retrofit request tag, never a wire
+header. Token selection and authentication recovery check both user and epoch. Refresh token writes,
+refresh markers and clearing are epoch-bound DataStore CAS operations; a late refresh cannot replace
+a newer login. Mock profile calls enforce the same binding. External profile observations carry their
+captured owner/revision, so an older response cannot undo a later background mutation or login.
+Ordinary unit tests cover persistence, restart/reboot, independent restrictions, stale callbacks,
+write-ahead cancellation, token CAS and actual HTTP dispatch. No UI, instrumentation, Maestro or
+design-check execution is needed for this silent logic.

@@ -61,10 +61,10 @@ class EncryptedTokenStoreRaceTest {
                 val scope = CoroutineScope(Dispatchers.IO + Job().also { jobs += it })
                 var last: Any? = "nothing"
                 val seen = scope.async {
-                    withTimeoutOrNull(WAIT_MS) { store.session.first { last = it; it == expected }; true } == true
+                    withTimeoutOrNull(WAIT_MS) { store.session.first { last = it; it?.copy(authSessionEpoch = null) == expected }; true } == true
                 }
                 scope.launch { write(store) }.join()
-                assertEquals(expected, store.current(), "run $run: the write did not land")
+                assertEquals(expected, store.current()?.copy(authSessionEpoch = null), "run $run: the write did not land")
                 if (!seen.await()) stale += "run $run: last=$last"
             }
         }

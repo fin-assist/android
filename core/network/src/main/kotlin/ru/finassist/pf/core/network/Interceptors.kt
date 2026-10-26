@@ -4,6 +4,8 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
 import ru.finassist.pf.core.api.TokenStore
+import ru.finassist.pf.core.api.RequestOwner
+import java.io.IOException
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.common.availability.ClientVersion
 import ru.finassist.pf.core.common.availability.ServiceGate
@@ -35,9 +37,11 @@ internal class AuthInterceptor(private val tokenStore: TokenStore) : Interceptor
             return chain.proceed(original.newBuilder().removeHeader(NoAuth.HEADER).build())
         }
         val session = runBlocking { tokenStore.current() }
+        val owner = original.tag(RequestOwner::class.java)
+        if (owner != null && !owner.matches(session)) throw IOException("Request session changed")
         val request = if (session != null) {
             original.newBuilder().header("Authorization", "Bearer ${session.tokens.accessToken}")
-                .tag(RequestSession::class.java, RequestSession(session.userId)).build()
+                .tag(RequestSession::class.java, RequestSession(session.userId, owner)).build()
         } else {
             original
         }
@@ -46,7 +50,8 @@ internal class AuthInterceptor(private val tokenStore: TokenStore) : Interceptor
 }
 
 /** Ephemeral identity of the original authenticated call; deliberately has no generated value-bearing toString. */
-internal class RequestSession(private val userId: String) {
+internal class RequestSession(private val userId: String, private val owner: RequestOwner? = null) {
+    fun matches(candidate: TokenStore.Session): Boolean = userId == candidate.userId && (owner?.matches(candidate) != false)
     fun matches(candidate: String): Boolean = userId == candidate
     override fun toString(): String = "RequestSession"
 }

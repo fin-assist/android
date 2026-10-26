@@ -73,6 +73,8 @@ import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.common.time.toApiString
 import java.time.OffsetDateTime
+import kotlinx.coroutines.currentCoroutineContext
+import ru.finassist.pf.core.api.RequestOwner
 
 /** Executes a Retrofit call: 2xx → body, anything else → [AppError]. */
 internal suspend fun <T> call(block: suspend () -> Response<T>): T {
@@ -159,8 +161,8 @@ internal class HttpAuthApi(private val service: AuthService, private val sse: Ss
 }
 
 internal class HttpProfileApi(private val service: ProfileService) : ProfileApi {
-    override suspend fun getProfile(): Profile = call { service.getProfile() }
-    override suspend fun updateProfile(update: ProfileUpdate): Profile = call { service.updateProfile(update) }
+    override suspend fun getProfile(): Profile = call { service.getProfile(currentCoroutineContext()[RequestOwner]) }
+    override suspend fun updateProfile(update: ProfileUpdate): Profile = call { service.updateProfile(update, currentCoroutineContext()[RequestOwner]) }
     override suspend fun deleteAccount() { call { service.deleteAccount() } }
     override suspend fun grantAssistantConsent(grant: AssistantConsentGrant): Profile = call { service.grantAssistantConsent(grant) }
     override suspend fun revokeAssistantConsent() { call { service.revokeAssistantConsent() } }

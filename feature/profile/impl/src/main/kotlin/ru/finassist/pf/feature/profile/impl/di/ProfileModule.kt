@@ -18,6 +18,8 @@ import ru.finassist.pf.feature.applock.api.AppLockRoutes
 import ru.finassist.pf.feature.assistant.api.AssistantRoutes
 import ru.finassist.pf.feature.profile.api.ProfileRoutes
 import ru.finassist.pf.feature.profile.api.TimeZoneSync
+import ru.finassist.pf.feature.profile.impl.data.AndroidBootCounter
+import ru.finassist.pf.feature.profile.impl.data.BootCounter
 import ru.finassist.pf.feature.profile.impl.data.DeviceZone
 import ru.finassist.pf.feature.profile.impl.data.SystemDeviceZone
 import ru.finassist.pf.feature.profile.impl.data.TimeZoneSyncImpl
@@ -70,6 +72,8 @@ internal abstract class ProfileModule {
     abstract fun entry(impl: ProfileEntry): FeatureEntry
 
     @Binds abstract fun timeZoneSync(impl: TimeZoneSyncImpl): TimeZoneSync
+
+    @Binds abstract fun bootCounter(impl: AndroidBootCounter): BootCounter
 
     @Binds abstract fun deviceZone(impl: SystemDeviceZone): DeviceZone
 }

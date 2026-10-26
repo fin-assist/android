@@ -32,7 +32,7 @@ object AuthRoutes {
 sealed interface SessionState {
     data object Unknown : SessionState
     data object SignedOut : SessionState
-    data class SignedIn(val userId: String) : SessionState
+    data class SignedIn(val userId: String, val authSessionEpoch: String? = null) : SessionState
 }
 
 /**

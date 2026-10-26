@@ -15,6 +15,7 @@ import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.Tag
+import ru.finassist.pf.core.api.RequestOwner
 import ru.finassist.pf.core.common.time.RequestReplayWindow
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.AnalyticsPeriodsList
@@ -79,10 +80,10 @@ internal interface AuthService {
 
 internal interface ProfileService {
     @GET("v1/profile")
-    suspend fun getProfile(): Response<Profile>
+    suspend fun getProfile(@Tag owner: RequestOwner? = null): Response<Profile>
 
     @PATCH("v1/profile")
-    suspend fun updateProfile(@Body body: ProfileUpdate): Response<Profile>
+    suspend fun updateProfile(@Body body: ProfileUpdate, @Tag owner: RequestOwner? = null): Response<Profile>
 
     @DELETE("v1/profile")
     suspend fun deleteAccount(): Response<Unit>

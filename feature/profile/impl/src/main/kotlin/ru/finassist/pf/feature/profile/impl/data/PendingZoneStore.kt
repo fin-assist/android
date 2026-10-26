@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.first
 import ru.finassist.pf.feature.profile.impl.domain.PendingZone
 import java.time.Instant
+import ru.finassist.pf.core.storage.AuthSessionIdentityPreferences
 import javax.inject.Inject
 
 /**
@@ -36,6 +37,32 @@ class PendingZoneStore @Inject constructor(private val dataStore: DataStore<Pref
         dataStore.edit {
             it.remove(KEY_USER)
             it.remove(KEY_ZONE)
+            it.remove(KEY_SINCE)
+        }
+    }
+
+    suspend fun set(owner: ZoneSyncStateStore.Owner, pending: PendingZone) {
+        dataStore.edit {
+            if (!AuthSessionIdentityPreferences.matches(it, owner.userId, owner.epoch)) return@edit
+            it[KEY_USER] = owner.userId
+            it[KEY_ZONE] = pending.zone
+            it[KEY_SINCE] = pending.since.toEpochMilli()
+        }
+    }
+
+    suspend fun clear(owner: ZoneSyncStateStore.Owner) {
+        dataStore.edit {
+            if (!AuthSessionIdentityPreferences.matches(it, owner.userId, owner.epoch)) return@edit
+            if (it[KEY_USER] == owner.userId) {
+                it.remove(KEY_USER); it.remove(KEY_ZONE); it.remove(KEY_SINCE)
+            }
+        }
+    }
+
+    suspend fun clearSignedOut() {
+        dataStore.edit {
+            if (!AuthSessionIdentityPreferences.signedOut(it)) return@edit
+            it.remove(KEY_USER); it.remove(KEY_ZONE)
             it.remove(KEY_SINCE)
         }
     }

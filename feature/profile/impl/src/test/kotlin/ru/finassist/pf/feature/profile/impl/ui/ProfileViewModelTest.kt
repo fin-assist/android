@@ -60,6 +60,7 @@ import ru.finassist.pf.feature.auth.api.SessionState
 import ru.finassist.pf.feature.profile.impl.data.FakeClock
 import ru.finassist.pf.feature.profile.impl.data.FakeDeviceZone
 import ru.finassist.pf.feature.profile.impl.data.TimeZoneChecker
+import ru.finassist.pf.feature.profile.impl.data.tempZoneSyncStore
 import ru.finassist.pf.feature.profile.impl.data.tempKnownStore
 import ru.finassist.pf.feature.profile.impl.data.tempPendingStore
 import ru.finassist.pf.feature.statements.api.StatementsEvent
@@ -152,7 +153,7 @@ class ProfileViewModelTest {
     private class FakeSession : SessionRepository {
         val signOuts = mutableListOf<String?>()
         var gate: CompletableDeferred<Unit>? = null
-        override val state: Flow<SessionState> = MutableStateFlow(SessionState.SignedIn("u_1"))
+        override val state: Flow<SessionState> = MutableStateFlow(SessionState.SignedIn("u_1", "epoch-1"))
         override suspend fun consumeJustRegistered() = false
         override suspend fun signOut(reason: String?) {
             signOuts += reason
@@ -226,7 +227,7 @@ class ProfileViewModelTest {
 
     private val reportZone = ReportZone { ZoneId.of(MOSCOW) }
     private val zoneChecker by lazy {
-        TimeZoneChecker(profileApi, session, tempPendingStore(), FakeClock(), FakeDeviceZone(MOSCOW), reportZone, tempKnownStore())
+        TimeZoneChecker(profileApi, session, tempPendingStore(session), FakeClock(), FakeDeviceZone(MOSCOW), reportZone, tempKnownStore(session), tempZoneSyncStore(session), { 0L }, { 1 })
     }
 
     private fun vm() = ProfileViewModel(profileApi, statementsApi, assistant, preferences, session, statements, flags, tracker, appLock, zoneChecker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })

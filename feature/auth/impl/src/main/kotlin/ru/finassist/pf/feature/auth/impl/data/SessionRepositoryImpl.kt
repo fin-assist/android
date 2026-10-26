@@ -68,7 +68,7 @@ class SessionRepositoryImpl @Inject constructor(
 
     override val state: Flow<SessionState> = tokenStore.session.map { session ->
         // A session without a user id exists only for the moment the profile is being fetched after sign-in.
-        if (session == null || session.userId.isEmpty()) SessionState.SignedOut else SessionState.SignedIn(session.userId)
+        if (session == null || session.userId.isEmpty()) SessionState.SignedOut else SessionState.SignedIn(session.userId, session.authSessionEpoch)
     }
 
     init {
