@@ -113,6 +113,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `statement.csv` | `CSV_NOT_ACCEPTED` |
   | `notes.txt` | `WRONG_FORMAT` |
 | `unreadable.ofx` | no readable operation, 2 unread lines (`EMPTY_STATEMENT`, `unread_count = 2`) |
+  | `unread-same-line.ofx` | 2 unread STMTTRN/FITID occurrences on physical line 31, both with no date: equal line numbers and reasons remain separate rows (FIN-352) |
   | `unreadable-fixed.ofx` | the two operations of `unreadable.ofx` read correctly (same account and FITID): closes its unread lines (FIN-79) |
   | `no-description.ofx` | 1 new operation without a description (7 October 2026): «Без описания» in the feed, no unread line |
   | `stale.ofx` | 3 operations, statement period 1 August — 20 September 2026, the last operation on 15 September: once the preloaded statement is deleted, the data is stale on the pinned date — the banner says «по 20 сентября» (FIN-125) |
@@ -290,6 +291,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `assistant/answer_changed_since` | after an answer a category is changed, then the statement deleted: the earlier answer in the history shows «С тех пор категории менялись», then «С тех пор данные менялись» (`changed_since` counted at the time of the request) — FIN-135 |
 | `statements/upload_errors` | CSV, not a statement, another bank; leaving the picker |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
+| `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
 | `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
@@ -387,3 +389,14 @@ The upload flow above deliberately seeds an unknown-age record without claiming 
 ### FIN-223 safe error controls and coverage
 
 The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.
+
+### FIN-352 repeated physical unread lines
+
+`UnreadLine` has no public occurrence ID. Two records can have identical upload, physical line and reason;
+the renderer uses the response occurrence index within each upload for its local LazyColumn key, while keeping
+the displayed line number/reason unchanged. The existing mock parser and resolver already retain such records.
+The new `unread-same-line.ofx` fixture and `statements/unread_same_physical_line` flow exercise the actual upload →
+history → unread list path, with index selectors checking both equal row titles and both equal reasons.
+`UnreadLinesViewModelTest` verifies duplicate-preservation in state; it does not claim to execute the renderer.
+`UnreadLinesSamePhysicalLine` / `UnreadLinesSamePhysicalLineDark` are proposed DesignCheck artboards with no Figma
+counterpart yet. The flow, Qase56 and fixtures were authored without UI/Maestro/DesignCheck/instrumented execution.

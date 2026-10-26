@@ -174,8 +174,9 @@ internal fun UnreadLinesContent(
                                 )
                             }
                         }
+                        // Compact OFX records can share both physical line and reason; their occurrence is local.
                         lines.forEachIndexed { i, l ->
-                            item(key = "$uploadId-${l.lineNumber}") {
+                            item(key = "line:$uploadId:$i") {
                                 UnreadLineRow(UnreadTexts.line(l.lineNumber, l.date?.toLocalDate()), l.reasonName, divider = i < lines.lastIndex)
                             }
                         }
