@@ -90,13 +90,6 @@ internal object Exclusions {
             "proposed: [Android] fake backend: idempotency and error order of statements and assistant",
         ),
         Behaviour(
-            "idempotency-stored-errors",
-            "the fake backend stores only 2xx under a key; api.md «Идемпотентность» stores 400, 413 and 422 too (except 413 " +
-                "FILE_TOO_LARGE of 3.2, answered before the key and never stored — the fake does that, FIN-340): after a 422 the same key " +
-                "with another file runs again instead of 409 IDEMPOTENCY_CONFLICT",
-            "FIN-344",
-        ),
-        Behaviour(
             "delete-unknown-upload",
             "deleteStatement of an upload the user never had is 204, api.md 3.5 says 404 (204 only for an upload deleted before); $FIN_170_FILES",
             "proposed: [Android] fake backend: idempotency and error order of statements and assistant",

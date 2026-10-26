@@ -48,6 +48,7 @@ import ru.finassist.pf.core.common.time.toApiMonth
 import ru.finassist.pf.mock.MockErrorCatalog
 import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.apiError
+import ru.finassist.pf.mock.idempotentResponse
 import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.mock.domain.AnalyticsEngine
 import ru.finassist.pf.mock.domain.Catalog
@@ -107,7 +108,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         if (file.size > backend.config.maxFileSizeBytes) throw backend.apiError(ErrorCodes.FILE_TOO_LARGE, 413)
         // Every other answer compares the key at the end of the file, by its content and its name.
         val content = file.open().use { it.readBytes() }
-        return backend.idempotent("statements.upload:${key.value}", request = UploadBody.of(content, file.name)) {
+        return backend.idempotentResponse("statements.upload:${key.value}", request = UploadBody.of(content, file.name)) {
             val text = content.toString(Charsets.UTF_8)
             when (val check = OfxParser.check(text)) {
                 OfxCheck.Csv -> throw backend.apiError(ErrorCodes.CSV_NOT_ACCEPTED, 422)
