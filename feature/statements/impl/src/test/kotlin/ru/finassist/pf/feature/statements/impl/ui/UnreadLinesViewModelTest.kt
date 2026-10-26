@@ -72,4 +72,17 @@ class UnreadLinesViewModelTest {
         assertFalse(vm.state.value.error)
         assertEquals(listOf(line), vm.state.value.lines)
     }
+    @Test fun `equal physical line and reason occurrences remain separate list entries`() {
+        val duplicate = line.copy()
+        api.unreadResult = UnreadLinesList(listOf(line, duplicate))
+        val state = newVm("uploadId" to "u1").state.value
+        assertFalse(state.loading)
+        assertFalse(state.error)
+        assertEquals(2, state.lines.size)
+        assertEquals(listOf(line, duplicate), state.lines)
+        assertEquals(state.lines[0].lineNumber, state.lines[1].lineNumber)
+        assertEquals(state.lines[0].reason, state.lines[1].reason)
+        assertEquals(state.lines[0].reasonName, state.lines[1].reasonName)
+    }
+
 }
