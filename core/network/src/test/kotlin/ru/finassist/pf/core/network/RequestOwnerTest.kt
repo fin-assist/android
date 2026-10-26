@@ -79,6 +79,27 @@ class RequestOwnerTest {
         assertEquals(1, server.requestCount)
     }
 
+    @Test fun `refresh retains captured login and resends with its new tokens`() = runBlocking<Unit> {
+        val base = InMemoryTokenStore(original)
+        val tokens = object : TokenStore by base {
+            override suspend fun reserveRefreshAttempt(token: String, key: IdempotencyKey, epoch: String): Boolean =
+                if (base.current()?.authSessionEpoch == epoch) base.reserveRefreshAttempt(token, key) else false
+            override suspend fun updateTokens(token: String, pair: TokenPair, epoch: String): Boolean =
+                if (base.current()?.authSessionEpoch == epoch) base.updateTokens(token, pair) else false
+        }
+        server.enqueue(MockResponse().setResponseCode(401))
+        server.enqueue(MockResponse().setResponseCode(200))
+        val client = OkHttpClient.Builder().addInterceptor(AuthInterceptor(tokens))
+            .authenticator(TokenAuthenticator(tokens, ElapsedClock { 100L }) { _, _ -> TokenPair("fresh-access", "fresh-refresh") })
+            .build()
+        client.newCall(Request.Builder().url(server.url("/v1/profile")).tag(RequestOwner::class.java, owner).build())
+            .execute().use { assertEquals(200, it.code) }
+        assertEquals("login-1", base.current()?.authSessionEpoch)
+        assertEquals("fresh-refresh", base.current()?.tokens?.refreshToken)
+        assertEquals("Bearer old-access", server.takeRequest().getHeader("Authorization"))
+        assertEquals("Bearer fresh-access", server.takeRequest().getHeader("Authorization"))
+    }
+
     @Test fun `new login before 401 authentication prevents refresh entirely`() = runBlocking<Unit> {
         val tokens = InMemoryTokenStore(original)
         var refreshed = 0

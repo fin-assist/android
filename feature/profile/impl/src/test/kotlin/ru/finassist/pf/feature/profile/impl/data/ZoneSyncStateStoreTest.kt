@@ -128,6 +128,26 @@ class ZoneSyncStateStoreTest {
         }
     }
 
+    @Test fun `failed outcome persistence leaves durable in flight instead of permitting replay`() = runBlocking<Unit> {
+        login()
+        var failWrite = false
+        val fault = object : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+            override val data = preferences.data
+            override suspend fun updateData(transform: suspend (androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences): androidx.datastore.preferences.core.Preferences {
+                if (failWrite) throw java.io.IOException("disk full")
+                return preferences.updateData(transform)
+            }
+        }
+        val store = ZoneSyncStateStore(fault)
+        val state = assertNotNull(store.bind(owner))
+        val ticket = assertNotNull(store.begin(state, GET, 2, 100))
+        failWrite = true
+        assertFailsWith<java.io.IOException> { store.finish(ticket, null) }
+        val restored = assertNotNull(ZoneSyncStateStore(preferences).current(owner))
+        assertEquals(ZoneSyncStateStore.Phase.IN_FLIGHT, restored.get.attempt?.phase)
+        assertNull(ZoneSyncStateStore(preferences).begin(restored, GET, 2, 1_000_000))
+    }
+
     @Test fun `failed storage never gives a dispatch ticket`() = runBlocking<Unit> {
         assertFailsWith<java.io.IOException> { ZoneSyncStateStore(FailingDataStore()).bind(owner) }
     }
