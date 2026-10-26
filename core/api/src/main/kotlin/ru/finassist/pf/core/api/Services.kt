@@ -90,7 +90,7 @@ sealed interface ImportEvent {
     data class Progress(val progress: ImportProgress) : ImportEvent
     data class Complete(val result: ImportResult) : ImportEvent
     /** `PROCESSING_FAILED`, `CANCELLED` or unknown (handled as `PROCESSING_FAILED`). */
-    data class Error(val code: String, val message: String) : ImportEvent
+    data class Error(val code: String, val message: String, val presentation: ru.finassist.pf.core.common.error.ErrorPresentation = ru.finassist.pf.core.common.error.ErrorPresentation()) : ImportEvent
 }
 
 interface StatementsApi {

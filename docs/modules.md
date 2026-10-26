@@ -8,7 +8,7 @@ implementations (Hilt). The rule is enforced at configuration time by `pf.module
 
 ```
 app                       composition root: Hilt graph, NavHost, tabs, app-lock gate, update / maintenance overlay, SDK init, flavors mock/local/prod (dimension `env`)
-core/common               Money, dates/periods, AppError, Result helpers, ClientVersion and ServiceGate (FIN-22) (JVM)
+core/common               Money, dates/periods, AppError, safe error presentation, retry restrictions, server deadlines, Result helpers, ClientVersion and ServiceGate (JVM)
 core/api                  client API contract: DTOs + service interfaces from openapi.yaml (JVM)
 core/network              HTTP implementation of core/api: OkHttp, Retrofit, SSE, auth, idempotency (local, prod)
 core/designsystem         tokens, theme, components, chart animation (Compose)
@@ -30,6 +30,7 @@ feature/<name>/impl       data / domain / ui + Hilt bindings (Android, Compose)
 
 Features: `auth`, `applock`, `availability`, `operations`, `statements`, `analytics`, `assistant`, `profile`.
 `availability` — the update and maintenance screens the app root lays over everything (FIN-22).
+Universal errors and their boundaries across these modules: [errors.md](errors.md) (FIN-223).
 
 ## Dependency rules
 

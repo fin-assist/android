@@ -190,4 +190,10 @@ class ImportResultDesignCheckTest {
             userId = "u1",
         )
     }
+    // FIN-223 proposed artboard; snapshot execution is not authorized.
+    @Test fun unreadServerWarning() = DesignCheck.capture("UnreadLinesServerWarning") {
+        UnreadLinesContent(UnreadUiState(loading = false, error = true,
+            errorPresentation = ru.finassist.pf.core.common.error.ErrorPresentation(ru.finassist.pf.core.common.error.UserMessage.from("Чтение строк временно недоступно"), ru.finassist.pf.core.common.error.ErrorSeverity.WARNING)),
+            copied = false, onBack = {}, onRetry = {}, onReport = {})
+    }
 }

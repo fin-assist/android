@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.availability.impl.ui
 
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorSeverity
+import ru.finassist.pf.core.common.error.UserMessage
 import androidx.compose.runtime.CompositionLocalProvider
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,4 +39,14 @@ class AvailabilityDesignCheckTest {
     @Test fun forceUpdateDark() = DesignCheck.capture("ForceUpdateDark", dark = true) { UpdateContent(onUpdate = {}, onSupport = {}) }
 
     @Test fun maintenanceDark() = maintenance("MaintenanceDark", OffsetDateTime.parse("2026-10-15T14:30:00+03:00"), dark = true)
+    @Test fun maintenanceWaiting() = DesignCheck.capture("MaintenanceWaiting") {
+        CompositionLocalProvider(LocalPfClock provides clock) {
+            MaintenanceContent(null, checking = false, onCheck = {}, onSupport = {}, canCheck = false)
+        }
+    }
+    // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
+    @Test fun serverWarning() = DesignCheck.capture("MaintenanceServerWarning") {
+        MaintenanceContent(null, checking = false, onCheck = {}, onSupport = {}, presentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING))
+    }
+
 }

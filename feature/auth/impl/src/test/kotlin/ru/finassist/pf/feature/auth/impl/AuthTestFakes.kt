@@ -172,7 +172,7 @@ class SessionHarness(
     private val dir: File = createTempDirectory("session").toFile()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val dataStore: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") }
-    val repo = SessionRepositoryImpl(tokens, auth, profile, flags, tracker, crash, dataStore, flow)
+    val repo = SessionRepositoryImpl(tokens, auth, profile, flags, tracker, crash, dataStore, flow, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
 
     fun close() {
         scope.cancel()

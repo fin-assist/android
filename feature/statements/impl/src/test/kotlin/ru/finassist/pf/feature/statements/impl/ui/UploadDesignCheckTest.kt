@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorSeverity
+import ru.finassist.pf.core.common.error.UserMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -75,5 +78,13 @@ class UploadDesignCheckTest {
     @Test fun importErrorExcel() = capture("ImportErrorExcel", error(ErrorCodes.CSV_NOT_ACCEPTED, "operations_09_2026.csv"))
 
     @Test fun importErrorSize() = capture("ImportErrorSize", error(ErrorCodes.FILE_TOO_LARGE, "statement_09_2026.ofx"))
+    // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
+    @Test fun serverWarning() {
+        val base = error(ErrorCodes.WRONG_BANK, "statement.ofx")
+        capture("ImportServerWarning", base.copy(phase = (base.phase as UploadPhase.Error).copy(presentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING))))
+    }
+
+    @Test fun uploadRecovery() = capture("ImportRecovery", guide.copy(phase = UploadPhase.RecoveryRequired("statement.ofx")))
+    @Test fun uploadRecoveryDark() = capture("ImportRecoveryDark", guide.copy(phase = UploadPhase.RecoveryRequired("statement.ofx")), dark = true)
 }
 

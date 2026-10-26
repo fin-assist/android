@@ -154,4 +154,22 @@ class NetworkModuleTest {
              "assistant_consent":{"granted":false,"current_version":"2.0"},"created_at":"2026-04-01T09:00:00+03:00"}
         """.trimIndent()
     }
+    @Test
+    fun `a new user signing in before a 401 is handled never receives the old mutation`() = runBlocking {
+        val replacement = TokenStore.Session("different-user", TokenPair("different-access", "different-refresh"))
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                runBlocking { store.save(replacement) }
+                return MockResponse().setResponseCode(401).setHeader("Content-Type", "application/json")
+                    .setBody("""{"error":{"code":"INVALID_TOKEN","message":"private","retryable":false}}""")
+            }
+        }
+        val key = ru.finassist.pf.core.api.model.IdempotencyKey.random(ru.finassist.pf.core.common.time.ElapsedClock { System.nanoTime() / 1_000_000 })
+        kotlin.test.assertFailsWith<ru.finassist.pf.core.common.error.AppError.Unauthorized> {
+            stack.api.assistant.ask(key, ru.finassist.pf.core.api.model.AskRequest("question"))
+        }
+        assertEquals(1, server.requestCount, "neither refresh nor the old POST may run for the replacement user")
+        assertEquals(replacement, store.current())
+    }
+
 }

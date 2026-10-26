@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.profile.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.error.ErrorPresentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -48,6 +51,9 @@ data class ProfileUiState(
     /** Biometric unlock on/off; null when the device has no biometrics. */
     val biometric: Boolean? = null,
     val flags: ProfileFlags,
+    val errorPresentation: ErrorPresentation? = null,
+    val requestRetryable: Boolean? = null,
+    val retryReady: Boolean = true,
 )
 
 @HiltViewModel
@@ -62,21 +68,38 @@ class ProfileViewModel @Inject constructor(
     private val tracker: Tracker,
     appLock: AppLock,
     private val zoneChecker: TimeZoneChecker,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ProfileUiState(flags = readFlags()))
+    private val statementsRetryGate = RequestRetryGate(elapsedClock)
+    private val limitRetryGate = RequestRetryGate(elapsedClock)
+    private val consentRetryGate = RequestRetryGate(elapsedClock)
+    private val themeRetryGate = RequestRetryGate(elapsedClock)
+    private var blockedTheme: Theme? = null
+    private var themeGeneration = 0L
+    private var statementsGeneration = 0L
+    private var profileGeneration = 0L
 
     private fun readFlags() = ProfileFlags(
         assistant = featureFlags.isEnabled(Flag.ASSISTANT),
         deleteAccount = featureFlags.isEnabled(Flag.PROFILE_DELETE_ACCOUNT),
         upload = featureFlags.isEnabled(Flag.STATEMENTS_UPLOAD),
     )
+    private val retryGate = RequestRetryGate(elapsedClock)
+    init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<ProfileUiState> = _state
 
     init {
         viewModelScope.launch {
             preferences.theme.collect { code -> _state.update { it.copy(theme = Theme.entries.firstOrNull { t -> t.name.equals(code, true) } ?: Theme.SYSTEM) } }
         }
-        viewModelScope.launch { statementsRepository.events.collect { loadStatements() } }
+        viewModelScope.launch {
+            statementsRepository.events.collect {
+                statementsGeneration++
+                statementsRetryGate.clear()
+                loadStatements()
+            }
+        }
         viewModelScope.launch { featureFlags.changes.collect { _state.update { it.copy(flags = readFlags()) } } }
         if (appLock.biometricAvailability() != BiometricAvailability.NONE) {
             viewModelScope.launch { appLock.biometricEnabled.collect { on -> _state.update { it.copy(biometric = on) } } }
@@ -85,26 +108,59 @@ class ProfileViewModel @Inject constructor(
 
     /** Called on every resume: the consent switch and the limit may have changed on other screens. */
     fun load() {
-        viewModelScope.launch {
-            _state.update { it.copy(loading = it.profile == null, offline = false) }
-            try {
-                val p = profileApi.getProfile()
-                _state.update { it.copy(loading = false, profile = p) }
-                syncFromServer(p)
-            } catch (e: AppError) {
-                _state.update { it.copy(loading = false, offline = it.profile == null) }
+        if (retryGate.isReady()) {
+            val generation = ++profileGeneration
+            viewModelScope.launch {
+                _state.update { it.copy(loading = it.profile == null, offline = false, errorPresentation = null, requestRetryable = null) }
+                try {
+                    val p = profileApi.getProfile()
+                    if (generation != profileGeneration) return@launch
+                    _state.update { it.copy(loading = false, profile = p) }
+                    syncFromServer(p)
+                } catch (e: AppError) {
+                    if (generation != profileGeneration) return@launch
+                    retryGate.record(e)
+                    _state.update { it.copy(loading = false, offline = it.profile == null, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                }
             }
         }
         loadStatements()
         // The limit is requested only when the assistant is on (plan, decision 5).
-        if (_state.value.flags.assistant) {
-            viewModelScope.launch { runCatching { assistantApi.getLimit() }.onSuccess { l -> _state.update { it.copy(limit = l) } } }
+        if (_state.value.flags.assistant && limitRetryGate.isReady()) {
+            viewModelScope.launch { runCatching { assistantApi.getLimit() }.onSuccess { l -> _state.update { it.copy(limit = l) } }
+                .onFailure { failure -> if (failure is AppError) {
+                    limitRetryGate.record(failure)
+                    if (failure !is AppError.Offline) _state.update { it.copy(errorPresentation = failure.presentation, snackbar = "Не получилось обновить лимит вопросов") }
+                } } }
         }
     }
 
+    /** A successful consent screen result is a confirmed server mutation, not an ordinary resume. */
+    fun onConsentResult(result: String?) {
+        if (result != "true") return
+        changedProfileContext()
+        consentRetryGate.clear()
+        load()
+    }
+
+    private fun changedProfileContext() {
+        profileGeneration++
+        retryGate.clear()
+        _state.update { it.copy(errorPresentation = null, requestRetryable = null) }
+    }
+
     private fun loadStatements() {
+        if (!statementsRetryGate.isReady()) return
+        val generation = ++statementsGeneration
         viewModelScope.launch {
-            runCatching { statementsApi.listStatements() }.onSuccess { list -> _state.update { it.copy(statements = list.summary, statementsLoaded = true) } }
+            runCatching { statementsApi.listStatements() }.onSuccess { list ->
+                if (generation == statementsGeneration) _state.update { it.copy(statements = list.summary, statementsLoaded = true) }
+            }.onFailure { failure ->
+                if (generation == statementsGeneration && failure is AppError) {
+                    statementsRetryGate.record(failure)
+                    if (failure !is AppError.Offline) _state.update { it.copy(errorPresentation = failure.presentation, snackbar = "Не получилось обновить историю загрузок") }
+                }
+            }
         }
     }
 
@@ -122,24 +178,39 @@ class ProfileViewModel @Inject constructor(
     fun openThemeSheet(open: Boolean) = _state.update { it.copy(themeSheet = open) }
 
     fun setTheme(theme: Theme) {
+        if (blockedTheme == theme && !themeRetryGate.isReady()) return
+        val generation = ++themeGeneration
+        if (blockedTheme != theme) themeRetryGate.clear()
+        blockedTheme = theme
         _state.update { it.copy(themeSheet = false) }
         viewModelScope.launch {
             preferences.setTheme(theme.name.lowercase())
             tracker.track(Events.PROFILE_THEME_CHANGED, mapOf("theme" to theme.name.lowercase()))
-            runCatching { profileApi.updateProfile(ProfileUpdate(theme = theme)) }.onSuccess { zoneChecker.observed(it) }
+            runCatching { profileApi.updateProfile(ProfileUpdate(theme = theme)) }.onSuccess {
+                if (generation == themeGeneration) zoneChecker.observed(it)
+            }.onFailure { failure ->
+                if (generation == themeGeneration && failure is AppError) {
+                    themeRetryGate.record(failure)
+                    _state.update { it.copy(errorPresentation = failure.presentation.takeUnless { failure is AppError.Offline }, snackbar = "Не получилось сохранить тему. Попробуйте ещё раз") }
+                }
+            }
         }
     }
 
     /** Switch off: revoke without a dialog (api.md 2.4). Switch on goes through the consent screen. */
     fun revokeConsent() {
+        if (!consentRetryGate.isReady()) return
         viewModelScope.launch {
-            _state.update { it.copy(consentBusy = true) }
+            _state.update { it.copy(consentBusy = true, errorPresentation = null) }
             try {
                 profileApi.revokeAssistantConsent()
+                changedProfileContext()
+                consentRetryGate.clear()
                 tracker.track(Events.ASSISTANT_CONSENT_REVOKED)
                 _state.update { s -> s.copy(consentBusy = false, profile = s.profile?.let { p -> p.assistantConsent?.let { c -> p.withConsent(c.copy(granted = false)) } ?: p }) }
             } catch (e: AppError) {
-                _state.update { it.copy(consentBusy = false, snackbar = if (e is AppError.Offline) "Нет сети — согласие не отозвано" else "Не получилось. Попробуйте ещё раз") }
+                consentRetryGate.record(e)
+                _state.update { it.copy(consentBusy = false, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, snackbar = if (e is AppError.Offline) "Нет сети — согласие не отозвано" else "Не получилось. Попробуйте ещё раз") }
             }
         }
     }
@@ -153,5 +224,5 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    fun consumeSnackbar() = _state.update { it.copy(snackbar = null) }
+    fun consumeSnackbar() = _state.update { it.copy(snackbar = null, errorPresentation = null) }
 }

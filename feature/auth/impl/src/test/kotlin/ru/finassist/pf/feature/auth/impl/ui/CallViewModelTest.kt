@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.time.ResponseTiming
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -19,6 +21,7 @@ import ru.finassist.pf.core.api.model.PhoneVerificationStatusEvent
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.api.model.VerificationStatus
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.error.ErrorResponseInfo
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.feature.auth.impl.SessionHarness
@@ -52,6 +55,7 @@ class CallViewModelTest {
 
     /** Virtual time of the deadline timer (`delay` in the view model). */
     private val scheduler = TestCoroutineScheduler()
+    private var elapsedOffset = 0L
 
     @BeforeTest fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
 
@@ -61,7 +65,7 @@ class CallViewModelTest {
     }
 
     private fun verification(token: String = "vt_1", callback: String = "+78001000000", expiresIn: Int? = 300) =
-        PhoneVerification(token, callback, now.plusMinutes(5), expiresIn = expiresIn)
+        PhoneVerification(token, callback, now.plusMinutes(5), expiresIn = expiresIn, responseTiming = ResponseTiming(receivedElapsedMillis = scheduler.currentTime))
 
     /** «ЧЧ:ММ» the screen shows for a deadline [seconds] after [now] (device zone of the test JVM). */
     private fun clockText(seconds: Long) = CallDeadline.clockText(now.plusSeconds(seconds).toInstant(), ZoneId.systemDefault())
@@ -87,7 +91,7 @@ class CallViewModelTest {
                 failure?.let { throw it }
             }
         }
-        return CallViewModel(auth, flow, repo, flags, tracker, clock)
+        return CallViewModel(auth, flow, repo, flags, tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
     }
 
     private fun event(status: VerificationStatus) = PhoneVerificationStatusEvent(status)
@@ -111,7 +115,7 @@ class CallViewModelTest {
     @Test fun `resume does not open a second stream while one is live`() {
         val h = harness()
         h.auth.stream = { token -> opened += token; MutableSharedFlow() }
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         vm.watch()
         assertEquals(listOf("vt_1"), opened)
@@ -135,13 +139,13 @@ class CallViewModelTest {
         val unauthorized = harness().vm(failure = AppError.Unauthorized("VERIFICATION_TOKEN_INVALID")).apply { watch() }
         assertEquals(CallPhase.EXPIRED, unauthorized.state.value.phase)
         val server = harness().vm(failure = AppError.Server(503)).apply { watch() }
-        assertEquals(CallPhase.EXPIRED, server.state.value.phase)
+        assertEquals(CallPhase.ERROR, server.state.value.phase)
 
         val retryAt = now.plusMinutes(10)
         val locked = harness().vm(failure = AppError.RateLimited(retryAt)).apply { watch() }
         assertEquals(CallPhase.LOCKED, locked.state.value.phase)
-        assertEquals(CallLockText.of(retryAt, now, Clock.MOSCOW), locked.state.value.lockText)
-        assertEquals("Слишком много попыток. Позвонить можно будет через 10 минут, в 14:32", locked.state.value.lockText)
+        assertEquals(CallLockText.withRemaining(retryAt, null, Clock.MOSCOW), locked.state.value.lockText)
+        assertEquals("Слишком много попыток. Позвонить можно будет позже, в 14:32", locked.state.value.lockText)
     }
 
     /** Each opening of the stream takes the next flow of [openings]; none left — a stream that never ends. */
@@ -151,10 +155,29 @@ class CallViewModelTest {
             opened += token
             queue.removeFirstOrNull() ?: flow { awaitCancellation() }
         }
-        return CallViewModel(auth, flow, repo, flags, tracker, clock)
+        return CallViewModel(auth, flow, repo, flags, tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
     }
 
     private val newUser = PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = true, registrationToken = "reg_1")
+
+    @Test fun `maintenance refusal allows one guarded read recovery without replacing verification`() {
+        val h = harness()
+        val refused = AppError.Maintenance(null, 15, ErrorResponseInfo(
+            code = "MAINTENANCE", httpStatus = 503, requestRetryable = false,
+            timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime), retryAfterSeconds = 15,
+        ))
+        val vm = h.scripted(flow { throw refused }, flowOf(newUser))
+        vm.watch()
+        assertEquals(listOf("vt_1"), opened)
+        vm.stopWatching()
+        vm.watch()
+        scheduler.advanceTimeBy(14_999); scheduler.runCurrent()
+        assertEquals(listOf("vt_1"), opened, "the corrected stream cannot bypass Retry-After")
+        scheduler.advanceTimeBy(1); scheduler.runCurrent()
+        assertEquals(listOf("vt_1", "vt_1"), opened)
+        assertEquals("vt_1", h.flow.verification?.verificationToken, "the original verification is retained")
+        assertEquals(CallEvent.NewUser, vm.events.value)
+    }
 
     @Test fun `a stream closed after pending is re-opened after a pause and the wait goes on without an error`() {
         val h = harness()
@@ -215,11 +238,12 @@ class CallViewModelTest {
         fun tracked(f: kotlinx.coroutines.flow.Flow<PhoneVerificationStatusEvent>) = f
             .onStart { active++; maxActive = maxOf(maxActive, active) }
             .onCompletion { active-- }
-        val limited = { tracked(flow { throw AppError.RateLimited(now.plusSeconds(60), retryAfterSeconds = 60) }) }
+        val limitedAt = mutableListOf<Long>()
+        val limited = { tracked(flow { limitedAt += scheduler.currentTime; throw AppError.RateLimited(now.plusSeconds(60), retryAfterSeconds = 60) }) }
         val vm = h.scripted(
             tracked(flowOf(event(VerificationStatus.PENDING))),
             limited(),
-            // The screen came back: the view model opens the stream itself, the server still says 429.
+            // The next opening after the retained wait gets a fresh 429 with its own wait.
             limited(),
             tracked(flowOf(event(VerificationStatus.PENDING), newUser)),
         )
@@ -229,12 +253,22 @@ class CallViewModelTest {
         advanceSeconds(4)
         vm.stopWatching()
         vm.watch()
-        assertEquals(3, opened.size)
+        assertEquals(2, opened.size, "resume must not bypass the retained Retry-After")
         assertEquals(CallPhase.WAITING, vm.state.value.phase, "a 429 on opening the stream again does not lock the screen")
         assertNull(vm.state.value.lockText)
-        advanceSeconds(59)
-        assertEquals(3, opened.size, "not before Retry-After")
-        advanceSeconds(2)
+        fun advanceTo(target: Long) {
+            scheduler.advanceTimeBy(target - scheduler.currentTime)
+            scheduler.runCurrent()
+        }
+        val firstRefusal = limitedAt.single()
+        advanceTo(firstRefusal + 59_999)
+        assertEquals(2, opened.size, "not before the original Retry-After")
+        advanceTo(firstRefusal + 62_001) // retained wait + original jitter <= 1 s, not a new wait on resume
+        assertEquals(3, opened.size)
+        val secondRefusal = limitedAt.last()
+        advanceTo(secondRefusal + 59_999)
+        assertEquals(3, opened.size, "a fresh 429 gets its own Retry-After")
+        advanceTo(secondRefusal + 62_001)
         assertEquals(4, opened.size)
         assertEquals(CallEvent.NewUser, vm.events.value)
         assertEquals(1, maxActive, "never two streams at once")
@@ -355,8 +389,25 @@ class CallViewModelTest {
         val vmFailed = failed.vm(failure = AppError.Offline()).apply { watch() }
         assertEquals(CallPhase.OFFLINE, vmFailed.state.value.phase)
         vmFailed.requestAgain()
-        assertEquals(CallPhase.EXPIRED, vmFailed.state.value.phase)
+        assertEquals(CallPhase.ERROR, vmFailed.state.value.phase)
         assertFalse(vmFailed.state.value.busy)
+    }
+
+    @Test fun `a lost phone request response retains its key and never resends automatically on resume`() {
+        val h = harness()
+        val keys = mutableListOf<String>()
+        h.auth.startPhone = { key, _ -> keys += key.value; throw AppError.Offline() }
+        val vm = h.vm(event(VerificationStatus.EXPIRED)).apply { watch() }
+        vm.requestAgain()
+        vm.watch() // lifecycle resume does not POST or read the previous token
+        assertEquals(1, keys.size)
+        vm.retry()
+        assertEquals(2, keys.size)
+        assertEquals(keys.first(), keys.last())
+        elapsedOffset = 24L * 60 * 60 * 1000
+        vm.retry()
+        assertEquals(2, keys.size)
+        assertTrue(vm.state.value.replayUnavailable)
     }
 
     @Test fun `opening the dialer is tracked`() {
@@ -383,7 +434,7 @@ class CallViewModelTest {
         val h = harness()
         h.flow.verificationReceived(verification(expiresIn = null), now.toInstant())
         h.auth.stream = { token -> opened += token; pendingForever() }
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         assertNull(vm.state.value.waitUntil)
         advanceSeconds(3600)
@@ -395,7 +446,7 @@ class CallViewModelTest {
     @Test fun `at the deadline the number leaves the screen and the stream confirms expiry`() {
         val h = harness()
         h.streams(first = ::pendingForever, rest = { flowOf(event(VerificationStatus.EXPIRED)) })
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         advanceSeconds(300)
         assertEquals(CallPhase.WAITING, vm.state.value.phase, "at the deadline itself the number is still there (grace)")
@@ -408,7 +459,7 @@ class CallViewModelTest {
     @Test fun `the number stays hidden until the re-opened stream answers`() {
         val h = harness()
         h.streams(first = ::pendingForever, rest = { flow { awaitCancellation() } })
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         advanceSeconds(301)
         assertEquals(CallPhase.CHECKING, vm.state.value.phase)
@@ -440,7 +491,7 @@ class CallViewModelTest {
     @Test fun `the deadline confirmed by a closed request is a fresh start`() {
         val h = harness()
         h.streams(first = ::pendingForever, rest = { flow { throw AppError.Unauthorized("INVALID_TOKEN") } })
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         advanceSeconds(301)
         assertEquals(CallPhase.EXPIRED, vm.state.value.phase)
@@ -449,7 +500,7 @@ class CallViewModelTest {
     @Test fun `pending after the deadline (device clock ahead) brings the number back without a time`() {
         val h = harness()
         h.streams(first = ::pendingForever, rest = ::pendingForever)
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         advanceSeconds(301)
         assertEquals(CallPhase.WAITING, vm.state.value.phase)
@@ -463,7 +514,7 @@ class CallViewModelTest {
     @Test fun `a deadline passed in the background hides the number and the stream opens on resume`() {
         val h = harness()
         h.streams(first = ::pendingForever, rest = { flowOf(event(VerificationStatus.EXPIRED)) })
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         vm.stopWatching()
         advanceSeconds(301)
@@ -477,8 +528,8 @@ class CallViewModelTest {
         val h = harness()
         h.flow.verificationReceived(verification(expiresIn = 0), now.toInstant())
         h.auth.stream = { token -> opened += token; flowOf(event(VerificationStatus.EXPIRED)) }
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
-        assertEquals(CallPhase.WAITING, vm.state.value.phase)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
+        assertEquals(CallPhase.CHECKING, vm.state.value.phase)
         advanceSeconds(1)
         assertEquals(CallPhase.CHECKING, vm.state.value.phase)
         vm.watch()
@@ -488,7 +539,7 @@ class CallViewModelTest {
     @Test fun `the timer does not override a locked or offline screen`() {
         val h = harness()
         h.auth.stream = { token -> opened += token; flow { throw AppError.Offline() } }
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         assertEquals(CallPhase.OFFLINE, vm.state.value.phase)
         advanceSeconds(301)
@@ -499,7 +550,7 @@ class CallViewModelTest {
     @Test fun `calling again after the deadline arms a new timer`() {
         val h = harness()
         h.streams(first = ::pendingForever, rest = { flowOf(event(VerificationStatus.EXPIRED)) })
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         advanceSeconds(301)
         assertEquals(CallPhase.EXPIRED, vm.state.value.phase)
@@ -522,7 +573,7 @@ class CallViewModelTest {
             opened += token
             flowOf(PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = true, registrationToken = "reg_1"))
         }
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         assertEquals(CallEvent.NewUser, vm.events.value)
         advanceSeconds(301)
@@ -538,7 +589,7 @@ class CallViewModelTest {
     @Test fun `the timer fires a second after the deadline, the shown time stays the deadline`() {
         val h = harness()
         h.streams(first = ::pendingForever, rest = { flow { awaitCancellation() } })
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         assertEquals(clockText(300), vm.state.value.waitUntil, "«до ЧЧ:ММ» is the deadline itself, without the grace")
         advanceSeconds(300)
@@ -553,11 +604,12 @@ class CallViewModelTest {
     @Test fun `back on the screen before the deadline only the time left is waited`() {
         val h = harness()
         h.streams(first = ::pendingForever, rest = ::pendingForever)
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         vm.stopWatching()
         // The device slept for 200 s: the clock moved, the timer coroutine did not.
         deviceNow = now.plusSeconds(200)
+        elapsedOffset = 200_000L
         vm.watch()
         advanceSeconds(100)
         assertEquals(CallPhase.WAITING, vm.state.value.phase)
@@ -571,14 +623,30 @@ class CallViewModelTest {
     @Test fun `back on the screen after the deadline the number is hidden and one stream confirms`() {
         val h = harness()
         h.streams(first = ::pendingForever, rest = { flow { awaitCancellation() } })
-        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock)
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset })
         vm.watch()
         vm.stopWatching()
         deviceNow = now.plusSeconds(400)
+        elapsedOffset = 400_000L
         vm.watch()
         assertEquals(CallPhase.CHECKING, vm.state.value.phase)
         assertNull(vm.state.value.waitUntil)
         assertEquals(listOf("vt_1", "vt_1"), opened, "exactly one stream on the return")
         vm.stopWatching()
     }
+    @Test fun `changing phone wall clock does not expire a fresh verification countdown`() {
+        val h = harness()
+        h.auth.stream = { pendingForever() }
+        val vm = CallViewModel(h.auth, h.flow, h.repo, h.flags, h.tracker, clock, ElapsedClock { scheduler.currentTime })
+        vm.watch()
+        vm.stopWatching()
+        deviceNow = now.plusDays(3)
+        vm.watch()
+        advanceSeconds(299)
+        assertEquals(CallPhase.WAITING, vm.state.value.phase)
+        advanceSeconds(2)
+        assertNull(vm.state.value.waitUntil)
+        vm.stopWatching()
+    }
+
 }

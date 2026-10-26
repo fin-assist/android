@@ -33,6 +33,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.TokenPair
+import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.common.error.AppError
 import java.security.GeneralSecurityException
 import javax.inject.Inject
@@ -188,7 +189,10 @@ class EncryptedTokenStore @Inject constructor(
                 throw AppError.Unknown(e)
             }
         }
-        writing { dataStore.edit { it[KEY_BLOB] = blob } }
+        writing { dataStore.edit {
+            it[KEY_BLOB] = blob
+            it.remove(KEY_REFRESH_PENDING)
+        } }
     }
 
     override suspend fun updateTokens(expectedRefreshToken: String, tokens: TokenPair): Boolean {
@@ -203,15 +207,80 @@ class EncryptedTokenStore @Inject constructor(
                 } catch (e: GeneralSecurityException) {
                     throw AppError.Unknown(e)
                 }
+                prefs.remove(KEY_REFRESH_PENDING)
                 updated = true
             }
         }
         return updated
     }
 
-    override suspend fun clear() {
-        writing { dataStore.edit { it.remove(KEY_BLOB) } }
+    override suspend fun reserveRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey): Boolean {
+        var reserved = false
+        writing {
+            dataStore.edit { prefs ->
+                val existing = prefs[KEY_BLOB]?.let(::decode) ?: return@edit
+                if (existing.tokens.refreshToken != expectedRefreshToken) return@edit
+                if (key.value.isBlank() || '\n' in key.value) return@edit
+                val marker = prefs[KEY_REFRESH_PENDING]
+                if (marker != null) {
+                    // Malformed/undecryptable is an uncertain prior attempt, never an absent marker.
+                    val pending = decodeRefreshMarker(marker) ?: return@edit
+                    reserved = pending.first == expectedRefreshToken && pending.second == key.value
+                    return@edit
+                }
+                val plain = "$expectedRefreshToken\n${key.value}".toByteArray(Charsets.UTF_8)
+                prefs[KEY_REFRESH_PENDING] = try {
+                    Base64.encodeToString(aead.encrypt(plain, REFRESH_AAD), Base64.NO_WRAP)
+                } catch (e: GeneralSecurityException) {
+                    throw AppError.Unknown(e)
+                }
+                reserved = true
+            }
+        }
+        return reserved
     }
+
+    override suspend fun retireRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey): Boolean {
+        var retired = false
+        writing {
+            dataStore.edit { prefs ->
+                val existing = prefs[KEY_BLOB]?.let(::decode) ?: return@edit
+                if (existing.tokens.refreshToken != expectedRefreshToken) return@edit
+                val marker = prefs[KEY_REFRESH_PENDING]?.let(::decodeRefreshMarker) ?: return@edit
+                if (marker.first != expectedRefreshToken || marker.second != key.value) return@edit
+                prefs.remove(KEY_REFRESH_PENDING)
+                retired = true
+            }
+        }
+        return retired
+    }
+
+    override suspend fun clearIfRefreshToken(expectedRefreshToken: String): Boolean {
+        var cleared = false
+        writing {
+            dataStore.edit { prefs ->
+                val existing = prefs[KEY_BLOB]?.let(::decode) ?: return@edit
+                if (existing.tokens.refreshToken != expectedRefreshToken) return@edit
+                prefs.remove(KEY_BLOB)
+                prefs.remove(KEY_REFRESH_PENDING)
+                cleared = true
+            }
+        }
+        return cleared
+    }
+
+    override suspend fun clear() {
+        writing { dataStore.edit {
+            it.remove(KEY_BLOB)
+            it.remove(KEY_REFRESH_PENDING)
+        } }
+    }
+
+    private fun decodeRefreshMarker(blob: String): Pair<String, String>? = runCatching {
+        val text = aead.decrypt(Base64.decode(blob, Base64.NO_WRAP), REFRESH_AAD).toString(Charsets.UTF_8)
+        val parts = text.split("\n")
+        if (parts.size == 2 && parts.all { it.isNotBlank() }) parts[0] to parts[1] else null
+    }.getOrNull()
 
     private fun encode(session: TokenStore.Session): String {
         val plain = listOf(session.userId, session.tokens.accessToken, session.tokens.refreshToken)
@@ -237,6 +306,8 @@ class EncryptedTokenStore @Inject constructor(
         const val TAG = "PfSession"
         const val READ_RETRY_MS = 1_000L
         val KEY_BLOB = stringPreferencesKey("session.blob")
+        val KEY_REFRESH_PENDING = stringPreferencesKey("session.refresh_pending")
+        val REFRESH_AAD = "pf.session.refresh_pending".toByteArray()
         const val KEYSET_NAME = "pf_session_keyset"
         const val KEYSET_PREFS = "pf_session_keyset_prefs"
         const val MASTER_KEY_URI = "android-keystore://pf_session_master_key"

@@ -6,6 +6,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import ru.finassist.pf.core.api.ProfileApi
@@ -13,6 +14,8 @@ import ru.finassist.pf.core.api.model.AssistantConsentGrant
 import ru.finassist.pf.core.api.model.Profile
 import ru.finassist.pf.core.api.model.ProfileUpdate
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.error.ErrorResponseInfo
+import ru.finassist.pf.core.common.time.ResponseTiming
 import ru.finassist.pf.core.tracking.Event
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
@@ -59,15 +62,16 @@ class DeleteAccountViewModelTest {
         override fun setUserId(userId: String?) = Unit
     }
 
+    private val scheduler = TestCoroutineScheduler()
     private val api = FakeProfileApi()
     private val session = FakeSession()
     private val tracker = FakeTracker()
 
-    @BeforeTest fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+    @BeforeTest fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
 
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
-    private fun vm() = DeleteAccountViewModel(api, session, tracker)
+    private fun vm() = DeleteAccountViewModel(api, session, tracker, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
 
     @Test fun `the passcode opens the dialog and «Отмена» closes it`() {
         val vm = vm()
@@ -122,4 +126,60 @@ class DeleteAccountViewModelTest {
         vm.delete()
         assertEquals(AuthRoutes.Phone.REASON_DELETED, session.clearedWith)
     }
+    @Test fun `explicit deletion refusal survives retry taps and closing then reopening the dialog`() {
+        val vm = vm()
+        api.failure = deletionFailure(retryable = false, wait = 30)
+        vm.onPasscodeConfirmed()
+        vm.delete()
+        assertEquals(1, api.deletes)
+        assertFalse(vm.state.value.retryReady)
+        assertNull(session.clearedWith)
+        assertTrue(tracker.events.isEmpty())
+        vm.delete()
+        vm.dismiss()
+        vm.onPasscodeConfirmed()
+        assertFalse(vm.state.value.retryReady)
+        api.failure = null
+        scheduler.advanceTimeBy(60_000); scheduler.runCurrent()
+        vm.delete()
+        assertEquals(1, api.deletes, "neither re-confirming nor an elapsed wait authorizes a forbidden DELETE")
+        assertFalse(vm.state.value.retryReady)
+        assertNull(session.clearedWith)
+        assertTrue(tracker.events.isEmpty())
+    }
+
+    @Test fun `deletion wait survives dialog reopening and unlocks only at its original deadline`() {
+        val vm = vm()
+        api.failure = deletionFailure(retryable = true, wait = 30)
+        vm.onPasscodeConfirmed()
+        vm.delete()
+        assertEquals(1, api.deletes)
+        assertFalse(vm.state.value.retryReady)
+        assertNull(session.clearedWith)
+        vm.delete()
+        scheduler.advanceTimeBy(10_000); scheduler.runCurrent()
+        vm.dismiss()
+        vm.onPasscodeConfirmed()
+        vm.delete()
+        assertFalse(vm.state.value.retryReady)
+        scheduler.advanceTimeBy(19_999); scheduler.runCurrent()
+        vm.delete()
+        assertEquals(1, api.deletes)
+        assertNull(session.clearedWith)
+        assertTrue(tracker.events.isEmpty())
+        scheduler.advanceTimeBy(1); scheduler.runCurrent()
+        assertTrue(vm.state.value.retryReady, "reopening must not restart the original wait")
+        assertEquals(1, api.deletes, "readiness never automatically sends DELETE")
+        api.failure = null
+        vm.delete()
+        assertEquals(2, api.deletes)
+        assertEquals(AuthRoutes.Phone.REASON_DELETED, session.clearedWith)
+        assertEquals(listOf(Events.PROFILE_ACCOUNT_DELETED), tracker.events)
+    }
+
+    private fun deletionFailure(retryable: Boolean, wait: Long) = AppError.Server(503, response = ErrorResponseInfo(
+        "INTERNAL_ERROR", 503, requestRetryable = retryable, retryAfterSeconds = wait,
+        timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime),
+    ))
+
 }

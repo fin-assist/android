@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.time.ElapsedClock
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
@@ -26,6 +29,10 @@ data class PhoneUiState(
     val error: String? = null,
     val busy: Boolean = false,
     val notice: String? = null,
+    val errorPresentation: ErrorPresentation? = null,
+    val requestRetryable: Boolean? = null,
+    val retryReady: Boolean = true,
+    val replayUnavailable: Boolean = false,
 ) {
     val digits: String get() = input.text
 }
@@ -40,10 +47,14 @@ class PhoneViewModel @Inject constructor(
     private val flow: SignInFlow,
     private val tracker: Tracker,
     private val clock: Clock,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         PhoneFormat.digits(flow.phone).let { PhoneUiState(input = TextFieldValue(it, TextRange(it.length))) },
     )
+    private val retryGate = RequestRetryGate(elapsedClock)
+    private var inputGeneration = 0L
+    init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<PhoneUiState> = _state
     private val _events = MutableStateFlow<PhoneEvent?>(null)
     val events: StateFlow<PhoneEvent?> = _events
@@ -52,35 +63,50 @@ class PhoneViewModel @Inject constructor(
 
     fun onInput(value: TextFieldValue) {
         val e = PhoneFormat.edit(value.text, value.selection.start, value.selection.end)
+        if (e.digits != _state.value.digits) {
+            inputGeneration++ // invalidate the previous number before clearing its restrictions
+            retryGate.clear()
+        }
         _state.update {
             // Selection-only changes keep the error; any text change clears it.
-            it.copy(input = TextFieldValue(e.digits, TextRange(e.start, e.end)), error = if (e.digits == it.digits) it.error else null)
+            it.copy(input = TextFieldValue(e.digits, TextRange(e.start, e.end)), error = if (e.digits == it.digits) it.error else null, errorPresentation = if (e.digits == it.digits) it.errorPresentation else null, requestRetryable = if (e.digits == it.digits) it.requestRetryable else null, replayUnavailable = if (e.digits == it.digits) it.replayUnavailable else false)
         }
     }
 
     fun submit() {
+        if (_state.value.busy || !retryGate.isReady()) return
         val digits = _state.value.digits
         if (!PhoneFormat.isComplete(digits)) {
             _state.update { it.copy(error = "В номере не хватает цифр") }
             return
         }
         val phone = PhoneFormat.toE164(digits)
+        val generation = inputGeneration
+        _state.update { it.copy(busy = true, error = null, errorPresentation = null) }
         viewModelScope.launch {
-            _state.update { it.copy(busy = true, error = null) }
-            // A new number is a new action → new idempotency key; a retry of the same number reuses it.
-            if (flow.phone != phone || flow.phoneRequestKey == null) {
-                flow.phone = phone
-                flow.phoneRequestKey = IdempotencyKey.random().value
-                flow.clearVerification()
-            }
             try {
-                val verification = authApi.startPhoneVerification(IdempotencyKey(flow.phoneRequestKey!!), phone)
+                if (generation != inputGeneration) return@launch
+                // A new number is a new action → new idempotency key; a retry of the same number reuses it.
+                if (flow.phone != phone || flow.phoneRequestKey == null) {
+                    flow.phone = phone
+                    flow.newPhoneRequest(elapsedClock)
+                    flow.clearVerification()
+                }
+                val key = checkNotNull(flow.currentPhoneKey())
+                if (key.replayWindow?.isOpen(elapsedClock) != true) {
+                    _state.update { it.copy(replayUnavailable = true, error = "Не получилось отправить номер. Измените номер или начните вход заново") }
+                    return@launch
+                }
+                val verification = authApi.startPhoneVerification(key, phone)
+                if (generation != inputGeneration) return@launch
                 // Device time of arrival: the wait is counted by the device clock, not by `expires_at` (api.md 1.1).
                 flow.verificationReceived(verification, clock.now().toInstant())
                 tracker.track(Events.AUTH_PHONE_SUBMITTED)
                 _events.value = PhoneEvent.GoToCall
             } catch (e: AppError) {
-                _state.update { it.copy(error = errorText(e)) }
+                if (generation != inputGeneration) return@launch
+                retryGate.record(e)
+                _state.update { it.copy(error = errorText(e), errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
             } finally {
                 _state.update { it.copy(busy = false) }
             }

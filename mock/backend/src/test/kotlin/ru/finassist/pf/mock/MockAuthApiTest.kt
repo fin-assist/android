@@ -12,6 +12,7 @@ import ru.finassist.pf.core.api.model.RegisterRequest
 import ru.finassist.pf.core.api.model.VerificationStatus
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.SystemClock
+import ru.finassist.pf.core.common.time.ResponseTiming
 import ru.finassist.pf.mock.api.MockAuthApi
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -62,10 +63,18 @@ class MockAuthApiTest {
         assertEquals("+78001234567", v.callbackNumber)
         assertEquals(clock.at.plusMinutes(5), v.expiresAt)
         assertEquals(300, v.expiresIn)
-        assertNull(v.serverTime, "no Date header in-process")
+        assertEquals(clock.at.toInstant(), v.serverTime, "the fake supplies its fresh response Date")
+        assertEquals(ResponseTiming(serverDate = clock.at.toInstant()), v.responseTiming)
+        assertNull(v.responseTiming.receivedElapsedMillis, "no elapsed clock was injected into this fixture")
         // Same key, same verification; `expires_in` is recomputed on the replay (api.md 1.1).
         clock.at = clock.at.plusSeconds(1)
-        assertEquals(v.copy(expiresIn = 299), api.startPhoneVerification(key("k"), existing))
+        val replay = api.startPhoneVerification(key("k"), existing)
+        assertEquals(v.copy(
+            expiresIn = 299,
+            serverTime = clock.at.toInstant(),
+            responseTiming = ResponseTiming(serverDate = clock.at.toInstant()),
+        ), replay)
+        assertNotEquals(v.responseTiming.serverDate, replay.responseTiming.serverDate, "replay must refresh Date, not retain the first receipt")
         clock.at = clock.at.minusSeconds(1)
 
         val events = api.streamPhoneVerification(v.verificationToken).toList()

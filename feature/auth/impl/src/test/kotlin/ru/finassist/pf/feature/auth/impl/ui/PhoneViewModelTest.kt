@@ -1,7 +1,10 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.time.ResponseTiming
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -39,10 +42,14 @@ import kotlin.test.assertTrue
 class PhoneViewModelTest {
     private class FakeAuth : AuthApi {
         var failure: AppError? = null
+        var pending: CompletableDeferred<PhoneVerification>? = null
+        val attemptedPhones = mutableListOf<String>()
         val phones = mutableListOf<String>()
         val keys = mutableListOf<String>()
         override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification {
             keys += key.value
+            attemptedPhones += phone
+            pending?.let { return it.await() }
             failure?.let { throw it }
             phones += phone
             return PhoneVerification("vt_1", "+78000000000", OffsetDateTime.parse("2026-10-13T12:03:00+03:00"), expiresIn = 300)
@@ -73,7 +80,7 @@ class PhoneViewModelTest {
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
     private fun submitted(digits: String = "9161234567"): PhoneViewModel {
-        val vm = PhoneViewModel(auth, flow, tracker, clock)
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { 0L })
         vm.onInput(TextFieldValue(digits, TextRange(digits.length)))
         vm.submit()
         return vm
@@ -140,6 +147,16 @@ class PhoneViewModelTest {
         assertEquals("+79031234567", flow.phone)
     }
 
+    @Test fun `unknown origin phone key is preserved without a POST replay`() {
+        flow.phone = "+79161234567"
+        flow.phoneRequestKey = "restored-key"
+        val vm = submitted()
+        assertTrue(auth.keys.isEmpty())
+        assertEquals("restored-key", flow.phoneRequestKey)
+        assertTrue(vm.state.value.replayUnavailable)
+        assertEquals("9161234567", vm.state.value.digits)
+    }
+
     @Test fun `a new number drops the previous verification request`() {
         flow.phone = "+79031234567"
         flow.phoneRequestKey = "old"
@@ -171,7 +188,7 @@ class PhoneViewModelTest {
 
     @Test fun `the number typed before is restored with the cursor at the end`() {
         flow.phone = "+79161234567"
-        val vm = PhoneViewModel(auth, flow, tracker, clock)
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { 0L })
         assertEquals("9161234567", vm.state.value.digits)
         assertEquals(TextRange(10), vm.state.value.input.selection)
     }
@@ -194,4 +211,86 @@ class PhoneViewModelTest {
         vm.setNotice(null)
         assertNull(vm.state.value.notice)
     }
+
+    @Test fun `a late false for number A cannot forbid explicitly submitting changed number B`() {
+        val reply = CompletableDeferred<PhoneVerification>()
+        auth.pending = reply
+        val vm = submitted()
+        val originalKey = auth.keys.single()
+        vm.onInput(TextFieldValue("9031234567", TextRange(10)))
+        vm.submit()
+        assertEquals(1, auth.keys.size, "the old request remains busy until it actually finishes")
+        reply.completeExceptionally(phoneRefusal(false))
+        assertFalse(vm.state.value.busy)
+        assertNull(vm.state.value.error)
+        assertNull(vm.state.value.requestRetryable)
+        assertTrue(vm.state.value.retryReady)
+        assertEquals(originalKey, flow.phoneRequestKey, "a stale response never changes the pending UUID")
+        auth.pending = null
+        vm.submit()
+        assertEquals(listOf("+79161234567", "+79031234567"), auth.attemptedPhones)
+        assertNotEquals(originalKey, auth.keys.last(), "explicitly submitting another number creates its own action")
+        assertEquals(PhoneEvent.GoToCall, vm.events.value)
+    }
+
+    @Test fun `mask and cursor changes preserve the original number refusal and key`() {
+        val reply = CompletableDeferred<PhoneVerification>()
+        auth.pending = reply
+        val vm = submitted()
+        val originalKey = auth.keys.single()
+        vm.onInput(TextFieldValue("+7 (916) 123-45-67", TextRange(5)))
+        reply.completeExceptionally(phoneRefusal(false))
+        assertEquals("9161234567", vm.state.value.digits)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(false, vm.state.value.requestRetryable)
+        vm.onInput(TextFieldValue("9161234567", TextRange(3)))
+        auth.pending = null
+        vm.submit()
+        assertEquals(1, auth.keys.size)
+        assertEquals(originalKey, flow.phoneRequestKey)
+        assertNull(vm.events.value)
+    }
+
+    @Test fun `a late Retry-After for A cannot delay the explicitly changed number B`() {
+        val reply = CompletableDeferred<PhoneVerification>()
+        auth.pending = reply
+        val vm = submitted()
+        vm.onInput(TextFieldValue("9031234567", TextRange(10)))
+        reply.completeExceptionally(phoneRefusal(true))
+        assertNull(vm.state.value.error)
+        assertTrue(vm.state.value.retryReady)
+        auth.pending = null
+        vm.submit()
+        assertEquals(2, auth.keys.size, "B does not inherit the old 60-second wait")
+        assertEquals("+79031234567", auth.attemptedPhones.last())
+        assertEquals(PhoneEvent.GoToCall, vm.events.value)
+    }
+
+    @Test fun `a late success for A cannot navigate track or install verification after editing B`() {
+        val reply = CompletableDeferred<PhoneVerification>()
+        auth.pending = reply
+        val vm = submitted()
+        val originalKey = auth.keys.single()
+        vm.onInput(TextFieldValue("9031234567", TextRange(10)))
+        vm.submit()
+        assertEquals(1, auth.keys.size)
+        reply.complete(PhoneVerification("vt_old_A", "+78000000000", deviceNow.plusMinutes(5), expiresIn = 300))
+        assertFalse(vm.state.value.busy)
+        assertNull(vm.events.value)
+        assertNull(flow.verification)
+        assertNull(flow.callDeadline)
+        assertTrue(tracked.isEmpty())
+        assertEquals(originalKey, flow.phoneRequestKey)
+        auth.pending = null
+        vm.submit()
+        assertEquals("vt_1", flow.verification?.verificationToken)
+        assertEquals(listOf("auth.phone.submitted"), tracked)
+        assertEquals(PhoneEvent.GoToCall, vm.events.value)
+        assertEquals("+79031234567", flow.phone)
+    }
+
+    private fun phoneRefusal(retryable: Boolean) = AppError.RateLimited(null, 60,
+        ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = retryable,
+            retryAfterSeconds = 60, timing = ResponseTiming(receivedElapsedMillis = 0)))
+
 }

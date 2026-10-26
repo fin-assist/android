@@ -14,6 +14,8 @@ import ru.finassist.pf.core.api.model.OperationsQuery
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.mock.MockBackend
+import ru.finassist.pf.mock.MockErrorOperation
+import ru.finassist.pf.mock.apiError
 import ru.finassist.pf.mock.domain.OperationViews
 import ru.finassist.pf.mock.domain.OwnTransferPair
 import ru.finassist.pf.mock.domain.Record
@@ -33,16 +35,17 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
     override suspend fun listOperations(query: OperationsQuery): OperationsList {
         backend.simulateNetwork()
         backend.requireSession()
+        backend.maybeInjectError(MockErrorOperation.OPERATIONS_LIST)
         val isSearch = !query.filter.isEmpty || query.allTime
-        if (isSearch && query.before != null) throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400, message = "before with filters")
+        if (isSearch && query.before != null) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400, message = "before with filters")
         // `before` is the start of a month in the profile zone — a `next_before` (docs/calc.md, section 6).
         query.before?.let { before ->
             val local = before.atZoneSameInstant(zone)
             if (local.toLocalDate().withDayOfMonth(1).atStartOfDay(zone).toInstant() != before.toInstant()) {
-                throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400, message = "before is not the start of a month")
+                throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400, message = "before is not the start of a month")
             }
         }
-        if (query.allTime && (query.filter.from != null || query.filter.to != null)) throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400, message = "all_time with period")
+        if (query.allTime && (query.filter.from != null || query.filter.to != null)) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400, message = "all_time with period")
         return backend.mutex.withLock { if (isSearch) searchPage(query) else feedPage(query) }
     }
 
@@ -87,7 +90,7 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
             try {
                 search.validateSelection(sel)
             } catch (e: Search.UnknownSelection) {
-                throw AppError.Api(ErrorCodes.SELECTION_NOT_FOUND, 422)
+                throw backend.apiError(ErrorCodes.SELECTION_NOT_FOUND, 422)
             }
         }
         val today = backend.now().atZoneSameInstant(zone).toLocalDate()
@@ -99,7 +102,7 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
         if (from != null) records = records.filter { !it.occurredAt.isBefore(from) }
         if (to != null) records = records.filter { it.occurredAt.isBefore(to) }
         val matched = search.apply(records, f)
-        if (matched.size > MAX_SEARCH_RESULTS) throw AppError.Api(ErrorCodes.TOO_MANY_RESULTS, 422)
+        if (matched.size > MAX_SEARCH_RESULTS) throw backend.apiError(ErrorCodes.TOO_MANY_RESULTS, 422)
         val hasOlderData = if (defaultPeriod) views.records().any { it.occurredAt.isBefore(from!!) } else null
         return OperationsList(
             items = matched.map(views::item),
@@ -113,7 +116,7 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
         backend.simulateNetwork()
         backend.requireSession()
         validateOccurredAt(occurredAt)
-        val record = views.record(id) ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+        val record = views.record(id) ?: throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
         return views.details(record)
     }
 
@@ -126,13 +129,13 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
         validateOccurredAt(request.occurredAt)
         return backend.mutex.withLock {
             // 404 before 422 (api.md, «Ошибки»): an operation that is not there is not found, whatever the category.
-            views.record(id) ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
-            val category = backend.catalog.byId(request.categoryId) ?: throw AppError.Api(ErrorCodes.CATEGORY_NOT_ASSIGNABLE, 422)
+            views.record(id) ?: throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
+            val category = backend.catalog.byId(request.categoryId) ?: throw backend.apiError(ErrorCodes.CATEGORY_NOT_ASSIGNABLE, 422)
             val before = categoryState()
             val (items, replaced) = try {
                 backend.ledger.changeCategory(id, category)
             } catch (e: IllegalArgumentException) {
-                throw AppError.Api(ErrorCodes.CATEGORY_NOT_ASSIGNABLE, 422, message = e.message)
+                throw backend.apiError(ErrorCodes.CATEGORY_NOT_ASSIGNABLE, 422, message = e.message)
             }
             // Only a real change marks the assistant's earlier answers: the same category again is not one (FIN-135).
             if (categoryState() != before) backend.dataChanges.categoriesChanged()
@@ -157,7 +160,7 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
 
     private fun validateOccurredAt(value: String) {
         if (runCatching { parseApiDateTime(value) }.isFailure) {
-            throw AppError.Api(
+            throw backend.apiError(
                 ErrorCodes.VALIDATION_ERROR, 400,
                 details = listOf(AppError.FieldError("occurred_at", FieldErrorCodes.INVALID_FORMAT, "Нужны дата и время со смещением")),
             )

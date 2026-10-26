@@ -304,7 +304,7 @@ class ContractBehaviourTest {
         val q = Scene()
         q.assistant.ask(KEY, AskRequest("Сколько я потратил?"))
         val question = q.call("askAssistant", AskResponse.serializer()) { q.assistant.ask(KEY, AskRequest("Сколько на такси?")) }
-        ContractCheck.knownGap(GAP_CONFLICT, question, contract = ErrorCodes.IDEMPOTENCY_CONFLICT, now = null)
+        expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "conflict: another assistant question", question)
     }
 
     @Test
@@ -382,13 +382,12 @@ class ContractBehaviourTest {
         val KEY = IdempotencyKey("6f1e1b8a-3c2d-4e5f-8a9b-0c1d2e3f4a5b")
 
         const val GAP_RETRY_ORDER = "retry-error-order"
-        const val GAP_CONFLICT = "idempotency-conflict-statements-assistant"
         const val GAP_STORED_ERRORS = "idempotency-stored-errors"
         const val GAP_DELETE_UNKNOWN = "delete-unknown-upload"
         const val GAP_STREAM_SESSION = "stream-session"
         const val GAP_SESSIONLESS = "logout-delete-session"
 
         /** Every gap a test here runs; [ContractCoverageTest] keeps it equal to [Exclusions.behaviours]. */
-        val GAPS = listOf(GAP_RETRY_ORDER, GAP_CONFLICT, GAP_STORED_ERRORS, GAP_DELETE_UNKNOWN, GAP_STREAM_SESSION, GAP_SESSIONLESS)
+        val GAPS = listOf(GAP_RETRY_ORDER, GAP_STORED_ERRORS, GAP_DELETE_UNKNOWN, GAP_STREAM_SESSION, GAP_SESSIONLESS)
     }
 }

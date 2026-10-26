@@ -51,8 +51,9 @@ exchange a server would send and validate it against the pinned contract.
   and at the same commit as the calculation fixtures (`ContractCoverageTest` checks that the two `VERSION` files agree).
 - **Wire (test code only).** `Wire.kt` builds the HTTP side: a result is the operation's 2xx status and a body
   serialized with `ApiJson` (the configuration the HTTP client reads with) plus `encodeDefaults` and `explicitNulls`,
-  because a server writes every field and writes an empty one as `null` (the examples of `api.md`, the expected
-  responses of `fixtures/calc`); an `AppError` is the status and `{"error": …}` body the HTTP client maps back to that
+  preserving the existing nullable fields in calculation fixtures. Optional non-null error presentation and retry
+  fields use `EncodeDefault(NEVER)` so absence is omitted instead of producing an invalid `null` (FIN-223).
+  An `AppError` is the status and `{"error": …}` body the HTTP client maps back to that
   error (`core/network`, `ErrorMapping.kt`); stream events are `event` + `data` pairs.
 - **Validator.** [swagger-request-validator-core](https://bitbucket.org/atlassian/swagger-request-validator)
   (Atlassian, Apache-2.0), test dependency of `:mock:backend` only, with its defaults: every message is an error and

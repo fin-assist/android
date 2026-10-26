@@ -25,19 +25,20 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FeedViewModelTest {
+    private val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
     private val api = FakeOperationsApi()
     private val statements = FakeStatements()
     private val operations = FakeOperationChanges()
     private val flags = FakeFlags()
     private val tracker = FakeTracker()
 
-    @BeforeTest fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+    @BeforeTest fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
 
     @AfterTest fun tearDown() = Dispatchers.resetMain()
 
     private val reportZone = ru.finassist.pf.core.common.time.ReportZone { java.time.ZoneId.of("Europe/Moscow") }
 
-    private fun vm() = FeedViewModel(api, statements, operations, operations, flags, tracker, reportZone)
+    private fun vm() = FeedViewModel(api, statements, operations, operations, flags, tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
 
     @Test fun `a new profile zone reloads the feed from the top, the first known zone does not (FIN-92)`() {
         api.lists += page("op_1", next = 1)
@@ -107,6 +108,55 @@ class FeedViewModelTest {
         assertEquals(listOf("op_1"), s.items.map { it.id })
         assertFalse(s.offline)
         assertFalse(s.refreshing)
+    }
+
+    @Test fun `unknown safe server warning preserves loaded rows and false blocks direct refresh`() {
+        val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
+            ru.finassist.pf.core.common.error.UserMessage.from("Сервис временно ограничил чтение"),
+            ru.finassist.pf.core.common.error.ErrorSeverity.WARNING,
+        )
+        api.lists += page("op_1")
+        api.lists += AppError.Api("FUTURE_POLICY", 429, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "FUTURE_POLICY", 429, presentation = presentation, requestRetryable = false,
+        ))
+        val vm = vm()
+        vm.refresh()
+        assertEquals(listOf("op_1"), vm.state.value.items.map { it.id })
+        assertEquals(presentation, vm.state.value.errorPresentation)
+        assertFalse(vm.state.value.offline)
+        vm.load()
+        vm.refresh()
+        assertEquals(2, api.queries.size)
+        // A real import changes the data context and may refresh it.
+        api.lists.clear()
+        api.lists += page("op_2")
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("u1"))
+        assertEquals(listOf("op_2"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `manual retry waits server duration without losing loaded rows`() {
+        api.lists += page("op_1")
+        api.lists += AppError.RateLimited(null, 3, ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "RATE_LIMITED", 429, requestRetryable = true,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0),
+        ))
+        val vm = vm()
+        vm.refresh()
+        assertFalse(vm.state.value.retryReady)
+        vm.load()
+        assertEquals(2, api.queries.size)
+        scheduler.advanceTimeBy(2999)
+        scheduler.runCurrent()
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(listOf("op_1"), vm.state.value.items.map { it.id })
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.retryReady)
+        api.lists.clear()
+        api.lists += page("op_2")
+        vm.load()
+        assertEquals(3, api.queries.size)
+        assertEquals(listOf("op_2"), vm.state.value.items.map { it.id })
     }
 
     @Test fun `a reload with items on screen does not show the full-screen loader`() {
@@ -420,11 +470,128 @@ class FeedViewModelTest {
         val records = object : ru.finassist.pf.feature.operations.api.OperationRecords {
             override val records = updates
         }
-        val vm = FeedViewModel(api, statements, operations, records, flags, tracker, reportZone)
+        val vm = FeedViewModel(api, statements, operations, records, flags, tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
         val updated = details("op_1", categoryId = "cat_restaurants")
         updates.tryEmit(listOf(updated))
         assertEquals(updated.toItem(), vm.state.value.items.single())
         assertEquals(1, api.queries.size)
+    }
+
+    private fun refusal() = AppError.Api("FUTURE_POLICY", 429,
+        response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_POLICY", 429, requestRetryable = false))
+
+    private fun waitFor(seconds: Long) = AppError.RateLimited(null, seconds,
+        ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = true,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = scheduler.currentTime)))
+
+    @Test fun `stale first-page refusal cannot restrict a newer successful feed`() {
+        api.lists += page("initial")
+        val vm = vm()
+        val old = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        pendingReplies(old, fresh)
+        vm.refresh()
+        vm.refresh()
+        fresh.complete(page("current"))
+        old.completeExceptionally(refusal())
+        assertTrue(vm.state.value.retryReady)
+        assertEquals(listOf("current"), vm.state.value.items.map { it.id })
+        assertEquals(null, vm.state.value.errorPresentation)
+        api.listReply = { page("latest") }
+        vm.refresh()
+        assertEquals(4, api.queries.size)
+        assertEquals(listOf("latest"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `stale pagination refusal cannot restrict the current request for the same cursor`() {
+        api.lists += page("initial", next = 1)
+        val vm = vm()
+        val old = CompletableDeferred<OperationsList>()
+        val fresh = CompletableDeferred<OperationsList>()
+        val current = CompletableDeferred<OperationsList>()
+        pendingReplies(old, fresh, current)
+        vm.loadMore()
+        vm.refresh()
+        fresh.complete(page("fresh", next = 1))
+        assertTrue(vm.state.value.loadingMore)
+        old.completeExceptionally(refusal())
+        assertTrue(vm.state.value.retryReady)
+        assertTrue(vm.state.value.moreRetryReady)
+        assertEquals(null, vm.state.value.errorPresentation)
+        current.complete(page("current"))
+        assertEquals(listOf("fresh", "current"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `a forbidden cursor never blocks first-page refresh and stays forbidden when that cursor returns`() {
+        api.lists += page("initial", next = 1)
+        api.lists += refusal()
+        api.lists += page("refreshed", next = 1)
+        val vm = vm()
+        vm.loadMore()
+        assertTrue(vm.state.value.moreFailed)
+        assertTrue(vm.state.value.retryReady)
+        assertFalse(vm.state.value.moreRetryReady)
+        vm.refresh()
+        assertEquals(3, api.queries.size)
+        assertEquals(listOf("refreshed"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.moreRetryReady)
+        vm.loadMore()
+        assertEquals(3, api.queries.size)
+    }
+
+    @Test fun `a different cursor has its own retry permission`() {
+        api.lists += page("initial", next = 1)
+        api.lists += refusal()
+        api.lists += page("refreshed", next = 2)
+        api.lists += page("older")
+        val vm = vm()
+        vm.loadMore()
+        vm.refresh()
+        assertTrue(vm.state.value.moreRetryReady)
+        vm.loadMore()
+        assertEquals(OperationsQuery(before = at(2)), api.queries.last())
+        assertEquals(listOf("refreshed", "older"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `first-page refusal cannot erase a cursor wait or select pagination for its own error`() {
+        api.lists += page("initial", next = 1)
+        api.lists += waitFor(5)
+        api.lists += refusal()
+        api.lists += page("older")
+        val vm = vm()
+        vm.loadMore()
+        assertFalse(vm.state.value.moreRetryReady)
+        assertTrue(vm.state.value.retryReady)
+        vm.refresh()
+        assertFalse(vm.state.value.retryReady)
+        assertFalse(vm.state.value.moreFailed, "the latest error belongs to the first page")
+        vm.loadMore()
+        assertEquals(3, api.queries.size)
+        scheduler.advanceTimeBy(4999)
+        scheduler.runCurrent()
+        vm.loadMore()
+        assertEquals(3, api.queries.size)
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.moreRetryReady)
+        assertFalse(vm.state.value.retryReady)
+        vm.loadMore()
+        assertEquals(4, api.queries.size)
+        assertEquals(OperationsQuery(before = at(1)), api.queries.last())
+    }
+
+    @Test fun `an explicit data-context change releases an old cursor restriction`() {
+        api.lists += page("initial", next = 1)
+        api.lists += refusal()
+        api.lists += page("refreshed", next = 1)
+        api.lists += page("older")
+        val vm = vm()
+        vm.loadMore()
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("u1"))
+        assertTrue(vm.state.value.moreRetryReady)
+        vm.loadMore()
+        assertEquals(4, api.queries.size)
+        assertEquals(listOf("refreshed", "older"), vm.state.value.items.map { it.id })
     }
 
 }

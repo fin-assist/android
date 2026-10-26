@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorSeverity
+import ru.finassist.pf.core.common.error.UserMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -34,4 +37,12 @@ class AiConsentDesignCheckTest {
         state.copy(error = CONSENT_REQUIRED),
         heightDp = 968,
     )
+    // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
+    @Test fun serverWarning() = capture("AiConsentServerWarning", state.copy(formError = "Не получилось сохранить согласие", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
+
+    @Test fun documentRecovery() = capture("AiConsentDocumentRecovery", state.copy(documentRefreshRequired = true, documentRefreshReady = true,
+        retryReady = false, requestRetryable = false, formError = "Не получилось загрузить документ согласия"))
+    @Test fun documentRecoveryDark() = capture("AiConsentDocumentRecoveryDark", state.copy(documentRefreshRequired = true, documentRefreshReady = true,
+        retryReady = false, requestRetryable = false, formError = "Не получилось загрузить документ согласия"), dark = true)
+
 }

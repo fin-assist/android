@@ -143,9 +143,12 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `stream_rate_limits=<n>` | the next n stream openings that follow a dropped one answer 429 `RATE_LIMITED` with `Retry-After: 3`; the app waits and re-opens, no «Слишком много попыток» (FIN-170) | process (counts down) |
   | `stream_retry_s=<n>` | `Retry-After` of those 429 answers, seconds (3 by default; a long one keeps the app waiting) | process |
   | `expect_stream_rate_limited=<n>` | a check, instant: `e2e.config.applied` shows only if the fake server has already turned away at least n stream openings with 429, else `e2e.config.unmet` and the flow fails; the app is paused under the link and its stream openings run on the main thread the link holds, so the openings must have happened before it | — |
+  | `expect_stream_rate_limited_exact=<n>` | requires exactly n stream 429 responses; catches an early opening when returning during the original wait | — |
   | `min_version=<MAJOR.MINOR.PATCH>` | the fake server's minimum client version; below it every request and every stream opening gets `CLIENT_VERSION_UNSUPPORTED` and the app shows the update screen (FIN-22); empty — none | process |
   | `maintenance=<minutes>\|unknown\|off` | every request and every stream opening gets 503 `MAINTENANCE` (a stream already open is cut at its next event) ending in that many minutes of the fake «now» or at an unknown time; `off` ends it (FIN-22) | process |
   | `maintenance_retry_after=<s>` | `Retry-After` of the maintenance answer, 15 s by default (the shortest the app waits) | process |
+  | `pending_upload_fixture=october` | seeds an unknown-age pending UUID under the current content-and-raw-name hash without an elapsed anchor; simulated restoration, not a process restart | app data |
+  | `expect_uploads=<n>` | requires exactly n uploads, including the preloaded statement; unchanged baseline proves no upload happened before explicit new intent | — |
   | `profile_timezone=<zone id>` | `profile.timezone` on the fake server, as if changed elsewhere; the app adopts it on the next profile read (opening «Профиль») | process |
   | `sign_in=existing` | signs the existing account in and sets passcode 1234 without the screens (`E2eSignIn`, FIN-180): applied after the other values of the link, finishes before `e2e.config.applied` shows; `e2e.config.unmet` when already signed in or the sign-in fails. Use it through `fast_login.yaml` (see «Signing in») | app data (session, passcode); unlocked while the process lives |
 
@@ -276,6 +279,9 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
 | `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
 | `assistant/off_topic` | a question not about finances (`weather`): the server's OFF_TOPIC text, no «Повторить» (`retryable: false`), still 5 of 5; the next question is answered, 4 of 5 — FIN-160 |
+| `assistant/off_topic_limit` | five terminal OFF_TOPIC outcomes reach the rolling limit; a refused sixth question keeps its draft, history and 5/5 daily quota; history remains readable — FIN-223, Qase 49 |
+| `errors/request_retry_false` | a REST refusal with retryable=false is not resent on resume or after its wait; corrected input is a new action and a later failed result can separately allow RetryAnswer — FIN-223, Qase 50 |
+| `errors/server_messages` | profile theme mutations show an unknown ordinary server message, unknown-severity error styling and safe malformed/legacy fallbacks without diagnostics — FIN-223, Qase 48 |
 | `assistant/nothing_found_charged` | a merchant with no operations over the covered six months of the answer (`Kaspersky`, only in March): «…операций «Kaspersky» не нашли», an answer, not a refund — 4 of 5 (it used to stay 5 of 5); only a lock or no data over the period is refunded — FIN-136 |
 | `assistant/offline_retry` | no network: the notice replaces the input; «Повторить» sends the question once the network is back |
 | `assistant/chip_after_statements_deleted` | every statement deleted: the operations chip of an earlier answer opens the search without its stale selection (notice, empty result) — FIN-76 |
@@ -288,15 +294,17 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
 | `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
-| `statements/upload_rate_limited_resume` | `stream_drops=1&stream_rate_limits=100&stream_retry_s=120`: the progress stream drops, every re-open gets 429; after the first 429 (`expect_stream_rate_limited=1`) the screen comes back from the control link and from the background and opens the stream itself, the server counts a 429 for each (`expect_stream_rate_limited=3`) — waited for, still parsing, no upload error; with the limit lifted the import result opens — FIN-170 |
+| `statements/upload_restored_key` | A seeded unknown-age UUID does not send the file or silently change key; the upload count remains 1 (preloaded statement). Only «Загрузить заново» starts a new action and changes the count to 2 (Qase51) — FIN-223 |
+| `assistant/retry_after_consent` | A model failure, consent revocation and denied RetryAnswer lead to consent correction; the same operation resumes and history contains one question with the successful replacement (Qase52) — FIN-223 |
+| `statements/upload_rate_limited_resume` | `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: after the first 429, both control-link and background returns retain the original deadline (`expect_stream_rate_limited_exact=1`); lifting the limiter does not skip that wait, then the result opens within 45s without an upload error (Qase45) — FIN-170, FIN-223 |
 | `statements/upload_no_description` | a line without a description is imported (no unread notice) and shown as «Без описания» in the feed and on the operation |
 | `statements/upload_unknown_codes` | `unknown_codes=true`: the import result shows the server's text for a notice code and for a locked analytics feature the client does not know — FIN-83 |
 | `profile/theme_and_logout` | dark theme; logout cancel / confirm with the notice |
 | `profile/delete_account` | passcode (wrong, right) → «Удалить аккаунт?» over the profile → «Удаляем…» ignores Back → «Аккаунт удалён» |
 | `availability/update_required` | `min_version=9.0.0`: the next request gets `CLIENT_VERSION_UNSUPPORTED`, the update screen covers the app — FIN-22 |
-| `availability/maintenance` | `maintenance=30` with a long `Retry-After`: the screen promises the end time, after `maintenance=off` «Проверить сейчас» opens the app; then with 15 s the app leaves the screen by itself — FIN-22 |
+| `availability/maintenance` | The check button is disabled during `Retry-After`; the first automatic probe is refused, then a guarded manual check after the fresh wait opens the app; a new maintenance episode has its own one-shot automatic check — FIN-22, FIN-223 |
 | `availability/maintenance_on_sign_in` | `maintenance=unknown` before sign-in: «Продолжить» on the phone screen gets the maintenance screen over sign-in, without an end time — FIN-22 |
-| `availability/maintenance_during_import` | `maintenance=30` while an upload is parsing (its stream kept re-opening with 429): the next opening of the progress stream gets 503 before the 429, the re-open loop stops and the maintenance screen covers the upload; after `maintenance=off` the upload screen's next stream opening goes through and lifts the maintenance screen by itself (the button is checked by `availability/maintenance`), and the history has the upload done, not failed — FIN-22, FIN-170, FIN-177 |
+| `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
 | `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
@@ -344,3 +352,38 @@ answer; the mock has no such hook — `offline` fails before the key is taken, a
 bundled files hold no two copies of one statement under different names. `UploadViewModelTest` checks that the copy
 gets its own key and that a retry sends the first attempt's name; `MockStatementsApiTest` and `ContractBehaviourTest`
 check the server side.
+
+
+
+The independent refusal of the availability probe after maintenance is not covered by a mock UI flow
+(FIN-223). The probe uses `GET /v1/consents/personal_data` to check availability, not to grant consent.
+The existing maintenance controls produce only `MAINTENANCE`; `offline` fails before a REST response,
+and the closed `error_operation` controls do not target this GET. They cannot produce a subsequent
+`INTERNAL_ERROR` 500 with its own `retryable:false` or `Retry-After`; that branch needs a controllable
+REST/peer fixture. `AvailabilityViewModelTest` checks the independent prohibition/wait, direct calls
+before readiness, unchanged original deadlines and preservation of the scoped maintenance correction.
+The faithful interceptor fixture also checks that a late 429 refusal after Open cannot restrict a later
+maintenance episode, including when StateFlow conflates Open with the next Maintenance.
+The existing authored `MaintenanceWaiting` fixture covers the disabled check button; no UI or DesignCheck
+execution is claimed. The existing maintenance flows and Qase34/35/46 cover the maintenance paths only.
+
+
+Consent-document refresh after `CONSENT_OUTDATED` is not covered by a mock UI flow
+([Qase54](https://app.qase.io/case/PLAINFIN-54), [Qase55](https://app.qase.io/case/PLAINFIN-55), manual cases authored, not executed).
+The fake backend's personal-data and assistant document versions are fixed constants, and the control
+link cannot rotate them between GET and the mutation; that transition needs a separate controllable
+REST/peer fixture. `ConsentViewModelTest` and `AiConsentViewModelTest` cover Offline/same-version
+recovery, independent GET false/wait, duplicate clicks and stale reads. Light/dark recovery fixtures
+show the explicit «Обновить документ» action; fixtures were authored without executing DesignCheck.
+
+Real client process-death recovery of an uncertain assistant request is not covered by a mock UI flow
+(Qase53). The fake backend, its token state and idempotency cache live in the client process: killing it
+also destroys the independent server outcome that recovery must reconcile. A separate persistent BFF/peer
+fixture is needed to test that boundary. `ChatViewModelBehaviourTest` restores the actual SavedStateHandle
+and tests no automatic POST, consent correction, fresh-history permission and explicit new intent;
+`ChatAskRecovery`, `ChatAskRecoveryDark` and `ChatRetryRecovery` fixtures cover the proposed visible states.
+The upload flow above deliberately seeds an unknown-age record without claiming real process death.
+
+### FIN-223 safe error controls and coverage
+
+The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.

@@ -2,6 +2,7 @@ package ru.finassist.pf.core.api
 
 import kotlinx.coroutines.flow.Flow
 import ru.finassist.pf.core.api.model.TokenPair
+import ru.finassist.pf.core.api.model.IdempotencyKey
 
 /**
  * Where the session tokens live. The refresh token is a long-lived secret and is stored encrypted under an
@@ -23,6 +24,12 @@ interface TokenStore {
      * the new one. Returns false when the session has changed meanwhile.
      */
     suspend fun updateTokens(expectedRefreshToken: String, tokens: TokenPair): Boolean
+    /** Durable CAS before the refresh RPC. Unknown/unsupported stores never grant a refresh attempt. */
+    suspend fun reserveRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey): Boolean = false
+    /** CAS-retire only this marker after caller-validated proof that no refresh RPC consumed the token. */
+    suspend fun retireRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey): Boolean = false
+    /** Clear only the failed session; never erase a new sign-in racing with an old response. */
+    suspend fun clearIfRefreshToken(expectedRefreshToken: String): Boolean = false
     suspend fun clear()
 
     data class Session(val userId: String, val tokens: TokenPair)

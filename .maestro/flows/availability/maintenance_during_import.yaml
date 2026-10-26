@@ -4,9 +4,8 @@ tags:
   - availability
 ---
 # FIN-22 + FIN-170 (api.md «SSE»: an open stream is cut when maintenance starts, a re-open gets 503 MAINTENANCE). The
-# progress stream drops after its first event and every re-open is turned away with a long 429, so the upload stays in
-# parsing for as long as the flow needs. Maintenance then starts: the next opening of the stream (the return from the
-# control link) gets 503 before the 429, the re-open loop stops instead of retrying, and the maintenance screen covers
+# progress stream drops after its first event and receives a short 429 wait. Maintenance then starts: the next
+# opening, AFTER the retained 429 deadline, gets 503 before the 429; the maintenance screen covers
 # the app (the screens under it are created anew after the maintenance, FIN-22). The 503 is not a parsing failure
 # (FIN-177): the server goes on parsing, and after the maintenance the history shows the upload done, not failed.
 - runFlow: ../../subflows/clear_state.yaml
@@ -31,7 +30,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?stream_drops=1&stream_rate_limits=100&stream_retry_s=120"
+      LINK: "pfe2e://config?stream_drops=1&stream_rate_limits=100&stream_retry_s=15"
 - scrollUntilVisible:
     element:
       id: "statements.upload.pick"
@@ -43,20 +42,23 @@ tags:
     visible:
       id: "statements.upload.busy"
     timeout: 10000
-# Maintenance with a long Retry-After (no automatic check races the steps below). Returning from the link, the screen
-# opens the progress stream again: 503 MAINTENANCE.
+# Let the first snapshot/drop/open reach 429, then enable maintenance. Returning cannot skip that original wait.
+- extendedWaitUntil:
+    visible:
+      id: "e2e.never"
+    timeout: 3000
+    optional: true
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=600"
+      LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=15"
 - extendedWaitUntil:
     visible:
       id: "availability.maintenance"
-    timeout: 15000
+    timeout: 30000
 - assertVisible: "Идут технические работы"
-# The maintenance is over and the limit lifted: the server answers again. Back from the link, the upload screen (still
-# busy, FIN-177) opens its progress stream, the opening goes through and lifts the maintenance screen by itself — no
-# «Проверить сейчас» needed (availability/maintenance checks that button).
+# End maintenance and lift the limiter. The one-shot maintenance probe/recovery still waits its captured deadline;
+# returning from the control link is not permission to open early. No repeated automatic loop is needed.
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -64,7 +66,7 @@ tags:
 - extendedWaitUntil:
     notVisible:
       id: "availability.maintenance"
-    timeout: 15000
+    timeout: 40000
 - extendedWaitUntil:
     visible:
       id: "operations.feed"

@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.analytics.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import androidx.compose.runtime.getValue
 import ru.finassist.pf.core.api.model.ActionType
 import ru.finassist.pf.core.api.model.Block
@@ -111,8 +112,16 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
     Column(Modifier.fillMaxSize().testTag(AnalyticsTags.SCREEN)) {
         if (actions.back != null) PfPageHeader("Аналитика", onBack = actions.back) else PfTabHeader("Аналитика")
         val a = state.data
+        state.limitErrorPresentation?.let {
+            ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4))
+        }
+        state.errorPresentation?.let { presentation ->
+            ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику. Попробуйте ещё раз",
+                modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.load() }))
+        }
         when {
             state.loading -> Unit
+            state.errorPresentation != null && a == null -> Unit
             state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(AnalyticsTags.OFFLINE)) {
                 PfButton("Повторить", onClick = { vm.load() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
             }
@@ -138,7 +147,7 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
                 Content(a, state, vm, actions)
             }
         }
-        state.snackbar?.let { text ->
+        state.snackbar?.takeIf { state.errorPresentation == null }?.let { text ->
             LaunchedEffect(text) {
                 delay(3000)
                 vm.consumeSnackbar()
@@ -346,8 +355,13 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
             val periods = state.periods
             if (state.periodsFailed) {
                 Column(Modifier.padding(vertical = PfTheme.dimens.space5)) {
-                    Text("Не получилось загрузить периоды", style = PfTheme.type.body, color = PfTheme.colors.textMuted)
-                    PfLink("Повторить", onClick = { vm.openSheet(AnalyticsSheet.PERIODS) })
+                    val retry = if (!state.periodsRetryReady) null else ({ vm.openSheet(AnalyticsSheet.PERIODS) })
+                    state.periodsErrorPresentation?.let {
+                        ErrorMessage(it, "Не получилось загрузить периоды", onRetry = retry)
+                    } ?: run {
+                        Text("Не получилось загрузить периоды", style = PfTheme.type.body, color = PfTheme.colors.textMuted)
+                        retry?.let { PfLink("Повторить", onClick = it) }
+                    }
                 }
             } else if (periods == null) {
                 Text("Загружаем…", style = PfTheme.type.body, color = PfTheme.colors.textMuted, modifier = Modifier.padding(vertical = PfTheme.dimens.space5))

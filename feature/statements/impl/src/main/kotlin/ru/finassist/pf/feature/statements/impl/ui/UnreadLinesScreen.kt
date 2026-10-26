@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -63,6 +67,9 @@ data class UnreadUiState(
     val userId: String? = null,
     /** False when the upload read no operation (route): the intro drops «остальные операции загружены». */
     val othersLoaded: Boolean = true,
+    val errorPresentation: ErrorPresentation? = null,
+    val requestRetryable: Boolean? = null,
+    val retryReady: Boolean = true,
 )
 
 @HiltViewModel
@@ -70,9 +77,12 @@ class UnreadLinesViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val api: StatementsApi,
     private val tokenStore: TokenStore,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     private val route = savedState.toRoute<StatementsRoutes.UnreadLines>()
     private val _state = MutableStateFlow(UnreadUiState(othersLoaded = route.othersLoaded))
+    private val retryGate = RequestRetryGate(elapsedClock)
+    init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<UnreadUiState> = _state
 
     init {
@@ -80,8 +90,9 @@ class UnreadLinesViewModel @Inject constructor(
     }
 
     fun load() {
+        if (!retryGate.isReady()) return
         viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = false) }
+            _state.update { it.copy(loading = true, error = false, errorPresentation = null, requestRetryable = null) }
             try {
                 val list = if (route.uploadId != null) {
                     api.listUnreadLines(route.uploadId!!)
@@ -90,7 +101,8 @@ class UnreadLinesViewModel @Inject constructor(
                 }
                 _state.update { it.copy(loading = false, lines = list.lines, userId = tokenStore.current()?.userId) }
             } catch (e: AppError) {
-                _state.update { it.copy(loading = false, error = true) }
+                retryGate.record(e)
+                _state.update { it.copy(loading = false, error = true, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
             }
         }
     }
@@ -126,9 +138,14 @@ internal fun UnreadLinesContent(
     val d = PfTheme.dimens
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(StatementsTags.UNREAD)) {
         PfPageHeader("Непрочитанные строки", onBack = onBack)
+        state.errorPresentation?.let {
+            ErrorMessage(it, "Не получилось загрузить. Попробуйте ещё раз", modifier = Modifier.padding(d.space4),
+                onRetry = if (!state.retryReady) null else onRetry)
+        }
         when {
             state.loading -> Unit
-            state.error -> PfEmptyState(PfIcons.ALERT, "Не получилось загрузить", "Проверьте интернет и попробуйте ещё раз") {
+            state.errorPresentation != null && state.lines.isEmpty() -> Unit
+            state.error && state.lines.isEmpty() -> PfEmptyState(PfIcons.ALERT, "Не получилось загрузить", "Проверьте интернет и попробуйте ещё раз") {
                 PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
             }
             state.lines.isEmpty() -> PfEmptyState(PfIcons.CHECK_CIRCLE, "Все строки прочитаны")

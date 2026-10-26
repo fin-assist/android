@@ -27,6 +27,8 @@ import ru.finassist.pf.core.network.AssistantService
 import ru.finassist.pf.core.common.availability.ClientVersion
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.time.Clock
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.network.AndroidElapsedClock
 import ru.finassist.pf.core.network.AuthInterceptor
 import ru.finassist.pf.core.network.ClientVersionInterceptor
 import ru.finassist.pf.core.network.AuthService
@@ -81,13 +83,14 @@ internal object NetworkModule {
         version: ClientVersion,
         gate: ServiceGate,
         clock: Clock,
+        elapsedClock: ElapsedClock = AndroidElapsedClock,
     ): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .eventListenerFactory(tlsFailures.eventListenerFactory())
         .readTimeout(30, TimeUnit.SECONDS)
         // FIN-22: the version on every request (refresh included), and what the server says about it and maintenance.
         .addInterceptor(ClientVersionInterceptor(version))
-        .addInterceptor(ServiceGateInterceptor(gate, clock))
+        .addInterceptor(ServiceGateInterceptor(gate, clock, elapsedClock))
         // Network interceptor: runs per attempt (auth retry, redirect), so every attempt gets a fresh X-Request-Id.
         .addNetworkInterceptor(RequestIdInterceptor())
         .apply { if (logging) addInterceptor(HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BASIC)) }
@@ -105,6 +108,7 @@ internal object NetworkModule {
         baseUrl: HttpUrl,
         tokenStore: TokenStore,
         tlsFailures: TlsFailureReporter,
+        elapsedClock: ElapsedClock = AndroidElapsedClock,
     ): OkHttpClient {
         // The refresh call gets its own Dispatcher: requests waiting in TokenAuthenticator hold slots of the
         // main dispatcher (5 per host), and a refresh queued behind them would never start.
@@ -119,7 +123,7 @@ internal object NetworkModule {
         val refreshApi = HttpAuthApi(retrofit(refreshClient, baseUrl).create(AuthService::class.java), SseRequests(baseUrl, refreshClient, tlsFailures))
         return plain.newBuilder()
             .addInterceptor(AuthInterceptor(tokenStore))
-            .authenticator(TokenAuthenticator(tokenStore) { key, refresh -> refreshApi.refreshTokens(key, refresh) })
+            .authenticator(TokenAuthenticator(tokenStore, elapsedClock) { key, refresh -> refreshApi.refreshTokens(key, refresh) })
             .build()
     }
 

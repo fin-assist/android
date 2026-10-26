@@ -113,11 +113,12 @@ class ErrorMappingTest {
     }
 
     @Test
-    fun `api error keeps message, retry_at and field details`() {
+    fun `api error keeps diagnostic metadata separate from its safe exception code`() {
         val body = """{"error":{"code":"IDEMPOTENCY_CONFLICT","message":"Другой запрос","retry_at":"2026-10-04T22:27:00+03:00",
             "details":[{"code":"REQUIRED","message":"m"}]}}"""
         val error = assertIs<AppError.Api>(mapHttpError(422, body, null))
-        assertEquals("Другой запрос", error.message)
+        assertEquals("IDEMPOTENCY_CONFLICT", error.message)
+        assertEquals("Другой запрос", (error.response!!.metadata["message"] as kotlinx.serialization.json.JsonPrimitive).content)
         assertEquals(27, error.retryAt?.minute)
         assertEquals(listOf(AppError.FieldError(null, "REQUIRED", "m")), error.details)
     }
@@ -132,4 +133,37 @@ class ErrorMappingTest {
         assertIs<AppError.Unknown>(IllegalStateException("bug").toNetworkError())
         assertFailsWith<CancellationException> { CancellationException("cancelled").toNetworkError() }
     }
+    @Test
+    fun `every specialized response including 5xx retains safe presentation and all metadata`() {
+        val codes = listOf(401 to "INVALID_TOKEN", 400 to "CLIENT_VERSION_UNSUPPORTED", 503 to "MAINTENANCE",
+            429 to "RATE_LIMITED", 409 to "REQUEST_IN_PROGRESS", 503 to "FUTURE_FAILURE", 422 to "WRONG_BANK")
+        for ((status, code) in codes) {
+            val body = """{"error":{"code":"$code","message":"PRIVATE SQL","user_message":"Безопасно","severity":"future","retryable":false,
+                "retry_at":"2026-10-25T12:00:00Z","resets_at":"2026-10-26T00:00:00Z","until":"2026-10-25T12:30:00Z",
+                "future_metadata":{"id":"opaque"},"details":[{"field":"x","code":"REQUIRED","message":"private detail"}]}}"""
+            val error = mapHttpError(status, body, "10", "Sun, 25 Oct 2026 12:00:00 GMT", 1000)
+            assertEquals(code, error.rawCode)
+            assertEquals(false, error.requestRetryable)
+            assertEquals("Безопасно", error.presentation.textOrFallback("fallback"))
+            assertEquals(ru.finassist.pf.core.common.error.ErrorSeverity.ERROR, error.presentation.severity)
+            val response = assertNotNull(error.response)
+            assertNotNull(response.until)
+            assertNotNull(response.resetsAt)
+            assertNotNull(response.retryAt)
+            assertEquals("REQUIRED", response.details.single().code)
+            assertNotNull(response.metadata["future_metadata"])
+            assertEquals(9000L, response.timing.deadline(response.retryAfterSeconds)!!.remainingMillis(ru.finassist.pf.core.common.time.ElapsedClock { 2000 }))
+            kotlin.test.assertFalse(error.message.orEmpty().contains("PRIVATE"))
+        }
+    }
+    @Test
+    fun `malformed optional canonical fields preserve the rate-limit action and forbid legacy diagnostic text`() {
+        val error = assertIs<AppError.RateLimited>(mapHttpError(429,
+            """{"error":{"code":"RATE_LIMITED","message":"PRIVATE","user_message":null,"severity":{},"retryable":"true","retry_at":"2026-10-25T12:00:00Z"}}""", "10"))
+        assertNotNull(error.retryAt)
+        assertEquals(10L, error.retryAfterSeconds)
+        assertNull(error.requestRetryable)
+        assertEquals("fallback", error.presentation.textOrFallback("fallback", "legacy"))
+    }
+
 }
