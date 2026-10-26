@@ -308,14 +308,34 @@ class ContractBehaviourTest {
     }
 
     @Test
-    fun `a 422 is stored under the key`() = runBlocking {
-        val s = Scene()
-        val pdf = s.statementFile("s.pdf", "%PDF-1.4")
-        expect(ErrorCodes.WRONG_FORMAT, "422 first", s.call("uploadStatement", null) { s.statements.uploadStatement(KEY, pdf) })
-        // The stored 422 makes the key taken: another file under it is IDEMPOTENCY_CONFLICT, not a new run. (A lowered
-        // limit no longer shows it: 413 FILE_TOO_LARGE of 3.2 comes before the key, FIN-297.)
-        val repeat = s.call("uploadStatement", UploadAccepted.serializer()) { s.statements.uploadStatement(KEY, s.statementFile()) }
-        ContractCheck.knownGap(GAP_STORED_ERRORS, repeat, contract = ErrorCodes.IDEMPOTENCY_CONFLICT, now = null)
+    fun `upload validation errors replay the stored status and body and reserve the key`() = runBlocking {
+        val s = Scene(loaded = false)
+        val cases = listOf(
+            s.statementFile("s.pdf", "%PDF-1.4") to ErrorCodes.WRONG_FORMAT,
+            s.statementFile("s.csv", "Дата операции;Сумма\n01.09.2026;100") to ErrorCodes.CSV_NOT_ACCEPTED,
+            s.statementFile("s.ofx", "<OFX><BANKMSGSRSV1><BANKID>SBER</BANKID></BANKMSGSRSV1></OFX>") to ErrorCodes.WRONG_BANK,
+        )
+        for ((file, code) in cases) {
+            val key = IdempotencyKey.random()
+            val first = s.call("uploadStatement", null) { s.statements.uploadStatement(key, file) }
+            expect(code, "422 first: $code", first)
+            val again = s.call("uploadStatement", null) { s.statements.uploadStatement(key, file) }
+            expect(code, "422 replay: $code", again)
+            assertEquals(first.status to first.body, again.status to again.body)
+            expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "changed content: $code", s.call("uploadStatement", null) {
+                s.statements.uploadStatement(key, s.statementFile(file.name, "%PDF-2.0"))
+            })
+            expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "changed name: $code", s.call("uploadStatement", null) {
+                s.statements.uploadStatement(key, s.statementFile("renamed-" + file.name, file.open().use { it.readBytes().decodeToString() }))
+            })
+        }
+        assertEquals(0, s.backend.uploads.size)
+        val corrected = s.call("uploadStatement", UploadAccepted.serializer()) {
+            s.statements.uploadStatement(IdempotencyKey.random(), s.statementFile())
+        }
+        assertEquals(202, corrected.status)
+        ContractCheck.assertContract("corrected file uses a new key", corrected)
+        assertEquals(1, s.backend.uploads.size)
     }
 
     // 404: an object the user never had, or another user's.
@@ -382,12 +402,11 @@ class ContractBehaviourTest {
         val KEY = IdempotencyKey("6f1e1b8a-3c2d-4e5f-8a9b-0c1d2e3f4a5b")
 
         const val GAP_RETRY_ORDER = "retry-error-order"
-        const val GAP_STORED_ERRORS = "idempotency-stored-errors"
         const val GAP_DELETE_UNKNOWN = "delete-unknown-upload"
         const val GAP_STREAM_SESSION = "stream-session"
         const val GAP_SESSIONLESS = "logout-delete-session"
 
         /** Every gap a test here runs; [ContractCoverageTest] keeps it equal to [Exclusions.behaviours]. */
-        val GAPS = listOf(GAP_RETRY_ORDER, GAP_STORED_ERRORS, GAP_DELETE_UNKNOWN, GAP_STREAM_SESSION, GAP_SESSIONLESS)
+        val GAPS = listOf(GAP_RETRY_ORDER, GAP_DELETE_UNKNOWN, GAP_STREAM_SESSION, GAP_SESSIONLESS)
     }
 }

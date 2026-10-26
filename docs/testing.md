@@ -70,8 +70,12 @@ exchange a server would send and validate it against the pinned contract.
   each terminal event of a stream, which must come last; an answer stream also while it is generated). `ContractErrorCodesTest` — every code of section 8 of `api.md` the mock can return, with the
   registry's status and a body valid for the operation. `ContractBehaviourTest` — error order (503 `MAINTENANCE` and 400
   `CLIENT_VERSION_UNSUPPORTED` first, neither stored under an `Idempotency-Key`, FIN-22), idempotency (replay,
-  another body, request in progress), 404 for an object the user never had or another user's.
+  another body, request in progress, saved upload 422 responses), 404 for an object the user never had or another user's.
   `ContractCoverageTest` fails when an operation or a code of the pinned contract has neither a case nor an exclusion.
+  Uploads cache successful and request-dependent 400/413/422 responses for 24 hours (FIN-344); the size/session/network
+  gates run before that cache. `MockStatementsApiTest` checks the inclusive expiry boundary and gates;
+  `IdempotentResponseTest` checks 400/413 storage and non-stored failures at the internal response-cache seam, since
+  upload currently has no post-key 400 producer. Other endpoints keep their existing cache policy.
 - **Exclusions.** `Exclusions.kt` lists the known mismatches, each with its reason and issue: a validation message of
   one case, bound to the JSON pointer it is reported at and to the value the body may carry there (anything else at
   that place still fails); a code the mock cannot return; a behaviour it does not follow (`knownGap` takes the code

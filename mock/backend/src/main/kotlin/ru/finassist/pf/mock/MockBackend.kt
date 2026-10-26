@@ -132,7 +132,7 @@ class MockBackend(
     val idempotency = HashMap<String, Stored>()
 
     /** A cached response and the request it answered ([request] null: the endpoint does not compare bodies yet). */
-    class Stored(val request: Any?, val result: Any)
+    class Stored(val request: Any?, val result: Any, val expiresAt: OffsetDateTime? = null)
 
     val analytics = AnalyticsEngine(
         ledger = ledger,
@@ -260,11 +260,21 @@ class MockBackend(
      * [request] (the request body, compared by equality) gets 409 IDEMPOTENCY_CONFLICT; a call without [request]
      * is not compared. A failed [block] is not stored: the key can be used again. [onRepeat] runs before a cached
      * result is returned: a [block] that simulates the network itself passes the same checks here, so a repeat
-     * still meets offline and a lost session.
+     * still meets offline and a lost session. [expiresAt] optionally bounds the cache lifetime; the response is
+     * discarded at that instant, and a replay never extends it.
      */
-    suspend fun <T : Any> idempotent(key: String, request: Any? = null, onRepeat: suspend () -> Unit = {}, block: suspend () -> T): T {
+    suspend fun <T : Any> idempotent(
+        key: String,
+        request: Any? = null,
+        onRepeat: suspend () -> Unit = {},
+        expiresAt: OffsetDateTime? = null,
+        block: suspend () -> T,
+    ): T {
         val cached = mutex.withLock {
-            val stored = idempotency[key]
+            val stored = idempotency[key]?.takeUnless { saved ->
+                saved.expiresAt?.let { !now().isBefore(it) } == true
+            }
+            if (stored == null) idempotency.remove(key)
             if (stored != null && request != null && stored.request != null && stored.request != request) {
                 throw apiError(ErrorCodes.IDEMPOTENCY_CONFLICT, 409, message = "Idempotency-Key was used with another request")
             }
@@ -280,7 +290,7 @@ class MockBackend(
         }
         try {
             val result = block()
-            mutex.withLock { idempotency[key] = Stored(request, result) }
+            mutex.withLock { idempotency[key] = Stored(request, result, expiresAt) }
             return result
         } finally {
             // Also when the caller was cancelled mid-request: the lock may be busy, and a cancellable wait for it

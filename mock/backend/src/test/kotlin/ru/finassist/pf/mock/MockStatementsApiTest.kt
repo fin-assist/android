@@ -165,6 +165,64 @@ class MockStatementsApiTest {
     }
 
     @Test
+    fun `saved upload errors expire at 24 hours and a replay does not extend the window`() = runBlocking<Unit> {
+        val backend = testBackend(clock)
+        val api = MockStatementsApi(backend)
+        val bad = file("s.pdf", "%PDF-1.4")
+        val createdAt = clock.at
+        assertFailsWith<AppError.Api> { api.uploadStatement(key("error"), bad) }
+        clock.at = createdAt.plusHours(24).minusNanos(1)
+        assertEquals(ErrorCodes.WRONG_FORMAT, assertFailsWith<AppError.Api> { api.uploadStatement(key("error"), bad) }.code)
+        assertEquals(ErrorCodes.IDEMPOTENCY_CONFLICT, assertFailsWith<AppError.Api> {
+            api.uploadStatement(key("error"), file("ok.ofx", ofx()))
+        }.code)
+        clock.at = createdAt.plusHours(24)
+        val accepted = api.uploadStatement(key("error"), file("ok.ofx", ofx()))
+        api.await(accepted.uploadId)
+        assertEquals(1, api.listStatements().uploads.size)
+    }
+
+    @Test
+    fun `successful uploads expire at 24 hours too`() = runBlocking<Unit> {
+        val backend = testBackend(clock)
+        val api = MockStatementsApi(backend)
+        val text = ofx()
+        val createdAt = clock.at
+        val first = api.uploadStatement(key("success"), file("ok.ofx", text))
+        api.await(first.uploadId)
+        clock.at = createdAt.plusHours(24).minusNanos(1)
+        assertEquals(first, api.uploadStatement(key("success"), file("ok.ofx", text)))
+        clock.at = createdAt.plusHours(24)
+        val second = api.uploadStatement(key("success"), file("another.ofx", text))
+        api.await(second.uploadId)
+        assertEquals(2, api.listStatements().uploads.size)
+    }
+
+    @Test
+    fun `request gates precede a stored upload error`() = runBlocking<Unit> {
+        val backend = testBackend(clock, config = FAST.copy(maxFileSizeBytes = 1_000))
+        val api = MockStatementsApi(backend)
+        val bad = file("s.pdf", "%PDF-1.4")
+        assertFailsWith<AppError.Api> { api.uploadStatement(key("error"), bad) }
+        assertEquals(ErrorCodes.FILE_TOO_LARGE, assertFailsWith<AppError.Api> {
+            api.uploadStatement(key("error"), file("big.ofx", ofx(), size = 1_001))
+        }.code)
+        val profile = backend.profile
+        backend.profile = backend.emptyProfile("", "")
+        assertFailsWith<AppError.Unauthorized> { api.uploadStatement(key("error"), bad) }
+        backend.profile = profile
+        backend.config = backend.config.copy(offline = true)
+        assertFailsWith<AppError.Offline> { api.uploadStatement(key("error"), bad) }
+        backend.config = backend.config.copy(offline = false, maintenance = true)
+        assertFailsWith<AppError.Maintenance> { api.uploadStatement(key("error"), bad) }
+        backend.config = backend.config.copy(maintenance = false, minVersion = "0.3.0")
+        assertFailsWith<AppError.UpdateRequired> { api.uploadStatement(key("error"), bad) }
+        backend.config = backend.config.copy(minVersion = null)
+        assertEquals(ErrorCodes.WRONG_FORMAT, assertFailsWith<AppError.Api> { api.uploadStatement(key("error"), bad) }.code)
+        assertTrue(backend.uploads.isEmpty())
+    }
+
+    @Test
     fun `FILE_TOO_LARGE comes before the key and is not stored under it (FIN-340)`() = runBlocking<Unit> {
         val backend = testBackend(clock, config = FAST.copy(maxFileSizeBytes = 1_000))
         val api = MockStatementsApi(backend)
