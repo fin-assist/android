@@ -2,6 +2,9 @@ package ru.finassist.pf.mock.api
 
 import kotlinx.coroutines.sync.withLock
 import ru.finassist.pf.core.api.ProfileApi
+import ru.finassist.pf.core.api.RequestOwner
+import ru.finassist.pf.core.api.TokenStore
+import kotlinx.coroutines.currentCoroutineContext
 import ru.finassist.pf.core.api.model.Consent
 import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.AssistantConsentGrant
@@ -13,11 +16,17 @@ import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.MockErrorOperation
 import ru.finassist.pf.mock.apiError
 
-class MockProfileApi(private val backend: MockBackend) : ProfileApi {
+class MockProfileApi(private val backend: MockBackend, private val tokenStore: TokenStore? = null) : ProfileApi {
+
+    private suspend fun checkCapturedOwner() {
+        val owner = currentCoroutineContext()[RequestOwner] ?: return
+        if (backend.profile.userId != owner.userId || !owner.matches(tokenStore?.current())) throw AppError.Unauthorized(ErrorCodes.INVALID_TOKEN)
+    }
 
     override suspend fun getProfile(): Profile {
         backend.simulateNetwork()
         backend.requireSession()
+        checkCapturedOwner()
         return backend.profile
     }
 
@@ -26,6 +35,7 @@ class MockProfileApi(private val backend: MockBackend) : ProfileApi {
         backend.requireSession()
         backend.maybeInjectError(MockErrorOperation.PROFILE_UPDATE)
         return backend.mutex.withLock {
+            checkCapturedOwner()
             backend.profile = backend.profile.copy(
                 theme = update.theme ?: backend.profile.theme,
                 timezone = update.timezone ?: backend.profile.timezone,

@@ -5,6 +5,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import ru.finassist.pf.core.api.ProfileApi
 import ru.finassist.pf.core.api.model.Consent
 import ru.finassist.pf.core.api.model.ConsentType
@@ -61,7 +63,7 @@ internal class FakeProfileApi(@Volatile var timezone: String = "Europe/Moscow") 
     override suspend fun revokeAssistantConsent() = Unit
 }
 
-internal class FakeSession(initial: SessionState = SessionState.SignedIn("u1")) : SessionRepository {
+internal class FakeSession(initial: SessionState = SessionState.SignedIn("u1", "epoch-1")) : SessionRepository {
     override val state = MutableStateFlow(initial)
     override suspend fun consumeJustRegistered() = false
     override suspend fun signOut(reason: String?) = Unit
@@ -87,11 +89,11 @@ internal class FakeDeviceZone(@Volatile var zone: String = "Europe/Moscow") : De
     }
 }
 
-internal fun tempPendingStore(): PendingZoneStore {
+internal fun tempPendingStore(session: SessionRepository? = null): PendingZoneStore {
     val dir = createTempDirectory("tz-sync").toFile().apply { deleteOnExit() }
     // On the calling thread: a write never resumes a view model on Main after the test reset it.
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-    return PendingZoneStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") })
+    return PendingZoneStore(identityPreferences(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") }, session))
 }
 
 /** Every read and write fails, as with a full disk or a broken preferences file. */
@@ -104,9 +106,37 @@ internal class FailingDataStore : androidx.datastore.core.DataStore<androidx.dat
     ): androidx.datastore.preferences.core.Preferences = throw java.io.IOException("disk full")
 }
 
-internal fun tempKnownStore(): KnownZoneStore {
+internal fun tempKnownStore(session: SessionRepository? = null): KnownZoneStore {
     val dir = createTempDirectory("tz-known").toFile().apply { deleteOnExit() }
     // On the calling thread: a write never resumes a view model on Main after the test reset it.
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-    return KnownZoneStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") })
+    return KnownZoneStore(identityPreferences(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") }, session))
+}
+
+/** Auth identity fixture only: production atomically writes these keys with its encrypted session. */
+private fun identityPreferences(
+    backing: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences>,
+    session: SessionRepository?,
+): androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+    if (session == null) return backing
+    return object : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+        private suspend fun owner(prefs: androidx.datastore.preferences.core.Preferences): androidx.datastore.preferences.core.Preferences {
+            val value = session.state.first() as? SessionState.SignedIn
+            return prefs.toMutablePreferences().apply {
+                val user = androidx.datastore.preferences.core.stringPreferencesKey("session.identity.user")
+                val epoch = androidx.datastore.preferences.core.stringPreferencesKey("session.identity.epoch")
+                remove(user); remove(epoch)
+                if (value?.authSessionEpoch != null) { this[user] = value.userId; this[epoch] = value.authSessionEpoch!! }
+            }
+        }
+        override val data = backing.data.map { owner(it) }
+        override suspend fun updateData(transform: suspend (androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences) =
+            backing.updateData { transform(owner(it)) }
+    }
+}
+
+internal fun tempZoneSyncStore(session: SessionRepository): ZoneSyncStateStore {
+    val dir = createTempDirectory("tz-retry").toFile().apply { deleteOnExit() }
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    return ZoneSyncStateStore(identityPreferences(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") }, session))
 }

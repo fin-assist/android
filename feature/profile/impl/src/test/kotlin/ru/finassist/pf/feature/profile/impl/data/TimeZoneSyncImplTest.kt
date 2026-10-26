@@ -31,10 +31,10 @@ class TimeZoneSyncImplTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val api = FakeProfileApi(timezone = "Europe/Moscow")
     private val session = FakeSession(SessionState.SignedOut)
-    private val store = tempPendingStore()
+    private val store = tempPendingStore(session)
     private val clock = FakeClock()
     private val device = FakeDeviceZone("Europe/Moscow")
-    private val sync = TimeZoneSyncImpl(context, TimeZoneChecker(api, session, store, clock, device, ReportZone { Clock.MOSCOW }, tempKnownStore()), session, device)
+    private val sync = TimeZoneSyncImpl(context, TimeZoneChecker(api, session, store, clock, device, ReportZone { Clock.MOSCOW }, tempKnownStore(session), tempZoneSyncStore(session), { 0L }, { 1 }), session, device)
 
     private fun eventually(condition: suspend () -> Boolean) = runBlocking {
         withTimeout(5_000) {
@@ -48,7 +48,7 @@ class TimeZoneSyncImplTest {
     @Test fun `sign-in checks the zone, sign-out drops the record`() {
         sync.start()
         device.zone = "Asia/Novosibirsk"
-        session.state.value = SessionState.SignedIn("u1")
+        session.state.value = SessionState.SignedIn("u1", "epoch-1")
         eventually { store.get("u1") != null }
 
         session.state.value = SessionState.SignedOut
@@ -57,7 +57,7 @@ class TimeZoneSyncImplTest {
     }
 
     @Test fun `a return to the foreground sends a zone held for 72 hours`() {
-        session.state.value = SessionState.SignedIn("u1")
+        session.state.value = SessionState.SignedIn("u1", "epoch-1")
         device.zone = "Asia/Novosibirsk"
         sync.start()
         eventually { store.get("u1") == PendingZone("Asia/Novosibirsk", clock.now().toInstant()) }
@@ -69,7 +69,7 @@ class TimeZoneSyncImplTest {
     }
 
     @Test fun `a device time zone change is checked at once`() {
-        session.state.value = SessionState.SignedIn("u1")
+        session.state.value = SessionState.SignedIn("u1", "epoch-1")
         sync.start()
         sync.start() // a second start registers nothing twice
         eventually { api.gets.get() > 0 }

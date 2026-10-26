@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.first
+import ru.finassist.pf.core.storage.AuthSessionIdentityPreferences
 import javax.inject.Inject
 
 /**
@@ -29,6 +30,21 @@ class KnownZoneStore @Inject constructor(private val dataStore: DataStore<Prefer
         dataStore.edit {
             it.remove(KEY_USER)
             it.remove(KEY_ZONE)
+        }
+    }
+
+    suspend fun set(owner: ZoneSyncStateStore.Owner, zone: String) {
+        dataStore.edit {
+            if (!AuthSessionIdentityPreferences.matches(it, owner.userId, owner.epoch)) return@edit
+            it[KEY_USER] = owner.userId
+            it[KEY_ZONE] = zone
+        }
+    }
+
+    suspend fun clearSignedOut() {
+        dataStore.edit {
+            if (!AuthSessionIdentityPreferences.signedOut(it)) return@edit
+            it.remove(KEY_USER); it.remove(KEY_ZONE)
         }
     }
 

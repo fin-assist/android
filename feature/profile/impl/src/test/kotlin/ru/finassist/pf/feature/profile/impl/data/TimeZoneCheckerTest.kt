@@ -16,12 +16,12 @@ import kotlin.test.assertTrue
 class TimeZoneCheckerTest {
     private val api = FakeProfileApi(timezone = MOSCOW)
     private val session = FakeSession()
-    private val store = tempPendingStore()
+    private val store = tempPendingStore(session)
     private val clock = FakeClock()
     private val device = FakeDeviceZone(MOSCOW)
     private val reportZone = ReportZone { ZoneId.of(device.zone) }
-    private val known = tempKnownStore()
-    private val checker = TimeZoneChecker(api, session, store, clock, device, reportZone, known)
+    private val known = tempKnownStore(session)
+    private val checker = TimeZoneChecker(api, session, store, clock, device, reportZone, known, tempZoneSyncStore(session), { 0L }, { 1 })
 
     private fun check() = runBlocking { checker.check() }
     private fun pending(user: String = "u1") = runBlocking { store.get(user) }
@@ -147,10 +147,11 @@ class TimeZoneCheckerTest {
     @Test fun `sign-out drops the record and the remembered zone`() {
         device.zone = NOVOSIBIRSK
         check()
+        session.state.value = SessionState.SignedOut
         runBlocking { checker.signedOut() }
         assertNull(pending())
 
-        session.state.value = SessionState.SignedIn("u1")
+        session.state.value = SessionState.SignedIn("u1", "epoch-1")
         check()
         assertEquals(2, api.gets.get(), "the profile zone is read again after a sign-in")
     }
@@ -162,7 +163,7 @@ class TimeZoneCheckerTest {
         // The profile read before the PATCH already goes out with the token of u2.
         api.onGet = {
             api.userId = "u2"
-            session.state.value = SessionState.SignedIn("u2")
+            session.state.value = SessionState.SignedIn("u2", "epoch-1")
         }
         check()
         assertTrue(api.updates.isEmpty())
@@ -232,16 +233,17 @@ class TimeZoneCheckerTest {
 
     @Test fun `a profile read elsewhere moves the report zone, one of another user does not`() {
         check()
-        runBlocking { checker.observed(api.getProfile().copy(timezone = VLADIVOSTOK)) }
+        runBlocking { checker.observed(api.getProfile().copy(timezone = VLADIVOSTOK), checker.captureObservation()) }
         assertEquals(ZoneId.of(VLADIVOSTOK), reportZone.current)
 
-        runBlocking { checker.observed(api.getProfile().copy(userId = "u2", timezone = NOVOSIBIRSK)) }
+        runBlocking { checker.observed(api.getProfile().copy(userId = "u2", timezone = NOVOSIBIRSK), checker.captureObservation()) }
         assertEquals(ZoneId.of(VLADIVOSTOK), reportZone.current)
     }
 
     @Test fun `sign-out returns to the device zone and forgets the stored one`() {
         api.timezone = VLADIVOSTOK
         check()
+        session.state.value = SessionState.SignedOut
         runBlocking { checker.signedOut() }
         assertNull(reportZone.profile.value)
         assertNull(runBlocking { known.get("u1") })
@@ -250,21 +252,22 @@ class TimeZoneCheckerTest {
     @Test fun `a zone id Java does not know is neither applied nor stored`() {
         api.timezone = VLADIVOSTOK
         check()
-        runBlocking { checker.observed(api.getProfile().copy(timezone = "Mars/Olympus_Mons")) }
+        runBlocking { checker.observed(api.getProfile().copy(timezone = "Mars/Olympus_Mons"), checker.captureObservation()) }
         assertEquals(ZoneId.of(VLADIVOSTOK), reportZone.current)
         assertEquals(VLADIVOSTOK, runBlocking { known.get("u1") }, "an offline start still restores the last usable zone")
     }
 
     @Test fun `a failing zone store does not fail the check, the profile screen or the sign-out`() {
         val failing = KnownZoneStore(FailingDataStore())
-        val checker = TimeZoneChecker(api, session, store, clock, device, reportZone, failing)
+        val checker = TimeZoneChecker(api, session, store, clock, device, reportZone, failing, tempZoneSyncStore(session), { 0L }, { 1 })
         api.timezone = VLADIVOSTOK
         runBlocking { checker.check() }
         assertEquals(ZoneId.of(VLADIVOSTOK), reportZone.current)
 
-        runBlocking { checker.observed(api.getProfile().copy(timezone = NOVOSIBIRSK)) }
+        runBlocking { checker.observed(api.getProfile().copy(timezone = NOVOSIBIRSK), checker.captureObservation()) }
         assertEquals(ZoneId.of(NOVOSIBIRSK), reportZone.current)
 
+        session.state.value = SessionState.SignedOut
         runBlocking { checker.signedOut() }
         assertNull(reportZone.profile.value)
     }
