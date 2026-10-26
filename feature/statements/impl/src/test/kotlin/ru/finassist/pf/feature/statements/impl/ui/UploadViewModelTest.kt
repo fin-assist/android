@@ -456,6 +456,8 @@ class UploadViewModelTest {
 
         vm.startNewUpload()
         advanceUntil("the explicitly new upload") { (vm.state.value.phase as? UploadPhase.Busy)?.uploadId == "u1" }
+        dispatcher.scheduler.runCurrent()
+        assertTrue(vm.state.value.uploadRetryReady, "the new proven action must observe its own readiness")
         assertEquals(1, api.keys.size)
         assertTrue(api.keys.single() != original.value)
     }
