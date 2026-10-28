@@ -45,32 +45,6 @@
     {
       "description": "FIN-211: recovery of an automatically failed dependency family",
       "matchPackageNames": [
-        "com.android.application:com.android.application.gradle.plugin"
-      ],
-      "matchDatasources": [
-        "maven"
-      ],
-      "recreateWhen": "always",
-      "matchJsonata": [
-        "newMajor = 9"
-      ]
-    },
-    {
-      "description": "FIN-211: recovery of an automatically failed dependency family",
-      "matchPackageNames": [
-        "com.android.tools.build:gradle"
-      ],
-      "matchDatasources": [
-        "maven"
-      ],
-      "recreateWhen": "always",
-      "matchJsonata": [
-        "newMajor = 9"
-      ]
-    },
-    {
-      "description": "FIN-211: recovery of an automatically failed dependency family",
-      "matchPackageNames": [
         "org.jetbrains.kotlin.plugin.serialization:org.jetbrains.kotlin.plugin.serialization.gradle.plugin"
       ],
       "matchDatasources": [
@@ -235,6 +209,32 @@
       "recreateWhen": "always",
       "matchJsonata": [
         "newMajor = 5"
+      ]
+    },
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "com.android.application:com.android.application.gradle.plugin"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 9"
+      ]
+    },
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "com.android.tools.build:gradle"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 9"
       ]
     },
     {
@@ -557,6 +557,40 @@
       "groupName": null,
       "additionalBranchPrefix": "fin211-retry-183-",
       "matchNewValue": "/^5\\.5\\.1$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "com.android.application:com.android.application.gradle.plugin"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-171-",
+      "matchNewValue": "/^9\\.5\\.0$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "com.android.tools.build:gradle"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-171-",
+      "matchNewValue": "/^9\\.5\\.0$/",
       "matchJsonata": [
         "$not($exists(newDigest)) or newDigest = null"
       ]
