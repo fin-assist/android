@@ -11,6 +11,7 @@ internal class PhoneStartGate(clock: ElapsedClock) {
         private set
     val readiness get() = gate.readiness
     fun isReady() = gate.isReady()
+    fun isExplicitlyForbidden() = gate.isExplicitlyForbidden()
     fun record(error: AppError) {
         if (error is AppError.RateLimited) {
             newIntentRequired = true

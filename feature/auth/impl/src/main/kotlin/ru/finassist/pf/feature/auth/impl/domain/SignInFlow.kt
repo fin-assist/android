@@ -25,6 +25,11 @@ class SignInFlow @Inject constructor() {
         private set
     @Volatile var callServerDeadline: ServerDeadline? = null
         private set
+    private var startGate: PhoneStartGate? = null
+    /** One Start restriction survives navigation between phone and call screens. */
+    internal fun phoneStartGate(clock: ElapsedClock): PhoneStartGate =
+        startGate ?: PhoneStartGate(clock).also { startGate = it }
+
     private var trackedPhoneKey: IdempotencyKey? = null
     @Volatile var registrationToken: String? = null
     /** Immutable body of the current keyed Start, including the consent version the user actually saw. */
@@ -59,7 +64,8 @@ class SignInFlow @Inject constructor() {
         trackedPhoneKey?.takeIf { it.value == value } ?: IdempotencyKey(value)
     }
 
-    fun reset() {
+    fun reset(keepPhoneStartWait: Boolean = false) {
+        if (!keepPhoneStartWait || startGate?.newIntentRequired != true) startGate?.clear()
         clearVerification()
         registrationToken = null
         phoneRequestKey = null

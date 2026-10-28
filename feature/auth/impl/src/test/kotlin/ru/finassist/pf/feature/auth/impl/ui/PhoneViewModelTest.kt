@@ -191,6 +191,7 @@ class PhoneViewModelTest {
     @Test fun `too many attempts names the time to retry when the server gives it`() {
         auth.failure = AppError.RateLimited(OffsetDateTime.parse("2026-10-13T14:05:00+03:00"))
         assertEquals("Слишком много попыток. Повторите в 14:05", submitted().state.value.error)
+        flow.reset() // the second assertion is an independent attempt, not navigation around the first wait
         auth.failure = AppError.RateLimited(null)
         assertEquals("Слишком много попыток", submitted().state.value.error)
     }

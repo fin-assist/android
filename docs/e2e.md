@@ -438,7 +438,8 @@ unknown-provider recovery or retention cleanup; production enforcement/rollout b
 
 Consent rotation has no mock control-link injection; its UI correction needs a controllable REST fixture.
 `phone_start` supports the existing closed `retry_forbidden` 429 fixture and the new `terminal_failure` 500 fixture.
-The explicit-restart flow uses the latter; 429 wait and retained timing across restart are covered by unit tests. Receipt retention and
+The explicit-restart flow uses the latter; 429 wait and retained timing across restart/back from Call are covered by unit tests. Lost Call Start responses
+retain their exact pending key when returning to Phone; terminal refusals expose explicit restart there as well. Receipt retention and
 provider unknown deadlines are server-only; no new client environment setting or hard-coded waiting period exists.
 The complete legal document is opened from `document.url`; publication of final production URLs/text remains
 FIN-141. The mock's example.ru URL is a fixture and is not claimed as a published legal document.

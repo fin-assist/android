@@ -1,7 +1,6 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
 import ru.finassist.pf.core.common.error.RequestRetryGate
-import ru.finassist.pf.feature.auth.impl.domain.PhoneStartGate
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.common.error.ErrorContext
 import ru.finassist.pf.core.common.availability.ServiceGate
@@ -89,7 +88,7 @@ class CallViewModel @Inject constructor(
         ),
     )
     private val retryGate = RequestRetryGate(elapsedClock)
-    private val verificationGate = PhoneStartGate(elapsedClock)
+    private val verificationGate = flow.phoneStartGate(elapsedClock)
     private var pendingRequestKey: IdempotencyKey? = null
     init {
         viewModelScope.launch { retryGate.readiness.collect { _ -> updateRetryReady() } }
@@ -247,6 +246,8 @@ class CallViewModel @Inject constructor(
                     verificationGate.clear()
                     flow.newPhoneRequest(elapsedClock).also { pendingRequestKey = it }
                 } else pendingRequestKey ?: flow.newPhoneRequest(elapsedClock).also { pendingRequestKey = it }
+                // The old expired verification must not cause Phone to replace this pending key after back.
+                flow.clearVerification()
                 if (key.replayWindow?.isOpen(elapsedClock) != true) {
                     _state.update { it.copy(phase = CallPhase.ERROR, replayUnavailable = true) }
                     return@launch
