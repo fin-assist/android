@@ -58,4 +58,16 @@ class MockPhoneConsentTest {
         api.startPhoneVerification(IdempotencyKey.random(), body.copy(pdConsentVersion = "new"))
         assertEquals("new", api.consentReceipts.single().request.pdConsentVersion)
     }
+    @Test fun `closed phone failure hook refuses before receipt and clearing it permits a new request`() = runTest {
+        backend.config = backend.config.copy(errorOperation = MockErrorOperation.PHONE_START, errorScenario = MockErrorScenario.TERMINAL_FAILURE)
+        api.getConsentDocument(ConsentType.PERSONAL_DATA)
+        val error = assertFailsWith<AppError.Server> { api.startPhoneVerification(IdempotencyKey.random(), body) }
+        assertEquals(false, error.requestRetryable)
+        assertEquals(1, backend.injectedErrorCount.value)
+        assertTrue(api.consentReceipts.isEmpty())
+        backend.config = backend.config.copy(errorOperation = null)
+        api.startPhoneVerification(IdempotencyKey.random(), body)
+        assertEquals(1, api.consentReceipts.size)
+    }
+
 }

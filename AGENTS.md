@@ -432,7 +432,8 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
   document version are required for new and existing users alike (FIN-365). Server checks and server receipt times
   are authoritative. Register reuses the original Start version without a second checkbox or a current-document GET.
   A received Start 429 means wait, then an explicit new intent with a new key; a lost transport response reuses
-  the exact original request and key. Server-only unknown deadlines are never hard-coded in the client.
+  the exact original request and key. Explicit restart resets the flow/key and both choices without a POST,
+  preserving any captured Start429 wait. Server-only unknown deadlines are never hard-coded in the client.
 - New dependencies: flag a new library or SDK that gets data access (network, storage, analytics) so the owner
   decides on it.
 

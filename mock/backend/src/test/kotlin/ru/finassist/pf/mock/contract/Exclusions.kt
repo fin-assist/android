@@ -67,7 +67,6 @@ internal object Exclusions {
 
     val codes: List<Code> = listOf(
         Code("REQUEST_TOO_LARGE", "BFF-only raw HTTP JSON byte limit; the in-process mock has no HTTP body or Content-Encoding", "FIN-339"),
-        Code("INTERNAL_ERROR", "the fake backend never fails with 500; `offline` is its only failure switch", ISSUE_FAILURES),
         Code(
             "PROCESSING_FAILED",
             "no statement fails to import in the fake backend: a file that passes the checks of 3.2 always imports; the 3-minute " +

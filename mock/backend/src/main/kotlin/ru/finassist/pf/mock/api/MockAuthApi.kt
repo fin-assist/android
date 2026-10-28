@@ -20,6 +20,7 @@ import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.api.model.VerificationStatus
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.ResponseTiming
+import ru.finassist.pf.mock.MockErrorOperation
 import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.apiError
 import ru.finassist.pf.mock.unauthorizedError
@@ -79,6 +80,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
                 details = listOf(AppError.FieldError("age_confirmed", "REQUIRED", "Подтвердите возраст 14+")))
             if (!request.pdConsentAccepted) throw backend.apiError(ErrorCodes.CONSENT_REQUIRED, 403)
             if (request.pdConsentVersion != personalDataConsentVersion) throw backend.apiError(ErrorCodes.CONSENT_OUTDATED, 422)
+            backend.maybeInjectError(MockErrorOperation.PHONE_START)
             val now = backend.now()
             val token = secret("vt_")
             val expiresAt = now.plusNanos(backend.config.verificationTtlMs * 1_000_000)

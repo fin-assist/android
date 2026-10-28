@@ -38,6 +38,7 @@ data class PhoneUiState(
     val documentRefreshRequired: Boolean = false,
     val documentRefreshReady: Boolean = true,
     val newIntentRequired: Boolean = false,
+    val restartAvailable: Boolean = false,
     val error: String? = null,
     val busy: Boolean = false,
     val notice: String? = null,
@@ -76,6 +77,7 @@ class PhoneViewModel @Inject constructor(
     private fun updateReadiness() = _state.update { it.copy(
         retryReady = retryGate.isReady() && rejectedVersion == null,
         newIntentRequired = retryGate.newIntentRequired,
+        restartAvailable = it.replayUnavailable || it.requestRetryable == false,
         documentRefreshReady = documentGate.isReady() && !it.documentBusy && !it.busy,
         documentRefreshRequired = rejectedVersion != null || it.document == null,
     ) }
@@ -88,6 +90,20 @@ class PhoneViewModel @Inject constructor(
             _state.update { it.copy(pdConsentAccepted = false) }
             refreshDocument()
         }
+    }
+
+    /** Explicitly abandons the local intent; it never POSTs and never cancels a server 429 wait. */
+    fun restart() {
+        if (_state.value.busy || _state.value.documentBusy) return
+        val previous = _state.value
+        inputGeneration++
+        flow.reset()
+        if (!retryGate.newIntentRequired) retryGate.clear()
+        documentGate.clear()
+        rejectedVersion = null
+        _state.value = PhoneUiState(input = previous.input, notice = previous.notice)
+        updateReadiness()
+        refreshDocument()
     }
 
     fun setAgeConfirmed(value: Boolean) {

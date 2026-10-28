@@ -41,5 +41,6 @@ class PhoneDesignCheckTest {
     @Test fun consentOnly() = capture("PhoneConsentOnly", PhoneUiState(document = document, pdConsentAccepted = true))
     @Test fun documentUnavailable() = capture("PhoneDocumentUnavailable", PhoneUiState(documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true))
     @Test fun documentUnavailableDark() = capture("PhoneDocumentUnavailableDark", PhoneUiState(documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true), dark = true)
+    @Test fun restartAfterRefusal() = capture("PhoneRestartAfterRefusal", PhoneUiState(document = document, restartAvailable = true, retryReady = false, error = "Начните вход заново"))
     @Test fun newIntentWait() = capture("PhoneNewIntentWait", PhoneUiState(document = document, ageConfirmed = true, pdConsentAccepted = true, newIntentRequired = true, retryReady = false, error = "Слишком много попыток"))
 }

@@ -364,12 +364,34 @@ class PhoneViewModelTest {
         vm.submit(); vm.submit()
         assertEquals(1, auth.keys.size)
         assertTrue(vm.state.value.newIntentRequired); assertFalse(vm.state.value.retryReady)
+        vm.restart()
+        assertFalse(vm.state.value.ageConfirmed); assertFalse(vm.state.value.pdConsentAccepted)
+        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.submit()
+        assertEquals(1, auth.keys.size, "restart must not bypass the original 429 wait")
         scheduler.advanceTimeBy(1000); scheduler.runCurrent()
         auth.failure = null; vm.submit()
         assertEquals(2, auth.keys.size)
         assertNotEquals(auth.keys[0], auth.keys[1])
         assertEquals(auth.requests[0], auth.requests[1])
         assertEquals(PhoneEvent.GoToCall, vm.events.value)
+    }
+
+    @Test fun `explicit restart abandons the denied key resets both choices and does not POST`() {
+        auth.failure = AppError.Server(500, response = ru.finassist.pf.core.common.error.ErrorResponseInfo("INTERNAL_ERROR", 500, requestRetryable = false))
+        val vm = submitted()
+        val key = auth.keys.single()
+        assertTrue(vm.state.value.restartAvailable)
+        vm.submit(); assertEquals(1, auth.keys.size)
+        val documentCalls = auth.documentCalls
+        vm.restart()
+        assertNull(flow.phoneRequestKey); assertNull(flow.phoneRequest)
+        assertFalse(vm.state.value.ageConfirmed); assertFalse(vm.state.value.pdConsentAccepted)
+        assertEquals(documentCalls + 1, auth.documentCalls)
+        assertEquals(1, auth.keys.size)
+        auth.failure = null
+        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.submit()
+        assertNotEquals(key, auth.keys.last())
+        assertEquals(2, auth.keys.size)
     }
 
     private fun phoneRefusal(retryable: Boolean) = AppError.RateLimited(null, 60,

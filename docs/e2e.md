@@ -259,6 +259,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 |---|---|
 | `auth/register_new_user` (smoke) | independent 14+/PD before phone → new number → create account without another consent → passcode → first upload → result → feed (Qase2, FIN-365) |
 | `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the three tabs (Qase1, FIN-365) |
+| `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
 | `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains current attempt confirmations (Qase57, FIN-365) |
 | `auth/phone_consent_recovery` | document offline → explicit refresh → confirmations → Start offline → retry with the existing intent (Qase58, FIN-365) |
 | `auth/phone_validation` | short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
@@ -395,7 +396,7 @@ The upload flow above deliberately seeds an unknown-age record without claiming 
 
 ### FIN-223 safe error controls and coverage
 
-The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.
+The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|phone_start|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden|terminal_failure`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.
 
 ### FIN-352 repeated physical unread lines
 
@@ -435,8 +436,9 @@ taps, missing evidence and restart. Mock receipt times come from the fake server
 and link only after verified or successful Register. These in-process fixtures do not prove backend durability,
 unknown-provider recovery or retention cleanup; production enforcement/rollout belongs to FIN-364.
 
-Start 429 and consent rotation have no mock control-link injection, so their new-intent wait/version-correction
-UI paths require a controllable REST fixture; unit tests cover their state and key changes. Receipt retention and
+Consent rotation has no mock control-link injection; its UI correction needs a controllable REST fixture.
+`phone_start` supports the existing closed `retry_forbidden` 429 fixture and the new `terminal_failure` 500 fixture.
+The explicit-restart flow uses the latter; 429 wait and retained timing across restart are covered by unit tests. Receipt retention and
 provider unknown deadlines are server-only; no new client environment setting or hard-coded waiting period exists.
 The complete legal document is opened from `document.url`; publication of final production URLs/text remains
 FIN-141. The mock's example.ru URL is a fixture and is not claimed as a published legal document.
@@ -444,3 +446,9 @@ FIN-141. The mock's example.ru URL is a fixture and is not claimed as a publishe
 Qase57/58 and updated registration steps are authored, mappings included. UI, Maestro, instrumented and
 DesignCheck runs were not executed under the owner's instruction. Existing sign-in-related Qase cases use the
 updated confirmation precondition; their other scenarios retain the same IDs.
+
+The `auth.phone.restart` action abandons the local phone flow/key and reloads the document with both choices off,
+without a POST. A received 429 keeps its captured server wait across this action. `phone_start` failures count in
+the existing `expect_error_requests` check and happen before receipt creation; arbitrary error payloads are not
+accepted. Qase59/`auth/phone_restart` exercises restart after the closed terminal 500 fixture. This is a synthetic
+refusal, not a claim to reproduce a lost provider outcome or restart an independent backend process.

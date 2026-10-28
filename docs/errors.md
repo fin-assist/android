@@ -150,3 +150,7 @@ captured owner/revision, so an older response cannot undo a later background mut
 Ordinary unit tests cover persistence, restart/reboot, independent restrictions, stale callbacks,
 write-ahead cancellation, token CAS and actual HTTP dispatch. No UI, instrumentation, Maestro or
 design-check execution is needed for this silent logic.
+
+FIN-365 phone restart: «Начать вход заново» abandons a terminal/unknown-age local key, resets 14+/PD choices and
+reloads the document. It performs no POST. A captured phone-429 wait survives restart; accepting the new choices
+cannot enable submission before that server wait ends. The backend independently enforces its phone fence.

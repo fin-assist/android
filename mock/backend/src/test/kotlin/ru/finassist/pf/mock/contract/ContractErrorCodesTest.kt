@@ -84,6 +84,11 @@ class ContractErrorCodesTest(private val name: String) {
                 val s = Scene(FAST.copy(maintenance = true))
                 s.call("getAnalytics", null) { s.analytics.getAnalytics() }
             },
+            case(ErrorCodes.INTERNAL_ERROR, "closed phone terminal failure fixture") {
+                val s = Scene(FAST.copy(errorOperation = ru.finassist.pf.mock.MockErrorOperation.PHONE_START,
+                    errorScenario = ru.finassist.pf.mock.MockErrorScenario.TERMINAL_FAILURE), signedIn = false)
+                s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, MockBackend.CONSENT_VERSION_PD, true)) }
+            },
             case(ErrorCodes.VALIDATION_ERROR, "phone outside +7 and 10 digits") {
                 val s = Scene(signedIn = false)
                 s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest("8916", true, "2026-09-28", true)) }
