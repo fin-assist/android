@@ -31,7 +31,7 @@ retrofit = "3.0.0"
 rustoreRemoteConfig = "10.5.2"
 mytracker = "3.6.0"
 # Crashes and ANR (both flavors); the Gradle plugin uploads R8 mappings
-tracer = "1.5.1"
+tracer = "1.6.0"
 
 # Security
 tink = "1.24.0"
