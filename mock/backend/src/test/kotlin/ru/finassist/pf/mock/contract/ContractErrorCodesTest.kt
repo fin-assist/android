@@ -138,7 +138,7 @@ class ContractErrorCodesTest(private val name: String) {
             case(ErrorCodes.INVALID_TOKEN, "verified phone stream result expires fifteen minutes after verification") {
                 val s = Scene(signedIn = false)
                 val verification = s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest("+79990001122", true, MockBackend.CONSENT_VERSION_PD, true))
-                drain(s.auth.streamPhoneVerification(verification.verificationToken))
+                s.drain(s.auth.streamPhoneVerification(verification.verificationToken))
                 s.clock.at = s.clock.at.plusMinutes(15)
                 s.phoneEvents(verification.verificationToken)
             },
