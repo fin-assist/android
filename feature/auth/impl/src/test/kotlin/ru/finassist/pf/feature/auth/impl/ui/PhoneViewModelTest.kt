@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.core.common.time.ResponseTiming
 import androidx.compose.ui.text.TextRange
@@ -46,7 +48,13 @@ class PhoneViewModelTest {
         val attemptedPhones = mutableListOf<String>()
         val phones = mutableListOf<String>()
         val keys = mutableListOf<String>()
-        override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification {
+        val requests = mutableListOf<StartPhoneVerificationRequest>()
+        var documentVersion = "2026-09-28"
+        var documentFailure: AppError? = null
+        var documentCalls = 0
+        override suspend fun startPhoneVerification(key: IdempotencyKey, request: StartPhoneVerificationRequest): PhoneVerification {
+        val phone = request.phone
+            requests += request
             keys += key.value
             attemptedPhones += phone
             pending?.let { return it.await() }
@@ -58,7 +66,11 @@ class PhoneViewModelTest {
         override suspend fun register(key: IdempotencyKey, request: RegisterRequest): RegisterResponse = error("unused")
         override suspend fun refreshTokens(key: IdempotencyKey, refreshToken: String): TokenPair = error("unused")
         override suspend fun logout(accessToken: String, refreshToken: String) = Unit
-        override suspend fun getConsentDocument(type: ConsentType): ConsentDocument = error("unused")
+        override suspend fun getConsentDocument(type: ConsentType): ConsentDocument {
+            documentCalls++
+            documentFailure?.let { throw it }
+            return ConsentDocument(type, documentVersion, "Текст согласия", "https://example.test/pd/$documentVersion")
+        }
     }
 
     /** Device clock, 1 h 40 min ahead of the server (12:03 − 5 min): the deadline must follow it, not `expires_at`. */
@@ -81,6 +93,8 @@ class PhoneViewModelTest {
 
     private fun submitted(digits: String = "9161234567"): PhoneViewModel {
         val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { 0L })
+        vm.setAgeConfirmed(true)
+        vm.setConsentAccepted(true)
         vm.onInput(TextFieldValue(digits, TextRange(digits.length)))
         vm.submit()
         return vm
@@ -287,6 +301,75 @@ class PhoneViewModelTest {
         assertEquals(listOf("auth.phone.submitted"), tracked)
         assertEquals(PhoneEvent.GoToCall, vm.events.value)
         assertEquals("+79031234567", flow.phone)
+    }
+
+    @Test fun `age and personal data confirmations are initially independent and both gate Start`() {
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { 0L })
+        assertFalse(vm.state.value.ageConfirmed); assertFalse(vm.state.value.pdConsentAccepted)
+        vm.onInput(TextFieldValue("9161234567"))
+        assertEquals("", vm.state.value.digits, "phone input is unavailable before age confirmation")
+        vm.submit(); assertTrue(auth.requests.isEmpty())
+        vm.setAgeConfirmed(true); vm.onInput(TextFieldValue("9161234567")); vm.submit()
+        assertTrue(auth.requests.isEmpty())
+        vm.setConsentAccepted(true); vm.setAgeConfirmed(false); vm.submit()
+        assertTrue(auth.requests.isEmpty())
+        vm.setAgeConfirmed(true); vm.submit()
+        assertEquals(StartPhoneVerificationRequest("+79161234567", true, "2026-09-28", true), auth.requests.single())
+    }
+
+    @Test fun `outdated consent clears only its tick and requires a different fetched document`() {
+        auth.failure = AppError.Api(ErrorCodes.CONSENT_OUTDATED, 422)
+        val vm = submitted()
+        assertTrue(vm.state.value.ageConfirmed)
+        assertFalse(vm.state.value.pdConsentAccepted)
+        assertTrue(vm.state.value.documentRefreshRequired)
+        vm.setConsentAccepted(true); vm.submit()
+        assertEquals(1, auth.requests.size)
+        auth.documentFailure = AppError.Offline(); vm.refreshDocument()
+        assertTrue(vm.state.value.documentRefreshRequired)
+        auth.documentFailure = null; auth.documentVersion = "pd-new"; vm.refreshDocument()
+        assertFalse(vm.state.value.documentRefreshRequired)
+        assertFalse(vm.state.value.pdConsentAccepted)
+        auth.failure = null; vm.setConsentAccepted(true); vm.submit()
+        assertEquals("pd-new", auth.requests.last().pdConsentVersion)
+        assertNotEquals(auth.keys.first(), auth.keys.last())
+    }
+
+    @Test fun `document load failure cannot send a number and is independently recoverable`() {
+        auth.documentFailure = AppError.Offline()
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { 0L })
+        vm.setAgeConfirmed(true); vm.onInput(TextFieldValue("9161234567")); vm.setConsentAccepted(true); vm.submit()
+        assertTrue(auth.requests.isEmpty()); assertNull(vm.state.value.document)
+        auth.documentFailure = null; vm.refreshDocument(); vm.setConsentAccepted(true); vm.submit()
+        assertEquals(1, auth.requests.size)
+    }
+
+    @Test fun `Call outdated version refreshes the phone document and resets consent`() {
+        val vm = submitted(); vm.consumeEvent()
+        flow.consentRefreshRequired = true; auth.documentVersion = "new"
+        vm.onResume()
+        assertFalse(vm.state.value.pdConsentAccepted)
+        assertEquals("new", vm.state.value.document?.version)
+        assertFalse(flow.consentRefreshRequired)
+    }
+
+    @Test fun `received 429 waits then explicit Start selects a new key`() {
+        val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
+        Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { scheduler.currentTime })
+        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.onInput(TextFieldValue("9161234567"))
+        auth.failure = AppError.RateLimited(null, 1,
+            ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
+                retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0)))
+        vm.submit(); vm.submit()
+        assertEquals(1, auth.keys.size)
+        assertTrue(vm.state.value.newIntentRequired); assertFalse(vm.state.value.retryReady)
+        scheduler.advanceTimeBy(1000); scheduler.runCurrent()
+        auth.failure = null; vm.submit()
+        assertEquals(2, auth.keys.size)
+        assertNotEquals(auth.keys[0], auth.keys[1])
+        assertEquals(auth.requests[0], auth.requests[1])
+        assertEquals(PhoneEvent.GoToCall, vm.events.value)
     }
 
     private fun phoneRefusal(retryable: Boolean) = AppError.RateLimited(null, 60,

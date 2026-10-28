@@ -15,7 +15,9 @@ import ru.finassist.pf.core.screenshot.DesignCheck
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PhoneDesignCheckTest {
-    private fun capture(name: String, state: PhoneUiState = PhoneUiState(), dark: Boolean = false) =
+    private val document = ru.finassist.pf.core.api.model.ConsentDocument(
+        ru.finassist.pf.core.api.model.ConsentType.PERSONAL_DATA, "2026-09-28", "Согласие на обработку персональных данных", "https://example.test/pd")
+    private fun capture(name: String, state: PhoneUiState = PhoneUiState(document = document), dark: Boolean = false) =
         DesignCheck.capture(name, dark = dark) { PhoneContent(state, onInput = {}, onSubmit = {}) }
 
     @Test fun phone() = capture("Phone")
@@ -24,7 +26,7 @@ class PhoneDesignCheckTest {
 
     @Test fun phoneFormatError() = capture(
         "PhoneFormatError",
-        PhoneUiState(input = TextFieldValue("91612345", TextRange(8)), error = "В номере не хватает цифр"),
+        PhoneUiState(document = document, ageConfirmed = true, pdConsentAccepted = true, input = TextFieldValue("91612345", TextRange(8)), error = "В номере не хватает цифр"),
     )
 
     @Test fun phoneLoggedOut() = capture("PhoneLoggedOut", PhoneUiState(notice = "Вы вышли из аккаунта. Войдите по номеру телефона"))
@@ -34,4 +36,10 @@ class PhoneDesignCheckTest {
     @Test fun serverWarning() = capture("PhoneServerWarning", PhoneUiState(error = "Не получилось отправить номер", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
     @Test fun serverWarningDark() = capture("PhoneServerWarningDark", PhoneUiState(error = "Не получилось отправить номер", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)), dark = true)
 
+    // FIN-365 fixtures are authored without executing UI or DesignCheck.
+    @Test fun ageOnly() = capture("PhoneAgeOnly", PhoneUiState(document = document, ageConfirmed = true))
+    @Test fun consentOnly() = capture("PhoneConsentOnly", PhoneUiState(document = document, pdConsentAccepted = true))
+    @Test fun documentUnavailable() = capture("PhoneDocumentUnavailable", PhoneUiState(documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true))
+    @Test fun documentUnavailableDark() = capture("PhoneDocumentUnavailableDark", PhoneUiState(documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true), dark = true)
+    @Test fun newIntentWait() = capture("PhoneNewIntentWait", PhoneUiState(document = document, ageConfirmed = true, pdConsentAccepted = true, newIntentRequired = true, retryReady = false, error = "Слишком много попыток"))
 }

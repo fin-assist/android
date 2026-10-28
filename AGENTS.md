@@ -427,10 +427,12 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
   one host of `pf.apiBaseUrl` (FIN-120).
 - Trust boundaries: limits, quotas and permissions are enforced by the backend; the client only shows them.
   Client-side checks are not the security control — flag code that relies on them.
-- Consent: user data goes to the LLM assistant only after the assistant consent; an account is registered
-  (created) only after the personal data consent. Sending the phone number for call verification before that is
-  allowed: only the server's answer tells a new number from an existing user, and the consent screen is shown for a
-  new number.
+- Consent: user data goes to the LLM assistant only after the assistant consent. Before phone input, a separate
+  unchecked 14+ confirmation is required; before Start, a separate unchecked personal-data consent and the viewed
+  document version are required for new and existing users alike (FIN-365). Server checks and server receipt times
+  are authoritative. Register reuses the original Start version without a second checkbox or a current-document GET.
+  A received Start 429 means wait, then an explicit new intent with a new key; a lost transport response reuses
+  the exact original request and key. Server-only unknown deadlines are never hard-coded in the client.
 - New dependencies: flag a new library or SDK that gets data access (network, storage, analytics) so the owner
   decides on it.
 

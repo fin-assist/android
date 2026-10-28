@@ -30,12 +30,19 @@ tags:
 
 # The existing account still signs in.
 # The number is kept; tap at the right edge so erasing starts after the last digit.
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
 - tapOn:
     id: "auth.phone.input"
     point: "90%,50%"
 - eraseText: 20
 - inputText: "9161234567"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
 - tapOn:
     id: "auth.phone.submit"
 - runFlow: ../../subflows/set_passcode.yaml

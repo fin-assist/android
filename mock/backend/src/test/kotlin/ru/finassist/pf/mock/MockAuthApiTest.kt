@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -27,7 +29,7 @@ class MockAuthApiTest {
     @Test
     fun `a number outside +7 and 10 digits is a VALIDATION_ERROR at phone (FIN-68)`() = runBlocking {
         for (phone in listOf("+7916123456", "+380501234567", "89161234567")) {
-            val e = assertFailsWith<AppError.Api> { auth.startPhoneVerification(IdempotencyKey("k-$phone"), phone) }
+            val e = assertFailsWith<AppError.Api> { auth.startPhoneVerification(IdempotencyKey("k-$phone"), StartPhoneVerificationRequest(phone, true, "2026-09-28", true)) }
             assertEquals(ErrorCodes.VALIDATION_ERROR, e.code)
             assertEquals(400, e.httpStatus)
             assertEquals(listOf("phone" to FieldErrorCodes.INVALID_FORMAT), e.details.map { it.field to it.code })
@@ -36,7 +38,7 @@ class MockAuthApiTest {
 
     @Test
     fun `a valid number starts the verification`() = runBlocking {
-        val v = auth.startPhoneVerification(IdempotencyKey("k1"), "+79161234567")
+        val v = auth.startPhoneVerification(IdempotencyKey("k1"), StartPhoneVerificationRequest("+79161234567", true, "2026-09-28", true))
         assertTrue(v.verificationToken.startsWith("vt_"))
     }
 
@@ -55,11 +57,11 @@ class MockAuthApiTest {
 
     /** Verifies [phone] and returns the final status event. */
     private suspend fun verify(phone: String, k: String = phone) =
-        api.streamPhoneVerification(api.startPhoneVerification(key(k), phone).verificationToken).toList().last()
+        api.streamPhoneVerification(api.startPhoneVerification(key(k), StartPhoneVerificationRequest(phone, true, "2026-09-28", true)).verificationToken).toList().last()
 
     @Test
     fun `the verification is pending until the call and then signs the existing user in`() = runTest {
-        val v = api.startPhoneVerification(key("k"), existing)
+        val v = api.startPhoneVerification(key("k"), StartPhoneVerificationRequest(existing, true, "2026-09-28", true))
         assertEquals("+78001234567", v.callbackNumber)
         assertEquals(clock.at.plusMinutes(5), v.expiresAt)
         assertEquals(300, v.expiresIn)
@@ -68,7 +70,7 @@ class MockAuthApiTest {
         assertNull(v.responseTiming.receivedElapsedMillis, "no elapsed clock was injected into this fixture")
         // Same key, same verification; `expires_in` is recomputed on the replay (api.md 1.1).
         clock.at = clock.at.plusSeconds(1)
-        val replay = api.startPhoneVerification(key("k"), existing)
+        val replay = api.startPhoneVerification(key("k"), StartPhoneVerificationRequest(existing, true, "2026-09-28", true))
         assertEquals(v.copy(
             expiresIn = 299,
             serverTime = clock.at.toInstant(),
@@ -91,14 +93,14 @@ class MockAuthApiTest {
 
     @Test
     fun `once the call has happened the stream says verified at once`() = runTest {
-        val v = api.startPhoneVerification(key("k"), existing)
+        val v = api.startPhoneVerification(key("k"), StartPhoneVerificationRequest(existing, true, "2026-09-28", true))
         clock.at = clock.at.plusSeconds(10)
         assertEquals(listOf(VerificationStatus.VERIFIED), api.streamPhoneVerification(v.verificationToken).toList().map { it.status })
     }
 
     @Test
     fun `a verification older than 5 minutes is expired`() = runTest {
-        val v = api.startPhoneVerification(key("k"), existing)
+        val v = api.startPhoneVerification(key("k"), StartPhoneVerificationRequest(existing, true, "2026-09-28", true))
         clock.at = clock.at.plusMinutes(5).plusSeconds(1)
         val events = api.streamPhoneVerification(v.verificationToken).toList()
         assertEquals(listOf(VerificationStatus.EXPIRED), events.map { it.status })
@@ -108,11 +110,11 @@ class MockAuthApiTest {
 
     @Test
     fun `expires_in counts down on replays, floors partial seconds and stops at zero`() = runTest {
-        val v = api.startPhoneVerification(key("k"), existing)
+        val v = api.startPhoneVerification(key("k"), StartPhoneVerificationRequest(existing, true, "2026-09-28", true))
         clock.at = clock.at.plusSeconds(100).plusNanos(500_000_000)
-        assertEquals(199, api.startPhoneVerification(key("k"), existing).expiresIn)
+        assertEquals(199, api.startPhoneVerification(key("k"), StartPhoneVerificationRequest(existing, true, "2026-09-28", true)).expiresIn)
         clock.at = clock.at.plusMinutes(10)
-        val late = api.startPhoneVerification(key("k"), existing)
+        val late = api.startPhoneVerification(key("k"), StartPhoneVerificationRequest(existing, true, "2026-09-28", true))
         assertEquals(0, late.expiresIn)
         assertEquals(v.verificationToken, late.verificationToken)
     }
@@ -120,7 +122,7 @@ class MockAuthApiTest {
     @Test
     fun `a call due after the end of the request ends the open stream with expired`() = runTest {
         backend.config = backend.config.copy(verificationTtlMs = 3_000)
-        val v = api.startPhoneVerification(key("late"), existing)
+        val v = api.startPhoneVerification(key("late"), StartPhoneVerificationRequest(existing, true, "2026-09-28", true))
         val events = api.streamPhoneVerification(v.verificationToken).toList()
         assertEquals(listOf(VerificationStatus.PENDING, VerificationStatus.EXPIRED), events.map { it.status })
         assertEquals("", backend.profile.userId)
@@ -129,7 +131,7 @@ class MockAuthApiTest {
     @Test
     fun `the request lifetime follows the config`() = runTest {
         backend.config = backend.config.copy(verificationTtlMs = 5_000)
-        val v = api.startPhoneVerification(key("short"), existing)
+        val v = api.startPhoneVerification(key("short"), StartPhoneVerificationRequest(existing, true, "2026-09-28", true))
         assertEquals(clock.at.plusSeconds(5), v.expiresAt)
         assertEquals(5, v.expiresIn)
     }
@@ -142,7 +144,7 @@ class MockAuthApiTest {
 
     @Test
     fun `a new phone gets a registration token, the same one on every check`() = runTest {
-        val v = api.startPhoneVerification(key("k"), newPhone)
+        val v = api.startPhoneVerification(key("k"), StartPhoneVerificationRequest(newPhone, true, "2026-09-28", true))
         val first = api.streamPhoneVerification(v.verificationToken).toList().last()
         assertEquals(VerificationStatus.VERIFIED, first.status)
         assertEquals(true, first.isNewUser)
@@ -169,7 +171,7 @@ class MockAuthApiTest {
 
     @Test
     fun `registration creates the account, uses the token up and is idempotent by key`() = runTest {
-        val v = api.startPhoneVerification(key("v"), newPhone)
+        val v = api.startPhoneVerification(key("v"), StartPhoneVerificationRequest(newPhone, true, "2026-09-28", true))
         val token = api.streamPhoneVerification(v.verificationToken).toList().last().registrationToken!!
         val response = api.register(key("r"), register(token))
         assertTrue(response.accessToken.startsWith("mock."))
@@ -229,7 +231,7 @@ class MockAuthApiTest {
     @Test
     fun `auth requests fail offline`() = runTest {
         backend.config = backend.config.copy(offline = true)
-        assertFailsWith<AppError.Offline> { api.startPhoneVerification(key("k"), existing) }
+        assertFailsWith<AppError.Offline> { api.startPhoneVerification(key("k"), StartPhoneVerificationRequest(existing, true, "2026-09-28", true)) }
         assertFailsWith<AppError.Offline> { api.refreshTokens(key("t"), "rt_x") }
     }
 }

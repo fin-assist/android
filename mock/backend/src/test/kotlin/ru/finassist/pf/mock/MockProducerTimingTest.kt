@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
@@ -24,12 +26,12 @@ class MockProducerTimingTest {
         try {
             val api = MockAuthApi(backend)
             val key = IdempotencyKey("phone-replay")
-            val first = api.startPhoneVerification(key, "+79160000000")
+            val first = api.startPhoneVerification(key, StartPhoneVerificationRequest("+79160000000", true, "2026-09-28", true))
             assertEquals(300, first.expiresIn)
             assertEquals(1_000, first.responseTiming.receivedElapsedMillis)
             wall.at = wall.at.plusSeconds(2)
             elapsed = 4_000
-            val replay = api.startPhoneVerification(key, "+79160000000")
+            val replay = api.startPhoneVerification(key, StartPhoneVerificationRequest("+79160000000", true, "2026-09-28", true))
             assertEquals(first.verificationToken, replay.verificationToken)
             assertEquals(first.expiresAt, replay.expiresAt)
             assertEquals(298, replay.expiresIn)

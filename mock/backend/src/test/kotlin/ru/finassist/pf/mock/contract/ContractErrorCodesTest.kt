@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock.contract
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -62,7 +64,7 @@ class ContractErrorCodesTest(private val name: String) {
         }
 
         private suspend fun Scene.registrationToken(): String {
-            val v = auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE)
+            val v = auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true))
             return drain(auth.streamPhoneVerification(v.verificationToken)).last().registrationToken!!
         }
 
@@ -84,7 +86,19 @@ class ContractErrorCodesTest(private val name: String) {
             },
             case(ErrorCodes.VALIDATION_ERROR, "phone outside +7 and 10 digits") {
                 val s = Scene(signedIn = false)
-                s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(IdempotencyKey.random(), "8916") }
+                s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest("8916", true, "2026-09-28", true)) }
+            },
+            case(ErrorCodes.VALIDATION_ERROR, "age confirmation missing before phone provider") {
+                val s = Scene(signedIn = false)
+                s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, MockBackend.CONSENT_VERSION_PD, false)) }
+            },
+            case(ErrorCodes.CONSENT_REQUIRED, "personal data consent missing before phone provider") {
+                val s = Scene(signedIn = false)
+                s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, false, MockBackend.CONSENT_VERSION_PD, true)) }
+            },
+            case(ErrorCodes.CONSENT_OUTDATED, "old personal data document before phone provider") {
+                val s = Scene(signedIn = false)
+                s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, "old", true)) }
             },
             case(ErrorCodes.VALIDATION_ERROR, "feed page with search filters") {
                 val s = Scene()
@@ -116,6 +130,12 @@ class ContractErrorCodesTest(private val name: String) {
                     s.auth.register(IdempotencyKey.random(), RegisterRequest("reg_unknown", true, MockBackend.CONSENT_VERSION_PD))
                 }
             },
+            case(ErrorCodes.TOKEN_EXPIRED, "registration result expires fifteen minutes after verification") {
+                val s = Scene(signedIn = false)
+                val token = s.registrationToken()
+                s.clock.at = s.clock.at.plusMinutes(16)
+                s.call("register", null) { s.auth.register(IdempotencyKey.random(), RegisterRequest(token, true, MockBackend.CONSENT_VERSION_PD)) }
+            },
             case(ErrorCodes.TOKEN_REVOKED, "an unknown refresh token") {
                 val s = Scene(signedIn = false)
                 s.call("refreshTokens", TokenPair.serializer()) { s.auth.refreshTokens(IdempotencyKey.random(), "rt_unknown") }
@@ -145,7 +165,7 @@ class ContractErrorCodesTest(private val name: String) {
             // The only 429 of the fake backend (FIN-170); request rate limits (1.1 «номер занят», plain calls) it does not have.
             case(ErrorCodes.RATE_LIMITED, "a stream re-open turned away after a drop") {
                 val s = Scene(FAST.copy(streamDrops = 1, streamRateLimits = 1, callVerifyDelayMs = 60_000), signedIn = false)
-                val token = s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken
+                val token = s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)).verificationToken
                 s.phoneEvents(token) // `pending`, then the drop
                 s.phoneEvents(token)
             },
@@ -170,8 +190,8 @@ class ContractErrorCodesTest(private val name: String) {
             case(ErrorCodes.IDEMPOTENCY_CONFLICT, "the same key with another phone") {
                 val s = Scene(signedIn = false)
                 val key = IdempotencyKey.random()
-                s.auth.startPhoneVerification(key, NEW_PHONE)
-                s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(key, "+79990000002") }
+                s.auth.startPhoneVerification(key, StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true))
+                s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(key, StartPhoneVerificationRequest("+79990000002", true, "2026-09-28", true)) }
             },
             case(ErrorCodes.REQUEST_IN_PROGRESS, "a second retry while the first is on its way") {
                 val s = Scene(FAST.copy(assistantModelErrors = 1))

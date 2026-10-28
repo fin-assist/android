@@ -3,6 +3,9 @@ package ru.finassist.pf.feature.auth.impl.domain
 import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.common.time.ServerDeadline
+import ru.finassist.pf.core.api.model.ConsentDocument
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+import ru.finassist.pf.core.api.model.RegisterRequest
 import ru.finassist.pf.core.api.model.PhoneVerification
 import java.time.Instant
 import javax.inject.Inject
@@ -24,6 +27,11 @@ class SignInFlow @Inject constructor() {
         private set
     private var trackedPhoneKey: IdempotencyKey? = null
     @Volatile var registrationToken: String? = null
+    /** Immutable body of the current keyed Start, including the consent version the user actually saw. */
+    @Volatile var phoneRequest: StartPhoneVerificationRequest? = null
+    @Volatile var consentDocument: ConsentDocument? = null
+    @Volatile var consentRefreshRequired: Boolean = false
+    @Volatile var registrationRequest: RegisterRequest? = null
     /** `Idempotency-Key` of the current phone verification request (reused on retry of the same action). */
     @Volatile var phoneRequestKey: String? = null
 
@@ -41,6 +49,8 @@ class SignInFlow @Inject constructor() {
     }
 
     fun newPhoneRequest(clock: ElapsedClock): IdempotencyKey = IdempotencyKey.random(clock).also {
+        registrationToken = null
+        registrationRequest = null
         trackedPhoneKey = it
         phoneRequestKey = it.value
     }
@@ -54,6 +64,10 @@ class SignInFlow @Inject constructor() {
         registrationToken = null
         phoneRequestKey = null
         trackedPhoneKey = null
+        phoneRequest = null
+        consentDocument = null
+        consentRefreshRequired = false
+        registrationRequest = null
     }
 }
 

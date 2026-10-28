@@ -11,21 +11,16 @@ tags:
     env:
       PHONE: "9001112233"
 
-# Consent: the button without the tick shows the error and keeps the user here.
+# The consent was received on the phone step; registration never asks for it again.
 - extendedWaitUntil:
     visible:
       id: "auth.consent"
     timeout: 15000
+- assertNotVisible:
+    id: "auth.consent.checkbox"
 - scrollUntilVisible:
     element:
       id: "auth.consent.submit"
-- tapOn:
-    id: "auth.consent.submit"
-- assertVisible: "Без согласия мы не сможем создать аккаунт и хранить ваши данные"
-- assertVisible:
-    id: "auth.consent"
-- tapOn:
-    id: "auth.consent.checkbox"
 - tapOn:
     id: "auth.consent.submit"
 

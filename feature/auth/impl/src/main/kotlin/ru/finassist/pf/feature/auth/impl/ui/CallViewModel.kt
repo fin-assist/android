@@ -1,6 +1,8 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
 import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.feature.auth.impl.domain.PhoneStartGate
+import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.common.error.ErrorContext
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.ErrorPresentation
@@ -54,6 +56,7 @@ data class CallUiState(
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
     val replayUnavailable: Boolean = false,
+    val newIntentRequired: Boolean = false,
 )
 
 sealed interface CallEvent {
@@ -61,6 +64,7 @@ sealed interface CallEvent {
     data object SignedIn : CallEvent
     data object NewUser : CallEvent
     data object RegistrationClosed : CallEvent
+    data object ConsentRequired : CallEvent
 }
 
 /**
@@ -85,14 +89,14 @@ class CallViewModel @Inject constructor(
         ),
     )
     private val retryGate = RequestRetryGate(elapsedClock)
-    private val verificationGate = RequestRetryGate(elapsedClock)
+    private val verificationGate = PhoneStartGate(elapsedClock)
     private var pendingRequestKey: IdempotencyKey? = null
     init {
         viewModelScope.launch { retryGate.readiness.collect { _ -> updateRetryReady() } }
         viewModelScope.launch { verificationGate.readiness.collect { _ -> updateRetryReady() } }
     }
 
-    private fun updateRetryReady() = _state.update { it.copy(retryReady = if (pendingRequestKey == null) retryGate.isReady() else verificationGate.isReady()) }
+    private fun updateRetryReady() = _state.update { it.copy(retryReady = if (pendingRequestKey == null) retryGate.isReady() else verificationGate.isReady(), newIntentRequired = verificationGate.newIntentRequired) }
     val state: StateFlow<CallUiState> = _state
     private val _events = MutableStateFlow<CallEvent?>(null)
     val events: StateFlow<CallEvent?> = _events
@@ -238,12 +242,16 @@ class CallViewModel @Inject constructor(
             _state.update { it.copy(busy = true, errorPresentation = null, requestRetryable = null) }
             try {
                 stopWatching()
-                val key = pendingRequestKey ?: flow.newPhoneRequest(elapsedClock).also { pendingRequestKey = it }
+                val request = flow.phoneRequest ?: run { _events.value = CallEvent.ConsentRequired; return@launch }
+                val key = if (verificationGate.newIntentRequired) {
+                    verificationGate.clear()
+                    flow.newPhoneRequest(elapsedClock).also { pendingRequestKey = it }
+                } else pendingRequestKey ?: flow.newPhoneRequest(elapsedClock).also { pendingRequestKey = it }
                 if (key.replayWindow?.isOpen(elapsedClock) != true) {
                     _state.update { it.copy(phase = CallPhase.ERROR, replayUnavailable = true) }
                     return@launch
                 }
-                val verification = authApi.startPhoneVerification(key, flow.phone)
+                val verification = authApi.startPhoneVerification(key, request)
                 pendingRequestKey = null
                 retryGate.clear()
                 verificationGate.clear()
@@ -256,6 +264,11 @@ class CallViewModel @Inject constructor(
                 watch()
             } catch (e: AppError) {
                 verificationGate.record(e)
+                if (e is AppError.Api && (e.code == ErrorCodes.CONSENT_OUTDATED || e.code == ErrorCodes.CONSENT_REQUIRED)) {
+                    flow.consentRefreshRequired = true
+                    _events.value = CallEvent.ConsentRequired
+                }
+                updateRetryReady()
                 _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
                 when (e) {
                     is AppError.RateLimited -> _state.update { it.copy(phase = CallPhase.LOCKED, lockText = lockText(e)) }

@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock.contract
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -40,12 +42,12 @@ class ContractBehaviourTest {
     }
 
     private suspend fun Scene.registrationToken(phone: String = NEW_PHONE): String {
-        val v = auth.startPhoneVerification(IdempotencyKey.random(), phone)
+        val v = auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(phone, true, "2026-09-28", true))
         return drain(auth.streamPhoneVerification(v.verificationToken)).last().registrationToken!!
     }
 
     private suspend fun Scene.refreshToken(): String {
-        val v = auth.startPhoneVerification(IdempotencyKey.random(), FAST.existingPhone)
+        val v = auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(FAST.existingPhone, true, "2026-09-28", true))
         return drain(auth.streamPhoneVerification(v.verificationToken)).last().refreshToken!!
     }
 
@@ -68,7 +70,7 @@ class ContractBehaviourTest {
         expect(ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "400 version before 401", s.call("getProfile", null) { s.profile.getProfile() })
         expect(
             ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "400 version before 400 validation",
-            s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(IdempotencyKey.random(), "8916") },
+            s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest("8916", true, "2026-09-28", true)) },
         )
     }
 
@@ -93,15 +95,15 @@ class ContractBehaviourTest {
     fun `maintenance and an unsupported version are not stored under the key`() = runBlocking {
         val s = Scene(FAST.copy(maintenance = true), signedIn = false)
         val key = IdempotencyKey.random()
-        expect(ErrorCodes.MAINTENANCE, "503 under a key", s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(key, NEW_PHONE) })
+        expect(ErrorCodes.MAINTENANCE, "503 under a key", s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(key, StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)) })
         s.backend.config = s.backend.config.copy(maintenance = false, minVersion = "0.3.0")
         expect(
             ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "400 version under the same key",
-            s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(key, NEW_PHONE) },
+            s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(key, StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)) },
         )
         s.backend.config = s.backend.config.copy(minVersion = null)
         // api.md «Идемпотентность»: answers before the key check are not stored, the repeat runs as the first request.
-        val after = s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(key, NEW_PHONE) }
+        val after = s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(key, StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)) }
         assertEquals("$after", 200, after.status)
         ContractCheck.assertContract("after maintenance and update, same key", after)
     }
@@ -109,7 +111,7 @@ class ContractBehaviourTest {
     @Test
     fun `a stream is not opened during maintenance or on an unsupported version`() = runBlocking {
         val s = Scene(signedIn = false)
-        val token = s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken
+        val token = s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)).verificationToken
         val signedIn = Scene()
         val upload = signedIn.backend.uploads.first().id
         val answer = signedIn.answer("Сколько я потратил?")
@@ -139,7 +141,7 @@ class ContractBehaviourTest {
     fun `a re-open during maintenance gets 503 before its 429`() = runBlocking {
         // The call does not come for a minute: the verification stream starts with `pending`, which is not terminal.
         val s = Scene(FAST.copy(streamDrops = 1, streamRateLimits = 1, callVerifyDelayMs = 60_000), signedIn = false)
-        val token = s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken
+        val token = s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)).verificationToken
         // The first opening drops after its first event; the next one would be turned away with 429.
         assertEquals(1, s.phoneEvents(token).events.size)
         s.backend.config = s.backend.config.copy(maintenance = true)
@@ -233,8 +235,8 @@ class ContractBehaviourTest {
     fun `a repeat with the same key and body gets the stored response`() = runBlocking {
         val s = Scene(signedIn = false)
         val key = IdempotencyKey.random()
-        val first = s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(key, NEW_PHONE) }
-        val again = s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(key, NEW_PHONE) }
+        val first = s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(key, StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)) }
+        val again = s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(key, StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)) }
         ContractCheck.assertContract("replay: phone", again)
         assertEquals(first.status to first.body, again.status to again.body)
 

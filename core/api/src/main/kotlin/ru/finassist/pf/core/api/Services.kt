@@ -1,5 +1,7 @@
 package ru.finassist.pf.core.api
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import kotlinx.coroutines.flow.Flow
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.AnalyticsPeriodsList
@@ -50,9 +52,11 @@ import java.time.OffsetDateTime
 interface AuthApi {
     /**
      * `POST /v1/auth/phone`. A number outside `+7` and 10 digits — 400 `VALIDATION_ERROR` with a violation at the
-     * field `phone` (`INVALID_FORMAT`); there is no code of its own for it (FIN-68).
+     * field `phone` (`INVALID_FORMAT`); there is no code of its own for it (FIN-68). Both confirmations and the
+     * viewed PD document version are mandatory before the provider call for every number (FIN-365). The server
+     * owns evidence timestamps. Replays retain the complete body; a received 429 leads to a new key after its wait.
      */
-    suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification
+    suspend fun startPhoneVerification(key: IdempotencyKey, request: StartPhoneVerificationRequest): PhoneVerification
 
     /** `GET /v1/auth/phone/events`. Completes after a terminal status (`verified` / `expired`). */
     fun streamPhoneVerification(verificationToken: String): Flow<PhoneVerificationStatusEvent>

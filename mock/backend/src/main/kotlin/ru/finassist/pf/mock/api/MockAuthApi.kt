@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock.api
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -32,13 +34,25 @@ import java.util.UUID
  */
 class MockAuthApi(private val backend: MockBackend) : AuthApi {
 
-    private class Verification(val phone: String, val createdAt: OffsetDateTime, val expiresAt: OffsetDateTime) {
+    internal data class ConsentReceipt(
+        val request: StartPhoneVerificationRequest,
+        val consentAcceptedAt: OffsetDateTime,
+        val ageConfirmedAt: OffsetDateTime,
+        var accountId: String? = null,
+    )
+    /** In-process server-side evidence, separate from profile and verification working state. */
+    internal val consentReceipts = mutableListOf<ConsentReceipt>()
+    internal var personalDataConsentVersion: String = MockBackend.CONSENT_VERSION_PD
+
+    private class Verification(val receipt: ConsentReceipt, val createdAt: OffsetDateTime, val expiresAt: OffsetDateTime) {
+        val phone get() = receipt.request.phone
         var registrationToken: String? = null
+        var verifiedAt: OffsetDateTime? = null
         var consumed = false
     }
 
     private val verifications = HashMap<String, Verification>()
-    private val registrationTokens = HashMap<String, String>() // token → phone
+    private val registrationTokens = HashMap<String, Verification>()
     private val refreshTokens = HashSet<String>()
     private val random = SecureRandom()
 
@@ -47,7 +61,8 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         return prefix + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     }
 
-    override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification {
+    override suspend fun startPhoneVerification(key: IdempotencyKey, request: StartPhoneVerificationRequest): PhoneVerification {
+        val phone = request.phone
         backend.simulateNetwork()
         if (!PHONE.matches(phone)) {
             throw backend.apiError(
@@ -55,11 +70,23 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
                 details = listOf(AppError.FieldError(PHONE_FIELD, FieldErrorCodes.INVALID_FORMAT, "Номер — +7 и 10 цифр")),
             )
         }
-        val stored = backend.idempotent("auth.phone:${key.value}", request = phone) {
+        if (request.pdConsentVersion.count { it !in '\uDC00'..'\uDFFF' } !in 1..64) {
+            throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+                details = listOf(AppError.FieldError("pd_consent_version", FieldErrorCodes.INVALID_FORMAT, "Нужна версия согласия")))
+        }
+        val stored = backend.idempotent("auth.phone:${key.value}", request = request) {
+            if (!request.ageConfirmed) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+                details = listOf(AppError.FieldError("age_confirmed", "REQUIRED", "Подтвердите возраст 14+")))
+            if (!request.pdConsentAccepted) throw backend.apiError(ErrorCodes.CONSENT_REQUIRED, 403)
+            if (request.pdConsentVersion != personalDataConsentVersion) throw backend.apiError(ErrorCodes.CONSENT_OUTDATED, 422)
             val now = backend.now()
             val token = secret("vt_")
             val expiresAt = now.plusNanos(backend.config.verificationTtlMs * 1_000_000)
-            backend.mutex.withLock { verifications[token] = Verification(phone, now, expiresAt) }
+            backend.mutex.withLock {
+                val receipt = ConsentReceipt(request, now, now)
+                consentReceipts += receipt
+                verifications[token] = Verification(receipt, now, expiresAt)
+            }
             PhoneVerification(verificationToken = token, callbackNumber = CALLBACK_NUMBER, expiresAt = expiresAt)
         }
         // `expires_in` is computed on every send, a replay by the same key included (api.md 1.1): floor, not below 0.
@@ -80,7 +107,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         if (v.consumed) throw backend.unauthorizedError(ErrorCodes.INVALID_TOKEN)
         val verifiedAt = v.createdAt.plusNanos(backend.config.callVerifyDelayMs * 1_000_000)
         val now = backend.now()
-        if (now.isAfter(v.expiresAt)) {
+        if (v.verifiedAt == null && !now.isBefore(v.expiresAt)) {
             emit(PhoneVerificationStatusEvent(status = VerificationStatus.EXPIRED))
             return@flow
         }
@@ -98,17 +125,19 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
     }
 
     private suspend fun verified(v: Verification): PhoneVerificationStatusEvent {
+        backend.mutex.withLock { if (v.verifiedAt == null) v.verifiedAt = backend.now() }
+        if (!backend.now().isBefore(checkNotNull(v.verifiedAt).plusMinutes(15))) throw backend.unauthorizedError(ErrorCodes.TOKEN_EXPIRED)
         val isNew = v.phone != backend.config.existingPhone && backend.profile.phone != v.phone
         return if (isNew) {
-            val token = v.registrationToken ?: secret("reg_").also { t ->
-                v.registrationToken = t
-                backend.mutex.withLock { registrationTokens[t] = v.phone }
+            val token = backend.mutex.withLock {
+                v.registrationToken ?: secret("reg_").also { t -> v.registrationToken = t; registrationTokens[t] = v }
             }
             PhoneVerificationStatusEvent(status = VerificationStatus.VERIFIED, isNewUser = true, registrationToken = token)
         } else {
             val tokens = issueTokens()
             backend.mutex.withLock {
                 if (backend.profile.userId.isEmpty()) backend.profile = backend.emptyProfile(v.phone, backend.newUserId())
+                v.receipt.accountId = backend.profile.userId
             }
             PhoneVerificationStatusEvent(
                 status = VerificationStatus.VERIFIED, isNewUser = false,
@@ -126,18 +155,25 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
     override suspend fun register(key: IdempotencyKey, request: RegisterRequest): RegisterResponse {
         backend.simulateNetwork()
         return backend.idempotent("auth.register:${key.value}", request = request) {
-            val phone = backend.mutex.withLock { registrationTokens[request.registrationToken] }
-                ?: throw backend.unauthorizedError(ErrorCodes.INVALID_TOKEN)
-            if (!request.pdConsentAccepted) throw backend.apiError(ErrorCodes.CONSENT_REQUIRED, 403)
-            if (request.pdConsentVersion != MockBackend.CONSENT_VERSION_PD) throw backend.apiError(ErrorCodes.CONSENT_OUTDATED, 422)
-            val tokens = issueTokens()
-            val userId = backend.newUserId()
             backend.mutex.withLock {
+                val verification = registrationTokens[request.registrationToken]
+                    ?: throw backend.unauthorizedError(ErrorCodes.INVALID_TOKEN)
+                if (!backend.now().isBefore(checkNotNull(verification.verifiedAt).plusMinutes(15))) {
+                    throw backend.unauthorizedError(ErrorCodes.TOKEN_EXPIRED)
+                }
+                if (!request.pdConsentAccepted) throw backend.apiError(ErrorCodes.CONSENT_REQUIRED, 403)
+                if (request.pdConsentVersion != verification.receipt.request.pdConsentVersion) throw backend.apiError(ErrorCodes.CONSENT_OUTDATED, 422)
+                val phone = verification.phone
+                val refresh = secret("rt_")
+                val access = "mock.${UUID.randomUUID()}"
+                val userId = backend.newUserId()
+                refreshTokens += refresh
                 registrationTokens.remove(request.registrationToken)
                 verifications.values.filter { it.phone == phone }.forEach { it.consumed = true }
                 backend.profile = backend.emptyProfile(phone, userId).copy(timezone = request.timezone ?: "Europe/Moscow")
+                verification.receipt.accountId = userId
+                RegisterResponse(accessToken = access, refreshToken = refresh, userId = userId)
             }
-            RegisterResponse(accessToken = tokens.accessToken, refreshToken = tokens.refreshToken, userId = userId)
         }
     }
 
@@ -158,7 +194,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
     override suspend fun getConsentDocument(type: ConsentType): ConsentDocument {
         backend.simulateNetwork()
         return when (type) {
-            ConsentType.PERSONAL_DATA -> ConsentDocument(type, MockBackend.CONSENT_VERSION_PD, "Согласие на обработку персональных данных", "https://example.ru/legal/pd-consent/${MockBackend.CONSENT_VERSION_PD}")
+            ConsentType.PERSONAL_DATA -> ConsentDocument(type, personalDataConsentVersion, "Согласие на обработку персональных данных", "https://example.ru/legal/pd-consent/$personalDataConsentVersion")
             ConsentType.ASSISTANT -> ConsentDocument(type, MockBackend.CONSENT_VERSION_ASSISTANT, "Согласие на передачу данных помощнику", "https://example.ru/legal/assistant-consent/${MockBackend.CONSENT_VERSION_ASSISTANT}")
             ConsentType.UNKNOWN -> throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
         }

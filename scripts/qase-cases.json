@@ -53,6 +53,8 @@
     ".maestro/flows/assistant/off_topic_limit.yaml": 49,
     ".maestro/flows/errors/request_retry_false.yaml": 50,
     ".maestro/flows/statements/upload_restored_key.yaml": 51,
-    ".maestro/flows/assistant/retry_after_consent.yaml": 52
+    ".maestro/flows/assistant/retry_after_consent.yaml": 52,
+    ".maestro/flows/auth/phone_confirmation_gates.yaml": 57,
+    ".maestro/flows/auth/phone_consent_recovery.yaml": 58
   }
 }

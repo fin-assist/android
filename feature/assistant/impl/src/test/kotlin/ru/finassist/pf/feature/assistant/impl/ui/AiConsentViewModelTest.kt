@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -46,7 +48,7 @@ class AiConsentViewModelTest {
         var documentGate: CompletableDeferred<Unit>? = null
         var documentFailure: AppError? = null
         var documentCall: (suspend (Int) -> ConsentDocument)? = null
-        override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification = error("unused")
+        override suspend fun startPhoneVerification(key: IdempotencyKey, request: StartPhoneVerificationRequest): PhoneVerification = error("unused")
         override fun streamPhoneVerification(verificationToken: String): Flow<PhoneVerificationStatusEvent> = error("unused")
         override suspend fun register(key: IdempotencyKey, request: RegisterRequest): RegisterResponse = error("unused")
         override suspend fun refreshTokens(key: IdempotencyKey, refreshToken: String): TokenPair = error("unused")
