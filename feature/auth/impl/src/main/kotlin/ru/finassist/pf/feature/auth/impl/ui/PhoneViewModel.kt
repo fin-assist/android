@@ -207,6 +207,7 @@ class PhoneViewModel @Inject constructor(
             } catch (e: AppError) {
                 if (generation != inputGeneration) return@launch
                 retryGate.record(e)
+                _state.update { it.copy(error = errorText(e), errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
                 if (e is AppError.Api && e.code == ErrorCodes.CONSENT_OUTDATED) {
                     rejectedVersion = request.pdConsentVersion
                     _state.update { it.copy(pdConsentAccepted = false, documentError = "Текст согласия обновился — прочитайте его и подтвердите заново") }
@@ -215,7 +216,6 @@ class PhoneViewModel @Inject constructor(
                     refreshDocument()
                 }
                 updateReadiness()
-                _state.update { it.copy(error = errorText(e), errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
             } finally {
                 _state.update { it.copy(busy = false) }; updateReadiness()
             }

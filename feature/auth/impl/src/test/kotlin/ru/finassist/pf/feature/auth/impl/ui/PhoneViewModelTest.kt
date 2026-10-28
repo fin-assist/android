@@ -394,6 +394,19 @@ class PhoneViewModelTest {
         assertEquals(2, auth.keys.size)
     }
 
+    @Test fun `an immediate corrected document cannot be overwritten by stale Start refusal metadata`() {
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { 0L })
+        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.onInput(TextFieldValue("9161234567"))
+        auth.failure = AppError.Api(ErrorCodes.CONSENT_OUTDATED, 422,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo(ErrorCodes.CONSENT_OUTDATED, 422, requestRetryable = false))
+        auth.documentVersion = "new"
+        vm.submit()
+        assertEquals("new", vm.state.value.document?.version)
+        assertNull(vm.state.value.requestRetryable)
+        assertTrue(vm.state.value.retryReady)
+        assertFalse(vm.state.value.pdConsentAccepted)
+    }
+
     private fun phoneRefusal(retryable: Boolean) = AppError.RateLimited(null, 60,
         ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = retryable,
             retryAfterSeconds = 60, timing = ResponseTiming(receivedElapsedMillis = 0)))
