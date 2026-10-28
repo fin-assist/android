@@ -156,6 +156,7 @@ class PhoneViewModel @Inject constructor(
             // Selection-only changes keep the error; any text change clears it.
             it.copy(input = TextFieldValue(e.digits, TextRange(e.start, e.end)), error = if (e.digits == it.digits) it.error else null, errorPresentation = if (e.digits == it.digits) it.errorPresentation else null, requestRetryable = if (e.digits == it.digits) it.requestRetryable else null, replayUnavailable = if (e.digits == it.digits) it.replayUnavailable else false)
         }
+        updateReadiness()
     }
 
     fun submit() {

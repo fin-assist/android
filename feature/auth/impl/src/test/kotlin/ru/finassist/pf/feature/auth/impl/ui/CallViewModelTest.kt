@@ -675,6 +675,7 @@ class CallViewModelTest {
         assertEquals(1, keys.size); assertTrue(vm.state.value.newIntentRequired)
         advanceSeconds(1); vm.requestAgain()
         assertEquals(2, keys.size); assertNotEquals(keys[0], keys[1])
+        assertFalse(vm.state.value.newIntentRequired, "a successful new Start clears the consumed new-intent state")
     }
 
 }

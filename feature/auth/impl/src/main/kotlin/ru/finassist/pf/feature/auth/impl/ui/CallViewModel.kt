@@ -277,6 +277,7 @@ class CallViewModel @Inject constructor(
                 }
             } finally {
                 _state.update { it.copy(busy = false) }
+                updateRetryReady()
             }
         }
     }
