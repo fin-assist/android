@@ -40,6 +40,10 @@ tags:
 - scrollUntilVisible:
     element:
       text: "Номер телефона из аккаунта"
+- assertVisible: "Номер телефона из аккаунта"
+- scrollUntilVisible:
+    element:
+      text: "Файлы выписок"
 - assertVisible: "Файлы выписок"
 - scrollUntilVisible:
     element:
