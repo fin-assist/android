@@ -56,4 +56,11 @@ class PhoneDesignCheckTest {
         documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true,
         documentRefreshReady = false, restartAvailable = true), dark = true)
 
+    @Test fun documentRefusedWait() = capture("PhoneDocumentRefusedWait", PhoneUiState(
+        documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true,
+        documentRefreshReady = false, restartAvailable = false))
+    @Test fun documentRefusedWaitDark() = capture("PhoneDocumentRefusedWaitDark", PhoneUiState(
+        documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true,
+        documentRefreshReady = false, restartAvailable = false), dark = true)
+
 }

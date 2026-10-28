@@ -493,4 +493,18 @@ class PhoneViewModelTest {
         assertTrue(auth.requests.isEmpty(), "explicit restart only GETs the document")
     }
 
+    @Test fun `document GET target without Date never invents a restart deadline`() {
+        var elapsed = 0L
+        auth.documentFailure = AppError.RateLimited(deviceNow.plusMinutes(5),
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
+                retryAt = deviceNow.plusMinutes(5), timing = ResponseTiming(receivedElapsedMillis = 0)))
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { elapsed })
+        assertFalse(vm.state.value.restartAvailable)
+        elapsed = 24L * 60 * 60 * 1000
+        vm.restart(); vm.setAgeConfirmed(true); vm.restart()
+        assertFalse(vm.state.value.restartAvailable)
+        assertEquals(1, auth.documentCalls)
+        assertTrue(auth.requests.isEmpty())
+    }
+
 }
