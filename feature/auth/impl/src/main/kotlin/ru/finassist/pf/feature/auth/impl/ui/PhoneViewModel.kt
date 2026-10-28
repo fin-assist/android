@@ -71,6 +71,7 @@ class PhoneViewModel @Inject constructor(
     init {
         viewModelScope.launch { retryGate.readiness.collect { updateReadiness() } }
         viewModelScope.launch { documentGate.readiness.collect { updateReadiness() } }
+        viewModelScope.launch { documentGate.waitReadiness.collect { updateReadiness() } }
         refreshDocument()
     }
     private fun updateReadiness() {
@@ -81,8 +82,8 @@ class PhoneViewModel @Inject constructor(
             it.copy(
             retryReady = retryGate.isReady() && rejectedVersion == null,
             newIntentRequired = retryGate.newIntentRequired,
-            restartAvailable = it.replayUnavailable || resolvedRetryable == false || retryGate.isExplicitlyForbidden() ||
-                (documentRefreshRequired && documentGate.isExplicitlyForbidden()),
+            restartAvailable = documentGate.remainingMillis() == 0L && (it.replayUnavailable || resolvedRetryable == false || retryGate.isExplicitlyForbidden() ||
+                (documentRefreshRequired && documentGate.isExplicitlyForbidden())),
             documentRefreshReady = documentGate.isReady() && !it.documentBusy && !it.busy,
             documentRefreshRequired = documentRefreshRequired,
             error = waiting?.let { limit -> rateLimitText(limit.retryAt) } ?: it.error,
@@ -103,7 +104,7 @@ class PhoneViewModel @Inject constructor(
 
     /** Explicitly abandons the local intent; it never POSTs and never cancels a server 429 wait. */
     fun restart() {
-        if (_state.value.busy || _state.value.documentBusy) return
+        if (_state.value.busy || _state.value.documentBusy || documentGate.remainingMillis() != 0L) return
         val previous = _state.value
         inputGeneration++
         flow.reset(keepPhoneStartWait = true)

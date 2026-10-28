@@ -455,3 +455,11 @@ restart and re-confirming the checkboxes. `phone_start` failures count in
 the existing `expect_error_requests` check and happen before receipt creation; arbitrary error payloads are not
 accepted. Qase59/`auth/phone_restart` exercises restart after the closed terminal 500 fixture. This is a synthetic
 refusal, not a claim to reproduce a lost provider outcome or restart an independent backend process.
+
+
+FIN-365 — Not covered yet: a refused consent-document GET (including 429 with `retryable:false`) and its
+explicit restart need a controllable REST fixture; the mock control-link does not inject document GET failures.
+VM/core regressions cover no GET before the captured deadline, an explicit restart afterwards without POST,
+and a refused GET without a time restriction. There is no automatic GET when the wait ends. UI/DesignCheck
+runs are not authorized. The proposed document-refusal states use existing error/link/button primitives;
+there is no matching Figma artboard, and source fixtures do not claim a visual approval or a completed UI run.

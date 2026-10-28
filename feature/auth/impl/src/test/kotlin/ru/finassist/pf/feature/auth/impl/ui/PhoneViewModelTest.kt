@@ -471,4 +471,26 @@ class PhoneViewModelTest {
         assertEquals(PhoneEvent.GoToCall, vm.events.value)
     }
 
+    @Test fun `refused document GET wait survives explicit restart and only enables a new GET after its deadline`() {
+        val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
+        Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+        auth.documentFailure = AppError.RateLimited(deviceNow.plusMinutes(5), 1,
+            ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
+                retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0)))
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { scheduler.currentTime })
+        assertFalse(vm.state.value.restartAvailable)
+        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.restart(); vm.refreshDocument(); vm.submit()
+        assertEquals(1, auth.documentCalls); assertTrue(auth.requests.isEmpty())
+        scheduler.advanceTimeBy(999); scheduler.runCurrent()
+        assertFalse(vm.state.value.restartAvailable)
+        scheduler.advanceTimeBy(1); scheduler.runCurrent()
+        assertTrue(vm.state.value.restartAvailable)
+        assertEquals(1, auth.documentCalls, "deadline alone never automatically GETs")
+        vm.refreshDocument(); assertEquals(1, auth.documentCalls, "the original GET remains forbidden")
+        auth.documentFailure = null; vm.restart()
+        assertEquals(2, auth.documentCalls)
+        assertFalse(vm.state.value.ageConfirmed); assertFalse(vm.state.value.pdConsentAccepted)
+        assertTrue(auth.requests.isEmpty(), "explicit restart only GETs the document")
+    }
+
 }
