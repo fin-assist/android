@@ -544,4 +544,32 @@ class PhoneViewModelTest {
         assertNull(vm.state.value.documentRetryText); assertTrue(auth.requests.isEmpty())
     }
 
+    @Test fun `document and Start retry times use clock zone instead of the server timestamp offset`() {
+        for ((target, zone, shown) in listOf(
+            Triple(OffsetDateTime.parse("2026-10-13T10:43:00Z"), Clock.MOSCOW, "13:43"),
+            Triple(OffsetDateTime.parse("2026-10-13T13:43:00+03:00"), ZoneId.of("Asia/Novosibirsk"), "17:43"),
+        )) {
+            val localClock = object : Clock {
+                override fun now() = deviceNow.atZoneSameInstant(zone).toOffsetDateTime()
+                override val zone: ZoneId = zone
+            }
+            val api = FakeAuth()
+            val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
+                ru.finassist.pf.core.common.error.UserMessage.from("Подождите перед загрузкой"))
+            val limited = AppError.RateLimited(target, 1,
+                ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
+                    retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0), presentation = presentation))
+            api.documentFailure = limited
+            val documentVm = PhoneViewModel(api, SignInFlow(), tracker, localClock, ElapsedClock { 0L })
+            assertEquals("Слишком много попыток. Повторите в $shown", documentVm.state.value.documentError)
+            assertEquals("Повторите в $shown", documentVm.state.value.documentRetryText)
+            assertEquals(presentation, documentVm.state.value.documentErrorPresentation)
+            api.documentFailure = null; api.failure = limited
+            val startVm = PhoneViewModel(api, SignInFlow(), tracker, localClock, ElapsedClock { 0L })
+            startVm.setAgeConfirmed(true); startVm.setConsentAccepted(true)
+            startVm.onInput(TextFieldValue("9161234567")); startVm.submit()
+            assertEquals("Слишком много попыток. Повторите в $shown", startVm.state.value.error)
+        }
+    }
+
 }

@@ -22,6 +22,7 @@ import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
+import ru.finassist.pf.feature.auth.impl.domain.CallDeadline
 import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
 import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
 import javax.inject.Inject
@@ -155,7 +156,7 @@ class PhoneViewModel @Inject constructor(
                     documentErrorPresentation = e.presentation.takeUnless { e is AppError.Offline },
                     // A safe server user_message replaces the fallback, so show the captured retry time separately.
                     documentRetryText = retryAt?.takeIf { e is AppError.RateLimited && e.presentation.userMessage is ru.finassist.pf.core.common.error.UserMessage.Safe }
-                        ?.let { "Повторите в ${"%02d:%02d".format(it.hour, it.minute)}" },
+                        ?.let(::retryTimeText),
                 ) }
             } finally {
                 _state.update { it.copy(documentBusy = false) }; updateReadiness()
@@ -249,8 +250,11 @@ class PhoneViewModel @Inject constructor(
 
     fun consumeEvent() { _events.value = null }
 
+    private fun retryTimeText(retryAt: java.time.OffsetDateTime): String =
+        "Повторите в ${CallDeadline.clockText(retryAt.toInstant(), clock.zone)}"
+
     private fun rateLimitText(retryAt: java.time.OffsetDateTime?): String =
-        "Слишком много попыток" + (retryAt?.let { ". Повторите в ${"%02d:%02d".format(it.hour, it.minute)}" } ?: "")
+        "Слишком много попыток" + (retryAt?.let { ". ${retryTimeText(it)}" } ?: "")
 
     private fun errorText(e: AppError): String = when (e) {
         is AppError.Offline -> "Нет сети — проверьте интернет и повторите"
