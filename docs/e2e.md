@@ -449,7 +449,8 @@ DesignCheck runs were not executed under the owner's instruction. Existing sign-
 updated confirmation precondition; their other scenarios retain the same IDs.
 
 The `auth.phone.restart` action abandons the local phone flow/key and reloads the document with both choices off,
-without a POST. A received 429 keeps its captured server wait across this action. `phone_start` failures count in
+without a POST. A received 429 keeps its captured server wait across this action and digit edits, including
+A → B → A. The pending intent conservatively delays any edited number until the same wait ends, then uses a new key. `phone_start` failures count in
 the existing `expect_error_requests` check and happen before receipt creation; arbitrary error payloads are not
 accepted. Qase59/`auth/phone_restart` exercises restart after the closed terminal 500 fixture. This is a synthetic
 refusal, not a claim to reproduce a lost provider outcome or restart an independent backend process.

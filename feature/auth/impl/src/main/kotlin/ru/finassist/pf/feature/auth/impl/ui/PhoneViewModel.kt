@@ -148,7 +148,9 @@ class PhoneViewModel @Inject constructor(
         val e = PhoneFormat.edit(value.text, value.selection.start, value.selection.end)
         if (e.digits != _state.value.digits) {
             inputGeneration++ // invalidate the previous number before clearing its restrictions
-            retryGate.clear()
+            // A received 429 belongs to the pending intent even after edits (including A → B → A).
+            // Keep its server wait and new-key requirement until the next explicit Start consumes them.
+            if (!retryGate.newIntentRequired) retryGate.clear()
         }
         _state.update {
             // Selection-only changes keep the error; any text change clears it.

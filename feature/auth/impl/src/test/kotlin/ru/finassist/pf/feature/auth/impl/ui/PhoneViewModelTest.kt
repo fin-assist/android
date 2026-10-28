@@ -412,4 +412,26 @@ class PhoneViewModelTest {
         ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = retryable,
             retryAfterSeconds = 60, timing = ResponseTiming(receivedElapsedMillis = 0)))
 
+    @Test fun `editing A to B and back cannot clear received 429 wait or reuse its refused key`() {
+        val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
+        Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { scheduler.currentTime })
+        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.onInput(TextFieldValue("9161234567"))
+        auth.failure = AppError.RateLimited(null, 1,
+            ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
+                retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0)))
+        vm.submit()
+        val refusedKey = auth.keys.single()
+        vm.onInput(TextFieldValue("9031234567")); vm.submit()
+        vm.onInput(TextFieldValue("9161234567")); vm.submit()
+        assertEquals(1, auth.keys.size)
+        assertTrue(vm.state.value.newIntentRequired)
+        assertFalse(vm.state.value.retryReady)
+        scheduler.advanceTimeBy(1000); scheduler.runCurrent()
+        auth.failure = null; vm.submit()
+        assertEquals(2, auth.keys.size)
+        assertNotEquals(refusedKey, auth.keys.last())
+        assertEquals(auth.requests.first(), auth.requests.last())
+    }
+
 }

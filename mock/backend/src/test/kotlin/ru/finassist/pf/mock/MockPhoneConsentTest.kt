@@ -70,4 +70,16 @@ class MockPhoneConsentTest {
         assertEquals(1, api.consentReceipts.size)
     }
 
+    @Test fun `verified Watch expires with INVALID_TOKEN while Register expires with TOKEN_EXPIRED`() = runTest {
+        val verification = api.startPhoneVerification(IdempotencyKey.random(), body)
+        val registeredToken = api.streamPhoneVerification(verification.verificationToken).toList().last().registrationToken!!
+        clock.at = clock.at.plusMinutes(15)
+        assertEquals(ErrorCodes.INVALID_TOKEN, assertFailsWith<AppError.Unauthorized> {
+            api.streamPhoneVerification(verification.verificationToken).toList()
+        }.code)
+        assertEquals(ErrorCodes.TOKEN_EXPIRED, assertFailsWith<AppError.Unauthorized> {
+            api.register(IdempotencyKey.random(), RegisterRequest(registeredToken, true, body.pdConsentVersion))
+        }.code)
+    }
+
 }

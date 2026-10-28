@@ -135,6 +135,13 @@ class ContractErrorCodesTest(private val name: String) {
                     s.auth.register(IdempotencyKey.random(), RegisterRequest("reg_unknown", true, MockBackend.CONSENT_VERSION_PD))
                 }
             },
+            case(ErrorCodes.INVALID_TOKEN, "verified phone stream result expires fifteen minutes after verification") {
+                val s = Scene(signedIn = false)
+                val verification = s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest("+79990001122", true, MockBackend.CONSENT_VERSION_PD, true))
+                drain(s.auth.streamPhoneVerification(verification.verificationToken))
+                s.clock.at = s.clock.at.plusMinutes(15)
+                s.phoneEvents(verification.verificationToken)
+            },
             case(ErrorCodes.TOKEN_EXPIRED, "registration result expires fifteen minutes after verification") {
                 val s = Scene(signedIn = false)
                 val token = s.registrationToken()

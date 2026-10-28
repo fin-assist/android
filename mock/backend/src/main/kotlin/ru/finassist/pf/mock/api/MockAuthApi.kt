@@ -128,7 +128,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
 
     private suspend fun verified(v: Verification): PhoneVerificationStatusEvent {
         backend.mutex.withLock { if (v.verifiedAt == null) v.verifiedAt = backend.now() }
-        if (!backend.now().isBefore(checkNotNull(v.verifiedAt).plusMinutes(15))) throw backend.unauthorizedError(ErrorCodes.TOKEN_EXPIRED)
+        if (!backend.now().isBefore(checkNotNull(v.verifiedAt).plusMinutes(15))) throw backend.unauthorizedError(ErrorCodes.INVALID_TOKEN)
         val isNew = v.phone != backend.config.existingPhone && backend.profile.phone != v.phone
         return if (isNew) {
             val token = backend.mutex.withLock {
