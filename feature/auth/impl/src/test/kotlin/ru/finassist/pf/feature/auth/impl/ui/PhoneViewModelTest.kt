@@ -448,4 +448,27 @@ class PhoneViewModelTest {
         assertEquals(auth.requests.first(), auth.requests.last())
     }
 
+    @Test fun `a forbidden initial document GET can be abandoned by explicit restart before confirming and sending phone`() {
+        auth.documentFailure = AppError.Api("DOCUMENT_UNAVAILABLE", 403,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo("DOCUMENT_UNAVAILABLE", 403, requestRetryable = false))
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { 0L })
+        assertNull(vm.state.value.document)
+        assertFalse(vm.state.value.documentRefreshReady)
+        assertTrue(vm.state.value.documentRefreshRequired)
+        assertTrue(vm.state.value.restartAvailable)
+        vm.refreshDocument()
+        assertEquals(1, auth.documentCalls, "the refused original GET cannot be replayed")
+        auth.documentFailure = null
+        vm.restart()
+        assertEquals(2, auth.documentCalls)
+        assertEquals(auth.documentVersion, vm.state.value.document?.version)
+        assertFalse(vm.state.value.restartAvailable)
+        assertFalse(vm.state.value.ageConfirmed)
+        assertFalse(vm.state.value.pdConsentAccepted)
+        assertTrue(auth.requests.isEmpty(), "restart only loads the document")
+        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.onInput(TextFieldValue("9161234567")); vm.submit()
+        assertEquals(1, auth.requests.size)
+        assertEquals(PhoneEvent.GoToCall, vm.events.value)
+    }
+
 }

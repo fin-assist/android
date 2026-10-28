@@ -49,4 +49,11 @@ class PhoneDesignCheckTest {
     @Test fun newIntentWaitAfterRestart() = capture("PhoneNewIntentWaitAfterRestart", PhoneUiState(document = document,
         newIntentRequired = true, retryReady = false, requestRetryable = false, restartAvailable = true, error = "Слишком много попыток. Повторите в 14:05"))
 
+    @Test fun documentRefused() = capture("PhoneDocumentRefused", PhoneUiState(
+        documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true,
+        documentRefreshReady = false, restartAvailable = true))
+    @Test fun documentRefusedDark() = capture("PhoneDocumentRefusedDark", PhoneUiState(
+        documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true,
+        documentRefreshReady = false, restartAvailable = true), dark = true)
+
 }

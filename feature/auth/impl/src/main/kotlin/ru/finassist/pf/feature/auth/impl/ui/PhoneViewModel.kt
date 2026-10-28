@@ -77,12 +77,14 @@ class PhoneViewModel @Inject constructor(
         val waiting = retryGate.receivedRateLimit?.takeIf { retryGate.newIntentRequired && !retryGate.isReady() }
         _state.update {
             val resolvedRetryable = if (waiting != null) waiting.requestRetryable else it.requestRetryable
+            val documentRefreshRequired = rejectedVersion != null || it.document == null
             it.copy(
             retryReady = retryGate.isReady() && rejectedVersion == null,
             newIntentRequired = retryGate.newIntentRequired,
-            restartAvailable = it.replayUnavailable || resolvedRetryable == false || retryGate.isExplicitlyForbidden(),
+            restartAvailable = it.replayUnavailable || resolvedRetryable == false || retryGate.isExplicitlyForbidden() ||
+                (documentRefreshRequired && documentGate.isExplicitlyForbidden()),
             documentRefreshReady = documentGate.isReady() && !it.documentBusy && !it.busy,
-            documentRefreshRequired = rejectedVersion != null || it.document == null,
+            documentRefreshRequired = documentRefreshRequired,
             error = waiting?.let { limit -> rateLimitText(limit.retryAt) } ?: it.error,
             errorPresentation = waiting?.presentation ?: it.errorPresentation,
             requestRetryable = resolvedRetryable,
