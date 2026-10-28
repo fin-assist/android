@@ -21,6 +21,7 @@ import ru.finassist.pf.core.api.model.VerificationStatus
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.ResponseTiming
 import ru.finassist.pf.mock.MockErrorOperation
+import ru.finassist.pf.mock.idempotentResponse
 import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.apiError
 import ru.finassist.pf.mock.unauthorizedError
@@ -75,7 +76,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
             throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
                 details = listOf(AppError.FieldError("pd_consent_version", FieldErrorCodes.INVALID_FORMAT, "Нужна версия согласия")))
         }
-        val stored = backend.idempotent("auth.phone:${key.value}", request = request) {
+        val stored = backend.idempotentResponse("auth.phone:${key.value}", request = request) {
             if (!request.ageConfirmed) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
                 details = listOf(AppError.FieldError("age_confirmed", "REQUIRED", "Подтвердите возраст 14+")))
             if (!request.pdConsentAccepted) throw backend.apiError(ErrorCodes.CONSENT_REQUIRED, 403)

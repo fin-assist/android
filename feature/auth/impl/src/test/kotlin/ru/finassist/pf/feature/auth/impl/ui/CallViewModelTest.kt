@@ -690,7 +690,7 @@ class CallViewModelTest {
         val keys = mutableListOf<String>()
         h.auth.startPhone = { key, _ ->
             keys += key.value
-            if (keys.size == 1) throw AppError.RateLimited(null, 1,
+            if (keys.size == 1) throw AppError.RateLimited(now.plusMinutes(5), 1,
                 ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false, retryAfterSeconds = 1,
                     timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime)))
             verification(token = "vt_new")
@@ -700,8 +700,10 @@ class CallViewModelTest {
         val phone = h.phoneVm()
         phone.onResume(); phone.submit()
         assertFalse(phone.state.value.retryReady)
+        assertEquals("Слишком много попыток. Повторите в 14:27", phone.state.value.error)
         assertEquals(1, keys.size, "back to the same number cannot POST before retry_at")
         phone.restart(); phone.setAgeConfirmed(true); phone.setConsentAccepted(true); phone.submit()
+        assertEquals("Слишком много попыток. Повторите в 14:27", phone.state.value.error)
         assertEquals(1, keys.size, "explicit restart also preserves the server wait")
         advanceSeconds(1); phone.submit()
         assertEquals(2, keys.size)

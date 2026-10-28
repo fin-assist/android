@@ -82,4 +82,21 @@ class MockPhoneConsentTest {
         }.code)
     }
 
+    @Test fun `Start caches age 400 and version 422 under their full request while consent 403 is not cached`() = runTest {
+        for ((invalid, code) in listOf(body.copy(ageConfirmed = false) to ErrorCodes.VALIDATION_ERROR,
+            body.copy(pdConsentVersion = "old") to ErrorCodes.CONSENT_OUTDATED)) {
+            val key = IdempotencyKey.random()
+            assertEquals(code, assertFailsWith<AppError.Api> { api.startPhoneVerification(key, invalid) }.code)
+            assertEquals(code, assertFailsWith<AppError.Api> { api.startPhoneVerification(key, invalid) }.code)
+            assertEquals(ErrorCodes.IDEMPOTENCY_CONFLICT, assertFailsWith<AppError.Api> { api.startPhoneVerification(key, body) }.code)
+        }
+        assertTrue(api.consentReceipts.isEmpty())
+        val nonCachedKey = IdempotencyKey.random()
+        assertEquals(ErrorCodes.CONSENT_REQUIRED, assertFailsWith<AppError.Api> {
+            api.startPhoneVerification(nonCachedKey, body.copy(pdConsentAccepted = false))
+        }.code)
+        api.startPhoneVerification(nonCachedKey, body)
+        assertEquals(1, api.consentReceipts.size)
+    }
+
 }

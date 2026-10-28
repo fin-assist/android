@@ -73,13 +73,19 @@ class PhoneViewModel @Inject constructor(
         viewModelScope.launch { documentGate.readiness.collect { updateReadiness() } }
         refreshDocument()
     }
-    private fun updateReadiness() = _state.update { it.copy(
-        retryReady = retryGate.isReady() && rejectedVersion == null,
-        newIntentRequired = retryGate.newIntentRequired,
-        restartAvailable = it.replayUnavailable || it.requestRetryable == false || retryGate.isExplicitlyForbidden(),
-        documentRefreshReady = documentGate.isReady() && !it.documentBusy && !it.busy,
-        documentRefreshRequired = rejectedVersion != null || it.document == null,
-    ) }
+    private fun updateReadiness() {
+        val waiting = retryGate.receivedRateLimit?.takeIf { retryGate.newIntentRequired && !retryGate.isReady() }
+        _state.update { it.copy(
+            retryReady = retryGate.isReady() && rejectedVersion == null,
+            newIntentRequired = retryGate.newIntentRequired,
+            restartAvailable = it.replayUnavailable || it.requestRetryable == false || retryGate.isExplicitlyForbidden(),
+            documentRefreshReady = documentGate.isReady() && !it.documentBusy && !it.busy,
+            documentRefreshRequired = rejectedVersion != null || it.document == null,
+            error = waiting?.let { limit -> rateLimitText(limit.retryAt) } ?: it.error,
+            errorPresentation = waiting?.presentation ?: it.errorPresentation,
+            requestRetryable = if (waiting != null) waiting.requestRetryable else it.requestRetryable,
+        ) }
+    }
 
     /** Called on return from the call screen when a new Start rejected the pinned document version. */
     fun onResume() {
@@ -105,11 +111,15 @@ class PhoneViewModel @Inject constructor(
     }
 
     fun setAgeConfirmed(value: Boolean) {
-        if (!_state.value.busy) _state.update { it.copy(ageConfirmed = value, error = null) }
+        if (!_state.value.busy) {
+            _state.update { it.copy(ageConfirmed = value, error = null) }
+            updateReadiness()
+        }
     }
     fun setConsentAccepted(value: Boolean) {
         if (!_state.value.busy && _state.value.document != null && rejectedVersion == null) {
             _state.update { it.copy(pdConsentAccepted = value, error = null) }
+            updateReadiness()
         }
     }
     fun refreshDocument() {
@@ -176,7 +186,7 @@ class PhoneViewModel @Inject constructor(
         val phone = PhoneFormat.toE164(digits)
         val request = StartPhoneVerificationRequest(phone, true, state.document.version, true)
         val generation = inputGeneration
-        _state.update { it.copy(busy = true, error = null, errorPresentation = null) }
+        _state.update { it.copy(busy = true, error = null, errorPresentation = null, requestRetryable = null) }
         viewModelScope.launch {
             try {
                 if (generation != inputGeneration) return@launch
@@ -224,9 +234,12 @@ class PhoneViewModel @Inject constructor(
 
     fun consumeEvent() { _events.value = null }
 
+    private fun rateLimitText(retryAt: java.time.OffsetDateTime?): String =
+        "Слишком много попыток" + (retryAt?.let { ". Повторите в ${"%02d:%02d".format(it.hour, it.minute)}" } ?: "")
+
     private fun errorText(e: AppError): String = when (e) {
         is AppError.Offline -> "Нет сети — проверьте интернет и повторите"
-        is AppError.RateLimited -> "Слишком много попыток" + (e.retryAt?.let { ". Повторите в ${"%02d:%02d".format(it.hour, it.minute)}" } ?: "")
+        is AppError.RateLimited -> rateLimitText(e.retryAt)
         // The server checks the format too (api.md 1.1): a violation at `phone`, whatever its code, is the field's error.
         is AppError.Api -> if (e.code == ErrorCodes.VALIDATION_ERROR && e.details.any { it.field == "phone" }) {
             "Нужен российский номер: +7 и 10 цифр"

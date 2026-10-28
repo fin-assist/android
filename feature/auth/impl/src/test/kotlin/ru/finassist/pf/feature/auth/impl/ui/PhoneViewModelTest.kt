@@ -359,7 +359,7 @@ class PhoneViewModelTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
         val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { scheduler.currentTime })
         vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.onInput(TextFieldValue("9161234567"))
-        auth.failure = AppError.RateLimited(null, 1,
+        auth.failure = AppError.RateLimited(deviceNow.plusMinutes(5), 1,
             ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
                 retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0)))
         vm.submit(); vm.submit()
@@ -369,12 +369,15 @@ class PhoneViewModelTest {
         assertFalse(vm.state.value.ageConfirmed); assertFalse(vm.state.value.pdConsentAccepted)
         vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.submit()
         assertEquals(1, auth.keys.size, "restart must not bypass the original 429 wait")
+        assertEquals("Слишком много попыток. Повторите в 13:43", vm.state.value.error)
+        assertEquals(auth.failure!!.presentation, vm.state.value.errorPresentation)
         scheduler.advanceTimeBy(1000); scheduler.runCurrent()
         auth.failure = null; vm.submit()
         assertEquals(2, auth.keys.size)
         assertNotEquals(auth.keys[0], auth.keys[1])
         assertEquals(auth.requests[0], auth.requests[1])
         assertEquals(PhoneEvent.GoToCall, vm.events.value)
+        assertNull(vm.state.value.requestRetryable, "a successful new intent clears the old refusal metadata")
     }
 
     @Test fun `explicit restart abandons the denied key resets both choices and does not POST`() {
@@ -417,16 +420,21 @@ class PhoneViewModelTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
         val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { scheduler.currentTime })
         vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.onInput(TextFieldValue("9161234567"))
-        auth.failure = AppError.RateLimited(null, 1,
+        auth.failure = AppError.RateLimited(deviceNow.plusMinutes(5), 1,
             ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
                 retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0)))
         vm.submit()
         val refusedKey = auth.keys.single()
+        val waitText = vm.state.value.error
+        val waitPresentation = vm.state.value.errorPresentation
         vm.onInput(TextFieldValue("9031234567")); vm.submit()
         vm.onInput(TextFieldValue("9161234567")); vm.submit()
         assertEquals(1, auth.keys.size)
         assertTrue(vm.state.value.newIntentRequired)
         assertFalse(vm.state.value.retryReady)
+        assertEquals(waitText, vm.state.value.error)
+        assertEquals(waitPresentation, vm.state.value.errorPresentation)
+        assertEquals("Слишком много попыток. Повторите в 13:43", vm.state.value.error)
         scheduler.advanceTimeBy(1000); scheduler.runCurrent()
         auth.failure = null; vm.submit()
         assertEquals(2, auth.keys.size)

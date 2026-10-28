@@ -42,7 +42,8 @@ class MockProducerTimingTest {
             wall.at = wall.at.plusYears(3)
             elapsed += 1_000
             assertEquals(297_000, deadline.remainingMillis(elapsedClock))
-            val stored = assertIs<PhoneVerification>(backend.idempotency.getValue("auth.phone:phone-replay").result)
+            val response = assertIs<StoredResponse<*>>(backend.idempotency.getValue("auth.phone:phone-replay").result)
+            val stored = assertIs<PhoneVerification>(response.value)
             assertNull(stored.responseTiming.receivedElapsedMillis)
             assertNull(stored.responseTiming.serverDate)
             val wire = ApiJson.encodeToString(PhoneVerification.serializer(), replay)
