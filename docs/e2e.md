@@ -277,7 +277,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
 | `analytics/search_scope_own_transfers` | September «Расходы» tile → search «как на Аналитике»; without «Только расходы» and with the amount 6 000 ₽ nothing is found — the single «Себе в другой банк» of 27 September is out, as in the Analytics figure; without the scope chip it is found — FIN-164 |
 | `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card and profile) |
-| `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
+| `assistant/ask_question` (smoke) | disclosure of question/history, account-phone/file exclusion and masking limits → consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search (Qase12, FIN-366) |
 | `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
 | `assistant/off_topic` | a question not about finances (`weather`): the server's OFF_TOPIC text, no «Повторить» (`retryable: false`), still 5 of 5; the next question is answered, 4 of 5 — FIN-160 |
 | `assistant/off_topic_limit` | five terminal OFF_TOPIC outcomes reach the rolling limit; a refused sixth question keeps its draft, history and 5/5 daily quota; history remains readable — FIN-223, Qase 49 |
@@ -407,3 +407,14 @@ history → unread list path, with index selectors checking both equal row title
 `UnreadLinesViewModelTest` verifies duplicate-preservation in state; it does not claim to execute the renderer.
 `UnreadLinesSamePhysicalLine` / `UnreadLinesSamePhysicalLineDark` are proposed DesignCheck artboards with no Figma
 counterpart yet. The flow, Qase56 and fixtures were authored without UI/Maestro/DesignCheck/instrumented execution.
+
+### FIN-366 assistant-consent disclosure
+
+`assistant/ask_question` / [Qase12](https://app.qase.io/case/PLAINFIN-12) checks that the consent screen names the
+question and dialogue history, excludes the account phone and statement files, and warns that names and other
+personal information in free text can remain. Supported phones, email addresses and full card/account numbers
+are masked by the backend; the screen does not promise complete anonymisation. Existing assistant-consent flows
+scroll to the checkbox and button to keep both reachable with the longer disclosure. The existing path-to-Qase
+mapping is unchanged. The flows and existing light/dark `AiConsentDesignCheckTest` fixtures use the updated content;
+UI, Maestro, instrumented and DesignCheck runs were not executed under the owner's instruction. Publishing final
+legal documents and their production URLs remains FIN-141; the mock consent-document URL is a fixture.
