@@ -42,11 +42,11 @@ class PhoneDesignCheckTest {
     @Test fun documentUnavailable() = capture("PhoneDocumentUnavailable", PhoneUiState(documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true))
     @Test fun documentUnavailableDark() = capture("PhoneDocumentUnavailableDark", PhoneUiState(documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true), dark = true)
     @Test fun restartAfterRefusal() = capture("PhoneRestartAfterRefusal", PhoneUiState(document = document, restartAvailable = true, retryReady = false, error = "Начните вход заново"))
-    @Test fun newIntentWait() = capture("PhoneNewIntentWait", PhoneUiState(document = document, ageConfirmed = true, pdConsentAccepted = true, newIntentRequired = true, retryReady = false, error = "Слишком много попыток"))
+    @Test fun newIntentWait() = capture("PhoneNewIntentWait", PhoneUiState(document = document, ageConfirmed = true, pdConsentAccepted = true, newIntentRequired = true, retryReady = false, requestRetryable = false, restartAvailable = true, error = "Слишком много попыток"))
     @Test fun newIntentWaitAfterEdit() = capture("PhoneNewIntentWaitAfterEdit", PhoneUiState(document = document,
         ageConfirmed = true, pdConsentAccepted = true, input = TextFieldValue("9031234567"), newIntentRequired = true,
-        retryReady = false, error = "Слишком много попыток. Повторите в 14:05"))
+        retryReady = false, requestRetryable = false, restartAvailable = true, error = "Слишком много попыток. Повторите в 14:05"))
     @Test fun newIntentWaitAfterRestart() = capture("PhoneNewIntentWaitAfterRestart", PhoneUiState(document = document,
-        newIntentRequired = true, retryReady = false, error = "Слишком много попыток. Повторите в 14:05"))
+        newIntentRequired = true, retryReady = false, requestRetryable = false, restartAvailable = true, error = "Слишком много попыток. Повторите в 14:05"))
 
 }

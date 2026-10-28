@@ -366,8 +366,12 @@ class PhoneViewModelTest {
         assertEquals(1, auth.keys.size)
         assertTrue(vm.state.value.newIntentRequired); assertFalse(vm.state.value.retryReady)
         vm.restart()
+        assertTrue(vm.state.value.restartAvailable, "captured refusal still permits explicit restart")
         assertFalse(vm.state.value.ageConfirmed); assertFalse(vm.state.value.pdConsentAccepted)
-        vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.submit()
+        vm.setAgeConfirmed(true)
+        assertTrue(vm.state.value.restartAvailable)
+        vm.setConsentAccepted(true); vm.submit()
+        assertTrue(vm.state.value.restartAvailable)
         assertEquals(1, auth.keys.size, "restart must not bypass the original 429 wait")
         assertEquals("Слишком много попыток. Повторите в 13:43", vm.state.value.error)
         assertEquals(auth.failure!!.presentation, vm.state.value.errorPresentation)
@@ -428,7 +432,9 @@ class PhoneViewModelTest {
         val waitText = vm.state.value.error
         val waitPresentation = vm.state.value.errorPresentation
         vm.onInput(TextFieldValue("9031234567")); vm.submit()
+        assertTrue(vm.state.value.restartAvailable)
         vm.onInput(TextFieldValue("9161234567")); vm.submit()
+        assertTrue(vm.state.value.restartAvailable)
         assertEquals(1, auth.keys.size)
         assertTrue(vm.state.value.newIntentRequired)
         assertFalse(vm.state.value.retryReady)
