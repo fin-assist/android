@@ -249,13 +249,18 @@ internal fun AiConsentContent(
                 PfCard {
                     DataList(
                         "Передаём", PfIcons.CHECK, PfTheme.colors.accent,
-                        listOf("Суммы, даты и категории операций", "Описания операций, включая имена получателей переводов", "Текст вашего вопроса"),
+                        listOf("Суммы, даты и категории операций", "Описания операций, включая имена получателей переводов", "Ваш вопрос и историю диалога"),
                     )
                     Spacer(Modifier.height(d.space4))
                     PfDivider()
                     Spacer(Modifier.height(d.space4))
-                    DataList("Не передаём", PfIcons.X, PfTheme.colors.textMuted, listOf("Ваш номер телефона", "Номера карт и счетов"))
+                    DataList("Не передаём", PfIcons.X, PfTheme.colors.textMuted, listOf("Номер телефона из аккаунта", "Файлы выписок"))
                 }
+                Spacer(Modifier.height(d.space3))
+                Text(
+                    "Распознаваемые телефоны, email, полные номера карт и счетов маскируем. Имена и другие личные сведения в свободном тексте могут остаться — полного обезличивания это не гарантирует",
+                    style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+                )
                 Spacer(Modifier.height(d.space1))
                 PfLink(
                     "Как помощник использует данные",

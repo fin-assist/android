@@ -111,6 +111,9 @@ tags:
     visible:
       id: "assistant.consent"
     timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
 - tapOn:
     id: "assistant.consent.checkbox"
 # Set right before the question goes: the answer stream is the next one to open.
@@ -118,6 +121,9 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?stream_drops=2"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
 - tapOn:
     id: "assistant.consent.submit"
 - extendedWaitUntil:
