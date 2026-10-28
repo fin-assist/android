@@ -143,7 +143,11 @@ internal fun PhoneContent(
             state.document?.let { document ->
                 PfLink(document.title, onClick = { onOpenDocument(document.url) }, modifier = Modifier.testTag(AuthTags.PHONE_DOCUMENT))
             }
-            state.documentError?.let { PfNotice(it, tone = NoticeTone.WARNING, alert = true) }
+            state.documentError?.let { message ->
+                state.documentErrorPresentation?.let { ErrorMessage(it, message) }
+                    ?: PfNotice(message, tone = NoticeTone.WARNING, alert = true)
+                state.documentRetryText?.let { Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted) }
+            }
             if (state.documentRefreshRequired || state.documentError != null) {
                 PfButton("Обновить документ", enabled = state.documentRefreshReady, onClick = onRefreshDocument,
                     busy = state.documentBusy, busyText = "Загружаем…", modifier = Modifier.testTag(AuthTags.PHONE_DOCUMENT_REFRESH))

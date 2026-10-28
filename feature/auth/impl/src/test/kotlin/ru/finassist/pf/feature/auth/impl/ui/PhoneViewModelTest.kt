@@ -456,6 +456,7 @@ class PhoneViewModelTest {
         assertFalse(vm.state.value.documentRefreshReady)
         assertTrue(vm.state.value.documentRefreshRequired)
         assertTrue(vm.state.value.restartAvailable)
+        assertEquals(auth.documentFailure!!.presentation, vm.state.value.documentErrorPresentation)
         vm.refreshDocument()
         assertEquals(1, auth.documentCalls, "the refused original GET cannot be replayed")
         auth.documentFailure = null
@@ -463,6 +464,8 @@ class PhoneViewModelTest {
         assertEquals(2, auth.documentCalls)
         assertEquals(auth.documentVersion, vm.state.value.document?.version)
         assertFalse(vm.state.value.restartAvailable)
+        assertNull(vm.state.value.documentErrorPresentation)
+        assertNull(vm.state.value.documentRetryText)
         assertFalse(vm.state.value.ageConfirmed)
         assertFalse(vm.state.value.pdConsentAccepted)
         assertTrue(auth.requests.isEmpty(), "restart only loads the document")
@@ -474,13 +477,19 @@ class PhoneViewModelTest {
     @Test fun `refused document GET wait survives explicit restart and only enables a new GET after its deadline`() {
         val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
         Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+        val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
+            ru.finassist.pf.core.common.error.UserMessage.from("Документ временно недоступен"),
+            ru.finassist.pf.core.common.error.ErrorSeverity.WARNING)
         auth.documentFailure = AppError.RateLimited(deviceNow.plusMinutes(5), 1,
             ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false,
-                retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0)))
+                retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0), presentation = presentation))
         val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { scheduler.currentTime })
         assertFalse(vm.state.value.restartAvailable)
         vm.setAgeConfirmed(true); vm.setConsentAccepted(true); vm.restart(); vm.refreshDocument(); vm.submit()
         assertEquals(1, auth.documentCalls); assertTrue(auth.requests.isEmpty())
+        assertEquals("Слишком много попыток. Повторите в 13:43", vm.state.value.documentError)
+        assertEquals(presentation, vm.state.value.documentErrorPresentation)
+        assertEquals("Повторите в 13:43", vm.state.value.documentRetryText)
         scheduler.advanceTimeBy(999); scheduler.runCurrent()
         assertFalse(vm.state.value.restartAvailable)
         scheduler.advanceTimeBy(1); scheduler.runCurrent()
@@ -489,6 +498,9 @@ class PhoneViewModelTest {
         vm.refreshDocument(); assertEquals(1, auth.documentCalls, "the original GET remains forbidden")
         auth.documentFailure = null; vm.restart()
         assertEquals(2, auth.documentCalls)
+        assertNull(vm.state.value.documentError)
+        assertNull(vm.state.value.documentErrorPresentation)
+        assertNull(vm.state.value.documentRetryText)
         assertFalse(vm.state.value.ageConfirmed); assertFalse(vm.state.value.pdConsentAccepted)
         assertTrue(auth.requests.isEmpty(), "explicit restart only GETs the document")
     }
@@ -505,6 +517,31 @@ class PhoneViewModelTest {
         assertFalse(vm.state.value.restartAvailable)
         assertEquals(1, auth.documentCalls)
         assertTrue(auth.requests.isEmpty())
+    }
+
+    @Test fun `permitted document GET retry preserves its explanation and only refreshes explicitly after wait`() {
+        val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
+        Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+        val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
+            ru.finassist.pf.core.common.error.UserMessage.from("Подождите перед загрузкой"))
+        auth.documentFailure = AppError.RateLimited(deviceNow.plusMinutes(5), 1,
+            ru.finassist.pf.core.common.error.ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = true,
+                retryAfterSeconds = 1, timing = ResponseTiming(receivedElapsedMillis = 0), presentation = presentation))
+        val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { scheduler.currentTime })
+        vm.restart(); vm.refreshDocument(); vm.setAgeConfirmed(true); vm.setConsentAccepted(true)
+        assertEquals(1, auth.documentCalls)
+        assertFalse(vm.state.value.documentRefreshReady)
+        assertEquals("Слишком много попыток. Повторите в 13:43", vm.state.value.documentError)
+        assertEquals(presentation, vm.state.value.documentErrorPresentation)
+        assertEquals("Повторите в 13:43", vm.state.value.documentRetryText)
+        scheduler.advanceTimeBy(1000); scheduler.runCurrent()
+        assertTrue(vm.state.value.documentRefreshReady)
+        assertFalse(vm.state.value.restartAvailable)
+        assertEquals(1, auth.documentCalls)
+        auth.documentFailure = null; vm.refreshDocument()
+        assertEquals(2, auth.documentCalls)
+        assertNull(vm.state.value.documentError); assertNull(vm.state.value.documentErrorPresentation)
+        assertNull(vm.state.value.documentRetryText); assertTrue(auth.requests.isEmpty())
     }
 
 }

@@ -34,6 +34,8 @@ data class PhoneUiState(
     val document: ConsentDocument? = null,
     val documentBusy: Boolean = false,
     val documentError: String? = null,
+    val documentErrorPresentation: ErrorPresentation? = null,
+    val documentRetryText: String? = null,
     val documentRefreshRequired: Boolean = false,
     val documentRefreshReady: Boolean = true,
     val newIntentRequired: Boolean = false,
@@ -129,7 +131,7 @@ class PhoneViewModel @Inject constructor(
     }
     fun refreshDocument() {
         if (_state.value.documentBusy || _state.value.busy || !documentGate.isReady()) return
-        _state.update { it.copy(documentBusy = true, documentError = null) }
+        _state.update { it.copy(documentBusy = true, documentError = null, documentErrorPresentation = null, documentRetryText = null) }
         updateReadiness()
         viewModelScope.launch {
             try {
@@ -142,11 +144,19 @@ class PhoneViewModel @Inject constructor(
                     _state.update { it.copy(error = null, errorPresentation = null, requestRetryable = null) }
                 }
                 _state.update { it.copy(document = document, pdConsentAccepted = if (changed) false else it.pdConsentAccepted,
+                    documentErrorPresentation = null, documentRetryText = null,
                     documentError = if (rejectedVersion != null) "Новая версия согласия пока недоступна. Обновите документ позже" else null) }
                 documentGate.clear()
             } catch (e: AppError) {
                 documentGate.record(e)
-                _state.update { it.copy(documentError = "Не получилось загрузить документ согласия") }
+                val retryAt = (e as? AppError.RateLimited)?.retryAt ?: e.response?.retryAt
+                _state.update { it.copy(
+                    documentError = if (e is AppError.RateLimited) rateLimitText(retryAt) else "Не получилось загрузить документ согласия",
+                    documentErrorPresentation = e.presentation.takeUnless { e is AppError.Offline },
+                    // A safe server user_message replaces the fallback, so show the captured retry time separately.
+                    documentRetryText = retryAt?.takeIf { e is AppError.RateLimited && e.presentation.userMessage is ru.finassist.pf.core.common.error.UserMessage.Safe }
+                        ?.let { "Повторите в ${"%02d:%02d".format(it.hour, it.minute)}" },
+                ) }
             } finally {
                 _state.update { it.copy(documentBusy = false) }; updateReadiness()
             }

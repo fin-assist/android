@@ -460,6 +460,7 @@ refusal, not a claim to reproduce a lost provider outcome or restart an independ
 FIN-365 — Not covered yet: a refused consent-document GET (including 429 with `retryable:false`) and its
 explicit restart need a controllable REST fixture; the mock control-link does not inject document GET failures.
 VM/core regressions cover no GET before the captured deadline, an explicit restart afterwards without POST,
-and a refused GET without a time restriction. There is no automatic GET when the wait ends. UI/DesignCheck
+and a refused GET without a time restriction. The captured rate-limit explanation, safe server presentation and
+retry time survive checkbox changes/blocked restart and clear after successful document loading. There is no automatic GET when the wait ends. UI/DesignCheck
 runs are not authorized. The proposed document-refusal states use existing error/link/button primitives;
 there is no matching Figma artboard, and source fixtures do not claim a visual approval or a completed UI run.

@@ -57,10 +57,14 @@ class PhoneDesignCheckTest {
         documentRefreshReady = false, restartAvailable = true), dark = true)
 
     @Test fun documentRefusedWait() = capture("PhoneDocumentRefusedWait", PhoneUiState(
-        documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true,
+        documentError = "Слишком много попыток. Повторите в 14:05", documentRefreshRequired = true,
+        documentErrorPresentation = ErrorPresentation(UserMessage.from("Подождите перед загрузкой документа"), ErrorSeverity.WARNING),
+        documentRetryText = "Повторите в 14:05",
         documentRefreshReady = false, restartAvailable = false))
     @Test fun documentRefusedWaitDark() = capture("PhoneDocumentRefusedWaitDark", PhoneUiState(
-        documentError = "Не получилось загрузить документ согласия", documentRefreshRequired = true,
+        documentError = "Слишком много попыток. Повторите в 14:05", documentRefreshRequired = true,
+        documentErrorPresentation = ErrorPresentation(UserMessage.from("Подождите перед загрузкой документа"), ErrorSeverity.WARNING),
+        documentRetryText = "Повторите в 14:05",
         documentRefreshReady = false, restartAvailable = false), dark = true)
 
 }
