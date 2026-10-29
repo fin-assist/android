@@ -19,7 +19,7 @@ META = AVD / 'finassist-clean.json'
 KEY = AVD_ROOT.parent / 'adbkey'
 KEY_PUBLIC = AVD_ROOT.parent / 'adbkey.pub'
 KEY_RECEIPT = AVD_ROOT.parent / 'finassist-ci-adb.json'
-SNAPSHOT_PROCEDURE = 'clean-snapshot-v2'
+SNAPSHOT_PROCEDURE = 'clean-snapshot-v3'
 
 
 def output(name, value):
@@ -119,8 +119,9 @@ def reload_ci_key():
 
 
 def snapshot_exists(avd=AVD):
+    # AEMU snapshot/common.h: named saves use kRamFileName (ram.bin); ram.img is optional mapped RAM.
     return all((avd / 'snapshots/clean' / name).is_file() and (avd / 'snapshots/clean' / name).stat().st_size > 0
-               for name in ('snapshot.pb', 'ram.img'))
+               for name in ('snapshot.pb', 'ram.bin'))
 
 
 def usable(avd, key):
@@ -212,7 +213,9 @@ def main():
         wait_stopped()
         assert_ci_key()
         if not snapshot_exists(AVD):
-            raise RuntimeError('Clean snapshot is missing or incomplete')
+            snapshot_dir = AVD / 'snapshots/clean'
+            found = {path.name: path.stat().st_size for path in snapshot_dir.iterdir() if path.is_file()} if snapshot_dir.is_dir() else {}
+            raise RuntimeError(f'Clean snapshot is missing or incomplete: expected nonempty snapshot.pb and ram.bin; files={found}')
         data = state()
         META.write_text(json.dumps({'key': data['key'], 'boot_id': data['boot_id']}))
         mark('save-start')

@@ -153,6 +153,15 @@ The first authorized [attempt 40952526793](https://github.com/fin-assist/android
 (exit 127; shard 1 at `2026-10-29T20:51:58Z`). The explicit SDK paths above fix this preparation failure. That
 attempt created no AVD cache and provides no cache/boot/test timing sample or evidence of speedup.
 
+The [second attempt 40953561096](https://github.com/fin-assist/android/actions/runs/40953561096) on `9152d38`
+passed SDK setup and disposable-key initialization in all shards. However, all shards rejected the saved snapshot
+in `seal`, skipped cache publication/warm boot and entered cold fallback. The owner cancelled that invalid benchmark
+instead of spending the full UI run on fallback. The structural guard incorrectly required optional mapped RAM
+`ram.img`; a named snapshot stores RAM in `ram.bin` ([AEMU file-name constants](https://android.googlesource.com/platform/hardware/google/aemu/+/refs/heads/main/snapshot/include/snapshot/common.h)).
+The guard now requires nonempty `snapshot.pb` and `ram.bin`, and reports only relative file names/sizes if sealing
+fails. The procedure version is bumped; GPU, API/profile/resources and test selection are unchanged. This cancelled
+attempt created no AVD cache and does not establish cache-hit performance or complete UI correctness.
+
 **Not yet measured:** the changed workflow's cache miss → save → hit, real boot-ID continuity, cache transfer size
 and time, or net speedup. UI/Maestro/native/DesignCheck runs and manually dispatched workflows require separate
 explicit owner permission. Helper/unit and workflow-syntax checks do not establish these runtime criteria.

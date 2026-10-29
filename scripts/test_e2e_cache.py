@@ -28,7 +28,7 @@ class CleanAvdCacheTest(unittest.TestCase):
         snapshot = self.avd / 'snapshots/clean'
         snapshot.mkdir(parents=True)
         (snapshot / 'snapshot.pb').write_bytes(b'metadata')
-        (snapshot / 'ram.img').write_bytes(b'ram')
+        (snapshot / 'ram.bin').write_bytes(b'ram')
         (self.avd / 'finassist-clean.json').write_text(json.dumps({'key': 'compatible', 'boot_id': '12345678-1234-4234-8234-123456789abc'}))
 
     def test_cache_miss_corrupt_or_incompatible_snapshot_is_not_usable(self):
@@ -36,10 +36,20 @@ class CleanAvdCacheTest(unittest.TestCase):
         self.ready_snapshot()
         self.assertTrue(cache.usable(self.avd, 'compatible'))
         self.assertFalse(cache.usable(self.avd, 'different-sdk'))
-        (self.avd / 'snapshots/clean/ram.img').write_bytes(b'')
+        (self.avd / 'snapshots/clean/ram.bin').write_bytes(b'')
         self.assertFalse(cache.usable(self.avd, 'compatible'))
         (self.avd / 'finassist-clean.json').write_text('{broken')
         self.assertFalse(cache.usable(self.avd, 'compatible'))
+
+    def test_named_snapshot_uses_ram_bin_without_requiring_optional_mapped_ram(self):
+        self.ready_snapshot()
+        self.assertTrue(cache.snapshot_exists(self.avd))
+        snapshot = self.avd / 'snapshots/clean'
+        self.assertFalse((snapshot / 'ram.img').exists())
+        (snapshot / 'ram.bin').rename(snapshot / 'ram.img')
+        self.assertFalse(cache.snapshot_exists(self.avd))
+        (snapshot / 'ram.bin').write_bytes(b'')
+        self.assertFalse(cache.snapshot_exists(self.avd))
 
     def test_invalid_restored_device_is_discarded_without_removing_other_avds(self):
         ini = self.root / 'device.ini'
