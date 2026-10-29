@@ -186,6 +186,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   `scripts/compose-classpath.init.gradle` (`:app:composeClasspathReport --no-configuration-cache`), then validates
   the JSON with `scripts/check-compose-classpath.py`: Compose UI/foundation and lifecycle-runtime must match the
   isolated BOM/navigation/catalog lifecycle baseline. Commands and failure diagnostics: docs/testing.md.
+- FIN-377: `scripts/check-app-version.py` checks `appVersionName` against release branches on pushes and either
+  side of a PR. The assemble job also checks generated manifest/BuildConfig versions for mockDebug, localDebug
+  and prodRelease. Release preparation and the independent monotonic build number: `docs/releasing.md`.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally (all flows and the native
   tests; `--shard i/n` runs one CI shard), the `UI tests` workflow in CI (after a merge to `main`, or started by hand
   for a branch; PRs never run them by themselves). CI splits the flows between four emulators

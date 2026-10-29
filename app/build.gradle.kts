@@ -56,12 +56,12 @@ val pinningTasks = pinnedFlavors.mapNotNull { (flavor, environment) ->
 // environment such as `stage` is covered without a change here.
 val checkNoMockCode = tasks.register<CheckNoMockCode>("checkNoMockCode")
 
-// Version of the app = version of the release branch (`release/0.2.8` → 0.2.8), raised with every release branch.
+// Version of the app = version of the release branch (`release/0.2.15` → 0.2.15), raised with every release branch.
 // Build number: `PF_VERSION_CODE` — set by the build that goes to the stores; it must only grow across every published
 // build, which `GITHUB_RUN_NUMBER` does not guarantee (a counter per workflow; a re-run keeps it). Without it — the CI
 // run number (`GITHUB_RUN_NUMBER`, enough to tell builds apart in logs), 1 locally. Both go into `X-Client-Version`
-// (`android/0.2.8+41`, api.md «Заголовки», FIN-20/22).
-val appVersionName = "0.2.8"
+// (`android/0.2.15+41`, api.md «Заголовки», FIN-20/22).
+val appVersionName = "0.2.15"
 val appVersionCode = (System.getenv("PF_VERSION_CODE") ?: System.getenv("GITHUB_RUN_NUMBER"))?.toIntOrNull() ?: 1
 
 android {
