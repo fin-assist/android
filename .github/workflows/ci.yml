@@ -36,6 +36,10 @@ jobs:
       - name: Test the scripts (agent-docs parsers, Qase report and case map, UI coverage, design-check export)
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
+      # Both PR directions matter: feature → release and release → main, as well as direct release pushes.
+      - name: App version matches the release branch
+        run: python3 scripts/check-app-version.py
+
       # Which screens and test tags the Maestro flows refer to (docs/testing.md, «UI test coverage»). Static, no
       # device: the number next to the code coverage the UI-tests workflow measures after a merge.
       - name: Scenario coverage of the flows
@@ -262,6 +266,21 @@ jobs:
       # Other variants (mockRelease, prodDebug, localRelease) are not built here.
       - name: Assemble
         run: ./gradlew assembleMockDebug assembleLocalDebug assembleProdRelease processLocalReleaseManifest :app:checkNoMockCode --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      # Check AGP output too: Android keeps flavor suffixes, the version sent in X-Client-Version does not.
+      - name: Manifest and client versions match the app version
+        run: |
+          m=app/build/intermediates/merged_manifests
+          b=app/build/generated/source/buildConfig
+          python3 scripts/check-app-version.py --suffix=-mock \
+            --manifest "$m/mockDebug/processMockDebugManifest/AndroidManifest.xml" \
+            --build-config "$b/mock/debug/ru/finassist/pf/BuildConfig.java"
+          python3 scripts/check-app-version.py --suffix=-local \
+            --manifest "$m/localDebug/processLocalDebugManifest/AndroidManifest.xml" \
+            --build-config "$b/local/debug/ru/finassist/pf/BuildConfig.java"
+          python3 scripts/check-app-version.py \
+            --manifest "$m/prodRelease/processProdReleaseManifest/AndroidManifest.xml" \
+            --build-config "$b/prod/release/ru/finassist/pf/BuildConfig.java"
 
       # CI has no Tracer token: the SDK must not be able to start (scripts/check-tracer-off.py, README).
       - name: Tracer is off without a token
