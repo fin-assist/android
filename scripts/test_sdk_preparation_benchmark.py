@@ -161,6 +161,20 @@ class BenchmarkTest(unittest.TestCase):
         self.assertNotIn("comparison_valid", json.loads(SDK.RESULT.read_text()))
         self.assertNotIn("emulator-key=", (self.root / "outputs").read_text())
 
+    def test_sdk_concurrency_group_requires_isolating_suffix(self):
+        route = (ROOT / ".github/workflows/e2e.yml").read_text()
+        suffix = "${{ inputs.sdk_benchmark && '-sdk-benchmark' || '' }}"
+        expected = "  group: e2e-${{ github.ref }}" + suffix
+
+        def require_isolated_group(workflow):
+            # Missing/false input retains the ordinary UI group; true uses a distinct SDK group.
+            self.assertIn(expected, workflow.splitlines())
+
+        require_isolated_group(route)
+        # Prove the guard rejects the regression that lets an SDK run cancel ordinary UI.
+        with self.assertRaises(AssertionError):
+            require_isolated_group(route.replace(suffix, ""))
+
     def test_reusable_manual_route_warm_exact_hits_seed_only_writer(self):
         text = (ROOT / ".github/workflows/sdk-preparation-benchmark.yml").read_text()
         self.assertIn("on:\n  workflow_call:\n", text)
