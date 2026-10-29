@@ -196,6 +196,24 @@ class CleanAvdCacheTest(unittest.TestCase):
                 cache.main()
                 out.assert_called_once_with('needed', 'false')
 
+    def test_direct_cold_path_keeps_real_failure_red_without_snapshot_validation(self):
+        with patch.object(cache, 'STATE', self.root / 'direct-state.json'), patch.object(cache, 'assert_clean'), \
+             patch.object(cache, 'cache_key') as key, patch.object(cache, 'assert_snapshot_loaded') as loaded, \
+             patch.object(cache.subprocess, 'run', return_value=subprocess.CompletedProcess([], 19)), \
+             patch('sys.argv', ['e2e-cache.py', 'test', '--direct-cold', '--shard', '1/4']):
+            cache.write({'marks': {}})
+            with self.assertRaises(SystemExit) as result:
+                cache.main()
+            self.assertEqual(19, result.exception.code)
+            self.assertEqual('fresh-cold-direct', cache.state()['boot_mode'])
+            self.assertEqual('disabled', cache.state()['cache'])
+            self.assertIn('direct-boot-ready', cache.state()['marks'])
+            self.assertIn('tests-started', cache.state()['marks'])
+            self.assertIn('tests-finished', cache.state()['marks'])
+            self.assertNotIn('fallback-boot-ready', cache.state()['marks'])
+            key.assert_not_called()
+            loaded.assert_not_called()
+
     def test_preparation_failure_allows_one_cold_attempt(self):
         with patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'assert_clean', side_effect=RuntimeError('dirty')), \
              patch('sys.argv', ['e2e-cache.py', 'test', '--shard', '2/4']):
@@ -396,11 +414,38 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
         return next(block for block in workflow.split('      - name: ') if block.startswith(name + '\n'))
 
-    def runs(self, name, fields):
+    def runs(self, name, fields, avd_cache=True):
         condition = re.search(r'^        if: (.+)$', self.step(name), re.MULTILINE).group(1)
         expression = re.sub(r'steps\.[\w-]+\.(?:outcome|outputs\.[\w-]+)',
                             lambda match: repr(fields.get(match.group(), '')), condition)
-        return eval(expression.replace('&&', ' and ').replace('||', ' or '), {'__builtins__': {}})
+        expression = expression.removeprefix('${{').removesuffix('}}').strip()
+        expression = expression.replace('inputs.avd_cache', repr(avd_cache))
+        expression = expression.replace('matrix.shard', repr(fields.get('matrix.shard', 1)))
+        expression = re.sub(r'!(?!=)', ' not ', expression)
+        return eval(expression.replace('&&', ' and ').replace('||', ' or ').strip(), {'__builtins__': {}})
+
+    def test_default_push_and_manual_false_use_direct_cold_without_snapshot_fallback(self):
+        for selected in (None, False):
+            with self.subTest(input=selected):
+                # Even stale success/fallback outputs must never activate the opt-in snapshot path.
+                fields = {'steps.avd.outcome': 'success', 'steps.avd.outputs.usable': 'true',
+                          'steps.seal.outcome': 'success', 'steps.ui.outcome': 'skipped',
+                          'steps.fallback.outputs.needed': 'true'}
+                self.assertTrue(self.runs('Run UI tests on a fresh cold AVD', fields, selected))
+                for step in ['Restore clean AVD', 'Run UI tests from clean snapshot', 'Save clean AVD',
+                             'Decide whether clean cold boot is needed',
+                             'Run UI tests on a fresh AVD after snapshot boot failure', 'Preserve UI test failure']:
+                    self.assertFalse(self.runs(step, fields, selected))
+        self.assertFalse(self.runs('Run UI tests on a fresh cold AVD', {}, True))
+        self.assertNotIn('continue-on-error', self.step('Run UI tests on a fresh cold AVD'))
+
+    def test_only_shard_one_publishes_changed_sdk_packages(self):
+        for shard in range(1, 5):
+            for name, package in [('emulator', 'emulator'), ('system image', 'image')]:
+                for needed in ('true', 'false'):
+                    fields = {'matrix.shard': shard, f'steps.sdk-install.outputs.{package}-save': needed}
+                    self.assertEqual(shard == 1 and needed == 'true',
+                                     self.runs(f'Save current {name} SDK package', fields))
 
     def test_each_preparation_failure_reaches_one_fresh_cold_attempt_without_cache_save(self):
         for failed in ['Validate restored AVD', 'Create clean AVD snapshot', 'Seal clean AVD']:
@@ -465,9 +510,9 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         self.assertIn('pattern: e2e-shard-*', workflow)
 
     def test_sdk_commands_before_emulator_action_do_not_assume_sdk_tools_on_path(self):
-        preparation = self.step('Prepare SDK and fingerprint the AVD')
+        preparation = self.step('Prepare current SDK packages')
         self.assertIn('sdkmanager_path="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"', preparation)
-        self.assertIn('yes | "$sdkmanager_path" --licenses', preparation)
+        self.assertIn('yes | timeout 120 "$sdkmanager_path" --licenses', preparation)
         self.assertIn('"$sdkmanager_path" --install platform-tools', preparation)
         self.assertNotRegex(preparation, r'(?m)(?:\||^)[ \t]*sdkmanager\s')
         with patch.dict(os.environ, {'ANDROID_HOME': '/sdk-without-path', 'PATH': '/bin'}):

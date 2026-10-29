@@ -17,6 +17,10 @@ on:
         description: Run only the SDK package cache experiment (no emulator or UI)
         type: boolean
         default: false
+      avd_cache:
+        description: Opt in to the experimental clean AVD snapshot cache
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -106,26 +110,97 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
-      # Resolve the actual installed versions before selecting an AVD cache. The runner action also calls
-      # sdkmanager, even on a hit; an AVD cache does not promise to avoid SDK downloads (docs/e2e.md).
-      - name: Prepare SDK and fingerprint the AVD
-        id: avd-key
+      # SDK caches contain only binaries, never AVD state or adb keys. Prefix restore may select an older
+      # revision, so online SDK checks always run before immutable final keys are computed.
+      - name: Select SDK package caches
+        id: sdk-paths
         run: |
           python3 scripts/e2e-cache.py mark sdk-start
+          python3 scripts/e2e-sdk-cache.py paths
+
+      - name: Restore emulator SDK package
+        id: sdk-emulator
+        if: steps.sdk-paths.outputs.emulator-restore == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 2
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.sdk-paths.outputs.emulator-path }}
+          key: ${{ steps.sdk-paths.outputs.emulator-prefix }}lookup
+          restore-keys: ${{ steps.sdk-paths.outputs.emulator-prefix }}
+
+      - name: Restore system image SDK package
+        id: sdk-image
+        if: steps.sdk-paths.outputs.image-restore == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 2
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.sdk-paths.outputs.image-path }}
+          key: ${{ steps.sdk-paths.outputs.image-prefix }}lookup
+          restore-keys: ${{ steps.sdk-paths.outputs.image-prefix }}
+
+      - name: Recover missing or failed SDK restores
+        env:
+          EMULATOR_OUTCOME: ${{ steps.sdk-emulator.outcome }}
+          EMULATOR_MATCHED_KEY: ${{ steps.sdk-emulator.outputs.cache-matched-key }}
+          IMAGE_OUTCOME: ${{ steps.sdk-image.outcome }}
+          IMAGE_MATCHED_KEY: ${{ steps.sdk-image.outputs.cache-matched-key }}
+        run: python3 scripts/e2e-sdk-cache.py recover
+
+      - name: Prepare current SDK packages
+        id: sdk-install
+        run: |
           sdkmanager_path="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           # yes exits on SIGPIPE when sdkmanager has read all answers; only sdkmanager failure matters here.
           set +o pipefail
-          yes | "$sdkmanager_path" --licenses >/dev/null
+          yes | timeout 120 "$sdkmanager_path" --licenses >/dev/null
           set -o pipefail
-          "$sdkmanager_path" --install platform-tools emulator "system-images;android-${AVD_API};${AVD_TARGET};${AVD_ARCH}" --channel=0
+          timeout 600 "$sdkmanager_path" --install platform-tools emulator "system-images;android-${AVD_API};${AVD_TARGET};${AVD_ARCH}" --channel=0
+          python3 scripts/e2e-sdk-cache.py finalize
+
+      # One shard publishes actual online-installed revisions, strictly before starting any emulator/tests.
+      - name: Save current emulator SDK package
+        if: matrix.shard == 1 && steps.sdk-install.outputs.emulator-save == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.sdk-paths.outputs.emulator-path }}
+          key: ${{ steps.sdk-install.outputs.emulator-key }}
+
+      - name: Save current system image SDK package
+        if: matrix.shard == 1 && steps.sdk-install.outputs.image-save == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.sdk-paths.outputs.image-path }}
+          key: ${{ steps.sdk-install.outputs.image-key }}
+
+      - name: Finish SDK preparation timings
+        run: |
+          python3 scripts/e2e-sdk-cache.py complete
+          python3 scripts/e2e-cache.py mark sdk-ready
+
+      - name: Fingerprint the optional AVD cache
+        id: avd-key
+        if: inputs.avd_cache
+        run: |
           python3 scripts/e2e-cache.py key
           python3 scripts/e2e-cache.py mark restore-start
 
       - name: Initialize disposable CI adb key
+        if: inputs.avd_cache
         run: python3 scripts/e2e-cache.py adb-init
 
       # Separate restore/save: a post-job cache save would persist the device AFTER the financial tests.
       - name: Restore clean AVD
+        if: inputs.avd_cache
         id: avd-cache
         continue-on-error: true
         uses: actions/cache/restore@v6
@@ -139,6 +214,7 @@ jobs:
           key: ${{ steps.avd-key.outputs.key }}
 
       - name: Validate restored AVD
+        if: inputs.avd_cache
         id: avd
         continue-on-error: true
         run: python3 scripts/e2e-cache.py validate
@@ -146,7 +222,7 @@ jobs:
       - name: Create clean AVD snapshot
         id: create
         continue-on-error: true
-        if: steps.avd.outcome == 'success' && steps.avd.outputs.usable != 'true'
+        if: inputs.avd_cache && steps.avd.outcome == 'success' && steps.avd.outputs.usable != 'true'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: ${{ env.AVD_API }}
@@ -168,12 +244,12 @@ jobs:
       - name: Seal clean AVD
         id: seal
         continue-on-error: true
-        if: steps.create.outcome == 'success'
+        if: inputs.avd_cache && steps.create.outcome == 'success'
         run: python3 scripts/e2e-cache.py seal
 
       - name: Save clean AVD
         continue-on-error: true
-        if: steps.seal.outcome == 'success' && steps.avd-cache.outputs.cache-hit != 'true'
+        if: inputs.avd_cache && steps.seal.outcome == 'success' && steps.avd-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: |
@@ -185,12 +261,12 @@ jobs:
           key: ${{ steps.avd-key.outputs.key }}
 
       - name: Mark cache ready
-        if: steps.avd.outcome == 'success' && (steps.avd.outputs.usable == 'true' || steps.seal.outcome == 'success')
+        if: inputs.avd_cache && steps.avd.outcome == 'success' && (steps.avd.outputs.usable == 'true' || steps.seal.outcome == 'success')
         run: python3 scripts/e2e-cache.py mark cache-ready
 
       - name: Run UI tests from clean snapshot
         id: ui
-        if: steps.avd.outcome == 'success' && (steps.avd.outputs.usable == 'true' || steps.seal.outcome == 'success')
+        if: inputs.avd_cache && steps.avd.outcome == 'success' && (steps.avd.outputs.usable == 'true' || steps.seal.outcome == 'success')
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
@@ -212,7 +288,7 @@ jobs:
 
       # Publish tiny sanitized preparation telemetry before a fallback starts, so it is readable while tests run.
       - name: Publish failed snapshot preparation diagnostics
-        if: steps.ui.outcome != 'success'
+        if: inputs.avd_cache && steps.ui.outcome != 'success'
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
@@ -224,16 +300,16 @@ jobs:
       # Retry preparation only. Once e2e.sh starts, an assertion/native-test failure remains a failure.
       - name: Decide whether clean cold boot is needed
         id: fallback
-        if: steps.ui.outcome != 'success'
+        if: inputs.avd_cache && steps.ui.outcome != 'success'
         run: python3 scripts/e2e-cache.py fallback
 
       - name: Initialize fresh fallback CI adb key
-        if: steps.fallback.outputs.needed == 'true'
+        if: inputs.avd_cache && steps.fallback.outputs.needed == 'true'
         run: python3 scripts/e2e-cache.py adb-init
 
       - name: Run UI tests on a fresh AVD after snapshot boot failure
         id: cold-ui
-        if: steps.fallback.outputs.needed == 'true'
+        if: inputs.avd_cache && steps.fallback.outputs.needed == 'true'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: ${{ env.AVD_API }}
@@ -251,8 +327,27 @@ jobs:
           script: python3 scripts/e2e-cache.py test --cold --shard ${{ matrix.shard }}/${{ env.SHARDS }}
 
       - name: Preserve UI test failure
-        if: steps.ui.outcome != 'success' && steps.fallback.outputs.needed != 'true'
+        if: inputs.avd_cache && steps.ui.outcome != 'success' && steps.fallback.outputs.needed != 'true'
         run: exit 1
+
+      - name: Run UI tests on a fresh cold AVD
+        id: direct-ui
+        if: ${{ !inputs.avd_cache }}
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: ${{ env.AVD_API }}
+          target: ${{ env.AVD_TARGET }}
+          arch: ${{ env.AVD_ARCH }}
+          profile: ${{ env.AVD_PROFILE }}
+          cores: ${{ env.AVD_CORES }}
+          ram-size: ${{ env.AVD_RAM }}
+          disk-size: ${{ env.AVD_DISK }}
+          avd-name: ${{ env.AVD_NAME }}
+          disable-animations: ${{ env.AVD_DISABLE_ANIMATIONS }}
+          force-avd-creation: true
+          emulator-options: ${{ env.AVD_OPTIONS }} -no-snapshot-load -no-snapshot-save -wipe-data
+          pre-emulator-launch-script: python3 scripts/e2e-cache.py mark direct-boot-start
+          script: python3 scripts/e2e-cache.py test --direct-cold --shard ${{ matrix.shard }}/${{ env.SHARDS }}
 
       - name: Emulator preparation timings
         if: always()

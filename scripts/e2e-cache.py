@@ -255,7 +255,9 @@ def main():
     parser.add_argument('command', choices=['adb-init', 'key', 'validate', 'snapshot', 'seal', 'test', 'fallback', 'mark', 'report'])
     parser.add_argument('name', nargs='?')
     parser.add_argument('--shard')
-    parser.add_argument('--cold', action='store_true')
+    cold = parser.add_mutually_exclusive_group()
+    cold.add_argument('--cold', action='store_true')
+    cold.add_argument('--direct-cold', action='store_true')
     args = parser.parse_args()
     if args.command == 'adb-init':
         initialize_ci_key()
@@ -306,18 +308,21 @@ def main():
         output('disk-size', disk_size)
         mark('save-start')
     elif args.command == 'test':
-        mark('fallback-boot-ready' if args.cold else 'test-boot-ready')
+        is_cold = args.cold or args.direct_cold
+        mark('direct-boot-ready' if args.direct_cold else 'fallback-boot-ready' if args.cold else 'test-boot-ready')
         assert_clean()
-        if not args.cold and cache_key() != state()['key']:
+        if not is_cold and cache_key() != state()['key']:
             raise RuntimeError('SDK changed after cache restore; use a fresh device')
-        if not args.cold:
+        if not is_cold:
             try:
                 assert_snapshot_loaded(json.loads(META.read_text()), boot_id())
             except RuntimeError:
                 record_hardware_difference()
                 raise
         data = state()
-        data['boot_mode'] = 'fresh-cold-fallback' if args.cold else 'snapshot-verified'
+        data['boot_mode'] = 'fresh-cold-direct' if args.direct_cold else 'fresh-cold-fallback' if args.cold else 'snapshot-verified'
+        if args.direct_cold:
+            data['cache'] = 'disabled'
         write(data)
         # The coordinator uses this durable marker to distinguish preparation failure from a real test failure.
         mark('tests-started')
@@ -346,6 +351,7 @@ def main():
                 ('Save snapshot / shutdown', 'create-boot-ready', 'save-start'),
                 ('Cache save', 'save-start', 'cache-ready'), ('Test boot', 'test-boot-start', 'test-boot-ready'),
                 ('Fallback boot', 'fallback-boot-start', 'fallback-boot-ready'),
+                ('Direct cold boot', 'direct-boot-start', 'direct-boot-ready'),
                 ('UI scenarios (e2e.sh)', 'tests-started', 'tests-finished')]
         lines = ['### Emulator preparation', f'Cache: `{data.get("cache", "unavailable")}`; test boot: `{data.get("boot_mode", "unverified")}`', '', '| Phase | Seconds |', '|---|---:|']
         for label, start, end in rows:

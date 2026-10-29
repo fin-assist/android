@@ -72,9 +72,42 @@ The flows run on four emulators at once (FIN-180), one job per shard, each with 
   fails after it has published everything.
 
 
-### Clean AVD snapshot cache (FIN-378)
+### Default SDK caching and fresh cold AVD (FIN-378)
 
-The four shard jobs restore independent writable copies of one clean Android API 34 / google_apis / x86_64 /
+Normal pushes to `main` and manual runs with the default inputs restore **SDK packages**, then create a fresh cold
+AVD for each of the four shards. The requested API/profile/cores/RAM/GPU/disk, KVM, test selection, app-data resets,
+native tests and reports/coverage/Qase stay unchanged. No AVD or adb key is stored in these SDK caches. Both manual
+inputs, `avd_cache` and `sdk_benchmark`, default to `false`; the latter selects the isolated SDK-only experiment.
+
+`scripts/e2e-sdk-cache.py` creates separate emulator/image compatibility prefixes from runner OS/architecture,
+ImageOS/ImageVersion, requested package path, the actual audited action SHA read from the workflow and a schema
+version. CPU features and AVD resources are not SDK package compatibility dimensions. An initially absent package
+may restore the latest prefix entry. The helper validates its `source.properties` revision/hash against the matched
+immutable key. Missing, failed or incompatible restore removes only that initially absent selected package directory
+and proceeds to ordinary online installation. Hosted-only checks, SDK-manager existence and confined, non-symlink
+package paths guard this cleanup. A package already supplied by the hosted image skips restore and save, so archives
+are never merged over preinstalled files and no extra save cost is introduced for that unmeasured case.
+
+Online SDK license/install checks always run through the explicit SDK-manager path, with 120s/600s subprocess
+limits. Final immutable keys contain the actual installed revision/metadata hash. Only shard 1 saves new/updated
+packages, before any emulator/tests, with two-minute transfer limits; other shards only read caches. A current hit
+is not re-saved; a prefix hit updated online gets a new final key. Restore/save failures are cache failures, not a
+reason to retry UI tests. An online SDK failure or direct cold test failure remains red. `cache-matched-key`, rather
+than exact-only `cache-hit`, identifies prefix restores. Old revision/image-version entries can accumulate and must
+be considered in the repository cache budget; two current archives measured about 1.82 GB below.
+
+The sidecar `build/e2e/sdk-cache.json` records matched/final keys, actual metadata, `hit-current`, `hit-updated`,
+`miss` or `preinstalled`, and restore/install/save phase times. It is included in existing shard artifacts.
+`sdk-start` precedes the first restore, so total preparation includes all SDK transfer/install/save plus Android
+boot. `preparation.json` labels the normal path `fresh-cold-direct` with AVD cache `disabled`; it cannot activate the
+snapshot fallback, and it never saves a post-test snapshot. The SDK-only sample supports this engineering choice,
+but **the changed default workflow still needs separately authorized full cold-SDK/warm-SDK UI acceptance**. No
+additional SDK/UI run was performed while implementing it, and full workflow acceleration remains unverified.
+
+### Optional clean AVD snapshot cache (FIN-378)
+
+
+Only a manual run with `avd_cache=true` enables this experimental path. The four shard jobs restore independent writable copies of one clean Android API 34 / google_apis / x86_64 /
 Pixel 6 AVD. A cache miss creates a fresh AVD, boots Android, checks that no FinAssist app or test APK is installed,
 and explicitly saves the named `clean` snapshot. This happens before `e2e.sh` installs anything, signs in or imports
 financial fixtures. The action shuts down the emulator; the helper waits for its process to exit and verifies the
@@ -128,10 +161,8 @@ Its SDK installer still invokes `sdkmanager` for the emulator and image on every
 The workflow calls `sdkmanager` through `$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager` and its helper calls
 `adb` through `$ANDROID_HOME/platform-tools/adb`: these preparation steps precede the action that adds SDK tools
 to `PATH`. It prepares these packages before computing the key, and checks their fingerprint again before saving
-or using a snapshot. An AVD hit does not promise to avoid SDK downloads. No separate SDK cache is enabled without
-measurements: downloading/decompressing SDK archives can cost more than using the packages already present on the
-hosted image, and the action would still check them. Evaluate that separately from the AVD cache with the same
-emulator/image revisions and test selection. The existing GPU mode is retained; Android's
+or using a snapshot. The separate SDK package cache now runs first, including online revision checks; an AVD hit
+alone does not avoid SDK downloads. The experiments below distinguish SDK transfer from AVD snapshot cost. The existing GPU mode is retained; Android's
 [snapshot documentation](https://developer.android.com/studio/run/emulator-snapshots) warns about software-rendering
 reliability. The boot-ID check and one cold fallback keep the tests runnable; actual snapshot compatibility and
 performance on our hosted runners are assessed below.
@@ -189,7 +220,7 @@ after the early diagnostic artifacts arrived. The effective-size output/input co
 and the emulator's first-setup normalization; it preserves the already-used 6 GiB resource size and does not change
 GPU, RAM, cores or snapshot hardware metadata. The full samples below use the corrected procedure.
 
-Two complete authorized samples used the same `ad230b4556ae67cf6457493c885baab201d91fa6`, configuration and
+Two complete authorized samples of the earlier AVD-enabled default used the same `ad230b4556ae67cf6457493c885baab201d91fa6`, configuration and
 selection without a code change between them:
 
 - [Empty-cache run 40960467777](https://github.com/fin-assist/android/actions/runs/40960467777),
@@ -245,17 +276,18 @@ reliable hit rate and cache budget remain unresolved. Do not merge or mark it Do
 
 `e2e.yml` has a `workflow_dispatch` boolean `sdk_benchmark`, default `false`. Only an explicitly selected manual
 run routes to reusable `sdk-preparation-benchmark.yml`; UI shards, reports and Qase are skipped. Normal main pushes
-and default manual UI runs retain the existing path. A separate concurrency suffix prevents the SDK experiment
+and default manual UI runs use SDK caching plus direct cold AVD boot. A separate concurrency suffix prevents the SDK experiment
 from cancelling an ordinary UI run. This routing uses the already registered workflow because GitHub requires a
 manual workflow to exist on the default branch ([dispatch documentation](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)).
-**The SDK experiment has not been dispatched and requires separate owner permission.**
+The owner authorized one SDK-only dispatch; its completed results are below. Any additional benchmark or UI
+run still requires separate explicit permission.
 
 The experiment starts no emulator, APK, Gradle, Maestro or native test. One seed job installs the current emulator
 and selected API 34 image with online `sdkmanager`, then saves two separate immutable package archives. Eight fresh
 jobs follow: four baseline and four warm. Only seed writes caches; warm requires both exact hits, and baseline
 never restores. The keys include the experiment schema, run ID, package identity, installed revision/metadata hash,
 runner OS/architecture and hosted-image version. No CPU/AVD snapshot keys are reused. The run ID bounds the two
-entries for later owner-directed cleanup; no default E2E package cache is enabled.
+entries for later owner-directed cleanup; these experiment keys are isolated from the stable default SDK keys.
 
 All nine runners perform the same disk-space preparation before measurement. Before deleting a package, the helper
 checks that SDK manager exists. Before each arm, it verifies it is on a disposable GitHub-hosted runner, records the hosted preinstalled
@@ -273,8 +305,48 @@ artifacts retain before/after revisions, runner identity, free bytes before/afte
 restore/setup, SDK manager, save/step and total durations,
 and logical package bytes. Individual cache transfer times are available in Actions step logs; compressed bytes
 come from the two exact cache entries after execution. Review total preparation distributions across four runners,
-seed/save cost, package sizes, update-check cost and repository cache pressure before deciding whether SDK caching
-belongs in the default UI workflow. This experiment cannot by itself establish full E2E speedup.
+seed/save cost, package sizes, update-check cost and repository cache pressure. The measured result supports the
+SDK package cache above; final default UI acceptance is still pending. This experiment cannot by itself establish full E2E speedup.
+
+
+The authorized [SDK-only run 40971458743](https://github.com/fin-assist/android/actions/runs/40971458743) used
+`3df7a93fe1a8fe4176915ae8a1b4018458ee34e7` and completed successfully on 2026-10-29 at 23:15:44 UTC:
+23:11:59–23:15:44, 3m45s including seed, job setup, parallel measurements and metadata upload. All nine SDK jobs
+passed; ordinary UI shards and Reports were skipped. Each warm job restored both exact run-scoped entries; none
+of the baseline jobs restored a cache. All nine manifests matched: Linux/X64, ubuntu24 hosted image
+`20261026.354.1`, emulator `37.2.13`, system-image revision `14`, platform-tools `37.0.1`, command-line tools `12.0`,
+and identical package `source.properties` hashes. Both selected packages were absent before cleanup on all nine
+runners, so package deletion did not change their observed starting state in this series.
+
+| Arm / shard | Restore + setup | Online SDK manager + metadata | Save + step overhead | Measured total |
+|---|---:|---:|---:|---:|
+| Seed | 0.1 s | 47.3 s | 19.1 s | 66.4 s |
+| Baseline 1 | 0.1 s | 40.9 s | 0.1 s | 41.0 s |
+| Baseline 2 | 0.1 s | 38.3 s | 0.1 s | 38.4 s |
+| Baseline 3 | 0.0 s | 77.6 s | 0.1 s | 77.7 s |
+| Baseline 4 | 0.0 s | 50.5 s | 0.0 s | 50.5 s |
+| Warm 1 | 28.8 s | 8.6 s | 0.0 s | 37.4 s |
+| Warm 2 | 19.0 s | 8.3 s | 0.1 s | 27.3 s |
+| Warm 3 | 31.8 s | 7.7 s | 0.0 s | 39.5 s |
+| Warm 4 | 31.5 s | 5.5 s | 0.2 s | 37.1 s |
+
+Total measurement starts after identical disk/package cleanup and excludes checkout, Java setup, artifact upload
+and post-job hooks. Baseline and warm jobs ran concurrently after seed on different unpaired runners. Mean measured
+total was 51.94s baseline versus 35.34s warm (16.60s / 32.0% lower); medians were 45.78s versus 37.23s
+(8.55s / 18.7% lower). Baseline's 77.7s tail affects the mean. Warm online SDK checks remained enabled and took
+5.5–8.6s, with no package-download progress in their logs. This single batch supports an SDK transfer benefit for
+these versions/hosts; it does not establish a stable distribution, savings when packages are preinstalled, or full
+UI workflow improvement. The one-time 19.1s seed-save cost and package updates must also be accounted for.
+
+The emulator package was 903,310,069 logical bytes and 334,907,506 compressed cache bytes; the system image was
+4,469,102,280 logical and 1,482,666,423 compressed bytes. The two immutable archives totaled 1,817,573,929 bytes
+(~1.82 GB), rather than duplicating one system image across CPU-specific AVD entries. All nine pre-existing repository
+cache entries (941,825,348 bytes) remained present in the during-run inventory. Cache IDs, exact keys, manifests,
+per-job phase/step times and metadata artifact URLs are retained in the external compact evidence. After all reads the owner removed only those two experiment entries; the exact nine previous entries and bytes
+remained unchanged. The implementation therefore adopts SDK caching plus fresh cold AVD as the default and retains
+snapshot caching as manual opt-in. This change preserves online revision checks and includes package-update/cache
+costs in telemetry. FIN-378 remains open pending full UI acceptance of that default; the SDK-only experiment does
+not reverse the failed/unconfirmed AVD preparation result.
 
 ## Qase
 
