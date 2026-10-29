@@ -16,6 +16,9 @@ appId: ru.finassist.pf.mock.e2e
     commands:
       - tapOn:
           id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: true
 - scrollUntilVisible:
     element:
       id: "auth.phone.consent"
@@ -27,3 +30,6 @@ appId: ru.finassist.pf.mock.e2e
     commands:
       - tapOn:
           id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: true

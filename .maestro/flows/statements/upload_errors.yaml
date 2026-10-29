@@ -38,7 +38,7 @@ tags:
     visible:
       id: "statements.upload.error.csv_not_accepted"
     timeout: 15000
-- assertVisible: "Это CSV, а нужен OFX"
+- assertVisible: "Выписки CSV пока не поддерживаются"
 
 - tapOn:
     id: "statements.upload.pick_another"
@@ -57,7 +57,7 @@ tags:
     visible:
       id: "statements.upload.error.wrong_bank"
     timeout: 15000
-- assertVisible: "Похоже, это выписка не Т-Банка"
+- assertVisible: "Загрузите выписку поддерживаемого банка"
 
 # Leaving the picker without a file keeps the guide.
 - tapOn:

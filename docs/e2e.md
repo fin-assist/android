@@ -227,6 +227,9 @@ were.
 - Type ASCII where you can (merchant `Krabsbir`, digits): non-ASCII input depends on the emulator keyboard.
 - `id` and `text` in one selector must match the same node. A tag on a container (`PfLink`, `PfPageHeader`, a
   row) has no text of its own — its text is a child node: check the id and the text in two steps.
+- A checkbox tag, checked state and click action must belong to the same semantics node. `PfCheckbox`
+  exposes all three on its outer node (FIN-375); do not test an uncheckable wrapper's default `checked: false`.
+  `confirm_phone` asserts both choices are on after its conditional taps, including repeated calls.
 - Labels that depend on «today» («Сегодня», «Вчера», the year next to a date) follow the pinned date, not the
   emulator's: 7 October 2026 is «Вчера».
 - A new flow needs a case in Qase and a line in `scripts/qase-cases.json`; a renamed or removed flow updates both.
@@ -260,7 +263,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `auth/register_new_user` (smoke) | independent 14+/PD before phone → new number → create account without another consent → passcode → first upload → result → feed (Qase2, FIN-365) |
 | `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the three tabs (Qase1, FIN-365) |
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
-| `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains current attempt confirmations (Qase57, FIN-365) |
+| `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains confirmations; repeated confirm_phone keeps both checked and input enabled (Qase57, FIN-365, FIN-375) |
 | `auth/phone_consent_recovery` | document offline → explicit refresh → confirmations → Start offline → retry with the existing intent (Qase58, FIN-365) |
 | `auth/phone_validation` | short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
 | `auth/call_expired` | `call_ttl_ms=15000`: the wait ends either by the stream's `expired` or by the device timer (their order is not fixed); both lead to «Время на звонок вышло» with no number; «Позвонить ещё раз» brings the number and a new deadline back — FIN-166 |
@@ -292,7 +295,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `assistant/retry_without_transfers` | `assistant_model_errors=1`: a question asked «Без переводов» fails, not spent; «Повторить» answers it still «без переводов» — FIN-76 |
 | `assistant/answer_retry` | `assistant_model_errors=1`: the answer fails, not spent; a double tap on «Повторить» while the request is on its way sends it once: one answer, no «Не получилось отправить вопрос», 4 of 5 — FIN-75 |
 | `assistant/answer_changed_since` | after an answer a category is changed, then the statement deleted: the earlier answer in the history shows «С тех пор категории менялись», then «С тех пор данные менялись» (`changed_since` counted at the time of the request) — FIN-135 |
-| `statements/upload_errors` | CSV, not a statement, another bank; leaving the picker |
+| `statements/upload_errors` | CSV and another-bank server messages, not a statement; leaving the picker (Qase15, FIN-375) |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
@@ -464,3 +467,15 @@ and a refused GET without a time restriction. The captured rate-limit explanatio
 retry time survive checkbox changes/blocked restart and clear after successful document loading. There is no automatic GET when the wait ends. UI/DesignCheck
 runs are not authorized. The proposed document-refusal states use existing error/link/button primitives;
 there is no matching Figma artboard, and source fixtures do not claim a visual approval or a completed UI run.
+
+### FIN-375 checkbox semantics and server-message expectations
+
+The checkbox's existing tag, click action, role, checked state and optional error are on the same
+merged semantics node. Both phone choices still start unchecked; no consent or age gate is bypassed.
+`confirm_phone` checks the actual checked state after each conditional tap. Qase57 now repeats that
+helper twice after returning from Call and verifies that phone input stays enabled. Qase3/35 retain
+their repeated-helper paths. Qase15 checks the current mock server's CSV/other-bank messages; Qase49
+checks its rate-limit message while keeping draft, daily quota, history and retry assertions.
+Existing case IDs and `scripts/qase-cases.json` mappings are retained. The failed run is documented in
+[FIN-375](https://finassist.youtrack.cloud/issue/FIN-375); these corrections are authored without a new
+UI, Maestro, instrumented or DesignCheck run.

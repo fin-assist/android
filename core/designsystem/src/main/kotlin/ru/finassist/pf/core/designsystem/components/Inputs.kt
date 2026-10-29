@@ -346,16 +346,20 @@ fun PfCheckbox(
 ) {
     val c = PfTheme.colors
     val d = PfTheme.dimens
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(d.space1)) {
+    // Keep the caller's tag, checked state and click action on the same accessibility node.
+    Column(
+        modifier
+            .clickable(role = Role.Checkbox) { onCheckedChange(!checked) }
+            .semantics(mergeDescendants = true) {
+                toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+                if (error != null) this.error(error)
+            },
+        verticalArrangement = Arrangement.spacedBy(d.space1),
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .defaultMinSize(minHeight = d.space6)
-                .clickable(role = Role.Checkbox) { onCheckedChange(!checked) }
-                .semantics(mergeDescendants = true) {
-                    toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
-                    if (error != null) this.error(error)
-                },
+                .defaultMinSize(minHeight = d.space6),
             horizontalArrangement = Arrangement.spacedBy(d.space3),
             verticalAlignment = Alignment.Top,
         ) {

@@ -90,3 +90,12 @@ tags:
 - assertVisible:
     id: "auth.phone.consent"
     checked: true
+# FIN-375: repeating the shared precondition must keep already accepted choices on.
+- runFlow: ../../subflows/confirm_phone.yaml
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- assertVisible:
+    id: "auth.phone.input"
+    enabled: true
