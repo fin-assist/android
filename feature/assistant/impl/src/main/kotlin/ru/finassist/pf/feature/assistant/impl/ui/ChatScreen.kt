@@ -8,7 +8,6 @@ import ru.finassist.pf.core.designsystem.components.PfTestTags
 import ru.finassist.pf.core.designsystem.components.PfLimitMeter
 import ru.finassist.pf.core.designsystem.components.PfDivider
 import ru.finassist.pf.core.designsystem.components.PfButton
-import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.height
@@ -312,11 +311,13 @@ private fun Answer(
     when {
         // The text and «Повторить» come from the server, whatever the code (api.md 7.2, 7.3, FIN-159).
         item.status == AnswerStatus.FAILED -> Column(Modifier.testTag(AssistantTags.ANSWER_FAILED)) {
-            ErrorMessage(item.errorPresentation, GENERIC_ANSWER_ERROR, legacySafeText = item.errorText)
-            if (item.retryable && !requestRetryBlocked) {
-                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.GHOST,
-                    modifier = Modifier.testTag(AssistantTags.ANSWER_FAILED_RETRY))
-            }
+            ErrorMessage(
+                item.errorPresentation,
+                GENERIC_ANSWER_ERROR,
+                legacySafeText = item.errorText,
+                onRetry = if (item.retryable && !requestRetryBlocked) onRetry else null,
+                retryModifier = Modifier.testTag(AssistantTags.ANSWER_FAILED_RETRY),
+            )
         }
         item.blocks.isEmpty() && item.status == AnswerStatus.GENERATING -> PfChatStatus("Считаю по выписке…", Modifier.testTag(AssistantTags.ANSWER_GENERATING))
         else -> Column(verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4)) {

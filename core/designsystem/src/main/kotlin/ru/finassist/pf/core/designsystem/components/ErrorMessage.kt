@@ -21,6 +21,7 @@ fun ErrorMessage(
     modifier: Modifier = Modifier,
     legacySafeText: String? = null,
     onRetry: (() -> Unit)? = null,
+    retryModifier: Modifier = Modifier,
 ) {
     Box(modifier) {
         PfNotice(
@@ -36,7 +37,7 @@ fun ErrorMessage(
                 ErrorSeverity.ERROR -> NoticeTone.ERROR
             },
             alert = presentation.severity == ErrorSeverity.ERROR,
-            action = if (onRetry != null) ({ PfNoticeLink("Повторить", onClick = onRetry) }) else null,
+            action = if (onRetry != null) ({ PfNoticeLink("Повторить", onClick = onRetry, modifier = retryModifier) }) else null,
         )
     }
 }
