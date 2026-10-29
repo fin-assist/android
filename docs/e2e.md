@@ -100,6 +100,17 @@ creates a new disposable pair. These cache keys authorize only disposable test A
 real devices or as production credentials. Cache contents are not secret storage. The acceptance hit must use a
 different hosted runner from the cache creator; a second boot in the same job does not prove key portability.
 
+The requested userdata size remains `AVD_DISK=4096M` for cold creation/fallback. On first setup, the emulator raises
+API 24+ userdata to a 6 GiB minimum and writes the effective size to `config.ini`
+([primary normalization code](https://android.googlesource.com/platform/external/qemu/+/emu-master-dev/android-qemu2-glue/main.cpp)).
+The action otherwise appends the original requested disk size again on a warm launch, changing the saved hardware
+from `6g` to `4g` and invalidating it. `seal` now reads the effective size from the saved `hardware.ini`, validates
+its numeric/unit representation and publishes a canonical byte count. Cache metadata retains that count; `validate`
+checks it against the saved hardware before exposing the same output on a hit. The warm action uses this explicit
+validated output as `disk-size`. Snapshot hardware metadata is never edited and AEMU checks stay enabled. Missing,
+invalid, duplicated, overflowing or inconsistent size metadata rejects the cache/preparation. The compatibility key
+still contains the requested parameters and image revision; this setup change raises the snapshot procedure version.
+
 The exact cache key includes the installed emulator and system-image `source.properties` (including revisions),
 runner OS/architecture and runner-image version, host CPU model/features, all `AVD_*` configuration, the pinned
 runner-action SHA and explicit `SNAPSHOT_PROCEDURE` version. A change to the snapshot creation/validation procedure
@@ -170,6 +181,13 @@ instead of spending the full UI run on fallback. The structural guard incorrectl
 The guard now requires nonempty `snapshot.pb` and `ram.bin`, and reports only relative file names/sizes if sealing
 fails. The procedure version is bumped; GPU, API/profile/resources and test selection are unchanged. This cancelled
 attempt created no AVD cache and does not establish cache-hit performance or complete UI correctness.
+
+The [diagnostic run 40958700437](https://github.com/fin-assist/android/actions/runs/40958700437) restored existing
+caches in all four shards and identified exactly one changed field, `disk.dataPartition.size`, with equal path counts.
+The captured snapshot size was `6g`, while repeated action setup reapplied requested `4096M`. The owner cancelled
+after the early diagnostic artifacts arrived. The effective-size output/input correction above follows that evidence
+and the emulator's first-setup normalization; it preserves the already-used 6 GiB resource size and does not change
+GPU, RAM, cores or snapshot hardware metadata. Full clean miss/hit acceptance follows on the corrected procedure.
 
 **Not yet measured:** the changed workflow's cache miss → save → hit, real boot-ID continuity, cache transfer size
 and time, or net speedup. UI/Maestro/native/DesignCheck runs and manually dispatched workflows require separate

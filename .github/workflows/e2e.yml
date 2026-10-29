@@ -188,7 +188,9 @@ jobs:
           profile: ${{ env.AVD_PROFILE }}
           cores: ${{ env.AVD_CORES }}
           ram-size: ${{ env.AVD_RAM }}
-          disk-size: ${{ env.AVD_DISK }}
+          # First boot may raise requested userdata size to the image minimum (6 GiB on API 34).
+          # Reapplying the original requested 4 GiB changes hardware.ini and invalidates the snapshot.
+          disk-size: ${{ steps.avd.outputs.disk-size || steps.seal.outputs.disk-size }}
           avd-name: ${{ env.AVD_NAME }}
           disable-animations: ${{ env.AVD_DISABLE_ANIMATIONS }}
           force-avd-creation: false

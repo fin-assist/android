@@ -19,7 +19,7 @@ META = AVD / 'finassist-clean.json'
 KEY = AVD_ROOT.parent / 'adbkey'
 KEY_PUBLIC = AVD_ROOT.parent / 'adbkey.pub'
 KEY_RECEIPT = AVD_ROOT.parent / 'finassist-ci-adb.json'
-SNAPSHOT_PROCEDURE = 'clean-snapshot-v3'
+SNAPSHOT_PROCEDURE = 'clean-snapshot-v4'
 
 
 def output(name, value):
@@ -135,7 +135,7 @@ def hardware_summary(text):
             continue
         if re.search(r'secret|token|password|serial|phone|email|account|card|uuid|(?:^|[._])(?:key|keys|pubkey|privatekey)(?:$|[._])', key, re.IGNORECASE):
             fields[key] = {'value': '<redacted>', 'not_compared': True}
-        elif re.fullmatch(r'[+-]?[0-9]{1,12}(?:\.[0-9]{1,6})?(?:[KMGT])?', value) or value in {
+        elif re.fullmatch(r'[+-]?[0-9]{1,12}(?:\.[0-9]{1,6})?(?:[KMGTkmgt])?', value) or value in {
                 '', 'yes', 'no', 'true', 'false', 'on', 'off', 'auto', 'none', 'portrait', 'landscape',
                 'x86', 'x86_64', 'arm', 'arm64', 'arm64-v8a', 'ranchu', 'ranchu64', 'pipe', 'guest', 'host'}:
             fields[key] = {'value': value}
@@ -184,11 +184,31 @@ def snapshot_exists(avd=AVD):
                for name in ('snapshot.pb', 'ram.bin'))
 
 
+def snapshot_disk_size(avd=AVD):
+    values = []
+    for line in (avd / 'snapshots/clean/hardware.ini').read_text().splitlines():
+        key, separator, value = line.partition('=')
+        if separator and key.strip() == 'disk.dataPartition.size':
+            values.append(value.strip())
+    if len(values) != 1:
+        raise ValueError('Saved snapshot must have exactly one disk.dataPartition.size')
+    match = re.fullmatch(r'([1-9][0-9]{0,18})([KMGTkmgt]?)', values[0])
+    if not match:
+        raise ValueError('Saved snapshot disk size must be a positive integer with an optional K/M/G/T unit')
+    multiplier = {'': 1, 'k': 1024, 'm': 1024 ** 2, 'g': 1024 ** 3, 't': 1024 ** 4}[match[2].lower()]
+    size = int(match[1]) * multiplier
+    if size > 2 ** 63 - 1:
+        raise ValueError('Saved snapshot disk size exceeds the supported integer range')
+    return size
+
+
 def usable(avd, key):
     try:
         metadata = json.loads((avd / 'finassist-clean.json').read_text())
         uuid.UUID(metadata['boot_id'])
-        return metadata['key'] == key and snapshot_exists(avd)
+        return (metadata['key'] == key and snapshot_exists(avd)
+                and type(metadata['disk_size_bytes']) is int
+                and metadata['disk_size_bytes'] == snapshot_disk_size(avd))
     except (OSError, ValueError, KeyError, TypeError):
         return False
 
@@ -258,6 +278,7 @@ def main():
             (AVD_ROOT / f'{NAME}.ini').unlink(missing_ok=True)
         if hit:
             capture_snapshot_hardware()
+            output('disk-size', snapshot_disk_size(AVD))
         mark('restore-ready')
         output('usable', str(hit).lower())
     elif args.command == 'snapshot':
@@ -279,8 +300,10 @@ def main():
             found = {path.name: path.stat().st_size for path in snapshot_dir.iterdir() if path.is_file()} if snapshot_dir.is_dir() else {}
             raise RuntimeError(f'Clean snapshot is missing or incomplete: expected nonempty snapshot.pb and ram.bin; files={found}')
         data = state()
-        META.write_text(json.dumps({'key': data['key'], 'boot_id': data['boot_id']}))
+        disk_size = snapshot_disk_size(AVD)
+        META.write_text(json.dumps({'key': data['key'], 'boot_id': data['boot_id'], 'disk_size_bytes': disk_size}))
         capture_snapshot_hardware()
+        output('disk-size', disk_size)
         mark('save-start')
     elif args.command == 'test':
         mark('fallback-boot-ready' if args.cold else 'test-boot-ready')

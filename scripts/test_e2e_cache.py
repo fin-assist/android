@@ -28,9 +28,9 @@ class CleanAvdCacheTest(unittest.TestCase):
         snapshot = self.avd / 'snapshots/clean'
         snapshot.mkdir(parents=True)
         (snapshot / 'snapshot.pb').write_bytes(b'metadata')
-        (snapshot / 'hardware.ini').write_text('hw.ramSize=4096\nhw.cpu.ncore=4\n')
+        (snapshot / 'hardware.ini').write_text('hw.ramSize=4096\nhw.cpu.ncore=4\ndisk.dataPartition.size=6g\n')
         (snapshot / 'ram.bin').write_bytes(b'ram')
-        (self.avd / 'finassist-clean.json').write_text(json.dumps({'key': 'compatible', 'boot_id': '12345678-1234-4234-8234-123456789abc'}))
+        (self.avd / 'finassist-clean.json').write_text(json.dumps({'key': 'compatible', 'boot_id': '12345678-1234-4234-8234-123456789abc', 'disk_size_bytes': 6 * 1024 ** 3}))
 
     def test_cache_miss_corrupt_or_incompatible_snapshot_is_not_usable(self):
         self.assertFalse(cache.usable(self.avd, 'compatible'))
@@ -52,6 +52,50 @@ class CleanAvdCacheTest(unittest.TestCase):
         (snapshot / 'ram.bin').write_bytes(b'')
         self.assertFalse(cache.snapshot_exists(self.avd))
 
+    def test_effective_disk_size_is_validated_against_saved_snapshot_and_not_requested_size(self):
+        self.ready_snapshot()
+        self.assertEqual(6442450944, cache.snapshot_disk_size(self.avd))
+        self.assertTrue(cache.usable(self.avd, 'compatible'))
+        metadata = self.avd / 'finassist-clean.json'
+        data = json.loads(metadata.read_text())
+        for wrong in [4294967296, '6442450944', True, None]:
+            data['disk_size_bytes'] = wrong
+            metadata.write_text(json.dumps(data))
+            self.assertFalse(cache.usable(self.avd, 'compatible'))
+        del data['disk_size_bytes']
+        metadata.write_text(json.dumps(data))
+        self.assertFalse(cache.usable(self.avd, 'compatible'))
+
+    def test_missing_invalid_or_injected_disk_size_cannot_become_action_input(self):
+        self.ready_snapshot()
+        hardware = self.avd / 'snapshots/clean/hardware.ini'
+        for invalid in ['', '0', '-1', '6g; touch should-not-exist', '6.0g', '1e9', '9999999999999999999T']:
+            with self.subTest(value=invalid):
+                hardware.write_text('disk.dataPartition.size=' + invalid + '\n')
+                with self.assertRaises(ValueError):
+                    cache.snapshot_disk_size(self.avd)
+                self.assertFalse(cache.usable(self.avd, 'compatible'))
+        for invalid in ['hw.ramSize=4096\n', 'disk.dataPartition.size=6g\ndisk.dataPartition.size=4g\n']:
+            hardware.write_text(invalid)
+            with self.assertRaises(ValueError):
+                cache.snapshot_disk_size(self.avd)
+
+    def test_seal_with_invalid_effective_size_cannot_publish_metadata_or_action_input(self):
+        self.ready_snapshot()
+        metadata = self.avd / 'finassist-clean.json'
+        metadata.unlink()
+        (self.avd / 'snapshots/clean/hardware.ini').write_text('disk.dataPartition.size=6g; invalid\n')
+        with patch.object(cache, 'AVD', self.avd), patch.object(cache, 'META', metadata), \
+             patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'wait_stopped'), \
+             patch.object(cache, 'assert_ci_key'), patch.object(cache, 'output') as out, \
+             patch('sys.argv', ['e2e-cache.py', 'seal']):
+            cache.write({'key': 'compatible', 'boot_id': '12345678-1234-4234-8234-123456789abc', 'marks': {}})
+            with self.assertRaises(ValueError):
+                cache.main()
+            self.assertFalse(metadata.exists())
+            out.assert_not_called()
+            self.assertNotIn('save-start', cache.state()['marks'])
+
     def test_invalid_restored_device_is_discarded_without_removing_other_avds(self):
         ini = self.root / 'device.ini'
         ini.write_text('path=old')
@@ -70,7 +114,8 @@ class CleanAvdCacheTest(unittest.TestCase):
     def test_seal_requires_a_stopped_emulator_and_complete_snapshot(self):
         metadata = self.avd / 'finassist-clean.json'
         with patch.object(cache, 'AVD', self.avd), patch.object(cache, 'META', metadata), patch.object(cache, 'assert_ci_key'), \
-             patch.object(cache, 'STATE', self.root / 'state.json'), patch('sys.argv', ['e2e-cache.py', 'seal']):
+             patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'output') as out, \
+             patch('sys.argv', ['e2e-cache.py', 'seal']):
             cache.write({'key': 'compatible', 'boot_id': '12345678-1234-4234-8234-123456789abc', 'marks': {}})
             with patch.object(cache, 'wait_stopped', side_effect=TimeoutError('live')):
                 with self.assertRaises(TimeoutError):
@@ -84,6 +129,7 @@ class CleanAvdCacheTest(unittest.TestCase):
                 metadata.unlink()
                 cache.main()
             self.assertTrue(cache.usable(self.avd, 'compatible'))
+            out.assert_called_once_with('disk-size', 6 * 1024 ** 3)
             self.assertIn('save-start', cache.state()['marks'])
             self.assertEqual({'value': '4096'}, cache.state()['snapshot_hardware']['fields']['hw.ramSize'])
 
@@ -235,12 +281,13 @@ class CleanAvdCacheTest(unittest.TestCase):
     def test_validate_retains_expected_hardware_before_loader_can_remove_snapshot(self):
         self.ready_snapshot()
         with patch.object(cache, 'AVD', self.avd), patch.object(cache, 'reload_ci_key'), \
-             patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'output'), \
+             patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'output') as out, \
              patch('sys.argv', ['e2e-cache.py', 'validate']):
             cache.write({'key': 'compatible', 'marks': {}})
             cache.main()
             (self.avd / 'snapshots/clean/hardware.ini').unlink()
             self.assertEqual({'value': '4'}, cache.state()['snapshot_hardware']['fields']['hw.cpu.ncore'])
+            self.assertIn(('disk-size', 6 * 1024 ** 3), [call.args for call in out.call_args_list])
 
     def test_boot_id_failure_records_sanitized_hardware_diff_without_starting_tests(self):
         self.ready_snapshot()
@@ -280,7 +327,7 @@ class CleanAvdCacheTest(unittest.TestCase):
         (sdk / 'emulator/source.properties').write_text('Pkg.Revision=36.1.2\n')
         (image / 'source.properties').write_text('Pkg.Revision=14\n')
         env = dict(ANDROID_HOME=str(sdk), AVD_API='34', AVD_TARGET='google_apis', AVD_ARCH='x86_64',
-                   RUNNER_OS='Linux', RUNNER_ARCH='X64', ImageOS='ubuntu24', ImageVersion='v1')
+                   RUNNER_OS='Linux', RUNNER_ARCH='X64', ImageOS='ubuntu24', ImageVersion='v1', AVD_DISK='4096M')
         original_read_text = Path.read_text
         def read_text(path, *args, **kwargs):
             if str(path) == '/proc/cpuinfo':
@@ -288,6 +335,9 @@ class CleanAvdCacheTest(unittest.TestCase):
             return original_read_text(path, *args, **kwargs)
         with patch.dict(os.environ, env), patch.object(Path, 'read_text', read_text):
             self.assertIn('36.1.2', cache.fingerprint()['packages']['emulator'])
+            requested_key = cache.cache_key()
+            with patch.dict(os.environ, {'AVD_DISK': '8192M'}):
+                self.assertNotEqual(requested_key, cache.cache_key())
             (image / 'source.properties').unlink()
             with self.assertRaises(FileNotFoundError):
                 cache.fingerprint()
@@ -393,6 +443,13 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         self.assertTrue(self.runs('Run UI tests on a fresh AVD after snapshot boot failure', fields))
         self.assertFalse(self.runs('Preserve UI test failure', fields))
         self.assertNotIn('continue-on-error', self.step('Run UI tests on a fresh AVD after snapshot boot failure'))
+
+    def test_warm_action_keeps_the_effective_disk_size_while_cold_creation_keeps_requested_size(self):
+        warm = self.step('Run UI tests from clean snapshot')
+        self.assertIn('disk-size: ${{ steps.avd.outputs.disk-size || steps.seal.outputs.disk-size }}', warm)
+        self.assertNotIn('disk-size: ${{ env.AVD_DISK }}', warm)
+        self.assertIn('disk-size: ${{ env.AVD_DISK }}', self.step('Create clean AVD snapshot'))
+        self.assertIn('disk-size: ${{ env.AVD_DISK }}', self.step('Run UI tests on a fresh AVD after snapshot boot failure'))
 
     def test_failed_warm_diagnostics_upload_precedes_cold_fallback_and_cannot_fail_the_job(self):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
