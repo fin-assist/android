@@ -83,7 +83,7 @@ cached; host adb keys are excluded. Saving is a step **before** the UI tests, ne
 
 On a hit, `force-avd-creation: false` and `-snapshot clean -no-snapshot-save` reuse the restored device. Before the
 tests, `scripts/e2e-cache.py` checks that the app is absent and that Android's kernel `boot_id` matches the ID saved
-in the snapshot metadata: a silent cold boot must not count as a successful snapshot restore. A preparation failure
+in the snapshot metadata: a silent cold boot must not count as a successful snapshot restore. A failure in cache validation, snapshot creation/sealing, or snapshot boot
 can fall back once to a fresh AVD with a cold boot. The marker written immediately before starting `e2e.sh` prevents
 an assertion failure, native-test failure or timeout from being retried or hidden as a cache problem. Test runs
 never save snapshots or update the shared cache. Existing per-flow app-data resets, native-test orchestration,

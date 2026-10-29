@@ -110,6 +110,7 @@ jobs:
       # Separate restore/save: a post-job cache save would persist the device AFTER the financial tests.
       - name: Restore clean AVD
         id: avd-cache
+        continue-on-error: true
         uses: actions/cache/restore@v6
         with:
           path: |
@@ -119,10 +120,13 @@ jobs:
 
       - name: Validate restored AVD
         id: avd
+        continue-on-error: true
         run: python3 scripts/e2e-cache.py validate
 
       - name: Create clean AVD snapshot
-        if: steps.avd.outputs.usable != 'true'
+        id: create
+        continue-on-error: true
+        if: steps.avd.outcome == 'success' && steps.avd.outputs.usable != 'true'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: ${{ env.AVD_API }}
@@ -141,11 +145,14 @@ jobs:
 
       # Save only the pristine, stopped AVD, never adb keys, APKs, or the post-test writable device.
       - name: Seal clean AVD
-        if: steps.avd.outputs.usable != 'true'
+        id: seal
+        continue-on-error: true
+        if: steps.create.outcome == 'success'
         run: python3 scripts/e2e-cache.py seal
 
       - name: Save clean AVD
-        if: steps.avd.outputs.usable != 'true' && steps.avd-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        if: steps.seal.outcome == 'success' && steps.avd-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: |
@@ -154,10 +161,12 @@ jobs:
           key: ${{ steps.avd-key.outputs.key }}
 
       - name: Mark cache ready
+        if: steps.avd.outcome == 'success' && (steps.avd.outputs.usable == 'true' || steps.seal.outcome == 'success')
         run: python3 scripts/e2e-cache.py mark cache-ready
 
       - name: Run UI tests from clean snapshot
         id: ui
+        if: steps.avd.outcome == 'success' && (steps.avd.outputs.usable == 'true' || steps.seal.outcome == 'success')
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
@@ -175,15 +184,16 @@ jobs:
           pre-emulator-launch-script: python3 scripts/e2e-cache.py mark test-boot-start
           script: python3 scripts/e2e-cache.py test --shard ${{ matrix.shard }}/${{ env.SHARDS }}
 
+      # Validation, snapshot creation, sealing, or snapshot boot may fail before UI tests start.
       # Retry preparation only. Once e2e.sh starts, an assertion/native-test failure remains a failure.
       - name: Decide whether clean cold boot is needed
         id: fallback
-        if: steps.ui.outcome == 'failure'
+        if: steps.ui.outcome != 'success'
         run: python3 scripts/e2e-cache.py fallback
 
       - name: Run UI tests on a fresh AVD after snapshot boot failure
         id: cold-ui
-        if: steps.ui.outcome == 'failure' && steps.fallback.outputs.needed == 'true'
+        if: steps.fallback.outputs.needed == 'true'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: ${{ env.AVD_API }}
@@ -201,7 +211,7 @@ jobs:
           script: python3 scripts/e2e-cache.py test --cold --shard ${{ matrix.shard }}/${{ env.SHARDS }}
 
       - name: Preserve UI test failure
-        if: steps.ui.outcome == 'failure' && steps.fallback.outputs.needed != 'true'
+        if: steps.ui.outcome != 'success' && steps.fallback.outputs.needed != 'true'
         run: exit 1
 
       - name: Emulator preparation timings

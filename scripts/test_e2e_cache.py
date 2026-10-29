@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -167,11 +168,57 @@ class CleanAvdCacheTest(unittest.TestCase):
 
 
 class CacheWorkflowSafetyTest(unittest.TestCase):
+    def step(self, name):
+        workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
+        return next(block for block in workflow.split('      - name: ') if block.startswith(name + '\n'))
+
+    def runs(self, name, fields):
+        condition = re.search(r'^        if: (.+)$', self.step(name), re.MULTILINE).group(1)
+        expression = re.sub(r'steps\.[\w-]+\.(?:outcome|outputs\.[\w-]+)',
+                            lambda match: repr(fields.get(match.group(), '')), condition)
+        return eval(expression.replace('&&', ' and ').replace('||', ' or '), {'__builtins__': {}})
+
+    def test_each_preparation_failure_reaches_one_fresh_cold_attempt_without_cache_save(self):
+        for failed in ['Validate restored AVD', 'Create clean AVD snapshot', 'Seal clean AVD']:
+            with self.subTest(failed=failed):
+                self.assertIn('continue-on-error: true', self.step(failed))
+                fields = {'steps.avd.outcome': 'success', 'steps.avd.outputs.usable': 'false',
+                          'steps.create.outcome': 'success', 'steps.seal.outcome': 'success',
+                          'steps.avd-cache.outputs.cache-hit': 'false', 'steps.ui.outcome': 'skipped'}
+                failed_id = re.search(r'^        id: (.+)$', self.step(failed), re.MULTILINE).group(1)
+                fields[f'steps.{failed_id}.outcome'] = 'failure'
+                if failed_id == 'avd':
+                    fields['steps.create.outcome'] = 'skipped'
+                if failed_id != 'seal':
+                    fields['steps.seal.outcome'] = 'skipped'
+                self.assertFalse(self.runs('Save clean AVD', fields))
+                self.assertFalse(self.runs('Run UI tests from clean snapshot', fields))
+                self.assertTrue(self.runs('Decide whether clean cold boot is needed', fields))
+                fields['steps.fallback.outputs.needed'] = 'true'
+                self.assertTrue(self.runs('Run UI tests on a fresh AVD after snapshot boot failure', fields))
+                self.assertFalse(self.runs('Preserve UI test failure', fields))
+
+    def test_successful_hit_and_miss_run_warm_tests_but_actual_test_failure_stays_red(self):
+        for hit in ['true', 'false']:
+            fields = {'steps.avd.outcome': 'success', 'steps.avd.outputs.usable': hit,
+                      'steps.seal.outcome': 'skipped' if hit == 'true' else 'success',
+                      'steps.avd-cache.outputs.cache-hit': hit}
+            self.assertTrue(self.runs('Run UI tests from clean snapshot', fields))
+            self.assertEqual(hit == 'false', self.runs('Save clean AVD', fields))
+            fields['steps.ui.outcome'] = 'success'
+            self.assertFalse(self.runs('Decide whether clean cold boot is needed', fields))
+            fields.update({'steps.ui.outcome': 'failure', 'steps.fallback.outputs.needed': 'false'})
+            self.assertTrue(self.runs('Decide whether clean cold boot is needed', fields))
+            self.assertFalse(self.runs('Run UI tests on a fresh AVD after snapshot boot failure', fields))
+            self.assertTrue(self.runs('Preserve UI test failure', fields))
+
     def test_cache_is_explicitly_saved_before_any_test_installation(self):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
         self.assertLess(workflow.index('- name: Save clean AVD'), workflow.index('- name: Run UI tests from'))
         self.assertNotIn('uses: actions/cache@', workflow)
         self.assertNotIn('~/.android/adb', workflow)
+        self.assertIn('continue-on-error: true', self.step('Restore clean AVD'))
+        self.assertIn('continue-on-error: true', self.step('Save clean AVD'))
         self.assertIn('force-avd-creation: false', workflow)
         self.assertIn('-snapshot clean -no-snapshot-save', workflow)
         self.assertIn("steps.fallback.outputs.needed != 'true'", workflow)
