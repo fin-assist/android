@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,6 +16,10 @@ AVD_ROOT = Path.home() / '.android/avd'
 NAME = os.environ.get('AVD_NAME', 'pf-e2e')
 AVD = AVD_ROOT / f'{NAME}.avd'
 META = AVD / 'finassist-clean.json'
+KEY = AVD_ROOT.parent / 'adbkey'
+KEY_PUBLIC = AVD_ROOT.parent / 'adbkey.pub'
+KEY_RECEIPT = AVD_ROOT.parent / 'finassist-ci-adb.json'
+SNAPSHOT_PROCEDURE = 'clean-snapshot-v2'
 
 
 def output(name, value):
@@ -54,14 +59,58 @@ def fingerprint():
         'runner': {key: os.environ[key] for key in ('RUNNER_OS', 'RUNNER_ARCH', 'ImageOS', 'ImageVersion')},
         'cpu': sorted(set(cpu.splitlines())),
         'config': {key: value for key, value in os.environ.items() if key.startswith('AVD_')},
-        # Includes the action SHA, all its explicit/default configuration and the snapshot procedure.
-        'workflow': hashlib.sha256(Path('.github/workflows/e2e.yml').read_bytes()).hexdigest(),
-        'helper': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        # Defaults come from the audited action; procedure changes must bump this explicit version.
+        'action': action_revision(Path('.github/workflows/e2e.yml').read_text()),
+        'procedure': SNAPSHOT_PROCEDURE,
     }
 
 
 def cache_key():
-    return 'clean-avd-v1-' + hashlib.sha256(json.dumps(fingerprint(), sort_keys=True).encode()).hexdigest()
+    return 'clean-avd-v2-' + hashlib.sha256(json.dumps(fingerprint(), sort_keys=True).encode()).hexdigest()
+
+
+def action_revision(workflow):
+    revisions = re.findall(r'uses: reactivecircus/android-emulator-runner@(\S+)', workflow)
+    if not revisions or len(set(revisions)) != 1 or not re.fullmatch(r'[0-9a-f]{40}', revisions[0]):
+        raise ValueError('All emulator actions must use the same audited SHA')
+    return revisions[0]
+
+
+def require_hosted_ci():
+    if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('RUNNER_ENVIRONMENT') != 'github-hosted':
+        raise RuntimeError('Disposable adb key operations require a GitHub-hosted CI runner')
+
+
+def key_receipt():
+    return {'purpose': 'finassist-clean-avd-ci', 'private_sha256': hashlib.sha256(KEY.read_bytes()).hexdigest(),
+            'public_sha256': hashlib.sha256(KEY_PUBLIC.read_bytes()).hexdigest()}
+
+
+def assert_ci_key():
+    require_hosted_ci()
+    if not KEY.is_file() or not KEY_PUBLIC.is_file() or KEY.stat().st_size == 0 or KEY_PUBLIC.stat().st_size == 0:
+        raise RuntimeError('Missing disposable CI adb key pair')
+    if json.loads(KEY_RECEIPT.read_text()) != key_receipt():
+        raise RuntimeError('adb key pair was not generated for this CI cache')
+
+
+def initialize_ci_key():
+    require_hosted_ci()  # Never read, delete, or cache a developer's existing adb keys.
+    subprocess.run(['adb', 'kill-server'], check=True, timeout=30)
+    KEY.parent.mkdir(parents=True, exist_ok=True)
+    for path in (KEY, KEY_PUBLIC, KEY_RECEIPT):
+        path.unlink(missing_ok=True)
+    subprocess.run(['adb', 'keygen', str(KEY)], check=True, timeout=30, capture_output=True)
+    KEY.chmod(0o600)
+    KEY_RECEIPT.write_text(json.dumps(key_receipt()))
+
+
+def reload_ci_key():
+    assert_ci_key()
+    KEY.chmod(0o600)
+    # A server started before cache restore may still hold the new runner's previous key in memory.
+    subprocess.run(['adb', 'kill-server'], check=True, timeout=30)
+    subprocess.run(['adb', 'start-server'], check=True, timeout=30)
 
 
 def snapshot_exists(avd=AVD):
@@ -117,12 +166,14 @@ def wait_stopped():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['key', 'validate', 'snapshot', 'seal', 'test', 'fallback', 'mark', 'report'])
+    parser.add_argument('command', choices=['adb-init', 'key', 'validate', 'snapshot', 'seal', 'test', 'fallback', 'mark', 'report'])
     parser.add_argument('name', nargs='?')
     parser.add_argument('--shard')
     parser.add_argument('--cold', action='store_true')
     args = parser.parse_args()
-    if args.command == 'mark':
+    if args.command == 'adb-init':
+        initialize_ci_key()
+    elif args.command == 'mark':
         mark(args.name)
     elif args.command == 'key':
         data = state()
@@ -131,6 +182,7 @@ def main():
         mark('sdk-ready')
         output('key', data['key'])
     elif args.command == 'validate':
+        reload_ci_key()
         data = state()
         hit = usable(AVD, data['key'])
         data['cache'] = 'hit' if hit else 'miss-or-invalid'
@@ -141,6 +193,7 @@ def main():
         mark('restore-ready')
         output('usable', str(hit).lower())
     elif args.command == 'snapshot':
+        assert_ci_key()
         mark('create-boot-ready')
         assert_clean()
         if cache_key() != state()['key']:
@@ -152,6 +205,7 @@ def main():
         mark('snapshot-saved')
     elif args.command == 'seal':
         wait_stopped()
+        assert_ci_key()
         if not snapshot_exists(AVD):
             raise RuntimeError('Clean snapshot is missing or incomplete')
         data = state()
@@ -176,7 +230,16 @@ def main():
         raise SystemExit(result.returncode)
     elif args.command == 'fallback':
         wait_stopped()
-        output('needed', str('tests-started' not in state()['marks']).lower())
+        data = state()
+        needed = 'tests-started' not in data['marks']
+        if needed and (data.get('cache') == 'hit' or 'save-start' in data['marks']):
+            warning = (f"Clean AVD snapshot {data['key']} failed preparation; using one fresh cold fallback. "
+                       'Delete this entry in Actions > Caches or bump clean-avd-v2 if it repeats; '
+                       'this is not a successful snapshot hit or demonstrated speedup.')
+            print('::warning::' + warning)
+            data['cache_warning'] = warning
+            write(data)
+        output('needed', str(needed).lower())
     elif args.command == 'report':
         data = state()
         marks = data['marks']
@@ -190,6 +253,8 @@ def main():
         for label, start, end in rows:
             if start in marks and end in marks:
                 lines.append(f'| {label} | {marks[end] - marks[start]:.2f} |')
+        if data.get('cache_warning'):
+            lines += ['', data['cache_warning']]
         lines += ['', 'Action step durations also include repeated SDK checks/AVD setup and teardown; see job timings.', '']
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
             stream.write('\n'.join(lines))

@@ -78,8 +78,8 @@ The four shard jobs restore independent writable copies of one clean Android API
 Pixel 6 AVD. A cache miss creates a fresh AVD, boots Android, checks that no FinAssist app or test APK is installed,
 and explicitly saves the named `clean` snapshot. This happens before `e2e.sh` installs anything, signs in or imports
 financial fixtures. The action shuts down the emulator; the helper waits for its process to exit and verifies the
-snapshot files before `actions/cache/save` uploads the pristine device. Only that AVD directory and its `.ini` are
-cached; host adb keys are excluded. Saving is a step **before** the UI tests, never a post-job hook.
+snapshot files before `actions/cache/save` uploads the pristine device. Only that AVD directory, its `.ini`, and a generated disposable CI adb key pair/provenance receipt are
+cached. Ordinary developer/production adb keys are excluded. Saving is a step **before** the UI tests, never a post-job hook.
 
 On a hit, `force-avd-creation: false` and `-snapshot clean -no-snapshot-save` reuse the restored device. Before the
 tests, `scripts/e2e-cache.py` checks that the app is absent and that Android's kernel `boot_id` matches the ID saved
@@ -89,13 +89,27 @@ an assertion failure, native-test failure or timeout from being retried or hidde
 never save snapshots or update the shared cache. Existing per-flow app-data resets, native-test orchestration,
 coverage, missing-report guards and Qase reporting remain in force.
 
+
+The [action recipe](https://github.com/ReactiveCircus/android-emulator-runner#usage--examples) preserves adb keys
+with the AVD: a restored `adbd` must recognize the host key when the snapshot moves to another runner. This workflow
+caches only exact `~/.android/adbkey`, `adbkey.pub` and `finassist-ci-adb.json` paths, never an `adb*` wildcard.
+Before restore, the helper explicitly generates a fresh disposable pair; it refuses key operations outside a
+GitHub-hosted Actions runner. After restore, it verifies the receipt against both files and restarts the adb server
+so an already-running server cannot retain a different key. Sealing also verifies provenance. A cold fallback
+creates a new disposable pair. These cache keys authorize only disposable test AVDs; they must never be used for
+real devices or as production credentials. Cache contents are not secret storage. The acceptance hit must use a
+different hosted runner from the cache creator; a second boot in the same job does not prove key portability.
+
 The exact cache key includes the installed emulator and system-image `source.properties` (including revisions),
 runner OS/architecture and runner-image version, host CPU model/features, all `AVD_*` configuration, the pinned
-runner-action SHA and workflow/helper hashes. No prefix restore can select another configuration. An absent,
+runner-action SHA and explicit `SNAPSHOT_PROCEDURE` version. A change to the snapshot creation/validation procedure
+must bump that version; unrelated reports/comments/Maestro changes do not invalidate a device snapshot. No prefix restore can select another configuration. An absent,
 incomplete or mismatched snapshot is discarded and recreated. Cache entries are immutable: if an exact entry is
 corrupt, the job recreates a clean device without overwriting it; delete that entry in Actions caches or change the
-`clean-avd-v1` namespace to replace it. Concurrent cache misses may race to save the same pristine entry; each shard
-still uses its own local device. Changing configuration invalidates the cache rather than carrying test state forward.
+`clean-avd-v2` namespace to replace it. Concurrent cache misses may race to save the same pristine entry; each shard
+still uses its own local device. If a stored or just-published snapshot fails warm preparation, an Actions warning
+annotation names its exact key and explains how to remove it or bump the namespace; the summary retains the warning.
+A cold fallback is not reported as a successful snapshot hit. Changing configuration invalidates the cache rather than carrying test state forward.
 
 The [runner action snapshot recipe](https://github.com/ReactiveCircus/android-emulator-runner#usage--examples) is
 used with the [audited action revision](https://github.com/ReactiveCircus/android-emulator-runner/tree/a421e43855164a8197daf9d8d40fe71c6996bb0d).
@@ -135,7 +149,10 @@ not a post-change speedup measurement.
 and time, or net speedup. UI/Maestro/native/DesignCheck runs and manually dispatched workflows require separate
 explicit owner permission. Helper/unit and workflow-syntax checks do not establish these runtime criteria.
 After permission, compare a cold-cache run and an exact-key hit using identical test/configuration revisions;
-check all four nonempty Maestro reports and shard 1's native results, verify no cold fallback occurred on a claimed
+record the compressed/uncompressed entry size, cache-transfer time, hit/fallback rate per shard, repository cache
+quota and whether AVD entries evict Gradle caches. Full CPU model/features remain a conservative compatibility
+guard until measurements justify narrowing them; cache fragmentation and net build time are acceptance criteria.
+Check all four nonempty Maestro reports and shard 1's native results, verify no cold fallback occurred on a claimed
 hit, and compare both preparation stages and total critical path with the baseline. Record SDK-cache A/B results
 separately before deciding whether to add one. Do not close FIN-378 until those acceptance measurements are resolved.
 

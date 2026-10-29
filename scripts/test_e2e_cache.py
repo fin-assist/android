@@ -44,7 +44,7 @@ class CleanAvdCacheTest(unittest.TestCase):
         sibling = self.root / 'other.avd'
         sibling.mkdir()
         with patch.object(cache, 'AVD', self.avd), patch.object(cache, 'AVD_ROOT', self.root), \
-             patch.object(cache, 'NAME', 'device'), patch.object(cache, 'STATE', self.root / 'state.json'), \
+             patch.object(cache, 'NAME', 'device'), patch.object(cache, 'reload_ci_key'), patch.object(cache, 'STATE', self.root / 'state.json'), \
              patch.object(cache, 'output') as out, patch('sys.argv', ['e2e-cache.py', 'validate']):
             cache.write({'key': 'new', 'marks': {}})
             cache.main()
@@ -55,7 +55,7 @@ class CleanAvdCacheTest(unittest.TestCase):
 
     def test_seal_requires_a_stopped_emulator_and_complete_snapshot(self):
         metadata = self.avd / 'finassist-clean.json'
-        with patch.object(cache, 'AVD', self.avd), patch.object(cache, 'META', metadata), \
+        with patch.object(cache, 'AVD', self.avd), patch.object(cache, 'META', metadata), patch.object(cache, 'assert_ci_key'), \
              patch.object(cache, 'STATE', self.root / 'state.json'), patch('sys.argv', ['e2e-cache.py', 'seal']):
             cache.write({'key': 'compatible', 'boot_id': '12345678-1234-4234-8234-123456789abc', 'marks': {}})
             with patch.object(cache, 'wait_stopped', side_effect=TimeoutError('live')):
@@ -111,7 +111,7 @@ class CleanAvdCacheTest(unittest.TestCase):
 
     def test_key_changes_with_each_compatibility_dimension(self):
         baseline = {'packages': {'emulator': '36.1', 'image': '14'}, 'runner': {'os': 'Linux', 'arch': 'X64'},
-                    'cpu': ['model'], 'config': {'api': '34', 'gpu': 'swiftshader'}, 'workflow': 'v1', 'helper': 'v1'}
+                    'cpu': ['model'], 'config': {'api': '34', 'gpu': 'swiftshader'}, 'action': 'a' * 40, 'procedure': 'v1'}
         with patch.object(cache, 'fingerprint', return_value=baseline):
             original = cache.cache_key()
         for field in baseline:
@@ -146,6 +146,70 @@ class CleanAvdCacheTest(unittest.TestCase):
                 cache.main()
                 out.assert_called_once_with('needed', 'true')
 
+    def test_snapshot_boundary_rejects_dirty_device_and_sdk_drift_before_any_save_or_boot_id(self):
+        for dirty, drift in [(True, False), (False, True)]:
+            with self.subTest(dirty=dirty, drift=drift), patch.object(cache, 'STATE', self.root / 'state.json'), \
+                 patch.object(cache, 'assert_ci_key'), patch.object(cache, 'cache_key', return_value='new' if drift else 'expected'), \
+                 patch.object(cache, 'adb', return_value='package:android\n' + ('package:ru.finassist.pf.mock.e2e\n' if dirty else '')) as adb, \
+                 patch('sys.argv', ['e2e-cache.py', 'snapshot']):
+                cache.write({'key': 'expected', 'marks': {}})
+                with self.assertRaises(RuntimeError):
+                    cache.main()
+                self.assertEqual([('shell', 'pm', 'list', 'packages')], [call.args for call in adb.call_args_list])
+                self.assertNotIn('boot_id', cache.state())
+                self.assertNotIn('snapshot-saved', cache.state()['marks'])
+
+    def test_snapshot_boundary_checks_cleanliness_before_recording_boot_and_saving(self):
+        identity = '12345678-1234-4234-8234-123456789abc'
+        with patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'assert_ci_key'), \
+             patch.object(cache, 'cache_key', return_value='expected'), \
+             patch.object(cache, 'adb', side_effect=['package:android\n', identity, 'OK']) as adb, \
+             patch('sys.argv', ['e2e-cache.py', 'snapshot']):
+            cache.write({'key': 'expected', 'marks': {}})
+            cache.main()
+            self.assertEqual([('shell', 'pm', 'list', 'packages'),
+                              ('shell', 'cat', '/proc/sys/kernel/random/boot_id'),
+                              ('emu', 'avd', 'snapshot', 'save', 'clean')], [call.args for call in adb.call_args_list])
+            self.assertEqual(identity, cache.state()['boot_id'])
+            self.assertIn('snapshot-saved', cache.state()['marks'])
+
+    def test_test_boundary_silent_cold_boot_cannot_start_tests_and_requests_fallback(self):
+        metadata = self.root / 'meta.json'
+        metadata.write_text(json.dumps({'boot_id': '12345678-1234-4234-8234-123456789abc'}))
+        with patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'META', metadata), \
+             patch.object(cache, 'cache_key', return_value='expected'), \
+             patch.object(cache, 'adb', side_effect=['package:android\n', '87654321-1234-4234-8234-123456789abc']), \
+             patch.object(cache.subprocess, 'run') as run, patch('sys.argv', ['e2e-cache.py', 'test', '--shard', '2/4']):
+            cache.write({'key': 'expected', 'marks': {}})
+            with self.assertRaisesRegex(RuntimeError, 'cold-booted'):
+                cache.main()
+            run.assert_not_called()
+            self.assertNotIn('tests-started', cache.state()['marks'])
+            with patch('sys.argv', ['e2e-cache.py', 'fallback']), patch.object(cache, 'wait_stopped'), patch.object(cache, 'output') as out:
+                cache.main()
+                out.assert_called_once_with('needed', 'true')
+
+    def test_failed_cached_or_just_published_snapshot_is_visible_in_annotations(self):
+        for cache_state, marks in [('hit', {}), ('miss-or-invalid', {'save-start': 1})]:
+            with self.subTest(cache=cache_state), patch.object(cache, 'STATE', self.root / 'state.json'), \
+                 patch.object(cache, 'wait_stopped'), patch.object(cache, 'output') as out, \
+                 patch('builtins.print') as print_message, patch('sys.argv', ['e2e-cache.py', 'fallback']):
+                cache.write({'key': 'clean-avd-v2-example', 'cache': cache_state, 'marks': marks})
+                cache.main()
+                out.assert_called_once_with('needed', 'true')
+                warning = print_message.call_args.args[0]
+                self.assertIn('::warning::Clean AVD snapshot clean-avd-v2-example', warning)
+                self.assertIn('Actions > Caches', warning)
+                self.assertIn('cache_warning', cache.state())
+
+    def test_audited_action_revision_ignores_unrelated_workflow_edits_but_not_action_changes(self):
+        action = 'uses: reactivecircus/android-emulator-runner@' + 'a' * 40
+        self.assertEqual(cache.action_revision(action), cache.action_revision(action + '\n# reports comment'))
+        self.assertNotEqual(cache.action_revision(action), cache.action_revision(action.replace('a' * 40, 'b' * 40)))
+        for invalid in ['uses: reactivecircus/android-emulator-runner@v2', action + '\nuses: reactivecircus/android-emulator-runner@' + 'b' * 40]:
+            with self.assertRaises(ValueError):
+                cache.action_revision(invalid)
+
     def test_fingerprint_reads_installed_revisions_and_rejects_missing_sdk(self):
         sdk = self.root / 'sdk'
         image = sdk / 'system-images/android-34/google_apis/x86_64'
@@ -165,6 +229,51 @@ class CleanAvdCacheTest(unittest.TestCase):
             (image / 'source.properties').unlink()
             with self.assertRaises(FileNotFoundError):
                 cache.fingerprint()
+
+
+class DisposableCiAdbKeyTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        for name, filename in [('KEY', 'adbkey'), ('KEY_PUBLIC', 'adbkey.pub'), ('KEY_RECEIPT', 'receipt.json')]:
+            patcher = patch.object(cache, name, self.root / filename)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_developer_keys_cannot_be_generated_or_reloaded_by_ci_helper(self):
+        cache.KEY.write_text('existing developer key')
+        with patch.dict(os.environ, {'GITHUB_ACTIONS': 'false', 'RUNNER_ENVIRONMENT': 'self-hosted'}), \
+             patch.object(cache.subprocess, 'run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'GitHub-hosted'):
+                cache.initialize_ci_key()
+            with self.assertRaisesRegex(RuntimeError, 'GitHub-hosted'):
+                cache.reload_ci_key()
+            self.assertEqual('existing developer key', cache.KEY.read_text())
+            run.assert_not_called()
+
+    def test_generated_pair_is_verified_then_reloaded_after_restore_without_logging_keys(self):
+        calls = []
+        def command(args, **kwargs):
+            calls.append(args)
+            if args[1] == 'keygen':
+                cache.KEY.write_text('disposable private')
+                cache.KEY_PUBLIC.write_text('disposable public')
+                self.assertTrue(kwargs['capture_output'])
+            return subprocess.CompletedProcess(args, 0)
+        with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted'}), \
+             patch.object(cache.subprocess, 'run', side_effect=command):
+            cache.initialize_ci_key()
+            cache.reload_ci_key()
+            self.assertEqual([['adb', 'kill-server'], ['adb', 'keygen', str(cache.KEY)],
+                              ['adb', 'kill-server'], ['adb', 'start-server']], calls)
+            self.assertEqual(0o600, cache.KEY.stat().st_mode & 0o777)
+            self.assertNotIn('disposable private', cache.KEY_RECEIPT.read_text())
+            cache.KEY.write_text('unrelated host key')
+            with self.assertRaisesRegex(RuntimeError, 'not generated'):
+                cache.reload_ci_key()
+            self.assertEqual(4, len(calls))
+
 
 
 class CacheWorkflowSafetyTest(unittest.TestCase):
@@ -195,6 +304,7 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
                 self.assertFalse(self.runs('Run UI tests from clean snapshot', fields))
                 self.assertTrue(self.runs('Decide whether clean cold boot is needed', fields))
                 fields['steps.fallback.outputs.needed'] = 'true'
+                self.assertTrue(self.runs('Initialize fresh fallback CI adb key', fields))
                 self.assertTrue(self.runs('Run UI tests on a fresh AVD after snapshot boot failure', fields))
                 self.assertFalse(self.runs('Preserve UI test failure', fields))
 
@@ -212,11 +322,22 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
             self.assertFalse(self.runs('Run UI tests on a fresh AVD after snapshot boot failure', fields))
             self.assertTrue(self.runs('Preserve UI test failure', fields))
 
+    def test_failed_warm_cache_hit_gets_one_cold_attempt_and_cold_test_failure_stays_red(self):
+        fields = {'steps.ui.outcome': 'failure', 'steps.fallback.outputs.needed': 'true'}
+        self.assertTrue(self.runs('Decide whether clean cold boot is needed', fields))
+        self.assertTrue(self.runs('Run UI tests on a fresh AVD after snapshot boot failure', fields))
+        self.assertFalse(self.runs('Preserve UI test failure', fields))
+        self.assertNotIn('continue-on-error', self.step('Run UI tests on a fresh AVD after snapshot boot failure'))
+
     def test_cache_is_explicitly_saved_before_any_test_installation(self):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
         self.assertLess(workflow.index('- name: Save clean AVD'), workflow.index('- name: Run UI tests from'))
         self.assertNotIn('uses: actions/cache@', workflow)
-        self.assertNotIn('~/.android/adb', workflow)
+        self.assertNotIn('~/.android/adb*', workflow)
+        self.assertEqual(2, workflow.count('            ~/.android/adbkey\n'))
+        self.assertEqual(2, workflow.count('            ~/.android/adbkey.pub\n'))
+        self.assertEqual(2, workflow.count('            ~/.android/finassist-ci-adb.json\n'))
+        self.assertLess(workflow.index('- name: Initialize disposable CI adb key'), workflow.index('- name: Restore clean AVD'))
         self.assertIn('continue-on-error: true', self.step('Restore clean AVD'))
         self.assertIn('continue-on-error: true', self.step('Save clean AVD'))
         self.assertIn('force-avd-creation: false', workflow)

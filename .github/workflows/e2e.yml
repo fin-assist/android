@@ -31,6 +31,7 @@ env:
   AVD_CORES: 4
   AVD_RAM: 4096M
   AVD_DISK: 4096M
+  AVD_DISABLE_ANIMATIONS: "true"
   AVD_OPTIONS: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -timezone Europe/Moscow
 
 jobs:
@@ -107,6 +108,9 @@ jobs:
           python3 scripts/e2e-cache.py key
           python3 scripts/e2e-cache.py mark restore-start
 
+      - name: Initialize disposable CI adb key
+        run: python3 scripts/e2e-cache.py adb-init
+
       # Separate restore/save: a post-job cache save would persist the device AFTER the financial tests.
       - name: Restore clean AVD
         id: avd-cache
@@ -116,6 +120,9 @@ jobs:
           path: |
             ~/.android/avd/${{ env.AVD_NAME }}.avd
             ~/.android/avd/${{ env.AVD_NAME }}.ini
+            ~/.android/adbkey
+            ~/.android/adbkey.pub
+            ~/.android/finassist-ci-adb.json
           key: ${{ steps.avd-key.outputs.key }}
 
       - name: Validate restored AVD
@@ -137,13 +144,14 @@ jobs:
           ram-size: ${{ env.AVD_RAM }}
           disk-size: ${{ env.AVD_DISK }}
           avd-name: ${{ env.AVD_NAME }}
-          disable-animations: true
+          disable-animations: ${{ env.AVD_DISABLE_ANIMATIONS }}
           force-avd-creation: true
           emulator-options: ${{ env.AVD_OPTIONS }} -no-snapshot-load -no-snapshot-save
           pre-emulator-launch-script: python3 scripts/e2e-cache.py mark create-boot-start
           script: python3 scripts/e2e-cache.py snapshot
 
-      # Save only the pristine, stopped AVD, never adb keys, APKs, or the post-test writable device.
+      # Save only the pristine, stopped AVD and its generated disposable CI adb pair. Never cache
+      # developer keys, APKs or the post-test writable device (the helper verifies key provenance).
       - name: Seal clean AVD
         id: seal
         continue-on-error: true
@@ -158,6 +166,9 @@ jobs:
           path: |
             ~/.android/avd/${{ env.AVD_NAME }}.avd
             ~/.android/avd/${{ env.AVD_NAME }}.ini
+            ~/.android/adbkey
+            ~/.android/adbkey.pub
+            ~/.android/finassist-ci-adb.json
           key: ${{ steps.avd-key.outputs.key }}
 
       - name: Mark cache ready
@@ -178,7 +189,7 @@ jobs:
           ram-size: ${{ env.AVD_RAM }}
           disk-size: ${{ env.AVD_DISK }}
           avd-name: ${{ env.AVD_NAME }}
-          disable-animations: true
+          disable-animations: ${{ env.AVD_DISABLE_ANIMATIONS }}
           force-avd-creation: false
           emulator-options: ${{ env.AVD_OPTIONS }} -snapshot clean -no-snapshot-save
           pre-emulator-launch-script: python3 scripts/e2e-cache.py mark test-boot-start
@@ -190,6 +201,10 @@ jobs:
         id: fallback
         if: steps.ui.outcome != 'success'
         run: python3 scripts/e2e-cache.py fallback
+
+      - name: Initialize fresh fallback CI adb key
+        if: steps.fallback.outputs.needed == 'true'
+        run: python3 scripts/e2e-cache.py adb-init
 
       - name: Run UI tests on a fresh AVD after snapshot boot failure
         id: cold-ui
@@ -204,7 +219,7 @@ jobs:
           ram-size: ${{ env.AVD_RAM }}
           disk-size: ${{ env.AVD_DISK }}
           avd-name: ${{ env.AVD_NAME }}
-          disable-animations: true
+          disable-animations: ${{ env.AVD_DISABLE_ANIMATIONS }}
           force-avd-creation: true
           emulator-options: ${{ env.AVD_OPTIONS }} -no-snapshot-load -no-snapshot-save -wipe-data
           pre-emulator-launch-script: python3 scripts/e2e-cache.py mark fallback-boot-start
