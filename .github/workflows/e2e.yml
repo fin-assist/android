@@ -12,12 +12,17 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      sdk_benchmark:
+        description: Run only the SDK package cache experiment (no emulator or UI)
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 concurrency:
-  group: e2e-${{ github.ref }}
+  group: e2e-${{ github.ref }}${{ inputs.sdk_benchmark && '-sdk-benchmark' || '' }}
   cancel-in-progress: true
 
 env:
@@ -35,7 +40,14 @@ env:
   AVD_OPTIONS: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -timezone Europe/Moscow
 
 jobs:
+  sdk-benchmark:
+    if: github.event_name == 'workflow_dispatch' && inputs.sdk_benchmark
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sdk-preparation-benchmark.yml
+
   shard:
+    if: github.event_name != 'workflow_dispatch' || !inputs.sdk_benchmark
     name: Shard ${{ matrix.shard }} (emulator)
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -260,7 +272,7 @@ jobs:
     # Also after a failed or timed-out shard: the other shards' results and coverage must not be lost. Not for a
     # cancelled run (a newer merge cancels it): nothing of it goes to Qase, and with fail-fast off a shard is cancelled
     # only together with the run.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !inputs.sdk_benchmark }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

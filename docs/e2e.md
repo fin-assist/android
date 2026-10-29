@@ -134,9 +134,9 @@ hosted image, and the action would still check them. Evaluate that separately fr
 emulator/image revisions and test selection. The existing GPU mode is retained; Android's
 [snapshot documentation](https://developer.android.com/studio/run/emulator-snapshots) warns about software-rendering
 reliability. The boot-ID check and one cold fallback keep the tests runnable; actual snapshot compatibility and
-speed on our hosted runners still require the authorized acceptance run.
+performance on our hosted runners are assessed below.
 
-#### Measurements and pending acceptance
+#### Measurements and acceptance limits
 
 `build/e2e/preparation.json` and each shard's job summary record SDK preparation, cache restore/validation,
 cold-device boot, snapshot creation/shutdown, cache save, test boot (and cold fallback when needed), and the complete
@@ -187,18 +187,94 @@ caches in all four shards and identified exactly one changed field, `disk.dataPa
 The captured snapshot size was `6g`, while repeated action setup reapplied requested `4096M`. The owner cancelled
 after the early diagnostic artifacts arrived. The effective-size output/input correction above follows that evidence
 and the emulator's first-setup normalization; it preserves the already-used 6 GiB resource size and does not change
-GPU, RAM, cores or snapshot hardware metadata. Full clean miss/hit acceptance follows on the corrected procedure.
+GPU, RAM, cores or snapshot hardware metadata. The full samples below use the corrected procedure.
 
-**Not yet measured:** the changed workflow's cache miss → save → hit, real boot-ID continuity, cache transfer size
-and time, or net speedup. UI/Maestro/native/DesignCheck runs and manually dispatched workflows require separate
-explicit owner permission. Helper/unit and workflow-syntax checks do not establish these runtime criteria.
-After permission, compare a cold-cache run and an exact-key hit using identical test/configuration revisions;
-record the compressed/uncompressed entry size, cache-transfer time, hit/fallback rate per shard, repository cache
-quota and whether AVD entries evict Gradle caches. Full CPU model/features remain a conservative compatibility
-guard until measurements justify narrowing them; cache fragmentation and net build time are acceptance criteria.
-Check all four nonempty Maestro reports and shard 1's native results, verify no cold fallback occurred on a claimed
-hit, and compare both preparation stages and total critical path with the baseline. Record SDK-cache A/B results
-separately before deciding whether to add one. Do not close FIN-378 until those acceptance measurements are resolved.
+Two complete authorized samples used the same `ad230b4556ae67cf6457493c885baab201d91fa6`, configuration and
+selection without a code change between them:
+
+- [Empty-cache run 40960467777](https://github.com/fin-assist/android/actions/runs/40960467777),
+  21:45:39–22:10:29 UTC, 24m50s: four misses created/saved clean snapshots, then all four test boots verified them.
+- [Second run 40963920355](https://github.com/fin-assist/android/actions/runs/40963920355),
+  22:11:28–22:33:37 UTC, 22m09s: only shard 4 restored an exact existing key (created by first-run shard 2);
+  shards 1–3 missed. Both runs passed all 55 Maestro scenarios and the one native test, with no skipped tests,
+  no cold fallback and nonempty merged coverage. All eight boots logged successful loading of named `clean` and
+  passed the helper's boot-ID continuity guard. The two artifacts do not independently expose both UUID values.
+
+Seconds below use helper epoch marks. Restore includes disposable-key initialization/validation; cold creation
+includes snapshot save and process-exit sealing. Repeated action SDK checks and other step overhead also contribute
+to total preparation, so the listed subphases do not sum exactly to it. E2E includes APK install, scenarios, native
+execution where selected, and script cleanup; it is separate from preparation.
+
+| Run / shard | SDK | Restore | Cold creation + snapshot | Cache save | Test boot | Total preparation | E2E |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| miss 1 (miss) | 71.1 | 1.5 | 62.4 | 15.4 | 11.1 | 175.7 | 1090.5 |
+| miss 2 (miss) | 45.6 | 0.4 | 51.8 | 11.3 | 10.6 | 128.7 | 864.9 |
+| miss 3 (miss) | 56.5 | 1.4 | 56.8 | 30.4 | 10.8 | 169.1 | 1043.9 |
+| miss 4 (miss) | 55.9 | 1.1 | 54.8 | 15.6 | 10.6 | 151.9 | 986.8 |
+| warm 1 (miss) | 37.6 | 0.9 | 45.4 | 17.5 | 13.9 | 130.6 | 985.5 |
+| warm 2 (miss) | 48.4 | 0.9 | 44.6 | 10.1 | 14.0 | 133.5 | 958.9 |
+| warm 3 (miss) | 51.7 | 1.4 | 47.9 | 27.9 | 10.8 | 151.9 | 931.4 |
+| warm 4 (hit) | 87.1 | 38.8 | 0.0 | 0.0 | 11.8 | 143.1 | 906.5 |
+
+The exact hit restored about 2.07 GB in 38.8s before its 11.8s test boot. Its total preparation was 143.1s,
+compared with historical cold preparation of 88.1–122.7s. Second-run total wall time was 29s shorter than the
+historical 22m38s, but the historical revision/hosts differ and scenario durations vary. These data **do not
+establish net preparation acceleration**. A fast snapshot boot alone does not meet the performance goal.
+
+Initial SDK preparation still downloaded emulator build `16740729` and system image `34_r14`; it took 37.6–87.1s
+across the eight jobs. The action's additional SDK checks took 4.3–6.9s per call without download-progress lines
+(two calls after each miss, one after the hit). AVD archives therefore do not remove the measured SDK download
+cost. A separate package-cache A/B is the next experiment, rather than assuming it will help.
+
+Four initial immutable AVD entries occupied 9,064,256,718 compressed bytes. The second run generated two distinct
+new keys (shards 1 and 2 shared one); the after-run inventory contained five AVD entries totaling 11,547,739,495
+bytes because one old entry had disappeared. During the measured window, 18 other entries (17 Gradle and one
+Robolectric), totaling 3,026,967,063 bytes, disappeared from the repository inventory. The API does not state why
+an entry vanished, so this is an observed cache-pressure risk, not proof of a specific eviction cause. The configured
+repository quota could not be read with the available API access; uncompressed AVD sizes were not captured.
+The owner removed only those five generated branch AVD entries after inventory capture, leaving all nine other
+entries untouched. Full key/ID/size inventories and compact per-shard evidence are retained outside the repository;
+large logs and archives are not committed.
+
+Exact key differences caused three second-run misses. The current telemetry does not retain sanitized fingerprint
+components, so CPU fragmentation is not established as their cause. The conservative CPU model/features guard stays
+in place. FIN-378 remains open: functional caching and cross-runner restoration passed, while net acceleration,
+reliable hit rate and cache budget remain unresolved. Do not merge or mark it Done based on these samples.
+
+#### Opt-in SDK package experiment
+
+`e2e.yml` has a `workflow_dispatch` boolean `sdk_benchmark`, default `false`. Only an explicitly selected manual
+run routes to reusable `sdk-preparation-benchmark.yml`; UI shards, reports and Qase are skipped. Normal main pushes
+and default manual UI runs retain the existing path. A separate concurrency suffix prevents the SDK experiment
+from cancelling an ordinary UI run. This routing uses the already registered workflow because GitHub requires a
+manual workflow to exist on the default branch ([dispatch documentation](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)).
+**The SDK experiment has not been dispatched and requires separate owner permission.**
+
+The experiment starts no emulator, APK, Gradle, Maestro or native test. One seed job installs the current emulator
+and selected API 34 image with online `sdkmanager`, then saves two separate immutable package archives. Eight fresh
+jobs follow: four baseline and four warm. Only seed writes caches; warm requires both exact hits, and baseline
+never restores. The keys include the experiment schema, run ID, package identity, installed revision/metadata hash,
+runner OS/architecture and hosted-image version. No CPU/AVD snapshot keys are reused. The run ID bounds the two
+entries for later owner-directed cleanup; no default E2E package cache is enabled.
+
+All nine runners perform the same disk-space preparation before measurement. Before deleting a package, the helper
+checks that SDK manager exists. Before each arm, it verifies it is on a disposable GitHub-hosted runner, records the hosted preinstalled
+package revisions, and removes only the emulator and this one image directory. It rejects symlink escapes. This
+measures **empty selected SDK packages versus restored packages**, not the average benefit when a hosted image
+already has current packages. Platform-tools, command-line tools, AVDs and adb keys are not deleted. Every arm
+accepts licenses and runs the same online `sdkmanager --install platform-tools emulator <image> --channel=0`
+([SDK manager documentation](https://developer.android.com/tools/sdkmanager)); a cache never suppresses update checks.
+Installed package revisions and `source.properties` hashes, plus runner ImageVersion, must equal seed metadata or
+that comparison fails while preserving the actual installed manifest in its artifact. A package/image update or heterogeneous hosted image therefore invalidates the sample
+instead of producing a misleading speedup.
+
+Each job has a 15-minute limit; license and install subprocesses have 120s/600s limits. Three-day metadata-only
+artifacts retain before/after revisions, runner identity, free bytes before/after package cleanup and install,
+restore/setup, SDK manager, save/step and total durations,
+and logical package bytes. Individual cache transfer times are available in Actions step logs; compressed bytes
+come from the two exact cache entries after execution. Review total preparation distributions across four runners,
+seed/save cost, package sizes, update-check cost and repository cache pressure before deciding whether SDK caching
+belongs in the default UI workflow. This experiment cannot by itself establish full E2E speedup.
 
 ## Qase
 
