@@ -96,7 +96,6 @@ fun PfNotice(
         modifier = modifier
             .fillMaxWidth()
             .background(bg, RoundedCornerShape(d.radiusLg))
-            .then(if (tone == NoticeTone.ERROR) Modifier.border(2.dp, fg, RoundedCornerShape(d.radiusLg)) else Modifier)
             .padding(horizontal = d.space4, vertical = d.space3)
             .semantics(mergeDescendants = true) { liveRegion = if (alert) LiveRegionMode.Assertive else LiveRegionMode.Polite },
         horizontalArrangement = Arrangement.spacedBy(d.space2),
