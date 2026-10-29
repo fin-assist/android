@@ -339,8 +339,8 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         preparation = self.step('Prepare SDK and fingerprint the AVD')
         self.assertIn('sdkmanager_path="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"', preparation)
         self.assertIn('yes | "$sdkmanager_path" --licenses', preparation)
-        self.assertIn('"$sdkmanager_path" --install', preparation)
-        self.assertNotRegex(preparation, r'(?:\||^)[ \t]*sdkmanager\s')
+        self.assertIn('"$sdkmanager_path" --install platform-tools', preparation)
+        self.assertNotRegex(preparation, r'(?m)(?:\||^)[ \t]*sdkmanager\s')
         with patch.dict(os.environ, {'ANDROID_HOME': '/sdk-without-path', 'PATH': '/bin'}):
             self.assertEqual('/sdk-without-path/platform-tools/adb', cache.adb_executable())
 
