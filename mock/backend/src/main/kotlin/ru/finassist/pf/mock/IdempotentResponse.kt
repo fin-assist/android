@@ -38,4 +38,4 @@ internal suspend fun <T : Any> MockBackend.idempotentResponse(
     return checkNotNull(response.value)
 }
 
-private data class StoredResponse<T : Any>(val value: T? = null, val error: ErrorResponseInfo? = null)
+internal data class StoredResponse<T : Any>(val value: T? = null, val error: ErrorResponseInfo? = null)

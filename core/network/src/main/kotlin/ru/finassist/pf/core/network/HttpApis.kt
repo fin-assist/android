@@ -122,11 +122,11 @@ internal class SseRequests(
 
 internal class HttpAuthApi(private val service: AuthService, private val sse: SseRequests) : AuthApi {
     /** Keeps the `Date` header: the fallback device deadline when the server sends no `expires_in` (api.md 1.1). */
-    override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification {
+    override suspend fun startPhoneVerification(key: IdempotencyKey, request: StartPhoneVerificationRequest): PhoneVerification {
         var serverTime: java.time.Instant? = null
         var receivedElapsed: Long? = null
         val body = call {
-            service.startPhoneVerification(key.value, StartPhoneVerificationRequest(phone), key.replayWindow).also { response ->
+            service.startPhoneVerification(key.value, request, key.replayWindow).also { response ->
                 serverTime = response.headers().getDate("Date")?.toInstant()
                 receivedElapsed = response.raw().request.tag(ru.finassist.pf.core.common.time.ResponseTiming::class.java)?.receivedElapsedMillis
             }

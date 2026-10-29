@@ -1,0 +1,63 @@
+appId: ru.finassist.pf.mock.e2e
+name: Новый вход после запрета повтора — подтверждения запрашиваются заново
+tags:
+  - auth
+---
+- runFlow: ../../subflows/clear_state.yaml
+- launchApp
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "9161234567"
+- hideKeyboard
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=phone_start&error_scenario=terminal_failure"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.restart"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.restart"
+- tapOn:
+    id: "auth.phone.restart"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: false
+- assertVisible:
+    id: "auth.phone.input"
+    enabled: false
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: false
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=off&expect_error_requests=1"
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- runFlow: ../../subflows/set_passcode.yaml

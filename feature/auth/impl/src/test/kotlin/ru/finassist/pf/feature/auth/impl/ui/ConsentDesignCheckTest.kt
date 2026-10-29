@@ -23,23 +23,15 @@ class ConsentDesignCheckTest {
 
     private fun capture(name: String, state: ConsentUiState = this.state, dark: Boolean = false) =
         DesignCheck.capture(name, dark = dark) {
-            ConsentContent(state, onBack = {}, onOpenDocument = {}, onAccepted = {}, onSubmit = {})
+            ConsentContent(state, onBack = {}, onOpenDocument = {}, onSubmit = {})
         }
 
     @Test fun consent() = capture("Consent")
 
     @Test fun consentDark() = capture("ConsentDark", dark = true)
 
-    @Test fun consentError() = capture(
-        "ConsentError",
-        state.copy(error = "Без согласия мы не сможем создать аккаунт и хранить ваши данные"),
-    )
     // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
     @Test fun serverWarning() = capture("ConsentServerWarning", state.copy(formError = "Не получилось создать аккаунт", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
 
-    @Test fun documentRecovery() = capture("ConsentDocumentRecovery", state.copy(documentRefreshRequired = true, documentRefreshReady = true,
-        retryReady = false, requestRetryable = false, formError = "Не получилось загрузить документ согласия"))
-    @Test fun documentRecoveryDark() = capture("ConsentDocumentRecoveryDark", state.copy(documentRefreshRequired = true, documentRefreshReady = true,
-        retryReady = false, requestRetryable = false, formError = "Не получилось загрузить документ согласия"), dark = true)
-
+    @Test fun registrationBusy() = capture("RegistrationBusy", state.copy(busy = true))
 }

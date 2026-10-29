@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import ru.finassist.pf.core.api.TokenStore
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
 import ru.finassist.pf.core.api.model.PhoneVerification
 import ru.finassist.pf.core.api.model.PhoneVerificationStatusEvent
 import ru.finassist.pf.core.api.model.TokenPair
@@ -79,6 +80,7 @@ class CallViewModelTest {
         SessionHarness(flagValues = mapOf(Flag.AUTH_REGISTRATION to registration)).also { h ->
             harnesses += h
             h.flow.phone = "+79161234567"
+            h.flow.phoneRequest = StartPhoneVerificationRequest(h.flow.phone, true, "2026-09-28", true)
             h.flow.phoneRequestKey = "key-1"
             h.flow.verificationReceived(verification(), now.toInstant())
         }
@@ -647,6 +649,92 @@ class CallViewModelTest {
         advanceSeconds(2)
         assertNull(vm.state.value.waitUntil)
         vm.stopWatching()
+    }
+
+    @Test fun `new call request with outdated consent returns to phone for a fresh affirmative choice`() {
+        val h = harness()
+        h.auth.startPhone = { _, _ -> throw AppError.Api("CONSENT_OUTDATED", 422) }
+        val vm = h.vm(event(VerificationStatus.EXPIRED))
+        vm.watch(); vm.requestAgain()
+        assertTrue(h.flow.consentRefreshRequired)
+        assertEquals(CallEvent.ConsentRequired, vm.events.value)
+    }
+
+    @Test fun `received Start 429 on call retry waits and changes the key for the next explicit intent`() {
+        val h = harness()
+        val keys = mutableListOf<String>()
+        h.auth.startPhone = { key, _ ->
+            keys += key.value
+            if (keys.size == 1) throw AppError.RateLimited(null, 1,
+                ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false, retryAfterSeconds = 1,
+                    timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime)))
+            verification(token = "vt_new")
+        }
+        val vm = h.vm(event(VerificationStatus.EXPIRED))
+        vm.watch(); vm.requestAgain(); vm.requestAgain()
+        assertEquals(1, keys.size); assertTrue(vm.state.value.newIntentRequired)
+        advanceSeconds(1); vm.requestAgain()
+        assertEquals(2, keys.size); assertNotEquals(keys[0], keys[1])
+        assertFalse(vm.state.value.newIntentRequired, "a successful new Start clears the consumed new-intent state")
+    }
+
+    private fun SessionHarness.phoneVm(): PhoneViewModel {
+        auth.consent = { type -> ru.finassist.pf.core.api.model.ConsentDocument(type, "2026-09-28", "Consent", "https://example.test/pd") }
+        return PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { scheduler.currentTime + elapsedOffset }).apply {
+            setAgeConfirmed(true); setConsentAccepted(true)
+        }
+    }
+
+    @Test fun `Call Start 429 survives back and explicit restart on Phone for the same number`() {
+        val h = harness()
+        val keys = mutableListOf<String>()
+        h.auth.startPhone = { key, _ ->
+            keys += key.value
+            if (keys.size == 1) throw AppError.RateLimited(now.plusMinutes(5), 1,
+                ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false, retryAfterSeconds = 1,
+                    timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime)))
+            verification(token = "vt_new")
+        }
+        val call = h.vm(event(VerificationStatus.EXPIRED))
+        call.watch(); call.requestAgain()
+        val phone = h.phoneVm()
+        phone.onResume(); phone.submit()
+        assertFalse(phone.state.value.retryReady)
+        assertEquals("Слишком много попыток. Повторите в 14:27", phone.state.value.error)
+        assertEquals(1, keys.size, "back to the same number cannot POST before retry_at")
+        phone.restart(); phone.setAgeConfirmed(true); phone.setConsentAccepted(true); phone.submit()
+        assertEquals("Слишком много попыток. Повторите в 14:27", phone.state.value.error)
+        assertEquals(1, keys.size, "explicit restart also preserves the server wait")
+        advanceSeconds(1); phone.submit()
+        assertEquals(2, keys.size)
+        assertNotEquals(keys.first(), keys.last(), "received 429 requires a NEW intent after the wait")
+    }
+
+    @Test fun `Call lost response returns to Phone with the same pending key instead of the old expired deadline`() {
+        val h = harness()
+        h.flow.verificationReceived(verification(expiresIn = 0), now.toInstant())
+        val keys = mutableListOf<String>()
+        h.auth.startPhone = { key, _ -> keys += key.value; throw AppError.Offline() }
+        val call = h.vm(event(VerificationStatus.EXPIRED))
+        call.watch(); call.requestAgain()
+        assertNull(h.flow.callServerDeadline)
+        h.phoneVm().submit()
+        assertEquals(2, keys.size)
+        assertEquals(keys.first(), keys.last(), "lost transport keeps the pending request key across back")
+    }
+
+    @Test fun `Call terminal Start refusal exposes explicit restart after back to Phone`() {
+        val h = harness()
+        h.auth.startPhone = { _, _ -> throw AppError.Server(500,
+            response = ErrorResponseInfo("INTERNAL_ERROR", 500, requestRetryable = false)) }
+        h.vm(event(VerificationStatus.EXPIRED)).apply { watch(); requestAgain() }
+        val phone = h.phoneVm()
+        assertFalse(phone.state.value.retryReady)
+        assertTrue(phone.state.value.restartAvailable)
+        phone.restart()
+        assertTrue(phone.state.value.retryReady)
+        assertFalse(phone.state.value.ageConfirmed)
+        assertFalse(phone.state.value.pdConsentAccepted)
     }
 
 }

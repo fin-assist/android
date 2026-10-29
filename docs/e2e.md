@@ -257,8 +257,11 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 
 | Flow | Checks |
 |---|---|
-| `auth/register_new_user` (smoke) | new number → consent (error without the tick) → passcode → first upload → result → feed |
-| `auth/sign_in_existing_user` (smoke) | existing account → passcode → feed; the three tabs |
+| `auth/register_new_user` (smoke) | independent 14+/PD before phone → new number → create account without another consent → passcode → first upload → result → feed (Qase2, FIN-365) |
+| `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the three tabs (Qase1, FIN-365) |
+| `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
+| `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains current attempt confirmations (Qase57, FIN-365) |
+| `auth/phone_consent_recovery` | document offline → explicit refresh → confirmations → Start offline → retry with the existing intent (Qase58, FIN-365) |
 | `auth/phone_validation` | short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
 | `auth/call_expired` | `call_ttl_ms=15000`: the wait ends either by the stream's `expired` or by the device timer (their order is not fixed); both lead to «Время на звонок вышло» with no number; «Позвонить ещё раз» brings the number and a new deadline back — FIN-166 |
 | `auth/call_stream_rate_limited` | `stream_drops=2&stream_rate_limits=1`: the call stream drops, its re-open gets 429 `Retry-After: 3`; the app waits and re-opens — no «Слишком много попыток», the number stays, sign-in goes on to the passcode — FIN-170 |
@@ -377,13 +380,11 @@ The existing authored `MaintenanceWaiting` fixture covers the disabled check but
 execution is claimed. The existing maintenance flows and Qase34/35/46 cover the maintenance paths only.
 
 
-Consent-document refresh after `CONSENT_OUTDATED` is not covered by a mock UI flow
-([Qase54](https://app.qase.io/case/PLAINFIN-54), [Qase55](https://app.qase.io/case/PLAINFIN-55), manual cases authored, not executed).
-The fake backend's personal-data and assistant document versions are fixed constants, and the control
-link cannot rotate them between GET and the mutation; that transition needs a separate controllable
-REST/peer fixture. `ConsentViewModelTest` and `AiConsentViewModelTest` cover Offline/same-version
-recovery, independent GET false/wait, duplicate clicks and stale reads. Light/dark recovery fixtures
-show the explicit «Обновить документ» action; fixtures were authored without executing DesignCheck.
+Consent-document rotation between GET and phone Start (FIN-365) and assistant grant is not covered by a mock UI
+flow. The mock PD version can be changed by JVM fixtures but has no external control-link mutation, and assistant
+versions remain fixed; a separate controllable REST fixture is required. `PhoneViewModelTest`,
+`MockPhoneConsentTest`, `CallViewModelTest` and `AiConsentViewModelTest` cover version rejection/refresh and pinning.
+Register never refetches current PD consent; mismatched original evidence restarts phone verification.
 
 Real client process-death recovery of an uncertain assistant request is not covered by a mock UI flow
 (Qase53). The fake backend, its token state and idempotency cache live in the client process: killing it
@@ -395,7 +396,7 @@ The upload flow above deliberately seeds an unknown-age record without claiming 
 
 ### FIN-223 safe error controls and coverage
 
-The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.
+The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|phone_start|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden|terminal_failure`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.
 
 ### FIN-352 repeated physical unread lines
 
@@ -418,3 +419,48 @@ scroll to the checkbox and button to keep both reachable with the longer disclos
 mapping is unchanged. The flows and existing light/dark `AiConsentDesignCheckTest` fixtures use the updated content;
 UI, Maestro, instrumented and DesignCheck runs were not executed under the owner's instruction. Publishing final
 legal documents and their production URLs remains FIN-141; the mock consent-document URL is a fixture.
+
+### FIN-365 phone confirmations and registration
+
+`confirm_phone.yaml` supplies independent affirmative fixture choices for all existing sign-in scenarios, including
+existing accounts and the native picker path. No production API defaults accept either confirmation. The phone
+screen loads `personal_data` first, keeps both ticks initially off, disables phone input before age confirmation,
+and exposes the current response's document URL. An outdated Start resets the PD tick; call re-request routes
+back for document correction. After verified, Register sends the same accepted version without another checkbox.
+`PhoneAgeOnly`, `PhoneConsentOnly`, document-failure light/dark and new-intent-wait DesignCheck fixtures are authored.
+The previous post-call ConsentError/document-refresh states were removed because that consent step no longer exists.
+
+`PhoneViewModelTest` / `PhoneStartGateTest` cover lost-response old-key replay, received-429 wait/new-key intent,
+independent document-read restrictions and age/PD gates; `ConsentViewModelTest` covers pinned version/body, double
+taps, missing evidence and restart. Mock receipt times come from the fake server clock at Start, survive a replay,
+and link only after verified or successful Register. These in-process fixtures do not prove backend durability,
+unknown-provider recovery or retention cleanup; production enforcement/rollout belongs to FIN-364.
+
+Consent rotation has no mock control-link injection; its UI correction needs a controllable REST fixture.
+`phone_start` supports the existing closed `retry_forbidden` 429 fixture and the new `terminal_failure` 500 fixture.
+The explicit-restart flow uses the latter; 429 wait and retained timing across restart/back from Call are covered by unit tests. Lost Call Start responses
+retain their exact pending key when returning to Phone; terminal refusals expose explicit restart there as well. Receipt retention and
+provider unknown deadlines are server-only; no new client environment setting or hard-coded waiting period exists.
+The complete legal document is opened from `document.url`; publication of final production URLs/text remains
+FIN-141. The mock's example.ru URL is a fixture and is not claimed as a published legal document.
+
+Qase57/58 and updated registration steps are authored, mappings included. UI, Maestro, instrumented and
+DesignCheck runs were not executed under the owner's instruction. Existing sign-in-related Qase cases use the
+updated confirmation precondition; their other scenarios retain the same IDs.
+
+The `auth.phone.restart` action abandons the local phone flow/key and reloads the document with both choices off,
+without a POST. A received 429 keeps its captured server wait across this action and digit edits, including
+A → B → A. The pending intent conservatively delays any edited number until the same wait ends, then uses a new key. The rate-limit explanation and original server retry time remain visible after edits,
+restart and re-confirming the checkboxes. `phone_start` failures count in
+the existing `expect_error_requests` check and happen before receipt creation; arbitrary error payloads are not
+accepted. Qase59/`auth/phone_restart` exercises restart after the closed terminal 500 fixture. This is a synthetic
+refusal, not a claim to reproduce a lost provider outcome or restart an independent backend process.
+
+
+FIN-365 — Not covered yet: a refused consent-document GET (including 429 with `retryable:false`) and its
+explicit restart need a controllable REST fixture; the mock control-link does not inject document GET failures.
+VM/core regressions cover no GET before the captured deadline, an explicit restart afterwards without POST,
+and a refused GET without a time restriction. The captured rate-limit explanation, safe server presentation and
+retry time survive checkbox changes/blocked restart and clear after successful document loading. There is no automatic GET when the wait ends. UI/DesignCheck
+runs are not authorized. The proposed document-refusal states use existing error/link/button primitives;
+there is no matching Figma artboard, and source fixtures do not claim a visual approval or a completed UI run.

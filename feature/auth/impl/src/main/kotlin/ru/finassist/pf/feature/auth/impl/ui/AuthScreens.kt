@@ -99,11 +99,20 @@ fun PhoneScreen(reason: String?, onNext: () -> Unit, vm: PhoneViewModel = hiltVi
         DeletedScreen(onDone = { showDeleted = false })
         return
     }
-    PhoneContent(state, onInput = vm::onInput, onSubmit = vm::submit)
+    LifecycleResumeEffect(Unit) { vm.onResume(); onPauseOrDispose {} }
+    val context = LocalContext.current
+    PhoneContent(state, onInput = vm::onInput, onSubmit = vm::submit,
+        onAgeConfirmed = vm::setAgeConfirmed, onConsentAccepted = vm::setConsentAccepted,
+        onRefreshDocument = vm::refreshDocument, onRestart = vm::restart,
+        onOpenDocument = { url -> runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } })
 }
 
 @Composable
-internal fun PhoneContent(state: PhoneUiState, onInput: (TextFieldValue) -> Unit, onSubmit: () -> Unit) {
+internal fun PhoneContent(
+    state: PhoneUiState, onInput: (TextFieldValue) -> Unit, onSubmit: () -> Unit,
+    onAgeConfirmed: (Boolean) -> Unit = {}, onConsentAccepted: (Boolean) -> Unit = {},
+    onRefreshDocument: () -> Unit = {}, onOpenDocument: (String) -> Unit = {}, onRestart: () -> Unit = {},
+) {
     AuthScaffold(AuthTags.PHONE) {
         Column(Modifier.weight(1f).padding(vertical = PfTheme.dimens.space6), verticalArrangement = Arrangement.Center) {
             PfMark(size = PfTheme.dimens.mark)
@@ -113,7 +122,10 @@ internal fun PhoneContent(state: PhoneUiState, onInput: (TextFieldValue) -> Unit
         }
         Column(verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4)) {
             state.notice?.let { PfNotice(it, tone = NoticeTone.INFO, alert = true, modifier = Modifier.testTag(AuthTags.PHONE_NOTICE)) }
+            PfCheckbox(state.ageConfirmed, onAgeConfirmed, label = "Мне исполнилось 14 лет",
+                modifier = Modifier.testTag(AuthTags.PHONE_AGE))
             PfTextField(
+                enabled = state.ageConfirmed,
                 value = state.input,
                 onValueChange = onInput,
                 label = "Номер телефона",
@@ -126,13 +138,31 @@ internal fun PhoneContent(state: PhoneUiState, onInput: (TextFieldValue) -> Unit
                 onImeAction = onSubmit,
                 testTag = AuthTags.PHONE_INPUT,
             )
+            PfCheckbox(state.pdConsentAccepted, onConsentAccepted, label = "Даю согласие на обработку персональных данных",
+                modifier = Modifier.testTag(AuthTags.PHONE_CONSENT))
+            state.document?.let { document ->
+                PfLink(document.title, onClick = { onOpenDocument(document.url) }, modifier = Modifier.testTag(AuthTags.PHONE_DOCUMENT))
+            }
+            state.documentError?.let { message ->
+                state.documentErrorPresentation?.let { ErrorMessage(it, message) }
+                    ?: PfNotice(message, tone = NoticeTone.WARNING, alert = true)
+                state.documentRetryText?.let { Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted) }
+            }
+            if (state.documentRefreshRequired || state.documentError != null) {
+                PfButton("Обновить документ", enabled = state.documentRefreshReady, onClick = onRefreshDocument,
+                    busy = state.documentBusy, busyText = "Загружаем…", modifier = Modifier.testTag(AuthTags.PHONE_DOCUMENT_REFRESH))
+            }
             state.errorPresentation?.let { presentation ->
                 ErrorMessage(presentation, state.error ?: "Не получилось отправить номер. Попробуйте ещё раз")
             }
             PfButton(
-                "Продолжить", enabled = state.retryReady && !state.replayUnavailable, onClick = onSubmit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Отправляем…",
+                if (state.newIntentRequired) "Запросить заново" else "Продолжить",
+                enabled = state.ageConfirmed && state.pdConsentAccepted && state.document != null && state.retryReady && !state.replayUnavailable, onClick = onSubmit, variant = ButtonVariant.PRIMARY, block = true, busy = state.busy, busyText = "Отправляем…",
                 modifier = Modifier.testTag(AuthTags.PHONE_SUBMIT),
             )
+            if (state.restartAvailable) PfButton("Начать вход заново", onClick = onRestart,
+                enabled = !state.busy && !state.documentBusy, block = true,
+                modifier = Modifier.testTag(AuthTags.PHONE_RESTART))
         }
     }
 }
@@ -166,6 +196,7 @@ fun CallScreen(onBack: () -> Unit, onNewUser: () -> Unit, onRegistrationClosed: 
         when (event) {
             CallEvent.NewUser -> { vm.consumeEvent(); onNewUser() }
             CallEvent.RegistrationClosed -> { vm.consumeEvent(); onRegistrationClosed() }
+            CallEvent.ConsentRequired -> { vm.consumeEvent(); onBack() }
             CallEvent.SignedIn -> vm.consumeEvent() // the app switches graphs on the session state
             null -> Unit
         }
@@ -240,7 +271,11 @@ internal fun CallContent(
                 }
                 // The deadline passed by the device clock: the number is gone while the stream confirms the status.
                 CallPhase.CHECKING -> Unit
-                CallPhase.LOCKED -> ErrorMessage(state.errorPresentation ?: ru.finassist.pf.core.common.error.ErrorPresentation(), state.lockText.orEmpty())
+                CallPhase.LOCKED -> {
+                    ErrorMessage(state.errorPresentation ?: ru.finassist.pf.core.common.error.ErrorPresentation(), state.lockText.orEmpty())
+                    if (state.newIntentRequired) PfButton("Запросить заново", onClick = onRequestAgain,
+                        enabled = state.retryReady, busy = state.busy, block = true, modifier = Modifier.testTag(AuthTags.CALL_RETRY))
+                }
                 CallPhase.ERROR -> ErrorMessage(state.errorPresentation ?: ru.finassist.pf.core.common.error.ErrorPresentation(), "Не получилось проверить звонок. Попробуйте ещё раз",
                     onRetry = if (!state.retryReady || state.replayUnavailable) null else onRetry)
                 CallPhase.OFFLINE -> {
@@ -268,9 +303,7 @@ fun ConsentScreen(onBack: () -> Unit, onExpired: () -> Unit, vm: ConsentViewMode
         state,
         onBack = onBack,
         onOpenDocument = { url -> runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } },
-        onAccepted = vm::setAccepted,
         onSubmit = vm::submit,
-        onRefreshDocument = vm::refreshDocument,
     )
 }
 
@@ -279,9 +312,7 @@ internal fun ConsentContent(
     state: ConsentUiState,
     onBack: () -> Unit,
     onOpenDocument: (url: String) -> Unit,
-    onAccepted: (Boolean) -> Unit,
     onSubmit: () -> Unit,
-    onRefreshDocument: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize().testTag(AuthTags.CONSENT)) {
         PfPageHeader("Регистрация", onBack = onBack)
@@ -298,7 +329,7 @@ internal fun ConsentContent(
             ) {
                 Text("Номер подтверждён", style = PfTheme.type.title1, color = PfTheme.colors.text)
                 Text(
-                    "На ${state.phoneDisplay} ещё нет аккаунта — создадим его. Для этого нужно ваше согласие на обработку персональных данных",
+                    "На ${state.phoneDisplay} ещё нет аккаунта — создадим его. Согласие на обработку персональных данных вы уже дали до отправки номера",
                     style = PfTheme.type.lead, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space1),
                 )
                 Spacer(Modifier.height(PfTheme.dimens.space6))
@@ -334,10 +365,6 @@ internal fun ConsentContent(
                     })
                 }
                 Spacer(Modifier.height(PfTheme.dimens.space4))
-                PfCheckbox(
-                    checked = state.accepted, onCheckedChange = onAccepted, label = "Даю согласие на обработку персональных данных", error = state.error,
-                    modifier = Modifier.testTag(AuthTags.CONSENT_CHECKBOX),
-                )
                 Spacer(Modifier.weight(1f).heightIn(min = PfTheme.dimens.space6))
                 state.formError?.let {
                     val presentation = state.errorPresentation
@@ -345,11 +372,11 @@ internal fun ConsentContent(
                     Spacer(Modifier.height(PfTheme.dimens.space3))
                 }
                 PfButton(
-                    if (state.documentRefreshRequired) "Обновить документ" else "Создать аккаунт",
-                    enabled = if (state.documentRefreshRequired) state.documentRefreshReady else state.retryReady && !state.replayUnavailable,
-                    onClick = if (state.documentRefreshRequired) onRefreshDocument else onSubmit,
+                    "Создать аккаунт",
+                    enabled = state.retryReady && !state.replayUnavailable,
+                    onClick = onSubmit,
                     variant = ButtonVariant.PRIMARY, block = true, busy = state.busy,
-                    busyText = if (state.documentRefreshRequired) "Загружаем…" else "Создаём…",
+                    busyText = "Создаём…",
                     modifier = Modifier.testTag(AuthTags.CONSENT_SUBMIT),
                 )
                 PfLinkedText(
@@ -400,6 +427,11 @@ private object PhoneMaskTransformation : VisualTransformation {
 /** Test tags of the sign-in screens (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object AuthTags {
     const val PHONE = "auth.phone"
+    const val PHONE_AGE = "auth.phone.age"
+    const val PHONE_CONSENT = "auth.phone.consent"
+    const val PHONE_DOCUMENT = "auth.phone.document"
+    const val PHONE_RESTART = "auth.phone.restart"
+    const val PHONE_DOCUMENT_REFRESH = "auth.phone.document_refresh"
     const val PHONE_INPUT = "auth.phone.input"
     const val PHONE_SUBMIT = "auth.phone.submit"
     const val PHONE_NOTICE = "auth.phone.notice"

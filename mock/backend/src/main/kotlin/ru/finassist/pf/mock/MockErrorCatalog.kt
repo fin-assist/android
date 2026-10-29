@@ -79,6 +79,7 @@ internal fun MockBackend.updateRequiredError() = AppError.UpdateRequired(errorIn
 
 /** Decode controls through the same tolerant wire model as production, including malformed canonical fields. */
 internal fun MockBackend.injectedError(scenario: MockErrorScenario): AppError {
+    if (scenario == MockErrorScenario.TERMINAL_FAILURE) return AppError.Server(500, response = errorInfo("INTERNAL_ERROR", 500, requestRetryable = false))
     if (scenario == MockErrorScenario.RETRY_FORBIDDEN) return rateLimitedError(now().plusSeconds(3), 3)
     val code = "FUTURE_OPERATION_FAILURE"
     val canonical = when (scenario) {
@@ -86,7 +87,7 @@ internal fun MockBackend.injectedError(scenario: MockErrorScenario): AppError {
         MockErrorScenario.UNKNOWN_SEVERITY -> "\"user_message\":\"Сервис получил новый тип ошибки. Попробуйте позже\",\"severity\":\"future_level\""
         MockErrorScenario.INVALID_MESSAGE -> "\"user_message\":null,\"severity\":\"warning\""
         MockErrorScenario.LEGACY_RESPONSE -> ""
-        MockErrorScenario.RETRY_FORBIDDEN -> error("handled above")
+        MockErrorScenario.RETRY_FORBIDDEN, MockErrorScenario.TERMINAL_FAILURE -> error("handled above")
     }
     val json = "{\"code\":\"$code\",\"message\":\"internal diagnostic must not be displayed\"" +
         (if (canonical.isEmpty()) "" else ",$canonical") + "}"

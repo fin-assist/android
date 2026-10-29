@@ -10,14 +10,22 @@ tags:
     visible:
       id: "auth.phone"
     timeout: 40000
+- runFlow: ../../subflows/confirm_phone.yaml
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?maintenance=unknown&maintenance_retry_after=600"
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
 - tapOn:
     id: "auth.phone.input"
 - inputText: "9161234567"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
 - tapOn:
     id: "auth.phone.submit"
 - extendedWaitUntil:

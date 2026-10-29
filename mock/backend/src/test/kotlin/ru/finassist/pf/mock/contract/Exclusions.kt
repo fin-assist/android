@@ -66,13 +66,7 @@ internal object Exclusions {
             "limits (RATE_LIMITED of 1.1 «номер занят» and of plain calls; only the 429 of a stream re-open exists, FIN-170)"
 
     val codes: List<Code> = listOf(
-        Code(
-            "TOKEN_EXPIRED",
-            "a registration token of the fake backend never expires (api.md 1.3: 15 minutes after the call); the consent screen " +
-                "already turns any 401 into «start again», the new path needs its UI flow",
-            "proposed: [Android] fake backend: registration token expires after 15 minutes (TOKEN_EXPIRED)",
-        ),
-        Code("INTERNAL_ERROR", "the fake backend never fails with 500; `offline` is its only failure switch", ISSUE_FAILURES),
+        Code("REQUEST_TOO_LARGE", "BFF-only raw HTTP JSON byte limit; the in-process mock has no HTTP body or Content-Encoding", "FIN-339"),
         Code(
             "PROCESSING_FAILED",
             "no statement fails to import in the fake backend: a file that passes the checks of 3.2 always imports; the 3-minute " +

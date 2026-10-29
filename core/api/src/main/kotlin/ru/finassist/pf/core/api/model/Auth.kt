@@ -6,7 +6,12 @@ import ru.finassist.pf.core.common.time.ApiDateTime
 import java.time.Instant
 
 @Serializable
-data class StartPhoneVerificationRequest(val phone: String)
+data class StartPhoneVerificationRequest(
+    val phone: String,
+    val pdConsentAccepted: Boolean,
+    val pdConsentVersion: String,
+    val ageConfirmed: Boolean,
+)
 
 @Serializable
 data class PhoneVerification(
