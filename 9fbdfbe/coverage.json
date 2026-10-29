@@ -1,0 +1,1482 @@
+[
+  {
+    "name": "Main",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:2",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "MainStale",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:142",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "MainEmpty",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:288",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Detail",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:323",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DetailHint",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:352",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DetailRefund",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:387",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DetailTransfer",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:424",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Search",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:457",
+    "w": 390,
+    "h": 892,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SearchInitial",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:596",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SearchEmpty",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:621",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Analytics",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:657",
+    "w": 390,
+    "h": 2848,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsYear",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:965",
+    "w": 390,
+    "h": 1700,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsEmpty",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:1123",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatEmpty",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "5:1163",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsHintCategories",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "6:2",
+    "w": 390,
+    "h": 2848,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsHintAsk",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "6:316",
+    "w": 390,
+    "h": 2848,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsLimit",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "6:630",
+    "w": 390,
+    "h": 2872,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsEarly",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "6:939",
+    "w": 390,
+    "h": 2096,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Chat",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "6:1175",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsStale",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "7:2",
+    "w": 390,
+    "h": 2952,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsPartial",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "7:318",
+    "w": 390,
+    "h": 2900,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatBusy",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "7:628",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatStale",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "7:669",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatError",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "7:761",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatErrorData",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "7:804",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatOffline",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "7:845",
+    "w": 390,
+    "h": 853,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatLimit",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "7:925",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Profile",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "7:993",
+    "w": 390,
+    "h": 984,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ProfileThemeSheet",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "8:2",
+    "w": 390,
+    "h": 984,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ProfileNoData",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "8:168",
+    "w": 390,
+    "h": 984,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "MainDark",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "8:297",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DetailDark",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "8:437",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SearchDark",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "8:466",
+    "w": 390,
+    "h": 892,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsDark",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "8:605",
+    "w": 390,
+    "h": 2848,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatDark",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "8:913",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ProfileDark",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "8:998",
+    "w": 390,
+    "h": 984,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SearchOlder",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "41:548",
+    "w": 390,
+    "h": 976,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SearchPeriod",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "41:689",
+    "w": 390,
+    "h": 892,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsNoTransfers",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "41:1206",
+    "w": 390,
+    "h": 2792,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AnalyticsTransfers",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "41:1497",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatOffTopic",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "122:4455",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatErrorGeneric",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "122:4508",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatOffTopicDark",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "122:4592",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ChatErrorGenericDark",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "122:4625",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DetailNoDescription",
+    "page": "MVP",
+    "section": "Основные экраны",
+    "node": "134:4512",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultNothingNew",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "6:1260",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Phone",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "9:1210",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Consent",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "9:1225",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ConsentError",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:219",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "PhoneFormatError",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:244",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PhoneDeleted",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:259",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PhoneLoggedOut",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:279",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Code",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:300",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CodeExpired",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:316",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CodeLocked",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:349",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Passcode",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:371",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeRepeat",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:395",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeMismatch",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:419",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeBiometric",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:445",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeChange",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:462",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeLogin",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:490",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeLoginWrong",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:530",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeLoginLast",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:572",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuide",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:614",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuideMore",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:657",
+    "w": 390,
+    "h": 924,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuideFallback",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:703",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuideBusy",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:776",
+    "w": 390,
+    "h": 926,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuideBusyCancel",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:824",
+    "w": 390,
+    "h": 926,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuideOffline",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:881",
+    "w": 390,
+    "h": 1040,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultEmpty",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:936",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportError",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:950",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistoryEmpty",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "10:971",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResult",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:2",
+    "w": 390,
+    "h": 856,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultRepeat",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:52",
+    "w": 390,
+    "h": 1028,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UnreadLines",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:118",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultShort",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:216",
+    "w": 390,
+    "h": 1044,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultUnlocked",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:275",
+    "w": 390,
+    "h": 1044,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultNoExpenses",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:333",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportErrorBank",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:375",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportErrorExcel",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:396",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportErrorSize",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:417",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistory",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:438",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistoryConfirm",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:476",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistoryDeleted",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:523",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PhoneDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:553",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CodeDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:568",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:584",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "PasscodeLoginDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:608",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportGuideDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:648",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:691",
+    "w": 390,
+    "h": 856,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportErrorDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:741",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistoryDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "11:762",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UnreadLinesDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "45:656",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ConsentDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "46:34",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistoryResolved",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "101:4396",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultUnknownCodes",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "102:4398",
+    "w": 390,
+    "h": 1042,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ForceUpdate",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "106:4406",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Maintenance",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "106:4432",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": true
+  },
+  {
+    "name": "MaintenanceNoTime",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "106:4465",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": true
+  },
+  {
+    "name": "ForceUpdateDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "111:4419",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "MaintenanceDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "111:4428",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": true
+  },
+  {
+    "name": "CodeNoDeadline",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "122:7132",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CodeChecking",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "122:7151",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CodeNoDeadlineDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "122:7167",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CodeCheckingDark",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "122:7183",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "ImportResultEmptyUnread",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "134:4549",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistoryWithoutPeriod",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "137:4537",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "UploadHistoryProcessing",
+    "page": "MVP",
+    "section": "Вход и импорт",
+    "node": "137:4578",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CategoryPicker",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:2",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CategoryPickerChanged",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:219",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CategoryPickerIncome",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:439",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CategoryPickerSearch",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:539",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AiConsent",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:587",
+    "w": 390,
+    "h": 932,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AiConsentError",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:627",
+    "w": 390,
+    "h": 968,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DeleteAccount",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:669",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DeleteAccountCodeWrong",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:707",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DeleteAccountDialog",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:747",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DeleteAccountOffline",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:838",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DeleteAccountBusy",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:935",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "Security",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:1027",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SecurityBiometricOff",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:1062",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "AiConsentDark",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:1097",
+    "w": 390,
+    "h": 932,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DeleteAccountDark",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:1137",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "SecurityDark",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "9:1175",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "CategoryPickerDark",
+    "page": "MVP",
+    "section": "Правка и настройки",
+    "node": "10:2",
+    "w": 390,
+    "h": 844,
+    "covered": true,
+    "rendered": true
+  },
+  {
+    "name": "DetailMassSaved",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "11:800",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "Deposits",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "11:832",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositsEmpty",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "11:868",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositsChoose",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "11:883",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositsExpired",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "11:948",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositForm",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:2",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositFormCredit",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:43",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositFormErrors",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:78",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositFormEdit",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:126",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositFormDiscard",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:168",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositFormCreditEdit",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:218",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositsDark",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:255",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "DepositFormDark",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:291",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoryPickerRule",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:332",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoryPickerCreating",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:558",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoryPickerCreateError",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:778",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "Categories",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:998",
+    "w": 390,
+    "h": 1372,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoriesAdding",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:1151",
+    "w": 390,
+    "h": 1404,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoriesNoRules",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "12:1307",
+    "w": 390,
+    "h": 1208,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoriesAll",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "13:2",
+    "w": 390,
+    "h": 2100,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoriesRule",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "13:284",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoriesDeleteCategory",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "13:479",
+    "w": 390,
+    "h": 844,
+    "covered": false,
+    "rendered": false
+  },
+  {
+    "name": "CategoriesDark",
+    "page": "Вне MVP",
+    "section": null,
+    "node": "13:641",
+    "w": 390,
+    "h": 1372,
+    "covered": false,
+    "rendered": false
+  }
+]
