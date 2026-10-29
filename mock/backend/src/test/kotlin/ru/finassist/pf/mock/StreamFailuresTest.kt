@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
@@ -269,7 +271,7 @@ class StreamFailuresTest {
     fun `an opening after a drop answers 429 with Retry-After while stream_rate_limits lasts`() = runTest {
         val backend = testBackend(clock, config = FAST.copy(callVerifyDelayMs = 5_000), userId = "", dispatcher = StandardTestDispatcher(testScheduler))
         val api = MockAuthApi(backend)
-        val token = api.startPhoneVerification(IdempotencyKey("p1"), "+79990001122").verificationToken
+        val token = api.startPhoneVerification(IdempotencyKey("p1"), StartPhoneVerificationRequest("+79990001122", true, "2026-09-28", true)).verificationToken
         backend.config = backend.config.copy(streamDrops = 1, streamRateLimits = 2, streamRetrySeconds = 7)
 
         assertEquals(listOf(VerificationStatus.PENDING), api.streamPhoneVerification(token).toList().map { it.status })
@@ -288,7 +290,7 @@ class StreamFailuresTest {
     fun `an opening that does not follow a drop is never turned away`() = runTest {
         val backend = testBackend(clock, config = FAST.copy(callVerifyDelayMs = 5_000), userId = "", dispatcher = StandardTestDispatcher(testScheduler))
         val api = MockAuthApi(backend)
-        val token = api.startPhoneVerification(IdempotencyKey("p1"), "+79990001122").verificationToken
+        val token = api.startPhoneVerification(IdempotencyKey("p1"), StartPhoneVerificationRequest("+79990001122", true, "2026-09-28", true)).verificationToken
         backend.config = backend.config.copy(streamRateLimits = 1)
 
         clock.at = clock.at.plusSeconds(10)
@@ -318,7 +320,7 @@ class StreamFailuresTest {
     fun `a dropped verification stream ends after pending, the next opening brings verified`() = runTest {
         val backend = testBackend(clock, config = FAST.copy(callVerifyDelayMs = 5_000), userId = "", dispatcher = StandardTestDispatcher(testScheduler))
         val api = MockAuthApi(backend)
-        val token = api.startPhoneVerification(IdempotencyKey("p1"), "+79990001122").verificationToken
+        val token = api.startPhoneVerification(IdempotencyKey("p1"), StartPhoneVerificationRequest("+79990001122", true, "2026-09-28", true)).verificationToken
         backend.config = backend.config.copy(streamDrops = 1)
 
         assertEquals(listOf(VerificationStatus.PENDING), api.streamPhoneVerification(token).toList().map { it.status })

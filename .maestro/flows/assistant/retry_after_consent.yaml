@@ -1,0 +1,133 @@
+appId: ru.finassist.pf.mock.e2e
+name: Помощник — повтор ответа после нового согласия сохраняет исходный вопрос
+tags:
+  - assistant
+---
+# FIN-223 / Qase 52. Сценарий подготовлен без запуска UI-тестов.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?assistant_model_errors=1&network_delay_ms=250"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+
+# Финансовый вопрос о продавце из фикстуры. Его успешный ответ короткий:
+# «не нашли» за покрытый период списывает попытку (FIN-136).
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Kaspersky"
+- hideKeyboard
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.failed.retry"
+    timeout: 20000
+- assertVisible: "Не получилось ответить. Вопрос не потрачен"
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
+
+# Отзываем согласие через настоящий профиль; чтение прежних ответов остаётся доступным.
+- tapOn:
+    id: "ds.back"
+- tapOn:
+    id: "ds.tab.profile"
+- scrollUntilVisible:
+    element:
+      id: "profile.assistant.consent"
+    direction: DOWN
+- tapOn:
+    id: "profile.assistant.consent"
+# Существующий config-overlay живёт 4 с: отзыв с задержкой 250 мс успевает завершиться;
+# после overlay профиль также перечитывается обычным lifecycle-путём.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?network_delay_ms=250"
+- tapOn:
+    id: "profile.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.failed.retry"
+    timeout: 15000
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
+
+# RetryAnswer получает CONSENT_REQUIRED / retryable=false. После нового согласия
+# возобновляется именно он с прежним ключом, а не AskQuestion и не новый вопрос.
+- tapOn:
+    id: "assistant.answer.failed.retry"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 20000
+- assertVisible: ".*операций «Kaspersky» не нашли.*"
+- assertNotVisible:
+    id: "assistant.answer.failed"
+- assertNotVisible:
+    id: "assistant.chat.send_failed"
+- assertVisible: ".*[Оо]сталось 4 из 5.*"
+
+# Перечитываем сохранённую историю новым экраном. Короткий ответ позволяет видеть
+# весь разговор: один вопрос и заменивший неудачный ответ. Новый Ask оставил бы
+# старую неудачу и второй вопрос; один лишь счётчик 4/5 этого не различает.
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "profile.assistant"
+    timeout: 10000
+- tapOn:
+    id: "profile.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 15000
+- assertVisible:
+    id: "assistant.question"
+    index: 0
+- assertNotVisible:
+    id: "assistant.question"
+    index: 1
+- assertNotVisible:
+    id: "assistant.answer.failed"
+- assertVisible: ".*операций «Kaspersky» не нашли.*"
+- assertVisible: ".*[Оо]сталось 4 из 5.*"

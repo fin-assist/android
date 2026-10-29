@@ -1,0 +1,102 @@
+package ru.finassist.pf.mock
+
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runTest
+import org.junit.Test
+import ru.finassist.pf.core.api.model.*
+import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.mock.api.MockAuthApi
+import kotlin.test.*
+
+class MockPhoneConsentTest {
+    private val clock = TestClock(NOW)
+    private val backend = testBackend(clock, config = FAST, userId = "")
+    private val api = MockAuthApi(backend)
+    private val body = StartPhoneVerificationRequest("+79990001122", true, MockBackend.CONSENT_VERSION_PD, true)
+    @Test fun `every missing confirmation and invalid version stops before a receipt or verification exists`() = runTest {
+        for ((request, code) in listOf(body.copy(ageConfirmed = false) to ErrorCodes.VALIDATION_ERROR,
+            body.copy(pdConsentAccepted = false) to ErrorCodes.CONSENT_REQUIRED,
+            body.copy(pdConsentVersion = "old") to ErrorCodes.CONSENT_OUTDATED,
+            body.copy(pdConsentVersion = "") to ErrorCodes.VALIDATION_ERROR,
+            body.copy(pdConsentVersion = "x".repeat(65)) to ErrorCodes.VALIDATION_ERROR)) {
+            assertEquals(code, assertFailsWith<AppError.Api> { api.startPhoneVerification(IdempotencyKey.random(), request) }.code)
+        }
+        assertTrue(api.consentReceipts.isEmpty()); assertEquals("", backend.profile.userId)
+    }
+    @Test fun `Start receipt is server timed and remains pinned across replay version rotation and Register`() = runTest {
+        val acceptedAt = clock.at
+        val key = IdempotencyKey.random()
+        val verification = api.startPhoneVerification(key, body)
+        val receipt = api.consentReceipts.single()
+        assertEquals(acceptedAt, receipt.consentAcceptedAt); assertEquals(acceptedAt, receipt.ageConfirmedAt)
+        assertNull(receipt.accountId)
+        clock.at = clock.at.plusSeconds(5)
+        api.personalDataConsentVersion = "new-version"
+        assertEquals(verification.verificationToken, api.startPhoneVerification(key, body).verificationToken)
+        assertEquals(1, api.consentReceipts.size)
+        assertEquals(ErrorCodes.IDEMPOTENCY_CONFLICT, assertFailsWith<AppError.Api> {
+            api.startPhoneVerification(key, body.copy(pdConsentVersion = "new-version"))
+        }.code)
+        val token = api.streamPhoneVerification(verification.verificationToken).toList().last().registrationToken!!
+        val registered = api.register(IdempotencyKey.random(), RegisterRequest(token, true, body.pdConsentVersion))
+        assertEquals(registered.userId, receipt.accountId)
+        assertEquals(acceptedAt, receipt.consentAcceptedAt)
+    }
+    @Test fun `existing account requires both confirmations and only verified phone links its own receipt`() = runTest {
+        val request = body.copy(phone = backend.config.existingPhone)
+        assertFailsWith<AppError.Api> { api.startPhoneVerification(IdempotencyKey.random(), request.copy(ageConfirmed = false)) }
+        val verification = api.startPhoneVerification(IdempotencyKey.random(), request)
+        assertNull(api.consentReceipts.single().accountId)
+        api.streamPhoneVerification(verification.verificationToken).toList()
+        assertEquals(backend.profile.userId, api.consentReceipts.single().accountId)
+        api.streamPhoneVerification(verification.verificationToken).toList()
+        assertEquals(1, api.consentReceipts.size)
+    }
+    @Test fun `new Start after version rotation needs the new document instead of old profile consent`() = runTest {
+        api.personalDataConsentVersion = "new"
+        assertEquals(ErrorCodes.CONSENT_OUTDATED, assertFailsWith<AppError.Api> { api.startPhoneVerification(IdempotencyKey.random(), body) }.code)
+        api.startPhoneVerification(IdempotencyKey.random(), body.copy(pdConsentVersion = "new"))
+        assertEquals("new", api.consentReceipts.single().request.pdConsentVersion)
+    }
+    @Test fun `closed phone failure hook refuses before receipt and clearing it permits a new request`() = runTest {
+        backend.config = backend.config.copy(errorOperation = MockErrorOperation.PHONE_START, errorScenario = MockErrorScenario.TERMINAL_FAILURE)
+        api.getConsentDocument(ConsentType.PERSONAL_DATA)
+        val error = assertFailsWith<AppError.Server> { api.startPhoneVerification(IdempotencyKey.random(), body) }
+        assertEquals(false, error.requestRetryable)
+        assertEquals(1, backend.injectedErrorCount.value)
+        assertTrue(api.consentReceipts.isEmpty())
+        backend.config = backend.config.copy(errorOperation = null)
+        api.startPhoneVerification(IdempotencyKey.random(), body)
+        assertEquals(1, api.consentReceipts.size)
+    }
+
+    @Test fun `verified Watch expires with INVALID_TOKEN while Register expires with TOKEN_EXPIRED`() = runTest {
+        val verification = api.startPhoneVerification(IdempotencyKey.random(), body)
+        val registeredToken = api.streamPhoneVerification(verification.verificationToken).toList().last().registrationToken!!
+        clock.at = clock.at.plusMinutes(15)
+        assertEquals(ErrorCodes.INVALID_TOKEN, assertFailsWith<AppError.Unauthorized> {
+            api.streamPhoneVerification(verification.verificationToken).toList()
+        }.code)
+        assertEquals(ErrorCodes.TOKEN_EXPIRED, assertFailsWith<AppError.Unauthorized> {
+            api.register(IdempotencyKey.random(), RegisterRequest(registeredToken, true, body.pdConsentVersion))
+        }.code)
+    }
+
+    @Test fun `Start caches age 400 and version 422 under their full request while consent 403 is not cached`() = runTest {
+        for ((invalid, code) in listOf(body.copy(ageConfirmed = false) to ErrorCodes.VALIDATION_ERROR,
+            body.copy(pdConsentVersion = "old") to ErrorCodes.CONSENT_OUTDATED)) {
+            val key = IdempotencyKey.random()
+            assertEquals(code, assertFailsWith<AppError.Api> { api.startPhoneVerification(key, invalid) }.code)
+            assertEquals(code, assertFailsWith<AppError.Api> { api.startPhoneVerification(key, invalid) }.code)
+            assertEquals(ErrorCodes.IDEMPOTENCY_CONFLICT, assertFailsWith<AppError.Api> { api.startPhoneVerification(key, body) }.code)
+        }
+        assertTrue(api.consentReceipts.isEmpty())
+        val nonCachedKey = IdempotencyKey.random()
+        assertEquals(ErrorCodes.CONSENT_REQUIRED, assertFailsWith<AppError.Api> {
+            api.startPhoneVerification(nonCachedKey, body.copy(pdConsentAccepted = false))
+        }.code)
+        api.startPhoneVerification(nonCachedKey, body)
+        assertEquals(1, api.consentReceipts.size)
+    }
+
+}

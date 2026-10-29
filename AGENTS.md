@@ -41,6 +41,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 |---|---|
 | Composition root, NavHost (auth graph → main tabs), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt`, `app/src/local/…/LocalModule.kt` |
 | API contract (service interfaces + DTOs) | `core/api/…/Services.kt`, `core/api/…/model/*.kt` |
+| Universal error presentation, request retry restrictions and server deadlines (FIN-223) | `docs/errors.md`; `core/common/…/error/`, `time/ServerDeadline.kt`; `core/designsystem/…/ErrorMessage.kt` |
 | SSE streams: transport and the one re-open loop of all three streams (pauses with jitter, 429, FIN-170) | `core/network/…/Sse.kt`; `core/api/…/SseReopen.kt` (`reopeningStream`, used by the view models; the fake backend's drops — `MockConfig.streamDrops`) |
 | Client version, update and maintenance (FIN-22): `X-Client-Version`, `CLIENT_VERSION_UNSUPPORTED` / `MAINTENANCE` → `ServiceGate` → screens over the app | `core/common/…/availability/` (`ClientVersion`, `ServiceGate`), `core/network/…/Interceptors.kt`, `core/toggles/…/MinVersionCheck.kt` (`app.min_version`), `feature/availability`; version and build number — `app/build.gradle.kts` |
 | Fake backend (mock flavor): OFX parsing, ledger, analytics, assistant | `mock/backend/…/mock/` — `MockBackend.kt`, `domain/*`, `MockConfig.kt` (existing phone, delays, `offline`) |
@@ -52,7 +53,8 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Server-composed blocks (Analytics, assistant): catalog models, renderers, registry, `supports` | `core/api/…/model/Blocks.kt`; `core/blocks` (`CatalogV1`, `BlockRegistry`, `BlocksColumn`); composer of the fake server `mock/backend/…/domain/AnalyticsComposer.kt` |
 | Feature flags | `core/toggles/…/Flag.kt` (registry + defaults), `docs/flags.md` (meaning); mock overrides `app/src/mock/assets/flags.json` |
 | Events / crashes | `core/tracking/…/Tracker.kt`, `CrashReporter.kt` (typed context, no free-form strings); providers in `providers/*` (only `:app` depends on them; Tracer keys — README) |
-| Tokens, preferences, idempotency keys | `core/storage` |
+| Tokens, preferences, idempotency keys | `core/storage`; `EncryptedTokenStore` atomically maintains `authSessionEpoch` (new login rotates, refresh retains) |
+| Silent background profile-zone sync (FIN-345) | `feature/profile/impl/…/data/TimeZoneChecker.kt`, `ZoneSyncStateStore.kt`, `BootCounter.kt`; independent durable GET/PATCH advice and boot-bound waits — `docs/errors.md` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md` (mockups: Figma, exported by `design-check/export.py`), `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks (sign-in without the screens — `E2eSignIn`), native gaps, shards in CI, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/e2e-shards.py`, `scripts/qase-*` |
 | Multiplatform readiness of `:core:api` and `:mock:backend`: rule, JVM-only inventory, check | `docs/kmp-readiness.md`; `scripts/check-kmp-ready.py`, `scripts/kmp-baseline.json` |
@@ -425,10 +427,13 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
   one host of `pf.apiBaseUrl` (FIN-120).
 - Trust boundaries: limits, quotas and permissions are enforced by the backend; the client only shows them.
   Client-side checks are not the security control — flag code that relies on them.
-- Consent: user data goes to the LLM assistant only after the assistant consent; an account is registered
-  (created) only after the personal data consent. Sending the phone number for call verification before that is
-  allowed: only the server's answer tells a new number from an existing user, and the consent screen is shown for a
-  new number.
+- Consent: user data goes to the LLM assistant only after the assistant consent. Before phone input, a separate
+  unchecked 14+ confirmation is required; before Start, a separate unchecked personal-data consent and the viewed
+  document version are required for new and existing users alike (FIN-365). Server checks and server receipt times
+  are authoritative. Register reuses the original Start version without a second checkbox or a current-document GET.
+  A received Start 429 means wait, then an explicit new intent with a new key; a lost transport response reuses
+  the exact original request and key. Explicit restart resets the flow/key and both choices without a POST,
+  preserving any captured Start429 wait shared across Phone/Call navigation. Server-only unknown deadlines are never hard-coded in the client.
 - New dependencies: flag a new library or SDK that gets data access (network, storage, analytics) so the owner
   decides on it.
 

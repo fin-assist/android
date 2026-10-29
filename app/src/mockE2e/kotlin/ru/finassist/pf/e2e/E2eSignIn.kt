@@ -47,7 +47,9 @@ class E2eSignIn(
 
     private suspend fun attempt(phone: String, passcode: String): String? {
         if (session.state.first() is SessionState.SignedIn) return "already signed in: start the flow with clear_state.yaml"
-        val verification = authApi.startPhoneVerification(IdempotencyKey.random(), phone)
+        val document = authApi.getConsentDocument(ru.finassist.pf.core.api.model.ConsentType.PERSONAL_DATA)
+        val verification = authApi.startPhoneVerification(IdempotencyKey.random(),
+            ru.finassist.pf.core.api.model.StartPhoneVerificationRequest(phone, true, document.version, true))
         val result = authApi.streamPhoneVerification(verification.verificationToken)
             .first { it.status != VerificationStatus.PENDING }
         if (result.status != VerificationStatus.VERIFIED) return "phone verification ended as ${result.status.code}"

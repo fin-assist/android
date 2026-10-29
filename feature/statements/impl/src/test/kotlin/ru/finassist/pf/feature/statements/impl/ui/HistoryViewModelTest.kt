@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -17,6 +19,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.ImportProgress
@@ -63,7 +66,7 @@ class HistoryViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun newVm(flags: StaticFlags = StaticFlags()) = HistoryViewModel(api, repository, tracker, flags)
+    private fun newVm(flags: StaticFlags = StaticFlags(), source: StatementsApi = api) = HistoryViewModel(source, repository, tracker, flags, ElapsedClock { dispatcher.scheduler.currentTime })
 
     private fun advance(ms: Long) {
         dispatcher.scheduler.advanceTimeBy(ms)
@@ -105,6 +108,113 @@ class HistoryViewModelTest {
         assertEquals(done, vm.state.value.list)
     }
 
+    private fun forbiddenListRead() = AppError.Api("FUTURE_READ_REFUSAL", 409,
+        response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_READ_REFUSAL", 409, requestRetryable = false))
+
+    @Test fun `a successful delete starts a new list context while same-context retries stay forbidden`() {
+        val empty = StatementsList(uploads = emptyList())
+        api.listOutcomes += done
+        api.listOutcomes += forbiddenListRead()
+        api.listOutcomes += empty
+        val vm = newVm()
+        vm.load()
+        vm.load()
+        assertFalse(vm.state.value.retryReady)
+        vm.load()
+        assertEquals(2, api.listCalls, "ordinary resume must respect the refusal")
+
+        vm.askDelete(upload("u1"))
+        vm.delete()
+        assertEquals(listOf("u1"), api.deleted)
+        assertEquals(3, api.listCalls, "actual deletion makes the previous list context obsolete")
+        assertEquals(empty, vm.state.value.list)
+        assertNull(vm.state.value.requestRetryable)
+        assertTrue(vm.state.value.retryReady)
+    }
+
+    @Test fun `a terminal import outcome refreshes a previously forbidden list in its new data context`() {
+        for (success in listOf(true, false)) {
+            val finish = CompletableDeferred<Unit>()
+            val result = importResult()
+            val after = if (success) done else StatementsList(uploads = emptyList())
+            api.listOutcomes.clear()
+            api.listOutcomes += processing
+            api.listOutcomes += forbiddenListRead()
+            api.listOutcomes += after
+            api.script("u1", flow {
+                emit(progress)
+                finish.await()
+                if (success) emit(ImportEvent.Complete(result))
+                else emit(ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, "private diagnostic"))
+            })
+            val callsBefore = api.listCalls
+            val vm = newVm()
+            vm.load()
+            vm.load()
+            vm.load()
+            assertEquals(callsBefore + 2, api.listCalls)
+            assertFalse(vm.state.value.retryReady)
+            finish.complete(Unit)
+            assertEquals(callsBefore + 3, api.listCalls)
+            assertEquals(after, vm.state.value.list)
+            assertTrue(vm.state.value.retryReady)
+            assertNull(vm.state.value.requestRetryable)
+            vm.pause()
+        }
+    }
+
+    @Test fun `an old read refusal cannot poison the successful post-delete list context`() {
+        val releaseOld = CompletableDeferred<Unit>()
+        val empty = StatementsList(uploads = emptyList())
+        var calls = 0
+        val source = object : StatementsApi by api {
+            override suspend fun listStatements(): StatementsList = when (++calls) {
+                1 -> done
+                2 -> { releaseOld.await(); throw forbiddenListRead() }
+                else -> empty
+            }
+        }
+        val vm = newVm(source = source)
+        vm.load()
+        vm.load() // old context still in flight
+        vm.askDelete(upload("u1"))
+        vm.delete()
+        assertEquals(empty, vm.state.value.list)
+        releaseOld.complete(Unit)
+        assertEquals(empty, vm.state.value.list)
+        assertNull(vm.state.value.errorPresentation)
+        assertNull(vm.state.value.requestRetryable)
+        assertTrue(vm.state.value.retryReady)
+        vm.load()
+        assertEquals(4, calls, "the stale refusal must not close the new context's retry gate")
+    }
+
+    @Test fun `an old successful read cannot watch deleted uploads or reopen a newer forbidden context`() {
+        val releaseOld = CompletableDeferred<Unit>()
+        var calls = 0
+        val source = object : StatementsApi by api {
+            override suspend fun listStatements(): StatementsList = when (++calls) {
+                1 -> done
+                2 -> { releaseOld.await(); processing }
+                else -> throw forbiddenListRead()
+            }
+        }
+        api.script("u1", flowOf(ImportEvent.Complete(importResult())))
+        val vm = newVm(source = source)
+        vm.load()
+        vm.load()
+        vm.askDelete(upload("u1"))
+        vm.delete()
+        assertEquals(3, calls)
+        assertFalse(vm.state.value.retryReady)
+        releaseOld.complete(Unit)
+        assertTrue(api.streamOpens.isEmpty(), "a stale list must not start watchers for deleted data")
+        assertEquals(false, vm.state.value.requestRetryable)
+        assertFalse(vm.state.value.retryReady)
+        vm.load()
+        assertEquals(3, calls, "the new response's false still controls the current request")
+    }
+
     @Test fun `an upload being parsed is watched and the list reloads when it completes`() {
         val result = importResult()
         api.listOutcomes += processing
@@ -128,6 +238,22 @@ class HistoryViewModelTest {
         vm.load()
         assertEquals(2, api.listCalls)
         assertNull(repository.lastResult("u1"))
+        assertTrue(repoEvents.isEmpty())
+    }
+
+    @Test fun `terminal import warning survives the list refresh without REST action dispatch`() {
+        val presentation = ru.finassist.pf.core.common.error.ErrorPresentation(
+            ru.finassist.pf.core.common.error.UserMessage.from("Проверьте выбранную выписку"),
+            ru.finassist.pf.core.common.error.ErrorSeverity.WARNING,
+        )
+        api.listOutcomes += processing
+        api.listOutcomes += done
+        api.script("u1", flowOf(ImportEvent.Error("MAINTENANCE", "diagnostic", presentation)))
+        val vm = newVm()
+        vm.load()
+        assertEquals(done, vm.state.value.list)
+        assertEquals(presentation, vm.state.value.resultErrorPresentation)
+        assertNull(vm.state.value.requestRetryable)
         assertTrue(repoEvents.isEmpty())
     }
 
@@ -165,7 +291,8 @@ class HistoryViewModelTest {
         fun tracked(f: kotlinx.coroutines.flow.Flow<ImportEvent>) = f
             .onStart { active++; maxActive = maxOf(maxActive, active) }
             .onCompletion { active-- }
-        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        val limitedAt = mutableListOf<Long>()
+        val limited = { tracked(flow { limitedAt += dispatcher.scheduler.currentTime; throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
         api.listOutcomes += processing
         api.listOutcomes += processing
         api.listOutcomes += done
@@ -175,7 +302,7 @@ class HistoryViewModelTest {
             // Closed after progress: a drop.
             tracked(flowOf(progress)),
             limited(),
-            // The screen came back (pause → load): the view model opens the stream itself, the server still says 429.
+            // The next opening after the retained wait gets a fresh 429 with its own wait.
             limited(),
             tracked(flowOf(ImportEvent.Complete(result))),
         )
@@ -183,18 +310,48 @@ class HistoryViewModelTest {
         vm.load()
         advance(1_000)
         assertEquals(2, api.streamOpens.size, "the drop was re-opened and got 429")
+        advance(4_000) // consume part of the original server wait before leaving
         vm.pause()
         vm.load()
-        assertEquals(3, api.streamOpens.size)
+        assertEquals(2, api.streamOpens.size, "resume must not bypass the retained Retry-After")
         assertEquals(2, api.listCalls, "no reload before the upload ends")
-        advance(59_000)
-        assertEquals(3, api.streamOpens.size, "not before Retry-After")
-        advance(2_000)
+        val firstRefusal = limitedAt.single()
+        advance(firstRefusal + 59_999 - dispatcher.scheduler.currentTime)
+        assertEquals(2, api.streamOpens.size, "not before the original Retry-After")
+        advance(firstRefusal + 62_001 - dispatcher.scheduler.currentTime)
+        assertEquals(3, api.streamOpens.size, "the original wait is not restarted on resume")
+        val secondRefusal = limitedAt.last()
+        advance(secondRefusal + 59_999 - dispatcher.scheduler.currentTime)
+        assertEquals(3, api.streamOpens.size, "a fresh 429 gets its own Retry-After")
+        advance(secondRefusal + 62_001 - dispatcher.scheduler.currentTime)
         assertEquals(4, api.streamOpens.size)
         assertEquals(3, api.listCalls, "the list is reloaded once the upload ended")
         assertEquals(done, vm.state.value.list)
         assertEquals(result, repository.lastResult("u1"))
         assertEquals(1, maxActive, "never two streams at once")
+    }
+
+    @Test fun `known false maintenance resumes only the existing history stream after its wait`() {
+        api.listOutcomes += processing
+        api.listOutcomes += processing
+        api.listOutcomes += done
+        val result = importResult()
+        api.script("u1", flow { throw AppError.Maintenance(null, 15,
+            ru.finassist.pf.core.common.error.ErrorResponseInfo("MAINTENANCE", 503, requestRetryable = false,
+                timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0))) },
+            flowOf(ImportEvent.Complete(result)))
+        val vm = newVm()
+        vm.load()
+        assertEquals(1, api.streamOpens.size)
+        vm.pause()
+        vm.load() // a stream denial must not poison the distinct list request's retry gate
+        assertEquals(2, api.listCalls)
+        advance(14_999)
+        assertEquals(1, api.streamOpens.size)
+        advance(1)
+        assertEquals(2, api.streamOpens.size)
+        assertEquals(done, vm.state.value.list)
+        assertEquals(result, repository.lastResult("u1"))
     }
 
     @Test fun `a stream error other than the network ends watching without a reload`() {

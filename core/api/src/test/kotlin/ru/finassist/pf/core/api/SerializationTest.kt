@@ -23,6 +23,17 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SerializationTest {
+    @Test fun `phone Start requires explicit confirmations and tolerates unknown fields`() {
+        val serializer = ru.finassist.pf.core.api.model.StartPhoneVerificationRequest.serializer()
+        val value = ApiJson.decodeFromString(serializer,
+            """{"phone":"+79991234567","pd_consent_accepted":true,"pd_consent_version":"согласие-1","age_confirmed":true,"future":42}""")
+        assertTrue(value.ageConfirmed); assertTrue(value.pdConsentAccepted)
+        assertEquals("согласие-1", value.pdConsentVersion)
+        kotlin.test.assertFailsWith<kotlinx.serialization.SerializationException> {
+            ApiJson.decodeFromString(serializer, """{"phone":"+79991234567"}""")
+        }
+    }
+
 
     @Test
     fun `upload period is a pair of calendar dates and unknown fields and status are tolerated`() {

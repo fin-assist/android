@@ -173,6 +173,20 @@ class ImportResultDesignCheckTest {
 
     @Test fun unreadLinesDark() = DesignCheck.capture("UnreadLinesDark", dark = true, heightDp = 844) { UnreadLinesContent(unreadState(), copied = false, onBack = {}, onRetry = {}, onReport = {}) }
 
+    // FIN-352 proposed artboards; fixtures are authored without executing DesignCheck.
+    @Test fun unreadSamePhysicalLine() = DesignCheck.capture("UnreadLinesSamePhysicalLine", heightDp = 844) {
+        UnreadLinesContent(unreadSamePhysicalLineState(), copied = false, onBack = {}, onRetry = {}, onReport = {})
+    }
+
+    @Test fun unreadSamePhysicalLineDark() = DesignCheck.capture("UnreadLinesSamePhysicalLineDark", dark = true, heightDp = 844) {
+        UnreadLinesContent(unreadSamePhysicalLineState(), copied = false, onBack = {}, onRetry = {}, onReport = {})
+    }
+
+    private fun unreadSamePhysicalLineState(): UnreadUiState {
+        val line = UnreadLine("u2", "unread-same-line.ofx", 31, reason = UnreadReason.NO_DATE, reasonName = "нет даты")
+        return UnreadUiState(loading = false, lines = listOf(line, line.copy()), userId = "u1", othersLoaded = false)
+    }
+
     private fun unreadState(): UnreadUiState {
         fun line(n: Int, date: String?, reason: UnreadReason, name: String) = UnreadLine(
             uploadId = "u2", fileName = "operations_2026.ofx", lineNumber = n, date = date?.let(::t), reason = reason,
@@ -189,5 +203,11 @@ class ImportResultDesignCheckTest {
             ),
             userId = "u1",
         )
+    }
+    // FIN-223 proposed artboard; snapshot execution is not authorized.
+    @Test fun unreadServerWarning() = DesignCheck.capture("UnreadLinesServerWarning") {
+        UnreadLinesContent(UnreadUiState(loading = false, error = true,
+            errorPresentation = ru.finassist.pf.core.common.error.ErrorPresentation(ru.finassist.pf.core.common.error.UserMessage.from("Чтение строк временно недоступно"), ru.finassist.pf.core.common.error.ErrorSeverity.WARNING)),
+            copied = false, onBack = {}, onRetry = {}, onReport = {})
     }
 }

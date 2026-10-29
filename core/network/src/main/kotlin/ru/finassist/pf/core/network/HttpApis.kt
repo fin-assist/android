@@ -73,6 +73,8 @@ import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.common.time.toApiString
 import java.time.OffsetDateTime
+import kotlinx.coroutines.currentCoroutineContext
+import ru.finassist.pf.core.api.RequestOwner
 
 /** Executes a Retrofit call: 2xx → body, anything else → [AppError]. */
 internal suspend fun <T> call(block: suspend () -> Response<T>): T {
@@ -88,7 +90,7 @@ internal suspend fun <T> call(block: suspend () -> Response<T>): T {
         @Suppress("UNCHECKED_CAST")
         return response.body() ?: (Unit as T)
     }
-    throw mapHttpError(response.code(), response.errorBody()?.string(), response.headers()["Retry-After"])
+    throw mapHttpError(response.code(), response.errorBody()?.string(), response.headers()["Retry-After"], response.headers()["Date"], response.raw().request.tag(ru.finassist.pf.core.common.time.ResponseTiming::class.java)?.receivedElapsedMillis)
 }
 
 /** A malformed event payload is a server error, not a crash in the collecting view model. */
@@ -120,14 +122,16 @@ internal class SseRequests(
 
 internal class HttpAuthApi(private val service: AuthService, private val sse: SseRequests) : AuthApi {
     /** Keeps the `Date` header: the fallback device deadline when the server sends no `expires_in` (api.md 1.1). */
-    override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification {
+    override suspend fun startPhoneVerification(key: IdempotencyKey, request: StartPhoneVerificationRequest): PhoneVerification {
         var serverTime: java.time.Instant? = null
+        var receivedElapsed: Long? = null
         val body = call {
-            service.startPhoneVerification(key.value, StartPhoneVerificationRequest(phone)).also { response ->
+            service.startPhoneVerification(key.value, request, key.replayWindow).also { response ->
                 serverTime = response.headers().getDate("Date")?.toInstant()
+                receivedElapsed = response.raw().request.tag(ru.finassist.pf.core.common.time.ResponseTiming::class.java)?.receivedElapsedMillis
             }
         }
-        return body.copy(serverTime = serverTime)
+        return body.copy(serverTime = serverTime, responseTiming = ru.finassist.pf.core.common.time.ResponseTiming(serverTime, receivedElapsed))
     }
 
     override fun streamPhoneVerification(verificationToken: String): Flow<PhoneVerificationStatusEvent> =
@@ -143,10 +147,10 @@ internal class HttpAuthApi(private val service: AuthService, private val sse: Ss
         }
 
     override suspend fun register(key: IdempotencyKey, request: RegisterRequest): RegisterResponse =
-        call { service.register(key.value, request) }
+        call { service.register(key.value, request, key.replayWindow) }
 
     override suspend fun refreshTokens(key: IdempotencyKey, refreshToken: String): TokenPair =
-        call { service.refreshTokens(key.value, RefreshTokenRequest(refreshToken)) }
+        call { service.refreshTokens(key.value, RefreshTokenRequest(refreshToken), key.replayWindow) }
 
     override suspend fun logout(accessToken: String, refreshToken: String) {
         call { service.logout("Bearer $accessToken", RefreshTokenRequest(refreshToken)) }
@@ -157,8 +161,8 @@ internal class HttpAuthApi(private val service: AuthService, private val sse: Ss
 }
 
 internal class HttpProfileApi(private val service: ProfileService) : ProfileApi {
-    override suspend fun getProfile(): Profile = call { service.getProfile() }
-    override suspend fun updateProfile(update: ProfileUpdate): Profile = call { service.updateProfile(update) }
+    override suspend fun getProfile(): Profile = call { service.getProfile(currentCoroutineContext()[RequestOwner]) }
+    override suspend fun updateProfile(update: ProfileUpdate): Profile = call { service.updateProfile(update, currentCoroutineContext()[RequestOwner]) }
     override suspend fun deleteAccount() { call { service.deleteAccount() } }
     override suspend fun grantAssistantConsent(grant: AssistantConsentGrant): Profile = call { service.grantAssistantConsent(grant) }
     override suspend fun revokeAssistantConsent() { call { service.revokeAssistantConsent() } }
@@ -176,7 +180,7 @@ internal class HttpStatementsApi(private val service: StatementsService, private
             }
         }
         val part = MultipartBody.Part.createFormData("file", file.name, body)
-        return call { service.uploadStatement(key.value, part) }
+        return call { service.uploadStatement(key.value, part, key.replayWindow) }
     }
 
     override fun streamProgress(uploadId: String): Flow<ImportEvent> =
@@ -186,7 +190,7 @@ internal class HttpStatementsApi(private val service: StatementsService, private
                 "complete" -> emit(ImportEvent.Complete(decode(ImportResult.serializer(), event.data)))
                 "error" -> {
                     val err = decode(StreamErrorPayload.serializer(), event.data)
-                    emit(ImportEvent.Error(err.code, err.message))
+                    emit(ImportEvent.Error(err.code, err.message, err.presentation))
                 }
             }
         }
@@ -249,7 +253,7 @@ internal class HttpAssistantApi(private val service: AssistantService, private v
     override suspend fun listMessages(limit: Int?, beforeId: String?): MessagesList =
         call { service.listMessages(limit, beforeId) }
 
-    override suspend fun ask(key: IdempotencyKey, request: AskRequest): AskResponse = call { service.ask(key.value, request) }
+    override suspend fun ask(key: IdempotencyKey, request: AskRequest): AskResponse = call { service.ask(key.value, request, key.replayWindow) }
 
     override fun streamAnswer(answerId: String): Flow<AnswerEvent> =
         sse.open("v1/assistant/messages/$answerId/events").map { event ->
@@ -266,18 +270,31 @@ internal class HttpAssistantApi(private val service: AssistantService, private v
         }
 
     override suspend fun retry(key: IdempotencyKey, answerId: String): RetryResponse =
-        call { service.retry(key.value, answerId) }
+        call { service.retry(key.value, answerId, key.replayWindow) }
 
     override suspend fun getLimit(): AssistantLimit = call { service.getLimit() }
 }
 
 /** `error` event payload shared by the verification and import streams. */
 @kotlinx.serialization.Serializable
-internal data class StreamErrorPayload(val code: String, val message: String)
+internal data class StreamErrorPayload(
+    val code: String,
+    val message: String,
+    val userMessage: ru.finassist.pf.core.common.error.UserMessage = ru.finassist.pf.core.common.error.UserMessage.Absent,
+    val severity: ru.finassist.pf.core.common.error.ErrorSeverity = ru.finassist.pf.core.common.error.ErrorSeverity.ERROR,
+) {
+    val presentation get() = ru.finassist.pf.core.common.error.ErrorPresentation(userMessage, severity)
+}
 
 private fun streamError(data: String): AppError {
     val payload = runCatching { decode(StreamErrorPayload.serializer(), data) }.getOrNull()
-    return AppError.Api(code = payload?.code ?: ErrorCodes.INTERNAL_ERROR, httpStatus = 200, message = payload?.message)
+    val code = payload?.code ?: ErrorCodes.INTERNAL_ERROR
+    return AppError.Api(code = code, httpStatus = 200, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+        code = code, httpStatus = 200,
+        presentation = payload?.presentation ?: ru.finassist.pf.core.common.error.ErrorPresentation(),
+        context = ru.finassist.pf.core.common.error.ErrorContext.GENERIC_EVENT,
+        metadata = runCatching { ApiJson.parseToJsonElement(data) as kotlinx.serialization.json.JsonObject }.getOrNull().orEmpty(),
+    ))
 }
 
 internal class HttpPfApi(

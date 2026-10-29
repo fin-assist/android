@@ -73,8 +73,11 @@ class StatementPickerTest {
     }
 
     private fun signInWithExistingAccount() {
+        compose.waitForTag("auth.phone.document")
+        compose.onNodeWithTag("auth.phone.age").performScrollTo().performClick()
+        compose.onNodeWithTag("auth.phone.consent").performScrollTo().performClick()
         compose.waitForTag("auth.phone.input")
-        compose.onNodeWithTag("auth.phone.input").performTextInput(EXISTING_PHONE)
+        compose.onNodeWithTag("auth.phone.input").performScrollTo().performTextInput(EXISTING_PHONE)
         // Submit through the keyboard's «Готово» (the same `onSubmit` as «Продолжить»), not a click: typing focuses
         // the field, the keyboard slides in and the sign-in screen (`imePadding`) moves the button up with it. A click
         // computed during that animation lands where the button was and is dropped — FIN-63, run 38304375031: the

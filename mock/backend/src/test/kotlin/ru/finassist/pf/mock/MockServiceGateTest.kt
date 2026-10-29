@@ -7,6 +7,9 @@ import kotlinx.coroutines.runBlocking
 import ru.finassist.pf.core.common.availability.ClientVersion
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorSeverity
+import ru.finassist.pf.core.common.error.UserMessage
 import ru.finassist.pf.core.common.time.SystemClock
 import java.time.OffsetDateTime
 import kotlin.test.Test
@@ -17,14 +20,18 @@ import kotlin.test.assertIs
 /** The fake server answers like the real one about the client version and maintenance (FIN-20, FIN-22). */
 class MockServiceGateTest {
     private val gate = ServiceGate()
+    private val updatePresentation = ErrorPresentation(
+        UserMessage.from("Обновите приложение, чтобы продолжить"), ErrorSeverity.ERROR,
+    )
     private fun backend(config: MockConfig) =
         MockBackend(config.copy(networkDelayMs = 0), SystemClock(), clientVersion = ClientVersion("0.2.7", 41), gate = gate).also { it.ready.complete(Unit) }
 
     @Test fun `a version below the minimum is told to update, an equal one passes`() = runBlocking<Unit> {
         backend(MockConfig(minVersion = "0.2.7")).simulateNetwork()
         assertEquals(ServiceGate.State.Open, gate.state.value)
-        assertFailsWith<AppError.UpdateRequired> { backend(MockConfig(minVersion = "0.3.0")).simulateNetwork() }
-        assertEquals(ServiceGate.State.UpdateRequired(), gate.state.value)
+        val error = assertFailsWith<AppError.UpdateRequired> { backend(MockConfig(minVersion = "0.3.0")).simulateNetwork() }
+        assertEquals(updatePresentation, error.presentation)
+        assertEquals(ServiceGate.State.UpdateRequired(presentation = updatePresentation), gate.state.value)
     }
 
     @Test fun `maintenance comes first and ends with the first request after it`() = runBlocking<Unit> {
@@ -47,8 +54,9 @@ class MockServiceGateTest {
 
         b.config = b.config.copy(maintenance = false)
         // The same flow collected again is the next opening: now the version.
-        assertFailsWith<AppError.UpdateRequired> { opening.toList() }
-        assertEquals(ServiceGate.State.UpdateRequired(), gate.state.value)
+        val error = assertFailsWith<AppError.UpdateRequired> { opening.toList() }
+        assertEquals(updatePresentation, error.presentation)
+        assertEquals(ServiceGate.State.UpdateRequired(presentation = updatePresentation), gate.state.value)
     }
 
     @Test fun `an opening that passes ends the maintenance the gate shows`() = runBlocking<Unit> {

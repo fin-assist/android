@@ -66,13 +66,7 @@ internal object Exclusions {
             "limits (RATE_LIMITED of 1.1 «номер занят» and of plain calls; only the 429 of a stream re-open exists, FIN-170)"
 
     val codes: List<Code> = listOf(
-        Code(
-            "TOKEN_EXPIRED",
-            "a registration token of the fake backend never expires (api.md 1.3: 15 minutes after the call); the consent screen " +
-                "already turns any 401 into «start again», the new path needs its UI flow",
-            "proposed: [Android] fake backend: registration token expires after 15 minutes (TOKEN_EXPIRED)",
-        ),
-        Code("INTERNAL_ERROR", "the fake backend never fails with 500; `offline` is its only failure switch", ISSUE_FAILURES),
+        Code("REQUEST_TOO_LARGE", "BFF-only raw HTTP JSON byte limit; the in-process mock has no HTTP body or Content-Encoding", "FIN-339"),
         Code(
             "PROCESSING_FAILED",
             "no statement fails to import in the fake backend: a file that passes the checks of 3.2 always imports; the 3-minute " +
@@ -87,18 +81,6 @@ internal object Exclusions {
         Behaviour(
             "retry-error-order",
             "retryAnswer checks RETRY_NOT_ALLOWED (422) before the consent and the limit (403), api.md «Ошибки» has 403 first; $FIN_170_FILES",
-            "proposed: [Android] fake backend: idempotency and error order of statements and assistant",
-        ),
-        Behaviour(
-            "idempotency-conflict-statements-assistant",
-            "uploadStatement, askAssistant, retryAnswer do not compare the body of a repeat: the same key with another file or question " +
-                "gets the stored response, not 409 IDEMPOTENCY_CONFLICT (auth endpoints do, FIN-123); $FIN_170_FILES",
-            "proposed: [Android] fake backend: idempotency and error order of statements and assistant",
-        ),
-        Behaviour(
-            "idempotency-stored-errors",
-            "the fake backend stores only 2xx under a key; api.md «Идемпотентность» stores 400, 413 and 422 too. Safe only with the body " +
-                "comparison of the entry above (a stored 422 must not answer another file)",
             "proposed: [Android] fake backend: idempotency and error order of statements and assistant",
         ),
         Behaviour(

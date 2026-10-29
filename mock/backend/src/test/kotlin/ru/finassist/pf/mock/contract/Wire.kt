@@ -13,6 +13,8 @@ import ru.finassist.pf.core.api.model.ApiErrorDetail
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.ErrorResponse
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.UserMessage
 
 /**
  * The HTTP side the in-process fake backend does not have, built for the contract tests only (FIN-123): what a
@@ -82,9 +84,11 @@ internal object Wire {
     fun <T> event(name: String, serializer: KSerializer<T>, data: T) = name to WireJson.encodeToString(serializer, data)
 
     /** The `{code, message}` payload of an `error` event (`StreamError`, `SseError`). */
-    fun errorEvent(code: String, message: String) = "error" to buildJsonObject {
+    fun errorEvent(code: String, message: String, presentation: ErrorPresentation = ErrorPresentation()) = "error" to buildJsonObject {
         put("code", code)
         put("message", message)
+        (presentation.userMessage as? UserMessage.Safe)?.let { put("user_message", it.text) }
+        put("severity", presentation.severity.name.lowercase())
     }.toString()
 
     fun error(op: Contract.Operation, path: String, e: AppError): Exchange {
@@ -124,7 +128,14 @@ internal object Wire {
             is AppError.Server -> Triple(e.httpStatus, ApiError(ErrorCodes.INTERNAL_ERROR, ErrorCodes.INTERNAL_ERROR), emptyMap())
             is AppError.Offline, is AppError.Unknown -> throw AssertionError("${op.id} $path: ${e::class.simpleName} is not a server response", e)
         }
-        return Exchange(op, path, status, WireJson.encodeToString(ErrorResponse.serializer(), ErrorResponse(error)), headers, code = error.code)
+        val rendered = error.copy(
+            userMessage = e.presentation.userMessage, severity = e.presentation.severity,
+            retryable = e.requestRetryable,
+        )
+        val datedHeaders = e.response?.timing?.serverDate?.let {
+            headers + ("Date" to java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME.format(it.atZone(java.time.ZoneOffset.UTC)))
+        } ?: headers
+        return Exchange(op, path, status, WireJson.encodeToString(ErrorResponse.serializer(), ErrorResponse(rendered)), datedHeaders, code = error.code)
     }
 
     private const val STREAM_TIMEOUT_MS = 10_000L

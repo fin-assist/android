@@ -12,6 +12,7 @@ import ru.finassist.pf.core.api.model.Message
 import ru.finassist.pf.core.api.model.MessageRole
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.mock.domain.DataChanges
+import ru.finassist.pf.core.common.error.ErrorPresentation
 import java.time.LocalDate
 import java.time.OffsetDateTime
 
@@ -43,6 +44,7 @@ class AssistantStore(val changes: DataChanges = DataChanges()) {
         var errorCode: AnswerErrorCode? = null
         /** The server's text of a failure (api.md 7.2, FIN-159). */
         var errorText: String? = null
+        var errorPresentation = ErrorPresentation()
         /** Whether a failure may be retried; null — stored before FIN-159, decided by the code ([retryAllowed]). */
         var retryable: Boolean? = null
         var charged: Boolean? = null
@@ -57,6 +59,7 @@ class AssistantStore(val changes: DataChanges = DataChanges()) {
                     status = AnswerStatus.FAILED
                     errorCode = event.event.code
                     errorText = event.event.text
+                    errorPresentation = event.event.presentation
                     retryable = event.event.retryable
                 }
                 else -> Unit
@@ -98,6 +101,7 @@ class AssistantStore(val changes: DataChanges = DataChanges()) {
             return Message(
                 id = id, role = MessageRole.ASSISTANT, status = status, errorCode = errorCode,
                 errorText = errorText, retryable = retryable,
+                errorUserMessage = errorPresentation.userMessage, errorSeverity = errorPresentation.severity,
                 charged = charged.takeIf { status == AnswerStatus.COMPLETE },
                 blocks = snap.blocks, chips = snap.chips.takeIf { status == AnswerStatus.COMPLETE },
                 source = snap.source.takeIf { status == AnswerStatus.COMPLETE }, createdAt = createdAt,
@@ -109,9 +113,10 @@ class AssistantStore(val changes: DataChanges = DataChanges()) {
     val questions = ArrayList<Message>()
     val answers = LinkedHashMap<String, Answer>()
     val usage = HashMap<LocalDate, Int>()
+    internal val offTopic = AssistantOffTopicPolicy()
 
     fun clear() {
-        questions.clear(); answers.clear(); usage.clear()
+        questions.clear(); answers.clear(); usage.clear(); offTopic.clear()
     }
 
     fun history(): List<Message> {

@@ -21,10 +21,17 @@ tags:
     visible:
       id: "auth.phone"
     timeout: 10000
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
 - tapOn:
     id: "auth.phone.input"
 - inputText: "9161234567"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
 - tapOn:
     id: "auth.phone.submit"
 - extendedWaitUntil:

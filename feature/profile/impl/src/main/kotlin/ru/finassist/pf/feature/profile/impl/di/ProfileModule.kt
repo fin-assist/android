@@ -1,6 +1,10 @@
 package ru.finassist.pf.feature.profile.impl.di
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.SavedStateHandle
+import kotlinx.coroutines.flow.filterNotNull
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import dagger.Binds
@@ -14,11 +18,14 @@ import ru.finassist.pf.feature.applock.api.AppLockRoutes
 import ru.finassist.pf.feature.assistant.api.AssistantRoutes
 import ru.finassist.pf.feature.profile.api.ProfileRoutes
 import ru.finassist.pf.feature.profile.api.TimeZoneSync
+import ru.finassist.pf.feature.profile.impl.data.AndroidBootCounter
+import ru.finassist.pf.feature.profile.impl.data.BootCounter
 import ru.finassist.pf.feature.profile.impl.data.DeviceZone
 import ru.finassist.pf.feature.profile.impl.data.SystemDeviceZone
 import ru.finassist.pf.feature.profile.impl.data.TimeZoneSyncImpl
 import ru.finassist.pf.feature.profile.impl.ui.ProfileActions
 import ru.finassist.pf.feature.profile.impl.ui.ProfileScreen
+import ru.finassist.pf.feature.profile.impl.ui.ProfileViewModel
 import ru.finassist.pf.feature.statements.api.StatementsRoutes
 import javax.inject.Inject
 
@@ -26,6 +33,10 @@ class ProfileEntry @Inject constructor() : FeatureEntry {
     override fun NavGraphBuilder.install(navigator: Navigator) {
         composable<ProfileRoutes.Home> { entry ->
             val handle = entry.savedStateHandle
+            val vm: ProfileViewModel = hiltViewModel()
+            LaunchedEffect(handle, vm) {
+                collectAssistantConsentResults(handle, vm::onConsentResult)
+            }
             ProfileScreen(
                 ProfileActions(
                     openHistory = { navigator.navigate(StatementsRoutes.History) },
@@ -40,8 +51,17 @@ class ProfileEntry @Inject constructor() : FeatureEntry {
                     handle.getStateFlow<String?>(AppLockRoutes.Confirm.RESULT_CONFIRMED, null).collect { value = it }
                 },
                 onPasscodeResultConsumed = { handle[AppLockRoutes.Confirm.RESULT_CONFIRMED] = null },
+                vm = vm,
             )
         }
+    }
+}
+
+/** Consume navigation results once; only the ViewModel decides which value confirms a context change. */
+internal suspend fun collectAssistantConsentResults(handle: SavedStateHandle, onResult: (String) -> Unit) {
+    handle.getStateFlow<String?>(AssistantRoutes.CONSENT_RESULT, null).filterNotNull().collect { result ->
+        handle[AssistantRoutes.CONSENT_RESULT] = null
+        onResult(result)
     }
 }
 
@@ -52,6 +72,8 @@ internal abstract class ProfileModule {
     abstract fun entry(impl: ProfileEntry): FeatureEntry
 
     @Binds abstract fun timeZoneSync(impl: TimeZoneSyncImpl): TimeZoneSync
+
+    @Binds abstract fun bootCounter(impl: AndroidBootCounter): BootCounter
 
     @Binds abstract fun deviceZone(impl: SystemDeviceZone): DeviceZone
 }

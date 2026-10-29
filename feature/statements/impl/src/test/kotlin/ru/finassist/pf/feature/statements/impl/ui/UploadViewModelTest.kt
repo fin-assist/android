@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
 import java.time.ZoneId
 import ru.finassist.pf.core.common.time.Clock
 import android.content.Context
@@ -7,6 +8,7 @@ import android.net.Uri
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -17,6 +19,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -78,6 +81,8 @@ class UploadViewModelTest {
         var currentConfig = config
         var configCalls = 0
         val keys: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+        /** `file.name` of every upload attempt, in the order of [keys]. */
+        val names: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
         /** Thrown by the next uploads, one each, before the file is accepted. */
         val uploadFailures = ArrayDeque<AppError>()
         /** While set, the upload waits for it: the request is «in flight». */
@@ -95,6 +100,7 @@ class UploadViewModelTest {
         }
         override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted {
             keys += key.value
+            names += file.name
             uploadGate?.await()
             if (offline) throw AppError.Offline()
             synchronized(uploadFailures) { uploadFailures.removeFirstOrNull() }?.let { throw it }
@@ -144,7 +150,7 @@ class UploadViewModelTest {
     }
 
     private fun newViewModel(flags: StaticFlags = StaticFlags()) =
-        UploadViewModel(context, api, repository, flags, tracker, IdempotencyKeys(store), clock)
+        UploadViewModel(context, api, repository, flags, tracker, IdempotencyKeys(store), clock, ElapsedClock { dispatcher.scheduler.currentTime })
 
     @After fun tearDown() = Dispatchers.resetMain()
 
@@ -198,6 +204,8 @@ class UploadViewModelTest {
         assertEquals("operations_2026.ofx", assertIs<UploadPhase.Busy>(vm.state.value.phase).fileName)
         assertEquals(2, api.keys.size)
         assertEquals(api.keys[0], api.keys[1])
+        // The server compares the name too (FIN-297): the retry sends the name of the first attempt.
+        assertEquals(listOf(name, name), api.names)
     }
 
     @Test fun `retry without a picked file does nothing`() {
@@ -301,7 +309,7 @@ class UploadViewModelTest {
         api.uploadFailures += AppError.Api(ErrorCodes.WRONG_FORMAT, 400)
         vm.onFilePicked(uri)
         await("the rejection") { it.phase is UploadPhase.Error }
-        assertEquals(UploadPhase.Error(ErrorCodes.WRONG_FORMAT, name, config), vm.state.value.phase)
+        assertEquals(UploadPhase.Error(ErrorCodes.WRONG_FORMAT, name, config, presentation = ru.finassist.pf.core.common.error.ErrorPresentation()), vm.state.value.phase)
         assertEquals(mapOf("code" to ErrorCodes.WRONG_FORMAT), tracker.events.last { it.first == Events.STATEMENTS_UPLOAD_FAILED }.second)
 
         vm.backToGuide()
@@ -316,13 +324,218 @@ class UploadViewModelTest {
         api.uploadFailures += AppError.Server(500)
         vm.onFilePicked(uri)
         await("the failure") { it.phase is UploadPhase.Error }
-        assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, name, config), vm.state.value.phase)
+        assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, name, config, presentation = ru.finassist.pf.core.common.error.ErrorPresentation()), vm.state.value.phase)
 
         vm.backToGuide()
         awaitIdle()
         vm.onFilePicked(uri)
         awaitAccepted()
         assertEquals(api.keys[0], api.keys[1])
+    }
+
+    @Test fun `explicit REST retry permission reuses the original upload key even for an unknown 400`() {
+        api.uploadFailures += AppError.Api("FUTURE_UPLOAD_ERROR", 400,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_UPLOAD_ERROR", 400, requestRetryable = true))
+        vm.onFilePicked(uri)
+        await("the controlled refusal") { it.phase is UploadPhase.Error }
+        awaitIdle()
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        assertEquals(2, api.keys.size)
+        assertEquals(api.keys.first(), api.keys.last(), "retry=true applies to the same original key, not a fresh upload")
+    }
+
+    private fun uploadBodyHash(fileName: String = name, text: String = "OFXHEADER:100"): String {
+        val content = java.security.MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
+        return java.security.MessageDigest.getInstance("SHA-256").digest(content + fileName.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
+
+    @Test fun `a legacy content-only pending action cannot silently become a fresh named action`() {
+        val contentHash = java.security.MessageDigest.getInstance("SHA-256").digest("OFXHEADER:100".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val legacyAction = "statements.upload:$contentHash"
+        val currentAction = "statements.upload:${uploadBodyHash()}"
+        val keys = IdempotencyKeys(store)
+        val old = kotlinx.coroutines.runBlocking { keys.keyFor(legacyAction) }
+        vm.onFilePicked(uri)
+        await("legacy unknown outcome is preserved") { it.phase is UploadPhase.RecoveryRequired }
+        awaitIdle()
+        assertTrue(api.keys.isEmpty())
+        assertEquals(old, kotlinx.coroutines.runBlocking { keys.pendingKey(legacyAction) })
+        assertNull(kotlinx.coroutines.runBlocking { keys.pendingKey(currentAction) }, "upgrade must not create a fresh alias")
+        vm.startNewUpload()
+        awaitAccepted()
+        assertTrue(api.keys.single() != old.value)
+        assertNull(kotlinx.coroutines.runBlocking { keys.pendingKey(legacyAction) })
+    }
+
+    @Test fun `manual retry preserves the picked name when the document provider changes its display name`() {
+        var displayedName = name
+        val provider = object : android.content.ContentProvider() {
+            override fun onCreate() = true
+            override fun getType(uri: Uri): String = "application/x-ofx"
+            override fun insert(uri: Uri, values: android.content.ContentValues?): Uri? = null
+            override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?) = 0
+            override fun update(uri: Uri, values: android.content.ContentValues?, selection: String?, selectionArgs: Array<out String>?) = 0
+            override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): android.database.Cursor =
+                android.database.MatrixCursor(arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)).apply { addRow(arrayOf(displayedName)) }
+        }
+        org.robolectric.shadows.ShadowContentResolver.registerProviderInternal("test", provider)
+        api.uploadFailures += AppError.Server(500)
+        vm.onFilePicked(uri)
+        await("the first named attempt fails") { it.phase is UploadPhase.Error }
+        awaitIdle()
+        displayedName = "provider_renamed.ofx"
+        vm.retryUpload()
+        awaitAccepted()
+        assertEquals(listOf(name, name), api.names)
+        assertEquals(api.keys.first(), api.keys.last())
+    }
+
+    @Test fun `manual retry cannot silently send changed file content under a new action`() {
+        api.uploadFailures += AppError.Server(500)
+        vm.onFilePicked(uri)
+        await("the uncertain failure") { it.phase is UploadPhase.Error }
+        awaitIdle()
+        val original = api.keys.single()
+        shadowOf(context.contentResolver).registerInputStreamSupplier(uri) { ByteArrayInputStream("OFXHEADER:100\n".toByteArray()) }
+        vm.retryUpload()
+        await("changed content requires explicit new intent") { it.phase is UploadPhase.RecoveryRequired }
+        awaitIdle()
+        assertEquals(listOf(original), api.keys)
+        vm.startNewUpload()
+        awaitAccepted()
+        assertEquals(2, api.keys.size)
+        assertTrue(api.keys.last() != original)
+    }
+
+    @Test fun `a restored upload UUID is kept without resending the same file`() {
+        val hash = uploadBodyHash()
+        val keys = IdempotencyKeys(store)
+        val oldKey = kotlinx.coroutines.runBlocking { keys.keyFor("statements.upload:$hash") }
+        vm.onFilePicked(uri)
+        await("unsafe replay blocked") { it.phase is UploadPhase.RecoveryRequired }
+        awaitIdle()
+        assertTrue(api.keys.isEmpty())
+        assertFalse(vm.state.value.uploadRetryReady)
+        assertEquals(oldKey, kotlinx.coroutines.runBlocking { keys.keyFor("statements.upload:$hash") })
+        vm.startNewUpload()
+        vm.startNewUpload() // double tap cannot create two new logical uploads
+        awaitAccepted()
+        assertEquals(1, api.keys.size)
+        assertTrue(api.keys.single() != oldKey.value)
+        assertEquals(name, assertIs<UploadPhase.Busy>(vm.state.value.phase).fileName)
+    }
+
+    @Test fun `queued initial retry readiness cannot enable an unknown upload key`() {
+        // Cache hits need not suspend. Keep storage immediate and queue Main so a newly launched readiness
+        // collector runs only after the upload continuation has published its unknown-outcome state.
+        val cached = object : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+            private var preferences: androidx.datastore.preferences.core.Preferences = androidx.datastore.preferences.core.emptyPreferences()
+            override val data get() = flowOf(preferences)
+            override suspend fun updateData(transform: suspend (androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences): androidx.datastore.preferences.core.Preferences =
+                transform(preferences).also { preferences = it }
+        }
+        val action = "statements.upload:${uploadBodyHash()}"
+        val keys = IdempotencyKeys(cached)
+        val original = kotlinx.coroutines.runBlocking { keys.keyFor(action) }
+        Dispatchers.setMain(StandardTestDispatcher(dispatcher.scheduler))
+        vm = UploadViewModel(context, api, repository, StaticFlags(), tracker, IdempotencyKeys(cached), clock,
+            ElapsedClock { dispatcher.scheduler.currentTime })
+        dispatcher.scheduler.runCurrent()
+
+        vm.onFilePicked(uri)
+        advanceUntil("the unknown-key recovery") { vm.state.value.phase is UploadPhase.RecoveryRequired }
+        dispatcher.scheduler.runCurrent()
+        assertFalse(vm.state.value.uploadRetryReady, "a ready REST gate is not proof of a replayable key")
+        vm.retryUpload()
+        dispatcher.scheduler.runCurrent()
+        assertTrue(api.keys.isEmpty())
+        assertEquals(original, kotlinx.coroutines.runBlocking { keys.pendingKey(action) })
+
+        vm.startNewUpload()
+        advanceUntil("the explicitly new upload") { (vm.state.value.phase as? UploadPhase.Busy)?.uploadId == "u1" }
+        dispatcher.scheduler.runCurrent()
+        assertTrue(vm.state.value.uploadRetryReady, "the new proven action must observe its own readiness")
+        assertEquals(1, api.keys.size)
+        assertTrue(api.keys.single() != original.value)
+    }
+
+    @Test fun `expired upload proof shows unknown outcome and renews the key only on explicit new upload`() {
+        api.offline = true
+        vm.onFilePicked(uri)
+        await("the lost response") { it.uploadOffline }
+        awaitIdle()
+        val originalKey = api.keys.single()
+        dispatcher.scheduler.advanceTimeBy(24L * 60 * 60 * 1000)
+        dispatcher.scheduler.runCurrent()
+        api.offline = false
+        vm.retryUpload()
+        await("unknown previous outcome") { it.phase is UploadPhase.RecoveryRequired }
+        awaitIdle()
+        assertEquals(listOf(originalKey), api.keys)
+        assertIs<UploadPhase.RecoveryRequired>(vm.state.value.phase)
+        vm.startNewUpload()
+        awaitAccepted()
+        assertEquals(2, api.keys.size)
+        assertTrue(api.keys.last() != originalKey)
+    }
+
+    @Test fun `the same content under another name is another upload with its own key (FIN-340)`() {
+        // The server compares the content and the name under a key: reusing the key for a renamed copy would be
+        // 409 IDEMPOTENCY_CONFLICT. Every attempt of one pick sends the name it was picked with.
+        val renamed: Uri = Uri.parse("content://test/operations_2026_copy.ofx")
+        shadowOf(context.contentResolver).registerInputStreamSupplier(renamed) { ByteArrayInputStream("OFXHEADER:100".toByteArray()) }
+        api.uploadFailures += AppError.Server(500)
+        vm.onFilePicked(uri)
+        await("the failure") { it.phase is UploadPhase.Error }
+
+        vm.backToGuide()
+        awaitIdle()
+        vm.onFilePicked(renamed)
+        awaitAccepted()
+        assertTrue(api.keys[0] != api.keys[1])
+        assertEquals(listOf("operations_2026.ofx", "operations_2026_copy.ofx"), api.names)
+        assertEquals("operations_2026_copy.ofx", assertIs<UploadPhase.Busy>(vm.state.value.phase).fileName)
+    }
+
+    @Test fun `after process death the same file and name keep an unknown key while a renamed copy is a new action (FIN-340)`() {
+        // A store of its own over one file: the first «process» ends by cancelling its scope, the second reads the file again.
+        val file = File(context.cacheDir, "upload-death-${System.nanoTime()}.preferences_pb")
+        val firstScope = kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+        val firstStore = PreferenceDataStoreFactory.create(scope = firstScope) { file }
+        vm = UploadViewModel(context, api, StatementsRepositoryImpl(firstStore, NoTokens), StaticFlags(), tracker, IdempotencyKeys(firstStore), clock, ElapsedClock { dispatcher.scheduler.currentTime })
+        api.uploadFailures += AppError.Server(500)
+        vm.onFilePicked(uri)
+        await("the failure") { it.phase is UploadPhase.Error }
+        awaitIdle()
+        kotlinx.coroutines.runBlocking { firstScope.coroutineContext[kotlinx.coroutines.Job]!!.cancelAndJoin() }
+
+        val secondStore = PreferenceDataStoreFactory.create { file }
+        vm = UploadViewModel(context, api, StatementsRepositoryImpl(secondStore, NoTokens), StaticFlags(), tracker, IdempotencyKeys(secondStore), clock, ElapsedClock { dispatcher.scheduler.currentTime })
+        val renamed: Uri = Uri.parse("content://test/operations_2026_copy.ofx")
+        shadowOf(context.contentResolver).registerInputStreamSupplier(renamed) { ByteArrayInputStream("OFXHEADER:100".toByteArray()) }
+        api.uploadFailures += AppError.Server(500)
+        vm.onFilePicked(renamed)
+        await("the copy's failure") { it.phase is UploadPhase.Error }
+        awaitIdle()
+        vm.backToGuide()
+        vm.onFilePicked(uri)
+        await("the original action has unknown age") { it.phase is UploadPhase.RecoveryRequired }
+        awaitIdle()
+        assertEquals(listOf(name, "operations_2026_copy.ofx"), api.names)
+        val retained = kotlinx.coroutines.runBlocking { IdempotencyKeys(secondStore).pendingKey("statements.upload:${uploadBodyHash()}") }
+        assertEquals(api.keys[0], retained?.value)
+        assertNull(retained?.replayWindow)
+        vm.retryUpload()
+        awaitIdle()
+        assertEquals(2, api.keys.size, "restoration does not authorize another POST")
+        vm.startNewUpload()
+        awaitAccepted()
+        assertEquals(listOf(name, "operations_2026_copy.ofx", name), api.names)
+        assertTrue(api.keys[0] != api.keys[2], "only explicit new intent replaces the retained unknown-age UUID")
+        assertTrue(api.keys[1] != api.keys[0], "a renamed copy is another action")
     }
 
     @Test fun `an accepted file is a final answer - the same file later is a new upload`() {
@@ -384,7 +597,7 @@ class UploadViewModelTest {
         api.streams += flowOf(ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, "failed"))
         vm.onFilePicked(uri)
         await("the parsing error") { it.phase is UploadPhase.Error }
-        assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, name, config), vm.state.value.phase)
+        assertEquals(UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, name, config, presentation = ru.finassist.pf.core.common.error.ErrorPresentation()), vm.state.value.phase)
         assertNull(vm.state.value.doneUploadId)
     }
 
@@ -402,10 +615,36 @@ class UploadViewModelTest {
         api.streams += flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) }
         vm.onFilePicked(uri)
         await("the error") { it.phase is UploadPhase.Error }
-        assertEquals(UploadPhase.Error(ErrorCodes.NOT_FOUND, name, config), vm.state.value.phase)
+        assertEquals(UploadPhase.Error(ErrorCodes.NOT_FOUND, name, config, presentation = ru.finassist.pf.core.common.error.ErrorPresentation()), vm.state.value.phase)
     }
 
     // ---- maintenance and an unsupported version (FIN-177) ----
+
+    @Test fun `false maintenance resumes an existing upload stream once after its original wait`() {
+        api.streams += flow { throw AppError.Maintenance(null, 15,
+            ru.finassist.pf.core.common.error.ErrorResponseInfo("MAINTENANCE", 503, requestRetryable = false,
+                timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0))) }
+        api.streams += flowOf(ImportEvent.Complete(importResult()))
+        vm.onFilePicked(uri)
+        awaitAccepted()
+        await("known maintenance interruption") { Events.STATEMENTS_UPLOAD_INTERRUPTED in tracker.names() }
+        assertIs<UploadPhase.Busy>(vm.state.value.phase)
+        vm.stopWatching()
+        vm.watch()
+        dispatcher.scheduler.advanceTimeBy(14_000)
+        dispatcher.scheduler.runCurrent()
+        assertEquals(1, api.streamOpens.get())
+        vm.stopWatching()
+        vm.watch()
+        dispatcher.scheduler.advanceTimeBy(999)
+        dispatcher.scheduler.runCurrent()
+        assertEquals(1, api.streamOpens.get())
+        dispatcher.scheduler.advanceTimeBy(1)
+        dispatcher.scheduler.runCurrent()
+        await("the existing upload result") { it.doneUploadId == "u1" }
+        assertEquals(2, api.streamOpens.get())
+        assertEquals(1, api.keys.size, "only the read resumes; original upload POST is not resent")
+    }
 
     @Test fun `maintenance on re-opening the stream is not a parsing failure - the result shows once the screen is back`() {
         api.streams += flowOf(ImportEvent.Progress(ImportProgress(ImportStage.PARSING, 30)))
@@ -503,10 +742,11 @@ class UploadViewModelTest {
         var maxActive = 0
         fun tracked(f: Flow<ImportEvent>) = f.onStart { synchronized(this) { active++; maxActive = maxOf(maxActive, active) } }
             .onCompletion { synchronized(this) { active-- } }
-        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        val limitedAt = java.util.Collections.synchronizedList(mutableListOf<Long>())
+        val limited = { tracked(flow { limitedAt += dispatcher.scheduler.currentTime; throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
         api.streams += tracked(flowOf(ImportEvent.Progress(ImportProgress(ImportStage.PARSING, 30))))
         api.streams += limited()
-        // The screen came back: the view model opens the stream itself, the server still says 429.
+        // The next opening after the retained wait gets a fresh 429 with its own wait.
         api.streams += limited()
         api.streams += tracked(flowOf(ImportEvent.Complete(importResult())))
         vm.onFilePicked(uri)
@@ -515,14 +755,26 @@ class UploadViewModelTest {
         // The re-open pause starts only once the first stream has ended on the IO thread: move the test clock on
         // until it has, not once (a single step could run before the pause was scheduled).
         advanceUntil("the drop was re-opened and got 429") { api.streamOpens.get() == 2 }
+        dispatcher.scheduler.advanceTimeBy(4_000)
+        dispatcher.scheduler.runCurrent()
         vm.stopWatching()
         vm.watch()
-        await("the stream opened again") { api.streamOpens.get() == 3 }
+        assertEquals(2, api.streamOpens.get(), "resume must not bypass the retained Retry-After")
         assertIs<UploadPhase.Busy>(vm.state.value.phase, "a 429 on opening it again is not an error")
-        dispatcher.scheduler.advanceTimeBy(59_000)
-        dispatcher.scheduler.runCurrent()
-        assertEquals(3, api.streamOpens.get(), "not before Retry-After")
-        advanceUntil("the result") { vm.state.value.doneUploadId == "u1" }
+        fun advanceTo(target: Long) {
+            dispatcher.scheduler.advanceTimeBy(target - dispatcher.scheduler.currentTime)
+            dispatcher.scheduler.runCurrent()
+        }
+        val firstRefusal = limitedAt.single()
+        advanceTo(firstRefusal + 59_999)
+        assertEquals(2, api.streamOpens.get(), "not before the original Retry-After")
+        advanceTo(firstRefusal + 62_001)
+        await("the retained wait ends") { api.streamOpens.get() == 3 }
+        val secondRefusal = limitedAt.last()
+        advanceTo(secondRefusal + 59_999)
+        assertEquals(3, api.streamOpens.get(), "a fresh 429 gets its own Retry-After")
+        advanceTo(secondRefusal + 62_001)
+        await("the result") { vm.state.value.doneUploadId == "u1" }
         assertEquals(4, api.streamOpens.get())
         assertTrue(Events.STATEMENTS_UPLOAD_FAILED !in tracker.names())
         assertEquals(1, maxActive, "never two streams at once")

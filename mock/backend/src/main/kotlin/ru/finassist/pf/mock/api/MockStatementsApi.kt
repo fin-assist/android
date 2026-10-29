@@ -45,13 +45,17 @@ import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.core.common.time.toApiMonth
+import ru.finassist.pf.mock.MockErrorCatalog
 import ru.finassist.pf.mock.MockBackend
+import ru.finassist.pf.mock.apiError
+import ru.finassist.pf.mock.idempotentResponse
 import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.mock.domain.AnalyticsEngine
 import ru.finassist.pf.mock.domain.Catalog
 import ru.finassist.pf.mock.domain.Coverage
 import ru.finassist.pf.mock.domain.Operation
 import ru.finassist.pf.mock.domain.ServerTexts
+import ru.finassist.pf.mock.domain.Sha256
 import ru.finassist.pf.mock.ofx.OfxCheck
 import ru.finassist.pf.mock.ofx.OfxDocument
 import ru.finassist.pf.mock.ofx.OfxParser
@@ -99,13 +103,17 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted {
         backend.simulateNetwork()
         backend.requireSession()
-        return backend.idempotent("statements.upload:${key.value}") {
-            if (file.size > backend.config.maxFileSizeBytes) throw AppError.Api(ErrorCodes.FILE_TOO_LARGE, 413)
-            val text = file.open().use { it.readBytes() }.toString(Charsets.UTF_8)
+        // api.md «Идемпотентность», 3.2: 413 FILE_TOO_LARGE comes before the key is looked at and is never stored
+        // under it — the service answers it without reading the file, so a repeat with the same key gets it again.
+        if (file.size > backend.config.maxFileSizeBytes) throw backend.apiError(ErrorCodes.FILE_TOO_LARGE, 413)
+        // Every other answer compares the key at the end of the file, by its content and its name.
+        val content = file.open().use { it.readBytes() }
+        return backend.idempotentResponse("statements.upload:${key.value}", request = UploadBody.of(content, file.name)) {
+            val text = content.toString(Charsets.UTF_8)
             when (val check = OfxParser.check(text)) {
-                OfxCheck.Csv -> throw AppError.Api(ErrorCodes.CSV_NOT_ACCEPTED, 422)
-                OfxCheck.NotOfx -> throw AppError.Api(ErrorCodes.WRONG_FORMAT, 422)
-                is OfxCheck.WrongBank -> throw AppError.Api(ErrorCodes.WRONG_BANK, 422, message = "bank ${check.bankId}")
+                OfxCheck.Csv -> throw backend.apiError(ErrorCodes.CSV_NOT_ACCEPTED, 422)
+                OfxCheck.NotOfx -> throw backend.apiError(ErrorCodes.WRONG_FORMAT, 422)
+                is OfxCheck.WrongBank -> throw backend.apiError(ErrorCodes.WRONG_BANK, 422, message = "bank ${check.bankId}")
                 OfxCheck.Ok -> Unit
             }
             val doc = OfxParser.parse(text)
@@ -171,11 +179,11 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             upload.events.value = ImportEvent.Complete(result)
         } catch (e: TimeoutCancellationException) {
             // Caught before CancellationException, its parent: a timeout is a failed parse, not a cancel by the user.
-            failWith(upload, ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, "parsing did not finish in time"))
+            failWith(upload, ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, "parsing did not finish in time", MockErrorCatalog.presentation(ErrorCodes.PROCESSING_FAILED)))
         } catch (e: kotlinx.coroutines.CancellationException) {
-            failWith(upload, ImportEvent.Error(ErrorCodes.CANCELLED, "cancelled by user"))
+            failWith(upload, ImportEvent.Error(ErrorCodes.CANCELLED, "cancelled by user", MockErrorCatalog.presentation(ErrorCodes.CANCELLED)))
         } catch (e: Exception) {
-            failWith(upload, ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, e.message ?: "failed"))
+            failWith(upload, ImportEvent.Error(ErrorCodes.PROCESSING_FAILED, e.message ?: "failed", MockErrorCatalog.presentation(ErrorCodes.PROCESSING_FAILED)))
         } finally {
             cancelled.remove(upload.id)
         }
@@ -296,7 +304,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         // Every opening goes through droppable: maintenance and the client version come before 404 (api.md «Ошибки»).
         val upload = backend.uploads.firstOrNull { it.id == uploadId }
             ?: return backend.droppable(
-                failures[uploadId]?.let { flowOf(it) } ?: kotlinx.coroutines.flow.flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) },
+                failures[uploadId]?.let { flowOf(it) } ?: kotlinx.coroutines.flow.flow { throw backend.apiError(ErrorCodes.NOT_FOUND, 404) },
             ) { true }
         return backend.droppable(
             upload.events.transformWhile { event ->
@@ -376,7 +384,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         backend.simulateNetwork()
         backend.requireSession()
         return backend.mutex.withLock {
-            val upload = backend.uploads.firstOrNull { it.id == uploadId } ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+            val upload = backend.uploads.firstOrNull { it.id == uploadId } ?: throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
             UnreadLinesList(upload.openUnreadLines.map { toDto(upload, it) })
         }
     }
@@ -403,4 +411,17 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             else -> "строка оборвана"
         },
     )
+}
+
+/**
+ * The body of 3.2 as the idempotency key compares it: the request hash of grpc-api.md 6,
+ * `SHA-256(SHA-256(content) ‖ UTF-8 file_name)`, with the name as sent, without normalisation (api.md
+ * «Идемпотентность»: the same file under another name is another body). The idempotency cache keeps this
+ * 64-character fingerprint, never the file itself.
+ */
+internal data class UploadBody(val requestHash: String) {
+    companion object {
+        fun of(content: ByteArray, name: String) =
+            UploadBody(Sha256.hex(Sha256.digest(Sha256.digest(content), name.encodeToByteArray())))
+    }
 }

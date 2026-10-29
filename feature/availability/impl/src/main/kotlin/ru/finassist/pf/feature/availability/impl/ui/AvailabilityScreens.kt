@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.availability.impl.ui
 
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.UserMessage
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -60,16 +63,20 @@ internal class AvailabilityScreensImpl @Inject constructor() : AvailabilityScree
         val vm: AvailabilityViewModel = hiltViewModel()
         val state by vm.gate.state.collectAsStateWithLifecycle()
         val checking by vm.checking.collectAsStateWithLifecycle()
+        val canCheck by vm.canCheck.collectAsStateWithLifecycle()
         val context = LocalContext.current
         when (val s = state) {
             ServiceGate.State.Open -> Unit
             is ServiceGate.State.UpdateRequired -> UpdateContent(
                 onUpdate = { openAppPage(context) },
+                presentation = s.presentation,
                 onSupport = { writeToSupport(context, "Обновление приложения") },
             )
             is ServiceGate.State.Maintenance -> MaintenanceContent(
                 until = s.until,
+                presentation = s.presentation,
                 checking = checking,
+                canCheck = canCheck,
                 onCheck = vm::checkNow,
                 onSupport = { writeToSupport(context, "Технические работы") },
             )
@@ -79,7 +86,8 @@ internal class AvailabilityScreensImpl @Inject constructor() : AvailabilityScree
 
 /** Mockup `ForceUpdate`: the store is not named — the app is distributed through more than one. */
 @Composable
-internal fun UpdateContent(onUpdate: () -> Unit, onSupport: () -> Unit) = GateScreen(
+internal fun UpdateContent(onUpdate: () -> Unit, onSupport: () -> Unit, presentation: ErrorPresentation = ErrorPresentation()) = GateScreen(
+    presentation = presentation,
     tag = AvailabilityTags.UPDATE,
     tone = HeroTone.INFO,
     icon = PfIcons.DOWNLOAD,
@@ -94,7 +102,8 @@ internal fun UpdateContent(onUpdate: () -> Unit, onSupport: () -> Unit) = GateSc
 
 /** Mockups `Maintenance` and `MaintenanceNoTime` (without `error.until`). */
 @Composable
-internal fun MaintenanceContent(until: OffsetDateTime?, checking: Boolean, onCheck: () -> Unit, onSupport: () -> Unit) = GateScreen(
+internal fun MaintenanceContent(until: OffsetDateTime?, checking: Boolean, onCheck: () -> Unit, onSupport: () -> Unit, presentation: ErrorPresentation = ErrorPresentation(), canCheck: Boolean = true) = GateScreen(
+    presentation = presentation,
     tag = AvailabilityTags.MAINTENANCE,
     tone = HeroTone.WARNING,
     icon = PfIcons.CLOCK,
@@ -106,6 +115,7 @@ internal fun MaintenanceContent(until: OffsetDateTime?, checking: Boolean, onChe
     action = {
         PfButton(
             "Проверить сейчас", onClick = onCheck, variant = ButtonVariant.SECONDARY, block = true, busy = checking,
+            enabled = canCheck,
             modifier = Modifier.testTag(AvailabilityTags.MAINTENANCE_CHECK),
         )
     },
@@ -126,6 +136,7 @@ internal fun untilText(until: OffsetDateTime?, now: OffsetDateTime, zone: ZoneId
 /** Layout of the mockups: hero, title and subtitle, a short paragraph; the action and the support link at the bottom. */
 @Composable
 private fun GateScreen(
+    presentation: ErrorPresentation,
     tag: String,
     tone: HeroTone,
     icon: String,
@@ -156,6 +167,10 @@ private fun GateScreen(
                 subtitle, style = PfTheme.type.lead, color = c.textMuted,
                 modifier = Modifier.padding(top = d.space1).then(if (subtitleTag != null) Modifier.testTag(subtitleTag) else Modifier),
             )
+            if (presentation.userMessage != UserMessage.Absent) {
+                Spacer(Modifier.height(d.space3))
+                ErrorMessage(presentation, subtitle)
+            }
             Spacer(Modifier.height(d.space6))
             Text(head, style = PfTheme.type.bodyStrong, color = c.text, modifier = Modifier.semantics { heading() })
             Text(body, style = PfTheme.type.body, color = c.text, modifier = Modifier.padding(top = d.space1))

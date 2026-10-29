@@ -19,6 +19,7 @@ import ru.finassist.pf.core.api.model.UploadStatus
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.mock.api.MockStatementsApi
+import ru.finassist.pf.mock.api.UploadBody
 import ru.finassist.pf.mock.domain.AnalyticsEngine
 import ru.finassist.pf.mock.ofx.UnreadLine
 import java.io.File
@@ -135,6 +136,115 @@ class MockStatementsApiTest {
         val again = api.uploadStatement(key("same"), file("a.ofx", text))
         assertEquals(first, again)
         api.await(first.uploadId)
+        assertEquals(1, api.listStatements().uploads.size)
+    }
+
+    @Test
+    fun `the same key with the same file under another name is IDEMPOTENCY_CONFLICT (FIN-340)`() = runBlocking<Unit> {
+        val backend = testBackend(clock)
+        val api = MockStatementsApi(backend)
+        val text = ofx(line("1", "20260905120000", "-100.00"))
+        val first = api.uploadStatement(key("same"), file("a.ofx", text))
+
+        val e = assertFailsWith<AppError.Api> { api.uploadStatement(key("same"), file("b.ofx", text)) }
+        assertEquals(ErrorCodes.IDEMPOTENCY_CONFLICT to 409, e.code to e.httpStatus)
+        // The name is compared as sent: no case or whitespace normalisation (grpc-api.md 6).
+        val e2 = assertFailsWith<AppError.Api> { api.uploadStatement(key("same"), file("A.ofx", text)) }
+        assertEquals(ErrorCodes.IDEMPOTENCY_CONFLICT, e2.code)
+        // Other content under the same name conflicts too.
+        val e3 = assertFailsWith<AppError.Api> { api.uploadStatement(key("same"), file("a.ofx", ofx(line("2", "20260906120000", "-5.00")))) }
+        assertEquals(ErrorCodes.IDEMPOTENCY_CONFLICT, e3.code)
+
+        // The conflicts started nothing, and the saved answer is still there for the original body.
+        assertEquals(first, api.uploadStatement(key("same"), file("a.ofx", text)))
+        api.await(first.uploadId)
+        assertEquals(listOf("a.ofx"), api.listStatements().uploads.map { it.fileName })
+        // The cache keeps the request hash, not the file: memory does not grow with every upload kept under a key.
+        val stored = assertNotNull(backend.idempotency["statements.upload:same"]).request
+        assertEquals(UploadBody.of(text.toByteArray(), "a.ofx"), stored)
+    }
+
+    @Test
+    fun `saved upload errors expire at 24 hours and a replay does not extend the window`() = runBlocking<Unit> {
+        val backend = testBackend(clock)
+        val api = MockStatementsApi(backend)
+        val bad = file("s.pdf", "%PDF-1.4")
+        val createdAt = clock.at
+        assertFailsWith<AppError.Api> { api.uploadStatement(key("error"), bad) }
+        clock.at = createdAt.plusHours(24).minusNanos(1)
+        assertEquals(ErrorCodes.WRONG_FORMAT, assertFailsWith<AppError.Api> { api.uploadStatement(key("error"), bad) }.code)
+        assertEquals(ErrorCodes.IDEMPOTENCY_CONFLICT, assertFailsWith<AppError.Api> {
+            api.uploadStatement(key("error"), file("ok.ofx", ofx()))
+        }.code)
+        clock.at = createdAt.plusHours(24)
+        val accepted = api.uploadStatement(key("error"), file("ok.ofx", ofx()))
+        api.await(accepted.uploadId)
+        assertEquals(1, api.listStatements().uploads.size)
+    }
+
+    @Test
+    fun `successful uploads expire at 24 hours too`() = runBlocking<Unit> {
+        val backend = testBackend(clock)
+        val api = MockStatementsApi(backend)
+        val text = ofx()
+        val createdAt = clock.at
+        val first = api.uploadStatement(key("success"), file("ok.ofx", text))
+        api.await(first.uploadId)
+        clock.at = createdAt.plusHours(24).minusNanos(1)
+        assertEquals(first, api.uploadStatement(key("success"), file("ok.ofx", text)))
+        clock.at = createdAt.plusHours(24)
+        val second = api.uploadStatement(key("success"), file("another.ofx", text))
+        api.await(second.uploadId)
+        assertEquals(2, api.listStatements().uploads.size)
+    }
+
+    @Test
+    fun `request gates precede a stored upload error`() = runBlocking<Unit> {
+        val backend = testBackend(clock, config = FAST.copy(maxFileSizeBytes = 1_000))
+        val api = MockStatementsApi(backend)
+        val bad = file("s.pdf", "%PDF-1.4")
+        assertFailsWith<AppError.Api> { api.uploadStatement(key("error"), bad) }
+        assertEquals(ErrorCodes.FILE_TOO_LARGE, assertFailsWith<AppError.Api> {
+            api.uploadStatement(key("error"), file("big.ofx", ofx(), size = 1_001))
+        }.code)
+        val profile = backend.profile
+        backend.profile = backend.emptyProfile("", "")
+        assertFailsWith<AppError.Unauthorized> { api.uploadStatement(key("error"), bad) }
+        backend.profile = profile
+        backend.config = backend.config.copy(offline = true)
+        assertFailsWith<AppError.Offline> { api.uploadStatement(key("error"), bad) }
+        backend.config = backend.config.copy(offline = false, maintenance = true)
+        assertFailsWith<AppError.Maintenance> { api.uploadStatement(key("error"), bad) }
+        backend.config = backend.config.copy(maintenance = false, minVersion = "0.3.0")
+        assertFailsWith<AppError.UpdateRequired> { api.uploadStatement(key("error"), bad) }
+        backend.config = backend.config.copy(minVersion = null)
+        assertEquals(ErrorCodes.WRONG_FORMAT, assertFailsWith<AppError.Api> { api.uploadStatement(key("error"), bad) }.code)
+        assertTrue(backend.uploads.isEmpty())
+    }
+
+    @Test
+    fun `FILE_TOO_LARGE comes before the key and is not stored under it (FIN-340)`() = runBlocking<Unit> {
+        val backend = testBackend(clock, config = FAST.copy(maxFileSizeBytes = 1_000))
+        val api = MockStatementsApi(backend)
+        val text = ofx(line("1", "20260905120000", "-100.00"))
+        val big = file("a.ofx", text, size = 1_001)
+
+        // Not stored: the same key gets 413 again, and then runs as a first request with a file that fits.
+        repeat(2) {
+            val e = assertFailsWith<AppError.Api> { api.uploadStatement(key("k"), big) }
+            assertEquals(ErrorCodes.FILE_TOO_LARGE to 413, e.code to e.httpStatus)
+        }
+        val accepted = api.uploadStatement(key("k"), file("a.ofx", text))
+        api.await(accepted.uploadId)
+
+        // Before the key: a key with a saved answer still gets 413 for a file over the limit, not that answer
+        // and not IDEMPOTENCY_CONFLICT, and the file is not read.
+        var opened = false
+        val unread = UploadFile("a.ofx", 1_001) { opened = true; text.byteInputStream() }
+        val e = assertFailsWith<AppError.Api> { api.uploadStatement(key("k"), unread) }
+        assertEquals(ErrorCodes.FILE_TOO_LARGE to 413, e.code to e.httpStatus)
+        assertFalse(opened)
+        assertEquals(accepted, api.uploadStatement(key("k"), file("a.ofx", text)))
         assertEquals(1, api.listStatements().uploads.size)
     }
 

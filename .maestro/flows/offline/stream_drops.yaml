@@ -23,10 +23,17 @@ tags:
     visible:
       id: "auth.phone"
     timeout: 10000
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
 - tapOn:
     id: "auth.phone.input"
 - inputText: "9161234567"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
 - tapOn:
     id: "auth.phone.submit"
 - extendedWaitUntil:
@@ -111,6 +118,9 @@ tags:
     visible:
       id: "assistant.consent"
     timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
 - tapOn:
     id: "assistant.consent.checkbox"
 # Set right before the question goes: the answer stream is the next one to open.
@@ -118,6 +128,9 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?stream_drops=2"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
 - tapOn:
     id: "assistant.consent.submit"
 - extendedWaitUntil:

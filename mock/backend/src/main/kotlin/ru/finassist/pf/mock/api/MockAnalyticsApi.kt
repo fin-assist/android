@@ -17,6 +17,7 @@ import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.mock.MockBackend
+import ru.finassist.pf.mock.apiError
 import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.mock.domain.AnalyticsComposer
 
@@ -25,8 +26,8 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
     override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?, supports: String?, exp: String?): Analytics {
         backend.simulateNetwork()
         backend.requireSession()
-        if (period == PeriodTypeCode.UNKNOWN || transferMode == TransferMode.UNKNOWN) throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400)
-        if (date != null && !PeriodKey.isValid(date.value)) throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400)
+        if (period == PeriodTypeCode.UNKNOWN || transferMode == TransferMode.UNKNOWN) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
+        if (date != null && !PeriodKey.isValid(date.value)) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
         val snapshot = backend.mutex.withLock { backend.analytics.analytics(period, date, transferMode ?: TransferMode.WITH) }
         val composed = AnalyticsComposer.compose(
             snapshot,
@@ -79,12 +80,12 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
      */
     private fun requirePayment(id: String) {
         if (!PAYMENT_ID.matches(id)) {
-            throw AppError.Api(
+            throw backend.apiError(
                 ErrorCodes.VALIDATION_ERROR, 400,
                 details = listOf(AppError.FieldError("id", FieldErrorCodes.INVALID_FORMAT, "must be a lowercase UUID")),
             )
         }
-        if (backend.analytics.regularPaymentName("s_regular_$id") == null) throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+        if (backend.analytics.regularPaymentName("s_regular_$id") == null) throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
     }
 
     private companion object {

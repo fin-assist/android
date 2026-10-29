@@ -19,27 +19,45 @@ tags:
       id: "auth.phone"
     timeout: 10000
 
+- runFlow: ../../subflows/confirm_phone.yaml
 # The call is paid at the subscriber's rate: nothing on the screens promises it is free (FIN-166).
 - assertVisible: "Для подтверждения позвоните нам с этого номера"
 - assertNotVisible: ".*бесплатн.*"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
 - tapOn:
     id: "auth.phone.submit"
 - assertVisible: "В номере не хватает цифр"
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
 - tapOn:
     id: "auth.phone.input"
 - inputText: "91612"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
 - tapOn:
     id: "auth.phone.submit"
 - assertVisible: "В номере не хватает цифр"
 
 # Tap at the right edge: the cursor goes after the last digit, not into the middle of the masked number.
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
 - tapOn:
     id: "auth.phone.input"
     point: "90%,50%"
 - eraseText: 20
 - inputText: "9161234567"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
 - tapOn:
     id: "auth.phone.submit"
 - extendedWaitUntil:

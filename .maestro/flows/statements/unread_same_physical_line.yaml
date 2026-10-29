@@ -1,0 +1,103 @@
+appId: ru.finassist.pf.mock.e2e
+name: Непрочитанные строки — две операции одной физической строки с одинаковой причиной
+tags:
+  - statements
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
+
+# FIN-352: two distinct STMTTRN/FITID occurrences start on physical line 31. Both lack a date, so
+# the response contains equal visible line/reason fields. The old LazyColumn keys collided on opening this list.
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- scrollUntilVisible:
+    element:
+      id: "e2e.picker.unread-same-line.ofx"
+- tapOn:
+    id: "e2e.picker.unread-same-line.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result.empty"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.unread"
+# The count is joined to the noun with a no-break space: any single character between them.
+- assertVisible: "2.строки не прочитали — их нет в суммах.*"
+
+# «Подробнее» in the notice is a link inside a text node: no view or id for Maestro to tap (docs/e2e.md). The same
+# list opens from the upload's row in the history, through a link of its own (FIN-66).
+- back
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+# The newest upload is on top; the fixture statement has no unread lines, so this is the only such link.
+# The tag is on the link's container, its text on a child node: id and text are checked apart (FIN-70).
+- assertVisible:
+    id: "statements.history.unread"
+- assertVisible: "Не прочитали 2.строки"
+- tapOn:
+    id: "statements.history.unread"
+- extendedWaitUntil:
+    visible:
+      id: "statements.unread"
+    timeout: 10000
+# Nothing of the file was read: the intro has no «Остальные операции загружены».
+- assertVisible: "В файле .* эти строки не прочитали — их нет в суммах\\."
+- assertNotVisible: ".*Остальные операции загружены.*"
+# Both physical numbers AND reasons must appear twice; adding reason to the key alone would still collide.
+- assertVisible:
+    text: "Строка 31 · дата не прочитана"
+    index: 0
+- assertVisible:
+    text: "Строка 31 · дата не прочитана"
+    index: 1
+- assertVisible:
+    text: "нет даты"
+    index: 0
+- assertVisible:
+    text: "нет даты"
+    index: 1
+- assertVisible:
+    id: "statements.unread.report"
+- back
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000

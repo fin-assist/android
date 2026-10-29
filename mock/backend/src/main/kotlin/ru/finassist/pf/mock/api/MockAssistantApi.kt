@@ -34,7 +34,11 @@ import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.mock.AssistantStore
+import ru.finassist.pf.mock.MockErrorCatalog
 import ru.finassist.pf.mock.MockBackend
+import ru.finassist.pf.mock.MockErrorOperation
+import ru.finassist.pf.mock.apiError
+import ru.finassist.pf.mock.rateLimitedError
 import ru.finassist.pf.mock.MockConfig
 import ru.finassist.pf.mock.domain.AssistantEngine
 import java.time.LocalDate
@@ -65,9 +69,10 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
     override suspend fun ask(key: IdempotencyKey, request: AskRequest): AskResponse {
         backend.simulateNetwork()
         backend.requireSession()
-        if (request.text.isBlank() || request.text.length > 2000) throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400)
-        if (request.transferMode == TransferMode.UNKNOWN) throw AppError.Api(ErrorCodes.VALIDATION_ERROR, 400)
-        return backend.idempotent("assistant.ask:${key.value}") {
+        backend.maybeInjectError(MockErrorOperation.ASSISTANT_ASK)
+        if (request.text.isBlank() || request.text.length > 2000) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
+        if (request.transferMode == TransferMode.UNKNOWN) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
+        return backend.idempotent("assistant.ask:${key.value}", request = request) {
             val question = Message(id = UUID.randomUUID().toString(), role = MessageRole.USER, text = request.text, createdAt = backend.now())
             val mode = request.transferMode ?: TransferMode.WITH
             val (answer, remainingLimit) = backend.mutex.withLock {
@@ -85,8 +90,16 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
     }
 
     private fun checkConsentAndLimit() {
-        if (backend.profile.assistantConsent?.granted != true) throw AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403)
-        if (remaining() <= 0) throw AppError.Api(ErrorCodes.LIMIT_EXCEEDED, 403, resetsAt = resetsAt())
+        checkOffTopicLimit()
+        if (backend.profile.assistantConsent?.granted != true) throw backend.apiError(ErrorCodes.CONSENT_REQUIRED, 403)
+        if (remaining() <= 0) throw backend.apiError(ErrorCodes.LIMIT_EXCEEDED, 403, resetsAt = resetsAt())
+    }
+
+    private fun checkOffTopicLimit() {
+        val now = backend.now()
+        val retryAt = store.offTopic.retryAt(now) ?: return
+        val seconds = (retryAt.toEpochSecond() - now.toEpochSecond() + if (retryAt.nano > now.nano) 1 else 0).coerceAtLeast(1)
+        throw backend.rateLimitedError(retryAt, retryAfterSeconds = seconds)
     }
 
     /**
@@ -101,7 +114,7 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
                 withTimeout(backend.config.answerTimeoutMs) { produce(answer, text, mode) }
             } catch (e: TimeoutCancellationException) {
                 // The deadline may pass inside a non-cancellable ending that already sent the terminal event.
-                if (answer.status == AnswerStatus.GENERATING) fail(answer, AnswerErrorCode.MODEL_ERROR, "generation timed out")
+                fail(answer, AnswerErrorCode.MODEL_ERROR, "generation timed out")
             }
         }
     }
@@ -148,8 +161,12 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
                     val source = AnswerSource(calculatedAt = calculatedAt, dataRange = a.dataRange, transferMode = mode, changedSince = emptyList())
                     answer.append(AnswerEvent.Source(backend.mutex.withLock { store.changes.restamp(source, answer.calculatedOn) }))
                     a.chips.forEach { answer.append(AnswerEvent.ChipAdded(it)) }
-                    if (!a.charged) refund()
-                    answer.append(AnswerEvent.Done(AnswerDoneEvent(charged = a.charged, remainingLimit = remaining())))
+                    backend.mutex.withLock {
+                        if (answer.status == AnswerStatus.GENERATING && store.offTopic.terminal(answer.id, backend.now(), charged = a.charged)) {
+                            if (!a.charged) refundLocked(answer)
+                            answer.append(AnswerEvent.Done(AnswerDoneEvent(charged = a.charged, remainingLimit = remaining())))
+                        }
+                    }
                 }
             }
         }
@@ -160,19 +177,25 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
      * generation timeout: the refund and the `error` event go together.
      */
     private suspend fun fail(answer: AssistantStore.Answer, code: AnswerErrorCode, message: String) = withContext(NonCancellable) {
-        refund()
-        answer.append(
-            AnswerEvent.Error(
-                AnswerErrorEvent(
-                    code = code, message = message, remainingLimit = remaining(),
-                    text = ERROR_TEXTS.getValue(code), retryable = code == AnswerErrorCode.MODEL_ERROR,
+        backend.mutex.withLock {
+            if (answer.status != AnswerStatus.GENERATING || !store.offTopic.terminal(answer.id, backend.now(), isOffTopic = code == AnswerErrorCode.OFF_TOPIC)) return@withLock
+            refundLocked(answer)
+            answer.append(
+                AnswerEvent.Error(
+                    AnswerErrorEvent(
+                        code = code, message = message, remainingLimit = remaining(),
+                        text = ERROR_TEXTS.getValue(code), retryable = code == AnswerErrorCode.MODEL_ERROR,
+                        userMessage = MockErrorCatalog.presentation(code.name).userMessage,
+                        severity = MockErrorCatalog.presentation(code.name).severity,
+                    ),
                 ),
-            ),
-        )
+            )
+        }
     }
 
-    private suspend fun refund() = backend.mutex.withLock {
-        store.usage[moscowToday()] = ((store.usage[moscowToday()] ?: 1) - 1).coerceAtLeast(0)
+    private fun refundLocked(answer: AssistantStore.Answer) {
+        val day = answer.createdAt.atZoneSameInstant(Clock.MOSCOW).toLocalDate()
+        store.usage[day] = ((store.usage[day] ?: 1) - 1).coerceAtLeast(0)
     }
 
     override fun streamAnswer(answerId: String): Flow<AnswerEvent> = backend.droppable(answerEvents(answerId)) { event ->
@@ -182,7 +205,7 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
 
     private fun answerEvents(answerId: String): Flow<AnswerEvent> = flow {
         val answer = backend.mutex.withLock { store.answers[answerId] }
-        if (answer == null || answer.replaced) throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+        if (answer == null || answer.replaced) throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
         val (snapshot, seen) = answer.snapshot()
         emit(AnswerEvent.Snapshot(snapshot))
         if (snapshot.status != AnswerStatus.GENERATING) {
@@ -213,14 +236,15 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
             backend.simulateNetwork()
             backend.requireSession()
         }
-        return backend.idempotent("assistant.retry:${key.value}", onRepeat = network) {
+        return backend.idempotent("assistant.retry:${key.value}", request = answerId, onRepeat = network) {
             network()
             val (fresh, remainingLimit, question) = backend.mutex.withLock {
+                checkOffTopicLimit()
                 // One critical section from the checks to the charge, as in [ask]: two retries of the same answer
                 // replace it once, and the last remaining question is not spent twice.
-                val old = store.answers[answerId] ?: throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+                val old = store.answers[answerId] ?: throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
                 if (!old.retryAllowed) {
-                    throw AppError.Api(ErrorCodes.RETRY_NOT_ALLOWED, 422)
+                    throw backend.apiError(ErrorCodes.RETRY_NOT_ALLOWED, 422)
                 }
                 checkConsentAndLimit()
                 val question = store.questions.first { it.id == old.questionId }
@@ -239,18 +263,13 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
     override suspend fun getLimit(): AssistantLimit {
         backend.simulateNetwork()
         backend.requireSession()
-        return AssistantLimit(remaining = remaining(), dailyMax = DAILY_MAX, resetsAt = resetsAt())
+        return backend.mutex.withLock { AssistantLimit(remaining = remaining(), dailyMax = DAILY_MAX, resetsAt = resetsAt()) }
     }
 
     companion object {
         private const val DAILY_MAX = 5
 
         /** Texts of the failures (api.md 7.2): the client shows them instead of the answer. */
-        val ERROR_TEXTS: Map<AnswerErrorCode, String> = mapOf(
-            AnswerErrorCode.MODEL_ERROR to "Не получилось ответить. Вопрос не потрачен",
-            AnswerErrorCode.CANNOT_ANSWER to "Не получилось ответить — недостаточно данных, переформулируйте вопрос. Вопрос не потрачен",
-            AnswerErrorCode.OFF_TOPIC to "Вопрос не по теме — помощник отвечает только на вопросы о ваших финансах. " +
-                "С другими вопросами помогут универсальные ассистенты: Алиса AI, GigaChat, ChatGPT, Claude, DeepSeek",
-        )
+        val ERROR_TEXTS: Map<AnswerErrorCode, String> = MockErrorCatalog.answerTexts
     }
 }

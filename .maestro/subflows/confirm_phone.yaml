@@ -1,0 +1,29 @@
+# Explicit fixture consent and 14+ before any phone submission, including an existing account (FIN-365).
+appId: ru.finassist.pf.mock.e2e
+---
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- runFlow:
+    when:
+      visible:
+        id: "auth.phone.age"
+        checked: false
+    commands:
+      - tapOn:
+          id: "auth.phone.age"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- runFlow:
+    when:
+      visible:
+        id: "auth.phone.consent"
+        checked: false
+    commands:
+      - tapOn:
+          id: "auth.phone.consent"

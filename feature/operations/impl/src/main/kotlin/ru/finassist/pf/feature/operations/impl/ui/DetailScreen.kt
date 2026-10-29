@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import androidx.compose.foundation.layout.Arrangement
@@ -87,10 +88,19 @@ internal fun DetailContent(
             op?.let { OperationFormat.title(it.title) } ?: "Операция", onBack = onBack,
             modifier = if (op != null) Modifier.testTag(OperationsTags.DETAIL_TITLE) else Modifier,
         )
+        state.errorPresentation?.let { presentation ->
+            ErrorMessage(
+                presentation,
+                if (state.notFound) "Операции больше нет. Возможно, удалили загрузку, в которой она была" else "Не получилось загрузить. Попробуйте ещё раз",
+                modifier = Modifier.padding(d.space4),
+                onRetry = if (state.notFound || !state.retryReady) null else onRetry,
+            )
+        }
         when {
             state.loading -> Unit
+            state.errorPresentation != null && (state.notFound || op == null) -> Unit
             state.notFound -> PfEmptyState(PfIcons.FILE_TEXT, "Операции больше нет", "Возможно, удалили загрузку, в которой она была")
-            state.error || op == null -> PfEmptyState(PfIcons.ALERT, "Не получилось загрузить", "Проверьте интернет и попробуйте ещё раз") {
+            op == null -> PfEmptyState(PfIcons.ALERT, "Не получилось загрузить", "Проверьте интернет и попробуйте ещё раз") {
                 PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
             }
             else -> Column(
@@ -144,7 +154,9 @@ internal fun DetailContent(
             scrollable = false,
             footer = {
                 state.pickerError?.let {
-                    PfNotice(it, tone = NoticeTone.WARNING, alert = true)
+                    val presentation = state.pickerErrorPresentation
+                    if (presentation != null) ErrorMessage(presentation, it)
+                    else PfNotice(it, tone = NoticeTone.WARNING, alert = true)
                     Spacer(Modifier.height(PfTheme.dimens.space3))
                 }
                 PfButton(

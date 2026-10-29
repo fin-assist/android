@@ -1,7 +1,9 @@
 package ru.finassist.pf.feature.availability.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -15,11 +17,15 @@ import ru.finassist.pf.core.api.model.ConsentDocument
 import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.error.ErrorResponseInfo
+import ru.finassist.pf.core.common.time.ResponseTiming
 import ru.finassist.pf.core.common.time.Clock
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /** Maintenance asks the server again once `Retry-After` passes and on «Проверить сейчас», never by polling (FIN-22). */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -30,21 +36,43 @@ class AvailabilityViewModelTest {
         override fun now(): OffsetDateTime = start.plusNanos(scheduler.currentTime * 1_000_000)
         override val zone: ZoneId = Clock.MOSCOW
     }
-    private val gate = ServiceGate()
+    private val elapsedClock = ElapsedClock { scheduler.currentTime }
+    private val gate = ServiceGate(elapsedClock)
 
     /** Each probe takes the next answer: `null` — success; an [AppError] — thrown (and reported like the network layer). */
     private val answers = ArrayDeque<AppError?>()
     private var probes = 0
     /** Runs before a successful answer: what happened on the server while the probe was on its way. */
     private var beforeSuccess: () -> Unit = {}
+    /** Allows the Main collector to observe the interceptor's report before the API error reaches the VM. */
+    private var beforeFailure: suspend (AppError) -> Unit = {}
     private val auth = object : AuthApi by unused() {
         override suspend fun getConsentDocument(type: ConsentType): ConsentDocument {
             probes++
-            when (val e = answers.removeFirstOrNull()) {
-                null -> return beforeSuccess().let { ConsentDocument(type = ConsentType.PERSONAL_DATA, version = "1", url = "https://plainfin.ru", title = "Согласие") }
-                is AppError.Maintenance -> { gate.maintenance(e.until, e.retryAfterSeconds, clock.now()); throw e }
-                else -> throw e
+            val before = gate.maintenance
+            val failure = answers.removeFirstOrNull()
+            if (failure == null) {
+                beforeSuccess()
+                gate.reopen(before)
+                return ConsentDocument(type = ConsentType.PERSONAL_DATA, version = "1", url = "https://plainfin.ru", title = "Согласие")
             }
+            // Faithful ServiceGateInterceptor order: special gates first, then non-special HTTP <500 reopens.
+            // An ordinary 500 or 503 retains maintenance; Offline has no HTTP response at all.
+            when (failure) {
+                is AppError.Maintenance -> gate.maintenance(failure.until, failure.retryAfterSeconds, clock.now(), failure.response)
+                is AppError.UpdateRequired -> gate.updateRequired(failure.presentation)
+                else -> {
+                    val status = failure.response?.httpStatus ?: when (failure) {
+                        is AppError.Server -> failure.httpStatus
+                        is AppError.Api -> failure.httpStatus
+                        is AppError.RateLimited -> 429
+                        else -> null
+                    }
+                    if (status != null && status < 500 && before != null) gate.reopen(before)
+                }
+            }
+            beforeFailure(failure)
+            throw failure
         }
     }
 
@@ -52,8 +80,8 @@ class AvailabilityViewModelTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    @Test fun `the probe waits for Retry-After, another maintenance moves it, a success reopens`() {
-        val vm = AvailabilityViewModel(gate, auth, clock)
+    @Test fun `one automatic probe respects Retry-After and a fresh refusal needs a guarded manual check`() {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
         gate.maintenance(null, 60, clock.now())
         answers += AppError.Maintenance(null, 120)
         scheduler.advanceTimeBy(59_000); scheduler.runCurrent()
@@ -66,31 +94,174 @@ class AvailabilityViewModelTest {
         scheduler.advanceTimeBy(119_000); scheduler.runCurrent()
         assertEquals(1, probes, "the new Retry-After counts")
         scheduler.advanceTimeBy(1_000); scheduler.runCurrent()
+        assertEquals(1, probes, "a new refusal must not start an automatic loop")
+        vm.checkNow(); scheduler.runCurrent()
         assertEquals(2, probes)
         assertEquals(ServiceGate.State.Open, gate.state.value)
         vm.hashCode()
     }
 
     @Test fun `a maintenance that began during the probe stays after its success`() {
-        val vm = AvailabilityViewModel(gate, auth, clock)
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
         gate.maintenance(null, 15, clock.now())
         answers += null
         beforeSuccess = { gate.maintenance(null, 600, clock.now()) }
         scheduler.advanceTimeBy(15_000); scheduler.runCurrent()
         assertEquals(1, probes)
-        assertEquals(ServiceGate.State.Maintenance(null, clock.now().plusSeconds(600)), gate.state.value)
+        assertEquals(clock.now().plusSeconds(600), assertIs<ServiceGate.State.Maintenance>(gate.state.value).retryAt)
         vm.hashCode()
     }
 
-    @Test fun `the check button asks at once, no network keeps the screen and waits again`() {
-        val vm = AvailabilityViewModel(gate, auth, clock)
+    @Test fun `the check button cannot bypass Retry-After and network failure does not start a loop`() {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
         gate.maintenance(null, 600, clock.now())
         answers += AppError.Offline()
         vm.checkNow(); scheduler.runCurrent()
+        assertEquals(0, probes)
+        assertFalse(vm.canCheck.value)
+        scheduler.advanceTimeBy(600_000); scheduler.runCurrent()
         assertEquals(1, probes)
-        val m = assertIs<ServiceGate.State.Maintenance>(gate.state.value)
-        assertEquals(clock.now().plusSeconds(ServiceGate.DEFAULT_RETRY_SECONDS.toLong()), m.retryAt)
+        assertTrue(vm.canCheck.value, "a failed one-shot probe leaves the guarded manual action available")
+        assertIs<ServiceGate.State.Maintenance>(gate.state.value)
+        scheduler.advanceTimeBy(600_000); scheduler.runCurrent()
+        assertEquals(1, probes)
     }
+
+    @Test fun `manual readiness follows each refusal deadline without an automatic loop`() {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
+        gate.maintenance(null, 15, clock.now())
+        answers += AppError.Maintenance(null, 30)
+        scheduler.runCurrent()
+        assertFalse(vm.canCheck.value)
+        scheduler.advanceTimeBy(15_000); scheduler.runCurrent()
+        assertEquals(1, probes)
+        assertFalse(vm.canCheck.value, "the fresh refusal has its own wait")
+        scheduler.advanceTimeBy(29_999); scheduler.runCurrent()
+        assertFalse(vm.canCheck.value)
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(1, probes)
+        scheduler.advanceTimeBy(1); scheduler.runCurrent()
+        assertTrue(vm.canCheck.value)
+        assertEquals(1, probes, "readiness does not start a second automatic probe")
+        answers += null
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(2, probes)
+        assertEquals(ServiceGate.State.Open, gate.state.value)
+        assertFalse(vm.canCheck.value)
+    }
+
+    @Test fun `independent probe refusal forbids repeat despite expired or renewed maintenance deadline`() {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
+        gate.maintenance(null, 15, clock.now())
+        scheduler.advanceTimeBy(15_000)
+        answers += probeFailure(retryable = false, wait = 30)
+        scheduler.runCurrent()
+        assertEquals(1, probes)
+        assertEquals(0L, gate.maintenance?.deadline?.remainingMillis(elapsedClock))
+        assertFalse(vm.canCheck.value)
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(1, probes)
+        scheduler.advanceTimeBy(600_000); scheduler.runCurrent()
+        assertFalse(vm.canCheck.value, "elapsed wait cannot override explicit original-GET false")
+        gate.maintenance(null, 15, clock.now())
+        scheduler.advanceTimeBy(15_000); scheduler.runCurrent()
+        vm.checkNow(); scheduler.runCurrent()
+        assertFalse(vm.canCheck.value, "fresh global maintenance is not a corrected original GET")
+        assertEquals(1, probes)
+    }
+
+    @Test fun `independent probe wait keeps its original deadline and needs a manual retry afterwards`() {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
+        gate.maintenance(null, 15, clock.now())
+        scheduler.advanceTimeBy(15_000)
+        answers += probeFailure(retryable = true, wait = 30)
+        scheduler.runCurrent()
+        assertEquals(1, probes)
+        assertFalse(vm.canCheck.value)
+        vm.checkNow(); scheduler.runCurrent()
+        scheduler.advanceTimeBy(29_999); scheduler.runCurrent()
+        vm.checkNow(); scheduler.runCurrent()
+        assertFalse(vm.canCheck.value)
+        assertEquals(1, probes, "taps cannot send early or restart the response deadline")
+        scheduler.advanceTimeBy(1); scheduler.runCurrent()
+        assertTrue(vm.canCheck.value)
+        assertEquals(1, probes, "expiry only enables the manual action")
+        answers += null
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(2, probes)
+        assertEquals(ServiceGate.State.Open, gate.state.value)
+        assertFalse(vm.canCheck.value)
+    }
+
+    @Test fun `known maintenance false still permits its scoped correction after its fresh wait`() {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
+        gate.maintenance(null, 15, clock.now())
+        scheduler.advanceTimeBy(15_000)
+        answers += AppError.Maintenance(null, 30, ErrorResponseInfo(
+            "MAINTENANCE", 503, requestRetryable = false,
+            timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime), retryAfterSeconds = 30,
+        ))
+        scheduler.runCurrent()
+        assertFalse(vm.canCheck.value)
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(1, probes)
+        scheduler.advanceTimeBy(30_000); scheduler.runCurrent()
+        assertTrue(vm.canCheck.value)
+        assertEquals(1, probes)
+        answers += null
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(2, probes)
+        assertEquals(ServiceGate.State.Open, gate.state.value)
+    }
+
+    @Test fun `a late 429 refusal after Open cannot restrict the next maintenance episode`() {
+        assertOldRefusalDoesNotBlockNextEpisode(conflateOpen = false)
+    }
+
+    @Test fun `a late 429 refusal cannot restrict a conflated Open to Maintenance transition`() {
+        assertOldRefusalDoesNotBlockNextEpisode(conflateOpen = true)
+    }
+
+    private fun assertOldRefusalDoesNotBlockNextEpisode(conflateOpen: Boolean) {
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
+        gate.maintenance(null, 15, clock.now())
+        answers += AppError.Server(500)
+        scheduler.advanceTimeBy(15_000); scheduler.runCurrent()
+        assertEquals(1, probes)
+        assertIs<ServiceGate.State.Maintenance>(gate.state.value, "500 does not reopen the network gate")
+        assertTrue(vm.canCheck.value)
+        beforeFailure = { error ->
+            if (error is AppError.RateLimited) {
+                assertEquals(ServiceGate.State.Open, gate.state.value, "429 reopens before the API error is delivered")
+                if (conflateOpen) gate.maintenance(null, 15, clock.now())
+                yield()
+            }
+        }
+        answers += AppError.RateLimited(null, 30, ErrorResponseInfo(
+            "RATE_LIMITED", 429, requestRetryable = false, retryAfterSeconds = 30,
+            timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime),
+        ))
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(2, probes)
+        assertFalse(vm.checking.value)
+        if (!conflateOpen) {
+            assertEquals(ServiceGate.State.Open, gate.state.value)
+            gate.maintenance(null, 15, clock.now())
+        }
+        scheduler.runCurrent()
+        assertFalse(vm.canCheck.value)
+        scheduler.advanceTimeBy(14_999); scheduler.runCurrent()
+        vm.checkNow(); scheduler.runCurrent()
+        assertEquals(2, probes, "the next episode keeps its own maintenance deadline")
+        scheduler.advanceTimeBy(1); scheduler.runCurrent()
+        assertEquals(3, probes, "a refusal from the closed episode cannot block the next one-shot probe")
+        assertEquals(ServiceGate.State.Open, gate.state.value)
+    }
+
+    private fun probeFailure(retryable: Boolean, wait: Long) = AppError.Server(500, response = ErrorResponseInfo(
+        "INTERNAL_ERROR", 500, requestRetryable = retryable, retryAfterSeconds = wait,
+        timing = ResponseTiming(receivedElapsedMillis = scheduler.currentTime),
+    ))
 
     @Test fun `the time of the end reads as a promise for today or another day`() {
         val now = OffsetDateTime.parse("2026-10-15T12:00:00+03:00")
@@ -105,7 +276,7 @@ class AvailabilityViewModelTest {
     }
 
     @Test fun `the button during a scheduled check sends one request, not two`() {
-        val vm = AvailabilityViewModel(gate, auth, clock)
+        val vm = AvailabilityViewModel(gate, auth, clock, elapsedClock)
         gate.maintenance(null, 15, clock.now())
         scheduler.runCurrent()
         answers += null

@@ -38,4 +38,9 @@ class CodeDesignCheckTest {
     @Test fun codeNoDeadlineDark() = capture("CodeNoDeadlineDark", state.copy(waitUntil = null), dark = true)
 
     @Test fun codeLocked() = capture("CodeLocked", state.copy(phase = CallPhase.LOCKED, lockText = "Слишком много попыток. Позвонить можно будет через 10 минут, в 14:32"))
+    // FIN-223 proposed artboard; snapshot execution is not authorized.
+    @Test fun serverError() = capture("CodeServerError", state.copy(phase = CallPhase.ERROR,
+        errorPresentation = ru.finassist.pf.core.common.error.ErrorPresentation(ru.finassist.pf.core.common.error.UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"))))
+    @Test fun serverErrorDark() = capture("CodeServerErrorDark", state.copy(phase = CallPhase.ERROR,
+        errorPresentation = ru.finassist.pf.core.common.error.ErrorPresentation(ru.finassist.pf.core.common.error.UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"))), dark = true)
 }

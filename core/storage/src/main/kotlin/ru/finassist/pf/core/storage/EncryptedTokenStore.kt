@@ -33,8 +33,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.TokenPair
+import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.common.error.AppError
 import java.security.GeneralSecurityException
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -94,7 +96,7 @@ class EncryptedTokenStore @Inject constructor(
         // shared DataStore do not concern the session. A failed read (I/O) would end the collection for good, so it
         // starts over after a pause.
         scope.launch {
-            dataStore.data.map { it[KEY_BLOB] }.distinctUntilChanged()
+            dataStore.data.map { it[KEY_BLOB] to AuthSessionIdentityPreferences.revision(it) }.distinctUntilChanged()
                 .retryWhen { e, _ -> (e !is CancellationException).also { if (it) delay(READ_RETRY_MS) } }
                 .collect { refreshUntilRead() }
         }
@@ -108,8 +110,23 @@ class EncryptedTokenStore @Inject constructor(
 
     override suspend fun current(): TokenStore.Session? = read()
 
-    private suspend fun read(): TokenStore.Session? =
-        withContext(Dispatchers.IO) { dataStore.data.first()[KEY_BLOB]?.let(::decode) }
+    private suspend fun read(): TokenStore.Session? = withContext(Dispatchers.IO) {
+        val preferences = dataStore.data.first()
+        val session = preferences[KEY_BLOB]?.let(::decode) ?: return@withContext null
+        AuthSessionIdentityPreferences.epoch(preferences, session.userId)?.let {
+            return@withContext session.copy(authSessionEpoch = it)
+        }
+        // Upgrade an existing blob once. Re-read inside edit: a concurrent login/logout must win over this read.
+        var migrated: TokenStore.Session? = null
+        dataStore.edit { current ->
+            val actual = current[KEY_BLOB]?.let(::decode) ?: return@edit
+            val epoch = AuthSessionIdentityPreferences.epoch(current, actual.userId) ?: UUID.randomUUID().toString().also {
+                AuthSessionIdentityPreferences.write(current, actual.userId, it)
+            }
+            migrated = actual.copy(authSessionEpoch = epoch)
+        }
+        migrated
+    }
 
     /**
      * NonCancellable: a write that has landed is published even if its caller has gone away meanwhile. A failed
@@ -188,30 +205,129 @@ class EncryptedTokenStore @Inject constructor(
                 throw AppError.Unknown(e)
             }
         }
-        writing { dataStore.edit { it[KEY_BLOB] = blob } }
+        writing { dataStore.edit {
+            it[KEY_BLOB] = blob
+            AuthSessionIdentityPreferences.write(it, session.userId, UUID.randomUUID().toString())
+            it.remove(KEY_REFRESH_PENDING)
+        } }
     }
 
-    override suspend fun updateTokens(expectedRefreshToken: String, tokens: TokenPair): Boolean {
+    override suspend fun updateTokens(expectedRefreshToken: String, tokens: TokenPair): Boolean =
+        updateTokensGuarded(expectedRefreshToken, tokens, null)
+
+    override suspend fun updateTokens(expectedRefreshToken: String, tokens: TokenPair, authSessionEpoch: String): Boolean =
+        updateTokensGuarded(expectedRefreshToken, tokens, authSessionEpoch)
+
+    private suspend fun updateTokensGuarded(expectedRefreshToken: String, tokens: TokenPair, epoch: String?): Boolean {
         var updated = false
         // One DataStore transaction: read, check, write — serialized with save() and clear().
         writing {
             dataStore.edit { prefs ->
                 val existing = prefs[KEY_BLOB]?.let(::decode) ?: return@edit
                 if (existing.tokens.refreshToken != expectedRefreshToken) return@edit
+                if (epoch != null && !AuthSessionIdentityPreferences.matches(prefs, existing.userId, epoch)) return@edit
                 prefs[KEY_BLOB] = try {
                     encode(existing.copy(tokens = tokens))
                 } catch (e: GeneralSecurityException) {
                     throw AppError.Unknown(e)
                 }
+                prefs.remove(KEY_REFRESH_PENDING)
                 updated = true
             }
         }
         return updated
     }
 
-    override suspend fun clear() {
-        writing { dataStore.edit { it.remove(KEY_BLOB) } }
+    override suspend fun reserveRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey): Boolean =
+        reserveRefreshAttemptGuarded(expectedRefreshToken, key, null)
+
+    override suspend fun reserveRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey, authSessionEpoch: String): Boolean =
+        reserveRefreshAttemptGuarded(expectedRefreshToken, key, authSessionEpoch)
+
+    private suspend fun reserveRefreshAttemptGuarded(expectedRefreshToken: String, key: IdempotencyKey, epoch: String?): Boolean {
+        var reserved = false
+        writing {
+            dataStore.edit { prefs ->
+                val existing = prefs[KEY_BLOB]?.let(::decode) ?: return@edit
+                if (existing.tokens.refreshToken != expectedRefreshToken) return@edit
+                if (epoch != null && !AuthSessionIdentityPreferences.matches(prefs, existing.userId, epoch)) return@edit
+                if (key.value.isBlank() || '\n' in key.value) return@edit
+                val marker = prefs[KEY_REFRESH_PENDING]
+                if (marker != null) {
+                    // Malformed/undecryptable is an uncertain prior attempt, never an absent marker.
+                    val pending = decodeRefreshMarker(marker) ?: return@edit
+                    reserved = pending.first == expectedRefreshToken && pending.second == key.value
+                    return@edit
+                }
+                val plain = "$expectedRefreshToken\n${key.value}".toByteArray(Charsets.UTF_8)
+                prefs[KEY_REFRESH_PENDING] = try {
+                    Base64.encodeToString(aead.encrypt(plain, REFRESH_AAD), Base64.NO_WRAP)
+                } catch (e: GeneralSecurityException) {
+                    throw AppError.Unknown(e)
+                }
+                reserved = true
+            }
+        }
+        return reserved
     }
+
+    override suspend fun retireRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey): Boolean =
+        retireRefreshAttemptGuarded(expectedRefreshToken, key, null)
+
+    override suspend fun retireRefreshAttempt(expectedRefreshToken: String, key: IdempotencyKey, authSessionEpoch: String): Boolean =
+        retireRefreshAttemptGuarded(expectedRefreshToken, key, authSessionEpoch)
+
+    private suspend fun retireRefreshAttemptGuarded(expectedRefreshToken: String, key: IdempotencyKey, epoch: String?): Boolean {
+        var retired = false
+        writing {
+            dataStore.edit { prefs ->
+                val existing = prefs[KEY_BLOB]?.let(::decode) ?: return@edit
+                if (existing.tokens.refreshToken != expectedRefreshToken) return@edit
+                if (epoch != null && !AuthSessionIdentityPreferences.matches(prefs, existing.userId, epoch)) return@edit
+                val marker = prefs[KEY_REFRESH_PENDING]?.let(::decodeRefreshMarker) ?: return@edit
+                if (marker.first != expectedRefreshToken || marker.second != key.value) return@edit
+                prefs.remove(KEY_REFRESH_PENDING)
+                retired = true
+            }
+        }
+        return retired
+    }
+
+    override suspend fun clearIfRefreshToken(expectedRefreshToken: String): Boolean =
+        clearIfRefreshTokenGuarded(expectedRefreshToken, null)
+
+    override suspend fun clearIfRefreshToken(expectedRefreshToken: String, authSessionEpoch: String): Boolean =
+        clearIfRefreshTokenGuarded(expectedRefreshToken, authSessionEpoch)
+
+    private suspend fun clearIfRefreshTokenGuarded(expectedRefreshToken: String, epoch: String?): Boolean {
+        var cleared = false
+        writing {
+            dataStore.edit { prefs ->
+                val existing = prefs[KEY_BLOB]?.let(::decode) ?: return@edit
+                if (existing.tokens.refreshToken != expectedRefreshToken) return@edit
+                if (epoch != null && !AuthSessionIdentityPreferences.matches(prefs, existing.userId, epoch)) return@edit
+                prefs.remove(KEY_BLOB)
+                AuthSessionIdentityPreferences.clear(prefs)
+                prefs.remove(KEY_REFRESH_PENDING)
+                cleared = true
+            }
+        }
+        return cleared
+    }
+
+    override suspend fun clear() {
+        writing { dataStore.edit {
+            it.remove(KEY_BLOB)
+            AuthSessionIdentityPreferences.clear(it)
+            it.remove(KEY_REFRESH_PENDING)
+        } }
+    }
+
+    private fun decodeRefreshMarker(blob: String): Pair<String, String>? = runCatching {
+        val text = aead.decrypt(Base64.decode(blob, Base64.NO_WRAP), REFRESH_AAD).toString(Charsets.UTF_8)
+        val parts = text.split("\n")
+        if (parts.size == 2 && parts.all { it.isNotBlank() }) parts[0] to parts[1] else null
+    }.getOrNull()
 
     private fun encode(session: TokenStore.Session): String {
         val plain = listOf(session.userId, session.tokens.accessToken, session.tokens.refreshToken)
@@ -237,6 +353,8 @@ class EncryptedTokenStore @Inject constructor(
         const val TAG = "PfSession"
         const val READ_RETRY_MS = 1_000L
         val KEY_BLOB = stringPreferencesKey("session.blob")
+        val KEY_REFRESH_PENDING = stringPreferencesKey("session.refresh_pending")
+        val REFRESH_AAD = "pf.session.refresh_pending".toByteArray()
         const val KEYSET_NAME = "pf_session_keyset"
         const val KEYSET_PREFS = "pf_session_keyset_prefs"
         const val MASTER_KEY_URI = "android-keystore://pf_session_master_key"

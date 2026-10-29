@@ -9,6 +9,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.transformWhile
@@ -26,6 +28,7 @@ import ru.finassist.pf.core.common.availability.ClientVersion
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.Clock
+import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.mock.domain.AnalyticsEngine
 import ru.finassist.pf.mock.domain.Catalog
 import ru.finassist.pf.mock.domain.Coverage
@@ -55,9 +58,23 @@ class MockBackend(
     private val clientVersion: ClientVersion = ClientVersion("0.0.0", 0),
     /** Where the update and maintenance answers go, as the network layer reports them in `prod` (FIN-22). */
     private val gate: ServiceGate = ServiceGate(),
+    internal val elapsedClock: ElapsedClock? = null,
 ) {
     val scope = CoroutineScope(SupervisorJob() + dispatcher)
     val mutex = Mutex()
+    private val injectedErrors = MutableStateFlow(0)
+    /** Cumulative: clearing the scenario does not erase evidence of an accidental resend. */
+    val injectedErrorCount: StateFlow<Int> = injectedErrors.asStateFlow()
+
+    internal suspend fun maybeInjectError(operation: MockErrorOperation) {
+        val scenario = mutex.withLock {
+            if (config.errorOperation != operation) return@withLock null
+            injectedErrors.value += 1
+            config.errorScenario
+        } ?: return
+        throw injectedError(scenario)
+    }
+
 
     /** Completed once the preloaded statement is imported; requests wait for it. */
     val ready = CompletableDeferred<Unit>()
@@ -115,7 +132,7 @@ class MockBackend(
     val idempotency = HashMap<String, Stored>()
 
     /** A cached response and the request it answered ([request] null: the endpoint does not compare bodies yet). */
-    class Stored(val request: Any?, val result: Any)
+    class Stored(val request: Any?, val result: Any, val expiresAt: OffsetDateTime? = null)
 
     val analytics = AnalyticsEngine(
         ledger = ledger,
@@ -170,12 +187,14 @@ class MockBackend(
     private fun checkAvailability() {
         val c = config
         if (c.maintenance) {
-            gate.maintenance(c.maintenanceUntil, c.maintenanceRetryAfterSeconds, now())
-            throw AppError.Maintenance(c.maintenanceUntil, c.maintenanceRetryAfterSeconds)
+            val error = maintenanceError(c.maintenanceUntil, c.maintenanceRetryAfterSeconds)
+            gate.maintenance(c.maintenanceUntil, c.maintenanceRetryAfterSeconds, now(), response = error.response)
+            throw error
         }
         if (clientVersion.isBelow(c.minVersion)) {
-            gate.updateRequired()
-            throw AppError.UpdateRequired()
+            val error = updateRequiredError()
+            gate.updateRequired(error.presentation)
+            throw error
         }
         gate.reopen()
     }
@@ -229,7 +248,7 @@ class MockBackend(
         config = config.copy(streamRateLimits = left - 1)
         val seconds = config.streamRetrySeconds
         streamRateLimited.value += 1
-        AppError.RateLimited(retryAt = now().plusSeconds(seconds), retryAfterSeconds = seconds)
+        rateLimitedError(retryAt = now().plusSeconds(seconds), retryAfterSeconds = seconds, requestRetryable = true)
     }
 
     /** Keys whose first request is still running. */
@@ -241,17 +260,27 @@ class MockBackend(
      * [request] (the request body, compared by equality) gets 409 IDEMPOTENCY_CONFLICT; a call without [request]
      * is not compared. A failed [block] is not stored: the key can be used again. [onRepeat] runs before a cached
      * result is returned: a [block] that simulates the network itself passes the same checks here, so a repeat
-     * still meets offline and a lost session.
+     * still meets offline and a lost session. [expiresAt] optionally bounds the cache lifetime; the response is
+     * discarded at that instant, and a replay never extends it.
      */
-    suspend fun <T : Any> idempotent(key: String, request: Any? = null, onRepeat: suspend () -> Unit = {}, block: suspend () -> T): T {
+    suspend fun <T : Any> idempotent(
+        key: String,
+        request: Any? = null,
+        onRepeat: suspend () -> Unit = {},
+        expiresAt: OffsetDateTime? = null,
+        block: suspend () -> T,
+    ): T {
         val cached = mutex.withLock {
-            val stored = idempotency[key]
+            val stored = idempotency[key]?.takeUnless { saved ->
+                saved.expiresAt?.let { !now().isBefore(it) } == true
+            }
+            if (stored == null) idempotency.remove(key)
             if (stored != null && request != null && stored.request != null && stored.request != request) {
-                throw AppError.Api(ErrorCodes.IDEMPOTENCY_CONFLICT, 409, message = "Idempotency-Key was used with another request")
+                throw apiError(ErrorCodes.IDEMPOTENCY_CONFLICT, 409, message = "Idempotency-Key was used with another request")
             }
             @Suppress("UNCHECKED_CAST")
             (stored?.result as? T) ?: run {
-                if (!inFlight.add(key)) throw AppError.InProgress(retryAfterSeconds = 1)
+                if (!inFlight.add(key)) throw inProgressError(retryAfterSeconds = 1)
                 null
             }
         }
@@ -261,7 +290,7 @@ class MockBackend(
         }
         try {
             val result = block()
-            mutex.withLock { idempotency[key] = Stored(request, result) }
+            mutex.withLock { idempotency[key] = Stored(request, result, expiresAt) }
             return result
         } finally {
             // Also when the caller was cancelled mid-request: the lock may be busy, and a cancellable wait for it
@@ -271,7 +300,7 @@ class MockBackend(
     }
 
     fun requireSession() {
-        if (profile.userId.isEmpty()) throw AppError.Unauthorized(ErrorCodes.INVALID_TOKEN)
+        if (profile.userId.isEmpty()) throw unauthorizedError(ErrorCodes.INVALID_TOKEN)
     }
 
     fun newUserId(): String = UUID.randomUUID().toString()

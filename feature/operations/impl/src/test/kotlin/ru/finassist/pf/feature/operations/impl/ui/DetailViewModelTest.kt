@@ -43,7 +43,7 @@ class DetailViewModelTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private fun vm() = DetailViewModel(savedState, api, categories, operations, tracker)
+    private fun vm() = DetailViewModel(savedState, api, categories, operations, tracker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
 
     private fun picked(categoryId: String) = vm().apply {
         openPicker()
@@ -166,7 +166,7 @@ class DetailViewModelTest {
         vm.load()
         assertEquals("op_1b", api.opened.last())
         assertEquals(creditAt, api.openedAt.last())
-        val recreated = DetailViewModel(savedState, api, categories, operations, tracker)
+        val recreated = DetailViewModel(savedState, api, categories, operations, tracker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
         assertEquals("op_1b", api.opened.last())
         assertEquals(creditAt, api.openedAt.last())
         api.changeResponse = ChangeCategoryResponse(listOf(credit.copy(categoryId = "cat_supermarkets")))
@@ -225,6 +225,46 @@ class DetailViewModelTest {
         assertNull(vm.state.value.pickerError)
     }
 
+    private fun forbiddenCategory() = AppError.Api("FUTURE_REFUSAL", 400,
+        response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_REFUSAL", 400, requestRetryable = false))
+
+    @Test fun `an old category refusal cannot restrict a different draft selected during the PATCH`() {
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        api.changeReply = { release.await(); throw forbiddenCategory() }
+        val vm = picked("cat_restaurants")
+        vm.save()
+        assertTrue(vm.state.value.saving)
+        vm.save()
+        assertEquals(1, api.changes.size, "busy prevents a duplicate submission")
+        vm.choose("cat_taxi")
+        release.complete(Unit)
+        assertFalse(vm.state.value.saving)
+        assertTrue(vm.state.value.pickerRetryReady)
+        assertNull(vm.state.value.pickerRequestRetryable)
+        assertNull(vm.state.value.pickerError)
+        api.changeReply = null
+        api.changeResponse = ChangeCategoryResponse(listOf(details("op_1", categoryId = "cat_taxi")))
+        vm.save()
+        assertEquals(listOf("op_1" to "cat_restaurants", "op_1" to "cat_taxi"), api.changes)
+        assertEquals("cat_taxi", vm.state.value.operation?.categoryId)
+    }
+
+    @Test fun `an unchanged draft preserves its own refusal until an actual new category is chosen`() {
+        api.changeFailure = forbiddenCategory()
+        val vm = picked("cat_restaurants")
+        vm.save()
+        vm.choose("cat_restaurants")
+        vm.save()
+        assertEquals(1, api.changes.size)
+        assertFalse(vm.state.value.pickerRetryReady)
+        vm.choose("cat_taxi")
+        api.changeFailure = null
+        api.changeResponse = ChangeCategoryResponse(listOf(details("op_1", categoryId = "cat_taxi")))
+        vm.save()
+        assertEquals(2, api.changes.size)
+        assertEquals("cat_taxi", vm.state.value.operation?.categoryId)
+    }
+
     @Test fun `the snackbar is shown once`() {
         api.changeResponse = ChangeCategoryResponse(listOf(details("op_1", categoryId = "cat_restaurants")))
         val vm = picked("cat_restaurants")
@@ -240,7 +280,7 @@ class DetailViewModelTest {
         api.changeResponse = ChangeCategoryResponse(listOf(details("op_1", categoryId = "cat_restaurants").copy(occurredAt = latest.plusDays(1))))
         vm.save()
         assertEquals("2026-10-01T00:00:00.123456789+03:00", api.changedAt.single())
-        DetailViewModel(savedState, api, categories, operations, tracker)
+        DetailViewModel(savedState, api, categories, operations, tracker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
         assertEquals("2026-10-02T00:00:00.123456789+03:00", api.openedAt.last())
     }
 

@@ -33,8 +33,14 @@ tags:
     visible:
       id: "assistant.consent"
     timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
 - tapOn:
     id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
 - tapOn:
     id: "assistant.consent.submit"
 - extendedWaitUntil:

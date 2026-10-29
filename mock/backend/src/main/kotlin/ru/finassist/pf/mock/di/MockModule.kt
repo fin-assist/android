@@ -19,6 +19,7 @@ import ru.finassist.pf.core.api.ProfileApi
 import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.common.time.Clock
+import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.MockConfig
 import ru.finassist.pf.mock.MockPfApi
@@ -38,7 +39,8 @@ object MockModule {
         config: Optional<MockConfig>,
         clientVersion: ClientVersion,
         gate: ServiceGate,
-    ): MockPfApi = MockPfApi(context, clock, tokenStore, config.orElseGet { MockConfig() }, clientVersion, gate)
+        elapsedClock: ElapsedClock,
+    ): MockPfApi = MockPfApi(context, clock, tokenStore, config.orElseGet { MockConfig() }, clientVersion, gate, elapsedClock)
 
     @Provides @Singleton fun backend(api: MockPfApi): MockBackend = api.backend
     @Provides @Singleton fun pfApi(api: MockPfApi): PfApi = api

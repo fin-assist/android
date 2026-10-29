@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.auth.impl.data
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -41,6 +43,7 @@ class SessionRepositoryImpl @Inject constructor(
     private val crashReporter: CrashReporter,
     private val dataStore: DataStore<Preferences>,
     private val signInFlow: SignInFlow,
+    private val elapsedClock: ElapsedClock,
 ) : SessionRepository {
 
     /**
@@ -65,7 +68,7 @@ class SessionRepositoryImpl @Inject constructor(
 
     override val state: Flow<SessionState> = tokenStore.session.map { session ->
         // A session without a user id exists only for the moment the profile is being fetched after sign-in.
-        if (session == null || session.userId.isEmpty()) SessionState.SignedOut else SessionState.SignedIn(session.userId)
+        if (session == null || session.userId.isEmpty()) SessionState.SignedOut else SessionState.SignedIn(session.userId, session.authSessionEpoch)
     }
 
     init {
@@ -176,7 +179,7 @@ class SessionRepositoryImpl @Inject constructor(
         try {
             authApi.logout(tokens.accessToken, tokens.refreshToken)
         } catch (e: AppError.Unauthorized) {
-            val fresh = authApi.refreshTokens(IdempotencyKey.random(), tokens.refreshToken)
+            val fresh = authApi.refreshTokens(IdempotencyKey.random(elapsedClock), tokens.refreshToken)
             authApi.logout(fresh.accessToken, fresh.refreshToken)
         }
     }

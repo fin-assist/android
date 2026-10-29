@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.auth.impl
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
@@ -116,7 +118,7 @@ open class FakeAuthApi(private val log: Log = Log()) : AuthApi {
     var logoutFailure: (String) -> Throwable? = { null }
     var refreshed = TokenPair("a_fresh", "r_fresh")
 
-    override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String) = startPhone(key, phone)
+    override suspend fun startPhoneVerification(key: IdempotencyKey, request: StartPhoneVerificationRequest) = startPhone(key, request.phone)
     override fun streamPhoneVerification(verificationToken: String) = stream(verificationToken)
     override suspend fun register(key: IdempotencyKey, request: RegisterRequest) = registerCall(key, request)
     override suspend fun refreshTokens(key: IdempotencyKey, refreshToken: String): TokenPair {
@@ -172,7 +174,7 @@ class SessionHarness(
     private val dir: File = createTempDirectory("session").toFile()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val dataStore: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") }
-    val repo = SessionRepositoryImpl(tokens, auth, profile, flags, tracker, crash, dataStore, flow)
+    val repo = SessionRepositoryImpl(tokens, auth, profile, flags, tracker, crash, dataStore, flow, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
 
     fun close() {
         scope.cancel()

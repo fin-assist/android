@@ -57,7 +57,7 @@ class SearchViewModelTest {
 
     private fun vm(preset: OperationsFilter? = null, flags: StaticFlags = StaticFlags()): SearchViewModel {
         val args = preset?.let { mapOf("filter" to PfNavTypes.operationsFilter.serializeAsValue(it)) }.orEmpty()
-        return SearchViewModel(SavedStateHandle(args), api, categories, operations, operations, flags, tracker, reportZone)
+        return SearchViewModel(SavedStateHandle(args), api, categories, operations, operations, flags, tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
     }
 
     private fun found(vararg ids: String, total: Int? = null, range: DateRange? = window, older: Boolean? = null) =
@@ -276,6 +276,46 @@ class SearchViewModelTest {
         assertEquals(2, api.queries.size)
     }
 
+    @Test fun `a changed effective zone releases only the default-window request refusal`() {
+        api.lists += AppError.Api("FUTURE_ERROR", 400,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_ERROR", 400, requestRetryable = false))
+        api.lists += found("recovered")
+        val vm = vm(OperationsFilter(q = "кофе"))
+        assertFalse(vm.state.value.retryReady)
+        reportZone.set("Europe/Moscow")
+        vm.retry()
+        assertEquals(1, api.queries.size, "the same effective zone is still the refused context")
+        reportZone.set("Asia/Vladivostok")
+        assertEquals(2, api.queries.size)
+        assertTrue(vm.state.value.retryReady)
+        assertNull(vm.state.value.requestRetryable)
+        assertEquals(listOf("recovered"), assertIs<SearchResult.Found>(vm.state.value.result).items.map { it.id })
+    }
+
+    @Test fun `a changed zone does not release an explicit-period request refusal`() {
+        api.lists += AppError.Api("FUTURE_ERROR", 400,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_ERROR", 400, requestRetryable = false))
+        val vm = vm(OperationsFilter(q = "кофе", from = window.from, to = window.to))
+        reportZone.set("Asia/Vladivostok")
+        vm.retry()
+        assertEquals(1, api.queries.size)
+        assertFalse(vm.state.value.retryReady)
+    }
+
+    @Test fun `a changed zone and repeated all-time choice keep an all-time refusal`() {
+        api.lists += found("initial")
+        api.lists += AppError.Api("FUTURE_ERROR", 400,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_ERROR", 400, requestRetryable = false))
+        val vm = vm(OperationsFilter(q = "кофе"))
+        vm.searchAllTime()
+        assertFalse(vm.state.value.retryReady)
+        reportZone.set("Asia/Vladivostok")
+        vm.searchAllTime()
+        vm.retry()
+        assertEquals(2, api.queries.size)
+        assertFalse(vm.state.value.retryReady)
+    }
+
     @Test fun `a new zone keeps the shown result while asking again (FIN-92 review)`() {
         api.lists += found("op_1")
         api.lists += found("op_1", "op_2")
@@ -351,6 +391,157 @@ class SearchViewModelTest {
         val vm = vm(OperationsFilter(from = window.from, to = window.to))
         operations.updateRecords(listOf(details("op_1").copy(occurredAt = at(25).plusMonths(1))))
         assertTrue(assertIs<SearchResult.Found>(vm.state.value.result).items.isEmpty())
+    }
+
+    private fun forbiddenSearch() = AppError.Api("FUTURE_ERROR", 400,
+        response = ru.finassist.pf.core.common.error.ErrorResponseInfo("FUTURE_ERROR", 400, requestRetryable = false))
+
+    @Test fun `blank search text never releases an unchanged category request refusal`() {
+        api.lists += forbiddenSearch()
+        val vm = vm(OperationsFilter(categoryId = "cat_taxi"))
+        typed(vm, " ")
+        typed(vm, "\t  ")
+        vm.retry()
+        assertEquals(1, api.queries.size)
+        assertNull(vm.state.value.filter.q)
+        assertFalse(vm.state.value.retryReady)
+    }
+
+    @Test fun `a restored blank preset has the same omitted-query context`() {
+        api.lists += forbiddenSearch()
+        val vm = vm(OperationsFilter(categoryId = "cat_taxi", q = " "))
+        typed(vm, "\t")
+        assertEquals(1, api.queries.size)
+        assertNull(api.queries.single().filter.q)
+        assertFalse(vm.state.value.retryReady)
+    }
+
+    @Test fun `removing only a display selection label cannot release a refused wire query`() {
+        api.lists += forbiddenSearch()
+        val vm = vm(OperationsFilter(categoryId = "cat_taxi", selectionName = "label"))
+        vm.clearAnalyticsScope()
+        assertNull(vm.state.value.filter.selectionName)
+        assertEquals(1, api.queries.size)
+        assertFalse(vm.state.value.retryReady)
+    }
+
+    @Test fun `a confirmed category change refreshes a quiet-refused search and its membership`() {
+        api.lists += found("op_1")
+        api.lists += forbiddenSearch()
+        api.lists += found(total = 0)
+        val vm = vm(OperationsFilter(categoryId = "cat_supermarkets"))
+        reportZone.set("Asia/Vladivostok")
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(1, assertIs<SearchResult.Found>(vm.state.value.result).totalCount)
+        vm.retry()
+        assertEquals(2, api.queries.size)
+        operations.notifyCategoryChanged()
+        val result = assertIs<SearchResult.Found>(vm.state.value.result)
+        assertTrue(result.items.isEmpty())
+        assertEquals(0, result.totalCount)
+        assertEquals(3, api.queries.size)
+        assertTrue(vm.state.value.retryReady)
+    }
+
+    @Test fun `only a changed visible timestamp releases a quiet-refused search`() {
+        api.lists += found("op_1")
+        api.lists += forbiddenSearch()
+        api.lists += found(total = 0)
+        val vm = vm(OperationsFilter(q = "кофе"))
+        reportZone.set("Asia/Vladivostok")
+        operations.updateRecords(listOf(details("op_1")))
+        vm.retry()
+        assertEquals(2, api.queries.size, "the same timestamp does not change the effective request")
+        assertFalse(vm.state.value.retryReady)
+        operations.updateRecords(listOf(details("op_1").copy(occurredAt = at(25).plusMonths(1))))
+        assertEquals(3, api.queries.size)
+        assertTrue(assertIs<SearchResult.Found>(vm.state.value.result).items.isEmpty())
+        assertTrue(vm.state.value.retryReady)
+    }
+
+    @Test fun `reset from a refused all-time query sends the default window with the same text`() {
+        api.lists += found("initial")
+        api.lists += forbiddenSearch()
+        api.lists += found("window")
+        val vm = vm(OperationsFilter(q = "кофе"))
+        vm.searchAllTime()
+        assertFalse(vm.state.value.retryReady)
+        vm.reset()
+        assertEquals(3, api.queries.size)
+        assertEquals(OperationsQuery(filter = OperationsFilter(q = "кофе")), api.queries.last())
+        assertFalse(vm.state.value.allTime)
+        assertTrue(vm.state.value.retryReady)
+        assertEquals(listOf("window"), assertIs<SearchResult.Found>(vm.state.value.result).items.map { it.id })
+    }
+
+    @Test fun `normalizing a period flag without changing the effective period preserves refusal`() {
+        api.lists += forbiddenSearch()
+        val vm = vm(OperationsFilter(q = "кофе", from = window.from, to = window.to))
+        vm.setPeriod(window.from, window.to, allTime = true)
+        vm.retry()
+        assertEquals(1, api.queries.size)
+        assertFalse(vm.state.value.allTime)
+        assertFalse(vm.state.value.retryReady)
+    }
+
+    @Test fun `a stale search refusal cannot poison a changed-filter result`() {
+        var old: kotlin.coroutines.Continuation<OperationsList>? = null
+        var calls = 0
+        api.listReply = {
+            if (++calls == 1) kotlin.coroutines.suspendCoroutine { old = it }
+            else found("current")
+        }
+        val vm = vm(OperationsFilter(q = "old"))
+        typed(vm, "new")
+        old!!.resumeWith(Result.failure(forbiddenSearch()))
+        assertEquals(listOf("current"), assertIs<SearchResult.Found>(vm.state.value.result).items.map { it.id })
+        assertNull(vm.state.value.requestRetryable)
+        assertTrue(vm.state.value.retryReady)
+        vm.retry()
+        assertEquals(3, calls)
+    }
+
+    @Test fun `a stale search success cannot replace a newer refusal or reopen its gate`() {
+        var old: kotlin.coroutines.Continuation<OperationsList>? = null
+        var calls = 0
+        api.listReply = {
+            if (++calls == 1) kotlin.coroutines.suspendCoroutine { old = it }
+            else throw forbiddenSearch()
+        }
+        val vm = vm(OperationsFilter(q = "old"))
+        typed(vm, "new")
+        old!!.resumeWith(Result.success(found("obsolete")))
+        assertEquals(SearchResult.Failed, vm.state.value.result)
+        assertEquals(false, vm.state.value.requestRetryable)
+        assertFalse(vm.state.value.retryReady)
+        vm.retry()
+        assertEquals(2, calls)
+    }
+
+    @Test fun `a stale selection refusal clears only the removed-selection context and recovers`() {
+        api.lists += AppError.Api(ErrorCodes.SELECTION_NOT_FOUND, 422,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo(ErrorCodes.SELECTION_NOT_FOUND, 422, requestRetryable = false))
+        api.lists += found("recovered")
+        val vm = vm(OperationsFilter(q = "кофе", selection = "stale", selectionName = "Такси"))
+        assertEquals(2, api.queries.size)
+        assertEquals("stale", api.queries.first().filter.selection)
+        assertEquals(OperationsFilter(q = "кофе"), api.queries.last().filter)
+        assertTrue(vm.state.value.selectionDropped)
+        assertTrue(vm.state.value.retryReady)
+        assertEquals(null, vm.state.value.requestRetryable)
+        assertEquals(listOf("recovered"), assertIs<SearchResult.Found>(vm.state.value.result).items.map { it.id })
+    }
+
+    @Test fun `selection-not-found without a selection keeps refusal and cannot loop or retry`() {
+        api.lists += AppError.Api(ErrorCodes.SELECTION_NOT_FOUND, 422,
+            response = ru.finassist.pf.core.common.error.ErrorResponseInfo(ErrorCodes.SELECTION_NOT_FOUND, 422, requestRetryable = false))
+        val vm = vm(OperationsFilter(q = "кофе"))
+        assertEquals(1, api.queries.size)
+        assertFalse(vm.state.value.selectionDropped)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(SearchResult.Failed, vm.state.value.result)
+        vm.retry()
+        assertEquals(1, api.queries.size)
     }
 
 }

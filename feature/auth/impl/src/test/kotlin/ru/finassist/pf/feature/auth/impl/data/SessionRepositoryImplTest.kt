@@ -42,6 +42,15 @@ class SessionRepositoryImplTest {
         assertEquals(SessionState.SignedIn("u1"), h.repo.state.first())
     }
 
+    @Test fun `login epoch reaches consumers and refresh retains their context`() = runBlocking {
+        val h = harness(TokenStore.Session("u1", pair, "login-1"))
+        assertEquals(SessionState.SignedIn("u1", "login-1"), h.repo.state.first())
+        h.tokens.flow.value = TokenStore.Session("u1", TokenPair("a2", "r2"), "login-1")
+        assertEquals(SessionState.SignedIn("u1", "login-1"), h.repo.state.first())
+        h.tokens.flow.value = TokenStore.Session("u1", pair, "login-2")
+        assertEquals(SessionState.SignedIn("u1", "login-2"), h.repo.state.first())
+    }
+
     @Test fun `an existing user's id is read from the profile before the session is saved`() = runBlocking {
         val h = harness()
         h.profile.userId = "u42"

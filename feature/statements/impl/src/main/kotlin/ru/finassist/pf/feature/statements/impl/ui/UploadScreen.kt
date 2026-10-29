@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.content.Intent
 import android.net.Uri
@@ -71,6 +72,7 @@ fun UploadScreen(
     onLater: () -> Unit,
     onDone: (uploadId: String) -> Unit,
     vm: UploadViewModel = hiltViewModel(),
+    onOpenHistory: () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -103,6 +105,8 @@ fun UploadScreen(
         onCancelImport = vm::cancelImport,
         onRetryUpload = vm::retryUpload,
         onSupport = { writeToSupport(context, "Не получилось загрузить выписку") },
+        onStartNewUpload = vm::startNewUpload,
+        onOpenHistory = onOpenHistory,
     )
 }
 
@@ -123,6 +127,8 @@ internal fun UploadContent(
     onCancelImport: () -> Unit,
     onRetryUpload: () -> Unit,
     onSupport: () -> Unit,
+    onStartNewUpload: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
 ) {
     val d = PfTheme.dimens
     val busy = state.phase as? UploadPhase.Busy
@@ -156,6 +162,9 @@ internal fun UploadContent(
                 .padding(horizontal = d.space5)
                 .padding(top = d.space4, bottom = d.space4),
         ) {
+            state.guideErrorPresentation?.let {
+                ErrorMessage(it, "Не получилось обновить условия загрузки. Используем сохранённые условия", modifier = Modifier.padding(horizontal = d.space5))
+            }
             when (val phase = state.phase) {
                 UploadPhase.Loading -> Unit
                 // First run has no back arrow: these states must offer a way on.
@@ -170,6 +179,7 @@ internal fun UploadContent(
                     config = state.config ?: (phase as? UploadPhase.Guide)?.config ?: return@Column,
                     busy = busy,
                     offline = state.uploadOffline,
+                    retryEnabled = state.uploadRetryReady,
                     canSkip = firstRun || (state.config ?: (phase as? UploadPhase.Guide)?.config)?.loaded == null,
                     onShowFallback = { onShowFallback(true) },
                     onDownload = { url -> onOpenUrl(url) },
@@ -178,6 +188,12 @@ internal fun UploadContent(
                     onLater = if (firstRun) onLater else onBack,
                     onPrivacy = { onOpenUrl(LegalLinks.PRIVACY) },
                 )
+                is UploadPhase.RecoveryRequired -> Column(Modifier.testTag(StatementsTags.UPLOAD_RECOVERY), verticalArrangement = Arrangement.spacedBy(d.space4)) {
+                    PfNotice("Результат предыдущей загрузки неизвестен: файл мог уже загрузиться. Проверьте историю. Новая загрузка не отменяет предыдущую попытку.", tone = NoticeTone.WARNING)
+                    FileRow("Файл", phase.fileName, divider = false)
+                    PfButton("Загрузить заново", onClick = onStartNewUpload, block = true, modifier = Modifier.testTag(StatementsTags.UPLOAD_NEW_INTENT))
+                    PfLink("Проверить историю загрузок", onClick = onOpenHistory)
+                }
                 is UploadPhase.Error -> Unit
             }
         }
@@ -207,6 +223,7 @@ private fun ColumnScope.Guide(
     config: ImportConfig,
     busy: UploadPhase.Busy?,
     offline: Boolean,
+    retryEnabled: Boolean = true,
     canSkip: Boolean,
     onShowFallback: () -> Unit,
     onDownload: (String) -> Unit,
@@ -266,7 +283,7 @@ private fun ColumnScope.Guide(
             modifier = Modifier.testTag(StatementsTags.UPLOAD_SEND_OFFLINE),
             action = {
                 Box(Modifier.padding(top = d.space2)) {
-                    PfButton("Повторить", onClick = onRetryUpload, variant = ButtonVariant.SECONDARY, modifier = Modifier.testTag(StatementsTags.UPLOAD_SEND_RETRY))
+                    PfButton("Повторить", onClick = onRetryUpload, enabled = retryEnabled, variant = ButtonVariant.SECONDARY, modifier = Modifier.testTag(StatementsTags.UPLOAD_SEND_RETRY))
                 }
             },
         )
@@ -340,7 +357,9 @@ private fun ColumnScope.ErrorBlock(phase: UploadPhase.Error, onPickAnother: () -
             PfStatusHero(tone = HeroTone.WARNING, icon = PfIcons.ALERT, centered = false)
             Spacer(Modifier.height(d.space5))
             Text("Не получилось прочитать файл", style = PfTheme.type.title1, color = c.text, modifier = Modifier.semantics { heading() })
-            Text(text.reason, style = PfTheme.type.lead, color = c.textMuted, modifier = Modifier.padding(top = d.space1))
+            val presentation = phase.presentation
+            if (presentation != null) ErrorMessage(presentation, text.reason, modifier = Modifier.padding(top = d.space1))
+            else Text(text.reason, style = PfTheme.type.lead, color = c.textMuted, modifier = Modifier.padding(top = d.space1))
             Spacer(Modifier.height(d.space5))
             PfCard(flush = true) {
                 FileRow("Файл", phase.fileName, divider = true)
@@ -393,6 +412,8 @@ private fun openUrl(context: android.content.Context, url: String) {
 
 /** Test tags of the statement screens (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object StatementsTags {
+    const val UPLOAD_RECOVERY = "statements.upload.recovery"
+    const val UPLOAD_NEW_INTENT = "statements.upload.new_intent"
     const val UPLOAD = "statements.upload"
     const val UPLOAD_PICK = "statements.upload.pick"
     const val UPLOAD_LATER = "statements.upload.later"

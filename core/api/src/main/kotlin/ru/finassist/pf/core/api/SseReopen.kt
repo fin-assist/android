@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onEach
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.error.ErrorContext
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.time.ServerDeadline
 import java.time.Instant
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
@@ -35,7 +38,9 @@ class SseBackoff(private val random: Random = Random.Default) {
     fun afterRateLimit(waitMs: Long): Long {
         val d = baseMs
         grow()
-        return waitMs.coerceAtLeast(0) + random.nextLong(0, d / 2 + 1)
+        val wait = waitMs.coerceAtLeast(0)
+        val jitter = random.nextLong(0, d / 2 + 1)
+        return if (wait > Long.MAX_VALUE - jitter) Long.MAX_VALUE else wait + jitter
     }
 
     fun reset() {
@@ -59,6 +64,25 @@ class SseBackoff(private val random: Random = Random.Default) {
  * caller per stream key across collections ([reopeningStream]); not thread-safe — one collection at a time.
  */
 class SseReopenState {
+    /** Retained across collections of this same request context; creating a new context is caller-owned. */
+    internal var blockedError: AppError? = null
+    internal var recoveryDeadline: ServerDeadline? = null
+    internal var recoveryConsumed: Boolean = false
+
+    internal fun authorizeRecoveryOnce(error: AppError, after: ServerDeadline): Boolean {
+        if (blockedError !== error || recoveryConsumed) return false
+        if (recoveryDeadline == null) recoveryDeadline = after
+        return true
+    }
+    internal var retryPauseError: AppError.RateLimited? = null
+    internal var retryPauseStartedMillis: Long? = null
+    internal var retryPauseMillis: Long = 0
+
+    internal fun clearRetryPause() {
+        retryPauseError = null
+        retryPauseStartedMillis = null
+        retryPauseMillis = 0
+    }
     var reopening: Boolean = false
         internal set
 }
@@ -75,7 +99,9 @@ class SseReopenState {
  *   [SseBackoff.HEALTHY_MS]. Events alone do not reset it: a server that fails right after the snapshot would
  *   otherwise be re-opened without pauses.
  * - 429 on a re-open: wait until `retry_at` — `Retry-After` when present (relative, independent of the device clock),
- *   else `retry_at` against [wallClock] — plus random [0; d/2]; d doubles. Without either, the pause of a drop.
+ *   else `retry_at` minus Date of the same fresh response with [elapsedClock] — plus random [0; d/2]; d doubles.
+ *   A datetime-only error without that timebase goes to the caller; phone [wallClock] is retained only for source compatibility.
+ *   Without any server retry time, the pause of a drop.
  * - Everything else (401, 404, a malformed event, 429 on the first opening) goes to the caller as before.
  * - [reopenFirstFailure] false: a failure of the very first opening, before any event, goes to the caller too, so a
  *   screen keeps its own «нет сети» state for a stream that could not be opened at all. A clean close without a
@@ -87,6 +113,11 @@ class SseReopenState {
  *   [reopenFirstFailure] still looks at this collection only: a stream that cannot be opened after the screen came
  *   back shows the screen's «нет сети» state, as on the first visit.
  *
+ * [recoverOnceAfter] is an explicit caller-owned correction policy, not an exemption for a raw error code.
+ * It can arm one opening after an anchored deadline; the first refusal still reaches the caller. Cancellation
+ * retains that deadline, and a second REST refusal before an event cannot re-arm a loop. A successful event
+ * starts a new independent episode. Without this policy, explicit false remains blocked.
+ *
  * The flow completes after the stream that brought the terminal event ends. Cancelling the collector stops it,
  * pauses included.
  */
@@ -97,8 +128,28 @@ fun <T> reopeningStream(
     random: Random = Random.Default,
     timeSource: TimeSource = TimeSource.Monotonic,
     wallClock: () -> Instant = Instant::now,
+    elapsedClock: ElapsedClock? = null,
+    recoverOnceAfter: ((AppError) -> ServerDeadline?)? = null,
     open: () -> Flow<T>,
 ): Flow<T> = flow {
+    var guardedRecoveryOpening = false
+    state.blockedError?.let { previous ->
+        val deadline = state.recoveryDeadline ?: throw previous
+        if (state.recoveryConsumed) throw previous
+        val remaining = elapsedClock?.let(deadline::remainingMillis) ?: throw previous
+        delay(remaining) // cancellation retains the same permission/deadline, without consuming the opening
+        state.recoveryConsumed = true
+        state.recoveryDeadline = null
+        state.blockedError = null
+        guardedRecoveryOpening = true
+    }
+    state.retryPauseError?.let { previous ->
+        val started = state.retryPauseStartedMillis ?: throw previous
+        val now = elapsedClock?.nowMillis() ?: throw previous
+        if (now < started) throw previous
+        delay((state.retryPauseMillis - (now - started)).coerceAtLeast(0))
+        state.clearRetryPause()
+    }
     val backoff = SseBackoff(random)
     // A drop has happened in this collection (the first-failure rule looks at this one only).
     var reopening = false
@@ -108,6 +159,9 @@ fun <T> reopeningStream(
         var failure: Throwable? = null
         open()
             .onEach { event ->
+                // An actual successful event ends this refusal episode; mere re-collection does not.
+                state.recoveryConsumed = false
+                guardedRecoveryOpening = false
                 if (openedAt == null) {
                     openedAt = timeSource.markNow()
                     state.reopening = true
@@ -127,6 +181,16 @@ fun <T> reopeningStream(
             return@flow
         }
         val error = failure
+        if (guardedRecoveryOpening && openedAt == null) {
+            // One corrected opening is not a new automatic retry loop. A new REST refusal stays latched.
+            if (error is AppError && error.response?.context == ErrorContext.REQUEST) state.blockedError = error
+            throw error ?: AppError.Offline()
+        }
+        if (error is AppError && error.response?.context == ErrorContext.REQUEST && error.requestRetryable == false) {
+            state.blockedError = error
+            if (!state.recoveryConsumed) recoverOnceAfter?.invoke(error)?.let { state.authorizeRecoveryOnce(error, it) }
+            throw error
+        }
         val pause = when {
             error == null || error.isDrop() -> {
                 if (error != null && !reopening && openedAt == null && !reopenFirstFailure) throw error
@@ -134,15 +198,26 @@ fun <T> reopeningStream(
                 backoff.afterDrop()
             }
             error is AppError.RateLimited && state.reopening -> {
-                val wait = error.retryAfterSeconds?.let { it * 1_000 }
-                    ?: error.retryAt?.let { it.toInstant().toEpochMilli() - wallClock().toEpochMilli() }
+                val deadline = error.response?.timing?.deadline(error.retryAfterSeconds, error.retryAt?.toInstant())
+                val wait = if (deadline != null && elapsedClock != null) deadline.remainingMillis(elapsedClock)
+                    else error.retryAfterSeconds?.let { if (it > Long.MAX_VALUE / 1000) Long.MAX_VALUE else it * 1000 }
+                // A datetime-only error without a fresh response Date/elapsed anchor cannot use phone wall time.
+                if (wait == null && (error.retryAt != null || deadline != null)) throw error
                 if (wait != null) backoff.afterRateLimit(wait) else backoff.afterDrop()
             }
             else -> throw error
         }
         reopening = true
         state.reopening = true
+        if (error is AppError.RateLimited) {
+            // Keep the already selected server wait+jitter across cancellation/background collection changes.
+            // A missing/lost elapsed anchor cannot grant an early opening on the next collection.
+            state.retryPauseError = error
+            state.retryPauseStartedMillis = elapsedClock?.nowMillis()
+            state.retryPauseMillis = pause
+        }
         delay(pause)
+        if (error is AppError.RateLimited) state.clearRetryPause()
     }
 }
 

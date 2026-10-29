@@ -32,11 +32,37 @@ tags:
     visible:
       id: "assistant.consent"
     timeout: 10000
+# FIN-366: disclose the actual scope and limits before consent is given.
+- scrollUntilVisible:
+    element:
+      text: "Ваш вопрос и историю диалога"
+- assertVisible: "Ваш вопрос и историю диалога"
+- scrollUntilVisible:
+    element:
+      text: "Номер телефона из аккаунта"
+- assertVisible: "Номер телефона из аккаунта"
+- scrollUntilVisible:
+    element:
+      text: "Файлы выписок"
+- assertVisible: "Файлы выписок"
+- scrollUntilVisible:
+    element:
+      text: ".*полного обезличивания это не гарантирует.*"
+- assertVisible: ".*Имена и другие личные сведения в свободном тексте могут остаться.*"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
 - tapOn:
     id: "assistant.consent.submit"
 - assertVisible: "Без согласия помощник не сможет ответить"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
 - tapOn:
     id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
 - tapOn:
     id: "assistant.consent.submit"
 - extendedWaitUntil:

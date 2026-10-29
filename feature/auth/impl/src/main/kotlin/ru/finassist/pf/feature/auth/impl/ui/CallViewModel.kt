@@ -1,5 +1,11 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.api.model.ErrorCodes
+import ru.finassist.pf.core.common.error.ErrorContext
+import ru.finassist.pf.core.common.availability.ServiceGate
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.time.ElapsedClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,7 +40,7 @@ import javax.inject.Inject
  * [CHECKING]: the device deadline has passed while waiting; the number is hidden until the stream confirms the status
  * (`expired` → [EXPIRED], `pending` → back to [WAITING] without a time, api.md 1.1 «Клиент, номер подтверждения»).
  */
-enum class CallPhase { WAITING, CHECKING, EXPIRED, LOCKED, OFFLINE }
+enum class CallPhase { WAITING, CHECKING, EXPIRED, LOCKED, OFFLINE, ERROR }
 
 data class CallUiState(
     val phoneDisplay: String,
@@ -45,6 +51,11 @@ data class CallUiState(
     /** Text of the [CallPhase.LOCKED] state (`CallLockText`). */
     val lockText: String? = null,
     val busy: Boolean = false,
+    val errorPresentation: ErrorPresentation? = null,
+    val requestRetryable: Boolean? = null,
+    val retryReady: Boolean = true,
+    val replayUnavailable: Boolean = false,
+    val newIntentRequired: Boolean = false,
 )
 
 sealed interface CallEvent {
@@ -52,6 +63,7 @@ sealed interface CallEvent {
     data object SignedIn : CallEvent
     data object NewUser : CallEvent
     data object RegistrationClosed : CallEvent
+    data object ConsentRequired : CallEvent
 }
 
 /**
@@ -66,6 +78,7 @@ class CallViewModel @Inject constructor(
     private val flags: FeatureFlags,
     private val tracker: Tracker,
     private val clock: Clock,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         CallUiState(
@@ -74,6 +87,15 @@ class CallViewModel @Inject constructor(
             waitUntil = waitUntilText(),
         ),
     )
+    private val retryGate = RequestRetryGate(elapsedClock)
+    private val verificationGate = flow.phoneStartGate(elapsedClock)
+    private var pendingRequestKey: IdempotencyKey? = null
+    init {
+        viewModelScope.launch { retryGate.readiness.collect { _ -> updateRetryReady() } }
+        viewModelScope.launch { verificationGate.readiness.collect { _ -> updateRetryReady() } }
+    }
+
+    private fun updateRetryReady() = _state.update { it.copy(retryReady = if (pendingRequestKey == null) retryGate.isReady() else verificationGate.isReady(), newIntentRequired = verificationGate.newIntentRequired) }
     val state: StateFlow<CallUiState> = _state
     private val _events = MutableStateFlow<CallEvent?>(null)
     val events: StateFlow<CallEvent?> = _events
@@ -96,6 +118,7 @@ class CallViewModel @Inject constructor(
 
     /** Called on every resume: the stream is cheap and its first event is the full state. */
     fun watch() {
+        if (pendingRequestKey != null || !retryGate.isReady()) return
         val token = flow.verification?.verificationToken ?: return
         watching = true
         // Re-armed on every resume: the remaining time is read from the clock again (the device clock may have moved).
@@ -110,6 +133,8 @@ class CallViewModel @Inject constructor(
                     isTerminal = { it.status != VerificationStatus.PENDING },
                     reopenFirstFailure = false,
                     state = reopenStates.getOrPut(token) { SseReopenState() },
+                    elapsedClock = elapsedClock,
+                    recoverOnceAfter = { ServiceGate.recoveryDeadline(it, elapsedClock) },
                 ) { authApi.streamPhoneVerification(token) }.collect { event ->
                     when (event.status) {
                         VerificationStatus.PENDING -> _state.update { it.copy(phase = CallPhase.WAITING) }
@@ -118,11 +143,15 @@ class CallViewModel @Inject constructor(
                     }
                 }
             } catch (e: AppError) {
+                // This known correction is constrained by the stream's one-shot permit and deadline.
+                // A second generic latch here would prevent that authorized recovery from collecting at all.
+                if (e !is AppError.Maintenance || e.response?.context != ErrorContext.REQUEST || e.requestRetryable != false) retryGate.record(e)
+                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
                 when (e) {
                     is AppError.Offline -> _state.update { it.copy(phase = CallPhase.OFFLINE) }
                     is AppError.Unauthorized -> _state.update { it.copy(phase = CallPhase.EXPIRED) }
                     is AppError.RateLimited -> _state.update { it.copy(phase = CallPhase.LOCKED, lockText = lockText(e)) }
-                    else -> _state.update { it.copy(phase = CallPhase.EXPIRED) }
+                    else -> _state.update { it.copy(phase = CallPhase.ERROR) }
                 }
             }
         }
@@ -144,7 +173,7 @@ class CallViewModel @Inject constructor(
      * number would come back for a moment before `expired`. «до ЧЧ:ММ» keeps the deadline itself (seconds dropped).
      */
     private fun armTimer() {
-        val deadline = flow.callDeadline
+        val deadline = flow.callServerDeadline
         if (deadline == null) {
             timerJob?.cancel()
             return
@@ -152,8 +181,11 @@ class CallViewModel @Inject constructor(
         if (deadlinePassed) return
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
-            val left = Duration.between(clock.now().toInstant(), deadline.plus(TIMER_GRACE))
-            if (!left.isNegative && !left.isZero) delay(left.toMillis())
+            val left = deadline.remainingMillis(elapsedClock) ?: run {
+                _state.update { it.copy(waitUntil = null) }
+                return@launch
+            }
+            if (left > 0) delay(left + TIMER_GRACE.toMillis())
             onDeadline()
         }
     }
@@ -199,13 +231,31 @@ class CallViewModel @Inject constructor(
     }
 
     /** «Позвонить ещё раз» after expiry: a new request with a new key (api.md: new action → new key). */
+    fun retry() {
+        if (pendingRequestKey != null) requestAgain() else watch()
+    }
+
     fun requestAgain() {
+        if (!verificationGate.isReady() || _state.value.busy) return
         viewModelScope.launch {
-            _state.update { it.copy(busy = true) }
+            _state.update { it.copy(busy = true, errorPresentation = null, requestRetryable = null) }
             try {
                 stopWatching()
-                flow.phoneRequestKey = IdempotencyKey.random().value
-                val verification = authApi.startPhoneVerification(IdempotencyKey(flow.phoneRequestKey!!), flow.phone)
+                val request = flow.phoneRequest ?: run { _events.value = CallEvent.ConsentRequired; return@launch }
+                val key = if (verificationGate.newIntentRequired) {
+                    verificationGate.clear()
+                    flow.newPhoneRequest(elapsedClock).also { pendingRequestKey = it }
+                } else pendingRequestKey ?: flow.newPhoneRequest(elapsedClock).also { pendingRequestKey = it }
+                // The old expired verification must not cause Phone to replace this pending key after back.
+                flow.clearVerification()
+                if (key.replayWindow?.isOpen(elapsedClock) != true) {
+                    _state.update { it.copy(phase = CallPhase.ERROR, replayUnavailable = true) }
+                    return@launch
+                }
+                val verification = authApi.startPhoneVerification(key, request)
+                pendingRequestKey = null
+                retryGate.clear()
+                verificationGate.clear()
                 flow.verificationReceived(verification, clock.now().toInstant())
                 deadlinePassed = false
                 _state.update {
@@ -214,18 +264,29 @@ class CallViewModel @Inject constructor(
                 armTimer()
                 watch()
             } catch (e: AppError) {
+                verificationGate.record(e)
+                if (e is AppError.Api && (e.code == ErrorCodes.CONSENT_OUTDATED || e.code == ErrorCodes.CONSENT_REQUIRED)) {
+                    flow.consentRefreshRequired = true
+                    _events.value = CallEvent.ConsentRequired
+                }
+                updateRetryReady()
+                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
                 when (e) {
                     is AppError.RateLimited -> _state.update { it.copy(phase = CallPhase.LOCKED, lockText = lockText(e)) }
                     is AppError.Offline -> _state.update { it.copy(phase = CallPhase.OFFLINE) }
-                    else -> _state.update { it.copy(phase = CallPhase.EXPIRED) }
+                    else -> _state.update { it.copy(phase = CallPhase.ERROR) }
                 }
             } finally {
                 _state.update { it.copy(busy = false) }
+                updateRetryReady()
             }
         }
     }
 
-    private fun lockText(e: AppError.RateLimited) = CallLockText.of(e.retryAt, clock.now(), clock.zone)
+    private fun lockText(e: AppError.RateLimited): String {
+        val left = e.response?.timing?.deadline(e.retryAfterSeconds, e.retryAt?.toInstant())?.remainingMillis(elapsedClock)
+        return CallLockText.withRemaining(e.retryAt, left, clock.zone)
+    }
 
     fun consumeEvent() { _events.value = null }
 

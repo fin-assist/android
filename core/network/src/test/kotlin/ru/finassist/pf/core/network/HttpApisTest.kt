@@ -1,5 +1,7 @@
 package ru.finassist.pf.core.network
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -33,6 +35,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -72,7 +75,7 @@ class HttpApisTest {
         stack.tokenStore.save(SESSION)
         reply("""{"verification_token":"vt","callback_number":"+78001234567","expires_at":"2026-10-04T22:27:00+03:00"}""")
 
-        val verification = api.auth.startPhoneVerification(key, "+79991234567")
+        val verification = api.auth.startPhoneVerification(key, StartPhoneVerificationRequest("+79991234567", true, "2026-09-28", true))
 
         assertEquals("vt", verification.verificationToken)
         assertEquals("+78001234567", verification.callbackNumber)
@@ -80,7 +83,7 @@ class HttpApisTest {
         assertEquals("POST", request.method)
         assertEquals("/v1/auth/phone", request.path)
         assertEquals(key.value, request.getHeader(HEADER_IDEMPOTENCY_KEY))
-        assertEquals("""{"phone":"+79991234567"}""", request.body.readUtf8())
+        assertEquals("""{"phone":"+79991234567","pd_consent_accepted":true,"pd_consent_version":"2026-09-28","age_confirmed":true}""", request.body.readUtf8())
         assertNull(request.getHeader("Authorization"))
         assertNull(request.getHeader(NoAuth.HEADER))
     }
@@ -92,10 +95,12 @@ class HttpApisTest {
                 .addHeader("Date", "Sun, 04 Oct 2026 19:12:00 GMT"),
         )
 
-        val verification = api.auth.startPhoneVerification(key, "+79991234567")
+        val verification = api.auth.startPhoneVerification(key, StartPhoneVerificationRequest("+79991234567", true, "2026-09-28", true))
 
         assertEquals(300, verification.expiresIn)
         assertEquals(java.time.Instant.parse("2026-10-04T19:12:00Z"), verification.serverTime)
+        assertNotNull(verification.responseTiming.receivedElapsedMillis)
+        assertEquals(verification.serverTime, verification.responseTiming.serverDate)
     }
 
     @Test
@@ -105,7 +110,7 @@ class HttpApisTest {
                 .removeHeader("Date"),
         )
 
-        val verification = api.auth.startPhoneVerification(key, "+79991234567")
+        val verification = api.auth.startPhoneVerification(key, StartPhoneVerificationRequest("+79991234567", true, "2026-09-28", true))
 
         assertNull(verification.expiresIn)
         assertNull(verification.serverTime)
@@ -118,7 +123,7 @@ class HttpApisTest {
             code = 400,
         )
 
-        val error = assertFailsWith<AppError.Api> { api.auth.startPhoneVerification(key, "123") }
+        val error = assertFailsWith<AppError.Api> { api.auth.startPhoneVerification(key, StartPhoneVerificationRequest("123", true, "2026-09-28", true)) }
 
         assertEquals("VALIDATION_ERROR", error.code)
         assertEquals(400, error.httpStatus)
@@ -300,7 +305,8 @@ class HttpApisTest {
         }
 
         assertEquals("WRONG_BANK", error.code)
-        assertEquals("Не Т-Банк", error.message)
+        assertEquals("WRONG_BANK", error.message)
+        assertEquals("Не Т-Банк", (error.response!!.metadata["message"] as kotlinx.serialization.json.JsonPrimitive).content)
     }
 
     @Test

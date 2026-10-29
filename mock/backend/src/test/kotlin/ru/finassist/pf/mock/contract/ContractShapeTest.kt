@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock.contract
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -106,12 +108,12 @@ class ContractShapeTest(private val name: String) {
         private suspend fun Scene.itemOf(kind: OperationKind) = feed().items.first { it.kind == kind }.id
 
         private suspend fun Scene.newUserRegistrationToken(): String {
-            val v = auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE)
+            val v = auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true))
             return drain(auth.streamPhoneVerification(v.verificationToken)).last().registrationToken!!
         }
 
         private suspend fun Scene.existingUserRefreshToken(): String {
-            val v = auth.startPhoneVerification(IdempotencyKey.random(), FAST.existingPhone)
+            val v = auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(FAST.existingPhone, true, "2026-09-28", true))
             return drain(auth.streamPhoneVerification(v.verificationToken)).last().refreshToken!!
         }
 
@@ -124,20 +126,20 @@ class ContractShapeTest(private val name: String) {
         internal val cases: List<ShapeCase> = listOf(
             // 1. Auth
             case("startPhoneVerification", "startPhoneVerification") { s ->
-                s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE) }
+                s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)) }
             },
             stream("streamPhoneVerification: new user", "streamPhoneVerification", "status:verified") { s ->
-                s.phoneEvents(s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken)
+                s.phoneEvents(s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)).verificationToken)
             },
             stream("streamPhoneVerification: existing user", "streamPhoneVerification", "status:verified") { s ->
-                s.phoneEvents(s.auth.startPhoneVerification(IdempotencyKey.random(), FAST.existingPhone).verificationToken)
+                s.phoneEvents(s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(FAST.existingPhone, true, "2026-09-28", true)).verificationToken)
             },
             stream("streamPhoneVerification: pending, then verified", "streamPhoneVerification", "status:verified") { s ->
                 s.backend.config = s.backend.config.copy(callVerifyDelayMs = 50)
-                s.phoneEvents(s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken)
+                s.phoneEvents(s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)).verificationToken)
             },
             stream("streamPhoneVerification: expired", "streamPhoneVerification", "status:expired") { s ->
-                val token = s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken
+                val token = s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)).verificationToken
                 s.clock.at = s.clock.at.plusMinutes(10)
                 s.phoneEvents(token)
             },

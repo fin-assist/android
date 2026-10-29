@@ -1,6 +1,13 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package ru.finassist.pf.core.api.model
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorSeverity
+import ru.finassist.pf.core.common.error.UserMessage
+import ru.finassist.pf.core.common.error.OptionalBooleanSerializer
 import ru.finassist.pf.core.common.time.ApiDateTime
 import ru.finassist.pf.core.common.time.DateRange
 
@@ -105,7 +112,7 @@ data class AnswerSource(
     val changedSinceText: String? = null,
 )
 
-@Serializable
+@Serializable(with = MessageSerializer::class)
 data class Message(
     val id: String,
     val role: MessageRole,
@@ -116,6 +123,7 @@ data class Message(
     /** Only for `failed`: the server's text shown instead of the answer; absent — the client's generic text (FIN-159). */
     val errorText: String? = null,
     /** Only for `failed`: whether «Повторить» is offered; absent — [answerRetryable] falls back to the code (FIN-159). */
+    @Serializable(with = OptionalBooleanSerializer::class)
     val retryable: Boolean? = null,
     val charged: Boolean? = null,
     val blocks: List<Block>? = null,
@@ -124,7 +132,14 @@ data class Message(
     /** Currency of the amounts in [blocks] (FIN-82). */
     val currency: String = "RUB",
     val createdAt: ApiDateTime,
-)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val errorUserMessage: UserMessage = UserMessage.Absent,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val errorSeverity: ErrorSeverity = ErrorSeverity.ERROR,
+    @Transient val errorRawCode: String? = errorCode?.code,
+) {
+    val errorPresentation: ErrorPresentation get() = ErrorPresentation(errorUserMessage, errorSeverity)
+}
 
 @Serializable
 data class MessagesList(
@@ -157,14 +172,22 @@ data class AnswerDoneEvent(val charged: Boolean, val remainingLimit: Int)
  * Terminal `error` event (api.md 7.2). [text] is shown instead of the answer (absent from a server older than FIN-159 —
  * the client's generic text); [retryable] decides on «Повторить» ([answerRetryable]); [message] is for logs only.
  */
-@Serializable
+@Serializable(with = AnswerErrorEventSerializer::class)
 data class AnswerErrorEvent(
     val code: AnswerErrorCode,
     val message: String,
     val remainingLimit: Int,
     val text: String? = null,
+    @Serializable(with = OptionalBooleanSerializer::class)
     val retryable: Boolean? = null,
-)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val userMessage: UserMessage = UserMessage.Absent,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val severity: ErrorSeverity = ErrorSeverity.ERROR,
+    @Transient val rawCode: String = code.code,
+) {
+    val presentation: ErrorPresentation get() = ErrorPresentation(userMessage, severity)
+}
 
 /** Typed view of the answer stream. [Unknown] carries event types this client does not know (ignored by UI). */
 sealed interface AnswerEvent {

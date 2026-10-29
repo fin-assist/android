@@ -14,6 +14,9 @@ import retrofit2.http.PUT
 import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Tag
+import ru.finassist.pf.core.api.RequestOwner
+import ru.finassist.pf.core.common.time.RequestReplayWindow
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.AnalyticsPeriodsList
 import ru.finassist.pf.core.api.model.AskRequest
@@ -54,15 +57,16 @@ internal interface AuthService {
     suspend fun startPhoneVerification(
         @Header(HEADER_IDEMPOTENCY_KEY) key: String,
         @Body body: StartPhoneVerificationRequest,
+        @Tag replayWindow: RequestReplayWindow? = null,
     ): Response<PhoneVerification>
 
     @Headers(NO_AUTH)
     @POST("v1/auth/register")
-    suspend fun register(@Header(HEADER_IDEMPOTENCY_KEY) key: String, @Body body: RegisterRequest): Response<RegisterResponse>
+    suspend fun register(@Header(HEADER_IDEMPOTENCY_KEY) key: String, @Body body: RegisterRequest, @Tag replayWindow: RequestReplayWindow? = null): Response<RegisterResponse>
 
     @Headers(NO_AUTH)
     @POST("v1/auth/token")
-    suspend fun refreshTokens(@Header(HEADER_IDEMPOTENCY_KEY) key: String, @Body body: RefreshTokenRequest): Response<TokenPair>
+    suspend fun refreshTokens(@Header(HEADER_IDEMPOTENCY_KEY) key: String, @Body body: RefreshTokenRequest, @Tag replayWindow: RequestReplayWindow? = null): Response<TokenPair>
 
     /** Authorization is passed explicitly (the local session is already gone); NoAuth keeps the interceptor out. */
     @Headers(NO_AUTH)
@@ -76,10 +80,10 @@ internal interface AuthService {
 
 internal interface ProfileService {
     @GET("v1/profile")
-    suspend fun getProfile(): Response<Profile>
+    suspend fun getProfile(@Tag owner: RequestOwner? = null): Response<Profile>
 
     @PATCH("v1/profile")
-    suspend fun updateProfile(@Body body: ProfileUpdate): Response<Profile>
+    suspend fun updateProfile(@Body body: ProfileUpdate, @Tag owner: RequestOwner? = null): Response<Profile>
 
     @DELETE("v1/profile")
     suspend fun deleteAccount(): Response<Unit>
@@ -100,6 +104,7 @@ internal interface StatementsService {
     suspend fun uploadStatement(
         @Header(HEADER_IDEMPOTENCY_KEY) key: String,
         @Part file: MultipartBody.Part,
+        @Tag replayWindow: RequestReplayWindow? = null,
     ): Response<UploadAccepted>
 
     @GET("v1/statements")
@@ -167,10 +172,10 @@ internal interface AssistantService {
     suspend fun listMessages(@Query("limit") limit: Int?, @Query("before_id") beforeId: String?): Response<MessagesList>
 
     @POST("v1/assistant/messages")
-    suspend fun ask(@Header(HEADER_IDEMPOTENCY_KEY) key: String, @Body body: AskRequest): Response<AskResponse>
+    suspend fun ask(@Header(HEADER_IDEMPOTENCY_KEY) key: String, @Body body: AskRequest, @Tag replayWindow: RequestReplayWindow? = null): Response<AskResponse>
 
     @POST("v1/assistant/messages/{answer_id}/retry")
-    suspend fun retry(@Header(HEADER_IDEMPOTENCY_KEY) key: String, @Path("answer_id") answerId: String): Response<RetryResponse>
+    suspend fun retry(@Header(HEADER_IDEMPOTENCY_KEY) key: String, @Path("answer_id") answerId: String, @Tag replayWindow: RequestReplayWindow? = null): Response<RetryResponse>
 
     @GET("v1/assistant/limit")
     suspend fun getLimit(): Response<AssistantLimit>

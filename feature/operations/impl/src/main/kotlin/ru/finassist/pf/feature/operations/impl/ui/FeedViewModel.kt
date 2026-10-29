@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.error.RequestRetryGate
+import ru.finassist.pf.core.common.error.ErrorPresentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,6 +43,10 @@ data class FeedUiState(
     val state: FeedState? = null,
     val nextBefore: ApiDateTime? = null,
     val uploadEnabled: Boolean = true,
+    val errorPresentation: ErrorPresentation? = null,
+    val requestRetryable: Boolean? = null,
+    val retryReady: Boolean = true,
+    val moreRetryReady: Boolean = true,
 ) {
     val isEmpty: Boolean get() = !loading && !offline && items.isEmpty() && nextBefore == null
 }
@@ -58,8 +65,22 @@ class FeedViewModel @Inject constructor(
     private val flags: FeatureFlags,
     private val tracker: Tracker,
     reportZone: ReportZone,
+    private val elapsedClock: ElapsedClock,
 ) : ViewModel() {
     private val _state = MutableStateFlow(FeedUiState(uploadEnabled = flags.isEnabled(Flag.STATEMENTS_UPLOAD)))
+    private val retryGate = RequestRetryGate(elapsedClock)
+    private val pageRetryGates = mutableMapOf<ApiDateTime, RequestRetryGate>()
+
+    private fun pageGate(before: ApiDateTime): RequestRetryGate = pageRetryGates.getOrPut(before) {
+        RequestRetryGate(elapsedClock).also { gate ->
+            viewModelScope.launch { gate.readiness.collect { ready ->
+                _state.update { if (it.nextBefore == before) it.copy(moreRetryReady = ready) else it }
+            } }
+        }
+    }
+
+    private fun pageReady(before: ApiDateTime?): Boolean = before?.let { pageRetryGates[it]?.isReady() } ?: true
+    init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<FeedUiState> = _state
     private var generation = 0L
     private var firstPagePending = false
@@ -70,7 +91,7 @@ class FeedViewModel @Inject constructor(
         tracker.track(Events.OPERATIONS_FEED_OPENED)
         load()
         viewModelScope.launch {
-            merge(statements.events, operations.categoryChanges).collect { refresh() }
+            merge(statements.events, operations.categoryChanges).collect { refresh(changedContext = true) }
         }
         viewModelScope.launch {
             records.records.collect { updated ->
@@ -78,32 +99,38 @@ class FeedViewModel @Inject constructor(
                 _state.update { state ->
                     state.copy(items = state.items.map { row -> updated.firstOrNull { it.id == row.id }?.toItem() ?: row })
                 }
-                if (timeChanged) refresh()
+                if (timeChanged) refresh(changedContext = true)
             }
         }
         // The first known zone is not a change: the first portion was asked for already.
-        viewModelScope.launch { reportZone.profile.drop(1).filterNotNull().distinctUntilChanged().collect { refresh() } }
+        viewModelScope.launch { reportZone.profile.drop(1).filterNotNull().distinctUntilChanged().collect { refresh(changedContext = true) } }
         viewModelScope.launch { flags.changes.collect { _state.update { it.copy(uploadEnabled = flags.isEnabled(Flag.STATEMENTS_UPLOAD)) } } }
     }
 
     fun load() {
+        if (!retryGate.isReady()) return
         val requestGeneration = ++generation
         pendingLoadMore = pendingLoadMore || _state.value.loadingMore
         firstPagePending = true
         viewModelScope.launch {
             if (requestGeneration != generation) return@launch
-            _state.update { it.copy(loading = it.items.isEmpty(), offline = false, loadingMore = false) }
+            _state.update { it.copy(loading = it.items.isEmpty(), offline = false, loadingMore = false, moreFailed = false, errorPresentation = null, requestRetryable = null) }
             fetchFirst(requestGeneration)
         }
     }
 
-    fun refresh() {
+    fun refresh(changedContext: Boolean = false) {
+        if (changedContext) {
+            retryGate.clear()
+            pageRetryGates.values.forEach { it.clear() }
+        }
+        if (!retryGate.isReady()) return
         val requestGeneration = ++generation
         pendingLoadMore = pendingLoadMore || _state.value.loadingMore
         firstPagePending = true
         viewModelScope.launch {
             if (requestGeneration != generation) return@launch
-            _state.update { it.copy(refreshing = true, loadingMore = false) }
+            _state.update { it.copy(refreshing = true, loadingMore = false, moreFailed = false, errorPresentation = null, requestRetryable = null) }
             fetchFirst(requestGeneration)
         }
     }
@@ -114,13 +141,15 @@ class FeedViewModel @Inject constructor(
             if (requestGeneration != generation) return
             _state.update {
                 it.copy(
-                    loading = false, refreshing = false, offline = false, moreFailed = false,
+                    loading = false, refreshing = false, offline = false, moreFailed = false, errorPresentation = null, requestRetryable = null,
                     items = page.items, summary = page.summary.orEmpty(), state = page.state, nextBefore = page.nextBefore,
+                    moreRetryReady = pageReady(page.nextBefore),
                 )
             }
         } catch (e: AppError) {
             if (requestGeneration != generation) return
-            _state.update { it.copy(loading = false, refreshing = false, offline = it.items.isEmpty()) }
+            retryGate.record(e)
+            _state.update { it.copy(loading = false, refreshing = false, offline = it.items.isEmpty(), errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
         }
         firstPagePending = false
         if (pendingLoadMore) {
@@ -137,12 +166,14 @@ class FeedViewModel @Inject constructor(
         }
         val s = _state.value
         val before = s.nextBefore ?: return
+        val pageGate = pageGate(before)
+        if (!pageGate.isReady()) return
         if (s.loadingMore || s.loading || s.refreshing || pendingLoadMore) return
         pendingLoadMore = true
         val requestGeneration = generation
         viewModelScope.launch {
             if (requestGeneration != generation) return@launch
-            _state.update { it.copy(loadingMore = true, moreFailed = false) }
+            _state.update { it.copy(loadingMore = true, moreFailed = false, errorPresentation = null, requestRetryable = null) }
             try {
                 val page = api.listOperations(OperationsQuery(before = before))
                 if (requestGeneration != generation) return@launch
@@ -153,12 +184,14 @@ class FeedViewModel @Inject constructor(
                         items = it.items + page.items.filter { new -> it.items.none { old -> old.id == new.id } },
                         summary = it.summary + page.summary.orEmpty(),
                         nextBefore = page.nextBefore,
+                        moreRetryReady = pageReady(page.nextBefore),
                     )
                 }
             } catch (e: AppError) {
                 if (requestGeneration != generation) return@launch
+                pageGate.record(e)
                 pendingLoadMore = false
-                _state.update { it.copy(loadingMore = false, moreFailed = true) }
+                _state.update { it.copy(loadingMore = false, moreFailed = true, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
             }
         }
     }

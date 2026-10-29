@@ -10,6 +10,7 @@ import ru.finassist.pf.BuildConfig
 import ru.finassist.pf.core.common.availability.ClientVersion
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.time.Clock
+import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.core.common.time.ShiftedClock
 import ru.finassist.pf.core.common.time.SystemClock
@@ -37,7 +38,7 @@ object AppModule {
     /** Update and maintenance screens over the whole app (FIN-22). */
     @Provides
     @Singleton
-    fun serviceGate(): ServiceGate = ServiceGate()
+    fun serviceGate(elapsedClock: ElapsedClock): ServiceGate = ServiceGate(elapsedClock)
 
     @Provides
     fun minVersionCheck(
@@ -55,6 +56,11 @@ object AppModule {
     @Singleton
     fun clock(zone: ReportZone): Clock =
         if (BuildConfig.E2E_NOW.isEmpty()) SystemClock(zone::current) else ShiftedClock(OffsetDateTime.parse(BuildConfig.E2E_NOW), zone::current)
+
+    /** Server durations use a boot-based clock that includes sleep and ignores wall-clock changes. */
+    @Provides
+    @Singleton
+    fun elapsedClock(): ElapsedClock = ElapsedClock { android.os.SystemClock.elapsedRealtime() }
 
     /** `true` when the build has a Tracer app token; otherwise the SDK is not even started. */
     @Provides

@@ -113,6 +113,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `statement.csv` | `CSV_NOT_ACCEPTED` |
   | `notes.txt` | `WRONG_FORMAT` |
 | `unreadable.ofx` | no readable operation, 2 unread lines (`EMPTY_STATEMENT`, `unread_count = 2`) |
+  | `unread-same-line.ofx` | 2 unread STMTTRN/FITID occurrences on physical line 31, both with no date: equal line numbers and reasons remain separate rows (FIN-352) |
   | `unreadable-fixed.ofx` | the two operations of `unreadable.ofx` read correctly (same account and FITID): closes its unread lines (FIN-79) |
   | `no-description.ofx` | 1 new operation without a description (7 October 2026): «Без описания» in the feed, no unread line |
   | `stale.ofx` | 3 operations, statement period 1 August — 20 September 2026, the last operation on 15 September: once the preloaded statement is deleted, the data is stale on the pinned date — the banner says «по 20 сентября» (FIN-125) |
@@ -143,9 +144,12 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `stream_rate_limits=<n>` | the next n stream openings that follow a dropped one answer 429 `RATE_LIMITED` with `Retry-After: 3`; the app waits and re-opens, no «Слишком много попыток» (FIN-170) | process (counts down) |
   | `stream_retry_s=<n>` | `Retry-After` of those 429 answers, seconds (3 by default; a long one keeps the app waiting) | process |
   | `expect_stream_rate_limited=<n>` | a check, instant: `e2e.config.applied` shows only if the fake server has already turned away at least n stream openings with 429, else `e2e.config.unmet` and the flow fails; the app is paused under the link and its stream openings run on the main thread the link holds, so the openings must have happened before it | — |
+  | `expect_stream_rate_limited_exact=<n>` | requires exactly n stream 429 responses; catches an early opening when returning during the original wait | — |
   | `min_version=<MAJOR.MINOR.PATCH>` | the fake server's minimum client version; below it every request and every stream opening gets `CLIENT_VERSION_UNSUPPORTED` and the app shows the update screen (FIN-22); empty — none | process |
   | `maintenance=<minutes>\|unknown\|off` | every request and every stream opening gets 503 `MAINTENANCE` (a stream already open is cut at its next event) ending in that many minutes of the fake «now» or at an unknown time; `off` ends it (FIN-22) | process |
   | `maintenance_retry_after=<s>` | `Retry-After` of the maintenance answer, 15 s by default (the shortest the app waits) | process |
+  | `pending_upload_fixture=october` | seeds an unknown-age pending UUID under the current content-and-raw-name hash without an elapsed anchor; simulated restoration, not a process restart | app data |
+  | `expect_uploads=<n>` | requires exactly n uploads, including the preloaded statement; unchanged baseline proves no upload happened before explicit new intent | — |
   | `profile_timezone=<zone id>` | `profile.timezone` on the fake server, as if changed elsewhere; the app adopts it on the next profile read (opening «Профиль») | process |
   | `sign_in=existing` | signs the existing account in and sets passcode 1234 without the screens (`E2eSignIn`, FIN-180): applied after the other values of the link, finishes before `e2e.config.applied` shows; `e2e.config.unmet` when already signed in or the sign-in fails. Use it through `fast_login.yaml` (see «Signing in») | app data (session, passcode); unlocked while the process lives |
 
@@ -253,8 +257,11 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 
 | Flow | Checks |
 |---|---|
-| `auth/register_new_user` (smoke) | new number → consent (error without the tick) → passcode → first upload → result → feed |
-| `auth/sign_in_existing_user` (smoke) | existing account → passcode → feed; the three tabs |
+| `auth/register_new_user` (smoke) | independent 14+/PD before phone → new number → create account without another consent → passcode → first upload → result → feed (Qase2, FIN-365) |
+| `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the three tabs (Qase1, FIN-365) |
+| `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
+| `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains current attempt confirmations (Qase57, FIN-365) |
+| `auth/phone_consent_recovery` | document offline → explicit refresh → confirmations → Start offline → retry with the existing intent (Qase58, FIN-365) |
 | `auth/phone_validation` | short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
 | `auth/call_expired` | `call_ttl_ms=15000`: the wait ends either by the stream's `expired` or by the device timer (their order is not fixed); both lead to «Время на звонок вышло» with no number; «Позвонить ещё раз» brings the number and a new deadline back — FIN-166 |
 | `auth/call_stream_rate_limited` | `stream_drops=2&stream_rate_limits=1`: the call stream drops, its re-open gets 429 `Retry-After: 3`; the app waits and re-opens — no «Слишком много попыток», the number stays, sign-in goes on to the passcode — FIN-170 |
@@ -273,9 +280,12 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
 | `analytics/search_scope_own_transfers` | September «Расходы» tile → search «как на Аналитике»; without «Только расходы» and with the amount 6 000 ₽ nothing is found — the single «Себе в другой банк» of 27 September is out, as in the Analytics figure; without the scope chip it is found — FIN-164 |
 | `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card and profile) |
-| `assistant/ask_question` (smoke) | consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search |
+| `assistant/ask_question` (smoke) | disclosure of question/history, account-phone/file exclusion and masking limits → consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search (Qase12, FIN-366) |
 | `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
 | `assistant/off_topic` | a question not about finances (`weather`): the server's OFF_TOPIC text, no «Повторить» (`retryable: false`), still 5 of 5; the next question is answered, 4 of 5 — FIN-160 |
+| `assistant/off_topic_limit` | five terminal OFF_TOPIC outcomes reach the rolling limit; a refused sixth question keeps its draft, history and 5/5 daily quota; history remains readable — FIN-223, Qase 49 |
+| `errors/request_retry_false` | a REST refusal with retryable=false is not resent on resume or after its wait; corrected input is a new action and a later failed result can separately allow RetryAnswer — FIN-223, Qase 50 |
+| `errors/server_messages` | profile theme mutations show an unknown ordinary server message, unknown-severity error styling and safe malformed/legacy fallbacks without diagnostics — FIN-223, Qase 48 |
 | `assistant/nothing_found_charged` | a merchant with no operations over the covered six months of the answer (`Kaspersky`, only in March): «…операций «Kaspersky» не нашли», an answer, not a refund — 4 of 5 (it used to stay 5 of 5); only a lock or no data over the period is refunded — FIN-136 |
 | `assistant/offline_retry` | no network: the notice replaces the input; «Повторить» sends the question once the network is back |
 | `assistant/chip_after_statements_deleted` | every statement deleted: the operations chip of an earlier answer opens the search without its stale selection (notice, empty result) — FIN-76 |
@@ -284,19 +294,22 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `assistant/answer_changed_since` | after an answer a category is changed, then the statement deleted: the earlier answer in the history shows «С тех пор категории менялись», then «С тех пор данные менялись» (`changed_since` counted at the time of the request) — FIN-135 |
 | `statements/upload_errors` | CSV, not a statement, another bank; leaving the picker |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
+| `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
 | `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
-| `statements/upload_rate_limited_resume` | `stream_drops=1&stream_rate_limits=100&stream_retry_s=120`: the progress stream drops, every re-open gets 429; after the first 429 (`expect_stream_rate_limited=1`) the screen comes back from the control link and from the background and opens the stream itself, the server counts a 429 for each (`expect_stream_rate_limited=3`) — waited for, still parsing, no upload error; with the limit lifted the import result opens — FIN-170 |
+| `statements/upload_restored_key` | A seeded unknown-age UUID does not send the file or silently change key; the upload count remains 1 (preloaded statement). Only «Загрузить заново» starts a new action and changes the count to 2 (Qase51) — FIN-223 |
+| `assistant/retry_after_consent` | A model failure, consent revocation and denied RetryAnswer lead to consent correction; the same operation resumes and history contains one question with the successful replacement (Qase52) — FIN-223 |
+| `statements/upload_rate_limited_resume` | `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: after the first 429, both control-link and background returns retain the original deadline (`expect_stream_rate_limited_exact=1`); lifting the limiter does not skip that wait, then the result opens within 45s without an upload error (Qase45) — FIN-170, FIN-223 |
 | `statements/upload_no_description` | a line without a description is imported (no unread notice) and shown as «Без описания» in the feed and on the operation |
 | `statements/upload_unknown_codes` | `unknown_codes=true`: the import result shows the server's text for a notice code and for a locked analytics feature the client does not know — FIN-83 |
 | `profile/theme_and_logout` | dark theme; logout cancel / confirm with the notice |
 | `profile/delete_account` | passcode (wrong, right) → «Удалить аккаунт?» over the profile → «Удаляем…» ignores Back → «Аккаунт удалён» |
 | `availability/update_required` | `min_version=9.0.0`: the next request gets `CLIENT_VERSION_UNSUPPORTED`, the update screen covers the app — FIN-22 |
-| `availability/maintenance` | `maintenance=30` with a long `Retry-After`: the screen promises the end time, after `maintenance=off` «Проверить сейчас» opens the app; then with 15 s the app leaves the screen by itself — FIN-22 |
+| `availability/maintenance` | The check button is disabled during `Retry-After`; the first automatic probe is refused, then a guarded manual check after the fresh wait opens the app; a new maintenance episode has its own one-shot automatic check — FIN-22, FIN-223 |
 | `availability/maintenance_on_sign_in` | `maintenance=unknown` before sign-in: «Продолжить» on the phone screen gets the maintenance screen over sign-in, without an end time — FIN-22 |
-| `availability/maintenance_during_import` | `maintenance=30` while an upload is parsing (its stream kept re-opening with 429): the next opening of the progress stream gets 503 before the 429, the re-open loop stops and the maintenance screen covers the upload; after `maintenance=off` the upload screen's next stream opening goes through and lifts the maintenance screen by itself (the button is checked by `availability/maintenance`), and the history has the upload done, not failed — FIN-22, FIN-170, FIN-177 |
+| `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
 | `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
@@ -337,3 +350,117 @@ The update or maintenance screen over the passcode screen (FIN-22): while the ap
 so a server answer can arrive under the lock only from background work (the time zone sync, Remote Config) at a moment
 a flow cannot pick. The overlay is one layer above all others in `PfApp`; `availability/maintenance_on_sign_in`
 checks it over sign-in, the other flows over the main screens.
+A renamed copy of a statement sent again after a lost answer (FIN-340): the server compares the file's content and
+its name under a key (FIN-297), so a client that reused the key of the same bytes under the old name would get 409
+`IDEMPOTENCY_CONFLICT`. The case needs a first request that the server stored under the key while the client lost its
+answer; the mock has no such hook — `offline` fails before the key is taken, and the upload has no 5xx — and the
+bundled files hold no two copies of one statement under different names. `UploadViewModelTest` checks that the copy
+gets its own key and that a retry sends the first attempt's name; `MockStatementsApiTest` and `ContractBehaviourTest`
+check the server side.
+
+The initial retry-readiness collector racing an unknown-age upload key (FIN-353) is not controllable
+through a UI flow: it needs the first collector emission to run after the recovery state was published.
+`UploadViewModelTest` queues Main and makes the pending-key cache immediate to reproduce that ordering;
+it asserts disabled ordinary retry, no POST, retention of the original UUID and a new key only after explicit
+new intent. `statements/upload_restored_key` / Qase51 already cover the visible recovery path with the
+closed unknown-age seed. No additional production hooks or UI/DesignCheck execution are used.
+
+
+
+The independent refusal of the availability probe after maintenance is not covered by a mock UI flow
+(FIN-223). The probe uses `GET /v1/consents/personal_data` to check availability, not to grant consent.
+The existing maintenance controls produce only `MAINTENANCE`; `offline` fails before a REST response,
+and the closed `error_operation` controls do not target this GET. They cannot produce a subsequent
+`INTERNAL_ERROR` 500 with its own `retryable:false` or `Retry-After`; that branch needs a controllable
+REST/peer fixture. `AvailabilityViewModelTest` checks the independent prohibition/wait, direct calls
+before readiness, unchanged original deadlines and preservation of the scoped maintenance correction.
+The faithful interceptor fixture also checks that a late 429 refusal after Open cannot restrict a later
+maintenance episode, including when StateFlow conflates Open with the next Maintenance.
+The existing authored `MaintenanceWaiting` fixture covers the disabled check button; no UI or DesignCheck
+execution is claimed. The existing maintenance flows and Qase34/35/46 cover the maintenance paths only.
+
+
+Consent-document rotation between GET and phone Start (FIN-365) and assistant grant is not covered by a mock UI
+flow. The mock PD version can be changed by JVM fixtures but has no external control-link mutation, and assistant
+versions remain fixed; a separate controllable REST fixture is required. `PhoneViewModelTest`,
+`MockPhoneConsentTest`, `CallViewModelTest` and `AiConsentViewModelTest` cover version rejection/refresh and pinning.
+Register never refetches current PD consent; mismatched original evidence restarts phone verification.
+
+Real client process-death recovery of an uncertain assistant request is not covered by a mock UI flow
+(Qase53). The fake backend, its token state and idempotency cache live in the client process: killing it
+also destroys the independent server outcome that recovery must reconcile. A separate persistent BFF/peer
+fixture is needed to test that boundary. `ChatViewModelBehaviourTest` restores the actual SavedStateHandle
+and tests no automatic POST, consent correction, fresh-history permission and explicit new intent;
+`ChatAskRecovery`, `ChatAskRecoveryDark` and `ChatRetryRecovery` fixtures cover the proposed visible states.
+The upload flow above deliberately seeds an unknown-age record without claiming real process death.
+
+### FIN-223 safe error controls and coverage
+
+The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|phone_start|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden|terminal_failure`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.
+
+### FIN-352 repeated physical unread lines
+
+`UnreadLine` has no public occurrence ID. Two records can have identical upload, physical line and reason;
+the renderer uses the response occurrence index within each upload for its local LazyColumn key, while keeping
+the displayed line number/reason unchanged. The existing mock parser and resolver already retain such records.
+The new `unread-same-line.ofx` fixture and `statements/unread_same_physical_line` flow exercise the actual upload →
+history → unread list path, with index selectors checking both equal row titles and both equal reasons.
+`UnreadLinesViewModelTest` verifies duplicate-preservation in state; it does not claim to execute the renderer.
+`UnreadLinesSamePhysicalLine` / `UnreadLinesSamePhysicalLineDark` are proposed DesignCheck artboards with no Figma
+counterpart yet. The flow, Qase56 and fixtures were authored without UI/Maestro/DesignCheck/instrumented execution.
+
+### FIN-366 assistant-consent disclosure
+
+`assistant/ask_question` / [Qase12](https://app.qase.io/case/PLAINFIN-12) checks that the consent screen names the
+question and dialogue history, excludes the account phone and statement files, and warns that names and other
+personal information in free text can remain. Supported phones, email addresses and full card/account numbers
+are masked by the backend; the screen does not promise complete anonymisation. Existing assistant-consent flows
+scroll to the checkbox and button to keep both reachable with the longer disclosure. The existing path-to-Qase
+mapping is unchanged. The flows and existing light/dark `AiConsentDesignCheckTest` fixtures use the updated content;
+UI, Maestro, instrumented and DesignCheck runs were not executed under the owner's instruction. Publishing final
+legal documents and their production URLs remains FIN-141; the mock consent-document URL is a fixture.
+
+### FIN-365 phone confirmations and registration
+
+`confirm_phone.yaml` supplies independent affirmative fixture choices for all existing sign-in scenarios, including
+existing accounts and the native picker path. No production API defaults accept either confirmation. The phone
+screen loads `personal_data` first, keeps both ticks initially off, disables phone input before age confirmation,
+and exposes the current response's document URL. An outdated Start resets the PD tick; call re-request routes
+back for document correction. After verified, Register sends the same accepted version without another checkbox.
+`PhoneAgeOnly`, `PhoneConsentOnly`, document-failure light/dark and new-intent-wait DesignCheck fixtures are authored.
+The previous post-call ConsentError/document-refresh states were removed because that consent step no longer exists.
+
+`PhoneViewModelTest` / `PhoneStartGateTest` cover lost-response old-key replay, received-429 wait/new-key intent,
+independent document-read restrictions and age/PD gates; `ConsentViewModelTest` covers pinned version/body, double
+taps, missing evidence and restart. Mock receipt times come from the fake server clock at Start, survive a replay,
+and link only after verified or successful Register. These in-process fixtures do not prove backend durability,
+unknown-provider recovery or retention cleanup; production enforcement/rollout belongs to FIN-364.
+
+Consent rotation has no mock control-link injection; its UI correction needs a controllable REST fixture.
+`phone_start` supports the existing closed `retry_forbidden` 429 fixture and the new `terminal_failure` 500 fixture.
+The explicit-restart flow uses the latter; 429 wait and retained timing across restart/back from Call are covered by unit tests. Lost Call Start responses
+retain their exact pending key when returning to Phone; terminal refusals expose explicit restart there as well. Receipt retention and
+provider unknown deadlines are server-only; no new client environment setting or hard-coded waiting period exists.
+The complete legal document is opened from `document.url`; publication of final production URLs/text remains
+FIN-141. The mock's example.ru URL is a fixture and is not claimed as a published legal document.
+
+Qase57/58 and updated registration steps are authored, mappings included. UI, Maestro, instrumented and
+DesignCheck runs were not executed under the owner's instruction. Existing sign-in-related Qase cases use the
+updated confirmation precondition; their other scenarios retain the same IDs.
+
+The `auth.phone.restart` action abandons the local phone flow/key and reloads the document with both choices off,
+without a POST. A received 429 keeps its captured server wait across this action and digit edits, including
+A → B → A. The pending intent conservatively delays any edited number until the same wait ends, then uses a new key. The rate-limit explanation and original server retry time remain visible after edits,
+restart and re-confirming the checkboxes. `phone_start` failures count in
+the existing `expect_error_requests` check and happen before receipt creation; arbitrary error payloads are not
+accepted. Qase59/`auth/phone_restart` exercises restart after the closed terminal 500 fixture. This is a synthetic
+refusal, not a claim to reproduce a lost provider outcome or restart an independent backend process.
+
+
+FIN-365 — Not covered yet: a refused consent-document GET (including 429 with `retryable:false`) and its
+explicit restart need a controllable REST fixture; the mock control-link does not inject document GET failures.
+VM/core regressions cover no GET before the captured deadline, an explicit restart afterwards without POST,
+and a refused GET without a time restriction. The captured rate-limit explanation, safe server presentation and
+retry time survive checkbox changes/blocked restart and clear after successful document loading. There is no automatic GET when the wait ends. UI/DesignCheck
+runs are not authorized. The proposed document-refusal states use existing error/link/button primitives;
+there is no matching Figma artboard, and source fixtures do not claim a visual approval or a completed UI run.

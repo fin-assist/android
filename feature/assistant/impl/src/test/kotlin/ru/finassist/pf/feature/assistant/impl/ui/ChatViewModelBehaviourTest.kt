@@ -1,5 +1,10 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.common.error.ErrorResponseInfo
+import ru.finassist.pf.core.common.error.ErrorSeverity
+import ru.finassist.pf.core.common.error.UserMessage
+import ru.finassist.pf.core.common.time.ElapsedClock
 import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -9,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -100,6 +106,7 @@ class ChatViewModelBehaviourTest {
         /** Each `ask` takes the next outcome: an [AskResponse] or an [AppError] to throw. */
         val askOutcomes = ArrayDeque<Any>()
         val asks = mutableListOf<Recorded>()
+        var askGate: CompletableDeferred<Unit>? = null
 
         val retryOutcomes = ArrayDeque<Any>()
         val retries = mutableListOf<Pair<IdempotencyKey, String>>()
@@ -120,6 +127,7 @@ class ChatViewModelBehaviourTest {
 
         override suspend fun ask(key: IdempotencyKey, request: AskRequest): AskResponse {
             asks += Recorded(key, request)
+            askGate?.await()
             return when (val o = askOutcomes.removeFirst()) {
                 is AppError -> throw o
                 else -> o as AskResponse
@@ -163,7 +171,7 @@ class ChatViewModelBehaviourTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private fun newVm(savedState: SavedStateHandle = SavedStateHandle()) = ChatViewModel(savedState, api, tracker, clock)
+    private fun newVm(savedState: SavedStateHandle = SavedStateHandle()) = ChatViewModel(savedState, api, tracker, clock, ElapsedClock { dispatcher.scheduler.currentTime })
 
     private fun advance(ms: Long) {
         dispatcher.scheduler.advanceTimeBy(ms)
@@ -190,7 +198,7 @@ class ChatViewModelBehaviourTest {
                 answer("a1"),
                 // Unknown role is dropped, an unknown status reads as failed, a duplicate id is shown once.
                 Message(id = "x", role = MessageRole.UNKNOWN, createdAt = now),
-                // Error fields of a status the client does not know are not trusted: the generic text, no retry (api.md 7.3).
+                // Unknown status shares safe text fallback, but does not supply a known code or new-attempt policy.
                 answer("a2", status = AnswerStatus.UNKNOWN, errorCode = AnswerErrorCode.MODEL_ERROR, errorText = "x", retryable = true),
                 answer("a1"),
             ),
@@ -205,10 +213,70 @@ class ChatViewModelBehaviourTest {
         assertEquals("Вопрос q1", assertIs<ChatItem.Question>(s.items[0]).text)
         val failed = vm.answerItem("a2")
         assertEquals(AnswerStatus.FAILED, failed.status)
-        assertNull(failed.errorText)
+        assertEquals("x", failed.failureText)
+        assertNull(failed.errorCode)
         assertFalse(failed.retryable)
         assertEquals(limit, s.limit)
         assertEquals(Events.ASSISTANT_OPENED, tracker.names().first())
+    }
+
+    @Test fun `unknown history status preserves canonical warning without granting code actions or a new attempt`() {
+        api.pages[null] = MessagesList(listOf(answer("a1", AnswerStatus.UNKNOWN, AnswerErrorCode.MODEL_ERROR,
+            errorText = "Прежний текст", retryable = true).copy(
+                errorUserMessage = UserMessage.from("Ответ пока недоступен"), errorSeverity = ErrorSeverity.WARNING,
+                errorRawCode = ErrorCodes.CONSENT_REQUIRED,
+            )), hasOlder = false)
+        val vm = newVm()
+        val shown = vm.answerItem("a1")
+        assertEquals(AnswerStatus.FAILED, shown.status)
+        assertEquals("Ответ пока недоступен", shown.failureText)
+        assertEquals(ErrorSeverity.WARNING, shown.errorPresentation.severity)
+        assertNull(shown.errorCode)
+        assertFalse(shown.retryable)
+        assertNull(vm.state.value.event)
+        assertTrue(api.retries.isEmpty())
+    }
+
+    @Test fun `missing history status preserves canonical presentation and never infers legacy retry`() {
+        api.pages[null] = MessagesList(listOf(Message("a1", MessageRole.ASSISTANT, status = null,
+            errorCode = AnswerErrorCode.MODEL_ERROR, errorText = "Прежний текст", createdAt = now,
+            errorUserMessage = UserMessage.from("Проверьте ответ позднее"), errorSeverity = ErrorSeverity.INFO,
+        )), hasOlder = false)
+        val shown = newVm().answerItem("a1")
+        assertEquals(AnswerStatus.FAILED, shown.status)
+        assertEquals("Проверьте ответ позднее", shown.failureText)
+        assertEquals(ErrorSeverity.INFO, shown.errorPresentation.severity)
+        assertNull(shown.errorCode)
+        assertFalse(shown.retryable, "MODEL_ERROR on an unrecognized status must not infer a new generation")
+    }
+
+    @Test fun `unknown and missing history statuses respect invalid versus absent canonical text`() {
+        val inputs = listOf(AnswerStatus.UNKNOWN, null).flatMapIndexed { index, status ->
+            listOf(
+                Message("invalid-$index", MessageRole.ASSISTANT, status = status, createdAt = now,
+                    errorText = "Legacy must not replace malformed canonical text", errorUserMessage = UserMessage.Invalid,
+                    errorSeverity = ErrorSeverity.WARNING, errorCode = AnswerErrorCode.MODEL_ERROR, retryable = true),
+                Message("legacy-$index", MessageRole.ASSISTANT, status = status, createdAt = now,
+                    errorText = "Прежнее пользовательское сообщение", errorCode = AnswerErrorCode.MODEL_ERROR, retryable = true),
+                Message("empty-$index", MessageRole.ASSISTANT, status = status, createdAt = now,
+                    errorText = "   ", errorCode = AnswerErrorCode.MODEL_ERROR, retryable = true),
+            )
+        }
+        api.pages[null] = MessagesList(inputs, hasOlder = false)
+        val vm = newVm()
+        repeat(2) { index ->
+            val invalid = vm.answerItem("invalid-$index")
+            assertEquals(GENERIC_ANSWER_ERROR, invalid.failureText)
+            assertEquals(UserMessage.Invalid, invalid.errorPresentation.userMessage)
+            assertEquals(ErrorSeverity.WARNING, invalid.errorPresentation.severity)
+            assertEquals("Прежнее пользовательское сообщение", vm.answerItem("legacy-$index").failureText)
+            assertEquals(GENERIC_ANSWER_ERROR, vm.answerItem("empty-$index").failureText)
+        }
+        vm.state.value.items.filterIsInstance<ChatItem.Answer>().forEach {
+            assertEquals(AnswerStatus.FAILED, it.status)
+            assertNull(it.errorCode)
+            assertFalse(it.retryable)
+        }
     }
 
     @Test fun `the thread failing to load offline shows the offline screen`() {
@@ -523,6 +591,25 @@ class ChatViewModelBehaviourTest {
         assertTrue(Events.ASSISTANT_CONSENT_GRANTED in tracker.names())
     }
 
+    @Test fun `restored Ask after consent requires explicit new intent before generating a fresh key`() {
+        val text = "Сколько я трачу на такси?"
+        val saved = SavedStateHandle(mapOf("chat.pending.text" to text, "chat.pending.key" to "old-unknown-key"))
+        val vm = newVm(saved)
+        vm.onConsentGranted()
+        assertTrue(api.asks.isEmpty())
+        assertEquals("old-unknown-key", saved.get<String>("chat.pending.key"))
+        assertEquals(text, vm.state.value.draft)
+        assertEquals(ChatRecoveryTarget.ASK, vm.state.value.recovery?.target)
+        vm.retryAfterFailure()
+        assertTrue(api.asks.isEmpty(), "ordinary retry cannot replace unknown origin proof")
+        api.askOutcomes += askResponse("a1")
+        vm.startNewRequest()
+        assertEquals(1, api.asks.size)
+        assertTrue(api.asks.single().key.value != "old-unknown-key")
+        assertEquals(text, api.asks.single().request.text)
+        assertNull(vm.state.value.recovery)
+    }
+
     @Test fun `consent granted with nothing waiting sends nothing`() {
         val vm = newVm()
         vm.onConsentGranted()
@@ -605,15 +692,30 @@ class ChatViewModelBehaviourTest {
         assertTrue(vm.state.value.sendFailed)
     }
 
-    @Test fun `a question left unsent before process death is restored and sent with its key`() {
+    @Test fun `a restored question retains unknown-origin key and draft without replaying POST`() {
         api.askOutcomes += askResponse("a1")
         val saved = SavedStateHandle(mapOf("chat.pending.text" to "Сколько я трачу на такси?", "chat.pending.key" to "k-1"))
         val vm = newVm(saved)
         assertEquals("Сколько я трачу на такси?", vm.state.value.draft)
         vm.send()
-        assertEquals(IdempotencyKey("k-1"), api.asks.single().key)
-        // A final response ends the action.
-        assertNull(saved.get<String>("chat.pending.key"))
+        assertTrue(api.asks.isEmpty())
+        assertEquals("k-1", saved.get<String>("chat.pending.key"))
+        assertEquals("Сколько я трачу на такси?", vm.state.value.draft)
+        assertTrue(vm.state.value.askBlocked)
+    }
+
+    @Test fun `an expired pending Ask cannot be replayed or silently receive a new key`() {
+        api.askOutcomes += AppError.Offline()
+        val saved = SavedStateHandle()
+        val vm = newVm(saved)
+        sendQuestion(vm)
+        val oldKey = api.asks.single().key
+        advance(24L * 60 * 60 * 1000)
+        vm.retryAfterFailure()
+        assertEquals(1, api.asks.size)
+        assertEquals(oldKey.value, saved.get<String>("chat.pending.key"))
+        assertTrue(vm.state.value.askBlocked)
+        assertTrue(vm.state.value.draft.isNotEmpty())
     }
 
     @Test fun `editing the waiting question makes it a new action`() {
@@ -661,6 +763,35 @@ class ChatViewModelBehaviourTest {
         vm.retry("a1")
         assertEquals(api.retries[0].first, api.retries[1].first)
         assertEquals(listOf("q1", "a2"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `an expired pending generation retry only reads history and never renews its original UUID`() {
+        api.retryOutcomes += AppError.Offline() // a lost response may hide an accepted replacement
+        api.retryOutcomes += RetryResponse("a3", remainingLimit = 1) // must remain unused
+        val vm = vmWithFailedAnswer()
+        vm.retry("a1")
+        val originalKey = api.retries.single().first
+        val readsBeforeRecovery = api.listCalls.size
+        val quotaBeforeRecovery = vm.state.value.limit
+        vm.setDraft("Черновик следующего вопроса")
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a2")), hasOlder = false)
+        advance(24L * 60 * 60 * 1000)
+
+        vm.retry("a1")
+        assertEquals(listOf(originalKey.value), api.retries.map { it.first.value }, "no second POST or fresh wire UUID")
+        assertEquals(readsBeforeRecovery + 1, api.listCalls.size, "recover the accepted replacement through a read")
+        assertEquals(listOf("q1", "a2"), vm.state.value.items.map { it.id })
+        assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a2").status)
+        assertEquals("Черновик следующего вопроса", vm.state.value.draft)
+        assertEquals(quotaBeforeRecovery, vm.state.value.limit)
+        assertEquals("a1", vm.state.value.blockedRetryAnswerId)
+
+        vm.retry("a1")
+        assertEquals(listOf(originalKey.value), api.retries.map { it.first.value }, "another tap cannot allocate a fresh attempt")
+        assertEquals(readsBeforeRecovery + 2, api.listCalls.size)
+        assertEquals(1, api.retryOutcomes.size, "the next generation response was not consumed")
+        vm.startNewRequest()
+        assertEquals(1, api.retries.size, "history already recovered the replacement, so no new attempt is offered")
     }
 
     @Test fun `a second tap while the retry is on its way sends nothing`() {
@@ -722,6 +853,58 @@ class ChatViewModelBehaviourTest {
         vm.retry("a1")
         assertTrue(vm.state.value.limitExhausted)
         assertEquals(AnswerStatus.FAILED, vm.answerItem("a1").status)
+    }
+
+    @Test fun `corrected consent resumes the denied RetryAnswer with its same key even after explicit false`() {
+        api.retryOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        val vm = vmWithFailedAnswer()
+        vm.retry("a1")
+        val originalKey = api.retries.single().first
+        assertEquals(ChatEvent.OPEN_CONSENT, vm.state.value.event)
+        vm.consumeEvent()
+        vm.onConsentGranted()
+        assertEquals(2, api.retries.size)
+        assertEquals(originalKey, api.retries.last().first)
+        assertEquals("a1", api.retries.last().second)
+        assertTrue(api.asks.isEmpty(), "corrective consent must not send Ask instead of RetryAnswer")
+        assertEquals(listOf("q1", "a2"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `expired denied RetryAnswer needs fresh history permission and an explicit new attempt`() {
+        api.retryOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        val vm = vmWithFailedAnswer()
+        vm.retry("a1")
+        val oldKey = api.retries.single().first
+        advance(24L * 60 * 60 * 1000)
+        vm.onConsentGranted()
+        assertEquals(1, api.retries.size)
+        assertEquals(ChatRecoveryTarget.RETRY_ANSWER, vm.state.value.recovery?.target)
+        assertTrue(vm.state.value.recovery?.historyChecked == true)
+        vm.startNewRequest()
+        assertEquals(2, api.retries.size)
+        assertTrue(api.retries.last().first != oldKey)
+        assertEquals("a1", api.retries.last().second)
+        assertTrue(api.asks.isEmpty())
+    }
+
+    @Test fun `a fresh history refusal of new generation removes the expired recovery action`() {
+        api.retryOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        val vm = vmWithFailedAnswer()
+        vm.retry("a1")
+        advance(24L * 60 * 60 * 1000)
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED,
+            AnswerErrorCode.MODEL_ERROR, retryable = false)), hasOlder = false)
+        vm.onConsentGranted()
+        assertEquals(1, api.retries.size)
+        assertNull(vm.state.value.recovery)
+        assertFalse(vm.answerItem("a1").retryable)
+        vm.startNewRequest()
+        assertEquals(1, api.retries.size)
     }
 
     @Test fun `retry without consent opens the consent screen`() {
@@ -798,14 +981,15 @@ class ChatViewModelBehaviourTest {
         var active = 0
         var maxActive = 0
         fun tracked(f: Flow<AnswerEvent>) = f.onStart { active++; maxActive = maxOf(maxActive, active) }.onCompletion { active-- }
-        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        val limitedAt = mutableListOf<Long>()
+        val limited = { tracked(flow { limitedAt += dispatcher.scheduler.currentTime; throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
         api.askOutcomes += askResponse("a1")
         api.script(
             "a1",
             // Closed after the snapshot: a drop.
             tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.GENERATING, listOf(text("Нач")), emptyList())))),
             limited(),
-            // The screen came back: the view model opens the stream itself, the server still says 429.
+            // The next opening after the retained wait gets a fresh 429 with its own wait.
             limited(),
             tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList())))),
         )
@@ -814,16 +998,23 @@ class ChatViewModelBehaviourTest {
         advance(1_000)
         assertEquals(2, api.streamOpens.size, "the drop was re-opened and got 429")
         val lists = api.listCalls.size
+        advance(4_000) // consume part of the server wait before leaving the screen
         vm.pauseStreams()
         vm.resumeStreams()
-        assertEquals(3, api.streamOpens.size)
+        assertEquals(2, api.streamOpens.size, "resume must not bypass the retained Retry-After")
         assertEquals(lists, api.listCalls.size, "a 429 on opening it again is not a reason to reload")
         assertEquals(AnswerStatus.GENERATING, vm.answerItem("a1").status)
         assertFalse(vm.state.value.sendFailed)
         assertFalse(vm.state.value.offline)
-        advance(59_000)
-        assertEquals(3, api.streamOpens.size, "not before Retry-After")
-        advance(2_000)
+        val firstRefusal = limitedAt.single()
+        advance(firstRefusal + 59_999 - dispatcher.scheduler.currentTime)
+        assertEquals(2, api.streamOpens.size, "not before the original Retry-After")
+        advance(firstRefusal + 62_001 - dispatcher.scheduler.currentTime)
+        assertEquals(3, api.streamOpens.size, "the original wait is not restarted on resume")
+        val secondRefusal = limitedAt.last()
+        advance(secondRefusal + 59_999 - dispatcher.scheduler.currentTime)
+        assertEquals(3, api.streamOpens.size, "a fresh 429 gets its own Retry-After")
+        advance(secondRefusal + 62_001 - dispatcher.scheduler.currentTime)
         assertEquals(4, api.streamOpens.size)
         assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
         assertEquals(1, maxActive, "never two streams at once")
@@ -833,7 +1024,8 @@ class ChatViewModelBehaviourTest {
         var active = 0
         var maxActive = 0
         fun tracked(f: Flow<AnswerEvent>) = f.onStart { active++; maxActive = maxOf(maxActive, active) }.onCompletion { active-- }
-        val limited = { tracked(flow { throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
+        val limitedAt = mutableListOf<Long>()
+        val limited = { tracked(flow { limitedAt += dispatcher.scheduler.currentTime; throw AppError.RateLimited(null, retryAfterSeconds = 60) }) }
         api.askOutcomes += askResponse("a1")
         api.script(
             "a1",
@@ -848,18 +1040,65 @@ class ChatViewModelBehaviourTest {
         advance(1_000)
         assertEquals(2, api.streamOpens.size, "the 503 was re-opened and got 429")
         val lists = api.listCalls.size
+        advance(4_000) // consume part of the server wait before leaving the screen
         vm.pauseStreams()
         vm.resumeStreams()
-        assertEquals(3, api.streamOpens.size)
+        assertEquals(2, api.streamOpens.size, "resume must not bypass the retained Retry-After")
         assertEquals(lists, api.listCalls.size, "the 429 after coming back is waited for, not a reason to reload")
         assertFalse(vm.state.value.sendFailed)
-        advance(59_000)
-        assertEquals(3, api.streamOpens.size, "not before Retry-After")
-        advance(2_000)
+        val firstRefusal = limitedAt.single()
+        advance(firstRefusal + 59_999 - dispatcher.scheduler.currentTime)
+        assertEquals(2, api.streamOpens.size, "not before the original Retry-After")
+        advance(firstRefusal + 62_001 - dispatcher.scheduler.currentTime)
+        assertEquals(3, api.streamOpens.size, "the original wait is not restarted on resume")
+        val secondRefusal = limitedAt.last()
+        advance(secondRefusal + 59_999 - dispatcher.scheduler.currentTime)
+        assertEquals(3, api.streamOpens.size, "a fresh 429 gets its own Retry-After")
+        advance(secondRefusal + 62_001 - dispatcher.scheduler.currentTime)
         assertEquals(4, api.streamOpens.size)
         assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
         assertEquals(listOf(text("Ответ")), vm.answerItem("a1").blocks)
         assertEquals(1, maxActive, "never two streams at once")
+    }
+
+    @Test fun `false maintenance permits one delayed stream recovery without resending Ask`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        api.script("a1", flow { throw AppError.Maintenance(null, 15,
+            ErrorResponseInfo("MAINTENANCE", 503, requestRetryable = false,
+                timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0))) },
+            events(done(3)))
+        val vm = newVm()
+        assertEquals(1, api.streamOpens.size)
+        vm.resumeStreams()
+        advance(14_000)
+        assertEquals(1, api.streamOpens.size)
+        vm.pauseStreams()
+        vm.resumeStreams()
+        advance(999)
+        assertEquals(1, api.streamOpens.size)
+        advance(1)
+        assertEquals(2, api.streamOpens.size)
+        assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
+        assertTrue(api.asks.isEmpty())
+        assertTrue(api.retries.isEmpty())
+    }
+
+    @Test fun `a second false stream refusal before an event cannot start another maintenance recovery loop`() {
+        fun refusal() = flow<AnswerEvent> { throw AppError.Maintenance(null, 15,
+            ErrorResponseInfo("MAINTENANCE", 503, requestRetryable = false,
+                timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = dispatcher.scheduler.currentTime))) }
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        api.script("a1", refusal(), refusal(), events(done(3)))
+        val vm = newVm()
+        vm.resumeStreams()
+        advance(15_000)
+        assertEquals(2, api.streamOpens.size)
+        vm.resumeStreams()
+        advance(60_000)
+        vm.resumeStreams()
+        assertEquals(2, api.streamOpens.size, "a fresh refusal cannot arm another permit without a successful event")
+        assertTrue(api.asks.isEmpty())
+        assertTrue(api.retries.isEmpty())
     }
 
     @Test fun `a stream error other than the network stops watching and the history gives the answer its status`() {
@@ -919,4 +1158,175 @@ class ChatViewModelBehaviourTest {
         live.tryEmit(done(remaining = 3))
         assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a1").status)
     }
+    @Test fun `unknown request message preserves draft history quota and forbids direct retry`() {
+        val presentation = ErrorPresentation(UserMessage.from("Подождите: действие временно недоступно"), ErrorSeverity.WARNING)
+        api.askOutcomes += AppError.Api("FUTURE_FAILURE", 429, response = ErrorResponseInfo(
+            code = "FUTURE_FAILURE", httpStatus = 429, presentation = presentation, requestRetryable = false))
+        val vm = newVm()
+        val draft = "Сколько осталось на покупки?"
+        sendQuestion(vm, draft)
+        assertEquals(draft, vm.state.value.draft)
+        assertEquals(limit, vm.state.value.limit)
+        assertTrue(vm.state.value.items.isEmpty())
+        assertEquals(presentation, vm.state.value.errorPresentation)
+        vm.retryAfterFailure()
+        vm.setDraft(draft + " ") // whitespace keeps the same normalized request and its denial
+        vm.send()
+        advance(60_000)
+        assertEquals(1, api.asks.size)
+        api.askOutcomes += askResponse()
+        vm.setDraft("Другой вопрос о расходах")
+        vm.send()
+        assertEquals(2, api.asks.size)
+        assertTrue(api.asks.first().key != api.asks.last().key)
+    }
+
+    @Test fun `manual Ask retry waits and retains exactly the original key and draft`() {
+        api.askOutcomes += AppError.RateLimited(null, 3, ErrorResponseInfo("RATE_LIMITED", 429,
+            requestRetryable = true, timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0)))
+        api.askOutcomes += askResponse()
+        val vm = newVm()
+        sendQuestion(vm, "Сколько осталось на покупки?")
+        assertFalse(vm.state.value.askRetryReady)
+        vm.retryAfterFailure()
+        assertEquals(1, api.asks.size)
+        advance(2999)
+        vm.send()
+        assertEquals(1, api.asks.size)
+        advance(1)
+        assertTrue(vm.state.value.askRetryReady)
+        vm.retryAfterFailure()
+        assertEquals(2, api.asks.size)
+        assertEquals(api.asks.first().key, api.asks.last().key)
+        assertEquals(api.asks.first().request, api.asks.last().request)
+    }
+
+    @Test fun `terminal unknown code never activates REST consent action and keeps new attempt permission`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val event = AnswerErrorEvent(AnswerErrorCode.UNKNOWN, "SQL secret", 5, text = "legacy text", retryable = true,
+            userMessage = UserMessage.from("Безопасный ответ новой ошибки"), severity = ErrorSeverity.WARNING, rawCode = ErrorCodes.CONSENT_REQUIRED)
+        api.script("a1", flowOf(AnswerEvent.Error(event)))
+        val vm = newVm()
+        assertNull(vm.state.value.event)
+        assertEquals("Безопасный ответ новой ошибки", vm.answerItem("a1").failureText)
+        assertTrue(vm.answerItem("a1").retryable)
+        assertEquals(ErrorCodes.CONSENT_REQUIRED, vm.answerItem("a1").errorCode)
+        assertEquals(5, vm.state.value.limit?.remaining)
+    }
+
+    @Test fun `invalid canonical answer text never revives legacy diagnostic text`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        api.script("a1", flowOf(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "SQL secret", 5,
+            text = "legacy text must not be used", retryable = false, userMessage = UserMessage.Invalid))))
+        val vm = newVm()
+        assertEquals(GENERIC_ANSWER_ERROR, vm.answerItem("a1").failureText)
+        assertFalse(vm.answerItem("a1").retryable)
+    }
+
+
+    @Test fun `another voice question changes the refused Ask context before its gate is checked`() {
+        api.askOutcomes += voiceAskRefusal(false)
+        api.askOutcomes += askResponse()
+        val vm = newVm()
+        sendQuestion(vm, "Сколько потрачено на такси?")
+        val original = api.asks.single().key
+        vm.send(voiceText = "Сколько потрачено на продукты?")
+        assertEquals(2, api.asks.size)
+        assertEquals("Сколько потрачено на продукты?", api.asks.last().request.text)
+        assertTrue(original != api.asks.last().key)
+    }
+
+    @Test fun `the same trimmed voice question preserves false denial and its pending key`() {
+        api.askOutcomes += voiceAskRefusal(false)
+        val saved = SavedStateHandle()
+        val vm = newVm(saved)
+        val question = "Сколько потрачено на такси?"
+        sendQuestion(vm, question)
+        val original = api.asks.single().key
+        val pendingBefore = saved.get<String>("chat.pending.key")
+        vm.send(voiceText = "  $question ")
+        advance(60_000)
+        assertEquals(1, api.asks.size)
+        assertEquals("  $question ", vm.state.value.draft)
+        assertEquals(false, vm.state.value.requestRetryable)
+        assertFalse(vm.state.value.askRetryReady)
+        assertEquals(pendingBefore, saved.get<String>("chat.pending.key"))
+        assertEquals(original.value, pendingBefore)
+    }
+
+    @Test fun `a new voice question does not inherit the previous question wait`() {
+        api.askOutcomes += voiceAskRefusal(true)
+        api.askOutcomes += askResponse()
+        val vm = newVm()
+        sendQuestion(vm, "Сколько потрачено на такси?")
+        assertFalse(vm.state.value.askRetryReady)
+        val original = api.asks.single().key
+        vm.send(voiceText = "Сколько потрачено на продукты?")
+        assertEquals(2, api.asks.size, "a different request is not a resend of the rate-limited request")
+        assertTrue(original != api.asks.last().key)
+    }
+
+    @Test fun `same voice preserves the original wait deadline and replays its exact key`() {
+        api.askOutcomes += voiceAskRefusal(true)
+        api.askOutcomes += askResponse()
+        val vm = newVm()
+        val question = "Сколько потрачено на такси?"
+        sendQuestion(vm, question)
+        val original = api.asks.single().key
+        advance(2_000)
+        vm.send(voiceText = " $question  ")
+        assertEquals(1, api.asks.size)
+        advance(999)
+        vm.send(voiceText = question)
+        assertEquals(1, api.asks.size)
+        advance(1)
+        vm.send(voiceText = " $question ")
+        assertEquals(2, api.asks.size)
+        assertEquals(original, api.asks.last().key)
+        assertEquals(question, api.asks.last().request.text)
+    }
+
+    @Test fun `a voice result while an Ask is busy stays in the draft after the old Ask fails`() {
+        val pending = CompletableDeferred<Unit>()
+        api.askGate = pending
+        api.askOutcomes += voiceAskRefusal(false)
+        val vm = newVm()
+        sendQuestion(vm, "Сколько потрачено на такси?")
+        vm.send(voiceText = "Сколько потрачено на продукты?")
+        assertEquals(1, api.asks.size)
+        assertEquals("Сколько потрачено на продукты?", vm.state.value.draft)
+        pending.complete(Unit)
+        assertFalse(vm.state.value.sending)
+        assertEquals("Сколько потрачено на продукты?", vm.state.value.draft)
+        assertNull(vm.state.value.requestRetryable)
+        assertFalse(vm.state.value.askBlocked)
+        assertTrue(vm.state.value.askRetryReady)
+        api.askGate = null
+        api.askOutcomes += askResponse()
+        vm.send()
+        assertEquals(2, api.asks.size)
+        assertTrue(api.asks.first().key != api.asks.last().key)
+    }
+
+    @Test fun `a voice result while an Ask is busy survives old success with the usual length bound`() {
+        val pending = CompletableDeferred<Unit>()
+        api.askGate = pending
+        api.askOutcomes += askResponse()
+        val vm = newVm()
+        sendQuestion(vm, "Сколько потрачено на такси?")
+        val recognized = "б".repeat(2_100)
+        vm.send(voiceText = recognized)
+        assertEquals("б".repeat(2_000), vm.state.value.draft)
+        assertEquals(1, api.asks.size)
+        pending.complete(Unit)
+        assertEquals("б".repeat(2_000), vm.state.value.draft)
+        assertEquals(listOf("q-a1", "a1"), vm.state.value.items.map { it.id }, "the accepted original Ask still belongs in history")
+        assertEquals(3, vm.state.value.limit?.remaining)
+        assertFalse(vm.state.value.sending)
+    }
+
+    private fun voiceAskRefusal(retryable: Boolean) = AppError.RateLimited(null, 3,
+        ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = retryable,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0)))
+
 }

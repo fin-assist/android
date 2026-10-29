@@ -183,6 +183,7 @@ fun PfChatComposer(
     offlineText: String = "Нет сети — помощнику нужен интернет. Операции и аналитика доступны",
     limitText: String = "Вопросы на сегодня закончились. Новые — в 00:00 по Москве",
     onRetry: (() -> Unit)? = null,
+    sendEnabled: Boolean = true,
 ) {
     val c = PfTheme.colors
     val d = PfTheme.dimens
@@ -215,7 +216,7 @@ fun PfChatComposer(
                             textStyle = PfTheme.type.lead.copy(color = if (idle) c.text else c.textMuted, fontSize = 16.sp),
                             cursorBrush = SolidColor(c.accent),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            keyboardActions = KeyboardActions(onSend = { onSend() }),
+                            keyboardActions = KeyboardActions(onSend = { if (idle && sendEnabled) onSend() }),
                             modifier = Modifier
                                 .weight(1f)
                                 .background(if (idle) c.surface else c.bg, shape)
@@ -234,12 +235,12 @@ fun PfChatComposer(
                         Box(
                             Modifier
                                 .size(d.touch)
-                                .background(if (idle) c.accent else c.border, RoundedCornerShape(d.radiusFull))
-                                .clickable(enabled = idle, role = Role.Button, onClick = onSend)
+                                .background(if (idle && sendEnabled) c.accent else c.border, RoundedCornerShape(d.radiusFull))
+                                .clickable(enabled = idle && sendEnabled, role = Role.Button, onClick = onSend)
                                 .testTag(PfTestTags.CHAT_SEND),
                             contentAlignment = Alignment.Center,
                         ) {
-                            PfIcon(PfIcons.SEND, contentDescription = "Отправить", tint = if (idle) c.onAccent else c.textMuted)
+                            PfIcon(PfIcons.SEND, contentDescription = "Отправить", tint = if (idle && sendEnabled) c.onAccent else c.textMuted)
                         }
                     }
                 }

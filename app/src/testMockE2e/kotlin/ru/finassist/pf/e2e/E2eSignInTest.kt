@@ -1,5 +1,7 @@
 package ru.finassist.pf.e2e
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -148,7 +150,8 @@ class E2eSignInTest {
         val phones = mutableListOf<String>()
         val streamed = mutableListOf<String>()
 
-        override suspend fun startPhoneVerification(key: IdempotencyKey, phone: String): PhoneVerification {
+        override suspend fun startPhoneVerification(key: IdempotencyKey, request: StartPhoneVerificationRequest): PhoneVerification {
+        val phone = request.phone
             startError?.let { throw it }
             phones += phone
             return PhoneVerification("vt_${phones.size}", "+74950000000", OffsetDateTime.parse("2026-10-08T12:05:00+03:00"), 300)
@@ -162,7 +165,7 @@ class E2eSignInTest {
         override suspend fun register(key: IdempotencyKey, request: RegisterRequest): RegisterResponse = error("unused")
         override suspend fun refreshTokens(key: IdempotencyKey, refreshToken: String): TokenPair = error("unused")
         override suspend fun logout(accessToken: String, refreshToken: String) = error("unused")
-        override suspend fun getConsentDocument(type: ConsentType): ConsentDocument = error("unused")
+        override suspend fun getConsentDocument(type: ConsentType) = ConsentDocument(type, "2026-09-28", "Согласие", "https://example.test/pd")
     }
 
     private class FakeSession : SessionRepository {

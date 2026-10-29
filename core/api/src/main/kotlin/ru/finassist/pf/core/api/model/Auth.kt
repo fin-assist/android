@@ -6,7 +6,12 @@ import ru.finassist.pf.core.common.time.ApiDateTime
 import java.time.Instant
 
 @Serializable
-data class StartPhoneVerificationRequest(val phone: String)
+data class StartPhoneVerificationRequest(
+    val phone: String,
+    val pdConsentAccepted: Boolean,
+    val pdConsentVersion: String,
+    val ageConfirmed: Boolean,
+)
 
 @Serializable
 data class PhoneVerification(
@@ -29,6 +34,8 @@ data class PhoneVerification(
      * deadline: arrival + ([expiresAt] − this). Null when the header is missing or unreadable, and in the fake backend.
      */
     @Transient val serverTime: Instant? = null,
+    /** Same fresh response receipt anchor, process-local and never persisted as a new duration. */
+    @Transient val responseTiming: ru.finassist.pf.core.common.time.ResponseTiming = ru.finassist.pf.core.common.time.ResponseTiming(),
 )
 
 @Serializable(with = VerificationStatus.Serializer::class)

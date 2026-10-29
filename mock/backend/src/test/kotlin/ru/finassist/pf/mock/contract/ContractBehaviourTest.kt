@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock.contract
 
+import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
+
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -40,12 +42,12 @@ class ContractBehaviourTest {
     }
 
     private suspend fun Scene.registrationToken(phone: String = NEW_PHONE): String {
-        val v = auth.startPhoneVerification(IdempotencyKey.random(), phone)
+        val v = auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(phone, true, "2026-09-28", true))
         return drain(auth.streamPhoneVerification(v.verificationToken)).last().registrationToken!!
     }
 
     private suspend fun Scene.refreshToken(): String {
-        val v = auth.startPhoneVerification(IdempotencyKey.random(), FAST.existingPhone)
+        val v = auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(FAST.existingPhone, true, "2026-09-28", true))
         return drain(auth.streamPhoneVerification(v.verificationToken)).last().refreshToken!!
     }
 
@@ -68,7 +70,7 @@ class ContractBehaviourTest {
         expect(ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "400 version before 401", s.call("getProfile", null) { s.profile.getProfile() })
         expect(
             ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "400 version before 400 validation",
-            s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(IdempotencyKey.random(), "8916") },
+            s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest("8916", true, "2026-09-28", true)) },
         )
     }
 
@@ -93,15 +95,15 @@ class ContractBehaviourTest {
     fun `maintenance and an unsupported version are not stored under the key`() = runBlocking {
         val s = Scene(FAST.copy(maintenance = true), signedIn = false)
         val key = IdempotencyKey.random()
-        expect(ErrorCodes.MAINTENANCE, "503 under a key", s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(key, NEW_PHONE) })
+        expect(ErrorCodes.MAINTENANCE, "503 under a key", s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(key, StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)) })
         s.backend.config = s.backend.config.copy(maintenance = false, minVersion = "0.3.0")
         expect(
             ErrorCodes.CLIENT_VERSION_UNSUPPORTED, "400 version under the same key",
-            s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(key, NEW_PHONE) },
+            s.call("startPhoneVerification", null) { s.auth.startPhoneVerification(key, StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)) },
         )
         s.backend.config = s.backend.config.copy(minVersion = null)
         // api.md «Идемпотентность»: answers before the key check are not stored, the repeat runs as the first request.
-        val after = s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(key, NEW_PHONE) }
+        val after = s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(key, StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)) }
         assertEquals("$after", 200, after.status)
         ContractCheck.assertContract("after maintenance and update, same key", after)
     }
@@ -109,7 +111,7 @@ class ContractBehaviourTest {
     @Test
     fun `a stream is not opened during maintenance or on an unsupported version`() = runBlocking {
         val s = Scene(signedIn = false)
-        val token = s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken
+        val token = s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)).verificationToken
         val signedIn = Scene()
         val upload = signedIn.backend.uploads.first().id
         val answer = signedIn.answer("Сколько я потратил?")
@@ -139,7 +141,7 @@ class ContractBehaviourTest {
     fun `a re-open during maintenance gets 503 before its 429`() = runBlocking {
         // The call does not come for a minute: the verification stream starts with `pending`, which is not terminal.
         val s = Scene(FAST.copy(streamDrops = 1, streamRateLimits = 1, callVerifyDelayMs = 60_000), signedIn = false)
-        val token = s.auth.startPhoneVerification(IdempotencyKey.random(), NEW_PHONE).verificationToken
+        val token = s.auth.startPhoneVerification(IdempotencyKey.random(), StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)).verificationToken
         // The first opening drops after its first event; the next one would be turned away with 429.
         assertEquals(1, s.phoneEvents(token).events.size)
         s.backend.config = s.backend.config.copy(maintenance = true)
@@ -233,8 +235,8 @@ class ContractBehaviourTest {
     fun `a repeat with the same key and body gets the stored response`() = runBlocking {
         val s = Scene(signedIn = false)
         val key = IdempotencyKey.random()
-        val first = s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(key, NEW_PHONE) }
-        val again = s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(key, NEW_PHONE) }
+        val first = s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(key, StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)) }
+        val again = s.call("startPhoneVerification", PhoneVerification.serializer()) { s.auth.startPhoneVerification(key, StartPhoneVerificationRequest(NEW_PHONE, true, "2026-09-28", true)) }
         ContractCheck.assertContract("replay: phone", again)
         assertEquals(first.status to first.body, again.status to again.body)
 
@@ -291,26 +293,51 @@ class ContractBehaviourTest {
     fun `the same key with another file or question is IDEMPOTENCY_CONFLICT`() = runBlocking {
         val s = Scene()
         s.statements.uploadStatement(KEY, s.statementFile())
-        val upload = s.call("uploadStatement", UploadAccepted.serializer()) {
-            s.statements.uploadStatement(KEY, s.statementFile("other.ofx", s.statementFile().open().readBytes().decodeToString() + "\n"))
+        val otherContent = s.call("uploadStatement", null) {
+            s.statements.uploadStatement(KEY, s.statementFile(text = s.statementFile().open().readBytes().decodeToString() + "\n"))
         }
-        ContractCheck.knownGap(GAP_CONFLICT, upload, contract = ErrorCodes.IDEMPOTENCY_CONFLICT, now = null)
+        expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "conflict: upload, other content under the same name", otherContent)
+        // 3.2 compares the content and the name (FIN-297): the same file under another name is another body.
+        val renamed = s.call("uploadStatement", null) {
+            s.statements.uploadStatement(KEY, s.statementFile("renamed.ofx", s.statementFile().open().readBytes().decodeToString()))
+        }
+        expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "conflict: upload, other name", renamed)
 
         val q = Scene()
         q.assistant.ask(KEY, AskRequest("Сколько я потратил?"))
         val question = q.call("askAssistant", AskResponse.serializer()) { q.assistant.ask(KEY, AskRequest("Сколько на такси?")) }
-        ContractCheck.knownGap(GAP_CONFLICT, question, contract = ErrorCodes.IDEMPOTENCY_CONFLICT, now = null)
+        expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "conflict: another assistant question", question)
     }
 
     @Test
-    fun `a 422 is stored under the key`() = runBlocking {
-        val s = Scene()
-        val pdf = s.statementFile("s.pdf", "%PDF-1.4")
-        expect(ErrorCodes.WRONG_FORMAT, "422 first", s.call("uploadStatement", null) { s.statements.uploadStatement(KEY, pdf) })
-        // Same key, same body: the stored 422, not a new run — the limit was lowered meanwhile, so a new run gives 413.
-        s.backend.config = s.backend.config.copy(maxFileSizeBytes = 1)
-        val repeat = s.call("uploadStatement", null) { s.statements.uploadStatement(KEY, pdf) }
-        ContractCheck.knownGap(GAP_STORED_ERRORS, repeat, contract = ErrorCodes.WRONG_FORMAT, now = ErrorCodes.FILE_TOO_LARGE)
+    fun `upload validation errors replay the stored status and body and reserve the key`() = runBlocking {
+        val s = Scene(loaded = false)
+        val cases = listOf(
+            s.statementFile("s.pdf", "%PDF-1.4") to ErrorCodes.WRONG_FORMAT,
+            s.statementFile("s.csv", "Дата операции;Сумма\n01.09.2026;100") to ErrorCodes.CSV_NOT_ACCEPTED,
+            s.statementFile("s.ofx", "<OFX><BANKMSGSRSV1><BANKID>SBER</BANKID></BANKMSGSRSV1></OFX>") to ErrorCodes.WRONG_BANK,
+        )
+        for ((file, code) in cases) {
+            val key = IdempotencyKey.random()
+            val first = s.call("uploadStatement", null) { s.statements.uploadStatement(key, file) }
+            expect(code, "422 first: $code", first)
+            val again = s.call("uploadStatement", null) { s.statements.uploadStatement(key, file) }
+            expect(code, "422 replay: $code", again)
+            assertEquals(first.status to first.body, again.status to again.body)
+            expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "changed content: $code", s.call("uploadStatement", null) {
+                s.statements.uploadStatement(key, s.statementFile(file.name, "%PDF-2.0"))
+            })
+            expect(ErrorCodes.IDEMPOTENCY_CONFLICT, "changed name: $code", s.call("uploadStatement", null) {
+                s.statements.uploadStatement(key, s.statementFile("renamed-" + file.name, file.open().use { it.readBytes().decodeToString() }))
+            })
+        }
+        assertEquals(0, s.backend.uploads.size)
+        val corrected = s.call("uploadStatement", UploadAccepted.serializer()) {
+            s.statements.uploadStatement(IdempotencyKey.random(), s.statementFile())
+        }
+        assertEquals(202, corrected.status)
+        ContractCheck.assertContract("corrected file uses a new key", corrected)
+        assertEquals(1, s.backend.uploads.size)
     }
 
     // 404: an object the user never had, or another user's.
@@ -377,13 +404,11 @@ class ContractBehaviourTest {
         val KEY = IdempotencyKey("6f1e1b8a-3c2d-4e5f-8a9b-0c1d2e3f4a5b")
 
         const val GAP_RETRY_ORDER = "retry-error-order"
-        const val GAP_CONFLICT = "idempotency-conflict-statements-assistant"
-        const val GAP_STORED_ERRORS = "idempotency-stored-errors"
         const val GAP_DELETE_UNKNOWN = "delete-unknown-upload"
         const val GAP_STREAM_SESSION = "stream-session"
         const val GAP_SESSIONLESS = "logout-delete-session"
 
         /** Every gap a test here runs; [ContractCoverageTest] keeps it equal to [Exclusions.behaviours]. */
-        val GAPS = listOf(GAP_RETRY_ORDER, GAP_CONFLICT, GAP_STORED_ERRORS, GAP_DELETE_UNKNOWN, GAP_STREAM_SESSION, GAP_SESSIONLESS)
+        val GAPS = listOf(GAP_RETRY_ORDER, GAP_DELETE_UNKNOWN, GAP_STREAM_SESSION, GAP_SESSIONLESS)
     }
 }

@@ -14,7 +14,7 @@ activityCompose = "1.10.1"
 lifecycle = "2.8.7"
 navigationCompose = "2.8.9"
 composeBom = "2025.03.01"
-datastore = "1.2.1"
+datastore = "1.3.0"
 biometric = "1.1.0"
 browser = "1.8.0"
 fragment = "1.8.6"
@@ -31,7 +31,7 @@ retrofit = "3.0.0"
 rustoreRemoteConfig = "10.5.2"
 mytracker = "3.6.0"
 # Crashes and ANR (both flavors); the Gradle plugin uploads R8 mappings
-tracer = "1.5.1"
+tracer = "1.6.0"
 
 # Security
 tink = "1.24.0"
@@ -51,7 +51,7 @@ openapiValidator = "2.46.1"
 # Unit test coverage (docs/testing.md)
 kover = "0.9.11"
 # UI test coverage (FIN-48): probes in the mock e2e build and the report task.
-jacoco = "0.8.15"
+jacoco = "0.8.16"
 
 [libraries]
 # Gradle plugins as libraries — used by build-logic convention plugins

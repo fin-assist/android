@@ -26,4 +26,7 @@ class DeleteAccountDesignCheckTest {
     @Test fun deleteAccountBusy() = capture("DeleteAccountBusy", DeleteUiState(dialog = true, deleting = true))
 
     @Test fun deleteAccountOffline() = capture("DeleteAccountOffline", DeleteUiState(dialog = true, error = DeleteAccountViewModel.OFFLINE))
+    // FIN-223 proposed artboard; snapshot execution is not authorized.
+    @Test fun serverWarning() = capture("DeleteAccountServerWarning", DeleteUiState(dialog = true, error = DeleteAccountViewModel.FAILED,
+        errorPresentation = ru.finassist.pf.core.common.error.ErrorPresentation(ru.finassist.pf.core.common.error.UserMessage.from("Удаление временно недоступно"), ru.finassist.pf.core.common.error.ErrorSeverity.WARNING), retryReady = false))
 }
