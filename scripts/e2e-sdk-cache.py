@@ -47,10 +47,16 @@ def action_revision():
     return revisions[0]
 
 
-def prefix(name, root, path):
+def runner_identity():
     runner = {key: os.environ[key] for key in ('RUNNER_OS', 'RUNNER_ARCH', 'ImageOS', 'ImageVersion')}
     if not all(value.strip() for value in runner.values()):
         raise ValueError('Missing runner image identity')
+    return runner
+
+
+def prefix(name, root, path):
+    # Package archives can span patch revisions of one ImageOS; AVD snapshots keep their stricter guard.
+    runner = {key: value for key, value in runner_identity().items() if key != 'ImageVersion'}
     payload = {'runner': runner, 'package': str(path.relative_to(root)), 'action': action_revision()}
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
     return f'{SCHEMA}-{name}-{digest}-'
@@ -70,7 +76,7 @@ def final_key(package_prefix, actual):
 
 def paths():
     root, packages = package_paths()
-    data = {'started': time.time(), 'packages': {}}
+    data = {'started': time.time(), 'runner': runner_identity(), 'packages': {}}
     for name, path in packages.items():
         entry = {'prefix': prefix(name, root, path), 'restore_attempted': not path.exists()}
         data['packages'][name] = entry

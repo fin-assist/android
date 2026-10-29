@@ -159,7 +159,7 @@ class SdkCacheTest(unittest.TestCase):
         original = SDK.prefix('image', root, paths['image'])
         with patch.dict(os.environ, {'CPU_MODEL': 'other', 'CPU_FLAGS': 'different'}):
             self.assertEqual(original, SDK.prefix('image', root, paths['image']))
-        for key, value in [('RUNNER_ARCH', 'ARM64'), ('ImageVersion', 'v2'), ('AVD_API', '35')]:
+        for key, value in [('RUNNER_OS', 'macOS'), ('RUNNER_ARCH', 'ARM64'), ('ImageOS', 'ubuntu26'), ('AVD_API', '35')]:
             with self.subTest(key=key), patch.dict(os.environ, {key: value}):
                 r, p = SDK.package_paths()
                 self.assertNotEqual(original, SDK.prefix('image', r, p['image']))
@@ -167,6 +167,20 @@ class SdkCacheTest(unittest.TestCase):
         changed_workflow.write_text('uses: reactivecircus/android-emulator-runner@' + 'b' * 40)
         with patch.object(SDK, 'WORKFLOW', changed_workflow):
             self.assertNotEqual(original, SDK.prefix('image', root, paths['image']))
+
+    def test_image_patch_version_changes_telemetry_but_not_sdk_prefix_or_final_key(self):
+        self.restore_hit()
+        SDK.finalize()
+        original = self.data()
+        self.assertEqual('v1', original['runner']['ImageVersion'])
+        with patch.dict(os.environ, {'ImageVersion': 'v2'}):
+            root, packages = SDK.package_paths()
+            for name, path in packages.items():
+                entry = original['packages'][name]
+                self.assertEqual(entry['prefix'], SDK.prefix(name, root, path))
+                self.assertEqual(entry['final_key'], SDK.final_key(SDK.prefix(name, root, path), SDK.metadata(path)))
+            SDK.paths()
+            self.assertEqual('v2', self.data()['runner']['ImageVersion'])
 
     def test_sdk_install_failure_cannot_finalize_missing_or_bad_actual_metadata(self):
         SDK.paths()

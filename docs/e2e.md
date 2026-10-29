@@ -80,8 +80,9 @@ native tests and reports/coverage/Qase stay unchanged. No AVD or adb key is stor
 inputs, `avd_cache` and `sdk_benchmark`, default to `false`; the latter selects the isolated SDK-only experiment.
 
 `scripts/e2e-sdk-cache.py` creates separate emulator/image compatibility prefixes from runner OS/architecture,
-ImageOS/ImageVersion, requested package path, the actual audited action SHA read from the workflow and a schema
-version. CPU features and AVD resources are not SDK package compatibility dimensions. An initially absent package
+ImageOS, requested package path, the actual audited action SHA read from the workflow and a schema
+version. ImageVersion is retained in the sidecar telemetry, but does not fragment package entries across hosted-image
+patch updates; AVD snapshot keys still require ImageVersion and full CPU compatibility. CPU features and AVD resources are not SDK package compatibility dimensions. An initially absent package
 may restore the latest prefix entry. The helper validates its `source.properties` revision/hash against the matched
 immutable key. Missing, failed or incompatible restore removes only that initially absent selected package directory
 and proceeds to ordinary online installation. Hosted-only checks, SDK-manager existence and confined, non-symlink
@@ -93,7 +94,7 @@ limits. Final immutable keys contain the actual installed revision/metadata hash
 packages, before any emulator/tests, with two-minute transfer limits; other shards only read caches. A current hit
 is not re-saved; a prefix hit updated online gets a new final key. Restore/save failures are cache failures, not a
 reason to retry UI tests. An online SDK failure or direct cold test failure remains red. `cache-matched-key`, rather
-than exact-only `cache-hit`, identifies prefix restores. Old revision/image-version entries can accumulate and must
+than exact-only `cache-hit`, identifies prefix restores. Old package-revision/ImageOS entries can accumulate and must
 be considered in the repository cache budget; two current archives measured about 1.82 GB below.
 
 The sidecar `build/e2e/sdk-cache.json` records matched/final keys, actual metadata, `hit-current`, `hit-updated`,

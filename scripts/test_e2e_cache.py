@@ -354,6 +354,8 @@ class CleanAvdCacheTest(unittest.TestCase):
         with patch.dict(os.environ, env), patch.object(Path, 'read_text', read_text):
             self.assertIn('36.1.2', cache.fingerprint()['packages']['emulator'])
             requested_key = cache.cache_key()
+            with patch.dict(os.environ, {'ImageVersion': 'v2'}):
+                self.assertNotEqual(requested_key, cache.cache_key())
             with patch.dict(os.environ, {'AVD_DISK': '8192M'}):
                 self.assertNotEqual(requested_key, cache.cache_key())
             (image / 'source.properties').unlink()
