@@ -18,6 +18,9 @@ class CleanAvdCacheTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        environment = patch.dict(os.environ, {'ANDROID_HOME': str(self.root / 'sdk')})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.avd = self.root / 'device.avd'
         self.avd.mkdir()
 
@@ -236,6 +239,9 @@ class DisposableCiAdbKeyTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        environment = patch.dict(os.environ, {'ANDROID_HOME': str(self.root / 'sdk')})
+        environment.start()
+        self.addCleanup(environment.stop)
         for name, filename in [('KEY', 'adbkey'), ('KEY_PUBLIC', 'adbkey.pub'), ('KEY_RECEIPT', 'receipt.json')]:
             patcher = patch.object(cache, name, self.root / filename)
             patcher.start()
@@ -265,8 +271,8 @@ class DisposableCiAdbKeyTest(unittest.TestCase):
              patch.object(cache.subprocess, 'run', side_effect=command):
             cache.initialize_ci_key()
             cache.reload_ci_key()
-            self.assertEqual([['adb', 'kill-server'], ['adb', 'keygen', str(cache.KEY)],
-                              ['adb', 'kill-server'], ['adb', 'start-server']], calls)
+            self.assertEqual([[cache.adb_executable(), 'kill-server'], [cache.adb_executable(), 'keygen', str(cache.KEY)],
+                              [cache.adb_executable(), 'kill-server'], [cache.adb_executable(), 'start-server']], calls)
             self.assertEqual(0o600, cache.KEY.stat().st_mode & 0o777)
             self.assertNotIn('disposable private', cache.KEY_RECEIPT.read_text())
             cache.KEY.write_text('unrelated host key')
@@ -328,6 +334,15 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         self.assertTrue(self.runs('Run UI tests on a fresh AVD after snapshot boot failure', fields))
         self.assertFalse(self.runs('Preserve UI test failure', fields))
         self.assertNotIn('continue-on-error', self.step('Run UI tests on a fresh AVD after snapshot boot failure'))
+
+    def test_sdk_commands_before_emulator_action_do_not_assume_sdk_tools_on_path(self):
+        preparation = self.step('Prepare SDK and fingerprint the AVD')
+        self.assertIn('sdkmanager_path="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"', preparation)
+        self.assertIn('yes | "$sdkmanager_path" --licenses', preparation)
+        self.assertIn('"$sdkmanager_path" --install', preparation)
+        self.assertNotRegex(preparation, r'(?:\||^)[ \t]*sdkmanager\s')
+        with patch.dict(os.environ, {'ANDROID_HOME': '/sdk-without-path', 'PATH': '/bin'}):
+            self.assertEqual('/sdk-without-path/platform-tools/adb', cache.adb_executable())
 
     def test_cache_is_explicitly_saved_before_any_test_installation(self):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()

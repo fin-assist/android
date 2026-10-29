@@ -81,6 +81,11 @@ def require_hosted_ci():
         raise RuntimeError('Disposable adb key operations require a GitHub-hosted CI runner')
 
 
+def adb_executable():
+    # android-emulator-runner adds SDK tools to PATH only after the pre-action cache/key steps.
+    return str(Path(os.environ['ANDROID_HOME']) / 'platform-tools/adb')
+
+
 def key_receipt():
     return {'purpose': 'finassist-clean-avd-ci', 'private_sha256': hashlib.sha256(KEY.read_bytes()).hexdigest(),
             'public_sha256': hashlib.sha256(KEY_PUBLIC.read_bytes()).hexdigest()}
@@ -96,11 +101,11 @@ def assert_ci_key():
 
 def initialize_ci_key():
     require_hosted_ci()  # Never read, delete, or cache a developer's existing adb keys.
-    subprocess.run(['adb', 'kill-server'], check=True, timeout=30)
+    subprocess.run([adb_executable(), 'kill-server'], check=True, timeout=30)
     KEY.parent.mkdir(parents=True, exist_ok=True)
     for path in (KEY, KEY_PUBLIC, KEY_RECEIPT):
         path.unlink(missing_ok=True)
-    subprocess.run(['adb', 'keygen', str(KEY)], check=True, timeout=30, capture_output=True)
+    subprocess.run([adb_executable(), 'keygen', str(KEY)], check=True, timeout=30, capture_output=True)
     KEY.chmod(0o600)
     KEY_RECEIPT.write_text(json.dumps(key_receipt()))
 
@@ -109,8 +114,8 @@ def reload_ci_key():
     assert_ci_key()
     KEY.chmod(0o600)
     # A server started before cache restore may still hold the new runner's previous key in memory.
-    subprocess.run(['adb', 'kill-server'], check=True, timeout=30)
-    subprocess.run(['adb', 'start-server'], check=True, timeout=30)
+    subprocess.run([adb_executable(), 'kill-server'], check=True, timeout=30)
+    subprocess.run([adb_executable(), 'start-server'], check=True, timeout=30)
 
 
 def snapshot_exists(avd=AVD):
@@ -128,7 +133,7 @@ def usable(avd, key):
 
 
 def adb(*args):
-    result = subprocess.run(['adb', '-s', os.environ.get('ANDROID_SERIAL', 'emulator-5554'), *args],
+    result = subprocess.run([adb_executable(), '-s', os.environ.get('ANDROID_SERIAL', 'emulator-5554'), *args],
                             check=True, text=True, capture_output=True, timeout=120)
     if any(line.startswith('KO:') for line in result.stdout.splitlines()):
         raise RuntimeError(result.stdout)

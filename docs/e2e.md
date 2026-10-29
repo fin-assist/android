@@ -114,7 +114,9 @@ A cold fallback is not reported as a successful snapshot hit. Changing configura
 The [runner action snapshot recipe](https://github.com/ReactiveCircus/android-emulator-runner#usage--examples) is
 used with the [audited action revision](https://github.com/ReactiveCircus/android-emulator-runner/tree/a421e43855164a8197daf9d8d40fe71c6996bb0d).
 Its SDK installer still invokes `sdkmanager` for the emulator and image on every call, even after an AVD hit.
-The workflow prepares these packages before computing the key, and checks their fingerprint again before saving
+The workflow calls `sdkmanager` through `$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager` and its helper calls
+`adb` through `$ANDROID_HOME/platform-tools/adb`: these preparation steps precede the action that adds SDK tools
+to `PATH`. It prepares these packages before computing the key, and checks their fingerprint again before saving
 or using a snapshot. An AVD hit does not promise to avoid SDK downloads. No separate SDK cache is enabled without
 measurements: downloading/decompressing SDK archives can cost more than using the packages already present on the
 hosted image, and the action would still check them. Evaluate that separately from the AVD cache with the same
@@ -144,6 +146,12 @@ not a post-change speedup measurement.
 | 2 | 87.5 s | 28.8 s | 122.7 s | 879.0 s |
 | 3 | 51.1 s | 32.6 s | 93.1 s | 930.1 s |
 | 4 | 52.9 s | 28.5 s | 88.1 s | 910.2 s |
+
+The first authorized [attempt 40952526793](https://github.com/fin-assist/android/actions/runs/40952526793) on
+`52f6647` stopped in all four shards before cache restore, emulator startup or UI execution:
+`Prepare SDK and fingerprint the AVD` called bare `sdkmanager`, which was absent from the hosted runner's PATH
+(exit 127; shard 1 at `2026-10-29T20:51:58Z`). The explicit SDK paths above fix this preparation failure. That
+attempt created no AVD cache and provides no cache/boot/test timing sample or evidence of speedup.
 
 **Not yet measured:** the changed workflow's cache miss → save → hit, real boot-ID continuity, cache transfer size
 and time, or net speedup. UI/Maestro/native/DesignCheck runs and manually dispatched workflows require separate

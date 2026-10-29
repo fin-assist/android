@@ -100,11 +100,12 @@ jobs:
         id: avd-key
         run: |
           python3 scripts/e2e-cache.py mark sdk-start
+          sdkmanager_path="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           # yes exits on SIGPIPE when sdkmanager has read all answers; only sdkmanager failure matters here.
           set +o pipefail
-          yes | sdkmanager --licenses >/dev/null
+          yes | "$sdkmanager_path" --licenses >/dev/null
           set -o pipefail
-          sdkmanager --install emulator "system-images;android-${AVD_API};${AVD_TARGET};${AVD_ARCH}" --channel=0
+          "$sdkmanager_path" --install platform-tools emulator "system-images;android-${AVD_API};${AVD_TARGET};${AVD_ARCH}" --channel=0
           python3 scripts/e2e-cache.py key
           python3 scripts/e2e-cache.py mark restore-start
 
