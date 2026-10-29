@@ -23,6 +23,15 @@ concurrency:
 env:
   # The number of shards; the matrix below lists 1..SHARDS.
   SHARDS: 4
+  AVD_NAME: pf-e2e
+  AVD_API: 34
+  AVD_TARGET: google_apis
+  AVD_ARCH: x86_64
+  AVD_PROFILE: pixel_6
+  AVD_CORES: 4
+  AVD_RAM: 4096M
+  AVD_DISK: 4096M
+  AVD_OPTIONS: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -timezone Europe/Moscow
 
 jobs:
   shard:
@@ -84,19 +93,120 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
-      - name: Run UI tests
-        uses: reactivecircus/android-emulator-runner@v2
+      # Resolve the actual installed versions before selecting an AVD cache. The runner action also calls
+      # sdkmanager, even on a hit; an AVD cache does not promise to avoid SDK downloads (docs/e2e.md).
+      - name: Prepare SDK and fingerprint the AVD
+        id: avd-key
+        run: |
+          python3 scripts/e2e-cache.py mark sdk-start
+          # yes exits on SIGPIPE when sdkmanager has read all answers; only sdkmanager failure matters here.
+          set +o pipefail
+          yes | sdkmanager --licenses >/dev/null
+          set -o pipefail
+          sdkmanager --install emulator "system-images;android-${AVD_API};${AVD_TARGET};${AVD_ARCH}" --channel=0
+          python3 scripts/e2e-cache.py key
+          python3 scripts/e2e-cache.py mark restore-start
+
+      # Separate restore/save: a post-job cache save would persist the device AFTER the financial tests.
+      - name: Restore clean AVD
+        id: avd-cache
+        uses: actions/cache/restore@v6
         with:
-          api-level: 34
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          cores: 4
-          ram-size: 4096M
-          disk-size: 4096M
+          path: |
+            ~/.android/avd/${{ env.AVD_NAME }}.avd
+            ~/.android/avd/${{ env.AVD_NAME }}.ini
+          key: ${{ steps.avd-key.outputs.key }}
+
+      - name: Validate restored AVD
+        id: avd
+        run: python3 scripts/e2e-cache.py validate
+
+      - name: Create clean AVD snapshot
+        if: steps.avd.outputs.usable != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: ${{ env.AVD_API }}
+          target: ${{ env.AVD_TARGET }}
+          arch: ${{ env.AVD_ARCH }}
+          profile: ${{ env.AVD_PROFILE }}
+          cores: ${{ env.AVD_CORES }}
+          ram-size: ${{ env.AVD_RAM }}
+          disk-size: ${{ env.AVD_DISK }}
+          avd-name: ${{ env.AVD_NAME }}
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -timezone Europe/Moscow
-          script: scripts/e2e.sh --no-build --shard ${{ matrix.shard }}/${{ env.SHARDS }}
+          force-avd-creation: true
+          emulator-options: ${{ env.AVD_OPTIONS }} -no-snapshot-load -no-snapshot-save
+          pre-emulator-launch-script: python3 scripts/e2e-cache.py mark create-boot-start
+          script: python3 scripts/e2e-cache.py snapshot
+
+      # Save only the pristine, stopped AVD, never adb keys, APKs, or the post-test writable device.
+      - name: Seal clean AVD
+        if: steps.avd.outputs.usable != 'true'
+        run: python3 scripts/e2e-cache.py seal
+
+      - name: Save clean AVD
+        if: steps.avd.outputs.usable != 'true' && steps.avd-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.android/avd/${{ env.AVD_NAME }}.avd
+            ~/.android/avd/${{ env.AVD_NAME }}.ini
+          key: ${{ steps.avd-key.outputs.key }}
+
+      - name: Mark cache ready
+        run: python3 scripts/e2e-cache.py mark cache-ready
+
+      - name: Run UI tests from clean snapshot
+        id: ui
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: ${{ env.AVD_API }}
+          target: ${{ env.AVD_TARGET }}
+          arch: ${{ env.AVD_ARCH }}
+          profile: ${{ env.AVD_PROFILE }}
+          cores: ${{ env.AVD_CORES }}
+          ram-size: ${{ env.AVD_RAM }}
+          disk-size: ${{ env.AVD_DISK }}
+          avd-name: ${{ env.AVD_NAME }}
+          disable-animations: true
+          force-avd-creation: false
+          emulator-options: ${{ env.AVD_OPTIONS }} -snapshot clean -no-snapshot-save
+          pre-emulator-launch-script: python3 scripts/e2e-cache.py mark test-boot-start
+          script: python3 scripts/e2e-cache.py test --shard ${{ matrix.shard }}/${{ env.SHARDS }}
+
+      # Retry preparation only. Once e2e.sh starts, an assertion/native-test failure remains a failure.
+      - name: Decide whether clean cold boot is needed
+        id: fallback
+        if: steps.ui.outcome == 'failure'
+        run: python3 scripts/e2e-cache.py fallback
+
+      - name: Run UI tests on a fresh AVD after snapshot boot failure
+        id: cold-ui
+        if: steps.ui.outcome == 'failure' && steps.fallback.outputs.needed == 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: ${{ env.AVD_API }}
+          target: ${{ env.AVD_TARGET }}
+          arch: ${{ env.AVD_ARCH }}
+          profile: ${{ env.AVD_PROFILE }}
+          cores: ${{ env.AVD_CORES }}
+          ram-size: ${{ env.AVD_RAM }}
+          disk-size: ${{ env.AVD_DISK }}
+          avd-name: ${{ env.AVD_NAME }}
+          disable-animations: true
+          force-avd-creation: true
+          emulator-options: ${{ env.AVD_OPTIONS }} -no-snapshot-load -no-snapshot-save -wipe-data
+          pre-emulator-launch-script: python3 scripts/e2e-cache.py mark fallback-boot-start
+          script: python3 scripts/e2e-cache.py test --cold --shard ${{ matrix.shard }}/${{ env.SHARDS }}
+
+      - name: Preserve UI test failure
+        if: steps.ui.outcome == 'failure' && steps.fallback.outputs.needed != 'true'
+        run: exit 1
+
+      - name: Emulator preparation timings
+        if: always()
+        run: python3 scripts/e2e-cache.py report
 
       # Whatever the shard ended with: the reports job needs the flows' report, execution data and logs of each one.
       - uses: actions/upload-artifact@v7

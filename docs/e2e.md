@@ -71,6 +71,74 @@ The flows run on four emulators at once (FIN-180), one job per shard, each with 
   was green (a shard's report that never arrived, flows missing or failed — `gather` lists them): the `Reports` job
   fails after it has published everything.
 
+
+### Clean AVD snapshot cache (FIN-378)
+
+The four shard jobs restore independent writable copies of one clean Android API 34 / google_apis / x86_64 /
+Pixel 6 AVD. A cache miss creates a fresh AVD, boots Android, checks that no FinAssist app or test APK is installed,
+and explicitly saves the named `clean` snapshot. This happens before `e2e.sh` installs anything, signs in or imports
+financial fixtures. The action shuts down the emulator; the helper waits for its process to exit and verifies the
+snapshot files before `actions/cache/save` uploads the pristine device. Only that AVD directory and its `.ini` are
+cached; host adb keys are excluded. Saving is a step **before** the UI tests, never a post-job hook.
+
+On a hit, `force-avd-creation: false` and `-snapshot clean -no-snapshot-save` reuse the restored device. Before the
+tests, `scripts/e2e-cache.py` checks that the app is absent and that Android's kernel `boot_id` matches the ID saved
+in the snapshot metadata: a silent cold boot must not count as a successful snapshot restore. A preparation failure
+can fall back once to a fresh AVD with a cold boot. The marker written immediately before starting `e2e.sh` prevents
+an assertion failure, native-test failure or timeout from being retried or hidden as a cache problem. Test runs
+never save snapshots or update the shared cache. Existing per-flow app-data resets, native-test orchestration,
+coverage, missing-report guards and Qase reporting remain in force.
+
+The exact cache key includes the installed emulator and system-image `source.properties` (including revisions),
+runner OS/architecture and runner-image version, host CPU model/features, all `AVD_*` configuration, the pinned
+runner-action SHA and workflow/helper hashes. No prefix restore can select another configuration. An absent,
+incomplete or mismatched snapshot is discarded and recreated. Cache entries are immutable: if an exact entry is
+corrupt, the job recreates a clean device without overwriting it; delete that entry in Actions caches or change the
+`clean-avd-v1` namespace to replace it. Concurrent cache misses may race to save the same pristine entry; each shard
+still uses its own local device. Changing configuration invalidates the cache rather than carrying test state forward.
+
+The [runner action snapshot recipe](https://github.com/ReactiveCircus/android-emulator-runner#usage--examples) is
+used with the [audited action revision](https://github.com/ReactiveCircus/android-emulator-runner/tree/a421e43855164a8197daf9d8d40fe71c6996bb0d).
+Its SDK installer still invokes `sdkmanager` for the emulator and image on every call, even after an AVD hit.
+The workflow prepares these packages before computing the key, and checks their fingerprint again before saving
+or using a snapshot. An AVD hit does not promise to avoid SDK downloads. No separate SDK cache is enabled without
+measurements: downloading/decompressing SDK archives can cost more than using the packages already present on the
+hosted image, and the action would still check them. Evaluate that separately from the AVD cache with the same
+emulator/image revisions and test selection. The existing GPU mode is retained; Android's
+[snapshot documentation](https://developer.android.com/studio/run/emulator-snapshots) warns about software-rendering
+reliability. The boot-ID check and one cold fallback keep the tests runnable; actual snapshot compatibility and
+speed on our hosted runners still require the authorized acceptance run.
+
+#### Measurements and pending acceptance
+
+`build/e2e/preparation.json` and each shard's job summary record SDK preparation, cache restore/validation,
+cold-device boot, snapshot creation/shutdown, cache save, test boot (and cold fallback when needed), and the complete
+`e2e.sh` execution separately. Action step durations additionally include its repeated SDK checks, AVD setup and
+teardown. Use the Actions job/step start and finish times for those costs and the workflow's critical-path duration;
+do not sum parallel shard durations. Preparation data is retained with the existing shard artifacts.
+
+The existing successful [baseline run 40944955977](https://github.com/fin-assist/android/actions/runs/40944955977)
+used commit `ee17c3a`, the same API/profile/resources and four shards. Its workflow took 22m38s. Approximate stage
+boundaries below come from the existing timestamped logs; the SDK column ends at `avdmanager create`, boot is
+`Starting emulator` → `Emulator booted`, preparation is the UI action start → the `e2e.sh` command, and scenarios end
+at the action's immediately following emulator-kill command (including script cleanup). This is historical evidence,
+not a post-change speedup measurement.
+
+| Shard | SDK before AVD creation | Android boot | Total preparation | Scenarios + script cleanup |
+|---|---:|---:|---:|---:|
+| 1 | 44.6 s | 39.0 s | 92.2 s | 984.9 s |
+| 2 | 87.5 s | 28.8 s | 122.7 s | 879.0 s |
+| 3 | 51.1 s | 32.6 s | 93.1 s | 930.1 s |
+| 4 | 52.9 s | 28.5 s | 88.1 s | 910.2 s |
+
+**Not yet measured:** the changed workflow's cache miss → save → hit, real boot-ID continuity, cache transfer size
+and time, or net speedup. UI/Maestro/native/DesignCheck runs and manually dispatched workflows require separate
+explicit owner permission. Helper/unit and workflow-syntax checks do not establish these runtime criteria.
+After permission, compare a cold-cache run and an exact-key hit using identical test/configuration revisions;
+check all four nonempty Maestro reports and shard 1's native results, verify no cold fallback occurred on a claimed
+hit, and compare both preparation stages and total critical path with the baseline. Record SDK-cache A/B results
+separately before deciding whether to add one. Do not close FIN-378 until those acceptance measurements are resolved.
+
 ## Qase
 
 Every scenario is a test case in Qase, project `PLAINFIN`, suite «UI-автотесты (Android)» (one sub-suite per feature):
