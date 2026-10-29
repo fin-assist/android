@@ -118,6 +118,66 @@ def reload_ci_key():
     subprocess.run([adb_executable(), 'start-server'], check=True, timeout=30)
 
 
+def hardware_summary(text):
+    """Keep equality evidence and safe previews, never raw paths or identity/secret values."""
+    fields = {}
+    paths = set()
+    for line in text.splitlines():
+        key, separator, value = line.partition('=')
+        key, value = key.strip(), value.strip()
+        if not separator or not re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', key):
+            continue
+        if key in {'android.sdk.root', 'android.avd.home', 'hw.gpu.mode', 'avd.id'}:
+            continue
+        if key.endswith(('.path', '.initPath')):
+            if key != 'disk.dataPartition.initPath':
+                paths.add(key)
+            continue
+        if re.search(r'secret|token|password|serial|phone|email|account|card|uuid|(?:^|[._])(?:key|keys|pubkey|privatekey)(?:$|[._])', key, re.IGNORECASE):
+            fields[key] = {'value': '<redacted>', 'not_compared': True}
+        elif re.fullmatch(r'[+-]?[0-9]{1,12}(?:\.[0-9]{1,6})?(?:[KMGT])?', value) or value in {
+                '', 'yes', 'no', 'true', 'false', 'on', 'off', 'auto', 'none', 'portrait', 'landscape',
+                'x86', 'x86_64', 'arm', 'arm64', 'arm64-v8a', 'ranchu', 'ranchu64', 'pipe', 'guest', 'host'}:
+            fields[key] = {'value': value}
+        else:
+            fields[key] = {'value': '<redacted>', 'digest': hashlib.sha256(value.encode()).hexdigest()}
+    return {'fields': fields, 'path_keys': sorted(paths)}
+
+
+def capture_snapshot_hardware():
+    data = state()
+    try:
+        data['snapshot_hardware'] = hardware_summary((AVD / 'snapshots/clean/hardware.ini').read_text())
+    except OSError:
+        data['snapshot_hardware'] = {'unavailable': True}
+    write(data)
+
+
+def record_hardware_difference():
+    data = state()
+    expected = data.get('snapshot_hardware', {'unavailable': True})
+    try:
+        current = hardware_summary((AVD / 'hardware-qemu.ini').read_text())
+    except OSError:
+        current = {'unavailable': True}
+    diagnostic = {'note': 'Raw INI telemetry before default stripping; AEMU alone decides snapshot compatibility.'}
+    if expected.get('unavailable') or current.get('unavailable'):
+        diagnostic['unavailable'] = True
+    else:
+        changes = []
+        for key in sorted(expected['fields'].keys() | current['fields'].keys()):
+            before = expected['fields'].get(key)
+            after = current['fields'].get(key)
+            if before != after:
+                changes.append({'key': key, 'saved': before['value'] if before else '<absent>',
+                                'current': after['value'] if after else '<absent>'})
+        diagnostic['changed_fields'] = changes
+        diagnostic['path_counts'] = {'saved': len(expected['path_keys']), 'current': len(current['path_keys'])}
+    data['hardware_diagnostics'] = diagnostic
+    write(data)
+    print('Snapshot hardware diagnostics: ' + json.dumps(diagnostic, sort_keys=True))
+
+
 def snapshot_exists(avd=AVD):
     # AEMU snapshot/common.h: named saves use kRamFileName (ram.bin); ram.img is optional mapped RAM.
     return all((avd / 'snapshots/clean' / name).is_file() and (avd / 'snapshots/clean' / name).stat().st_size > 0
@@ -196,6 +256,8 @@ def main():
         if not hit:
             shutil.rmtree(AVD, ignore_errors=True)
             (AVD_ROOT / f'{NAME}.ini').unlink(missing_ok=True)
+        if hit:
+            capture_snapshot_hardware()
         mark('restore-ready')
         output('usable', str(hit).lower())
     elif args.command == 'snapshot':
@@ -218,6 +280,7 @@ def main():
             raise RuntimeError(f'Clean snapshot is missing or incomplete: expected nonempty snapshot.pb and ram.bin; files={found}')
         data = state()
         META.write_text(json.dumps({'key': data['key'], 'boot_id': data['boot_id']}))
+        capture_snapshot_hardware()
         mark('save-start')
     elif args.command == 'test':
         mark('fallback-boot-ready' if args.cold else 'test-boot-ready')
@@ -225,7 +288,11 @@ def main():
         if not args.cold and cache_key() != state()['key']:
             raise RuntimeError('SDK changed after cache restore; use a fresh device')
         if not args.cold:
-            assert_snapshot_loaded(json.loads(META.read_text()), boot_id())
+            try:
+                assert_snapshot_loaded(json.loads(META.read_text()), boot_id())
+            except RuntimeError:
+                record_hardware_difference()
+                raise
         data = state()
         data['boot_mode'] = 'fresh-cold-fallback' if args.cold else 'snapshot-verified'
         write(data)

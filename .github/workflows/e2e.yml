@@ -196,6 +196,16 @@ jobs:
           pre-emulator-launch-script: python3 scripts/e2e-cache.py mark test-boot-start
           script: python3 scripts/e2e-cache.py test --shard ${{ matrix.shard }}/${{ env.SHARDS }}
 
+      # Publish tiny sanitized preparation telemetry before a fallback starts, so it is readable while tests run.
+      - name: Publish failed snapshot preparation diagnostics
+        if: steps.ui.outcome != 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-preparation-${{ matrix.shard }}
+          path: build/e2e/preparation.json
+          retention-days: 3
+
       # Validation, snapshot creation, sealing, or snapshot boot may fail before UI tests start.
       # Retry preparation only. Once e2e.sh starts, an assertion/native-test failure remains a failure.
       - name: Decide whether clean cold boot is needed

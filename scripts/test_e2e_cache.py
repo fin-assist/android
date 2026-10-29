@@ -28,6 +28,7 @@ class CleanAvdCacheTest(unittest.TestCase):
         snapshot = self.avd / 'snapshots/clean'
         snapshot.mkdir(parents=True)
         (snapshot / 'snapshot.pb').write_bytes(b'metadata')
+        (snapshot / 'hardware.ini').write_text('hw.ramSize=4096\nhw.cpu.ncore=4\n')
         (snapshot / 'ram.bin').write_bytes(b'ram')
         (self.avd / 'finassist-clean.json').write_text(json.dumps({'key': 'compatible', 'boot_id': '12345678-1234-4234-8234-123456789abc'}))
 
@@ -84,6 +85,7 @@ class CleanAvdCacheTest(unittest.TestCase):
                 cache.main()
             self.assertTrue(cache.usable(self.avd, 'compatible'))
             self.assertIn('save-start', cache.state()['marks'])
+            self.assertEqual({'value': '4096'}, cache.state()['snapshot_hardware']['fields']['hw.ramSize'])
 
     def test_wait_stopped_waits_for_exit_and_rejects_a_live_emulator_at_timeout(self):
         process = f'qemu-system-x86_64 -avd {cache.NAME} -no-window'
@@ -215,6 +217,53 @@ class CleanAvdCacheTest(unittest.TestCase):
                 self.assertIn('Actions > Caches', warning)
                 self.assertIn('cache_warning', cache.state())
 
+    def test_hardware_telemetry_redacts_paths_secrets_serials_and_arbitrary_strings(self):
+        config = ('hw.ramSize=4096\nhw.keyboard=yes\nhw.cpu.arch=x86_64\n'
+                  'disk.systemPartition.initPath=/private/sdk/system.img\n'
+                  'disk.dataPartition.initPath=/private/sdk/userdata.img\n'
+                  'custom.serial=unique-device-serial\ncustom.token=secret-token-value\n'
+                  'custom.key=private-key-value\ncustom.note=arbitrary-sensitive-content\n')
+        summary = cache.hardware_summary(config)
+        serialized = json.dumps(summary)
+        for forbidden in ['/private', 'unique-device-serial', 'secret-token-value', 'private-key-value', 'arbitrary-sensitive-content']:
+            self.assertNotIn(forbidden, serialized)
+        self.assertEqual({'value': '4096'}, summary['fields']['hw.ramSize'])
+        self.assertEqual({'value': 'x86_64'}, summary['fields']['hw.cpu.arch'])
+        self.assertEqual(['disk.systemPartition.initPath'], summary['path_keys'])
+        self.assertNotIn('digest', summary['fields']['custom.token'])
+
+    def test_validate_retains_expected_hardware_before_loader_can_remove_snapshot(self):
+        self.ready_snapshot()
+        with patch.object(cache, 'AVD', self.avd), patch.object(cache, 'reload_ci_key'), \
+             patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'output'), \
+             patch('sys.argv', ['e2e-cache.py', 'validate']):
+            cache.write({'key': 'compatible', 'marks': {}})
+            cache.main()
+            (self.avd / 'snapshots/clean/hardware.ini').unlink()
+            self.assertEqual({'value': '4'}, cache.state()['snapshot_hardware']['fields']['hw.cpu.ncore'])
+
+    def test_boot_id_failure_records_sanitized_hardware_diff_without_starting_tests(self):
+        self.ready_snapshot()
+        metadata = self.root / 'meta.json'
+        metadata.write_text(json.dumps({'boot_id': '12345678-1234-4234-8234-123456789abc'}))
+        with patch.object(cache, 'AVD', self.avd), patch.object(cache, 'STATE', self.root / 'state.json'), \
+             patch.object(cache, 'META', metadata), patch.object(cache, 'cache_key', return_value='expected'), \
+             patch.object(cache, 'adb', side_effect=['package:android\n', '87654321-1234-4234-8234-123456789abc']), \
+             patch.object(cache.subprocess, 'run') as run, patch('builtins.print'), \
+             patch('sys.argv', ['e2e-cache.py', 'test', '--shard', '2/4']):
+            cache.write({'key': 'expected', 'marks': {}})
+            cache.capture_snapshot_hardware()
+            (self.avd / 'snapshots/clean/hardware.ini').unlink()
+            (self.avd / 'hardware-qemu.ini').write_text('hw.ramSize=2048\nhw.cpu.ncore=4\ncustom.token=do-not-output\n')
+            with self.assertRaisesRegex(RuntimeError, 'cold-booted'):
+                cache.main()
+            run.assert_not_called()
+            self.assertNotIn('tests-started', cache.state()['marks'])
+            diagnostics = cache.state()['hardware_diagnostics']
+            self.assertIn({'key': 'hw.ramSize', 'saved': '4096', 'current': '2048'}, diagnostics['changed_fields'])
+            self.assertNotIn('do-not-output', json.dumps(diagnostics))
+            self.assertEqual({'saved': 0, 'current': 0}, diagnostics['path_counts'])
+
     def test_audited_action_revision_ignores_unrelated_workflow_edits_but_not_action_changes(self):
         action = 'uses: reactivecircus/android-emulator-runner@' + 'a' * 40
         self.assertEqual(cache.action_revision(action), cache.action_revision(action + '\n# reports comment'))
@@ -344,6 +393,19 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         self.assertTrue(self.runs('Run UI tests on a fresh AVD after snapshot boot failure', fields))
         self.assertFalse(self.runs('Preserve UI test failure', fields))
         self.assertNotIn('continue-on-error', self.step('Run UI tests on a fresh AVD after snapshot boot failure'))
+
+    def test_failed_warm_diagnostics_upload_precedes_cold_fallback_and_cannot_fail_the_job(self):
+        workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
+        diagnostic = self.step('Publish failed snapshot preparation diagnostics')
+        self.assertIn('continue-on-error: true', diagnostic)
+        self.assertIn('name: e2e-preparation-${{ matrix.shard }}', diagnostic)
+        self.assertIn('path: build/e2e/preparation.json', diagnostic)
+        self.assertLess(workflow.index('- name: Publish failed snapshot preparation diagnostics'),
+                        workflow.index('- name: Decide whether clean cold boot is needed'))
+        self.assertTrue(self.runs('Publish failed snapshot preparation diagnostics', {'steps.ui.outcome': 'failure'}))
+        self.assertTrue(self.runs('Publish failed snapshot preparation diagnostics', {'steps.ui.outcome': 'skipped'}))
+        self.assertFalse(self.runs('Publish failed snapshot preparation diagnostics', {'steps.ui.outcome': 'success'}))
+        self.assertIn('pattern: e2e-shard-*', workflow)
 
     def test_sdk_commands_before_emulator_action_do_not_assume_sdk_tools_on_path(self):
         preparation = self.step('Prepare SDK and fingerprint the AVD')

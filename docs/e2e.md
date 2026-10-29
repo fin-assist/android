@@ -133,6 +133,15 @@ cold-device boot, snapshot creation/shutdown, cache save, test boot (and cold fa
 teardown. Use the Actions job/step start and finish times for those costs and the workflow's critical-path duration;
 do not sum parallel shard durations. Preparation data is retained with the existing shard artifacts.
 
+Before a warm launch, `seal` (miss) or `validate` (hit) retains sanitized expected hardware metadata in
+`preparation.json`, because the emulator may remove an incompatible snapshot. A boot-ID mismatch records changed
+hardware key names, safe numeric/bool/enum previews and path counts against `hardware-qemu.ini`. Paths, serials,
+secret/key/token values and arbitrary string contents are excluded; opaque non-secret strings retain only an
+equality digest. This is raw INI telemetry before default stripping, never a replacement for AEMU's compatibility
+checks. After a failed/skipped warm step, a small optional `e2e-preparation-<shard>` artifact is uploaded before cold
+fallback, so the diagnostic can be read while tests run. Existing `e2e-shard-*` reports, gather and Qase are unchanged.
+Telemetry alone does not change the snapshot procedure/cache key or emulator configuration.
+
 The existing successful [baseline run 40944955977](https://github.com/fin-assist/android/actions/runs/40944955977)
 used commit `ee17c3a`, the same API/profile/resources and four shards. Its workflow took 22m38s. Approximate stage
 boundaries below come from the existing timestamped logs; the SDK column ends at `avdmanager create`, boot is
