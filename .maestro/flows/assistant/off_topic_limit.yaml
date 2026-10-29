@@ -75,7 +75,7 @@ tags:
     visible:
       id: "assistant.chat.send_failed"
     timeout: 20000
-- assertVisible: "Слишком много попыток.*"
+- assertVisible: "Слишком много запросов[.] Попробуйте позже"
 - assertVisible: "Krabsbir"
 - assertVisible: ".*[Оо]сталось 5 из 5.*"
 - assertVisible:
