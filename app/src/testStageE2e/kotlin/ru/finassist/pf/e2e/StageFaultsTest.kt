@@ -130,7 +130,7 @@ class StageFaultsTest {
                 ru.finassist.pf.core.api.model.ErrorResponse.serializer(), it.body!!.string(),
             ).error
             assertEquals("RATE_LIMITED", error.code)
-            assertTrue(error.retryable)
+            assertEquals(true, error.retryable)
         }
         request("/v1/statements/test/progress").execute().use { assertEquals("{}", it.body!!.string()) }
         assertEquals(2, realCalls)
