@@ -129,7 +129,17 @@ class StageFaults @Inject constructor(
         }
     }
 
-    override fun intercept(chain: Interceptor.Chain): Response {
+    override fun intercept(chain: Interceptor.Chain): Response = try {
+        checkedIntercept(chain)
+    } catch (failure: IOException) {
+        throw failure
+    } catch (_: Exception) {
+        // OkHttp's asynchronous dispatcher does not deliver unchecked interceptor exceptions as onFailure.
+        // Scope/configuration rejection must fail the request without crashing the client process or echoing data.
+        throw IOException("Stage harness rejected an invalid request or run receipt")
+    }
+
+    private fun checkedIntercept(chain: Interceptor.Chain): Response {
         val run = runs.read()
         val request = chain.request()
         check(request.url.scheme == "https" && request.url.host == "stage.plainfin.ru" && request.url.port == 443) {

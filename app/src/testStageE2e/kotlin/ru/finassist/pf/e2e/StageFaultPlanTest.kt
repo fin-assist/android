@@ -10,6 +10,13 @@ import kotlin.test.assertNull
 
 class StageFaultPlanTest {
     @Test
+    fun `instrumented Android runtime never writes coverage into its working directory`() {
+        val settings = java.util.Properties()
+        checkNotNull(javaClass.classLoader!!.getResourceAsStream("jacoco-agent.properties")).use(settings::load)
+        assertEquals("none", settings.getProperty("output"))
+    }
+
+    @Test
     fun `controls reject arbitrary data and unbounded faults`() {
         listOf("call_ttl_ms" to "10", "assistant_model_errors" to "1", "url" to "https://other.example", "offline" to "yes", "network_delay_ms" to "60001", "stream_drops" to "101", "error_operation" to "profile_delete").forEach { (name, value) ->
             assertFailsWith<IllegalArgumentException> { StageFaultPlan.validate(name, value) }

@@ -90,11 +90,11 @@ class StageFaultsTest {
 
     @Test
     fun `missing receipt and other origin are refused before transport`() {
-        assertFailsWith<IllegalStateException> {
+        assertFailsWith<IOException> {
             client.newCall(Request.Builder().url("https://other.example/v1/profile").build()).execute()
         }
         File(context.filesDir, "stage-run.json").delete()
-        assertFailsWith<IllegalArgumentException> { request().execute() }
+        assertFailsWith<IOException> { request().execute() }
         assertEquals(0, realCalls)
     }
 
@@ -127,8 +127,30 @@ class StageFaultsTest {
         assertFalse(evidence.contains("registration-secret"))
         assertTrue(evidence.contains("\"has_client_injections\":false"))
         val before = realCalls
-        assertFailsWith<IllegalArgumentException> { post("/v1/auth/register", """{"registration_token":"foreign"}""") }
+        assertFailsWith<IOException> { post("/v1/auth/register", """{"registration_token":"foreign"}""") }
         assertEquals(before, realCalls)
+    }
+
+    @Test
+    fun `invalid receipt fails the asynchronous request without crashing the dispatcher`() {
+        File(context.filesDir, "stage-run.json").writeText(Json.encodeToString(
+            StageRun("11111111-2222-4333-8444-555555555555", "+70000001234", "+70000001234"),
+        ))
+        val finished = java.util.concurrent.CountDownLatch(1)
+        var failure: IOException? = null
+        request().enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, error: IOException) {
+                failure = error
+                finished.countDown()
+            }
+            override fun onResponse(call: okhttp3.Call, response: Response) {
+                response.close()
+                finished.countDown()
+            }
+        })
+        assertTrue(finished.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        assertEquals("Stage harness rejected an invalid request or run receipt", failure?.message)
+        assertEquals(0, realCalls)
     }
 
 }
