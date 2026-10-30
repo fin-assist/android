@@ -56,7 +56,8 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Tokens, preferences, idempotency keys | `core/storage`; `EncryptedTokenStore` atomically maintains `authSessionEpoch` (new login rotates, refresh retains) |
 | Silent background profile-zone sync (FIN-345) | `feature/profile/impl/…/data/TimeZoneChecker.kt`, `ZoneSyncStateStore.kt`, `BootCounter.kt`; independent durable GET/PATCH advice and boot-bound waits — `docs/errors.md` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md` (mockups: Figma, exported by `design-check/export.py`), `*DesignCheckTest.kt` in feature `:impl` modules |
-| UI tests: Maestro flows, e2e build hooks (sign-in without the screens — `E2eSignIn`), native gaps, shards in CI, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/e2e-shards.py`, `scripts/qase-*` |
+| UI tests: Maestro flows, e2e build hooks (sign-in without the screens — `E2eSignIn`), native gaps, shards in CI, Qase; default SDK package cache + fresh cold AVD, opt-in snapshot (`avd_cache`), SDK-only experiment (`sdk_benchmark`) | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/e2e-shards.py`, `scripts/qase-*`; `scripts/e2e-sdk-cache.py`, `scripts/e2e-cache.py`, `scripts/sdk-preparation-benchmark.py` |
+| Read-only live SSE 429 marker, mockE2e only (FIN-380) | `app/src/mockE2e/…/E2eStreamProbe.kt`; wait for `e2e.stream.rate_limited=1` before opening a control link or checking absence of errors; `docs/e2e.md` |
 | Multiplatform readiness of `:core:api` and `:mock:backend`: rule, JVM-only inventory, check | `docs/kmp-readiness.md`; `scripts/check-kmp-ready.py`, `scripts/kmp-baseline.json` |
 | Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
 | UI test coverage: JaCoCo on the e2e build, scenario coverage of the flows | `docs/testing.md` («UI test coverage»); `:e2eCoverageReport` in root `build.gradle.kts`, `app/src/mockE2e/…/E2eCoverage.kt`, `scripts/ui-coverage.py` |
@@ -186,6 +187,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   `scripts/compose-classpath.init.gradle` (`:app:composeClasspathReport --no-configuration-cache`), then validates
   the JSON with `scripts/check-compose-classpath.py`: Compose UI/foundation and lifecycle-runtime must match the
   isolated BOM/navigation/catalog lifecycle baseline. Commands and failure diagnostics: docs/testing.md.
+- FIN-377: `scripts/check-app-version.py` checks `appVersionName` against release branches on pushes and either
+  side of a PR. The assemble job also checks generated manifest/BuildConfig versions for mockDebug, localDebug
+  and prodRelease. Release preparation and the independent monotonic build number: `docs/releasing.md`.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally (all flows and the native
   tests; `--shard i/n` runs one CI shard), the `UI tests` workflow in CI (after a merge to `main`, or started by hand
   for a branch; PRs never run them by themselves). CI splits the flows between four emulators

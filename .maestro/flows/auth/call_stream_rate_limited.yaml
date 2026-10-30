@@ -1,12 +1,11 @@
 appId: ru.finassist.pf.mock.e2e
-name: 429 на переоткрытие потока звонка — ожидание без «Слишком много попыток», вход продолжается
+name: 429 на переоткрытие потока звонка — ожидание без сообщения RATE_LIMITED, вход продолжается
 tags:
   - auth
 ---
-# FIN-170 (api.md «SSE»): the call stream drops twice (`stream_drops=2`), and the re-open after the first drop is
-# turned away with 429 `Retry-After: 3` (`stream_rate_limits=1`). The app waits for Retry-After and re-opens; the
-# screen is not locked («Слишком много попыток» is only for a 429 on the first opening) and sign-in goes on when the
-# call «arrives» after 10 s.
+# FIN-380: wait for a real stream 429 on the running screen, then reject every ErrorMessage severity (FIN-376).
+# Keep refusing re-opens with Retry-After: 30 until the exact count has been checked across a control-link resume.
+# Removing future refusals does not remove the client's original deadline: only then may sign-in continue.
 - runFlow: ../../subflows/clear_state.yaml
 - launchApp
 - extendedWaitUntil:
@@ -16,7 +15,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?call_delay_ms=10000&stream_drops=2&stream_rate_limits=1"
+      LINK: "pfe2e://config?call_delay_ms=10000&stream_drops=1&stream_rate_limits=100&stream_retry_s=30"
 - extendedWaitUntil:
     visible:
       id: "auth.phone"
@@ -38,11 +37,37 @@ tags:
     visible:
       id: "auth.call"
     timeout: 10000
+# This marker is driven by MockBackend.streamRateLimited, not elapsed time or an absent error.
+- extendedWaitUntil:
+    visible:
+      text: "e2e.stream.rate_limited=1"
+    timeout: 10000
 - assertVisible:
     id: "auth.call.dial"
-- assertNotVisible: "Слишком много попыток.*"
+- assertNotVisible:
+    id: "ds.error.info"
+- assertNotVisible:
+    id: "ds.error.warning"
+- assertNotVisible:
+    id: "ds.error.error"
 - assertNotVisible: "Нет сети — не можем дождаться звонка. Проверьте интернет"
-# A locked screen would never get here: the call is confirmed by the stream re-opened after the wait.
+# The link is now safe: a 429 has already happened, and its original wait must survive the pause/resume.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_stream_rate_limited_exact=1"
+- assertVisible:
+    id: "auth.call.dial"
+- assertVisible: "e2e.stream.rate_limited=1"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_stream_rate_limited_exact=1&stream_rate_limits=0"
+# The already-recorded Retry-After still applies even after future refusals have been removed.
+- extendedWaitUntil:
+    visible:
+      id: "applock.setup"
+    timeout: 45000
 - runFlow: ../../subflows/set_passcode.yaml
 - extendedWaitUntil:
     visible:
