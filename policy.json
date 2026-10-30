@@ -238,6 +238,19 @@
       ]
     },
     {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 2"
+      ]
+    },
+    {
       "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
       "matchPackageNames": [
         "io.github.takahirom.roborazzi:roborazzi-compose"
@@ -608,6 +621,23 @@
       "groupName": null,
       "additionalBranchPrefix": "fin211-retry-216-",
       "matchNewValue": "/^9\\.5\\.0$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-229-",
+      "matchNewValue": "/^2\\.3\\.13$/",
       "matchJsonata": [
         "$not($exists(newDigest)) or newDigest = null"
       ]
