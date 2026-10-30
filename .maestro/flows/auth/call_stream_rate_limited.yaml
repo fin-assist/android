@@ -1,12 +1,12 @@
 appId: ru.finassist.pf.mock.e2e
-name: 429 на переоткрытие потока звонка — ожидание без «Слишком много попыток», вход продолжается
+name: 429 на переоткрытие потока звонка — ожидание без сообщения RATE_LIMITED, вход продолжается
 tags:
   - auth
 ---
 # FIN-170 (api.md «SSE»): the call stream drops twice (`stream_drops=2`), and the re-open after the first drop is
 # turned away with 429 `Retry-After: 3` (`stream_rate_limits=1`). The app waits for Retry-After and re-opens; the
-# screen is not locked («Слишком много попыток» is only for a 429 on the first opening) and sign-in goes on when the
-# call «arrives» after 10 s.
+# screen is not locked (the server's RATE_LIMITED message is only shown for a 429 on the first opening) and sign-in
+# goes on when the call «arrives» after 10 s. FIN-376: check the current server message from FIN-223.
 - runFlow: ../../subflows/clear_state.yaml
 - launchApp
 - extendedWaitUntil:
@@ -40,7 +40,7 @@ tags:
     timeout: 10000
 - assertVisible:
     id: "auth.call.dial"
-- assertNotVisible: "Слишком много попыток.*"
+- assertNotVisible: "Слишком много запросов. Попробуйте позже"
 - assertNotVisible: "Нет сети — не можем дождаться звонка. Проверьте интернет"
 # A locked screen would never get here: the call is confirmed by the stream re-opened after the wait.
 - runFlow: ../../subflows/set_passcode.yaml
