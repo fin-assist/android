@@ -89,8 +89,17 @@ def case_problems(row, expected):
             problems.append("missing_or_invalid_client_evidence")
         elif expected["provenance"] == "real-stage" and evidence["has_client_injections"]:
             problems.append("undeclared_client_injection")
+        counts = evidence["counts"] if valid_counts(evidence) else {}
+        required = expected.get("required_counts", {})
+        if not isinstance(required, dict) or any(
+                not isinstance(key, str) or not re.fullmatch(r"[a-z_0-9]+", key)
+                or type(minimum) is not int or minimum < 0 for key, minimum in required.items()):
+            problems.append("invalid_required_counts")
+        else:
+            for key, minimum in required.items():
+                if counts.get(key, 0) < minimum:
+                    problems.append("required_count_not_observed:" + key)
         if expected["layer"] == "checkpoint":
-            counts = evidence.get("counts", {}) if isinstance(evidence, dict) else {}
             checkpoint = row.get("checkpoint", {})
             if (not isinstance(checkpoint, dict) or checkpoint.get("process_disappeared") is not True
                     or type(checkpoint.get("accepted_before_death")) is not int or checkpoint["accepted_before_death"] != 1

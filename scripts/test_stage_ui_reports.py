@@ -27,8 +27,9 @@ def expected_case(identifier="qase-8", layer="maestro", status="ready"):
 
 def result(case):
     row = {key: case[key] for key in ("id", "source", "qase_id", "provenance")}
-    row.update(outcome="passed", seconds=1, client_evidence={"has_client_injections": case["layer"] == "checkpoint",
+    row.update(outcome="passed", seconds=1, client_evidence={"has_client_injections": case["provenance"] == "client-injected",
                                                            "counts": {"real_requests": 7}})
+    row["client_evidence"]["counts"].update(case.get("required_counts", {}))
     if case["layer"] == "checkpoint":
         row["client_evidence"]["counts"].update(real_ask_requests=1, real_ask_accepted=1, ask_response_held=1, ask_response_released=0)
         row["checkpoint"] = {"process_disappeared": True, "accepted_before_death": 1,
@@ -124,11 +125,36 @@ class AggregateTests(unittest.TestCase):
                 self.assertFalse(combined["full_acceptance"])
                 self.assertEqual(combined["results"][0]["outcome"], "failed")
 
+    def test_manifest_required_observation_cannot_be_replaced_by_generic_injection(self):
+        for name in ("unknown_kind_requests", "import_response_transform"):
+            for observed in (None, 0, True, 1, 2):
+                with self.subTest(name=name, observed=observed):
+                    case=expected_case()
+                    case.update(provenance="client-injected", required_counts={name: 2})
+                    row=result(case)
+                    row["client_evidence"]={"has_client_injections": True,
+                                            "counts": {"real_requests": 10, "unrelated_transform": 1}}
+                    if observed is not None:row["client_evidence"]["counts"][name]=observed
+                    combined=self.merge([worker([row])], [case])
+                    self.assertEqual(combined["full_acceptance"], type(observed) is int and observed >= 2)
+                    if observed is None or type(observed) is int and observed < 2:
+                        self.assertIn("required_count_not_observed:"+name, combined["results"][0]["validation_errors"])
+
+    def test_invalid_required_observation_template_fails_closed(self):
+        for required in (None, [], {"unknown_kind_requests": True}, {"import_response_transform": -1}):
+            case=expected_case();case["required_counts"]=required
+            row=result(expected_case())
+            combined=self.merge([worker([row])], [case])
+            self.assertFalse(combined["full_acceptance"])
+            self.assertIn("invalid_required_counts", combined["results"][0]["validation_errors"])
+
     def test_process_death_requires_real_death_and_no_second_post(self):
-        for mutation in ("extra_post", "no_checkpoint", "released", "not_dead"):
+        for mutation in ("extra_post", "missing_sent_counter", "invalid_counts", "no_checkpoint", "released", "not_dead"):
             with self.subTest(mutation=mutation):
                 data=self.valid();row=data[1]["results"][0]
                 if mutation == "extra_post":row["client_evidence"]["counts"]["real_ask_requests"] = 2
+                if mutation == "missing_sent_counter":row["client_evidence"]["counts"].pop("real_ask_requests")
+                if mutation == "invalid_counts":row["client_evidence"]["counts"] = None
                 if mutation == "no_checkpoint":row.pop("checkpoint")
                 if mutation == "released":row["client_evidence"]["counts"]["ask_response_released"] = 1
                 if mutation == "not_dead":row["checkpoint"]["process_disappeared"] = False
@@ -204,7 +230,8 @@ class AggregateTests(unittest.TestCase):
         combined=reports.aggregate([directory], self.root/"out", manifest, expected)
         self.assertTrue(combined["full_inventory"])
         self.assertEqual(len(combined["results"]), 57)
-        self.assertEqual(sum(row["outcome"] == "blocked" for row in combined["results"]), 9)
+        self.assertEqual(sum(row["outcome"] == "blocked" for row in combined["results"]),
+                         sum(row["status"] == "blocked" for row in expected))
         self.assertFalse(combined["full_acceptance"])
         self.assertEqual(combined["guard_errors"], [])
 
