@@ -35,7 +35,8 @@ UNKNOWN_CODE_COUNTERS = {
     31: {"analytics_response_transform": 1}, 32: {"import_response_transform": 1},
 }
 SCENARIO_OBSERVATIONS = {
-    19: {"offline": 2}, 34: {"maintenance": 2}, 43: {"stream_drop": 6},
+    19: {"offline": 2}, 20: {"real_ask_accepted": 2},
+    34: {"maintenance": 2}, 43: {"stream_drop": 6},
     48: {"error_requests": 4}, 58: {"offline": 2},
     60: {"real_ask_requests": 2, "real_ask_consent_required": 1, "real_ask_accepted": 1, "ask_response_held": 1},
 }

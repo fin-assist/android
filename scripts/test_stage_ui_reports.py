@@ -175,6 +175,21 @@ class AggregateTests(unittest.TestCase):
         weakened=copy.deepcopy(case);weakened["required_counts"]["stream_drop"]=1
         self.assertIn("observation_contract_too_weak:stream_drop", reports.case_problems(result(weakened), weakened))
 
+    def test_offline_retry_requires_two_real_accepted_questions(self):
+        _, cases=reports.load_manifest()
+        case=next(case for case in cases if case["qase_id"]==20)
+        self.assertEqual(case["required_counts"]["real_ask_accepted"], 2)
+        self.assertEqual(reports.observation_contract_problems(case), [])
+        for count in (0, 1):
+            with self.subTest(count=count):
+                weakened=copy.deepcopy(case);weakened["required_counts"]["real_ask_accepted"]=count
+                self.assertIn("observation_contract_too_weak:real_ask_accepted", reports.observation_contract_problems(weakened))
+                row=result(case);row["client_evidence"]["counts"]["real_ask_accepted"]=count
+                combined=self.merge([worker([row])], [case])
+                self.assertFalse(combined["full_acceptance"])
+                self.assertIn("required_count_not_observed:real_ask_accepted", combined["results"][0]["validation_errors"])
+        self.assertTrue(self.merge([worker([result(case)])], [case])["full_acceptance"])
+
     def test_timezone_patch_is_real_stage_and_flag_controls_are_not(self):
         _, cases=reports.load_manifest()
         timezone=next(case for case in cases if case["qase_id"]==27)
