@@ -1,13 +1,11 @@
 # FIN-386. Source: .maestro/flows/operations/unknown_filter_kind.yaml; Qase 29.
-# Unknown filter code with server-side scope semantics.
-# BLOCKED: The backend must understand the unknown filter kind while preserving the analytics scope; translating it back on the client would conceal that boundary.
+# Closed client peer fixture: UI retains expense_e2e; only the transport adapter maps it to the live server's expense code.
+# This does not establish that the deployed backend accepts an unknown kind. All other filters remain real.
 appId: ru.finassist.pf.stage.e2e
 name: "[stage] Поиск — фильтр с неизвестным kind не теряется, а показывается чипом «Как на „Аналитике“»"
 tags:
   - operations
 ---
-# This case is blocked; direct execution must fail instead of claiming coverage.
-- assertTrue: ${false}
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/fast_login.yaml
 - runFlow:

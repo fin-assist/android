@@ -155,14 +155,17 @@
       "source": ".maestro/flows/operations/unknown_filter_kind.yaml",
       "stage_flow": ".maestro-stage/flows/operations/unknown_filter_kind.yaml",
       "layer": "maestro",
-      "status": "blocked",
+      "status": "ready",
       "provenance": "client-injected",
       "setup": "first-session-seeded",
       "requirements": [
-        "unknown_codes"
+        "unknown_codes",
+        "closed-expense-kind-peer-alias"
       ],
-      "assertions": "Unknown filter code with server-side scope semantics.",
-      "blocked_reason": "The backend must understand the unknown filter kind while preserving the analytics scope; translating it back on the client would conceal that boundary."
+      "assertions": "UI preserves unknown expense_e2e in its scope/query; a labelled closed client peer maps only this code to real stage expense, retaining every other filter. This is not proof that stage accepts a new kind.",
+      "required_counts": {
+        "unknown_kind_requests": 1
+      }
     },
     {
       "id": "qase-27",
@@ -568,14 +571,17 @@
       "source": ".maestro/flows/statements/upload_unknown_codes.yaml",
       "stage_flow": ".maestro-stage/flows/statements/upload_unknown_codes.yaml",
       "layer": "maestro",
-      "status": "blocked",
+      "status": "ready",
       "provenance": "client-injected",
       "setup": "first-session-seeded",
       "requirements": [
-        "unknown_codes"
+        "unknown_codes",
+        "bounded-real-import-complete-augmentation"
       ],
-      "assertions": "Unknown notice and feature on real import terminal payload.",
-      "blocked_reason": "Unknown import notice and feature require a bounded transform of the real terminal import SSE; the current harness only transforms analytics."
+      "assertions": "Real successful import/SSE result, augmented only with closed unknown notice/feature fields; original accounting and metadata are preserved and callback consumption is counted.",
+      "required_counts": {
+        "import_response_transform": 1
+      }
     },
     {
       "id": "qase-24",

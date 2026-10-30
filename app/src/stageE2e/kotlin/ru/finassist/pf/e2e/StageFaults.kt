@@ -168,7 +168,7 @@ class StageFaults @Inject constructor(
 
     private fun checkedIntercept(chain: Interceptor.Chain): Response {
         val run = runs.read()
-        val request = chain.request()
+        var request = chain.request()
         check(request.url.scheme == "https" && request.url.host == "stage.plainfin.ru" && request.url.port == 443) {
             "Stage harness only permits the fixed stage origin"
         }
@@ -222,6 +222,11 @@ class StageFaults @Inject constructor(
                 record("call_event_latency")
                 Thread.sleep(callDelay)
             }
+        }
+        StageResponseTransforms.expenseRequest(request, value("unknown_codes") == "true")?.let { translated ->
+            // The UI sent the unknown code intact. Only this closed peer fixture maps it for the current server.
+            record("unknown_kind_requests")
+            request = translated
         }
         record("real_requests")
         if (request.method == "POST" && request.url.encodedPath == "/v1/assistant/messages") {
@@ -290,6 +295,12 @@ class StageFaults @Inject constructor(
                 setOfNotNull(run.phone.takeIf { run.new_account }, run.new_phone),
             )).build()
         }
+        if (result.isSuccessful && value("unknown_codes") == "true" &&
+            request.method == "GET" && request.url.encodedPath.matches(Regex("/v1/statements/[^/]+/progress"))) {
+            result = result.newBuilder().body(StageImportUnknownCodesBody(checkNotNull(result.body)) {
+                record("import_response_transform")
+            }).build()
+        }
         if (result.isSuccessful && request.url.encodedPath == "/v1/analytics" &&
             (value("unknown_codes") == "true" || value("failing_blocks").isNotEmpty())) {
             val raw = result.body ?: return result
@@ -303,7 +314,7 @@ class StageFaults @Inject constructor(
                         "alt_text" to JsonPrimitive("Не получилось посчитать — обновите экран позже"),
                         "empty_text" to JsonPrimitive("Не получилось посчитать — обновите экран позже"),
                     ))
-                } else block
+                } else if (value("unknown_codes") == "true") StageResponseTransforms.expenseTile(obj) else block
             }.toMutableList()
             if (value("unknown_codes") == "true") {
                 changed += Json.parseToJsonElement("""{"id":"e2e_unknown","type":"e2e_new_primitive","v":1,"alt_text":"Карта расходов по районам — обновите приложение, чтобы её увидеть"}""")

@@ -1,13 +1,10 @@
 # FIN-386. Source: .maestro/flows/statements/upload_unknown_codes.yaml; Qase 32.
-# Unknown notice and feature on real import terminal payload.
-# BLOCKED: Unknown import notice and feature require a bounded transform of the real terminal import SSE; the current harness only transforms analytics.
+# Only a valid real import complete event is augmented with closed unknown notice/feature texts; counts and metadata stay real.
 appId: ru.finassist.pf.stage.e2e
 name: "[stage] Загрузка — серверные тексты для неизвестного уведомления и неизвестной закрытой функции"
 tags:
   - statements
 ---
-# This case is blocked; direct execution must fail instead of claiming coverage.
-- assertTrue: ${false}
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/fast_login.yaml
 - runFlow:

@@ -73,10 +73,10 @@ A `client-injected` case still makes real stage calls outside its explicitly con
 | 26 | `assistant/answer_retry.yaml` | blocked | client-injected | Persisted model failure, double retry and one charged result. |
 | 27 | `operations/days_in_profile_zone.yaml` | ready | client-injected | Real profile timezone PATCH and operation day grouping across midnight. |
 | 28 | `statements/upload_unreadable_fixed.yaml` | ready | real-stage | Real correction preserves account/FITID identity and resolves historical unread rows; upload date comes from runner. |
-| 29 | `operations/unknown_filter_kind.yaml` | blocked | client-injected | Unknown filter code with server-side scope semantics. |
+| 29 | `operations/unknown_filter_kind.yaml` | ready | client-injected | Closed client compatibility peer observes the intact unknown expense kind, then maps only that alias to the real expense query with every other scope/filter retained. Does not prove live-server support for a new kind. |
 | 30 | `analytics/block_unavailable.yaml` | ready | client-injected | Client transforms one real analytics block to unavailable; sibling blocks remain real. |
 | 31 | `analytics/unknown_blocks.yaml` | ready | client-injected | Client adds two closed unknown-code blocks to a real analytics payload. |
-| 32 | `statements/upload_unknown_codes.yaml` | blocked | client-injected | Unknown notice and feature on real import terminal payload. |
+| 32 | `statements/upload_unknown_codes.yaml` | ready | client-injected | A valid real import complete frame gains only closed unknown notice/feature fields; accounting, IDs and nonterminal/error frames remain real. |
 | 33 | `availability/update_required.yaml` | ready | client-injected | Client injects version-unsupported wire error; global stage minimum stays unchanged. |
 | 34 | `availability/maintenance.yaml` | ready | client-injected | Client injects maintenance and Retry-After; captured deadline survives later controls; real availability GET on recovery. |
 | 35 | `availability/maintenance_on_sign_in.yaml` | ready | client-injected | Client maintenance refusal during login, unknown end time. |
@@ -109,8 +109,6 @@ A `client-injected` case still makes real stage calls outside its explicitly con
 | 24 | The deployed tools scenario returns category/all-time filters, not a verified expiring merchant selection. Removing uploads alone cannot prove the original stale-selection fallback. |
 | 25 | RetryAnswer must recover a persisted MODEL_ERROR using the original question and transfer mode; no run-scoped fail-once provider is available. |
 | 26 | A real persisted failed answer must succeed on retry; a client-only SSE substitution cannot create that server state. |
-| 29 | The backend must understand the unknown filter kind while preserving the analytics scope; translating it back on the client would conceal that boundary. |
-| 32 | Unknown import notice and feature require a bounded transform of the real terminal import SSE; the current harness only transforms analytics. |
 | 41 | A real pending verification must expire and accept an explicit new Start; client latency does not change fake-phone server state or TTL. |
 | 42 | The stage fake-LLM has no verified merchant-not-found tool scenario for a covered period; a synthetic answer cannot prove server charging. |
 | 50 | The REST retryable=false portion is injectable, but the full original case also requires persisted MODEL_ERROR followed by a successful RetryAnswer. |
@@ -131,3 +129,17 @@ A process-death test must record real pre/post request counts and the same serve
 ## Authored baseline
 
 This inventory currently has 47 ready source candidates and 9 blocked source cases, plus the authored Qase60 process-death candidate. No readiness flag claims a local/device pass. The report records fresh environment, selected APK/source SHA, provider fixture expectation, account ownership evidence, assertion outcomes, client fault counters and sanitized failure materials separately. Backend/provider missing mechanisms are tracked by FIN-387.
+
+### Closed client compatibility fixtures (Qase29/32)
+
+Qase29 does not claim that the current stage server understands `expense_e2e`. The real expense tile gains that closed
+unknown code, which the UI must preserve through its chip and query serializer. The test interceptor counts the original
+unknown query and translates only this one alias to the server's `expense`, retaining origin and every other filter.
+The row's `required_counts.unknown_kind_requests` must be met before it can pass. Other unknown codes and duplicate kind
+parameters are never translated. This separates client open-code compatibility from current backend enforcement.
+
+Qase32 wraps only a successful real import progress stream. It buffers at most one64KiB input frame, preserves all other
+events and framing, validates the original `ImportResult`, then appends the two closed unknown-code fields to `complete`.
+The actual import, amounts, counters, accounts, currency, coverage and IDs are not fabricated. Malformed/error responses
+never become success; oversize frames fail safely. `required_counts.import_response_transform` proves the transformed
+terminal payload was consumed rather than merely configuring the fixture. Neither fixture establishes a provider fault.
