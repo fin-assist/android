@@ -53,6 +53,15 @@ def control_status(raw, run_id):
     return None
 
 
+def is_runner_interrupted(error):
+    return isinstance(error, StageFailure) and str(error) == "runner_interrupted"
+
+
+def raise_if_interrupted(error):
+    if is_runner_interrupted(error):
+        raise error
+
+
 def sanitize(text, secrets=()):
     for secret in sorted((item for item in secrets if item), key=len, reverse=True):
         text = text.replace(secret, "[redacted]")
@@ -389,7 +398,8 @@ def run_case(row, api, args, private, prepared=None):
                         raise StageFailure("invalid_client_registration")
                     owned = api.adopt_registration(registration["phone"], registration["user_id"])
                     registered.add(owned.phone)
-                except (StageFailure, KeyError, TypeError, ValueError):
+                except (StageFailure, KeyError, TypeError, ValueError) as error:
+                    raise_if_interrupted(error)
                     # A malformed/foreign entry never grants ownership, and cannot discard another valid receipt.
                     evidence_failures.append("invalid_client_registration")
             # Ownership and best-effort first-session cleanup precede all test acceptance assertions.
@@ -414,7 +424,8 @@ def run_case(row, api, args, private, prepared=None):
                                     owned.deleted = True
                             break
                         time.sleep(0.5)
-                except (StageFailure, OSError, KeyError, TypeError, ValueError):
+                except (StageFailure, OSError, KeyError, TypeError, ValueError) as error:
+                    raise_if_interrupted(error)
                     cleanup_failed = True
             for name, minimum in row.get("required_counts", {}).items():
                 if type(minimum) is not int or minimum < 1 or counts.get(name, 0) < minimum:
@@ -466,7 +477,8 @@ def cleanup_accounts(api, report, accounts, retain, defer_new_sessions=False):
             try:
                 api.delete_owned(account)
                 outcome = "deleted"
-            except (StageFailure, OSError, KeyError, ValueError):
+            except (StageFailure, OSError, KeyError, ValueError) as error:
+                raise_if_interrupted(error)
                 outcome = "cleanup_unverified"
         report["cleanup"].append({"account": hashlib.sha256(account.user_id.encode()).hexdigest()[:12], "outcome": outcome})
 
@@ -556,6 +568,7 @@ def main(argv=None):
                     prepared_cases[row["id"]] = prepare_case(row, api)
                     print("[stage] " + row["id"] + " prepared", flush=True)
                 except (StageFailure, OSError, KeyError, ValueError) as error:
+                    raise_if_interrupted(error)
                     report["results"][index].update(outcome="failed", reason=str(error) if isinstance(error, StageFailure) else "preparation_" + type(error).__name__)
                 write_report(report)
             for index, row in execution:
@@ -567,6 +580,10 @@ def main(argv=None):
                 write_report(report)
                 print("[stage] " + row["id"] + " executing", flush=True)
                 report["results"][index] = run_case(row, api, args, Path(folder), prepared)
+                current = report["results"][index]
+                # run_case finishes ownership capture/cleanup before an interrupt stops the remaining cases.
+                if "runner_interrupted" in (current.get("reason"), current.get("evidence_failure")):
+                    raise StageFailure("runner_interrupted")
                 # Keep deletion within the access token lifetime, rather than waiting for the whole suite.
                 accounts = ([prepared["account"]] if prepared and prepared["account"] else []) + api.owned[before:]
                 cleanup_accounts(api, report, accounts, args.retain_owned, defer_new_sessions=True)

@@ -239,7 +239,7 @@ class StageEvidenceFailureCleanupTest(unittest.TestCase):
     USER = "22222222-2222-4222-8222-222222222222"
     FOREIGN_PHONE = "+70000009999"
 
-    def run_evidence_case(self, *, missing_count=False, injected=False, retain=False, flow_passed=True, extra_registration=None, invalid_counts=False):
+    def run_evidence_case(self, *, missing_count=False, injected=False, retain=False, flow_passed=True, extra_registration=None, invalid_counts=False, interrupt_flow=False):
         api = FakeApi([])
         api.unused.update((self.PHONE, self.FOREIGN_PHONE))
         registrations = [{"phone": self.PHONE, "user_id": self.USER}]
@@ -261,6 +261,8 @@ class StageEvidenceFailureCleanupTest(unittest.TestCase):
             nonlocal cleanup_sent
             commands.append(command)
             if command[0] == "maestro":
+                if interrupt_flow:
+                    raise StageFailure("runner_interrupted")
                 failure = "" if flow_passed else '<failure message="synthetic UI failure"/>'
                 Path(command[command.index("--output") + 1]).write_text('<testsuite><testcase name="stage">' + failure + '</testcase></testsuite>')
                 return (0 if flow_passed else 1), ""
@@ -318,6 +320,14 @@ class StageEvidenceFailureCleanupTest(unittest.TestCase):
                 self.assertEqual(len(report["cleanup"]), 1)
                 self.assertEqual(api.calls, [])
 
+    def test_interrupted_flow_finishes_ownership_capture_and_cleanup_before_main_stops(self):
+        api, result, commands, report, _ = self.run_evidence_case(interrupt_flow=True)
+        self.assertEqual(result["outcome"], "failed")
+        self.assertEqual(result["reason"], "runner_interrupted")
+        self.assertEqual(len(api.owned), 1)
+        self.assertTrue(api.owned[0].deleted)
+        self.assertEqual(report["cleanup"][0]["outcome"], "deleted")
+
     def test_invalid_safe_envelope_counts_never_grant_registration_ownership(self):
         api, result, commands, report, host_deletes = self.run_evidence_case(invalid_counts=True)
         self.assertEqual(result["outcome"], "failed")
@@ -326,6 +336,58 @@ class StageEvidenceFailureCleanupTest(unittest.TestCase):
         self.assertFalse(any("cleanup_run=owned" in str(item) for command in commands for item in command))
         self.assertEqual(report["cleanup"], [])
         self.assertEqual(host_deletes, 0)
+
+
+class StageInterruptTest(unittest.TestCase):
+    def main_interrupted(self, *, during_preparation=False, evidence_failure=False):
+        rows = [{"id": "qase-8", "qase_id": 8, "status": "ready", "layer": "maestro", "setup": "first-session-seeded", "provenance": "real-stage"},
+                {"id": "qase-9", "qase_id": 9, "status": "ready", "layer": "maestro", "setup": "first-session-seeded", "provenance": "real-stage"}]
+        prepared = {"account": None, "phone": "+70000001234", "new_phone": "+70000001234", "ready_at": 0, "new_account": True}
+        first = rows[0] | {"outcome": "failed", "reason": "flow_or_report_failed" if evidence_failure else "runner_interrupted"}
+        if evidence_failure:
+            first["evidence_failure"] = "runner_interrupted"
+        api = FakeApi([])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "app"
+            app.mkdir()
+            (app / "build.gradle.kts").write_text('val appVersionName = "0.2.16"\n')
+            apk = app / "build/outputs/apk/stage/e2e/app-stage-e2e.apk"
+            apk.parent.mkdir(parents=True)
+            apk.write_bytes(b"synthetic-apk-placeholder")
+            with patch.object(ui, "ROOT", root), patch.object(ui, "OUT", root / "build/stage-ui"), \
+                    patch.object(ui, "inventory", return_value={"cases": rows}), patch.object(ui, "StageApi", return_value=api), \
+                    patch.object(ui.shutil, "which", return_value="/synthetic/available"), \
+                    patch.object(ui, "command", return_value=(0, "")), \
+                    patch.object(ui, "prepare_case", side_effect=StageFailure("runner_interrupted") if during_preparation else None, return_value=prepared) as prepare, \
+                    patch.object(ui, "run_case", return_value=first) as run:
+                self.assertEqual(ui.main(["--no-build", "--retain-owned"]), 1)
+            report = json.loads((root / "build/stage-ui/report.json").read_text())
+        return report, prepare.call_count, run.call_count
+
+    def test_interrupt_in_flow_or_evidence_prevents_the_next_case(self):
+        for evidence in (False, True):
+            with self.subTest(evidence=evidence):
+                report, _, runs = self.main_interrupted(evidence_failure=evidence)
+                self.assertEqual(runs, 1)
+                self.assertEqual(report["environment_failure"], "runner_interrupted")
+                self.assertEqual(report["results"][0]["outcome"], "failed")
+                self.assertEqual(report["results"][1]["outcome"], "not_run")
+                self.assertFalse(report["full_acceptance"])
+
+    def test_interrupt_during_preparation_never_prepares_or_runs_the_next_case(self):
+        report, preparations, runs = self.main_interrupted(during_preparation=True)
+        self.assertEqual(preparations, 1)
+        self.assertEqual(runs, 0)
+        self.assertEqual(report["environment_failure"], "runner_interrupted")
+
+    def test_interrupt_during_cleanup_is_not_reclassified_as_a_recoverable_failure(self):
+        api = FakeApi(registration_replies())
+        account = api.create()
+        with patch.object(api, "delete_owned", side_effect=StageFailure("runner_interrupted")) as delete:
+            with self.assertRaisesRegex(StageFailure, "runner_interrupted"):
+                ui.cleanup_accounts(api, {"cleanup": []}, [account, account], retain=False)
+        self.assertEqual(delete.call_count, 1)
 
 
 class StageTransportTest(unittest.TestCase):
