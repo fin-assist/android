@@ -52,6 +52,53 @@ class NetworkModuleTest {
         assertEquals(listOf(ClientVersionInterceptor::class, ServiceGateInterceptor::class), plain.interceptors.map { it::class })
         assertIs<RequestIdInterceptor>(plain.networkInterceptors.single())
         assertSame(Authenticator.NONE, plain.authenticator)
+        assertTrue(plain.followRedirects)
+        assertTrue(plain.followSslRedirects)
+    }
+
+    @Test
+    fun `disabled redirects never forward the verification header to another origin`() {
+        val foreign = MockWebServer()
+        foreign.start()
+        try {
+            server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", foreign.url("/foreign")))
+            val client = NetworkModule.plainClient(
+                logging = false,
+                tlsFailures = stack.tlsFailures,
+                version = stack.version,
+                gate = stack.gate,
+                clock = ru.finassist.pf.core.common.time.SystemClock(),
+                elapsedClock = ru.finassist.pf.core.common.time.ElapsedClock { 1_000L },
+                followRedirects = false,
+            )
+            assertTrue(!client.followRedirects && !client.followSslRedirects)
+            client.newCall(okhttp3.Request.Builder().url(server.url("/v1/auth/phone/events"))
+                .header("X-Verification-Token", "synthetic-verification-secret").build()).execute().use {
+                assertEquals(302, it.code)
+            }
+            assertEquals("synthetic-verification-secret", server.takeRequest().getHeader("X-Verification-Token"))
+            assertEquals(0, foreign.requestCount)
+            assertNull(foreign.takeRequest(100, TimeUnit.MILLISECONDS))
+        } finally {
+            foreign.shutdown()
+        }
+    }
+
+    @Test
+    fun `ordinary client keeps the default redirect policy`() {
+        val foreign = MockWebServer()
+        foreign.start()
+        try {
+            server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", foreign.url("/target")))
+            foreign.enqueue(MockResponse().setResponseCode(200))
+            stack.plain.newCall(okhttp3.Request.Builder().url(server.url("/initial")).build()).execute().use {
+                assertEquals(200, it.code)
+            }
+            assertEquals(1, foreign.requestCount)
+            assertEquals("/target", foreign.takeRequest().path)
+        } finally {
+            foreign.shutdown()
+        }
     }
 
     @Test

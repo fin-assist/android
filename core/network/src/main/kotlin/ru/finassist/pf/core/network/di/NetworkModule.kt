@@ -56,7 +56,7 @@ import javax.inject.Singleton
 
 /**
  * Base URL and debug logging are supplied by `:app` (`@Named("apiBaseUrl")`, `@Named("httpLogging")`), and so are the
- * [ClientVersion], the [ServiceGate] and the [Clock].
+ * [ClientVersion], the [ServiceGate], the [Clock] and the redirect policy (`@Named("httpFollowRedirects")`).
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -86,7 +86,10 @@ internal object NetworkModule {
         clock: Clock,
         elapsedClock: ElapsedClock = AndroidElapsedClock,
         @Named("clientInterceptors") clientInterceptors: Set<@JvmSuppressWildcards Interceptor> = emptySet(),
+        @Named("httpFollowRedirects") followRedirects: Boolean = true,
     ): OkHttpClient = OkHttpClient.Builder()
+        .followRedirects(followRedirects)
+        .followSslRedirects(followRedirects)
         .connectTimeout(15, TimeUnit.SECONDS)
         .eventListenerFactory(tlsFailures.eventListenerFactory())
         .readTimeout(30, TimeUnit.SECONDS)

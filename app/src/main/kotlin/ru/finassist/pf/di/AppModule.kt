@@ -27,6 +27,11 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+    /** A test run never forwards verification secrets to a redirect destination outside its fixed origin. */
+    @Provides
+    @Named("httpFollowRedirects")
+    fun httpFollowRedirects(): Boolean = !BuildConfig.STAGE_UI_TEST
+
     @Provides
     @Singleton
     fun reportZone(): ReportZone = ReportZone()
