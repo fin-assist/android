@@ -5,6 +5,7 @@ import android.app.Instrumentation
 import android.content.Intent
 import android.net.Uri
 import android.os.Handler
+import android.os.Bundle
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
@@ -14,6 +15,7 @@ import androidx.test.core.app.ActivityScenario
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import ru.finassist.pf.e2e.StageRun
+import ru.finassist.pf.e2e.StageNativeProof
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -28,6 +30,7 @@ import androidx.test.espresso.intent.Intents.intending
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasComponent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.platform.io.PlatformTestStorageRegistry
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -50,12 +53,14 @@ class StageStatementPickerTest {
     val compose = createEmptyComposeRule()
     private lateinit var activity: ActivityScenario<MainActivity>
     private lateinit var phone: String
+    private lateinit var runId: String
 
     @Before
     fun setUp() {
         Intents.init()
         val args = InstrumentationRegistry.getArguments()
         val run = StageRun(requireNotNull(args.getString("stageRunId")), requireNotNull(args.getString("stagePhone"))).validated()
+        runId = run.run_id
         phone = run.phone.removePrefix("+7")
         val target = InstrumentationRegistry.getInstrumentation().targetContext
         target.openFileOutput("stage-run.json", android.content.Context.MODE_PRIVATE).use {
@@ -85,6 +90,20 @@ class StageStatementPickerTest {
 
         intended(hasComponent(E2eDocumentPickerActivity::class.java.name))
         compose.waitForTag("statements.result", timeoutMs = 30_000)
+        exportNativeProof()
+    }
+
+    /** TestStorage survives orchestrator clearPackageData; only an allowlisted non-secret proof leaves app files. */
+    private fun exportNativeProof() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val file = File(instrumentation.targetContext.filesDir, "stage-evidence.json")
+        check(file.isFile && file.length() in 1..8192) { "Missing native stage evidence" }
+        val proof = StageNativeProof.project(file.readText(), runId)
+        PlatformTestStorageRegistry.getInstance().openOutputFile("fin386-native-proof-$runId.json").use {
+            it.write(proof.toByteArray(Charsets.UTF_8))
+        }
+        // A second transport for the same already-written safe proof, if host additional-output collection differs.
+        instrumentation.sendStatus(0, Bundle().apply { putString("stream", "FIN386_NATIVE_PROOF $proof\n") })
     }
 
     private fun signInWithExistingAccount() {
