@@ -16,6 +16,35 @@ import kotlin.test.*
 class StageResponseTransformsTest {
     private val completion = """{"operation_count":2,"new_count":1,"duplicate_count":1,"unread_count":0,"is_first_import":false,"totals":{"scope":"all","expense":123,"income":456},"accounts":[{"type_name":"Карта","is_other_bank":false}],"categorized_count":1,"own_transfer_count":0,"uncategorized_count":0,"coverage":{"full_months":1,"full_months_before":0,"newly_full_months":["2026-09"],"incomplete_months":[],"features":[]},"notices":[],"currency":"RUB","future_server_field":{"kept":true}}"""
 
+    @Test(timeout = 5_000)
+    fun `unknown block fixtures follow tiles while all real blocks keep their complete content and order`() {
+        val original = (0..100).map { index -> buildJsonObject {
+            put("id", if (index == 2) "tiles" else "real_$index")
+            put("type", if (index == 2) "tile_group" else "insight_card")
+            put("v", 1)
+            put("data", buildJsonObject { put("amount", index * 123); put("server_extra", "retained_$index") })
+        } }
+        val changed = StageResponseTransforms.unknownAnalyticsBlocks(original)
+        assertEquals(listOf("real_0", "real_1", "tiles", "e2e_unknown", "e2e_locked", "real_3"),
+            changed.take(6).map { it.jsonObject["id"]!!.jsonPrimitive.content })
+        assertEquals(original, changed.filter { !it.jsonObject["id"]!!.jsonPrimitive.content.startsWith("e2e_") })
+        assertEquals("e2e_new_primitive", changed[3].jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals("Карта расходов по районам — обновите приложение, чтобы её увидеть", changed[3].jsonObject["alt_text"]!!.jsonPrimitive.content)
+        assertEquals("e2e_reason", changed[4].jsonObject["lock"]!!.jsonObject["reason"]!!.jsonPrimitive.content)
+        assertEquals("Откроется, когда подключите второй банк", changed[4].jsonObject["lock"]!!.jsonObject["text"]!!.jsonPrimitive.content)
+    }
+
+    @Test(timeout = 5_000)
+    fun `missing tiles places fixtures after first real block and empty lists remain supported`() {
+        val original = listOf("first", "second").map { buildJsonObject { put("id", it); put("server_extra", true) } }
+        val changed = StageResponseTransforms.unknownAnalyticsBlocks(original)
+        assertEquals(listOf("first", "e2e_unknown", "e2e_locked", "second"),
+            changed.map { it.jsonObject["id"]!!.jsonPrimitive.content })
+        assertEquals(original, listOf(changed.first(), changed.last()))
+        assertEquals(listOf("e2e_unknown", "e2e_locked"), StageResponseTransforms.unknownAnalyticsBlocks(emptyList())
+            .map { it.jsonObject["id"]!!.jsonPrimitive.content })
+    }
+
     @Test
     fun `only closed expense alias reaches real transport as expense without widening scope`() {
         val request = Request.Builder().url("https://stage.plainfin.ru/v1/operations?from=2026-09-01&kind=expense_e2e&transfer_mode=without&selection=scope%2Fid&category_id=cat_food&before=cursor").build()

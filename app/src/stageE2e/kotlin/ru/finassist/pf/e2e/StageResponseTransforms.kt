@@ -45,6 +45,18 @@ object StageResponseTransforms {
         return JsonObject(block + ("data" to JsonObject(data + ("tiles" to JsonArray(changed)))))
     }
 
+    /** Match the original unknown-block scenario: keep the fixture just after tiles, not behind all live content. */
+    fun unknownAnalyticsBlocks(blocks: List<JsonElement>): JsonArray {
+        val changed = blocks.toMutableList()
+        val tiles = blocks.indexOfFirst { (it as? JsonObject)?.string("id") == "tiles" }
+        val at = if (tiles >= 0) tiles + 1 else minOf(1, blocks.size)
+        changed.addAll(at, listOf(
+            Json.parseToJsonElement("""{"id":"e2e_unknown","type":"e2e_new_primitive","v":1,"alt_text":"Карта расходов по районам — обновите приложение, чтобы её увидеть"}"""),
+            Json.parseToJsonElement("""{"id":"e2e_locked","type":"insight_card","v":1,"status":"locked","lock":{"reason":"e2e_reason","text":"Откроется, когда подключите второй банк"},"data":{"icon":"lock","title":"Сравнение банков"}}"""),
+        ))
+        return JsonArray(changed)
+    }
+
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
 
     /** Nonterminal, error, malformed and unrecognised frames remain byte-for-byte unchanged. */

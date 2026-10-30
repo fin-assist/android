@@ -316,13 +316,10 @@ class StageFaults @Inject constructor(
                         "empty_text" to JsonPrimitive("Не получилось посчитать — обновите экран позже"),
                     ))
                 } else if (value("unknown_codes") == "true") StageResponseTransforms.expenseTile(obj) else block
-            }.toMutableList()
-            if (value("unknown_codes") == "true") {
-                changed += Json.parseToJsonElement("""{"id":"e2e_unknown","type":"e2e_new_primitive","v":1,"alt_text":"Карта расходов по районам — обновите приложение, чтобы её увидеть"}""")
-                changed += Json.parseToJsonElement("""{"id":"e2e_locked","type":"insight_card","v":1,"status":"locked","lock":{"reason":"e2e_reason","text":"Откроется, когда подключите второй банк"},"data":{"icon":"lock","title":"Сравнение банков"}}""")
             }
+            val augmented = if (value("unknown_codes") == "true") StageResponseTransforms.unknownAnalyticsBlocks(changed) else JsonArray(changed)
             record("analytics_response_transform")
-            return result.newBuilder().body(JsonObject(root + ("blocks" to JsonArray(changed))).toString().toResponseBody(JSON)).build()
+            return result.newBuilder().body(JsonObject(root + ("blocks" to augmented)).toString().toResponseBody(JSON)).build()
         }
         return result
     }
