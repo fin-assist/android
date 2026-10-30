@@ -34,6 +34,12 @@
             android:authorities="${applicationId}.e2e.coverage"
             android:exported="false" />
 
+        <!-- Read-only marker for a real stream 429, observed without pausing the screen (FIN-380). -->
+        <provider
+            android:name="ru.finassist.pf.e2e.E2eStreamProbe"
+            android:authorities="${applicationId}.e2e.stream-probe"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.e2e.files"

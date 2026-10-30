@@ -467,6 +467,18 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   machine (`E2eModule`). Delays are short: the call «arrives» in 1.5 s, imports and answers stream fast.
 - **Registration open.** `assets/flags.json` is empty, so flags have their code defaults; the existing account is
   `+7 916 123-45-67`, any other number registers.
+- **Live stream probe (FIN-380).** The non-exported `E2eStreamProbe` provider installs a read-only native marker
+  on MainActivity, only in `mockE2e`. It observes the existing process-wide `MockBackend.streamRateLimited`
+  StateFlow while the activity is started. Before any real stream 429 the marker is hidden; afterwards its native
+  resource id is `e2e_stream_rate_limited` and its text is `e2e.stream.rate_limited=<count>`. It neither opens nor
+  pauses an activity, writes backend state or exposes user data. Destroying the activity cancels collection;
+  resuming does not add a second marker, and recreation reads the current process count. Flows clear app data
+  first, so a previous scenario cannot satisfy the wait. Ordinary mock, local and prod builds have no probe.
+  `auth/call_stream_rate_limited` waits up to 10 s for the exact marker text `e2e.stream.rate_limited=1` before checking the call number
+  and absence of ErrorMessage/offline text. If the fixture stops issuing 429, this wait fails instead of silently
+  passing. The flow uses `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: the longer server pause
+  accommodates the 4 s control-link activity. It checks exactly one 429 across a control-link resume, removes
+  future refusals and allows up to 45 s for the retained deadline plus jitter and sign-in. No fixed sleep is used.
 - **File picker.** The upload screen opens a list of bundled files instead of the system picker
   (`E2eDocumentPickerActivity`, see `PickStatementDocument`). Files in `app/src/mockE2e/assets/e2e/statements/`:
 
@@ -631,7 +643,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `auth/phone_consent_recovery` | document offline → explicit refresh → confirmations → Start offline → retry with the existing intent (Qase58, FIN-365) |
 | `auth/phone_validation` | short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
 | `auth/call_expired` | `call_ttl_ms=15000`: the wait ends either by the stream's `expired` or by the device timer (their order is not fixed); both lead to «Время на звонок вышло» with no number; «Позвонить ещё раз» brings the number and a new deadline back — FIN-166 |
-| `auth/call_stream_rate_limited` | `stream_drops=2&stream_rate_limits=1`: the call stream drops, its re-open gets 429 `Retry-After: 3`; the app waits and re-opens — no ErrorMessage (`ds.error.info/warning/error`, independent of the server RATE_LIMITED or client fallback text), the number stays, sign-in goes on to the passcode and feed (Qase44, FIN-170, FIN-376) |
+| `auth/call_stream_rate_limited` | live 429 marker before negative checks; `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: one actual refusal, number stays, no ErrorMessage (`ds.error.info/warning/error`) or offline message; exact count across control-link resume, remove future refusals, retained wait → passcode → feed (Qase44, FIN-170, FIN-376, FIN-380) |
 | `auth/registration_closed` | `auth.registration=false`: new number → «Регистрация пока закрыта»; existing account still signs in |
 | `applock/unlock` (smoke) | cold start → unlock; wrong code error |
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |
