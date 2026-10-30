@@ -239,9 +239,10 @@ class StageEvidenceFailureCleanupTest(unittest.TestCase):
     USER = "22222222-2222-4222-8222-222222222222"
     FOREIGN_PHONE = "+70000009999"
 
-    def run_evidence_case(self, *, missing_count=False, injected=False, retain=False, flow_passed=True, extra_registration=None, invalid_counts=False, interrupt_flow=False):
+    def run_evidence_case(self, *, missing_count=False, injected=False, retain=False, flow_passed=True, extra_registration=None, invalid_counts=False, interrupt_flow=False, interrupt_evidence=None):
         api = FakeApi([])
         api.unused.update((self.PHONE, self.FOREIGN_PHONE))
+        api.evidence_read_timeouts = []
         registrations = [{"phone": self.PHONE, "user_id": self.USER}]
         if extra_registration is not None:
             registrations.append(extra_registration)
@@ -269,6 +270,19 @@ class StageEvidenceFailureCleanupTest(unittest.TestCase):
             if any("cleanup_run=owned" in str(item) for item in command):
                 cleanup_sent = True
             if command[-1] == "files/stage-evidence.json":
+                api.evidence_read_timeouts.append(kwargs["timeout"])
+                read = len(api.evidence_read_timeouts)
+                if interrupt_evidence and read == 1:
+                    if interrupt_evidence == "signal":
+                        handler = ui.signal.getsignal(ui.signal.SIGTERM)
+                        self.assertTrue(callable(handler))
+                        handler(ui.signal.SIGTERM, None)
+                    else:
+                        raise StageFailure("runner_interrupted")
+                if interrupt_evidence == "unavailable" and read == 2:
+                    return 1, "no receipt available"
+                if interrupt_evidence == "foreign" and read == 2:
+                    return 0, json.dumps(evidence | {"run_id": str(uuid.uuid4())})
                 return 0, json.dumps(evidence | {"deleted_phones": [self.PHONE] if cleanup_sent else []})
             return 0, ""
 
@@ -327,6 +341,44 @@ class StageEvidenceFailureCleanupTest(unittest.TestCase):
         self.assertEqual(len(api.owned), 1)
         self.assertTrue(api.owned[0].deleted)
         self.assertEqual(report["cleanup"][0]["outcome"], "deleted")
+
+    def test_interrupt_of_first_evidence_read_retries_once_and_preserves_owned_cleanup(self):
+        for retain in (False, True):
+            with self.subTest(retain=retain):
+                api, result, commands, report, host_deletes = self.run_evidence_case(interrupt_evidence="once", retain=retain)
+                self.assertEqual(result["outcome"], "failed")
+                self.assertEqual(result["reason"], "runner_interrupted")
+                self.assertEqual(api.evidence_read_timeouts[:2], [20, 5])
+                self.assertEqual(len(api.owned), 1)
+                self.assertEqual(api.owned[0].phone, self.PHONE)
+                self.assertEqual(api.owned[0].deleted, not retain)
+                self.assertEqual(report["cleanup"][0]["outcome"], "retained" if retain else "deleted")
+                self.assertEqual(any("cleanup_run=owned" in str(item) for command in commands for item in command), not retain)
+                self.assertEqual(host_deletes, 0 if retain else 1)
+
+    def test_graceful_signal_during_evidence_read_is_deferred_until_adoption_and_failed_accounting(self):
+        before = ui.signal.getsignal(ui.signal.SIGTERM)
+        api, result, _, report, _ = self.run_evidence_case(interrupt_evidence="signal")
+        self.assertEqual(result["outcome"], "failed")
+        self.assertEqual(result["reason"], "runner_interrupted")
+        self.assertEqual(len(api.owned), 1)
+        self.assertTrue(api.owned[0].deleted)
+        self.assertEqual(report["cleanup"][0]["outcome"], "deleted")
+        self.assertEqual(api.evidence_read_timeouts, [20, 10])
+        self.assertEqual(ui.signal.getsignal(ui.signal.SIGTERM), before)
+
+    def test_failed_or_foreign_retry_never_claims_ownership_and_still_reports_interrupt(self):
+        for failure in ("unavailable", "foreign"):
+            with self.subTest(failure=failure):
+                api, result, commands, report, host_deletes = self.run_evidence_case(interrupt_evidence=failure)
+                self.assertEqual(result["outcome"], "failed")
+                self.assertEqual(result["evidence_failure"], "runner_interrupted")
+                self.assertEqual(result["reason"], "missing_client_evidence" if failure == "unavailable" else "invalid_client_evidence")
+                self.assertEqual(api.evidence_read_timeouts, [20, 5])
+                self.assertEqual(api.owned, [])
+                self.assertEqual(report["cleanup"], [])
+                self.assertEqual(host_deletes, 0)
+                self.assertFalse(any("cleanup_run=owned" in str(item) for command in commands for item in command))
 
     def test_invalid_safe_envelope_counts_never_grant_registration_ownership(self):
         api, result, commands, report, host_deletes = self.run_evidence_case(invalid_counts=True)

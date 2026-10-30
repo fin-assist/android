@@ -63,6 +63,23 @@ def raise_if_interrupted(error):
         raise error
 
 
+@contextmanager
+def defer_ownership_interrupts(state):
+    """Remember graceful stop while bounded evidence read/local adoption finishes; never block SIGKILL."""
+    previous = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)}
+
+    def remember_stop(signum, frame):
+        state["requested"] = True
+
+    try:
+        for number in previous:
+            signal.signal(number, remember_stop)
+        yield
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
 def sanitize(text, secrets=()):
     for secret in sorted((item for item in secrets if item), key=len, reverse=True):
         text = text.replace(secret, "[redacted]")
@@ -364,45 +381,58 @@ def run_case(row, api, args, private, prepared=None):
     if flow_private and flow_private.exists():
         save_materials(flow_private, target, api.secrets)
         (target / "execution.log").write_text(sanitize(output, api.secrets))
+    ownership_stop = {"requested": False}
     try:
-        code, evidence_text = command(["adb", "-s", args.serial, "exec-out", "run-as", APP, "cat", "files/stage-evidence.json"], timeout=20) if configured else (1, "")
-        if row["layer"] == "native":
+        with defer_ownership_interrupts(ownership_stop):
+            read_command = ["adb", "-s", args.serial, "exec-out", "run-as", APP, "cat", "files/stage-evidence.json"]
             try:
-                evidence = json.loads(evidence_text)
-            except ValueError:
-                source, evidence = native_proof(output, api.run_id)
-                result["native_proof_source"] = source
-            code = 0
-        if code == 0:
-            if row["layer"] != "native":
-                evidence = json.loads(evidence_text)
-            if not isinstance(evidence, dict):
-                raise StageFailure("invalid_client_evidence")
-            if evidence.get("run_id") != api.run_id or not isinstance(evidence.get("has_client_injections"), bool):
-                raise StageFailure("invalid_client_evidence")
-            counts = evidence.get("counts", {})
-            if not isinstance(counts, dict) or not all(isinstance(key, str) and re.fullmatch(r"[a-z_0-9]+", key) and type(value) is int and value >= 0 for key, value in counts.items()):
-                raise StageFailure("invalid_client_evidence_counts")
-            result["client_evidence"] = {"has_client_injections": evidence["has_client_injections"], "counts": counts}
-            evidence_failures = []
-            registered = set()
-            registrations = evidence.get("successful_registrations", [])
-            if not isinstance(registrations, list):
-                evidence_failures.append("invalid_client_registration")
-                registrations = []
-            for registration in registrations:
+                code, evidence_text = command(read_command, timeout=20) if configured else (1, "")
+            except StageFailure as error:
+                if not is_runner_interrupted(error):
+                    raise
+                ownership_stop["requested"] = True
+                # Recover the authoritative receipt once, rather than losing ownership on an interrupted cat.
+                code, evidence_text = command(read_command, timeout=5) if configured else (1, "")
+            if row["layer"] == "native":
                 try:
-                    if (not isinstance(registration, dict) or set(registration) != {"phone", "user_id"}
-                            or not isinstance(registration["phone"], str) or registration["phone"] not in {phone, new_phone}
-                            or not isinstance(registration["user_id"], str)
-                            or str(uuid.UUID(registration["user_id"])) != registration["user_id"]):
-                        raise StageFailure("invalid_client_registration")
-                    owned = api.adopt_registration(registration["phone"], registration["user_id"])
-                    registered.add(owned.phone)
-                except (StageFailure, KeyError, TypeError, ValueError) as error:
-                    raise_if_interrupted(error)
-                    # A malformed/foreign entry never grants ownership, and cannot discard another valid receipt.
+                    evidence = json.loads(evidence_text)
+                except ValueError:
+                    source, evidence = native_proof(output, api.run_id)
+                    result["native_proof_source"] = source
+                code = 0
+            if code == 0:
+                if row["layer"] != "native":
+                    evidence = json.loads(evidence_text)
+                if not isinstance(evidence, dict):
+                    raise StageFailure("invalid_client_evidence")
+                if evidence.get("run_id") != api.run_id or not isinstance(evidence.get("has_client_injections"), bool):
+                    raise StageFailure("invalid_client_evidence")
+                counts = evidence.get("counts", {})
+                if not isinstance(counts, dict) or not all(isinstance(key, str) and re.fullmatch(r"[a-z_0-9]+", key) and type(value) is int and value >= 0 for key, value in counts.items()):
+                    raise StageFailure("invalid_client_evidence_counts")
+                result["client_evidence"] = {"has_client_injections": evidence["has_client_injections"], "counts": counts}
+                evidence_failures = []
+                registered = set()
+                registrations = evidence.get("successful_registrations", [])
+                if not isinstance(registrations, list):
                     evidence_failures.append("invalid_client_registration")
+                    registrations = []
+                for registration in registrations:
+                    try:
+                        if (not isinstance(registration, dict) or set(registration) != {"phone", "user_id"}
+                                or not isinstance(registration["phone"], str) or registration["phone"] not in {phone, new_phone}
+                                or not isinstance(registration["user_id"], str)
+                                or str(uuid.UUID(registration["user_id"])) != registration["user_id"]):
+                            raise StageFailure("invalid_client_registration")
+                        owned = api.adopt_registration(registration["phone"], registration["user_id"])
+                        registered.add(owned.phone)
+                    except (StageFailure, KeyError, TypeError, ValueError) as error:
+                        raise_if_interrupted(error)
+                        # A malformed/foreign entry never grants ownership, and cannot discard another valid receipt.
+                        evidence_failures.append("invalid_client_registration")
+            elif result["outcome"] == "passed":
+                raise StageFailure("missing_client_evidence")
+        if code == 0:
             # Ownership and best-effort first-session cleanup precede all test acceptance assertions.
             # Failed assertions still leave a correlated account in api.owned for the host cleanup report.
             cleanup_failed = False
@@ -441,8 +471,6 @@ def run_case(row, api, args, private, prepared=None):
                 evidence_failures.append("invalid_cleanup_receipt")
             if evidence_failures:
                 raise StageFailure(evidence_failures[0])
-        elif result["outcome"] == "passed":
-            raise StageFailure("missing_client_evidence")
         code, output = command(["adb", "-s", args.serial, "logcat", "-b", "crash", "-d"], timeout=20) if configured else (1, "")
         if code == 0:
             (target / "crash.log").write_text(sanitize(output, api.secrets))
@@ -453,6 +481,11 @@ def run_case(row, api, args, private, prepared=None):
             result["reason"] = evidence_failure
         else:
             result["evidence_failure"] = evidence_failure
+    if ownership_stop["requested"]:
+        if result["outcome"] == "passed":
+            result.update(outcome="failed", reason="runner_interrupted")
+        elif result.get("reason") != "runner_interrupted":
+            result["evidence_failure"] = "runner_interrupted"
     if configured:
         _, status_text = command(["adb", "-s", args.serial, "exec-out", "run-as", APP, "cat", "files/stage-control-status.json"], timeout=10)
         status = control_status(status_text, api.run_id)
