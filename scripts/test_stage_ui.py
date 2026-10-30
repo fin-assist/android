@@ -234,6 +234,100 @@ class StageOwnershipTest(unittest.TestCase):
             api.adopt_registration("+70000009998", user_id)
 
 
+class StageEvidenceFailureCleanupTest(unittest.TestCase):
+    PHONE = "+70000001234"
+    USER = "22222222-2222-4222-8222-222222222222"
+    FOREIGN_PHONE = "+70000009999"
+
+    def run_evidence_case(self, *, missing_count=False, injected=False, retain=False, flow_passed=True, extra_registration=None, invalid_counts=False):
+        api = FakeApi([])
+        api.unused.update((self.PHONE, self.FOREIGN_PHONE))
+        registrations = [{"phone": self.PHONE, "user_id": self.USER}]
+        if extra_registration is not None:
+            registrations.append(extra_registration)
+        evidence = {"run_id": RUN, "has_client_injections": injected,
+                    "counts": {"real_requests": -1 if invalid_counts else 7},
+                    "successful_registrations": registrations, "deleted_phones": []}
+        row = {"id": "qase-8", "status": "ready", "layer": "maestro", "setup": "first-session-seeded",
+               "provenance": "real-stage", "stage_flow": ".maestro-stage/flows/operations/feed_and_detail.yaml"}
+        if missing_count:
+            row["required_counts"] = {"stream_429": 1}
+        args = SimpleNamespace(serial="emulator-5554", case_timeout=30, retain_owned=retain)
+        prepared = {"account": None, "phone": self.PHONE, "new_phone": self.PHONE, "ready_at": 0, "new_account": True}
+        commands = []
+        cleanup_sent = False
+
+        def fake_command(command, **kwargs):
+            nonlocal cleanup_sent
+            commands.append(command)
+            if command[0] == "maestro":
+                failure = "" if flow_passed else '<failure message="synthetic UI failure"/>'
+                Path(command[command.index("--output") + 1]).write_text('<testsuite><testcase name="stage">' + failure + '</testcase></testsuite>')
+                return (0 if flow_passed else 1), ""
+            if any("cleanup_run=owned" in str(item) for item in command):
+                cleanup_sent = True
+            if command[-1] == "files/stage-evidence.json":
+                return 0, json.dumps(evidence | {"deleted_phones": [self.PHONE] if cleanup_sent else []})
+            return 0, ""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private = root / "private"
+            private.mkdir()
+            with patch.object(ui, "ROOT", root), patch.object(ui, "OUT", root / "build/stage-ui"), patch.object(ui, "command", side_effect=fake_command):
+                result = ui.run_case(row, api, args, private, prepared)
+        report = {"cleanup": []}
+        with patch.object(api, "delete_owned", wraps=api.delete_owned) as delete:
+            ui.cleanup_accounts(api, report, api.owned, retain=retain)
+            host_deletes = delete.call_count
+        return api, result, commands, report, host_deletes
+
+    def test_missing_counter_and_undeclared_injection_keep_ownership_and_cleanup_on_failure(self):
+        for kind, failure in (("missing_count", "required_transport_observation_missing"), ("injected", "undeclared_client_injection")):
+            for retain in (False, True):
+                with self.subTest(kind=kind, retain=retain):
+                    api, result, commands, report, host_deletes = self.run_evidence_case(**{kind: True}, retain=retain)
+                    self.assertEqual(result["outcome"], "failed")
+                    self.assertEqual(result["reason"], failure)
+                    self.assertEqual([(account.phone, account.user_id) for account in api.owned], [(self.PHONE, self.USER)])
+                    self.assertEqual(any("cleanup_run=owned" in str(item) for command in commands for item in command), not retain)
+                    self.assertEqual(api.owned[0].deleted, not retain)
+                    self.assertEqual(report["cleanup"][0]["outcome"], "retained" if retain else "deleted")
+                    self.assertEqual(host_deletes, 0 if retain else 1)
+                    self.assertEqual(api.calls, [])
+
+    def test_failed_ui_still_preserves_registration_and_cleanup_without_declaring_a_pass(self):
+        api, result, commands, report, _ = self.run_evidence_case(missing_count=True, flow_passed=False)
+        self.assertEqual(result["outcome"], "failed")
+        self.assertEqual(result["reason"], "flow_or_report_failed")
+        self.assertEqual(result["evidence_failure"], "required_transport_observation_missing")
+        self.assertEqual(len(api.owned), 1)
+        self.assertTrue(api.owned[0].deleted)
+        self.assertEqual(report["cleanup"][0]["outcome"], "deleted")
+
+    def test_partially_invalid_registration_never_adopts_or_deletes_foreign_candidate(self):
+        for invalid in ({"phone": self.FOREIGN_PHONE, "user_id": "33333333-3333-4333-8333-333333333333"},
+                        {"phone": self.PHONE}, {"phone": self.PHONE, "user_id": "not-an-id"}):
+            with self.subTest(invalid=invalid):
+                api, result, commands, report, _ = self.run_evidence_case(extra_registration=invalid)
+                self.assertEqual(result["outcome"], "failed")
+                self.assertEqual(result["reason"], "invalid_client_registration")
+                self.assertEqual([(account.phone, account.user_id) for account in api.owned], [(self.PHONE, self.USER)])
+                self.assertIn(self.FOREIGN_PHONE, api.unused)
+                self.assertTrue(api.owned[0].deleted)
+                self.assertEqual(len(report["cleanup"]), 1)
+                self.assertEqual(api.calls, [])
+
+    def test_invalid_safe_envelope_counts_never_grant_registration_ownership(self):
+        api, result, commands, report, host_deletes = self.run_evidence_case(invalid_counts=True)
+        self.assertEqual(result["outcome"], "failed")
+        self.assertEqual(result["reason"], "invalid_client_evidence_counts")
+        self.assertEqual(api.owned, [])
+        self.assertFalse(any("cleanup_run=owned" in str(item) for command in commands for item in command))
+        self.assertEqual(report["cleanup"], [])
+        self.assertEqual(host_deletes, 0)
+
+
 class StageTransportTest(unittest.TestCase):
     def test_absolute_url_traversal_and_header_injection_are_rejected(self):
         api = StageApi(RUN, "android/0.2.16+1")

@@ -371,37 +371,64 @@ def run_case(row, api, args, private, prepared=None):
             if evidence.get("run_id") != api.run_id or not isinstance(evidence.get("has_client_injections"), bool):
                 raise StageFailure("invalid_client_evidence")
             counts = evidence.get("counts", {})
-            if not isinstance(counts, dict) or not all(re.fullmatch(r"[a-z_0-9]+", key) and type(value) is int and value >= 0 for key, value in counts.items()):
+            if not isinstance(counts, dict) or not all(isinstance(key, str) and re.fullmatch(r"[a-z_0-9]+", key) and type(value) is int and value >= 0 for key, value in counts.items()):
                 raise StageFailure("invalid_client_evidence_counts")
             result["client_evidence"] = {"has_client_injections": evidence["has_client_injections"], "counts": counts}
+            evidence_failures = []
+            registered = set()
+            registrations = evidence.get("successful_registrations", [])
+            if not isinstance(registrations, list):
+                evidence_failures.append("invalid_client_registration")
+                registrations = []
+            for registration in registrations:
+                try:
+                    if (not isinstance(registration, dict) or set(registration) != {"phone", "user_id"}
+                            or not isinstance(registration["phone"], str) or registration["phone"] not in {phone, new_phone}
+                            or not isinstance(registration["user_id"], str)
+                            or str(uuid.UUID(registration["user_id"])) != registration["user_id"]):
+                        raise StageFailure("invalid_client_registration")
+                    owned = api.adopt_registration(registration["phone"], registration["user_id"])
+                    registered.add(owned.phone)
+                except (StageFailure, KeyError, TypeError, ValueError):
+                    # A malformed/foreign entry never grants ownership, and cannot discard another valid receipt.
+                    evidence_failures.append("invalid_client_registration")
+            # Ownership and best-effort first-session cleanup precede all test acceptance assertions.
+            # Failed assertions still leave a correlated account in api.owned for the host cleanup report.
+            cleanup_failed = False
+            if registered and not args.retain_owned:
+                try:
+                    cleanup_link = "pfe2e://config?cleanup_run=owned"
+                    command(["adb", "-s", args.serial, "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "'" + cleanup_link + "'", "-p", APP], timeout=20)
+                    deadline = time.monotonic() + 15
+                    while time.monotonic() < deadline:
+                        _, deleted_text = command(["adb", "-s", args.serial, "exec-out", "run-as", APP, "cat", "files/stage-evidence.json"], timeout=10)
+                        updated = json.loads(deleted_text)
+                        if (not isinstance(updated, dict) or updated.get("run_id") != api.run_id
+                                or not isinstance(updated.get("deleted_phones", []), list)
+                                or not all(isinstance(item, str) and item in {phone, new_phone} for item in updated.get("deleted_phones", []))):
+                            raise StageFailure("invalid_cleanup_receipt")
+                        deleted = set(updated.get("deleted_phones", []))
+                        if deleted & registered:
+                            for owned in api.owned:
+                                if owned.phone in deleted & registered:
+                                    owned.deleted = True
+                            break
+                        time.sleep(0.5)
+                except (StageFailure, OSError, KeyError, TypeError, ValueError):
+                    cleanup_failed = True
             for name, minimum in row.get("required_counts", {}).items():
                 if type(minimum) is not int or minimum < 1 or counts.get(name, 0) < minimum:
-                    raise StageFailure("required_transport_observation_missing")
-            for registration in evidence.get("successful_registrations", []):
-                api.adopt_registration(registration["phone"], registration["user_id"])
+                    evidence_failures.append("required_transport_observation_missing")
+                    break
             if (row.get("setup") == "new-empty" and row.get("registration_expected", True)
-                    and not evidence.get("successful_registrations") and result["outcome"] == "passed"):
-                raise StageFailure("missing_new_registration_ownership")
+                    and not registered and result["outcome"] == "passed"):
+                evidence_failures.append("missing_new_registration_ownership")
             if evidence["has_client_injections"] and row["provenance"] == "real-stage":
-                raise StageFailure("undeclared_client_injection")
-            # Reuse the first session for cleanup too. A logout case may defer its cleanup to suite end.
-            registered = {item["phone"] for item in evidence.get("successful_registrations", [])}
-            if registered and not args.retain_owned:
-                cleanup_link = "pfe2e://config?cleanup_run=owned"
-                command(["adb", "-s", args.serial, "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "'" + cleanup_link + "'", "-p", APP], timeout=20)
-                deadline = time.monotonic() + 15
-                while time.monotonic() < deadline:
-                    _, deleted_text = command(["adb", "-s", args.serial, "exec-out", "run-as", APP, "cat", "files/stage-evidence.json"], timeout=10)
-                    updated = json.loads(deleted_text)
-                    if updated.get("run_id") != api.run_id:
-                        raise StageFailure("invalid_cleanup_receipt")
-                    deleted = set(updated.get("deleted_phones", []))
-                    if deleted & registered:
-                        for owned in api.owned:
-                            if owned.phone in deleted & registered:
-                                owned.deleted = True
-                        break
-                    time.sleep(0.5)
+                evidence_failures.append("undeclared_client_injection")
+            if cleanup_failed:
+                evidence_failures.append("invalid_cleanup_receipt")
+            if evidence_failures:
+                raise StageFailure(evidence_failures[0])
         elif result["outcome"] == "passed":
             raise StageFailure("missing_client_evidence")
         code, output = command(["adb", "-s", args.serial, "logcat", "-b", "crash", "-d"], timeout=20) if configured else (1, "")
