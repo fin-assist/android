@@ -59,7 +59,9 @@ class E2eDocumentPickerActivity : ComponentActivity() {
         // Copied out of the APK: FileProvider serves files, and reports their name and size like a real document.
         val file = File(cacheDir, "e2e/${assetPath.substringAfterLast('/')}")
         file.parentFile?.mkdirs()
-        assets.open(assetPath).use { input -> file.outputStream().use { input.copyTo(it) } }
+        assets.open(assetPath).use { input ->
+            file.outputStream().use { StageHistoryStatementFixture.copyTo(assetPath, input, it) }
+        }
         val uri = FileProvider.getUriForFile(this, "$packageName.e2e.files", file)
         setResult(Activity.RESULT_OK, Intent().setData(uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
         finish()
