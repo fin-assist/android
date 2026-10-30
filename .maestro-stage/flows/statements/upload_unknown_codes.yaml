@@ -1,0 +1,49 @@
+# FIN-386. Source: .maestro/flows/statements/upload_unknown_codes.yaml; Qase 32.
+# Unknown notice and feature on real import terminal payload.
+# BLOCKED: Unknown import notice and feature require a bounded transform of the real terminal import SSE; the current harness only transforms analytics.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Загрузка — серверные тексты для неизвестного уведомления и неизвестной закрытой функции"
+tags:
+  - statements
+---
+# This case is blocked; direct execution must fail instead of claiming coverage.
+- assertTrue: ${false}
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?unknown_codes=true"
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.notice"
+- assertVisible: "Часть операций пришла из нового источника — проверьте категории"
+- scrollUntilVisible:
+    element: ".*Новая метрика — нужно 6 полных месяцев\\..*"

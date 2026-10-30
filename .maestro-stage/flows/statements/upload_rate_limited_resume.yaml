@@ -1,0 +1,79 @@
+# FIN-386. Source: .maestro/flows/statements/upload_rate_limited_resume.yaml; Qase 45.
+# Real import; client stream 429 deadline survives Home/resume before real terminal result.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Загрузка — 429 сохраняет исходную паузу при возврате на экран"
+tags:
+  - statements
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?stream_drops=1&stream_rate_limits=100&stream_retry_s=30"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload.busy"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "e2e.never"
+    timeout: 3000
+    optional: true
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_stream_rate_limited_exact=1"
+- pressKey: Home
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload.busy"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_stream_rate_limited_exact=1"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload.busy"
+    timeout: 10000
+- assertNotVisible:
+    id: "statements.upload.error.processing_failed"
+- assertNotVisible:
+    id: "statements.upload.offline"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?stream_rate_limits=0"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 45000
+- assertVisible:
+    id: "statements.result.new"

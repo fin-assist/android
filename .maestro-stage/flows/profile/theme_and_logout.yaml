@@ -1,0 +1,44 @@
+# FIN-386. Source: .maestro/flows/profile/theme_and_logout.yaml; Qase 17.
+# Real profile theme PATCH; cancel and confirm logout.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Профиль — тема и выход из аккаунта"
+tags:
+  - profile
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- scrollUntilVisible:
+    element:
+      id: "profile.theme"
+- tapOn:
+    id: "profile.theme"
+- tapOn:
+    id: "profile.theme.dark"
+- extendedWaitUntil:
+    notVisible:
+      id: "profile.theme.dark"
+    timeout: 5000
+- assertVisible: "Тёмная"
+
+- scrollUntilVisible:
+    element:
+      id: "profile.logout"
+- tapOn:
+    id: "profile.logout"
+- tapOn:
+    id: "ds.dialog.cancel"
+- assertVisible:
+    id: "profile.screen"
+- tapOn:
+    id: "profile.logout"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 15000
+- assertVisible:
+    id: "auth.phone.notice"
+- assertVisible: "Вы вышли из аккаунта.*"

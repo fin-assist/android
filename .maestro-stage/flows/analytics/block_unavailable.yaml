@@ -1,0 +1,32 @@
+# FIN-386. Source: .maestro/flows/analytics/block_unavailable.yaml; Qase 30.
+# Client transforms one real analytics block to unavailable; sibling blocks remain real.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Аналитика — блок, который не удалось посчитать, не ломает экран"
+tags:
+  - analytics
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?failing_blocks=expense_categories"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- runFlow:
+    file: ../../subflows/select_fixture_month.yaml
+    env:
+      PERIOD_TITLE: "Сентябрь 2026"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.expense_categories"
+- assertVisible: "Не получилось посчитать — обновите экран позже"
+- assertNotVisible:
+    id: "analytics.expense_category"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.income_categories"

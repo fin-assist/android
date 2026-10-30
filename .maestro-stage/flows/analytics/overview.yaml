@@ -1,0 +1,104 @@
+# FIN-386. Source: .maestro/flows/analytics/overview.yaml; Qase 10.
+# Explicit fixture months; real analytics blocks, period navigation, transfer mode and category link.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Аналитика — блоки, периоды, переводы, переход к операциям"
+tags:
+  - smoke
+  - analytics
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- runFlow:
+    file: ../../subflows/select_fixture_month.yaml
+    env:
+      PERIOD_TITLE: "Октябрь 2026"
+- assertVisible: "Октябрь 2026"
+- assertVisible:
+    id: "analytics.ask"
+- runFlow:
+    file: ../../subflows/select_fixture_month.yaml
+    env:
+      PERIOD_TITLE: "Сентябрь 2026"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.expense_categories"
+- assertVisible:
+    id: "analytics.expense_category"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.income_categories"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 60%"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 5000
+- assertVisible: "Сентябрь 2026"
+
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible: "Август 2026"
+    timeout: 10000
+- tapOn:
+    id: "ds.segment.1"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 10000
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 10000
+- tapOn:
+    id: "ds.segment.0"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/select_fixture_month.yaml
+    env:
+      PERIOD_TITLE: "Сентябрь 2026"
+
+- tapOn:
+    id: "analytics.transfers"
+- tapOn:
+    id: "analytics.transfers.without"
+- extendedWaitUntil:
+    visible: "Без переводов"
+    timeout: 5000
+- assertVisible:
+    id: "analytics.transfers"
+    checked: true
+
+- scrollUntilVisible:
+    element:
+      id: "analytics.expense_category"
+- tapOn:
+    id: "analytics.expense_category"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "operations.search"
+    timeout: 10000
+- assertVisible:
+    id: "operations.row"
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "analytics.screen"

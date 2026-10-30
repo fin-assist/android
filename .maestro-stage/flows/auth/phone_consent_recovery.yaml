@@ -1,0 +1,63 @@
+# FIN-386. Source: .maestro/flows/auth/phone_consent_recovery.yaml; Qase 58.
+# Client network failures at public document GET and phone Start; explicit recovery uses real stage requests.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Согласие до телефона — восстановление документа и отправки без сети"
+tags:
+  - auth
+  - offline
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Не получилось загрузить документ согласия"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- assertVisible:
+    id: "auth.phone.submit"
+    enabled: false
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.document_refresh"
+- tapOn:
+    id: "auth.phone.document_refresh"
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "${STAGE_PHONE}"
+- hideKeyboard
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- extendedWaitUntil:
+    visible: "Нет сети — проверьте интернет и повторите"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- runFlow: ../../subflows/set_passcode.yaml

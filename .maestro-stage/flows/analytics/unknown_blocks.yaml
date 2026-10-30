@@ -1,0 +1,27 @@
+# FIN-386. Source: .maestro/flows/analytics/unknown_blocks.yaml; Qase 31.
+# Client adds two closed unknown-code blocks to a real analytics payload.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Аналитика — блок неизвестного типа и неизвестная блокировка показываются текстом сервера"
+tags:
+  - analytics
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?unknown_codes=true"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.e2e_unknown"
+- assertVisible: "Карта расходов по районам — обновите приложение, чтобы её увидеть"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.e2e_locked"
+- assertVisible: ".*Откроется, когда подключите второй банк.*"

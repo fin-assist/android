@@ -1,0 +1,27 @@
+# FIN-386. Source: .maestro/flows/operations/days_in_profile_zone.yaml; Qase 27.
+# Real profile timezone PATCH and operation day grouping across midnight.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Лента группирует по дням в поясе профиля, а не устройства"
+tags:
+  - operations
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- assertVisible: "30.сентября"
+- assertNotVisible: "1.октября"
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?profile_timezone=Asia/Vladivostok"
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.screen"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.operations"
+- extendedWaitUntil:
+    visible: "1.октября"
+    timeout: 10000

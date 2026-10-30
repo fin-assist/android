@@ -1,0 +1,88 @@
+# FIN-386. Source: .maestro/flows/errors/server_messages.yaml; Qase 48.
+# Closed malformed/unknown REST fixtures at profile PATCH exercise safe presentation.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Универсальные серверные сообщения вне помощника"
+tags:
+  - profile
+  - errors
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=profile_update&error_scenario=unknown_code"
+- scrollUntilVisible:
+    element:
+      id: "profile.theme"
+    direction: DOWN
+- tapOn:
+    id: "profile.theme"
+- tapOn:
+    id: "profile.theme.light"
+- extendedWaitUntil:
+    visible:
+      id: "ds.error.warning"
+    timeout: 20000
+- assertVisible: "Сервис получил новый тип ошибки.*"
+- assertNotVisible: ".*internal diagnostic.*"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=profile_update&error_scenario=unknown_severity"
+- scrollUntilVisible:
+    element:
+      id: "profile.theme"
+    direction: DOWN
+- tapOn:
+    id: "profile.theme"
+- tapOn:
+    id: "profile.theme.dark"
+- extendedWaitUntil:
+    visible:
+      id: "ds.error.error"
+    timeout: 20000
+- assertVisible: "Сервис получил новый тип ошибки.*"
+- assertNotVisible: ".*internal diagnostic.*"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=profile_update&error_scenario=invalid_message"
+- scrollUntilVisible:
+    element:
+      id: "profile.theme"
+    direction: DOWN
+- tapOn:
+    id: "profile.theme"
+- tapOn:
+    id: "profile.theme.light"
+- extendedWaitUntil:
+    visible:
+      id: "ds.error.warning"
+    timeout: 20000
+- assertVisible: "Не получилось сохранить тему.*"
+- assertNotVisible: ".*internal diagnostic.*"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=profile_update&error_scenario=legacy_response"
+- scrollUntilVisible:
+    element:
+      id: "profile.theme"
+    direction: DOWN
+- tapOn:
+    id: "profile.theme"
+- tapOn:
+    id: "profile.theme.system"
+- extendedWaitUntil:
+    visible:
+      id: "ds.error.error"
+    timeout: 20000
+- assertVisible: "Не получилось сохранить тему.*"
+- assertNotVisible: ".*internal diagnostic.*"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=off"

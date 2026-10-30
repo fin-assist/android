@@ -1,0 +1,102 @@
+# FIN-386. Source: .maestro/flows/auth/phone_confirmation_gates.yaml; Qase 57.
+# Independent unchecked confirmations and returning from Call preserve valid choices; repeated helper is idempotent.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Два независимых подтверждения до отправки телефона"
+tags:
+  - auth
+---
+- runFlow: ../../subflows/clear_state.yaml
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: false
+- assertVisible:
+    id: "auth.phone.input"
+    enabled: false
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: false
+- tapOn:
+    id: "auth.phone.consent"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- assertVisible:
+    id: "auth.phone.submit"
+    enabled: false
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- tapOn:
+    id: "auth.phone.age"
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "${STAGE_PHONE}"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- tapOn:
+    id: "auth.phone.consent"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- assertVisible:
+    id: "auth.phone.submit"
+    enabled: false
+- assertNotVisible:
+    id: "auth.call"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- tapOn:
+    id: "auth.phone.consent"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_delay_ms=60000"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 10000
+- tapOn:
+    id: "auth.call.change_number"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: true
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: true
+- runFlow: ../../subflows/confirm_phone.yaml
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- assertVisible:
+    id: "auth.phone.input"
+    enabled: true

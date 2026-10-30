@@ -1,0 +1,31 @@
+# FIN-386. Source: .maestro/flows/auth/sign_in_existing_user.yaml; Qase 1.
+# Existing owned phone, baseline upload, real login and tabs; match the run phone.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Вход существующего пользователя и вкладки"
+tags:
+  - smoke
+  - auth
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+
+- assertVisible:
+    id: "ds.tab.operations"
+    selected: true
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.screen"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.phone"
+    timeout: 10000
+- assertVisible: ".*\\${STAGE_PHONE_DISPLAY}.*"
+- tapOn:
+    id: "ds.tab.operations"
+- assertVisible:
+    id: "operations.row"

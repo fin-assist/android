@@ -1,0 +1,73 @@
+# FIN-386. Source: .maestro/flows/auth/call_expired.yaml; Qase 41.
+# Backend expiry rather than client-side event delay.
+# BLOCKED: A real pending verification must expire and accept an explicit new Start; client latency does not change fake-phone server state or TTL.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Время на звонок вышло и «Позвонить ещё раз»"
+tags:
+  - auth
+---
+# This case is blocked; direct execution must fail instead of claiming coverage.
+- assertTrue: ${false}
+- runFlow: ../../subflows/clear_state.yaml
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 20000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_delay_ms=600000&call_ttl_ms=15000"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "${STAGE_PHONE}"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 10000
+- assertVisible:
+    id: "auth.call.dial"
+- assertVisible:
+    id: "auth.call.wait"
+    text: ".*Ждём звонок до [0-2][0-9]:[0-5][0-9]"
+
+- extendedWaitUntil:
+    visible: "Время на звонок вышло"
+    timeout: 30000
+- assertNotVisible:
+    id: "auth.call.dial"
+- assertNotVisible: "Номер для звонка"
+- assertVisible: "Звонка с \\${STAGE_PHONE_DISPLAY} мы не дождались\\. Запросите номер ещё раз"
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_ttl_ms=300000"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call.retry"
+    timeout: 10000
+- tapOn:
+    id: "auth.call.retry"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call.dial"
+    timeout: 10000
+- assertVisible:
+    id: "auth.call.wait"
+    text: ".*Ждём звонок до [0-2][0-9]:[0-5][0-9]"
+- assertNotVisible: "Время на звонок вышло"

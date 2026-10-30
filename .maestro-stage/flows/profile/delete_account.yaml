@@ -1,0 +1,59 @@
+# FIN-386. Source: .maestro/flows/profile/delete_account.yaml; Qase 18.
+# Only owned account is deleted; client latency exposes busy state and prevents Back dismissal.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Удаление аккаунта — код-пароль, подтверждение в диалоге, «Назад» во время удаления"
+tags:
+  - profile
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- scrollUntilVisible:
+    element:
+      id: "profile.delete_account"
+- tapOn:
+    id: "profile.delete_account"
+- extendedWaitUntil:
+    visible:
+      id: "applock.confirm"
+    timeout: 10000
+- assertVisible: "Удаление аккаунта"
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "9999"
+- extendedWaitUntil:
+    visible: "Неверный код"
+    timeout: 5000
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "1234"
+- extendedWaitUntil:
+    visible: "Удалить аккаунт?"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?network_delay_ms=6000"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible: "Удаляем…"
+    timeout: 5000
+- pressKey: Back
+- assertVisible:
+    id: "ds.dialog"
+- assertVisible: "Удаляем…"
+- extendedWaitUntil:
+    visible:
+      id: "auth.deleted"
+    timeout: 20000
+- assertVisible: "Аккаунт удалён"
+- tapOn:
+    id: "auth.deleted.done"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000

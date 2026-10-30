@@ -1,0 +1,119 @@
+# FIN-386. Source: .maestro/flows/operations/search_filters.yaml; Qase 9.
+# Real search over the imported Krabsbir fixture, empty result, amount/kind/category/period filters.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Поиск операций и фильтры"
+tags:
+  - operations
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "operations.feed.search"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.initial"
+    timeout: 10000
+
+- tapOn:
+    id: "operations.search.input"
+- inputText: "Zzqqxx"
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.empty"
+    timeout: 10000
+- tapOn:
+    id: "operations.search.reset"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.initial"
+    timeout: 10000
+
+- tapOn:
+    id: "operations.search.input"
+- inputText: "Krabsbir"
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+    timeout: 10000
+- assertVisible: "Найдено.*"
+- assertVisible:
+    id: "operations.row"
+
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
+- tapOn:
+    id: "operations.search.chip.kind"
+- assertVisible:
+    id: "operations.search.chip.kind"
+    checked: true
+
+- tapOn:
+    id: "operations.search.chip.amount"
+- tapOn:
+    id: "operations.search.amount.from"
+- inputText: "100"
+- tapOn:
+    id: "operations.search.amount.to"
+- inputText: "100000"
+- hideKeyboard
+- tapOn:
+    id: "operations.search.amount.apply"
+- assertVisible:
+    id: "operations.search.chip.amount"
+    checked: true
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+    timeout: 10000
+
+- swipe:
+    from:
+      id: "operations.search.chip.amount"
+    direction: LEFT
+- tapOn:
+    id: "operations.search.chip.reset"
+- assertVisible:
+    id: "operations.search.chip.amount"
+    checked: false
+- assertVisible:
+    id: "operations.search.chip.kind"
+    checked: false
+
+- swipe:
+    from:
+      id: "operations.search.chip.amount"
+    direction: RIGHT
+- tapOn:
+    id: "operations.search.chip.period"
+- tapOn:
+    id: "operations.search.period.all"
+- assertVisible: "За всё время"
+
+- tapOn:
+    id: "operations.row"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "operations.detail"
+    timeout: 10000
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "operations.search.count"
+
+- tapOn:
+    id: "operations.search.chip.category"
+- extendedWaitUntil:
+    visible:
+      id: "operations.category.search"
+    timeout: 10000
+- assertVisible: "Системные"
+- tapOn: "Без категории"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.empty"
+    timeout: 10000

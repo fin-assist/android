@@ -1,0 +1,17 @@
+# FIN-386. Stage-only helper; run scripts/stage-e2e.py to prepare owned state first.
+appId: ru.finassist.pf.stage.e2e
+---
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "applock.unlock"
+    timeout: 20000
+- runFlow:
+    file: enter_code.yaml
+    env:
+      CODE: ${CODE}
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 20000

@@ -1,0 +1,3 @@
+# Stage suite inventory includes blocked cases; only the host runner can prepare accounts and report readiness.
+flows:
+  - "flows/**"

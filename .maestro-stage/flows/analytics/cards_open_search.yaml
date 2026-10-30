@@ -1,0 +1,79 @@
+# FIN-386. Source: .maestro/flows/analytics/cards_open_search.yaml; Qase 36.
+# Real category/merchant/payment groups link to actual operations.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Аналитика — карточки наблюдений открывают свои операции"
+tags:
+  - analytics
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- runFlow:
+    file: ../../subflows/select_fixture_month.yaml
+    env:
+      PERIOD_TITLE: "Сентябрь 2026"
+
+- scrollUntilVisible:
+    element: "Мелкие частые траты"
+- tapOn: "Мелкие частые траты"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+    timeout: 10000
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
+- assertVisible:
+    id: "operations.search.chip.scope"
+- assertVisible: "Фастфуд.*✕"
+- assertVisible:
+    id: "operations.row"
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.screen"
+    timeout: 10000
+
+- scrollUntilVisible:
+    element: "Пятёрочка"
+- tapOn: "Пятёрочка"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+    timeout: 10000
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
+- assertVisible: "Пятёрочка.*✕"
+- assertVisible:
+    id: "operations.row"
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.screen"
+    timeout: 10000
+
+- scrollUntilVisible:
+    element: "Подписки и регулярные платежи"
+    direction: UP
+- tapOn: "РБК"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+    timeout: 10000
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
+- assertVisible: "РБК.*✕"
+- assertVisible:
+    id: "operations.row"

@@ -1,0 +1,36 @@
+# FIN-386. Source: .maestro/flows/applock/unlock.yaml; Qase 5.
+# Real login; incorrect and correct local passcode after cold start.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Разблокировка после перезапуска, неверный код"
+tags:
+  - smoke
+  - applock
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "applock.unlock"
+    timeout: 20000
+- assertVisible: "Введите код-пароль"
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "1111"
+- extendedWaitUntil:
+    visible:
+      id: "ds.passcode.error"
+    timeout: 5000
+- assertVisible: "Неверный код.*"
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "1234"
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- assertNotVisible:
+    id: "applock.unlock"

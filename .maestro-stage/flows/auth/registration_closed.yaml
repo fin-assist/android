@@ -1,0 +1,51 @@
+# FIN-386. Source: .maestro/flows/auth/registration_closed.yaml; Qase 4.
+# Local registration flag, separate new and precreated owned phones.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Регистрация закрыта флагом auth.registration"
+tags:
+  - auth
+  - flags
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?flag.auth.registration=false"
+- launchApp:
+    stopApp: false
+- runFlow:
+    file: ../../subflows/sign_in.yaml
+    env:
+      PHONE: "${STAGE_NEW_PHONE}"
+- extendedWaitUntil:
+    visible:
+      id: "auth.closed"
+    timeout: 15000
+- assertVisible: "Регистрация пока закрыта"
+- tapOn:
+    id: "auth.closed.back"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- tapOn:
+    id: "auth.phone.input"
+    point: "90%,50%"
+- eraseText: 20
+- inputText: "${STAGE_PHONE}"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- runFlow: ../../subflows/set_passcode.yaml
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 20000

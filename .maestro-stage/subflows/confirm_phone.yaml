@@ -1,0 +1,35 @@
+# FIN-386. Stage-only helper; run scripts/stage-e2e.py to prepare owned state first.
+appId: ru.finassist.pf.stage.e2e
+---
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- runFlow:
+    when:
+      visible:
+        id: "auth.phone.age"
+        checked: false
+    commands:
+      - tapOn:
+          id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: true
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- runFlow:
+    when:
+      visible:
+        id: "auth.phone.consent"
+        checked: false
+    commands:
+      - tapOn:
+          id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: true

@@ -1,0 +1,141 @@
+# FIN-386. Source: .maestro/flows/offline/stream_drops.yaml; Qase 43.
+# Client truncates three actual stage SSE streams; reopening returns real terminal outcomes.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Обрыв потока без терминального события — поток переоткрывается, ошибки нет"
+tags:
+  - offline
+---
+
+- runFlow: ../../subflows/clear_state.yaml
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 20000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_delay_ms=6000&stream_drops=2"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "${STAGE_PHONE}"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 10000
+- assertVisible:
+    id: "auth.call.dial"
+- assertNotVisible: "Нет сети — не можем дождаться звонка. Проверьте интернет"
+- runFlow: ../../subflows/set_passcode.yaml
+- extendedWaitUntil:
+    visible:
+      id: "operations.row"
+    timeout: 40000
+
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?stream_drops=2"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 30000
+- assertVisible:
+    id: "statements.result.new"
+- assertNotVisible:
+    id: "statements.upload.error.processing_failed"
+- assertNotVisible:
+    id: "statements.upload.offline"
+
+- tapOn:
+    id: "statements.result.done"
+- extendedWaitUntil:
+    notVisible:
+      id: "statements.result"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "${STAGE_FINANCIAL_QUESTION}"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?stream_drops=2"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.input"
+      enabled: true
+    timeout: 30000
+- assertVisible: ".*[Оо]сталось 4 из 5.*"
+- assertNotVisible:
+    id: "ds.chat.offline"
+- assertNotVisible: "Не получилось ответить.*"

@@ -1,0 +1,55 @@
+# FIN-386. Source: .maestro/flows/assistant/nothing_found_charged.yaml; Qase 42.
+# Tool-backed no-results in covered period is charged.
+# BLOCKED: The stage fake-LLM has no verified merchant-not-found tool scenario for a covered period; a synthetic answer cannot prove server charging.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Помощник — «не нашли» за покрытый период — ответ, попытка списывается"
+tags:
+  - assistant
+---
+# This case is blocked; direct execution must fail instead of claiming coverage.
+- assertTrue: ${false}
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Kaspersky"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 20000
+- assertVisible: ".*операций «Kaspersky» не нашли.*"
+- assertNotVisible:
+    id: "assistant.answer.failed"
+- extendedWaitUntil:
+    visible: ".*[Оо]сталось 4 из 5.*"
+    timeout: 20000
+- assertNotVisible: ".*[Оо]сталось 5 из 5.*"

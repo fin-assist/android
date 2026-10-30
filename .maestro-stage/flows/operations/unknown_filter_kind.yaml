@@ -1,0 +1,40 @@
+# FIN-386. Source: .maestro/flows/operations/unknown_filter_kind.yaml; Qase 29.
+# Unknown filter code with server-side scope semantics.
+# BLOCKED: The backend must understand the unknown filter kind while preserving the analytics scope; translating it back on the client would conceal that boundary.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Поиск — фильтр с неизвестным kind не теряется, а показывается чипом «Как на „Аналитике“»"
+tags:
+  - operations
+---
+# This case is blocked; direct execution must fail instead of claiming coverage.
+- assertTrue: ${false}
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?unknown_codes=true"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- runFlow:
+    file: ../../subflows/select_fixture_month.yaml
+    env:
+      PERIOD_TITLE: "Сентябрь 2026"
+- tapOn:
+    id: "analytics.tile.expense"
+- extendedWaitUntil:
+    visible:
+      id: "operations.row"
+    timeout: 15000
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
+- assertVisible:
+    id: "operations.search.chip.scope"
+- assertVisible: "Как на «Аналитике».*"
+- assertNotVisible: "Зачисление кэшбэка"

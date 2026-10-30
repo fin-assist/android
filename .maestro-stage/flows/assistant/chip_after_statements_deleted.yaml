@@ -1,0 +1,100 @@
+# FIN-386. Source: .maestro/flows/assistant/chip_after_statements_deleted.yaml; Qase 24.
+# Real answer scope survives deletion of all owned uploads; stale selection fallback and empty ledger.
+# BLOCKED: The deployed tools scenario returns category/all-time filters, not a verified expiring merchant selection. Removing uploads alone cannot prove the original stale-selection fallback.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Помощник — чип ответа после удаления всех выписок"
+tags:
+  - assistant
+---
+# This case is blocked; direct execution must fail instead of claiming coverage.
+- assertTrue: ${false}
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "${STAGE_FINANCIAL_QUESTION}"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.chip.operations"
+    timeout: 20000
+
+- tapOn:
+    id: "ds.back"
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- assertVisible: "Удалить загрузку .*\\?"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.empty"
+    timeout: 10000
+
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "profile.assistant"
+    timeout: 10000
+- tapOn:
+    id: "profile.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.chip.operations"
+    timeout: 10000
+- tapOn:
+    id: "assistant.answer.chip.operations"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search"
+    timeout: 10000
+- extendedWaitUntil:
+    visible: "Выборка с «Аналитики» больше не действует — ищем без неё"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.empty"
+    timeout: 10000
+- assertNotVisible:
+    id: "operations.row"

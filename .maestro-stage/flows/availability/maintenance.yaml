@@ -1,0 +1,71 @@
+# FIN-386. Source: .maestro/flows/availability/maintenance.yaml; Qase 34.
+# Client injects maintenance and Retry-After; captured deadline survives later controls; real availability GET on recovery.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Техработы — ожидание Retry-After, одна автопроверка и ручная проверка после нового отказа"
+tags:
+  - availability
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=15"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "availability.maintenance"
+    timeout: 15000
+- assertVisible: "Идут технические работы"
+- assertVisible: "Закончим примерно к [0-2][0-9]:[0-5][0-9]"
+- assertVisible:
+    id: "availability.maintenance.check"
+    enabled: false
+
+- repeat:
+    times: 5
+    commands:
+      - runFlow:
+          file: ../../subflows/config.yaml
+          env:
+            LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=15"
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=off"
+- extendedWaitUntil:
+    visible:
+      id: "availability.maintenance.check"
+      enabled: true
+    timeout: 20000
+- tapOn:
+    id: "availability.maintenance.check"
+- extendedWaitUntil:
+    notVisible:
+      id: "availability.maintenance"
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 15000
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=15"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "availability.maintenance"
+    timeout: 15000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=off"
+- extendedWaitUntil:
+    notVisible:
+      id: "availability.maintenance"
+    timeout: 40000

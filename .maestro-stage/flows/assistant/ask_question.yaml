@@ -1,0 +1,115 @@
+# FIN-386. Source: .maestro/flows/assistant/ask_question.yaml; Qase 12.
+# Real assistant consent, tool-backed answer, both navigation chips, and charged quota.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Помощник — согласие, вопрос, ответ, переход к операциям"
+tags:
+  - smoke
+  - assistant
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
+
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "${STAGE_FINANCIAL_QUESTION}"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "Ваш вопрос и историю диалога"
+- assertVisible: "Ваш вопрос и историю диалога"
+- scrollUntilVisible:
+    element:
+      text: "Номер телефона из аккаунта"
+- assertVisible: "Номер телефона из аккаунта"
+- scrollUntilVisible:
+    element:
+      text: "Файлы выписок"
+- assertVisible: "Файлы выписок"
+- scrollUntilVisible:
+    element:
+      text: ".*полного обезличивания это не гарантирует.*"
+- assertVisible: ".*Имена и другие личные сведения в свободном тексте могут остаться.*"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- assertVisible: "Без согласия помощник не сможет ответить"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertVisible:
+    id: "assistant.question"
+
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 20000
+- assertVisible: ".*[Оо]сталось 4 из 5.*"
+- assertVisible:
+    id: "assistant.answer.chip.operations"
+
+- tapOn:
+    id: "assistant.answer.chip.operations"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search"
+    timeout: 10000
+- assertVisible:
+    id: "operations.search.chip.category"
+    checked: true
+- assertVisible:
+    id: "operations.row"
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "assistant.chat"
+
+# The deployed provider presents operation rows and analytics in separate scenarios.
+# Exercise both real navigation capabilities without fabricating an extra server chip.
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "#FIN362_ANALYTICS"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.chip.analytics"
+    timeout: 40000
+- assertVisible: ".*[Оо]сталось 3 из 5.*"
+- tapOn:
+    id: "assistant.answer.chip.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.screen"
+    timeout: 20000

@@ -1,0 +1,32 @@
+# FIN-386. Source: .maestro/flows/applock/forgot_code.yaml; Qase 6.
+# Real login; cancel and confirm forgotten-code logout.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] «Забыли код?» — выход и новый вход"
+tags:
+  - applock
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "applock.unlock"
+    timeout: 20000
+- tapOn:
+    id: "applock.unlock.forgot"
+- assertVisible:
+    id: "ds.dialog"
+- assertVisible: "Выйти из аккаунта?"
+- tapOn:
+    id: "ds.dialog.cancel"
+- assertVisible:
+    id: "applock.unlock"
+- tapOn:
+    id: "applock.unlock.forgot"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 15000

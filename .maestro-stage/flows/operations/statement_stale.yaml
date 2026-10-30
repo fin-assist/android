@@ -1,0 +1,69 @@
+# FIN-386. Source: .maestro/flows/operations/statement_stale.yaml; Qase 37.
+# Fresh baseline extends statement coverage to today without changing operations; then real stale file replacement.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Устаревшая выписка — плашка на «Операциях» и «Аналитике» с датой конца выписки"
+tags:
+  - operations
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- assertNotVisible:
+    id: "operations.feed.stale"
+- assertVisible: "Данные по ${STAGE_TODAY}.*"
+
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- assertVisible: "Удалить загрузку .*\\?"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.empty"
+    timeout: 10000
+
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.stale.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "statements.result.done"
+- tapOn:
+    id: "statements.result.done"
+
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed.stale"
+    timeout: 10000
+- assertVisible: "Данные в приложении по 20.сентября — с тех пор прошло больше двух недель"
+- assertNotVisible: ".*по 15.сентября.*"
+
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.stale"
+    timeout: 15000
+- assertVisible: "Данные в приложении по 20.сентября — с тех пор прошло больше двух недель"

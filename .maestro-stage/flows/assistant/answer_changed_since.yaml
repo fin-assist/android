@@ -1,0 +1,138 @@
+# FIN-386. Source: .maestro/flows/assistant/answer_changed_since.yaml; Qase 40.
+# Real history changed_since tracks category change and upload deletion.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Помощник — «с тех пор данные менялись» под прежним ответом"
+tags:
+  - assistant
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "${STAGE_FINANCIAL_QUESTION}"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 20000
+- assertVisible: "FIN362_TOOLS_OK.*"
+- assertNotVisible: "С тех пор.*"
+
+- tapOn:
+    id: "ds.back"
+- tapOn:
+    id: "ds.tab.operations"
+- extendedWaitUntil:
+    visible:
+      id: "operations.row"
+    timeout: 10000
+- tapOn:
+    id: "operations.row"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "operations.detail"
+    timeout: 10000
+- tapOn:
+    id: "operations.detail.category"
+- extendedWaitUntil:
+    visible:
+      id: "operations.category.search"
+    timeout: 5000
+- tapOn:
+    id: "operations.category.option"
+    index: 1
+- runFlow:
+    when:
+      visible:
+        id: "operations.detail.save"
+        enabled: false
+    commands:
+      - tapOn:
+          id: "operations.category.option"
+          index: 2
+- tapOn:
+    id: "operations.detail.save"
+- extendedWaitUntil:
+    notVisible:
+      id: "operations.category.search"
+    timeout: 10000
+- tapOn:
+    id: "ds.back"
+
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.assistant"
+    timeout: 10000
+- tapOn:
+    id: "profile.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 10000
+- assertVisible: "С тех пор категории менялись"
+
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- assertVisible: "Удалить загрузку .*\\?"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.empty"
+    timeout: 10000
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "profile.assistant"
+    timeout: 10000
+- tapOn:
+    id: "profile.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 10000
+- assertVisible: "С тех пор данные менялись"

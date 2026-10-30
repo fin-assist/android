@@ -1,0 +1,25 @@
+# FIN-386. Source: .maestro/flows/availability/update_required.yaml; Qase 33.
+# Client injects version-unsupported wire error; global stage minimum stays unchanged.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Версия ниже минимальной — экран обновления поверх приложения"
+tags:
+  - availability
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?min_version=9.0.0"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "availability.update"
+    timeout: 15000
+- assertVisible: "Обновите приложение"
+- assertVisible: "Эта версия больше не поддерживается"
+- assertVisible:
+    id: "availability.update.button"
+- assertVisible:
+    id: "availability.update.support"

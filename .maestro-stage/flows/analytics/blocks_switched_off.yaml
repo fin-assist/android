@@ -1,0 +1,39 @@
+# FIN-386. Source: .maestro/flows/analytics/blocks_switched_off.yaml; Qase 11.
+# Local flags hide blocks, transfers and assistant while other real blocks remain.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Блоки аналитики и помощник выключены флагами"
+tags:
+  - analytics
+  - flags
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?flag.analytics.block.tiles=false&flag.analytics.block.expense_categories=false&flag.analytics.filter.transfers=false&flag.assistant=false"
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "ds.period.pick"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.block.tiles"
+- assertNotVisible:
+    id: "analytics.ask"
+- assertNotVisible:
+    id: "analytics.transfers"
+- assertNotVisible:
+    id: "analytics.block.expense_categories"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.income_categories"
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.phone"
+    timeout: 10000
+- assertNotVisible:
+    id: "profile.assistant"

@@ -1,0 +1,78 @@
+# FIN-386. Source: .maestro/flows/auth/phone_validation.yaml; Qase 3.
+# Client-only verified-event delay preserves the Call UI for edit-number assertions; backend may already be VERIFIED.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Проверка номера и «Изменить номер» на экране звонка"
+tags:
+  - auth
+---
+- runFlow: ../../subflows/clear_state.yaml
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 20000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_delay_ms=60000"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+
+- runFlow: ../../subflows/confirm_phone.yaml
+- assertVisible: "Для подтверждения позвоните нам с этого номера"
+- assertNotVisible: ".*бесплатн.*"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- assertVisible: "В номере не хватает цифр"
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "91612"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- assertVisible: "В номере не хватает цифр"
+
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- tapOn:
+    id: "auth.phone.input"
+    point: "90%,50%"
+- eraseText: 20
+- inputText: "${STAGE_PHONE}"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 10000
+- assertVisible: "Позвоните нам для подтверждения"
+- assertVisible: "Позвоните с номера \\${STAGE_PHONE_DISPLAY} на наш номер. Мы сразу сбросим звонок — по нему и поймём, что номер ваш"
+- assertVisible:
+    id: "auth.call.wait"
+    text: "Как только дозвонитесь, вход продолжится сам\\. Ждём звонок до [0-2][0-9]:[0-5][0-9]"
+- assertNotVisible: ".*бесплатн.*"
+- tapOn:
+    id: "auth.call.change_number"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+- assertVisible: ".*\\${STAGE_PHONE_DISPLAY}.*"

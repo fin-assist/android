@@ -1,0 +1,56 @@
+# FIN-386. Source: .maestro/flows/auth/register_new_user.yaml; Qase 2.
+# Unregistered owned phone, real registration and first upload.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Регистрация нового номера до первой выписки"
+tags:
+  - smoke
+  - auth
+---
+- runFlow: ../../subflows/clear_state.yaml
+- launchApp
+- runFlow:
+    file: ../../subflows/sign_in.yaml
+    env:
+      PHONE: "${STAGE_NEW_PHONE}"
+
+- extendedWaitUntil:
+    visible:
+      id: "auth.consent"
+    timeout: 15000
+- assertNotVisible:
+    id: "auth.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "auth.consent.submit"
+- tapOn:
+    id: "auth.consent.submit"
+
+- runFlow: ../../subflows/set_passcode.yaml
+
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 15000
+- assertVisible:
+    id: "statements.upload.later"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.new"
+- tapOn:
+    id: "statements.result.done"
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- assertVisible:
+    id: "operations.row"

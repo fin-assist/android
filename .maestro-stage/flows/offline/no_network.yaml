@@ -1,0 +1,55 @@
+# FIN-386. Source: .maestro/flows/offline/no_network.yaml; Qase 19.
+# Client transport failure on real analytics/profile; recovery rereads actual stage data.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Нет сети — экран ошибки и «Повторить»"
+tags:
+  - offline
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.offline"
+    timeout: 15000
+- assertVisible: "Нет сети"
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.offline"
+    timeout: 15000
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- runFlow:
+    when:
+      visible:
+        id: "profile.retry"
+    commands:
+      - tapOn:
+          id: "profile.retry"
+- extendedWaitUntil:
+    visible:
+      id: "profile.phone"
+    timeout: 15000
+- tapOn:
+    id: "ds.tab.analytics"
+- runFlow:
+    when:
+      visible:
+        id: "analytics.retry"
+    commands:
+      - tapOn:
+          id: "analytics.retry"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000

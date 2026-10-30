@@ -1,0 +1,85 @@
+# FIN-386. Source: .maestro/flows/assistant/offline_retry.yaml; Qase 20.
+# Real first answer, client transport outage, real second charged answer and quota.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Помощник — нет сети вместо поля ввода и «Повторить»"
+tags:
+  - assistant
+  - offline
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "${STAGE_FINANCIAL_QUESTION}"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.input"
+      enabled: true
+    timeout: 20000
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "${STAGE_FINANCIAL_QUESTION}"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.offline"
+    timeout: 15000
+- assertVisible: "Нет сети — помощнику нужен интернет. Операции и аналитика доступны"
+- assertNotVisible:
+    id: "ds.chat.input"
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- tapOn:
+    id: "ds.chat.retry"
+- extendedWaitUntil:
+    notVisible:
+      id: "ds.chat.offline"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+      index: 1
+    timeout: 20000
+- assertVisible: ".*[Оо]сталось 3 из 5.*"

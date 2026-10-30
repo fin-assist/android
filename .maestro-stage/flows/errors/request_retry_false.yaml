@@ -1,0 +1,94 @@
+# FIN-386. Source: .maestro/flows/errors/request_retry_false.yaml; Qase 50.
+# Retry prohibition counter plus persisted model-failure recovery.
+# BLOCKED: The REST retryable=false portion is injectable, but the full original case also requires persisted MODEL_ERROR followed by a successful RetryAnswer.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] REST retryable=false не подменяет новую попытку генерации"
+tags:
+  - assistant
+  - errors
+---
+# This case is blocked; direct execution must fail instead of claiming coverage.
+- assertTrue: ${false}
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "#FIN362_OFF_TOPIC"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.failed"
+    timeout: 20000
+- assertVisible: "Вопрос не по теме — помощник отвечает только на вопросы о ваших финансах.*"
+- assertNotVisible:
+    id: "assistant.answer.failed.retry"
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=assistant_ask&error_scenario=retry_forbidden"
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "${STAGE_FINANCIAL_QUESTION}"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat.send_failed"
+    timeout: 20000
+- assertVisible: "Krabsbir"
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_error_requests=1"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_error_requests=1&error_operation=off&assistant_model_errors=1"
+- tapOn:
+    id: "ds.chat.input"
+- eraseText
+- inputText: "${STAGE_FINANCIAL_QUESTION}"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.failed.retry"
+    timeout: 20000
+- tapOn:
+    id: "assistant.answer.failed.retry"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 20000
+- assertVisible: ".*[Оо]сталось 4 из 5.*"

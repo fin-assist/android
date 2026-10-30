@@ -1,0 +1,4 @@
+# FIN-386. Stage-only helper; run scripts/stage-e2e.py to prepare owned state first.
+appId: ru.finassist.pf.stage.e2e
+---
+- stopApp

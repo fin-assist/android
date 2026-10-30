@@ -1,0 +1,75 @@
+# FIN-386. Source: .maestro/flows/statements/upload_offline_retry.yaml; Qase 21.
+# Client transport failure before upload; retry uses real stage import.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Загрузка — «Не скачивается?», нет сети при отправке файла и «Повторить»"
+tags:
+  - statements
+  - offline
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
+
+- tapOn:
+    id: "statements.upload.fallback"
+- extendedWaitUntil:
+    visible: "Если файл не скачивается"
+    timeout: 5000
+- tapOn:
+    id: "statements.upload.fallback.ok"
+- extendedWaitUntil:
+    notVisible: "Если файл не скачивается"
+    timeout: 5000
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload.send_offline"
+    timeout: 15000
+- assertVisible: "Нет связи с интернетом — файл не загружен"
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.send_retry"
+- tapOn:
+    id: "statements.upload.send_retry"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.new"

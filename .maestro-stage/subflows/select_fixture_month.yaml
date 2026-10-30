@@ -1,0 +1,23 @@
+# Select the fixture month explicitly; stage uses its real current clock.
+appId: ru.finassist.pf.stage.e2e
+---
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
+- tapOn:
+    id: "ds.period.pick"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.option"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "analytics.period.option"
+      text: ${PERIOD_TITLE}
+- tapOn:
+    id: "analytics.period.option"
+    text: ${PERIOD_TITLE}
+- extendedWaitUntil:
+    visible: ${PERIOD_TITLE}
+    timeout: 20000

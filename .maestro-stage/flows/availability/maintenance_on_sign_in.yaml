@@ -1,0 +1,37 @@
+# FIN-386. Source: .maestro/flows/availability/maintenance_on_sign_in.yaml; Qase 35.
+# Client maintenance refusal during login, unknown end time.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Техработы до входа — экран техработ поверх входа, без времени окончания"
+tags:
+  - availability
+---
+- runFlow: ../../subflows/clear_state.yaml
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 40000
+- runFlow: ../../subflows/confirm_phone.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=unknown&maintenance_retry_after=600"
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "${STAGE_PHONE}"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- extendedWaitUntil:
+    visible:
+      id: "availability.maintenance"
+    timeout: 15000
+- assertVisible: "Идут технические работы"
+- assertVisible: "Пока не знаем, когда закончим"

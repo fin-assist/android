@@ -1,0 +1,70 @@
+# FIN-386. Source: .maestro/flows/applock/change_passcode.yaml; Qase 7.
+# Real login; mismatched repeat and changed passcode after restart.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Смена код-пароля в профиле"
+tags:
+  - applock
+  - profile
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- scrollUntilVisible:
+    element:
+      id: "profile.security"
+- tapOn:
+    id: "profile.security"
+- extendedWaitUntil:
+    visible:
+      id: "applock.security"
+    timeout: 10000
+- tapOn:
+    id: "applock.security.change"
+- extendedWaitUntil:
+    visible:
+      id: "applock.change"
+    timeout: 10000
+
+- assertVisible: "Введите текущий код-пароль"
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "1234"
+- extendedWaitUntil:
+    visible: "Введите новый код-пароль"
+    timeout: 5000
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "5678"
+- extendedWaitUntil:
+    visible: "Повторите новый код-пароль"
+    timeout: 5000
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "1111"
+- extendedWaitUntil:
+    visible: "Коды не совпадают.*"
+    timeout: 5000
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "5678"
+- extendedWaitUntil:
+    visible: "Повторите новый код-пароль"
+    timeout: 5000
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "5678"
+- extendedWaitUntil:
+    visible:
+      id: "applock.security"
+    timeout: 10000
+
+- runFlow:
+    file: ../../subflows/relaunch_and_unlock.yaml
+    env:
+      CODE: "5678"

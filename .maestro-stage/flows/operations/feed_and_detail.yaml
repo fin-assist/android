@@ -1,0 +1,64 @@
+# FIN-386. Source: .maestro/flows/operations/feed_and_detail.yaml; Qase 8.
+# Real operation category update remains visible after reopening.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Лента, карточка операции, смена категории"
+tags:
+  - smoke
+  - operations
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "operations.row"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "operations.detail"
+    timeout: 10000
+- assertVisible:
+    id: "operations.detail.title"
+- assertVisible: "Из выписки"
+
+- tapOn:
+    id: "operations.detail.category"
+- extendedWaitUntil:
+    visible:
+      id: "operations.category.search"
+    timeout: 5000
+- tapOn:
+    id: "operations.category.option"
+    index: 1
+- runFlow:
+    when:
+      visible:
+        id: "operations.detail.save"
+        enabled: false
+    commands:
+      - tapOn:
+          id: "operations.category.option"
+          index: 2
+- tapOn:
+    id: "operations.detail.save"
+- extendedWaitUntil:
+    notVisible:
+      id: "operations.category.search"
+    timeout: 10000
+- assertVisible: "Вы выбрали сами"
+
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "operations.feed"
+
+- tapOn:
+    id: "operations.row"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "operations.detail"
+    timeout: 10000
+- assertVisible: "Вы выбрали сами"
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "operations.feed"

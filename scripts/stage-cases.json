@@ -1,0 +1,812 @@
+{
+  "schema_version": 1,
+  "project": "PLAINFIN",
+  "source_mapping": "scripts/qase-cases.json",
+  "cases": [
+    {
+      "id": "qase-1",
+      "qase_id": 1,
+      "source": ".maestro/flows/auth/sign_in_existing_user.yaml",
+      "stage_flow": ".maestro-stage/flows/auth/sign_in_existing_user.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Existing owned phone, baseline upload, real login and tabs; match the run phone."
+    },
+    {
+      "id": "qase-2",
+      "qase_id": 2,
+      "source": ".maestro/flows/auth/register_new_user.yaml",
+      "stage_flow": ".maestro-stage/flows/auth/register_new_user.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "new-empty",
+      "requirements": [],
+      "assertions": "Unregistered owned phone, real registration and first upload."
+    },
+    {
+      "id": "qase-3",
+      "qase_id": 3,
+      "source": ".maestro/flows/auth/phone_validation.yaml",
+      "stage_flow": ".maestro-stage/flows/auth/phone_validation.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "call_delay_ms"
+      ],
+      "assertions": "Client-only verified-event delay preserves the Call UI for edit-number assertions; backend may already be VERIFIED."
+    },
+    {
+      "id": "qase-4",
+      "qase_id": 4,
+      "source": ".maestro/flows/auth/registration_closed.yaml",
+      "stage_flow": ".maestro-stage/flows/auth/registration_closed.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-and-new",
+      "requirements": [
+        "flag.auth.registration"
+      ],
+      "assertions": "Local registration flag, separate new and precreated owned phones."
+    },
+    {
+      "id": "qase-41",
+      "qase_id": 41,
+      "source": ".maestro/flows/auth/call_expired.yaml",
+      "stage_flow": ".maestro-stage/flows/auth/call_expired.yaml",
+      "layer": "maestro",
+      "status": "blocked",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "call_delay_ms",
+        "call_ttl_ms"
+      ],
+      "assertions": "Backend expiry rather than client-side event delay.",
+      "blocked_reason": "A real pending verification must expire and accept an explicit new Start; client latency does not change fake-phone server state or TTL."
+    },
+    {
+      "id": "qase-44",
+      "qase_id": 44,
+      "source": ".maestro/flows/auth/call_stream_rate_limited.yaml",
+      "stage_flow": ".maestro-stage/flows/auth/call_stream_rate_limited.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "call_delay_ms",
+        "stream_drops",
+        "stream_rate_limits",
+        "stream_retry_s",
+        "expect_stream_rate_limited_exact"
+      ],
+      "assertions": "Client delay/drop/429 of actual phone SSE; exact opening count and captured Retry-After."
+    },
+    {
+      "id": "qase-5",
+      "qase_id": 5,
+      "source": ".maestro/flows/applock/unlock.yaml",
+      "stage_flow": ".maestro-stage/flows/applock/unlock.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real login; incorrect and correct local passcode after cold start."
+    },
+    {
+      "id": "qase-6",
+      "qase_id": 6,
+      "source": ".maestro/flows/applock/forgot_code.yaml",
+      "stage_flow": ".maestro-stage/flows/applock/forgot_code.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real login; cancel and confirm forgotten-code logout."
+    },
+    {
+      "id": "qase-7",
+      "qase_id": 7,
+      "source": ".maestro/flows/applock/change_passcode.yaml",
+      "stage_flow": ".maestro-stage/flows/applock/change_passcode.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real login; mismatched repeat and changed passcode after restart."
+    },
+    {
+      "id": "qase-8",
+      "qase_id": 8,
+      "source": ".maestro/flows/operations/feed_and_detail.yaml",
+      "stage_flow": ".maestro-stage/flows/operations/feed_and_detail.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real operation category update remains visible after reopening."
+    },
+    {
+      "id": "qase-9",
+      "qase_id": 9,
+      "source": ".maestro/flows/operations/search_filters.yaml",
+      "stage_flow": ".maestro-stage/flows/operations/search_filters.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real search over the imported Krabsbir fixture, empty result, amount/kind/category/period filters."
+    },
+    {
+      "id": "qase-29",
+      "qase_id": 29,
+      "source": ".maestro/flows/operations/unknown_filter_kind.yaml",
+      "stage_flow": ".maestro-stage/flows/operations/unknown_filter_kind.yaml",
+      "layer": "maestro",
+      "status": "blocked",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "unknown_codes"
+      ],
+      "assertions": "Unknown filter code with server-side scope semantics.",
+      "blocked_reason": "The backend must understand the unknown filter kind while preserving the analytics scope; translating it back on the client would conceal that boundary."
+    },
+    {
+      "id": "qase-27",
+      "qase_id": 27,
+      "source": ".maestro/flows/operations/days_in_profile_zone.yaml",
+      "stage_flow": ".maestro-stage/flows/operations/days_in_profile_zone.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "profile_timezone"
+      ],
+      "assertions": "Real profile timezone PATCH and operation day grouping across midnight."
+    },
+    {
+      "id": "qase-37",
+      "qase_id": 37,
+      "source": ".maestro/flows/operations/statement_stale.yaml",
+      "stage_flow": ".maestro-stage/flows/operations/statement_stale.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "fresh-baseline",
+      "requirements": [],
+      "assertions": "Fresh baseline extends statement coverage to today without changing operations; then real stale file replacement."
+    },
+    {
+      "id": "qase-10",
+      "qase_id": 10,
+      "source": ".maestro/flows/analytics/overview.yaml",
+      "stage_flow": ".maestro-stage/flows/analytics/overview.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Explicit fixture months; real analytics blocks, period navigation, transfer mode and category link."
+    },
+    {
+      "id": "qase-11",
+      "qase_id": 11,
+      "source": ".maestro/flows/analytics/blocks_switched_off.yaml",
+      "stage_flow": ".maestro-stage/flows/analytics/blocks_switched_off.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "flag.analytics.block.tiles",
+        "flag.analytics.block.expense_categories",
+        "flag.analytics.filter.transfers",
+        "flag.assistant"
+      ],
+      "assertions": "Local flags hide blocks, transfers and assistant while other real blocks remain."
+    },
+    {
+      "id": "qase-30",
+      "qase_id": 30,
+      "source": ".maestro/flows/analytics/block_unavailable.yaml",
+      "stage_flow": ".maestro-stage/flows/analytics/block_unavailable.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "failing_blocks"
+      ],
+      "assertions": "Client transforms one real analytics block to unavailable; sibling blocks remain real."
+    },
+    {
+      "id": "qase-31",
+      "qase_id": 31,
+      "source": ".maestro/flows/analytics/unknown_blocks.yaml",
+      "stage_flow": ".maestro-stage/flows/analytics/unknown_blocks.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "unknown_codes"
+      ],
+      "assertions": "Client adds two closed unknown-code blocks to a real analytics payload."
+    },
+    {
+      "id": "qase-36",
+      "qase_id": 36,
+      "source": ".maestro/flows/analytics/cards_open_search.yaml",
+      "stage_flow": ".maestro-stage/flows/analytics/cards_open_search.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real category/merchant/payment groups link to actual operations."
+    },
+    {
+      "id": "qase-38",
+      "qase_id": 38,
+      "source": ".maestro/flows/analytics/search_scope_own_transfers.yaml",
+      "stage_flow": ".maestro-stage/flows/analytics/search_scope_own_transfers.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real own-transfer 6000 is absent from scoped analytics search and present after scope removal."
+    },
+    {
+      "id": "qase-12",
+      "qase_id": 12,
+      "source": ".maestro/flows/assistant/ask_question.yaml",
+      "stage_flow": ".maestro-stage/flows/assistant/ask_question.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [
+        "provider-fin362-tools",
+        "provider-fin362-analytics"
+      ],
+      "assertions": "Real consent, tool-backed operation rows and category navigation, then a second real analytics answer and analytics navigation; quota 5 to 4 to 3."
+    },
+    {
+      "id": "qase-13",
+      "qase_id": 13,
+      "source": ".maestro/flows/assistant/daily_limit.yaml",
+      "stage_flow": ".maestro-stage/flows/assistant/daily_limit.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [
+        "provider-default-refusal",
+        "provider-fin362-limit"
+      ],
+      "assertions": "CANNOT_ANSWER then five charged outcomes need stage provider capability."
+    },
+    {
+      "id": "qase-14",
+      "qase_id": 14,
+      "source": ".maestro/flows/statements/upload_and_history.yaml",
+      "stage_flow": ".maestro-stage/flows/statements/upload_and_history.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real upload, exact-byte duplicate import, three history records, delete newest only."
+    },
+    {
+      "id": "qase-47",
+      "qase_id": 47,
+      "source": ".maestro/flows/statements/upload_history_period.yaml",
+      "stage_flow": ".maestro-stage/flows/statements/upload_history_period.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Actual parser derives explicit calendar range, transaction fallback date and zero-operation history."
+    },
+    {
+      "id": "qase-15",
+      "qase_id": 15,
+      "source": ".maestro/flows/statements/upload_errors.yaml",
+      "stage_flow": ".maestro-stage/flows/statements/upload_errors.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real parser rejects CSV, non-statement and unsupported bank; cancel picker."
+    },
+    {
+      "id": "qase-16",
+      "qase_id": 16,
+      "source": "ru.finassist.pf.StatementPickerTest#uploadsTheDocumentReturnedBySystemPicker",
+      "stage_flow": null,
+      "layer": "native",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [
+        "native-stage-picker"
+      ],
+      "assertions": "Native ActivityResult path sends bundled OFX through the real stage importer; does not prove DocumentsUI interaction.",
+      "native_test": "ru.finassist.pf.StageStatementPickerTest#uploadsTheDocumentReturnedBySystemPicker"
+    },
+    {
+      "id": "qase-17",
+      "qase_id": 17,
+      "source": ".maestro/flows/profile/theme_and_logout.yaml",
+      "stage_flow": ".maestro-stage/flows/profile/theme_and_logout.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real profile theme PATCH; cancel and confirm logout."
+    },
+    {
+      "id": "qase-18",
+      "qase_id": 18,
+      "source": ".maestro/flows/profile/delete_account.yaml",
+      "stage_flow": ".maestro-stage/flows/profile/delete_account.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "network_delay_ms"
+      ],
+      "assertions": "Only owned account is deleted; client latency exposes busy state and prevents Back dismissal."
+    },
+    {
+      "id": "qase-19",
+      "qase_id": 19,
+      "source": ".maestro/flows/offline/no_network.yaml",
+      "stage_flow": ".maestro-stage/flows/offline/no_network.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "offline"
+      ],
+      "assertions": "Client transport failure on real analytics/profile; recovery rereads actual stage data."
+    },
+    {
+      "id": "qase-43",
+      "qase_id": 43,
+      "source": ".maestro/flows/offline/stream_drops.yaml",
+      "stage_flow": ".maestro-stage/flows/offline/stream_drops.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "call_delay_ms",
+        "stream_drops"
+      ],
+      "assertions": "Client truncates three actual stage SSE streams; reopening returns real terminal outcomes."
+    },
+    {
+      "id": "qase-33",
+      "qase_id": 33,
+      "source": ".maestro/flows/availability/update_required.yaml",
+      "stage_flow": ".maestro-stage/flows/availability/update_required.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "min_version"
+      ],
+      "assertions": "Client injects version-unsupported wire error; global stage minimum stays unchanged."
+    },
+    {
+      "id": "qase-34",
+      "qase_id": 34,
+      "source": ".maestro/flows/availability/maintenance.yaml",
+      "stage_flow": ".maestro-stage/flows/availability/maintenance.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "maintenance",
+        "maintenance_retry_after"
+      ],
+      "assertions": "Client injects maintenance and Retry-After; captured deadline survives later controls; real availability GET on recovery."
+    },
+    {
+      "id": "qase-35",
+      "qase_id": 35,
+      "source": ".maestro/flows/availability/maintenance_on_sign_in.yaml",
+      "stage_flow": ".maestro-stage/flows/availability/maintenance_on_sign_in.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "maintenance",
+        "maintenance_retry_after"
+      ],
+      "assertions": "Client maintenance refusal during login, unknown end time."
+    },
+    {
+      "id": "qase-46",
+      "qase_id": 46,
+      "source": ".maestro/flows/availability/maintenance_during_import.yaml",
+      "stage_flow": ".maestro-stage/flows/availability/maintenance_during_import.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "stream_drops",
+        "stream_rate_limits",
+        "stream_retry_s",
+        "maintenance",
+        "maintenance_retry_after"
+      ],
+      "assertions": "Server import continues while client stream sees maintenance; real history has completed upload."
+    },
+    {
+      "id": "qase-20",
+      "qase_id": 20,
+      "source": ".maestro/flows/assistant/offline_retry.yaml",
+      "stage_flow": ".maestro-stage/flows/assistant/offline_retry.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "offline"
+      ],
+      "assertions": "Real first answer, client transport outage, real second charged answer and quota."
+    },
+    {
+      "id": "qase-21",
+      "qase_id": 21,
+      "source": ".maestro/flows/statements/upload_offline_retry.yaml",
+      "stage_flow": ".maestro-stage/flows/statements/upload_offline_retry.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "offline"
+      ],
+      "assertions": "Client transport failure before upload; retry uses real stage import."
+    },
+    {
+      "id": "qase-45",
+      "qase_id": 45,
+      "source": ".maestro/flows/statements/upload_rate_limited_resume.yaml",
+      "stage_flow": ".maestro-stage/flows/statements/upload_rate_limited_resume.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "stream_drops",
+        "stream_rate_limits",
+        "stream_retry_s",
+        "expect_stream_rate_limited_exact"
+      ],
+      "assertions": "Real import; client stream 429 deadline survives Home/resume before real terminal result."
+    },
+    {
+      "id": "qase-22",
+      "qase_id": 22,
+      "source": ".maestro/flows/statements/upload_unreadable.yaml",
+      "stage_flow": ".maestro-stage/flows/statements/upload_unreadable.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real unread parser line numbers and reasons; history opens unread list."
+    },
+    {
+      "id": "qase-56",
+      "qase_id": 56,
+      "source": ".maestro/flows/statements/unread_same_physical_line.yaml",
+      "stage_flow": ".maestro-stage/flows/statements/unread_same_physical_line.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Actual parser emits two identical unread occurrences on physical line 31."
+    },
+    {
+      "id": "qase-28",
+      "qase_id": 28,
+      "source": ".maestro/flows/statements/upload_unreadable_fixed.yaml",
+      "stage_flow": ".maestro-stage/flows/statements/upload_unreadable_fixed.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real correction preserves account/FITID identity and resolves historical unread rows; upload date comes from runner."
+    },
+    {
+      "id": "qase-23",
+      "qase_id": 23,
+      "source": ".maestro/flows/statements/upload_no_description.yaml",
+      "stage_flow": ".maestro-stage/flows/statements/upload_no_description.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real OFX operation without NAME displays fallback title; fixed 7 October header replaces frozen yesterday."
+    },
+    {
+      "id": "qase-32",
+      "qase_id": 32,
+      "source": ".maestro/flows/statements/upload_unknown_codes.yaml",
+      "stage_flow": ".maestro-stage/flows/statements/upload_unknown_codes.yaml",
+      "layer": "maestro",
+      "status": "blocked",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "unknown_codes"
+      ],
+      "assertions": "Unknown notice and feature on real import terminal payload.",
+      "blocked_reason": "Unknown import notice and feature require a bounded transform of the real terminal import SSE; the current harness only transforms analytics."
+    },
+    {
+      "id": "qase-24",
+      "qase_id": 24,
+      "source": ".maestro/flows/assistant/chip_after_statements_deleted.yaml",
+      "stage_flow": ".maestro-stage/flows/assistant/chip_after_statements_deleted.yaml",
+      "layer": "maestro",
+      "status": "blocked",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [
+        "provider-expiring-merchant-selection"
+      ],
+      "assertions": "Real answer scope survives deletion of all owned uploads; stale selection fallback and empty ledger.",
+      "blocked_reason": "The deployed tools scenario returns category/all-time filters, not a verified expiring merchant selection. Removing uploads alone cannot prove the original stale-selection fallback."
+    },
+    {
+      "id": "qase-25",
+      "qase_id": 25,
+      "source": ".maestro/flows/assistant/retry_without_transfers.yaml",
+      "stage_flow": ".maestro-stage/flows/assistant/retry_without_transfers.yaml",
+      "layer": "maestro",
+      "status": "blocked",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "assistant_model_errors"
+      ],
+      "assertions": "Persisted model failure, retry and original transfer mode.",
+      "blocked_reason": "RetryAnswer must recover a persisted MODEL_ERROR using the original question and transfer mode; no run-scoped fail-once provider is available."
+    },
+    {
+      "id": "qase-26",
+      "qase_id": 26,
+      "source": ".maestro/flows/assistant/answer_retry.yaml",
+      "stage_flow": ".maestro-stage/flows/assistant/answer_retry.yaml",
+      "layer": "maestro",
+      "status": "blocked",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "assistant_model_errors",
+        "network_delay_ms"
+      ],
+      "assertions": "Persisted model failure, double retry and one charged result.",
+      "blocked_reason": "A real persisted failed answer must succeed on retry; a client-only SSE substitution cannot create that server state."
+    },
+    {
+      "id": "qase-39",
+      "qase_id": 39,
+      "source": ".maestro/flows/assistant/off_topic.yaml",
+      "stage_flow": ".maestro-stage/flows/assistant/off_topic.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [
+        "provider-fin362-off-topic"
+      ],
+      "assertions": "Real fake-LLM off_topic terminal outcome refunds quota, then real tool-backed answer."
+    },
+    {
+      "id": "qase-40",
+      "qase_id": 40,
+      "source": ".maestro/flows/assistant/answer_changed_since.yaml",
+      "stage_flow": ".maestro-stage/flows/assistant/answer_changed_since.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Real history changed_since tracks category change and upload deletion."
+    },
+    {
+      "id": "qase-42",
+      "qase_id": 42,
+      "source": ".maestro/flows/assistant/nothing_found_charged.yaml",
+      "stage_flow": ".maestro-stage/flows/assistant/nothing_found_charged.yaml",
+      "layer": "maestro",
+      "status": "blocked",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [],
+      "assertions": "Tool-backed no-results in covered period is charged.",
+      "blocked_reason": "The stage fake-LLM has no verified merchant-not-found tool scenario for a covered period; a synthetic answer cannot prove server charging."
+    },
+    {
+      "id": "qase-48",
+      "qase_id": 48,
+      "source": ".maestro/flows/errors/server_messages.yaml",
+      "stage_flow": ".maestro-stage/flows/errors/server_messages.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "error_operation",
+        "error_scenario"
+      ],
+      "assertions": "Closed malformed/unknown REST fixtures at profile PATCH exercise safe presentation."
+    },
+    {
+      "id": "qase-49",
+      "qase_id": 49,
+      "source": ".maestro/flows/assistant/off_topic_limit.yaml",
+      "stage_flow": ".maestro-stage/flows/assistant/off_topic_limit.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [
+        "provider-fin362-off-topic"
+      ],
+      "assertions": "Five real fake-LLM off_topic outcomes enforce actual rolling-window block; draft and daily quota remain."
+    },
+    {
+      "id": "qase-50",
+      "qase_id": 50,
+      "source": ".maestro/flows/errors/request_retry_false.yaml",
+      "stage_flow": ".maestro-stage/flows/errors/request_retry_false.yaml",
+      "layer": "maestro",
+      "status": "blocked",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "error_operation",
+        "error_scenario",
+        "expect_error_requests",
+        "assistant_model_errors"
+      ],
+      "assertions": "Retry prohibition counter plus persisted model-failure recovery.",
+      "blocked_reason": "The REST retryable=false portion is injectable, but the full original case also requires persisted MODEL_ERROR followed by a successful RetryAnswer."
+    },
+    {
+      "id": "qase-51",
+      "qase_id": 51,
+      "source": ".maestro/flows/statements/upload_restored_key.yaml",
+      "stage_flow": ".maestro-stage/flows/statements/upload_restored_key.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "pending_upload_fixture",
+        "expect_uploads"
+      ],
+      "assertions": "Closed local unknown-age upload-key seed; real GET count proves no automatic upload and exactly one explicit new intent."
+    },
+    {
+      "id": "qase-52",
+      "qase_id": 52,
+      "source": ".maestro/flows/assistant/retry_after_consent.yaml",
+      "stage_flow": ".maestro-stage/flows/assistant/retry_after_consent.yaml",
+      "layer": "maestro",
+      "status": "blocked",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "assistant_model_errors",
+        "network_delay_ms"
+      ],
+      "assertions": "Persisted failed question, consent correction and exactly one history question after retry.",
+      "blocked_reason": "The original failed question must persist across consent revoke, history read, regrant and successful RetryAnswer; no run-scoped fail-once provider exists."
+    },
+    {
+      "id": "qase-57",
+      "qase_id": 57,
+      "source": ".maestro/flows/auth/phone_confirmation_gates.yaml",
+      "stage_flow": ".maestro-stage/flows/auth/phone_confirmation_gates.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "call_delay_ms"
+      ],
+      "assertions": "Independent unchecked confirmations and returning from Call preserve valid choices; repeated helper is idempotent."
+    },
+    {
+      "id": "qase-58",
+      "qase_id": 58,
+      "source": ".maestro/flows/auth/phone_consent_recovery.yaml",
+      "stage_flow": ".maestro-stage/flows/auth/phone_consent_recovery.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "offline"
+      ],
+      "assertions": "Client network failures at public document GET and phone Start; explicit recovery uses real stage requests."
+    },
+    {
+      "id": "qase-59",
+      "qase_id": 59,
+      "source": ".maestro/flows/auth/phone_restart.yaml",
+      "stage_flow": ".maestro-stage/flows/auth/phone_restart.yaml",
+      "layer": "maestro",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "existing-seeded",
+      "requirements": [
+        "error_operation",
+        "error_scenario",
+        "expect_error_requests"
+      ],
+      "assertions": "Closed terminal Start refusal; explicit restart clears confirmations without another POST, then real login."
+    }
+  ],
+  "additional_cases": [
+    {
+      "id": "process-death-assistant",
+      "qase_id": null,
+      "source": null,
+      "stage_flow": null,
+      "layer": "maestro",
+      "status": "blocked",
+      "provenance": "real-stage",
+      "setup": "existing-seeded",
+      "requirements": [
+        "durable-in-flight-assistant-checkpoint"
+      ],
+      "blocked_reason": "A host checkpoint must kill the client after the real Ask was accepted but before its response reached the client, then reopen actual history without automatic POST; no such seam is implemented yet."
+    }
+  ],
+  "provider_scenarios": {
+    "sha256": "7d0b637f0c2d1f67293a1819fc93ce3d113c24ef468be9f44f449e3a578e7d5f",
+    "financial_question": "#FIN362_TOOLS Покажи доходы и расходы по моим данным.",
+    "analytics_question": "#FIN362_ANALYTICS",
+    "limit_question": "#FIN362_LIMIT",
+    "off_topic_question": "#FIN362_OFF_TOPIC",
+    "source": "FIN-362 stage fake-LLM acceptance scenarios; runtime must verify the configured revision before attributing provider outcomes."
+  }
+}

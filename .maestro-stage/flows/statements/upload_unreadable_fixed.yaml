@@ -1,0 +1,95 @@
+# FIN-386. Source: .maestro/flows/statements/upload_unreadable_fixed.yaml; Qase 28.
+# Real correction preserves account/FITID identity and resolves historical unread rows; upload date comes from runner.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Загрузка — исправленный файл дочитывает непрочитанные строки прошлой загрузки"
+tags:
+  - statements
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.unreadable.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result.empty"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.unread"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.unreadable-fixed.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- back
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- assertVisible:
+    id: "statements.history.resolved"
+- assertVisible: "Строки дочитаны в загрузке от ${STAGE_UPLOAD_DATE}"
+- assertNotVisible:
+    id: "statements.history.unread"

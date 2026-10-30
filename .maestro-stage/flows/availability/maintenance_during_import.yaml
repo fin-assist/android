@@ -1,0 +1,80 @@
+# FIN-386. Source: .maestro/flows/availability/maintenance_during_import.yaml; Qase 46.
+# Server import continues while client stream sees maintenance; real history has completed upload.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Техработы во время разбора выписки — переоткрытие потока получает 503, экран техработ поверх загрузки, после техработ выписка разобрана"
+tags:
+  - availability
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?stream_drops=1&stream_rate_limits=100&stream_retry_s=15"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload.busy"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "e2e.never"
+    timeout: 3000
+    optional: true
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=15"
+- extendedWaitUntil:
+    visible:
+      id: "availability.maintenance"
+    timeout: 30000
+- assertVisible: "Идут технические работы"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?maintenance=off&stream_rate_limits=0"
+- extendedWaitUntil:
+    notVisible:
+      id: "availability.maintenance"
+    timeout: 40000
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 15000
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+      index: 1
+    timeout: 15000
+- extendedWaitUntil:
+    notVisible: "Разбираем…"
+    timeout: 15000
+- assertVisible: "october.ofx"

@@ -1,0 +1,71 @@
+# FIN-386. Source: .maestro/flows/auth/call_stream_rate_limited.yaml; Qase 44.
+# Client delay/drop/429 of actual phone SSE; exact opening count and captured Retry-After.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] 429 на переоткрытие потока звонка — ожидание без сообщения RATE_LIMITED, вход продолжается"
+tags:
+  - auth
+---
+- runFlow: ../../subflows/clear_state.yaml
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 20000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_delay_ms=10000&stream_drops=1&stream_rate_limits=100&stream_retry_s=30"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "${STAGE_PHONE}"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "e2e.stream.rate_limited=1"
+    timeout: 10000
+- assertVisible:
+    id: "auth.call.dial"
+- assertNotVisible:
+    id: "ds.error.info"
+- assertNotVisible:
+    id: "ds.error.warning"
+- assertNotVisible:
+    id: "ds.error.error"
+- assertNotVisible: "Нет сети — не можем дождаться звонка. Проверьте интернет"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_stream_rate_limited_exact=1"
+- assertVisible:
+    id: "auth.call.dial"
+- assertVisible: "e2e.stream.rate_limited=1"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_stream_rate_limited_exact=1&stream_rate_limits=0"
+- extendedWaitUntil:
+    visible:
+      id: "applock.setup"
+    timeout: 45000
+- runFlow: ../../subflows/set_passcode.yaml
+- extendedWaitUntil:
+    visible:
+      id: "operations.row"
+    timeout: 40000

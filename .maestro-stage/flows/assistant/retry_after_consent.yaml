@@ -1,0 +1,127 @@
+# FIN-386. Source: .maestro/flows/assistant/retry_after_consent.yaml; Qase 52.
+# Persisted failed question, consent correction and exactly one history question after retry.
+# BLOCKED: The original failed question must persist across consent revoke, history read, regrant and successful RetryAnswer; no run-scoped fail-once provider exists.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Помощник — повтор ответа после нового согласия сохраняет исходный вопрос"
+tags:
+  - assistant
+---
+# This case is blocked; direct execution must fail instead of claiming coverage.
+- assertTrue: ${false}
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?assistant_model_errors=1&network_delay_ms=250"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Kaspersky"
+- hideKeyboard
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.failed.retry"
+    timeout: 20000
+- assertVisible: "Не получилось ответить. Вопрос не потрачен"
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
+
+- tapOn:
+    id: "ds.back"
+- tapOn:
+    id: "ds.tab.profile"
+- scrollUntilVisible:
+    element:
+      id: "profile.assistant.consent"
+    direction: DOWN
+- tapOn:
+    id: "profile.assistant.consent"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?network_delay_ms=250"
+- tapOn:
+    id: "profile.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer.failed.retry"
+    timeout: 15000
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
+
+- tapOn:
+    id: "assistant.answer.failed.retry"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 20000
+- assertVisible: ".*операций «Kaspersky» не нашли.*"
+- assertNotVisible:
+    id: "assistant.answer.failed"
+- assertNotVisible:
+    id: "assistant.chat.send_failed"
+- assertVisible: ".*[Оо]сталось 4 из 5.*"
+
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "profile.assistant"
+    timeout: 10000
+- tapOn:
+    id: "profile.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 15000
+- assertVisible:
+    id: "assistant.question"
+    index: 0
+- assertNotVisible:
+    id: "assistant.question"
+    index: 1
+- assertNotVisible:
+    id: "assistant.answer.failed"
+- assertVisible: ".*операций «Kaspersky» не нашли.*"
+- assertVisible: ".*[Оо]сталось 4 из 5.*"

@@ -1,0 +1,85 @@
+# FIN-386. Source: .maestro/flows/statements/upload_unreadable.yaml; Qase 22.
+# Real unread parser line numbers and reasons; history opens unread list.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Загрузка — ни одной прочитанной операции, непрочитанные строки видны и открываются списком"
+tags:
+  - statements
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
+
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.unreadable.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result.empty"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.unread"
+- assertVisible: "2.строки не прочитали — их нет в суммах.*"
+
+- back
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- assertVisible:
+    id: "statements.history.unread"
+- assertVisible: "Не прочитали 2.строки"
+- tapOn:
+    id: "statements.history.unread"
+- extendedWaitUntil:
+    visible:
+      id: "statements.unread"
+    timeout: 10000
+- assertVisible: "В файле .* эти строки не прочитали — их нет в суммах\\."
+- assertNotVisible: ".*Остальные операции загружены.*"
+- assertVisible: "Строка 31 · дата не прочитана"
+- assertVisible: "нет даты"
+- assertVisible: "Строка 38 · 5.октября"
+- assertVisible: "не распознали сумму"
+- assertVisible:
+    id: "statements.unread.report"
+- back
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
