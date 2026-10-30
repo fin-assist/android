@@ -381,6 +381,63 @@ class StageInterruptTest(unittest.TestCase):
         self.assertEqual(runs, 0)
         self.assertEqual(report["environment_failure"], "runner_interrupted")
 
+    def owned_pair(self, api):
+        phones = ("+70000001234", "+70000005678")
+        users = ("22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333")
+        api.unused.update(phones)
+        return [api.adopt_registration(phone, user) for phone, user in zip(phones, users)]
+
+    def test_cleanup_interrupt_records_current_and_remaining_owned_accounts_as_unverified(self):
+        api = FakeApi([])
+        accounts = self.owned_pair(api)
+        report = {"cleanup": []}
+        with patch.object(api, "delete_owned", side_effect=StageFailure("runner_interrupted")) as delete:
+            with self.assertRaisesRegex(StageFailure, "runner_interrupted"):
+                ui.cleanup_accounts(api, report, accounts, retain=False)
+        self.assertEqual(delete.call_count, 1)
+        self.assertEqual(len(report["cleanup"]), 2)
+        self.assertTrue(all(row["outcome"] == "cleanup_unverified" for row in report["cleanup"]))
+        self.assertTrue(all(not account.deleted for account in accounts))
+        self.assertEqual(api.calls, [])
+
+    def test_second_interrupt_in_final_cleanup_still_persists_the_final_failure_report(self):
+        api = FakeApi([])
+        accounts = self.owned_pair(api)
+        rows = [{"id": "qase-8", "qase_id": 8, "status": "ready", "layer": "maestro", "setup": "first-session-seeded", "provenance": "real-stage"},
+                {"id": "qase-9", "qase_id": 9, "status": "ready", "layer": "maestro", "setup": "first-session-seeded", "provenance": "real-stage"}]
+        prepared = {"account": None, "phone": accounts[0].phone, "new_phone": accounts[0].phone, "ready_at": 0, "new_account": True}
+        previous = {number: ui.signal.getsignal(number) for number in (ui.signal.SIGINT, ui.signal.SIGTERM)}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "app"
+            app.mkdir()
+            (app / "build.gradle.kts").write_text('val appVersionName = "0.2.16"\n')
+            apk = app / "build/outputs/apk/stage/e2e/app-stage-e2e.apk"
+            apk.parent.mkdir(parents=True)
+            apk.write_bytes(b"synthetic-apk-placeholder")
+            with patch.object(ui, "ROOT", root), patch.object(ui, "OUT", root / "build/stage-ui"), \
+                    patch.object(ui, "inventory", return_value={"cases": rows}), patch.object(ui, "StageApi", return_value=api), \
+                    patch.object(ui.shutil, "which", return_value="/synthetic/available"), \
+                    patch.object(ui, "command", return_value=(0, "")), patch.object(ui, "prepare_case", return_value=prepared), \
+                    patch.object(ui, "run_case", side_effect=StageFailure("runner_interrupted")) as run, \
+                    patch.object(api, "delete_owned", side_effect=StageFailure("runner_interrupted")) as delete:
+                with self.assertRaisesRegex(StageFailure, "runner_interrupted"):
+                    ui.main(["--no-build"])
+            report = json.loads((root / "build/stage-ui/report.json").read_text())
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(delete.call_count, 1)
+        self.assertEqual(report["environment_failure"], "runner_interrupted")
+        self.assertEqual(report["results"][0]["outcome"], "failed")
+        self.assertEqual(report["results"][0]["reason"], "runner_interrupted")
+        self.assertEqual(report["results"][1]["outcome"], "not_run")
+        self.assertEqual(len(report["cleanup"]), 2)
+        self.assertTrue(all(row["outcome"] == "cleanup_unverified" for row in report["cleanup"]))
+        self.assertTrue(all(not account.deleted for account in accounts))
+        self.assertIn("finished_at", report)
+        self.assertFalse(report["full_acceptance"])
+        self.assertEqual(previous, {number: ui.signal.getsignal(number) for number in previous})
+        self.assertEqual(api.calls, [])
+
     def test_interrupt_during_cleanup_is_not_reclassified_as_a_recoverable_failure(self):
         api = FakeApi(registration_replies())
         account = api.create()

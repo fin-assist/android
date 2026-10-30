@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import datetime as dt
 import fcntl
 import hashlib
@@ -468,19 +469,49 @@ def upload_date():
     return str(today.day) + ".*" + months[today.month - 1]
 
 
-def cleanup_accounts(api, report, accounts, retain, defer_new_sessions=False):
+@contextmanager
+def final_report_window():
+    """Protect only brief local bookkeeping/write; cleanup I/O stays interruptible and SIGKILL stays effective."""
+    previous = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        for number in previous:
+            signal.signal(number, signal.SIG_IGN)
+        yield
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
+def record_unverified_cleanup(report, accounts):
+    recorded = {row["account"] for row in report["cleanup"]}
     for account in accounts:
-        if defer_new_sessions and not account.access and not account.deleted and not retain:
-            continue
-        outcome = "retained"
-        if not retain:
-            try:
-                api.delete_owned(account)
-                outcome = "deleted"
-            except (StageFailure, OSError, KeyError, ValueError) as error:
-                raise_if_interrupted(error)
-                outcome = "cleanup_unverified"
-        report["cleanup"].append({"account": hashlib.sha256(account.user_id.encode()).hexdigest()[:12], "outcome": outcome})
+        identity = hashlib.sha256(account.user_id.encode()).hexdigest()[:12]
+        if identity not in recorded:
+            report["cleanup"].append({"account": identity, "outcome": "cleanup_unverified"})
+            recorded.add(identity)
+
+
+def cleanup_accounts(api, report, accounts, retain, defer_new_sessions=False):
+    accounts = list(accounts)
+    index = 0
+    try:
+        for index, account in enumerate(accounts):
+            if defer_new_sessions and not account.access and not account.deleted and not retain:
+                continue
+            outcome = "retained"
+            if not retain:
+                try:
+                    api.delete_owned(account)
+                    outcome = "deleted"
+                except (StageFailure, OSError, KeyError, ValueError) as error:
+                    raise_if_interrupted(error)
+                    outcome = "cleanup_unverified"
+            report["cleanup"].append({"account": hashlib.sha256(account.user_id.encode()).hexdigest()[:12], "outcome": outcome})
+    except StageFailure as error:
+        if is_runner_interrupted(error):
+            with final_report_window():
+                record_unverified_cleanup(report, accounts[index:])
+        raise
 
 
 def main(argv=None):
@@ -592,15 +623,28 @@ def main(argv=None):
     except StageFailure as error:
         report["environment_failure"] = str(error)
     finally:
-        recorded = {row["account"] for row in report["cleanup"]}
-        unrecorded = [account for account in api.owned if hashlib.sha256(account.user_id.encode()).hexdigest()[:12] not in recorded]
-        cleanup_accounts(api, report, unrecorded, args.retain_owned)
-        report["public_api_requests"] = api.requests
-        report["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
-        report["full_acceptance"] = (report["full_inventory"] and len(report["results"]) == len(rows)
-                                     and all(row["outcome"] == "passed" for row in report["results"])
-                                     and all(row["outcome"] == "deleted" for row in report["cleanup"]))
-        write_report(report)
+        try:
+            recorded = {row["account"] for row in report["cleanup"]}
+            unrecorded = [account for account in api.owned if hashlib.sha256(account.user_id.encode()).hexdigest()[:12] not in recorded]
+            cleanup_accounts(api, report, unrecorded, args.retain_owned)
+        except StageFailure as error:
+            if is_runner_interrupted(error):
+                with final_report_window():
+                    report["environment_failure"] = "runner_interrupted"
+                    record_unverified_cleanup(report, api.owned)
+            raise
+        finally:
+            with final_report_window():
+                if report.get("environment_failure") == "runner_interrupted":
+                    for row in report["results"]:
+                        if row["outcome"] == "running":
+                            row.update(outcome="failed", reason="runner_interrupted")
+                report["public_api_requests"] = api.requests
+                report["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+                report["full_acceptance"] = (not report.get("environment_failure") and report["full_inventory"] and len(report["results"]) == len(rows)
+                                             and all(row["outcome"] == "passed" for row in report["results"])
+                                             and all(row["outcome"] == "deleted" for row in report["cleanup"]))
+                write_report(report)
     return 0 if (all(row["outcome"] == "passed" for row in report["results"])
                  and not report.get("environment_failure")
                  and all(row["outcome"] != "cleanup_unverified" for row in report["cleanup"])) else 1
