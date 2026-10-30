@@ -48,7 +48,7 @@ import javax.inject.Inject
  * - `stream_drops=<n>` — the next n openings of an SSE stream (call, import progress, answer) close after their first
  *   event without a terminal one, as the server does on its own failure; the app re-opens them (FIN-170).
  * - `stream_rate_limits=<n>` — the next n openings that follow a dropped one answer 429 with `Retry-After: 3`; the app
- *   waits and re-opens again, without «Слишком много попыток» (FIN-170).
+ *   waits and re-opens again, without showing the server's RATE_LIMITED message (FIN-170, FIN-376).
  * - `stream_retry_s=<n>` — `Retry-After` of those 429 answers, seconds (a long one keeps the app waiting).
  * - `expect_stream_rate_limited=<n>` — a check, not a setting: the applied tag shows only if the fake server has
  *   already turned away at least n stream openings with 429; otherwise [TAG_UNMET] shows, and the flow fails on the
