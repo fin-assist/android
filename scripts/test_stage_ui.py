@@ -105,6 +105,38 @@ class StageOwnershipTest(unittest.TestCase):
             self.assertFalse(api.owned[0].deleted)
             self.assertEqual(api.calls, [])
 
+    def test_only_explicit_nonregistration_new_empty_case_can_pass_without_registration_receipt(self):
+        for expected in (False, True, None):
+            with self.subTest(registration_expected=expected), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                private = root / "private"
+                private.mkdir()
+                phone = "+70000001234"
+                api = FakeApi([])
+                api.unused.add(phone)
+                evidence = {"run_id": RUN, "has_client_injections": False, "counts": {"real_requests": 1}, "successful_registrations": []}
+                row = {"id": "qase-3", "status": "ready", "layer": "maestro", "setup": "new-empty",
+                       "provenance": "real-stage", "stage_flow": ".maestro-stage/flows/auth/phone_validation.yaml"}
+                if expected is not None:
+                    row["registration_expected"] = expected
+                args = SimpleNamespace(serial="emulator-5554", case_timeout=30, retain_owned=True)
+                prepared = {"account": None, "phone": phone, "new_phone": phone, "ready_at": 0, "new_account": True}
+
+                def fake_command(command, **kwargs):
+                    if command[0] == "maestro":
+                        Path(command[command.index("--output") + 1]).write_text('<testsuite><testcase name="stage"/></testsuite>')
+                    elif command[-1] == "files/stage-evidence.json":
+                        return 0, json.dumps(evidence)
+                    return 0, ""
+
+                with patch.object(ui, "ROOT", root), patch.object(ui, "OUT", root / "build/stage-ui"), patch.object(ui, "command", side_effect=fake_command):
+                    result = ui.run_case(row, api, args, private, prepared)
+                self.assertEqual(result["outcome"], "passed" if expected is False else "failed", result)
+                if expected is not False:
+                    self.assertEqual(result["reason"], "missing_new_registration_ownership")
+                self.assertEqual(api.owned, [])
+                self.assertEqual(api.calls, [])
+
     def test_registration_is_the_ownership_boundary(self):
         api = FakeApi(registration_replies())
         account = api.create()
@@ -277,20 +309,38 @@ class StageReportingTest(unittest.TestCase):
             with self.assertRaisesRegex(StageFailure, "conflicting_native_proof"):
                 ui.native_proof(text, RUN)
     def test_checkpoint_kills_only_the_background_client_before_response_delivery(self):
-        evidence = {"run_id": RUN, "counts": {"real_ask_requests": 1, "real_ask_accepted": 1, "ask_response_held": 1}}
+        evidence = {"run_id": RUN, "counts": {"real_ask_requests": 2, "real_ask_consent_required": 1, "real_ask_accepted": 1, "ask_response_held": 1}}
         replies = [(0, json.dumps(evidence)), (0, "4242\n"), (0, ""), (0, ""), (1, ""), (0, json.dumps(evidence))]
         with patch.object(ui, "command", side_effect=replies) as command:
             result = ui.process_death_checkpoint("emulator-5554", RUN)
         self.assertTrue(result["process_disappeared"])
         self.assertEqual(result["pid_before"], 4242)
+        self.assertEqual(result["requests_before_death"], 2)
+        self.assertEqual(result["consent_refusals_before_death"], 1)
         calls = [call.args[0] for call in command.call_args_list]
         self.assertTrue(any(call[-3:] == ["am", "kill", ui.APP] for call in calls))
         self.assertFalse(any("force-stop" in call for call in calls))
 
     def test_checkpoint_refuses_a_response_already_delivered_to_the_client(self):
-        evidence = {"run_id": RUN, "counts": {"real_ask_requests": 1, "real_ask_accepted": 1, "ask_response_held": 1, "ask_response_released": 1}}
+        evidence = {"run_id": RUN, "counts": {"real_ask_requests": 2, "real_ask_consent_required": 1, "real_ask_accepted": 1, "ask_response_held": 1, "ask_response_released": 1}}
         with patch.object(ui, "command", return_value=(0, json.dumps(evidence))) as command:
             with self.assertRaisesRegex(StageFailure, "already_delivered"):
+                ui.process_death_checkpoint("emulator-5554", RUN)
+        self.assertEqual(command.call_count, 1)
+
+    def test_checkpoint_rejects_an_extra_third_post_even_when_it_was_refused(self):
+        evidence = {"run_id": RUN, "counts": {"real_ask_requests": 3, "real_ask_consent_required": 1,
+                                             "real_ask_accepted": 1, "ask_response_held": 1}}
+        with patch.object(ui, "command", return_value=(0, json.dumps(evidence))) as command:
+            with self.assertRaisesRegex(StageFailure, "unexpected_ask_requests"):
+                ui.process_death_checkpoint("emulator-5554", RUN)
+        self.assertEqual(command.call_count, 1)
+
+    def test_checkpoint_never_treats_two_posts_without_the_exact_consent_refusal_as_valid(self):
+        evidence = {"run_id": RUN, "counts": {"real_ask_requests": 2, "real_ask_accepted": 1, "ask_response_held": 1}}
+        with patch.object(ui, "command", return_value=(0, json.dumps(evidence))) as command, \
+                patch.object(ui.time, "monotonic", side_effect=[0, 21]):
+            with self.assertRaisesRegex(StageFailure, "checkpoint_not_reached"):
                 ui.process_death_checkpoint("emulator-5554", RUN)
         self.assertEqual(command.call_count, 1)
 

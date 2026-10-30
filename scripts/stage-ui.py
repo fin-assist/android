@@ -184,10 +184,16 @@ def read_client_evidence(serial, run_id):
 
 def process_death_checkpoint(serial, run_id):
     deadline = time.monotonic() + 20
+    expected = {"real_ask_requests": 2, "real_ask_consent_required": 1, "real_ask_accepted": 1, "ask_response_held": 1}
     while True:
         evidence = read_client_evidence(serial, run_id)
         counts = evidence.get("counts", {})
-        if counts.get("real_ask_requests") == 1 and counts.get("real_ask_accepted") == 1 and counts.get("ask_response_held") == 1:
+        observed = {name: counts.get(name, 0) for name in expected}
+        if any(type(value) is not int or value < 0 for value in observed.values()):
+            raise StageFailure("invalid_ask_checkpoint_counts")
+        if any(observed[name] > maximum for name, maximum in expected.items()):
+            raise StageFailure("unexpected_ask_requests_before_checkpoint")
+        if observed == expected:
             break
         if time.monotonic() >= deadline:
             raise StageFailure("accepted_ask_checkpoint_not_reached")
@@ -214,6 +220,7 @@ def process_death_checkpoint(serial, run_id):
     if after.get("ask_response_released", 0) != 0:
         raise StageFailure("response_released_before_process_death")
     return {"pid_before": int(pid), "process_disappeared": True, "accepted_before_death": 1,
+            "requests_before_death": 2, "consent_refusals_before_death": 1,
             "response_delivered_before_death": False, "server_restarted": False}
 
 
@@ -372,7 +379,8 @@ def run_case(row, api, args, private, prepared=None):
                     raise StageFailure("required_transport_observation_missing")
             for registration in evidence.get("successful_registrations", []):
                 api.adopt_registration(registration["phone"], registration["user_id"])
-            if row.get("setup") == "new-empty" and not evidence.get("successful_registrations") and result["outcome"] == "passed":
+            if (row.get("setup") == "new-empty" and row.get("registration_expected", True)
+                    and not evidence.get("successful_registrations") and result["outcome"] == "passed"):
                 raise StageFailure("missing_new_registration_ownership")
             if evidence["has_client_injections"] and row["provenance"] == "real-stage":
                 raise StageFailure("undeclared_client_injection")
