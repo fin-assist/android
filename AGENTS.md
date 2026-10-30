@@ -57,6 +57,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Silent background profile-zone sync (FIN-345) | `feature/profile/impl/…/data/TimeZoneChecker.kt`, `ZoneSyncStateStore.kt`, `BootCounter.kt`; independent durable GET/PATCH advice and boot-bound waits — `docs/errors.md` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md` (mockups: Figma, exported by `design-check/export.py`), `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks (sign-in without the screens — `E2eSignIn`), native gaps, shards in CI, Qase | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/e2e-shards.py`, `scripts/qase-*` |
+| Read-only live SSE 429 marker, mockE2e only (FIN-380) | `app/src/mockE2e/…/E2eStreamProbe.kt`; wait for `e2e.stream.rate_limited=1` before opening a control link or checking absence of errors; `docs/e2e.md` |
 | Multiplatform readiness of `:core:api` and `:mock:backend`: rule, JVM-only inventory, check | `docs/kmp-readiness.md`; `scripts/check-kmp-ready.py`, `scripts/kmp-baseline.json` |
 | Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
 | UI test coverage: JaCoCo on the e2e build, scenario coverage of the flows | `docs/testing.md` («UI test coverage»); `:e2eCoverageReport` in root `build.gradle.kts`, `app/src/mockE2e/…/E2eCoverage.kt`, `scripts/ui-coverage.py` |
