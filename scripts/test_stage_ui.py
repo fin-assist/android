@@ -10,6 +10,7 @@ import unittest
 import urllib.error
 import urllib.request
 import uuid
+from types import SimpleNamespace
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
@@ -61,6 +62,49 @@ def registration_replies():
 
 
 class StageOwnershipTest(unittest.TestCase):
+    def test_retained_first_session_registration_never_sends_device_or_host_cleanup(self):
+        phone = "+70000001234"
+        user_id = "22222222-2222-4222-8222-222222222222"
+        api = FakeApi([])
+        api.unused.add(phone)
+        evidence = {"run_id": RUN, "has_client_injections": False, "counts": {"real_requests": 7},
+                    "successful_registrations": [{"phone": phone, "user_id": user_id}], "deleted_phones": []}
+        row = {"id": "qase-8", "source": ".maestro/flows/operations/feed_and_detail.yaml", "qase_id": 8,
+               "status": "ready", "layer": "maestro", "setup": "first-session-seeded", "provenance": "real-stage",
+               "stage_flow": ".maestro-stage/flows/operations/feed_and_detail.yaml"}
+        args = SimpleNamespace(serial="emulator-5554", case_timeout=30, retain_owned=True)
+        prepared = {"account": None, "phone": phone, "new_phone": phone, "ready_at": 0, "new_account": True}
+        commands = []
+
+        def fake_command(command, **kwargs):
+            commands.append(command)
+            if command[0] == "maestro":
+                Path(command[command.index("--output") + 1]).write_text('<testsuite><testcase name="stage"/></testsuite>')
+            elif command[-1] == "files/stage-evidence.json":
+                return 0, json.dumps(evidence)
+            elif command[-1] == "files/stage-control-status.json":
+                return 0, json.dumps({"run_id": RUN, "operation": "setup_run", "phase": "done", "outcome": "passed"})
+            return 0, ""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private = root / "private"
+            private.mkdir()
+            with patch.object(ui, "ROOT", root), patch.object(ui, "OUT", root / "build/stage-ui"), patch.object(ui, "command", side_effect=fake_command):
+                result = ui.run_case(row, api, args, private, prepared)
+            self.assertEqual(result["outcome"], "passed", result)
+            self.assertEqual(len(api.owned), 1)
+            self.assertEqual((api.owned[0].phone, api.owned[0].user_id), (phone, user_id))
+            self.assertFalse(api.owned[0].deleted)
+            self.assertFalse(any("cleanup_run=owned" in str(argument) for command in commands for argument in command))
+            report = {"cleanup": []}
+            with patch.object(api, "delete_owned") as delete:
+                ui.cleanup_accounts(api, report, api.owned, retain=True)
+                delete.assert_not_called()
+            self.assertEqual(report["cleanup"][0]["outcome"], "retained")
+            self.assertFalse(api.owned[0].deleted)
+            self.assertEqual(api.calls, [])
+
     def test_registration_is_the_ownership_boundary(self):
         api = FakeApi(registration_replies())
         account = api.create()

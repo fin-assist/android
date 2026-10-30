@@ -378,7 +378,7 @@ def run_case(row, api, args, private, prepared=None):
                 raise StageFailure("undeclared_client_injection")
             # Reuse the first session for cleanup too. A logout case may defer its cleanup to suite end.
             registered = {item["phone"] for item in evidence.get("successful_registrations", [])}
-            if registered:
+            if registered and not args.retain_owned:
                 cleanup_link = "pfe2e://config?cleanup_run=owned"
                 command(["adb", "-s", args.serial, "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "'" + cleanup_link + "'", "-p", APP], timeout=20)
                 deadline = time.monotonic() + 15
