@@ -95,10 +95,15 @@ abstract class GenerateNetworkSecurityConfig : DefaultTask() {
     @get:Optional
     abstract val pinsExpiration: Property<String>
 
+    /** Property name used in expiration diagnostics, including a re-check after configuration. */
+    @get:Input
+    abstract val pinsExpirationProperty: Property<String>
+
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
     init {
+        pinsExpirationProperty.convention(ApiPins.EXPIRATION_PROPERTY)
         outputs.upToDateWhen { !pinsExpiration.isPresent }
     }
 
@@ -106,7 +111,7 @@ abstract class GenerateNetworkSecurityConfig : DefaultTask() {
     fun generate() = generate(LocalDate.now())
 
     internal fun generate(today: LocalDate) {
-        pinsExpiration.orNull?.let { ApiPins.requireActive(LocalDate.parse(it), today) }
+        pinsExpiration.orNull?.let { ApiPins.requireActive(LocalDate.parse(it), today, pinsExpirationProperty.get()) }
         val dir = outputDir.get().asFile
         dir.deleteRecursively()
         val file = dir.resolve("xml/network_security_config.xml")

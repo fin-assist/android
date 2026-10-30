@@ -855,3 +855,11 @@ checks its rate-limit message while keeping draft, daily quota, history and retr
 Existing case IDs and `scripts/qase-cases.json` mappings are retained. The failed run is documented in
 [FIN-375](https://finassist.youtrack.cloud/issue/FIN-375); these corrections are authored without a new
 UI, Maestro, instrumented or DesignCheck run.
+
+
+Stage integration (FIN-385): the existing `mockE2e` harness replaces HTTP with `:mock:backend` and therefore
+cannot prove the installed `stage` flavor's real HTTPS/SSE path, server-side persistence or provider configuration.
+No stage e2e hooks are shipped. CI assembles both stage variants, checks identity/HTTPS/SDK separation and runtime
+classpaths; the existing HTTP/SSE unit suites cover the transport. The Android → public stage flow
+(synthetic auth → OFX → progress → operations/analytics → assistant) remains a separate device acceptance run;
+it was not executed for this build-environment change. This is not a new screen or a claim of stage UI coverage.

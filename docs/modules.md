@@ -7,10 +7,10 @@ implementations (Hilt). The rule is enforced at configuration time by `pf.module
 (`build-logic/convention/src/main/kotlin/ModuleRulesPlugin.kt`); a violation fails the build.
 
 ```
-app                       composition root: Hilt graph, NavHost, tabs, app-lock gate, update / maintenance overlay, SDK init, flavors mock/local/prod (dimension `env`)
+app                       composition root: Hilt graph, NavHost, tabs, app-lock gate, update / maintenance overlay, SDK init, flavors mock/local/stage/prod (dimension `env`)
 core/common               Money, dates/periods, AppError, safe error presentation, retry restrictions, server deadlines, Result helpers, ClientVersion and ServiceGate (JVM)
 core/api                  client API contract: DTOs + service interfaces from openapi.yaml (JVM)
-core/network              HTTP implementation of core/api: OkHttp, Retrofit, SSE, auth, idempotency (local, prod)
+core/network              HTTP implementation of core/api: OkHttp, Retrofit, SSE, auth, idempotency (local, stage, prod)
 core/designsystem         tokens, theme, components, chart animation (Compose)
 core/blocks               renderers of the block catalog (api.md «Блоки»): registry, `supports`, Analytics and assistant (Compose, FIN-7)
 core/navigation           FeatureEntry, Navigator, shared route arguments
@@ -20,9 +20,9 @@ core/storage              DataStore preferences + Tink-encrypted TokenStore (all
 core/screenshot-testing   design-check snapshot harness (Robolectric + Roborazzi); test-only dependency via `pf.screenshots`
 providers/toggles-local   flags from a JSON asset + debug overrides (mock, local)
 providers/tracking-log    logcat tracker (mock, local)
-providers/toggles-rustore RuStore Remote Config (prod, stage 8)
-providers/tracking-mytracker MyTracker events (prod, stage 8)
-providers/crash-tracer    Tracer crashes, ANR, non-fatals (mock, prod; off without `pf.tracerAppToken` and always in local)
+providers/toggles-rustore RuStore Remote Config (prod, stage; separate SDK keys)
+providers/tracking-mytracker MyTracker events (prod, stage; separate SDK keys)
+providers/crash-tracer    Tracer crashes, ANR, non-fatals (mock, stage, prod; stage-specific tokens; off without the environment app token and always in local)
 mock/backend              in-process fake backend on an OFX statement, implements core/api (mock flavor)
 feature/<name>/api        public surface of the feature (JVM)
 feature/<name>/impl       data / domain / ui + Hilt bindings (Android, Compose)
@@ -57,10 +57,11 @@ anything beyond `scripts/kmp-baseline.json`. Rule, check and inventory of what i
 |---|---|---|
 | `mock` | `:mock:backend`, `:providers:toggles-local`, `:providers:tracking-log` | `src/mock` (flags asset), `src/mockE2e` (UI-test hooks), `src/androidTestMock` |
 | `local` | `:core:network`, `:providers:toggles-local`, `:providers:tracking-log` | `src/local` (`LocalModule`: base URL, name), `src/localDebug` (network security config) |
+| `stage` | `:core:network`, `:providers:toggles-rustore`, `:providers:tracking-mytracker` | `src/stage` (`StageModule`, name); fixed HTTPS stage URL, separate `pf.stage…` SDK keys and optional stage-only pins |
 | `prod` | `:core:network`, `:providers:toggles-rustore`, `:providers:tracking-mytracker` | `src/prod` (`ProdModule`: base URL, SDK keys); with `pf.apiPins` — a generated network security config with a `pin-set` and its manifest overlay (`ApiPins` in build-logic, FIN-121) |
 
-`:mock:*` never reaches `local` or `prod` (`:app:checkNoMockCode` in CI checks every variant outside `mock`, so a new flavor is covered by itself). A future `stage` flavor follows `prod`.
-Variants that are off: `localE2e`, `prodE2e` (`androidComponents.beforeVariants` in `app/build.gradle.kts`).
+`:mock:*` never reaches `local`, `stage` or `prod` (`:app:checkNoMockCode` in CI checks every variant outside `mock`, so a new flavor is covered by itself). Stage follows prod with separate endpoint and SDK properties.
+Variants that are off: `localE2e`, `stageE2e`, `prodE2e` (`androidComponents.beforeVariants` in `app/build.gradle.kts`).
 
 ## Inside `:impl`
 

@@ -251,7 +251,7 @@ python3 scripts/ui-coverage.py summary            # Markdown to stdout; --summar
 
 ## Compose runtime dependency guard (FIN-185)
 
-The assemble CI job resolves `mockE2eRuntimeClasspath` and `prodReleaseRuntimeClasspath` before compilation:
+The assemble CI job resolves `mockE2eRuntimeClasspath`, `stageDebugRuntimeClasspath`, `stageReleaseRuntimeClasspath` and `prodReleaseRuntimeClasspath` before compilation:
 
 ```sh
 ./gradlew -I scripts/compose-classpath.init.gradle :app:composeClasspathReport --no-configuration-cache
@@ -268,3 +268,12 @@ closed. Errors include the configuration, coordinate, actual and expected versio
 The generated JSON lives under `app/build/reports/`. The one-off metadata task requires `--no-configuration-cache`;
 it does not compile the app or run tests. The Python guard's positive, negative and FIN-184 regression cases run
 with the other script tests in CI. This guard does not authorize Compose/AndroidX automerge or UI-test execution.
+
+
+### Stage build checks (FIN-385)
+
+CI assembles stageDebug and stageRelease, publishes `app-stage-debug`, validates stage version suffix/identity,
+fixed HTTPS endpoint and default-off SDKs, and tests stage/prod pin isolation on generated manifests/resources.
+Both stage debug and release guards are also run with production SDK sentinel properties and a different local backend URL;
+those must not enter the stage BuildConfig or enable Tracer. `:app:checkNoMockCode` checks both stage runtime
+classpaths. These are build/configuration checks, not a public-stage UI acceptance run (docs/e2e.md).

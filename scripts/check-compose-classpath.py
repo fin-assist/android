@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import sys
 
-CONFIGURATIONS = ('mockE2eRuntimeClasspath', 'prodReleaseRuntimeClasspath')
+CONFIGURATIONS = ('mockE2eRuntimeClasspath', 'stageDebugRuntimeClasspath', 'stageReleaseRuntimeClasspath', 'prodReleaseRuntimeClasspath')
 MODULES = ('androidx.compose.ui:ui', 'androidx.compose.foundation:foundation',
            'androidx.lifecycle:lifecycle-runtime')
 
@@ -51,7 +51,7 @@ def main():
               'Update the Compose/AndroidX stack together; do not force a transitive upgrade past its baseline.',
               file=sys.stderr)
         return 1
-    print('Compose UI, foundation and lifecycle match the isolated baseline in both runtime classpaths.')
+    print('Compose UI, foundation and lifecycle match the isolated baseline in every checked runtime classpath.')
     return 0
 
 

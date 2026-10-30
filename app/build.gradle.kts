@@ -17,6 +17,8 @@ plugins {
 // an app token the SDK is switched off in every variant (README, «Ключи SDK»).
 val tracerAppToken = secret("pf.tracerAppToken")
 val tracerPluginToken = secret("pf.tracerPluginToken")
+val stageTracerAppToken = secret("pf.stageTracerAppToken")
+val stageTracerPluginToken = secret("pf.stageTracerPluginToken")
 
 // Backend of the `local` flavor: `pf.apiBaseUrl`, by default bank-bff on the emulator's host (LocalBackend, FIN-120).
 // An invalid value fails the configuration with the reason.
@@ -29,15 +31,20 @@ val localNetworkSecurityConfig = tasks.register<GenerateNetworkSecurityConfig>("
 
 // Production API. A placeholder until there is a server (AGENTS.md «Flavors»).
 val prodBaseUrl = "https://api.example.ru/"
+val stageBaseUrl = "https://stage.plainfin.ru/"
 
 // Certificate pinning (FIN-121, ApiPins): `pf.apiPins` + `pf.apiPinsExpiration` (or PF_API_PINS and
 // PF_API_PINS_EXPIRATION in CI) pin the API host of the flavor. Without them the flavor has no network security
-// config, as before; a partial or invalid value fails the configuration with the reason. A future `stage` gets its own
-// properties and one more `pinnedFlavors` entry. The build date is a value source: a configuration cache entry from
+// config; a partial or invalid value fails configuration. Stage uses separate properties, never production pins.
+// The build date is a value source: a configuration cache entry from
 // another day is not reused, and the generator checks the date again when it runs.
 val buildDate: LocalDate = LocalDate.parse(providers.of(BuildDate::class.java) {}.get())
 val pinnedFlavors: Map<String, Pair<String, ApiPins.Pins?>> = mapOf(
     "prod" to (prodBaseUrl to ApiPins.parse(secret(ApiPins.PINS_PROPERTY), secret(ApiPins.EXPIRATION_PROPERTY), buildDate)),
+    "stage" to (stageBaseUrl to ApiPins.parse(
+        secret("pf.stageApiPins"), secret("pf.stageApiPinsExpiration"), buildDate,
+        pinsProperty = "pf.stageApiPins", expirationProperty = "pf.stageApiPinsExpiration",
+    )),
 )
 val pinningTasks = pinnedFlavors.mapNotNull { (flavor, environment) ->
     val (baseUrl, pins) = environment
@@ -46,6 +53,7 @@ val pinningTasks = pinnedFlavors.mapNotNull { (flavor, environment) ->
     val config = tasks.register<GenerateNetworkSecurityConfig>("generate${name}NetworkSecurityConfig") {
         config.set(ApiPins.networkSecurityConfig(ApiPins.host(baseUrl), pins))
         pinsExpiration.set(pins.expiration.toString())
+        pinsExpirationProperty.set(if (flavor == "stage") "pf.stageApiPinsExpiration" else ApiPins.EXPIRATION_PROPERTY)
     }
     val manifest = tasks.register<GeneratePinningManifest>("generate${name}PinningManifest")
     flavor to (config to manifest)
@@ -56,12 +64,12 @@ val pinningTasks = pinnedFlavors.mapNotNull { (flavor, environment) ->
 // environment such as `stage` is covered without a change here.
 val checkNoMockCode = tasks.register<CheckNoMockCode>("checkNoMockCode")
 
-// Version of the app = version of the release branch (`release/0.2.15` → 0.2.15), raised with every release branch.
+// Version of the app = version of the release branch (`release/0.2.16` → 0.2.16), raised with every release branch.
 // Build number: `PF_VERSION_CODE` — set by the build that goes to the stores; it must only grow across every published
 // build, which `GITHUB_RUN_NUMBER` does not guarantee (a counter per workflow; a re-run keeps it). Without it — the CI
 // run number (`GITHUB_RUN_NUMBER`, enough to tell builds apart in logs), 1 locally. Both go into `X-Client-Version`
-// (`android/0.2.15+41`, api.md «Заголовки», FIN-20/22).
-val appVersionName = "0.2.15"
+// (`android/0.2.16+41`, api.md «Заголовки», FIN-20/22).
+val appVersionName = "0.2.16"
 val appVersionCode = (System.getenv("PF_VERSION_CODE") ?: System.getenv("GITHUB_RUN_NUMBER"))?.toIntOrNull() ?: 1
 
 android {
@@ -86,8 +94,7 @@ android {
         manifestPlaceholders["tracerEnabled"] = tracerAppToken.isNotBlank()
     }
 
-    // One dimension `env`, one flavor per environment (FIN-120); dimensions are not multiplied. A stand will be one
-    // more flavor `stage`, built like `prod`.
+    // One dimension `env`, one flavor per environment (FIN-120/385); dimensions are not multiplied.
     // `mock`: in-process fake backend on an OFX statement, local toggles, logcat tracking — no SDK keys needed.
     // `local`: real HTTP client against a bank-bff on the developer's machine (`pf.apiBaseUrl`); local toggles and
     //   logcat tracking as in `mock` — no RuStore, MyTracker or Tracer, so nothing reaches production analytics,
@@ -95,7 +102,8 @@ android {
     //   generated security config).
     // `prod`: real HTTP client, RuStore Remote Config, MyTracker; certificate pinning of the API host when
     //   `pf.apiPins` is set (pinnedFlavors above, FIN-121).
-    // `mock` and `prod`: Tracer for crashes and ANR, when a token is set.
+    // `stage`: the same HTTP/SDK providers as prod, with its own endpoint, app id and optional SDK keys/pins.
+    // `mock` and `prod`: shared Tracer keys; `stage`: separate keys. Blank keys keep SDKs off.
     flavorDimensions += "env"
     productFlavors {
         create("mock") {
@@ -111,6 +119,16 @@ android {
             // Tracer stays off even with a token: crashes of a developer's backend runs do not belong in the console.
             buildConfigField("boolean", "CRASH_REPORTING_ENABLED", "false")
             manifestPlaceholders["tracerEnabled"] = false
+        }
+        create("stage") {
+            dimension = "env"
+            applicationIdSuffix = ".stage"
+            versionNameSuffix = "-stage"
+            buildConfigField("String", "API_BASE_URL", "\"$stageBaseUrl\"")
+            buildConfigField("String", "RUSTORE_REMOTE_CONFIG_APP_ID", "\"${secret("pf.stageRustoreRemoteConfigAppId")}\"")
+            buildConfigField("String", "MYTRACKER_SDK_KEY", "\"${secret("pf.stageMytrackerSdkKey")}\"")
+            buildConfigField("boolean", "CRASH_REPORTING_ENABLED", stageTracerAppToken.isNotBlank().toString())
+            manifestPlaceholders["tracerEnabled"] = stageTracerAppToken.isNotBlank()
         }
         create("prod") {
             dimension = "env"
@@ -168,8 +186,9 @@ android {
 }
 
 androidComponents {
-    // The e2e build type exists only for the fake backend: localE2e and prodE2e would have no test hooks to run against.
+    // The e2e build type exists only for the fake backend; HTTP flavors have no test hooks.
     beforeVariants(selector().withBuildType("e2e").withFlavor("env" to "local")) { it.enable = false }
+    beforeVariants(selector().withBuildType("e2e").withFlavor("env" to "stage")) { it.enable = false }
     beforeVariants(selector().withBuildType("e2e").withFlavor("env" to "prod")) { it.enable = false }
 
     onVariants { variant ->
@@ -215,6 +234,10 @@ dependencies {
     "localImplementation"(projects.core.network)
     "localImplementation"(projects.providers.togglesLocal)
     "localImplementation"(projects.providers.trackingLog)
+
+    "stageImplementation"(projects.core.network)
+    "stageImplementation"(projects.providers.togglesRustore)
+    "stageImplementation"(projects.providers.trackingMytracker)
 
     "prodImplementation"(projects.core.network)
     "prodImplementation"(projects.providers.togglesRustore)
@@ -263,6 +286,12 @@ tracer {
     create("local") {
         isDisabled = true
         uploadMapping = false
+    }
+    create("stage") {
+        isDisabled = stageTracerAppToken.isBlank()
+        appToken = stageTracerAppToken
+        pluginToken = stageTracerPluginToken
+        uploadMapping = stageTracerAppToken.isNotBlank() && stageTracerPluginToken.isNotBlank()
     }
 }
 

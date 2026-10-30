@@ -69,8 +69,8 @@ class ComposeClasspathTest(unittest.TestCase):
             result = subprocess.run([sys.executable, str(SCRIPT), str(path)],
                                     capture_output=True, text=True, timeout=10)
             self.assertEqual(0, result.returncode)
-            self.assertIn('both runtime classpaths', result.stdout)
-            report[guard.CONFIGURATIONS[1]]['resolved'][guard.MODULES[2]] = '2.10.0'
+            self.assertIn('every checked runtime classpath', result.stdout)
+            report['prodReleaseRuntimeClasspath']['resolved'][guard.MODULES[2]] = '2.10.0'
             path.write_text(json.dumps(report))
             result = subprocess.run([sys.executable, str(SCRIPT), str(path)],
                                     capture_output=True, text=True, timeout=10)

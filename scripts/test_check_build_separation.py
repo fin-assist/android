@@ -74,6 +74,62 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual(["no <application>"], module.release_problems(f"<manifest {NS}/>"))
 
 
+STAGE_MANIFEST = manifest().replace('package="ru.finassist.pf"', 'package="ru.finassist.pf.stage"')
+STAGE_CONFIG = '\n'.join([
+    'public static final String APPLICATION_ID = "ru.finassist.pf.stage";',
+    'public static final String API_BASE_URL = "https://stage.plainfin.ru/";',
+    'public static final String RUSTORE_REMOTE_CONFIG_APP_ID = "";',
+    'public static final String MYTRACKER_SDK_KEY = "";',
+    'public static final boolean CRASH_REPORTING_ENABLED = false;',
+    'public static final String E2E_NOW = "";',
+])
+
+
+class StageDefaultTest(unittest.TestCase):
+    def test_default_stage_passes(self):
+        self.assertEqual([], module.stage_default_problems(STAGE_MANIFEST, STAGE_CONFIG))
+
+    def test_http_wrong_host_or_path_fail(self):
+        for url in ['http://stage.plainfin.ru/', 'https://api.example.ru/', 'https://stage.plainfin.ru/v1/']:
+            with self.subTest(url=url):
+                config = STAGE_CONFIG.replace('https://stage.plainfin.ru/', url)
+                self.assertIn('stage API_BASE_URL must be https://stage.plainfin.ru/',
+                              module.stage_default_problems(STAGE_MANIFEST, config))
+
+    def test_shared_package_or_buildconfig_identity_fails(self):
+        self.assertTrue(module.stage_default_problems(manifest(), STAGE_CONFIG))
+        self.assertTrue(module.stage_default_problems(STAGE_MANIFEST,
+                        STAGE_CONFIG.replace('"ru.finassist.pf.stage"', '"ru.finassist.pf"')))
+
+    def test_production_sdk_values_fail_without_logging_them(self):
+        for field in ['RUSTORE_REMOTE_CONFIG_APP_ID', 'MYTRACKER_SDK_KEY']:
+            config = STAGE_CONFIG.replace(field + ' = ""', field + ' = "sensitive-sentinel"')
+            errors = module.stage_default_problems(STAGE_MANIFEST, config)
+            self.assertEqual(['unexpected default stage BuildConfig.' + field], errors)
+            self.assertNotIn('sensitive-sentinel', str(errors))
+
+    def test_tracer_or_pinned_clock_fails(self):
+        for before, after in [('CRASH_REPORTING_ENABLED = false', 'CRASH_REPORTING_ENABLED = true'),
+                              ('E2E_NOW = ""', 'E2E_NOW = "2026-10-08T12:00:00+03:00"')]:
+            self.assertTrue(module.stage_default_problems(STAGE_MANIFEST, STAGE_CONFIG.replace(before, after)))
+
+    def test_cleartext_custom_config_and_hooks_fail(self):
+        for xml in [STAGE_MANIFEST.replace('usesCleartextTraffic="false"', 'usesCleartextTraffic="true"'),
+                    STAGE_MANIFEST.replace('android:usesCleartextTraffic="false"', ''),
+                    STAGE_MANIFEST.replace('<application ', '<application android:networkSecurityConfig="@xml/network_security_config" '),
+                    STAGE_MANIFEST.replace('</application>', '<activity android:name="ru.finassist.pf.e2e.E2eControlActivity"/></application>')]:
+            self.assertTrue(module.stage_default_problems(xml, STAGE_CONFIG))
+
+    def test_missing_or_duplicate_fields_fail(self):
+        for config in ['', STAGE_CONFIG.replace('public static final String E2E_NOW = "";', ''),
+                       STAGE_CONFIG + '\npublic static final String MYTRACKER_SDK_KEY = "";']:
+            if not config:
+                with self.assertRaises(ValueError):
+                    module.stage_default_problems(STAGE_MANIFEST, config)
+            else:
+                self.assertTrue(module.stage_default_problems(STAGE_MANIFEST, config))
+
+
 class LocalDebugTest(unittest.TestCase):
     def test_one_cleartext_host_passes(self):
         self.assertEqual([], local_debug(LOCAL_MANIFEST, nsc(ONE_HOST)))
