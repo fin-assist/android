@@ -52,23 +52,28 @@ tags:
 - extendedWaitUntil:
     visible: "Август 2026"
     timeout: 10000
+# Wait for the response-backed selection, not tiles retained from the previous period.
+# FIN-391: Year -> Month remains a real failure until the period-key transition is fixed.
 - tapOn:
     id: "ds.segment.1"
 - extendedWaitUntil:
     visible:
-      id: "analytics.block.tiles"
+      id: "ds.segment.1"
+      checked: true
     timeout: 10000
 - tapOn:
     id: "ds.segment.2"
 - extendedWaitUntil:
     visible:
-      id: "analytics.block.tiles"
+      id: "ds.segment.2"
+      checked: true
     timeout: 10000
 - tapOn:
     id: "ds.segment.0"
 - extendedWaitUntil:
     visible:
-      id: "analytics.block.tiles"
+      id: "ds.segment.0"
+      checked: true
     timeout: 10000
 - runFlow:
     file: ../../subflows/select_fixture_month.yaml

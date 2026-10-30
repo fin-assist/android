@@ -27,6 +27,8 @@ Source inventory at Android commit `661ff373bfa6357597d1d0e054159d662612b1b2`: *
 
 The static OFX parser fixtures retain their dates and line numbers. Qase23 asserts **7 October** rather than the mock-only word “yesterday”; it still verifies the fallback title and absence of description. Qase28 compares the real upload date supplied by the host. Analytics chooses September/October 2026 explicitly from the period sheet instead of assuming a previous-month step relative to a frozen clock. The selected period must exist in the real list; a missing period is a failure, not a reason to inject a fabricated response.
 
+Qase10 waits for each period segment to become checked: the selected segment is rendered from the successful analytics response, whereas old tiles remain visible during loading and after a refusal. FIN-391 tracks the real Year → Month period-key failure; the scenario keeps failing on that transition and does not prescribe a month anchor. It selects September explicitly only after the Month response succeeds.
+
 ## Provider capabilities and provenance
 
 The audited stage provider file from FIN-362 is `fin362-scenarios.json`, SHA256 `7d0b637f0c2d1f67293a1819fc93ce3d113c24ef468be9f44f449e3a578e7d5f`. This identifies the expected fixture; the host must bind the actual deployed revision in the environment report and detect drift. The local source and historical operator report alone do not establish the current server configuration.
