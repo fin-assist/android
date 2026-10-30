@@ -35,11 +35,15 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "new-empty",
       "requirements": [
         "call_delay_ms"
       ],
-      "assertions": "Client-only verified-event delay preserves the Call UI for edit-number assertions; backend may already be VERIFIED."
+      "assertions": "New synthetic phone needs no registered account or seeded ledger: validate incomplete input, hold the real verification event on the client, inspect Call and return to phone editing without Register.",
+      "required_counts": {
+        "call_event_latency": 1
+      },
+      "registration_expected": false
     },
     {
       "id": "qase-4",
@@ -53,7 +57,10 @@
       "requirements": [
         "flag.auth.registration"
       ],
-      "assertions": "Local registration flag, separate new and precreated owned phones."
+      "assertions": "Local registration flag, separate new and precreated owned phones.",
+      "required_counts": {
+        "flag_override": 1
+      }
     },
     {
       "id": "qase-41",
@@ -87,7 +94,12 @@
         "stream_retry_s",
         "expect_stream_rate_limited_exact"
       ],
-      "assertions": "Client delay/drop/429 of actual phone SSE; exact opening count and captured Retry-After."
+      "assertions": "Client delay/drop/429 of actual phone SSE; exact opening count and captured Retry-After.",
+      "required_counts": {
+        "call_event_latency": 1,
+        "stream_drop": 1,
+        "stream_429": 1
+      }
     },
     {
       "id": "qase-5",
@@ -164,6 +176,7 @@
       ],
       "assertions": "UI preserves unknown expense_e2e in its scope/query; a labelled closed client peer maps only this code to real stage expense, retaining every other filter. This is not proof that stage accepts a new kind.",
       "required_counts": {
+        "analytics_response_transform": 1,
         "unknown_kind_requests": 1
       }
     },
@@ -174,12 +187,12 @@
       "stage_flow": ".maestro-stage/flows/operations/days_in_profile_zone.yaml",
       "layer": "maestro",
       "status": "ready",
-      "provenance": "client-injected",
+      "provenance": "real-stage",
       "setup": "first-session-seeded",
       "requirements": [
         "profile_timezone"
       ],
-      "assertions": "Real profile timezone PATCH and operation day grouping across midnight."
+      "assertions": "Real run-owned profile timezone PATCH and GET, followed by actual operation day grouping across midnight; no transport or response injection."
     },
     {
       "id": "qase-37",
@@ -220,7 +233,10 @@
         "flag.analytics.filter.transfers",
         "flag.assistant"
       ],
-      "assertions": "Local flags hide blocks, transfers and assistant while other real blocks remain."
+      "assertions": "Local flags hide blocks, transfers and assistant while other real blocks remain.",
+      "required_counts": {
+        "flag_override": 4
+      }
     },
     {
       "id": "qase-30",
@@ -234,7 +250,10 @@
       "requirements": [
         "failing_blocks"
       ],
-      "assertions": "Client transforms one real analytics block to unavailable; sibling blocks remain real."
+      "assertions": "Client transforms one real analytics block to unavailable; sibling blocks remain real.",
+      "required_counts": {
+        "analytics_response_transform": 1
+      }
     },
     {
       "id": "qase-31",
@@ -248,7 +267,10 @@
       "requirements": [
         "unknown_codes"
       ],
-      "assertions": "Client adds two closed unknown-code blocks to a real analytics payload."
+      "assertions": "Client adds two closed unknown-code blocks to a real analytics payload.",
+      "required_counts": {
+        "analytics_response_transform": 1
+      }
     },
     {
       "id": "qase-36",
@@ -379,7 +401,10 @@
       "requirements": [
         "network_delay_ms"
       ],
-      "assertions": "Only owned account is deleted; client latency exposes busy state and prevents Back dismissal."
+      "assertions": "Only owned account is deleted; client latency exposes busy state and prevents Back dismissal.",
+      "required_counts": {
+        "latency": 1
+      }
     },
     {
       "id": "qase-19",
@@ -393,7 +418,10 @@
       "requirements": [
         "offline"
       ],
-      "assertions": "Client transport failure on real analytics/profile; recovery rereads actual stage data."
+      "assertions": "Client transport failure on real analytics/profile; recovery rereads actual stage data.",
+      "required_counts": {
+        "offline": 2
+      }
     },
     {
       "id": "qase-43",
@@ -408,7 +436,11 @@
         "call_delay_ms",
         "stream_drops"
       ],
-      "assertions": "Client truncates three actual stage SSE streams; reopening returns real terminal outcomes."
+      "assertions": "Client truncates three actual stage SSE streams; reopening returns real terminal outcomes.",
+      "required_counts": {
+        "call_event_latency": 1,
+        "stream_drop": 6
+      }
     },
     {
       "id": "qase-33",
@@ -422,7 +454,10 @@
       "requirements": [
         "min_version"
       ],
-      "assertions": "Client injects version-unsupported wire error; global stage minimum stays unchanged."
+      "assertions": "Client injects version-unsupported wire error; global stage minimum stays unchanged.",
+      "required_counts": {
+        "update_required": 1
+      }
     },
     {
       "id": "qase-34",
@@ -437,7 +472,10 @@
         "maintenance",
         "maintenance_retry_after"
       ],
-      "assertions": "Client injects maintenance and Retry-After; captured deadline survives later controls; real availability GET on recovery."
+      "assertions": "Client injects maintenance and Retry-After; captured deadline survives later controls; real availability GET on recovery.",
+      "required_counts": {
+        "maintenance": 2
+      }
     },
     {
       "id": "qase-35",
@@ -452,7 +490,10 @@
         "maintenance",
         "maintenance_retry_after"
       ],
-      "assertions": "Client maintenance refusal during login, unknown end time."
+      "assertions": "Client maintenance refusal during login, unknown end time.",
+      "required_counts": {
+        "maintenance": 1
+      }
     },
     {
       "id": "qase-46",
@@ -470,7 +511,12 @@
         "maintenance",
         "maintenance_retry_after"
       ],
-      "assertions": "Server import continues while client stream sees maintenance; real history has completed upload."
+      "assertions": "Server import continues while client stream sees maintenance; real history has completed upload.",
+      "required_counts": {
+        "stream_drop": 1,
+        "stream_429": 1,
+        "maintenance": 1
+      }
     },
     {
       "id": "qase-20",
@@ -484,7 +530,10 @@
       "requirements": [
         "offline"
       ],
-      "assertions": "Real first answer, client transport outage, real second charged answer and quota."
+      "assertions": "Real first answer, client transport outage, real second charged answer and quota.",
+      "required_counts": {
+        "offline": 1
+      }
     },
     {
       "id": "qase-21",
@@ -498,7 +547,10 @@
       "requirements": [
         "offline"
       ],
-      "assertions": "Client transport failure before upload; retry uses real stage import."
+      "assertions": "Client transport failure before upload; retry uses real stage import.",
+      "required_counts": {
+        "offline": 1
+      }
     },
     {
       "id": "qase-45",
@@ -515,7 +567,11 @@
         "stream_retry_s",
         "expect_stream_rate_limited_exact"
       ],
-      "assertions": "Real import; client stream 429 deadline survives Home/resume before real terminal result."
+      "assertions": "Real import; client stream 429 deadline survives Home/resume before real terminal result.",
+      "required_counts": {
+        "stream_drop": 1,
+        "stream_429": 1
+      }
     },
     {
       "id": "qase-22",
@@ -681,7 +737,10 @@
         "error_operation",
         "error_scenario"
       ],
-      "assertions": "Closed malformed/unknown REST fixtures at profile PATCH exercise safe presentation."
+      "assertions": "Closed malformed/unknown REST fixtures at profile PATCH exercise safe presentation.",
+      "required_counts": {
+        "error_requests": 4
+      }
     },
     {
       "id": "qase-49",
@@ -728,7 +787,10 @@
         "pending_upload_fixture",
         "expect_uploads"
       ],
-      "assertions": "Closed local unknown-age upload-key seed; real GET count proves no automatic upload and exactly one explicit new intent."
+      "assertions": "Closed local unknown-age upload-key seed; real GET count proves no automatic upload and exactly one explicit new intent.",
+      "required_counts": {
+        "pending_upload_seed": 1
+      }
     },
     {
       "id": "qase-52",
@@ -758,7 +820,10 @@
       "requirements": [
         "call_delay_ms"
       ],
-      "assertions": "Independent unchecked confirmations and returning from Call preserve valid choices; repeated helper is idempotent."
+      "assertions": "Independent unchecked confirmations and returning from Call preserve valid choices; repeated helper is idempotent.",
+      "required_counts": {
+        "call_event_latency": 1
+      }
     },
     {
       "id": "qase-58",
@@ -772,7 +837,10 @@
       "requirements": [
         "offline"
       ],
-      "assertions": "Client network failures at public document GET and phone Start; explicit recovery uses real stage requests."
+      "assertions": "Client network failures at public document GET and phone Start; explicit recovery uses real stage requests.",
+      "required_counts": {
+        "offline": 2
+      }
     },
     {
       "id": "qase-59",
@@ -788,7 +856,10 @@
         "error_scenario",
         "expect_error_requests"
       ],
-      "assertions": "Closed terminal Start refusal; explicit restart clears confirmations without another POST, then real login."
+      "assertions": "Closed terminal Start refusal; explicit restart clears confirmations without another POST, then real login.",
+      "required_counts": {
+        "error_requests": 1
+      }
     }
   ],
   "additional_cases": [
@@ -806,7 +877,12 @@
         "host-process-death-checkpoint"
       ],
       "before_flow": ".maestro-stage/checkpoints/assistant_process_death_before.yaml",
-      "after_flow": ".maestro-stage/checkpoints/assistant_process_death_after.yaml"
+      "after_flow": ".maestro-stage/checkpoints/assistant_process_death_after.yaml",
+      "required_counts": {
+        "real_ask_requests": 1,
+        "real_ask_accepted": 1,
+        "ask_response_held": 1
+      }
     }
   ],
   "provider_scenarios": {

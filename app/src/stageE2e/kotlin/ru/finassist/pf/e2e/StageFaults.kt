@@ -91,6 +91,13 @@ class StageFaults @Inject constructor(
     @Synchronized
     fun count(name: String): Int = counts[name] ?: 0
 
+    /** Called only after the corresponding local control has been applied successfully. */
+    fun flagOverrideApplied() = record("flag_override")
+
+    fun flagsResetApplied() = record("flags_reset")
+
+    fun pendingUploadSeeded() = record("pending_upload_seed")
+
     @Synchronized
     fun canCleanup(phone: String, userId: String): Boolean {
         val run = runs.read()

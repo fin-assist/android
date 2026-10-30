@@ -71,7 +71,7 @@ A `client-injected` case still makes real stage calls outside its explicitly con
 | 24 | `assistant/chip_after_statements_deleted.yaml` | blocked | real-stage | Real answer scope survives deletion of all owned uploads; stale selection fallback and empty ledger. |
 | 25 | `assistant/retry_without_transfers.yaml` | blocked | client-injected | Persisted model failure, retry and original transfer mode. |
 | 26 | `assistant/answer_retry.yaml` | blocked | client-injected | Persisted model failure, double retry and one charged result. |
-| 27 | `operations/days_in_profile_zone.yaml` | ready | client-injected | Real profile timezone PATCH and operation day grouping across midnight. |
+| 27 | `operations/days_in_profile_zone.yaml` | ready | real-stage | Real owned-profile PATCH/GET changes timezone; actual operation day grouping crosses midnight. No response/transport substitution. |
 | 28 | `statements/upload_unreadable_fixed.yaml` | ready | real-stage | Real correction preserves account/FITID identity and resolves historical unread rows; upload date comes from runner. |
 | 29 | `operations/unknown_filter_kind.yaml` | ready | client-injected | Closed client compatibility peer observes the intact unknown expense kind, then maps only that alias to the real expense query with every other scope/filter retained. Does not prove live-server support for a new kind. |
 | 30 | `analytics/block_unavailable.yaml` | ready | client-injected | Client transforms one real analytics block to unavailable; sibling blocks remain real. |
@@ -143,3 +143,21 @@ events and framing, validates the original `ImportResult`, then appends the two 
 The actual import, amounts, counters, accounts, currency, coverage and IDs are not fabricated. Malformed/error responses
 never become success; oversize frames fail safely. `required_counts.import_response_transform` proves the transformed
 terminal payload was consumed rather than merely configuring the fixture. Neither fixture establishes a provider fault.
+
+## Required observations for client controls
+
+Every ready `client-injected` row declares positive `required_counts` for each effect it needs.
+The runner and aggregate report reject a green assertion result when the transport/local-control
+observation is missing; configuring a control, recording unrelated traffic or merely setting
+`has_client_injections` cannot satisfy it. The inventory contract also rejects a missing or weakened
+observation declaration. Qase43 requires six actual stream drops (two in each of phone, import and
+assistant), Qase48 four injected PATCH refusals, and Qase11 four applied flag overrides.
+
+Local flag overrides/reset and the unknown-age upload-key seed record their own observations only
+after the DataStore/key operation succeeds. Fault cleanup does not generate these observations.
+Qase27 is `real-stage`: the control performs the actual scoped profile PATCH, followed by actual GET
+and UI grouping assertions, rather than a fake timezone response.
+
+Qase3 uses `new-empty` with `registration_expected:false`: its first Start only reaches Call and returns to phone
+editing. It never registers, reads an account or needs a baseline ledger. The ordinary `new-empty` registration
+case still requires a correlated successful Register receipt; this exception does not relax that ownership check.

@@ -22,7 +22,8 @@ def expected_case(identifier="qase-8", layer="maestro", status="ready"):
     if layer == "checkpoint":
         source, qase = ".maestro-stage/flows/assistant/process_death.yaml", 60
     return {"id": identifier, "source": source, "qase_id": qase, "layer": layer, "status": status,
-            "provenance": "client-injected" if layer == "checkpoint" else "real-stage", "blocked_reason": "server_capability_missing"}
+            "provenance": "client-injected" if layer == "checkpoint" else "real-stage", "blocked_reason": "server_capability_missing",
+            "required_counts": {"real_ask_requests": 1, "real_ask_accepted": 1, "ask_response_held": 1} if layer == "checkpoint" else {}}
 
 
 def result(case):
@@ -147,6 +148,42 @@ class AggregateTests(unittest.TestCase):
             combined=self.merge([worker([row])], [case])
             self.assertFalse(combined["full_acceptance"])
             self.assertIn("invalid_required_counts", combined["results"][0]["validation_errors"])
+
+    def test_every_ready_injected_case_has_complete_observation_contract(self):
+        _, cases=reports.load_manifest()
+        for case in cases:
+            if case["status"] != "ready" or case["provenance"] != "client-injected":continue
+            with self.subTest(case=case["id"]):
+                self.assertEqual(reports.observation_contract_problems(case), [])
+                without=copy.deepcopy(case);without.pop("required_counts")
+                self.assertTrue(reports.observation_contract_problems(without))
+                unobserved=result(case)
+                unobserved["client_evidence"]={"has_client_injections": True, "counts": {"real_requests": 7}}
+                self.assertTrue(reports.case_problems(unobserved, case))
+                for name in case["required_counts"]:
+                    weak=copy.deepcopy(case);weak["required_counts"][name]=0
+                    self.assertTrue(reports.observation_contract_problems(weak), (case["id"],name))
+
+    def test_three_stream_drop_phases_require_six_actual_drops(self):
+        _, cases=reports.load_manifest()
+        case=next(case for case in cases if case["qase_id"]==43)
+        self.assertEqual(case["required_counts"]["stream_drop"], 6)
+        row=result(case)
+        row["client_evidence"]["counts"]["stream_drop"]=5
+        self.assertIn("required_count_not_observed:stream_drop", reports.case_problems(row, case))
+        weakened=copy.deepcopy(case);weakened["required_counts"]["stream_drop"]=1
+        self.assertIn("observation_contract_too_weak:stream_drop", reports.case_problems(result(weakened), weakened))
+
+    def test_timezone_patch_is_real_stage_and_flag_controls_are_not(self):
+        _, cases=reports.load_manifest()
+        timezone=next(case for case in cases if case["qase_id"]==27)
+        self.assertEqual(timezone["provenance"], "real-stage")
+        self.assertEqual(reports.observation_contract_problems(timezone), [])
+        flags=copy.deepcopy(next(case for case in cases if case["qase_id"]==11))
+        self.assertEqual(flags["required_counts"]["flag_override"], 4)
+        flags["provenance"]="real-stage"
+        self.assertIn("injection_controls_declared_real_stage", reports.observation_contract_problems(flags))
+        self.assertEqual(next(case for case in cases if case["qase_id"]==51)["required_counts"]["pending_upload_seed"], 1)
 
     def test_process_death_requires_real_death_and_no_second_post(self):
         for mutation in ("extra_post", "missing_sent_counter", "invalid_counts", "no_checkpoint", "released", "not_dead"):

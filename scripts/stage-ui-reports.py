@@ -20,6 +20,55 @@ ENVIRONMENT = "https://stage.plainfin.ru/"
 PUBLIC_EXTENSIONS = {".png", ".json", ".xml", ".txt", ".log", ".yaml", ".yml"}
 OUTCOMES = {"passed", "failed", "blocked", "not_run", "running", "missing", "cancelled", "timed_out"}
 
+# These observe the effect of a control, not its configuration or a generic successful request.
+CONTROL_COUNTERS = {
+    "offline": "offline", "network_delay_ms": "latency", "call_delay_ms": "call_event_latency",
+    "stream_drops": "stream_drop", "stream_rate_limits": "stream_429", "stream_retry_s": "stream_429",
+    "error_operation": "error_requests", "error_scenario": "error_requests",
+    "maintenance": "maintenance", "maintenance_retry_after": "maintenance",
+    "min_version": "update_required", "failing_blocks": "analytics_response_transform",
+    "flags": "flags_reset", "pending_upload_fixture": "pending_upload_seed",
+    "hold_ask_response_ms": "ask_response_held",
+}
+UNKNOWN_CODE_COUNTERS = {
+    29: {"analytics_response_transform": 1, "unknown_kind_requests": 1},
+    31: {"analytics_response_transform": 1}, 32: {"import_response_transform": 1},
+}
+SCENARIO_OBSERVATIONS = {
+    19: {"offline": 2}, 34: {"maintenance": 2}, 43: {"stream_drop": 6},
+    48: {"error_requests": 4}, 58: {"offline": 2},
+    60: {"real_ask_requests": 1, "real_ask_accepted": 1, "ask_response_held": 1},
+}
+
+
+def observation_contract_problems(case):
+    if case["status"] != "ready":
+        return []
+    required = case.get("required_counts", {})
+    if not isinstance(required, dict) or any(
+            not isinstance(key, str) or not re.fullmatch(r"[a-z_0-9]+", key)
+            or type(value) is not int or value < 0 for key, value in required.items()):
+        return ["invalid_required_counts"]
+    needed = {}
+    for control in case.get("requirements", []):
+        if control.startswith("flag."):
+            needed["flag_override"] = needed.get("flag_override", 0) + 1
+        elif control == "unknown_codes":
+            if case["qase_id"] not in UNKNOWN_CODE_COUNTERS:
+                return ["unknown_code_observation_contract_missing"]
+            needed.update(UNKNOWN_CODE_COUNTERS[case["qase_id"]])
+        elif control in CONTROL_COUNTERS:
+            needed[CONTROL_COUNTERS[control]] = max(needed.get(CONTROL_COUNTERS[control], 0), 1)
+    if case["provenance"] == "client-injected":
+        for key, value in SCENARIO_OBSERVATIONS.get(case["qase_id"], {}).items():
+            needed[key] = max(needed.get(key, 0), value)
+        known = set(CONTROL_COUNTERS.values()) | {"flag_override", "unknown_kind_requests", "import_response_transform"}
+        if not any(key in known and value > 0 for key, value in required.items()):
+            return ["client_injection_observation_contract_missing"]
+    elif needed:
+        return ["injection_controls_declared_real_stage"]
+    return ["observation_contract_too_weak:" + key for key, value in needed.items() if required.get(key, 0) < value]
+
 
 def canonical_uuid(value):
     try:
@@ -35,6 +84,8 @@ def load_manifest():
     if (len({row["id"] for row in rows}) != len(rows)
             or {row["source"]: row["qase_id"] for row in rows} != mapping):
         raise ValueError("invalid_stage_inventory")
+    if any(observation_contract_problems(row) for row in rows):
+        raise ValueError("invalid_stage_observation_contract")
     return manifest, rows
 
 
@@ -84,6 +135,7 @@ def case_problems(row, expected):
     if row.get("outcome") == "passed":
         if expected["status"] != "ready":
             problems.append("blocked_case_claimed_passed")
+        problems.extend(observation_contract_problems(expected))
         evidence = row.get("client_evidence")
         if not valid_counts(evidence):
             problems.append("missing_or_invalid_client_evidence")

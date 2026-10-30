@@ -128,8 +128,14 @@ class StageControlActivity : ComponentActivity() {
         })
         controls.forEach { (name, value) ->
             when {
-                name == "flags" -> overrides.clear()
-                name.startsWith("flag.") -> overrides.set(Flag.byKey(name.removePrefix("flag."))!!, value.toBooleanStrictOrNull())
+                name == "flags" -> {
+                    overrides.clear()
+                    faults.flagsResetApplied()
+                }
+                name.startsWith("flag.") -> {
+                    overrides.set(Flag.byKey(name.removePrefix("flag."))!!, value.toBooleanStrictOrNull())
+                    faults.flagOverrideApplied()
+                }
             }
         }
         controls["setup_run"]?.let { mode ->
@@ -187,5 +193,6 @@ class StageControlActivity : ComponentActivity() {
             update(digest.digest()); update("october.ofx".toByteArray(Charsets.UTF_8))
         }.digest().joinToString("") { "%02x".format(it) }
         keys.keyFor("statements.upload:$hash")
+        faults.pendingUploadSeeded()
     }
 }
