@@ -227,6 +227,38 @@ class StageTransportTest(unittest.TestCase):
 
 
 class StageReportingTest(unittest.TestCase):
+    def test_prepare_report_and_preparation_failures_preserve_all_original_case_identities(self):
+        manifest = json.loads((ui.ROOT / "scripts/stage-cases.json").read_text())
+        rows = manifest["cases"] + manifest.get("additional_cases", [])
+        identities = {row["id"]: row.get("qase_id") for row in rows}
+        for argv, expected_exit in ((["--prepare-report"], 0), (["--no-build"], 1)):
+            with self.subTest(argv=argv), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                app = root / "app"
+                app.mkdir()
+                (app / "build.gradle.kts").write_text('val appVersionName = "0.2.16"\n')
+                apk = app / "build/outputs/apk/stage/e2e/app-stage-e2e.apk"
+                apk.parent.mkdir(parents=True)
+                apk.write_bytes(b"synthetic-apk-placeholder")
+                api = FakeApi([])
+                with patch.object(ui, "ROOT", root), patch.object(ui, "OUT", root / "build/stage-ui"), \
+                        patch.object(ui, "inventory", return_value=manifest), patch.object(ui, "StageApi", return_value=api), \
+                        patch.object(ui.shutil, "which", return_value="/synthetic/available"), \
+                        patch.object(ui, "command", return_value=(0, "")), \
+                        patch.object(ui, "prepare_case", side_effect=StageFailure("synthetic_preparation_failure")):
+                    self.assertEqual(ui.main(argv), expected_exit)
+                report = json.loads((root / "build/stage-ui/report.json").read_text())
+                self.assertEqual({item["id"]: item.get("qase_id") for item in report["results"]}, identities)
+                if "--prepare-report" in argv:
+                    self.assertTrue(all(item["outcome"] == "not_run" for item in report["results"]))
+                else:
+                    for item, row in zip(report["results"], rows):
+                        if row["status"] == "ready":
+                            self.assertEqual(item["outcome"], "failed")
+                            self.assertEqual(item["reason"], "synthetic_preparation_failure")
+                self.assertFalse(report["full_acceptance"])
+                self.assertEqual(api.calls, [])
+
     def test_native_stream_proof_is_run_scoped_and_does_not_accept_private_fields(self):
         proof = {"schema_version": 1, "run_id": RUN, "has_client_injections": False, "counts": {"real_requests": 7}}
         with tempfile.TemporaryDirectory() as directory, patch.object(ui, "ROOT", Path(directory)):

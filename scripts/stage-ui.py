@@ -480,7 +480,7 @@ def main(argv=None):
     report["provider_scenarios_expected_sha256"] = manifest.get("provider_scenarios", {}).get("sha256")
     report["provider_scenarios_runtime_sha256_verified"] = False
     for row in rows:
-        report["results"].append({key: row[key] for key in ("id", "source", "provenance") if key in row} |
+        report["results"].append({key: row[key] for key in ("id", "source", "qase_id", "provenance") if key in row} |
                                  {"outcome": "not_run", "reason": "runner_did_not_reach_case"})
     write_report(report)
     if args.prepare_report:
