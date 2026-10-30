@@ -92,6 +92,21 @@ class StageFaults @Inject constructor(
     fun count(name: String): Int = counts[name] ?: 0
 
     @Synchronized
+    fun canCleanup(phone: String, userId: String): Boolean {
+        val run = runs.read()
+        return (phone == run.phone || phone == run.new_phone) && registrations.any {
+            it["phone"]?.jsonPrimitive?.content == phone && it["user_id"]?.jsonPrimitive?.content == userId
+        }
+    }
+
+    @Synchronized
+    fun clearForCleanup() {
+        settings.clear()
+        afterDrop = false
+        saveSettings()
+    }
+
+    @Synchronized
     private fun value(name: String, default: String = ""): String = settings[name] ?: default
 
     @Synchronized
@@ -237,6 +252,7 @@ class StageFaults @Inject constructor(
                     Thread.currentThread().interrupt()
                     throw IOException("Stage UI Ask response hold interrupted")
                 }
+                record("ask_response_released")
             }
         }
         if (request.method == "DELETE" && request.url.encodedPath == "/v1/profile" && result.code in setOf(200, 204)) {
@@ -265,7 +281,10 @@ class StageFaults @Inject constructor(
             return result.newBuilder().body("".toResponseBody("text/event-stream".toMediaType())).build()
         }
         if (result.isSuccessful && request.url.encodedPath == "/v1/auth/phone/events") {
-            result = result.newBuilder().body(authEvidence.observe(checkNotNull(result.body), checkNotNull(request.header("X-Verification-Token")))).build()
+            result = result.newBuilder().body(authEvidence.observe(
+                checkNotNull(result.body), checkNotNull(request.header("X-Verification-Token")),
+                setOfNotNull(run.phone.takeIf { run.new_account }, run.new_phone),
+            )).build()
         }
         if (result.isSuccessful && request.url.encodedPath == "/v1/analytics" &&
             (value("unknown_codes") == "true" || value("failing_blocks").isNotEmpty())) {

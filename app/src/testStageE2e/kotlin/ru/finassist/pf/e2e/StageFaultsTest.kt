@@ -121,6 +121,9 @@ class StageFaultsTest {
         responseText = """{"user_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}"""
         post("/v1/auth/register", """{"registration_token":"registration-secret"}""").close()
         val evidence = File(context.filesDir, "stage-evidence.json").readText()
+        assertTrue(faults.canCleanup("+70000001234", "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"))
+        assertFalse(faults.canCleanup("+70000001234", "foreign-user"))
+        assertFalse(faults.canCleanup("+70000009999", "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"))
         assertTrue(evidence.contains("+70000001234"))
         assertTrue(evidence.contains("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"))
         assertFalse(evidence.contains("verification-secret"))
@@ -189,6 +192,7 @@ class StageFaultsTest {
             while (faults.count("ask_response_held") == 0 && System.nanoTime() < deadline) Thread.sleep(5)
             assertEquals(1, faults.count("ask_response_held"))
             assertEquals(1, faults.count("real_ask_accepted"))
+            assertEquals(0, faults.count("ask_response_released"))
             assertFalse(returned.get())
             val restarted = StageFaults(context, store)
             assertEquals(1, restarted.count("real_ask_accepted"))

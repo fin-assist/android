@@ -14,9 +14,12 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import ru.finassist.pf.core.api.AuthApi
+import ru.finassist.pf.core.api.AnalyticsApi
+import ru.finassist.pf.core.api.AssistantApi
 import ru.finassist.pf.core.api.ProfileApi
 import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.model.ProfileUpdate
+import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.designsystem.components.pfTestRoot
 import ru.finassist.pf.core.storage.IdempotencyKeys
 import ru.finassist.pf.core.toggles.Flag
@@ -36,6 +39,8 @@ class StageControlActivity : ComponentActivity() {
     @Inject lateinit var authApi: AuthApi
     @Inject lateinit var profileApi: ProfileApi
     @Inject lateinit var statementsApi: StatementsApi
+    @Inject lateinit var analyticsApi: AnalyticsApi
+    @Inject lateinit var assistantApi: AssistantApi
     @Inject lateinit var session: SessionRepository
     @Inject lateinit var sessionImpl: SessionRepositoryImpl
     @Inject lateinit var appLock: AppLock
@@ -45,7 +50,7 @@ class StageControlActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         lifecycleScope.launch {
             val success = try {
-                withTimeout(90_000) { apply(intent?.data) }
+                withTimeout(180_000) { apply(intent?.data) }
                 true
             } catch (_: Exception) {
                 // Never render an exception or URI: it can contain server details or a caller's arbitrary text.
@@ -76,20 +81,45 @@ class StageControlActivity : ComponentActivity() {
                 }
                 name == "flags" -> require(value == "reset")
                 name == "sign_in" -> require(value == "existing")
+                name == "setup_run" -> require(value in StageBootstrap.MODES)
+                name == "cleanup_run" -> require(value == "owned")
+                name == "expect_process_question" -> require(value == "one")
                 name in setOf("expect_stream_rate_limited", "expect_stream_rate_limited_exact", "expect_error_requests", "expect_uploads") -> require(value.toIntOrNull() in 0..10_000)
                 name == "pending_upload_fixture" -> require(value == "october")
                 name == "profile_timezone" -> require(value in setOf("Asia/Vladivostok", "Europe/Moscow"))
                 else -> StageFaultPlan.validate(name, value)
             }
         }
+        require(controls["setup_run"] == null || controls["sign_in"] == null)
+        if (controls["cleanup_run"] != null) {
+            require(controls.size == 1)
+            faults.clearForCleanup()
+            val current = profileApi.getProfile()
+            require(faults.canCleanup(current.phone, current.userId))
+            profileApi.deleteAccount()
+            session.clearLocal("deleted")
+            appLock.reset()
+            return
+        }
         faults.configure(controls.filterKeys { name ->
-            name !in setOf("flags", "sign_in", "expect_stream_rate_limited", "expect_stream_rate_limited_exact", "expect_error_requests", "expect_uploads", "pending_upload_fixture", "profile_timezone") && !name.startsWith("flag.")
+            name !in setOf("flags", "sign_in", "setup_run", "expect_process_question", "expect_stream_rate_limited", "expect_stream_rate_limited_exact", "expect_error_requests", "expect_uploads", "pending_upload_fixture", "profile_timezone") && !name.startsWith("flag.")
         })
         controls.forEach { (name, value) ->
             when {
                 name == "flags" -> overrides.clear()
                 name.startsWith("flag.") -> overrides.set(Flag.byKey(name.removePrefix("flag."))!!, value.toBooleanStrictOrNull())
             }
+        }
+        controls["setup_run"]?.let { mode ->
+            require(run.new_account)
+            StageBootstrap(
+                authApi, profileApi, statementsApi, analyticsApi, session, appLock,
+                startSession = { registered ->
+                    // The precondition performs the real initial import before revealing the main UI.
+                    sessionImpl.start(registered.userId, TokenPair(registered.accessToken, registered.refreshToken), registered = false)
+                },
+                fixture = { assets.open("statements/fixture.ofx").use { it.readBytes() } },
+            ).setup(run.phone, mode)
         }
         if (controls["sign_in"] != null) {
             val signIn = E2eSignIn(authApi, session, { tokens ->
@@ -112,6 +142,11 @@ class StageControlActivity : ComponentActivity() {
         controls["expect_uploads"]?.let {
             require(profileApi.getProfile().phone == run.phone)
             require(statementsApi.listStatements().uploads.size == it.toInt())
+        }
+        if (controls["expect_process_question"] != null) {
+            val current = profileApi.getProfile()
+            require(current.phone == run.phone && faults.canCleanup(current.phone, current.userId))
+            StageProcessQuestionEvidence.verify(run.run_id, assistantApi.listMessages(limit = 100), assistantApi.getLimit(), faults::count)
         }
     }
 

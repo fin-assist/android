@@ -43,4 +43,17 @@ class StageAuthEvidenceTest {
         assertEquals("Malformed authentication receipt", failure.message)
     }
 
+    @Test
+    fun `new candidate refuses existing or unknown user events before application consumes session tokens`() {
+        for (newField in listOf("false", "null")) {
+            val evidence = StageAuthEvidence()
+            evidence.started("+70000001234", """{"verification_token":"v"}""")
+            val stream = "event: status\ndata: {\"status\":\"verified\",\"is_new_user\":$newField,\"access_token\":\"foreign-access\",\"refresh_token\":\"foreign-refresh\"}\n\n"
+            val failure = assertFailsWith<IOException> {
+                evidence.observe(stream.toResponseBody(), "v", setOf("+70000001234")).string()
+            }
+            assertEquals("Stage candidate is not a confirmed new account", failure.message)
+        }
+    }
+
 }

@@ -36,7 +36,7 @@ class StageAuthEvidence {
     private fun textField(value: JsonObject, field: String): String =
         requireNotNull((value[field] as? JsonPrimitive)?.contentOrNull) { "Missing authentication receipt field" }
 
-    fun observe(body: ResponseBody, verificationToken: String): ResponseBody {
+    fun observe(body: ResponseBody, verificationToken: String, newPhones: Set<String> = emptySet()): ResponseBody {
         val phone = requireNotNull(verifications[verificationToken]) { "Unknown verification receipt" }
         return object : ResponseBody() {
             override fun contentType() = body.contentType()
@@ -53,7 +53,7 @@ class StageAuthEvidence {
                         while (lines.indexOf('\n'.code.toByte()) >= 0) {
                             val line = lines.readUtf8LineStrict().removeSuffix("\r")
                             if (line.isEmpty()) {
-                                terminal(phone, frame.toString())
+                                terminal(phone, frame.toString(), phone in newPhones)
                                 frame.clear()
                             } else {
                                 if (frame.length + line.length > MAX_FRAME) throw IOException("Authentication event exceeds harness limit")
@@ -69,12 +69,15 @@ class StageAuthEvidence {
         }
     }
 
-    private fun terminal(phone: String, frame: String) {
+    private fun terminal(phone: String, frame: String, requireNew: Boolean) {
         val lines = frame.lineSequence().toList()
         if (lines.none { it == "event: status" || it == "event:status" }) return
         val data = lines.filter { it.startsWith("data:") }.joinToString("\n") { it.removePrefix("data:").trimStart() }
         val result = runCatching { Json.parseToJsonElement(data).jsonObject }.getOrNull() ?: return
-        if ((result["status"] as? JsonPrimitive)?.contentOrNull != "verified" || (result["is_new_user"] as? JsonPrimitive)?.booleanOrNull != true) return
+        if ((result["status"] as? JsonPrimitive)?.contentOrNull != "verified") return
+        val isNew = (result["is_new_user"] as? JsonPrimitive)?.booleanOrNull
+        if (requireNew && isNew != true) throw IOException("Stage candidate is not a confirmed new account")
+        if (isNew != true) return
         val token = (result["registration_token"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.length in 1..2048 } ?: return
         registrations[token] = phone
     }

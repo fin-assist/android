@@ -11,7 +11,12 @@ import javax.inject.Singleton
 
 /** Non-secret ownership receipt installed by the host after it creates this synthetic account. */
 @Serializable
-data class StageRun(val run_id: String, val phone: String, val new_phone: String? = null) {
+data class StageRun(
+    val run_id: String,
+    val phone: String,
+    val new_phone: String? = null,
+    val new_account: Boolean = false,
+) {
     fun validated(): StageRun = apply {
         require(UUID.fromString(run_id).toString() == run_id) { "Invalid run receipt" }
         require(Regex("\\+7000000[0-9]{4}").matches(phone)) { "Not a synthetic phone" }
