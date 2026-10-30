@@ -11,7 +11,7 @@ class StageProcessQuestionEvidenceTest {
     private val question = Message("q", MessageRole.USER, "#FIN362_TOOLS FIN386 process-death $run", createdAt = now)
     private val history = MessagesList(listOf(question), false)
     private val quota = AssistantLimit(4, 5, now.plusDays(1))
-    private val counters = mapOf("real_ask_accepted" to 1, "ask_response_held" to 1, "ask_response_released" to 0)
+    private val counters = mapOf("real_ask_requests" to 1, "real_ask_accepted" to 1, "ask_response_held" to 1, "ask_response_released" to 0)
 
     @Test
     fun `one exact persisted question and charge confirms the closed uncertain scenario`() {
@@ -28,7 +28,7 @@ class StageProcessQuestionEvidenceTest {
 
     @Test
     fun `released response duplicate post or absent hold never proves an uncertain outcome`() {
-        for ((name, value) in listOf("real_ask_accepted" to 2, "ask_response_held" to 0, "ask_response_released" to 1)) {
+        for ((name, value) in listOf("real_ask_requests" to 2, "real_ask_accepted" to 2, "ask_response_held" to 0, "ask_response_released" to 1)) {
             val changed = counters + (name to value)
             assertFailsWith<IllegalStateException> { StageProcessQuestionEvidence.verify(run, history, quota) { changed[it] ?: 0 } }
         }

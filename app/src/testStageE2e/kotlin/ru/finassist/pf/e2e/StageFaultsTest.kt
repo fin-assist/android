@@ -191,10 +191,12 @@ class StageFaultsTest {
             val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
             while (faults.count("ask_response_held") == 0 && System.nanoTime() < deadline) Thread.sleep(5)
             assertEquals(1, faults.count("ask_response_held"))
+            assertEquals(1, faults.count("real_ask_requests"))
             assertEquals(1, faults.count("real_ask_accepted"))
             assertEquals(0, faults.count("ask_response_released"))
             assertFalse(returned.get())
             val restarted = StageFaults(context, store)
+            assertEquals(1, restarted.count("real_ask_requests"))
             assertEquals(1, restarted.count("real_ask_accepted"))
             assertEquals(1, restarted.count("ask_response_held"))
             val evidence = File(context.filesDir, "stage-evidence.json").readText()
@@ -215,6 +217,7 @@ class StageFaultsTest {
         bindOwnedProfile()
         responseText = acceptedAsk
         authenticatedRequest("/v1/assistant/messages", "POST", "{}").execute().close()
+        assertEquals(1, faults.count("real_ask_requests"))
         assertEquals(1, faults.count("real_ask_accepted"))
         assertEquals(0, faults.count("ask_response_held"))
         assertTrue(File(context.filesDir, "stage-evidence.json").readText().contains("\"has_client_injections\":false"))
@@ -222,8 +225,19 @@ class StageFaultsTest {
         responseStatus = 429
         responseText = "{}"
         authenticatedRequest("/v1/assistant/messages", "POST", "{}").execute().close()
+        assertEquals(2, faults.count("real_ask_requests"))
         assertEquals(1, faults.count("real_ask_accepted"))
         assertEquals(0, faults.count("ask_response_held"))
+    }
+
+    @Test
+    fun `refused real Ask is durably counted as sent without recording an acceptance or injection`() {
+        responseStatus = 429
+        authenticatedRequest("/v1/assistant/messages", "POST", "{}").execute().close()
+        assertEquals(1, faults.count("real_ask_requests"))
+        assertEquals(0, faults.count("real_ask_accepted"))
+        assertEquals(1, StageFaults(context, store).count("real_ask_requests"))
+        assertTrue(File(context.filesDir, "stage-evidence.json").readText().contains("\"has_client_injections\":false"))
     }
 
     @Test

@@ -120,7 +120,7 @@ class StageFaults @Inject constructor(
     private fun saveEvidence() {
         val evidence = buildJsonObject {
             put("run_id", runs.read().run_id)
-            put("has_client_injections", counts.any { (name, count) -> name !in setOf("real_requests", "real_ask_accepted") && count > 0 })
+            put("has_client_injections", counts.any { (name, count) -> name !in setOf("real_requests", "real_ask_requests", "real_ask_accepted") && count > 0 })
             put("counts", Json.encodeToJsonElement(counts.toMap()))
             put("successful_registrations", JsonArray(registrations.toList()))
             put("deleted_phones", JsonArray(deletedPhones.sorted().map(::JsonPrimitive)))
@@ -224,6 +224,10 @@ class StageFaults @Inject constructor(
             }
         }
         record("real_requests")
+        if (request.method == "POST" && request.url.encodedPath == "/v1/assistant/messages") {
+            // Count attempts before the transport returns: a refused automatic resend is still a resend.
+            record("real_ask_requests")
+        }
         var result = chain.proceed(request)
         if (result.isSuccessful && request.method == "GET" && request.url.encodedPath == "/v1/profile") {
             val profile = Json.parseToJsonElement(result.peekBody(65_536).string()).jsonObject
