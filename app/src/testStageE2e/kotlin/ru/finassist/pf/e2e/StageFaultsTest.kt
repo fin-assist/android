@@ -3,6 +3,8 @@ package ru.finassist.pf.e2e
 import android.content.Context
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
@@ -72,6 +74,28 @@ class StageFaultsTest {
         request().execute().close()
         assertEquals(1, realCalls)
         assertEquals(1, faults.count("offline"))
+    }
+
+    @Test
+    fun `maintenance distinguishes a real deadline from an unknown end`() {
+        val before = java.time.Instant.now().plusSeconds(30 * 60)
+        faults.configure(mapOf("maintenance" to "30", "maintenance_retry_after" to "15"))
+        request().execute().use {
+            assertEquals(503, it.code)
+            assertEquals("15", it.header("Retry-After"))
+            val error = Json.parseToJsonElement(it.body!!.string()).jsonObject.getValue("error").jsonObject
+            val until = java.time.OffsetDateTime.parse(error.getValue("until").jsonPrimitive.content).toInstant()
+            assertFalse(until.isBefore(before))
+            assertFalse(until.isAfter(java.time.Instant.now().plusSeconds(30 * 60)))
+        }
+        faults.configure(mapOf("maintenance" to "unknown", "maintenance_retry_after" to "60"))
+        request().execute().use {
+            assertEquals("60", it.header("Retry-After"))
+            val error = Json.parseToJsonElement(it.body!!.string()).jsonObject.getValue("error").jsonObject
+            assertFalse("until" in error)
+        }
+        assertEquals(2, faults.count("maintenance"))
+        assertEquals(0, realCalls)
     }
 
     @Test

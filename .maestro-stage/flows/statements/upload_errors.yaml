@@ -40,7 +40,7 @@ tags:
     visible:
       id: "statements.upload.error.csv_not_accepted"
     timeout: 15000
-- assertVisible: "Выписки CSV пока не поддерживаются"
+- assertVisible: "CSV не подходит — выгрузите выписку в формате OFX."
 
 - tapOn:
     id: "statements.upload.pick_another"
@@ -59,7 +59,7 @@ tags:
     visible:
       id: "statements.upload.error.wrong_bank"
     timeout: 15000
-- assertVisible: "Загрузите выписку поддерживаемого банка"
+- assertVisible: "Выберите OFX-выписку Т-Банка."
 
 - tapOn:
     id: "statements.upload.guide"

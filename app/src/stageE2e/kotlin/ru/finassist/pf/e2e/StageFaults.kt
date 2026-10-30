@@ -205,7 +205,8 @@ class StageFaults @Inject constructor(
         val maintenance = value("maintenance", "off")
         if (maintenance != "off") {
             record("maintenance")
-            return error(request, 503, "MAINTENANCE", "Сервис временно недоступен. Попробуйте позже", value("maintenance_retry_after", "15"))
+            val until = maintenance.toLongOrNull()?.let { ZonedDateTime.now(java.time.ZoneOffset.UTC).plusMinutes(it).toOffsetDateTime().toString() }
+            return error(request, 503, "MAINTENANCE", "Сервис временно недоступен. Попробуйте позже", value("maintenance_retry_after", "15"), until)
         }
         if (StageFaultPlan.operation(request.method, request.url.encodedPath) == value("error_operation", "off")) {
             record("error_requests")
@@ -326,9 +327,10 @@ class StageFaults @Inject constructor(
         return result
     }
 
-    private fun error(request: okhttp3.Request, status: Int, code: String, message: String, retry: String? = null): Response =
+    private fun error(request: okhttp3.Request, status: Int, code: String, message: String, retry: String? = null, until: String? = null): Response =
         response(request, status, buildJsonObject { put("error", buildJsonObject {
             put("code", code); put("user_message", message); put("severity", "warning"); put("retryable", false)
+            until?.let { put("until", it) }
         }) }.toString(), retry)
 
     private fun response(request: okhttp3.Request, status: Int, body: String, retry: String?): Response =

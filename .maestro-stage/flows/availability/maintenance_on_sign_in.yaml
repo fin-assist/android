@@ -15,7 +15,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?maintenance=unknown&maintenance_retry_after=600"
+      LINK: "pfe2e://config?maintenance=unknown&maintenance_retry_after=60"
 - runFlow: ../../subflows/confirm_phone.yaml
 - scrollUntilVisible:
     element:
