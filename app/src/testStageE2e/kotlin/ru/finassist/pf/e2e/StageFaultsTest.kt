@@ -255,6 +255,28 @@ class StageFaultsTest {
     }
 
     @Test
+    fun `only the real consent refusal explains the initial uncharged Ask attempt`() {
+        responseStatus = 403
+        responseText = """{"error":{"code":"CONSENT_REQUIRED","user_message":"Do not export this payload"}}"""
+        authenticatedRequest("/v1/assistant/messages", "POST", "{}").execute().close()
+        assertEquals(1, faults.count("real_ask_consent_required"))
+        assertEquals(1, faults.count("real_ask_requests"))
+        assertEquals(0, faults.count("real_ask_accepted"))
+        assertEquals(1, StageFaults(context, store).count("real_ask_consent_required"))
+        val evidence = File(context.filesDir, "stage-evidence.json").readText()
+        assertTrue(evidence.contains("\"has_client_injections\":false"))
+        assertFalse(evidence.contains("Do not export"))
+        for ((status, body) in listOf(429 to responseText, 403 to "{}", 403 to "not-json",
+            403 to """{"error":{"code":"LIMIT_EXCEEDED"}}""")) {
+            responseStatus = status
+            responseText = body
+            authenticatedRequest("/v1/assistant/messages", "POST", "{}").execute().close()
+        }
+        assertEquals(1, faults.count("real_ask_consent_required"))
+        assertEquals(5, faults.count("real_ask_requests"))
+    }
+
+    @Test
     fun `refused real Ask is durably counted as sent without recording an acceptance or injection`() {
         responseStatus = 429
         authenticatedRequest("/v1/assistant/messages", "POST", "{}").execute().close()

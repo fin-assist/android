@@ -127,7 +127,7 @@ class StageFaults @Inject constructor(
     private fun saveEvidence() {
         val evidence = buildJsonObject {
             put("run_id", runs.read().run_id)
-            put("has_client_injections", counts.any { (name, count) -> name !in setOf("real_requests", "real_ask_requests", "real_ask_accepted") && count > 0 })
+            put("has_client_injections", counts.any { (name, count) -> name !in setOf("real_requests", "real_ask_requests", "real_ask_accepted", "real_ask_consent_required") && count > 0 })
             put("counts", Json.encodeToJsonElement(counts.toMap()))
             put("successful_registrations", JsonArray(registrations.toList()))
             put("deleted_phones", JsonArray(deletedPhones.sorted().map(::JsonPrimitive)))
@@ -242,6 +242,13 @@ class StageFaults @Inject constructor(
             record("real_ask_requests")
         }
         var result = chain.proceed(request)
+        if (result.code == 403 && request.method == "POST" && request.url.encodedPath == "/v1/assistant/messages") {
+            val code = runCatching {
+                Json.parseToJsonElement(result.peekBody(65_536).string()).jsonObject["error"]
+                    ?.jsonObject?.get("code")?.jsonPrimitive?.contentOrNull
+            }.getOrNull()
+            if (code == "CONSENT_REQUIRED") record("real_ask_consent_required")
+        }
         if (result.isSuccessful && request.method == "GET" && request.url.encodedPath == "/v1/profile") {
             val profile = Json.parseToJsonElement(result.peekBody(65_536).string()).jsonObject
             val phone = (profile["phone"] as? JsonPrimitive)?.contentOrNull
