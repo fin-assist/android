@@ -25,8 +25,8 @@ orientation map: read it first, then open only the files the task touches.
   (https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv, link also in `design-check/README.md`).
 - Version 0.2 (API, mockups, docs) is crystallized; every change goes through a YouTrack issue (`FIN-<n>`,
   finassist.youtrack.cloud) and is referenced in the PR. Release notes live in Confluence.
-- There is no deployed backend yet: the `mock` flavor is the working product, `local` talks to a bank-bff on the
-  developer's machine, `prod` is the HTTP client for later.
+- The deployed backend stage is `https://stage.plainfin.ru/` (FIN-149/385): `stage` talks to its real Go services
+  with fake-phone/fake-LLM. `mock` stays in-process; `local` targets a developer backend; `prod` has a placeholder URL.
 - Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) +
   the latest decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
 - API extensibility (decision of 13.10.2026): the contract grows by addition and keeps `deprecated` for
@@ -39,7 +39,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 
 | What | Where |
 |---|---|
-| Composition root, NavHost (auth graph → main tabs), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt`, `app/src/local/…/LocalModule.kt` |
+| Composition root, NavHost (auth graph → main tabs), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt`, `app/src/local/…/LocalModule.kt`, `app/src/stage/…/StageModule.kt` |
 | API contract (service interfaces + DTOs) | `core/api/…/Services.kt`, `core/api/…/model/*.kt` |
 | Universal error presentation, request retry restrictions and server deadlines (FIN-223) | `docs/errors.md`; `core/common/…/error/`, `time/ServerDeadline.kt`; `core/designsystem/…/ErrorMessage.kt` |
 | SSE streams: transport and the one re-open loop of all three streams (pauses with jitter, 429, FIN-170) | `core/network/…/Sse.kt`; `core/api/…/SseReopen.kt` (`reopeningStream`, used by the view models; the fake backend's drops — `MockConfig.streamDrops`) |
@@ -69,17 +69,20 @@ multiplied:
 |---|---|---|---|
 | `mock` | in-process fake (`:mock:backend`) | `toggles-local` (`app/src/mock/assets/flags.json`) / logcat / Tracer with a token | `.mock` |
 | `local` | bank-bff on the developer's machine: `pf.apiBaseUrl` (Gradle property or `PF_API_BASE_URL`), default `http://10.0.2.2:8080/` (emulator → host; `LocalBackend` in build-logic) | `toggles-local` (optional, gitignored `app/src/local/assets/flags.json`) / logcat / off — nothing reaches production consoles | `.local`, «Понятные финансы local» |
+| `stage` | `https://stage.plainfin.ru/`, real HTTP/SSE client | RuStore Remote Config / MyTracker / Tracer, only with separate `pf.stage…` keys; otherwise code defaults / SDKs off | `.stage`, «Понятные финансы stage» |
 | `prod` | `API_BASE_URL` (placeholder until there is a server); certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | RuStore Remote Config / MyTracker / Tracer with a token | no suffix |
 
-A stand will be one more flavor `stage`, built like `prod`. Plain HTTP only in `localDebug`: its network security config
+`stage` follows `prod`, with isolated SDK properties and optional `pf.stageApiPins` / `pf.stageApiPinsExpiration`.
+Production keys and pins never serve as a fallback for stage. Plain HTTP only in `localDebug`: its network security config
 is generated from `pf.apiBaseUrl` (one host, no subdomains); every other variant has `usesCleartextTraffic="false"`
-and no config — except `prod` with API pins (Gradle properties or `PF_API_PINS` / `PF_API_PINS_EXPIRATION`; at least
+and no config — except `prod`/`stage` with their own API pins (prod `pf.apiPins` / `pf.apiPinsExpiration`, stage `pf.stageApiPins` /
+`pf.stageApiPinsExpiration`; at least
 two distinct `sha256/` pins and an expiration within a year, or the configuration fails): a generated config with a
 `pin-set` for the `API_BASE_URL` host, no cleartext, no trust anchors of its own. Real pins are never committed; a
 refused certificate is the usual offline error plus a `network.tls` non-fatal (`core/network/…/TlsFailures.kt`).
 Decision and rotation: «Архитектура» → «Вход трафика» in Confluence PF. CI checks it on the merged manifests
 (`scripts/check-build-separation.py`, `pinned-release` with test pins) and keeps `:mock:*` off the
-`local` and `prod` classpaths (`:app:checkNoMockCode`). Build type `e2e` (mock only): debug + UI-test hooks, pinned
+`local`, `stage` and `prod` classpaths (`:app:checkNoMockCode`). Build type `e2e` (mock only): debug + UI-test hooks, pinned
 date, JaCoCo probes; the native tests run on it (docs/e2e.md).
 
 ### Stack
@@ -179,17 +182,18 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   of JVM modules, `testDebugUnitTest` of Android libraries, `testMockDebugUnitTest` of `:app`.
 - CI (`.github/workflows/ci.yml`, FIN-176) runs the Gradle checks as parallel jobs: unit tests with coverage
   (`unitTest :build-logic:convention:test` on a PR; `test`, the unit tests of every variant, on pushes to `main`,
-  `release/**` and `stage-*/**`), `lintMockDebug`, and the build of `assembleMockDebug assembleLocalDebug
-  assembleProdRelease` (release unsigned) with `:app:checkNoMockCode`, the Tracer check and the manifest checks
+  `release/**` and `stage-*/**`), `lintMockDebug lintStageDebug`, and the build of `assembleMockDebug assembleLocalDebug
+  assembleStageDebug assembleStageRelease assembleProdRelease` (release unsigned) with `:app:checkNoMockCode`, the Tracer check and the manifest checks
   (`scripts/check-build-separation.py`, pinning included). A test that fails only in a release, `local`, `prod` or
-  `e2e` variant is caught after the merge, not on the PR; run `./gradlew test` locally when a change is variant-specific.
-- FIN-185: the assemble job resolves `mockE2eRuntimeClasspath` and `prodReleaseRuntimeClasspath` using
+  `e2e` variant is caught after the merge, not on the PR (stage app unit tests also run on PRs); run `./gradlew test` locally when a change is variant-specific.
+- FIN-185: the assemble job resolves `mockE2eRuntimeClasspath`, both stage runtime classpaths and `prodReleaseRuntimeClasspath` using
   `scripts/compose-classpath.init.gradle` (`:app:composeClasspathReport --no-configuration-cache`), then validates
   the JSON with `scripts/check-compose-classpath.py`: Compose UI/foundation and lifecycle-runtime must match the
   isolated BOM/navigation/catalog lifecycle baseline. Commands and failure diagnostics: docs/testing.md.
 - FIN-377: `scripts/check-app-version.py` checks `appVersionName` against release branches on pushes and either
-  side of a PR. The assemble job also checks generated manifest/BuildConfig versions for mockDebug, localDebug
-  and prodRelease. Release preparation and the independent monotonic build number: `docs/releasing.md`.
+  side of a PR. The assemble job also checks generated manifest/BuildConfig versions for mockDebug, localDebug, both stage variants
+  and prodRelease. The assemble job publishes `app-stage-debug` for installation; default stage identity/HTTPS/SDK
+  isolation is checked with production sentinel properties, and stage/prod pinning is checked independently. Release preparation and the independent monotonic build number: `docs/releasing.md`.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally (all flows and the native
   tests; `--shard i/n` runs one CI shard), the `UI tests` workflow in CI (after a merge to `main`, or started by hand
   for a branch; PRs never run them by themselves). CI splits the flows between four emulators

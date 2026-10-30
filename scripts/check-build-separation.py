@@ -19,6 +19,7 @@ Usage:
   scripts/check-build-separation.py release <merged AndroidManifest.xml>...
   scripts/check-build-separation.py local-debug <merged AndroidManifest.xml> <network_security_config.xml> <BuildConfig.java>
   scripts/check-build-separation.py pinned-release <merged AndroidManifest.xml> <network_security_config.xml> <BuildConfig.java>
+  scripts/check-build-separation.py stage-default <merged AndroidManifest.xml> <BuildConfig.java>
 """
 import base64
 import binascii
@@ -140,6 +141,36 @@ def api_base_url(build_config_java: str) -> str:
     return match.group(1)
 
 
+def stage_default_problems(manifest_xml: str, build_config_java: str) -> list[str]:
+    """Default stage build: fixed HTTPS endpoint, separate identity, no inherited SDK credentials or test hooks."""
+    root = ET.fromstring(manifest_xml)
+    problems = [f"test hook: {hook}" for hook in test_hooks(root)]
+    application = root.find("application")
+    if application is None:
+        return problems + ["no <application>"]
+    if root.get("package") != "ru.finassist.pf.stage":
+        problems.append("stage package must be ru.finassist.pf.stage")
+    if application.get(ANDROID + "usesCleartextTraffic") != "false":
+        problems.append("stage cleartext is not explicitly false")
+    if application.get(ANDROID + "networkSecurityConfig") is not None:
+        problems.append("default stage inherited a network security config")
+    if api_base_url(build_config_java) != "https://stage.plainfin.ru/":
+        problems.append("stage API_BASE_URL must be https://stage.plainfin.ru/")
+    expected = {
+        "APPLICATION_ID": '"ru.finassist.pf.stage"',
+        "RUSTORE_REMOTE_CONFIG_APP_ID": '""',
+        "MYTRACKER_SDK_KEY": '""',
+        "CRASH_REPORTING_ENABLED": "false",
+        "E2E_NOW": '""',
+    }
+    for name, value in expected.items():
+        values = re.findall(r'public static final (?:String|boolean) ' + name + r' = ([^;]*);', build_config_java)
+        if values != [value]:
+            # Never include actual SDK values in logs.
+            problems.append(f"unexpected default stage BuildConfig.{name}")
+    return problems
+
+
 def local_debug_problems(manifest_xml: str, nsc_xml: str, base_url: str) -> list[str]:
     root = ET.fromstring(manifest_xml)
     problems = [f"test hook: {hook}" for hook in test_hooks(root)]
@@ -191,6 +222,11 @@ def report(path: str, problems: list[str]) -> bool:
 
 
 def main(args: list[str]) -> int:
+    if len(args) == 3 and args[0] == "stage-default":
+        failed = report(args[1], stage_default_problems(read(args[1]), read(args[2])))
+        if not failed:
+            print("stage: separate identity, HTTPS, no production SDK keys or test hooks")
+        return 1 if failed else 0
     if len(args) >= 2 and args[0] == "release":
         failed = False
         for path in args[1:]:

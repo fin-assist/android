@@ -13,7 +13,7 @@ import java.util.Base64
 
 /**
  * Certificate pinning of the API (FIN-121; decision — Confluence PF, «Архитектура»): SPKI pins of our own keys for
- * the host of the environment's `API_BASE_URL`, in the network security config of `prod` (and of a future `stage`).
+ * the host of the environment's `API_BASE_URL`, in the network security config of `prod` and `stage`.
  *
  * Pins come from Gradle properties (`pf.apiPins` — `sha256/<base64>` separated by commas or spaces,
  * `pf.apiPinsExpiration` — `yyyy-MM-dd`) or the matching environment variables in CI. No pins — no pinning, the
