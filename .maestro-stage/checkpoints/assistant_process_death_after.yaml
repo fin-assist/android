@@ -16,19 +16,31 @@ name: "[stage] Process death · restore actual history"
     visible:
       id: "assistant.chat"
     timeout: 30000
+# A fast history fetch may already reconcile the accepted question before the first restored UI observation.
 - extendedWaitUntil:
     visible:
-      id: "assistant.chat.recovery"
+      id: "assistant.chat.recovery|assistant.answer"
     timeout: 30000
-- assertVisible: ".*Результат предыдущей отправки неизвестен.*"
 - runFlow:
     when:
-      visible: "Проверить историю"
+      visible:
+        id: "assistant.chat.recovery"
     commands:
-      - tapOn: "Проверить историю"
-- extendedWaitUntil:
-    visible: "FIN362_TOOLS_OK.*"
-    timeout: 40000
+      - assertVisible: ".*Результат предыдущей отправки неизвестен.*"
+      - runFlow:
+          when:
+            visible: "Проверить историю"
+          commands:
+            - tapOn: "Проверить историю"
+- scrollUntilVisible:
+    element:
+      text: "FIN362_TOOLS_OK.*"
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: "assistant.question"
+    direction: UP
+    timeout: 60000
 - assertVisible:
     id: "assistant.question"
     index: 0
