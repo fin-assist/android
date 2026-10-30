@@ -365,7 +365,7 @@ def run_case(row, api, args, private, prepared=None):
             native_reports = ROOT / "app/build/outputs/androidTest-results/connected"
             if native_reports.exists():
                 shutil.rmtree(native_reports)
-            cmd = ["./gradlew", ":app:connectedStageE2eAndroidTest", "--serial", args.serial, "--console=plain",
+            cmd = ["./gradlew", ":app:connectedStageE2eAndroidTest", "--serial", args.serial, "--console=plain", "--stacktrace",
                    "-Pandroid.testInstrumentationRunnerArguments.stageRunId=" + api.run_id,
                    "-Pandroid.testInstrumentationRunnerArguments.stagePhone=" + phone]
             code, output = command(cmd, timeout=min(900, args.case_timeout * 2))

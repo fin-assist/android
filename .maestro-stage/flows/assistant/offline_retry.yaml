@@ -56,7 +56,7 @@ tags:
       LINK: "pfe2e://config?offline=true"
 - tapOn:
     id: "ds.chat.input"
-- inputText: "${STAGE_FINANCIAL_QUESTION}"
+- inputText: "${STAGE_FINANCIAL_QUESTION} FIN386 второй вопрос после восстановления сети."
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:
@@ -77,9 +77,19 @@ tags:
     notVisible:
       id: "ds.chat.offline"
     timeout: 10000
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
+      id: "assistant.question"
+      containsDescendants:
+        - text: "${STAGE_FINANCIAL_QUESTION} FIN386 второй вопрос после восстановления сети."
+    direction: UP
+    timeout: 60000
+- scrollUntilVisible:
+    element:
       id: "assistant.answer"
-      index: 1
-    timeout: 20000
+      below:
+        id: "assistant.question"
+        containsDescendants:
+          - text: "${STAGE_FINANCIAL_QUESTION} FIN386 второй вопрос после восстановления сети."
+    timeout: 60000
 - assertVisible: ".*[Оо]сталось 3 из 5.*"

@@ -532,7 +532,8 @@
       ],
       "assertions": "Real first answer, client transport outage, real second charged answer and quota.",
       "required_counts": {
-        "offline": 1
+        "offline": 1,
+        "real_ask_accepted": 2
       }
     },
     {
