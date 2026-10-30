@@ -526,26 +526,19 @@ def record_unverified_cleanup(report, accounts):
 
 
 def cleanup_accounts(api, report, accounts, retain, defer_new_sessions=False):
-    accounts = list(accounts)
-    index = 0
-    try:
-        for index, account in enumerate(accounts):
-            if defer_new_sessions and not account.access and not account.deleted and not retain:
-                continue
-            outcome = "retained"
-            if not retain:
-                try:
-                    api.delete_owned(account)
-                    outcome = "deleted"
-                except (StageFailure, OSError, KeyError, ValueError) as error:
-                    raise_if_interrupted(error)
-                    outcome = "cleanup_unverified"
-            report["cleanup"].append({"account": hashlib.sha256(account.user_id.encode()).hexdigest()[:12], "outcome": outcome})
-    except StageFailure as error:
-        if is_runner_interrupted(error):
-            with final_report_window():
-                record_unverified_cleanup(report, accounts[index:])
-        raise
+    for account in accounts:
+        if defer_new_sessions and not account.access and not account.deleted and not retain:
+            continue
+        outcome = "retained"
+        if not retain:
+            try:
+                api.delete_owned(account)
+                outcome = "deleted"
+            except (StageFailure, OSError, KeyError, ValueError) as error:
+                # Final accounting belongs to main: a per-case interrupt must leave these accounts retryable.
+                raise_if_interrupted(error)
+                outcome = "cleanup_unverified"
+        report["cleanup"].append({"account": hashlib.sha256(account.user_id.encode()).hexdigest()[:12], "outcome": outcome})
 
 
 def main(argv=None):
