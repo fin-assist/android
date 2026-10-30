@@ -49,11 +49,30 @@ class StageControlActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         lifecycleScope.launch {
+            var status: StageControlStatus? = null
+            var phase = StageBootstrapPhase.INITIAL
+            val observe: (StageBootstrapPhase) -> Unit = { next ->
+                phase = next
+                status?.write(phase, StageControlOutcome.STARTED)
+            }
             val success = try {
-                withTimeout(180_000) { apply(intent?.data) }
+                val names = intent?.data?.queryParameterNames.orEmpty()
+                val operation = when {
+                    "setup_run" in names -> StageControlOperation.SETUP
+                    "cleanup_run" in names -> StageControlOperation.CLEANUP
+                    "sign_in" in names -> StageControlOperation.SIGN_IN
+                    "expect_process_question" in names -> StageControlOperation.PROCESS_QUESTION
+                    else -> StageControlOperation.CONFIG
+                }
+                val writer = StageControlStatus(this@StageControlActivity, runs.read().run_id, operation)
+                status = writer
+                observe(StageBootstrapPhase.INITIAL)
+                withTimeout(180_000) { apply(intent?.data, observe) }
+                writer.write(StageBootstrapPhase.DONE, StageControlOutcome.PASSED)
                 true
-            } catch (_: Exception) {
-                // Never render an exception or URI: it can contain server details or a caller's arbitrary text.
+            } catch (failure: Exception) {
+                // Never render or persist an exception message or URI: both can contain caller/server data.
+                runCatching { status?.write(phase, StageControlOutcome.FAILED, failure) }
                 false
             }
             setContent {
@@ -65,7 +84,7 @@ class StageControlActivity : ComponentActivity() {
         }
     }
 
-    private suspend fun apply(uri: Uri?) {
+    private suspend fun apply(uri: Uri?, onPhase: (StageBootstrapPhase) -> Unit) {
         val run = runs.read()
         require(uri?.scheme == "pfe2e" && uri.host == "config" && uri.fragment == null)
         val controls = uri.queryParameterNames.associateWith { name ->
@@ -94,9 +113,12 @@ class StageControlActivity : ComponentActivity() {
         if (controls["cleanup_run"] != null) {
             require(controls.size == 1)
             faults.clearForCleanup()
+            onPhase(StageBootstrapPhase.PROFILE)
             val current = profileApi.getProfile()
             require(faults.canCleanup(current.phone, current.userId))
+            onPhase(StageBootstrapPhase.CLEANUP_DELETE)
             profileApi.deleteAccount()
+            onPhase(StageBootstrapPhase.CLEANUP_LOCAL)
             session.clearLocal("deleted")
             appLock.reset()
             return
@@ -119,6 +141,7 @@ class StageControlActivity : ComponentActivity() {
                     sessionImpl.start(registered.userId, TokenPair(registered.accessToken, registered.refreshToken), registered = false)
                 },
                 fixture = { assets.open("statements/fixture.ofx").use { it.readBytes() } },
+                onPhase = onPhase,
             ).setup(run.phone, mode)
         }
         if (controls["sign_in"] != null) {

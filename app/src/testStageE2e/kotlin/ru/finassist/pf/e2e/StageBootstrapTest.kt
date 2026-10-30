@@ -3,6 +3,7 @@ package ru.finassist.pf.e2e
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -24,11 +25,11 @@ class StageBootstrapTest {
     private val lock = FakeLock()
     private val sessionStarts = mutableListOf<RegisterResponse>()
 
-    private fun bootstrap() = StageBootstrap(api, api, api, api, session, lock,
+    private fun bootstrap(onPhase: (StageBootstrapPhase) -> Unit = {}) = StageBootstrap(api, api, api, api, session, lock,
         startSession = {
             sessionStarts += it
             session.state.value = SessionState.SignedIn(it.userId)
-        }, fixture = { fixture }, now = { moment }, timeoutMs = 5_000,
+        }, fixture = { fixture }, now = { moment }, timeoutMs = 5_000, onPhase = onPhase,
     )
 
     @Test
@@ -62,7 +63,10 @@ class StageBootstrapTest {
     fun `existing or unknown candidate never adopts tokens or touches profile and financial data`() = runTest {
         for (isNew in listOf(false, null)) {
             api.verified = PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = isNew, accessToken = "foreign-access", refreshToken = "foreign-refresh")
-            assertFailsWith<IllegalStateException> { bootstrap().setup(phone, "seeded") }
+            val phases = mutableListOf<StageBootstrapPhase>()
+            val failure = assertFailsWith<StageBootstrapFailure> { bootstrap(phases::add).setup(phone, "seeded") }
+            assertEquals(StageBootstrapPhase.VERIFICATION, phases.last())
+            assertEquals("candidate_not_new", StageControlStatus.errorClass(failure))
         }
         assertTrue(api.registrations.isEmpty())
         assertTrue(sessionStarts.isEmpty())
@@ -124,10 +128,24 @@ class StageBootstrapTest {
     @Test
     fun `analytics readiness timeout does not reauthenticate or unlock an unready client`() = runTest {
         api.readyAfter = Int.MAX_VALUE
-        assertFailsWith<TimeoutCancellationException> { bootstrap().setup(phone, "seeded") }
+        val phases = mutableListOf<StageBootstrapPhase>()
+        val failure = assertFailsWith<TimeoutCancellationException> { bootstrap(phases::add).setup(phone, "seeded") }
+        assertEquals(StageBootstrapPhase.ANALYTICS, phases.last())
+        assertEquals("timeout", StageControlStatus.errorClass(failure))
         assertEquals(1, api.starts.size)
         assertEquals(1, api.registrations.size)
         assertTrue(lock.passcodes.isEmpty())
+    }
+
+    @Test
+    fun `document timeout reports document phase before any phone or registration request`() = runTest {
+        api.documentHangs = true
+        val phases = mutableListOf<StageBootstrapPhase>()
+        val failure = assertFailsWith<TimeoutCancellationException> { bootstrap(phases::add).setup(phone, "seeded") }
+        assertEquals(StageBootstrapPhase.DOCUMENT, phases.last())
+        assertEquals("timeout", StageControlStatus.errorClass(failure))
+        assertTrue(api.starts.isEmpty())
+        assertTrue(api.registrations.isEmpty())
     }
 
     private inner class FakeApis : AuthApi, ProfileApi, StatementsApi, AnalyticsApi {
@@ -139,8 +157,10 @@ class StageBootstrapTest {
         var importFails = false
         var analyticsReads = 0
         var readyAfter = 1
+        var documentHangs = false
         override suspend fun getConsentDocument(type: ConsentType): ConsentDocument {
             calls += "document"
+            if (documentHangs) awaitCancellation()
             return ConsentDocument(type, "pd-original", "Synthetic", "https://stage.plainfin.ru/pd")
         }
         override suspend fun startPhoneVerification(key: IdempotencyKey, request: StartPhoneVerificationRequest): PhoneVerification {
