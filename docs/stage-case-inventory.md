@@ -128,7 +128,7 @@ A process-death test must record real pre/post request counts and the same serve
 
 ## Authored baseline
 
-This inventory currently has 47 ready source candidates and 9 blocked source cases, plus the authored Qase60 process-death candidate. No readiness flag claims a local/device pass. The report records fresh environment, selected APK/source SHA, provider fixture expectation, account ownership evidence, assertion outcomes, client fault counters and sanitized failure materials separately. Backend/provider missing mechanisms are tracked by FIN-387.
+This inventory currently has 49 ready source candidates and 7 blocked source cases, plus the authored Qase60 process-death candidate. No readiness flag claims a local/device pass. The report records fresh environment, selected APK/source SHA, provider fixture expectation, account ownership evidence, assertion outcomes, client fault counters and sanitized failure materials separately. Backend/provider missing mechanisms are tracked by FIN-387.
 
 ### Closed client compatibility fixtures (Qase29/32)
 

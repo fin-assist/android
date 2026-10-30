@@ -163,6 +163,23 @@ class StageTransportTest(unittest.TestCase):
 
 
 class StageReportingTest(unittest.TestCase):
+    def test_native_stream_proof_is_run_scoped_and_does_not_accept_private_fields(self):
+        proof = {"schema_version": 1, "run_id": RUN, "has_client_injections": False, "counts": {"real_requests": 7}}
+        with tempfile.TemporaryDirectory() as directory, patch.object(ui, "ROOT", Path(directory)):
+            source, value = ui.native_proof("FIN386_NATIVE_PROOF " + json.dumps(proof), RUN)
+            self.assertEqual(source, "instrumentation-stream")
+            self.assertEqual(value["counts"]["real_requests"], 7)
+            for invalid in (proof | {"run_id": str(uuid.uuid4())}, proof | {"refresh_token": "never-export"},
+                            proof | {"counts": {"real_requests": 0}}, proof | {"has_client_injections": True}):
+                with self.assertRaises(StageFailure):
+                    ui.native_proof("FIN386_NATIVE_PROOF " + json.dumps(invalid), RUN)
+
+    def test_conflicting_native_proofs_do_not_pass(self):
+        proof = {"schema_version": 1, "run_id": RUN, "has_client_injections": False, "counts": {"real_requests": 7}}
+        text = "FIN386_NATIVE_PROOF " + json.dumps(proof) + "\nFIN386_NATIVE_PROOF " + json.dumps(proof | {"counts": {"real_requests": 8}})
+        with tempfile.TemporaryDirectory() as directory, patch.object(ui, "ROOT", Path(directory)):
+            with self.assertRaisesRegex(StageFailure, "conflicting_native_proof"):
+                ui.native_proof(text, RUN)
     def test_checkpoint_kills_only_the_background_client_before_response_delivery(self):
         evidence = {"run_id": RUN, "counts": {"real_ask_requests": 1, "real_ask_accepted": 1, "ask_response_held": 1}}
         replies = [(0, json.dumps(evidence)), (0, "4242\n"), (0, ""), (0, ""), (1, ""), (0, json.dumps(evidence))]

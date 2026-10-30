@@ -190,6 +190,33 @@ def process_death_checkpoint(serial, run_id):
             "response_delivered_before_death": False, "server_restarted": False}
 
 
+def native_proof(output, run_id):
+    """Recover only the tiny test-storage projection; the orchestrator may have cleared private app data."""
+    proofs = []
+    for path in (ROOT / "app/build").rglob("fin386-native-proof-" + run_id + ".json"):
+        if path.is_file() and not path.is_symlink() and path.stat().st_size <= 8192:
+            proofs.append(("test-storage", path.read_text()))
+    proofs.extend(("instrumentation-stream", match.group(1)) for match in re.finditer(r"FIN386_NATIVE_PROOF (\{[^\r\n]+\})", output))
+    valid = []
+    for source, raw in proofs:
+        try:
+            proof = json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(proof, dict):
+            continue
+        counts = proof.get("counts")
+        if (set(proof) == {"schema_version", "run_id", "has_client_injections", "counts"}
+                and proof["schema_version"] == 1 and proof["run_id"] == run_id
+                and proof["has_client_injections"] is False and isinstance(counts, dict)
+                and set(counts) == {"real_requests"} and type(counts["real_requests"]) is int
+                and 0 < counts["real_requests"] <= 1_000_000):
+            valid.append((source, proof))
+    if not valid or any(proof != valid[0][1] for _, proof in valid):
+        raise StageFailure("missing_or_conflicting_native_proof")
+    return valid[0]
+
+
 def prepare_case(row, api):
     account = None
     setup = row.get("setup", "existing-seeded")
@@ -277,7 +304,7 @@ def run_case(row, api, args, private, prepared=None):
             native_reports = ROOT / "app/build/outputs/androidTest-results/connected"
             if native_reports.exists():
                 shutil.rmtree(native_reports)
-            cmd = ["./gradlew", ":app:connectedStageE2eAndroidTest", "--console=plain",
+            cmd = ["./gradlew", ":app:connectedStageE2eAndroidTest", "--serial", args.serial, "--console=plain",
                    "-Pandroid.testInstrumentationRunnerArguments.stageRunId=" + api.run_id,
                    "-Pandroid.testInstrumentationRunnerArguments.stagePhone=" + phone]
             code, output = command(cmd, timeout=min(900, args.case_timeout * 2))
@@ -295,14 +322,27 @@ def run_case(row, api, args, private, prepared=None):
         (target / "execution.log").write_text(sanitize(output, api.secrets))
     try:
         code, evidence_text = command(["adb", "-s", args.serial, "exec-out", "run-as", APP, "cat", "files/stage-evidence.json"], timeout=20) if configured else (1, "")
+        if row["layer"] == "native":
+            try:
+                evidence = json.loads(evidence_text)
+            except ValueError:
+                source, evidence = native_proof(output, api.run_id)
+                result["native_proof_source"] = source
+            code = 0
         if code == 0:
-            evidence = json.loads(evidence_text)
+            if row["layer"] != "native":
+                evidence = json.loads(evidence_text)
+            if not isinstance(evidence, dict):
+                raise StageFailure("invalid_client_evidence")
             if evidence.get("run_id") != api.run_id or not isinstance(evidence.get("has_client_injections"), bool):
                 raise StageFailure("invalid_client_evidence")
             counts = evidence.get("counts", {})
             if not isinstance(counts, dict) or not all(re.fullmatch(r"[a-z_0-9]+", key) and type(value) is int and value >= 0 for key, value in counts.items()):
                 raise StageFailure("invalid_client_evidence_counts")
             result["client_evidence"] = {"has_client_injections": evidence["has_client_injections"], "counts": counts}
+            for name, minimum in row.get("required_counts", {}).items():
+                if type(minimum) is not int or minimum < 1 or counts.get(name, 0) < minimum:
+                    raise StageFailure("required_transport_observation_missing")
             for registration in evidence.get("successful_registrations", []):
                 api.adopt_registration(registration["phone"], registration["user_id"])
             if row.get("setup") == "new-empty" and not evidence.get("successful_registrations") and result["outcome"] == "passed":

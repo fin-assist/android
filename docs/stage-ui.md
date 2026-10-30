@@ -76,7 +76,7 @@ does not prove this boundary.
 Reports are separate from mock reports, in `build/stage-ui/`: JSON, JUnit, execution logs, screenshots and UI hierarchies
 for failures. Text materials redact credentials/JWTs and synthetic phones; unknown binary files/raw archives are not
 published. Native picker coverage retains the original ActivityResult interception boundary, not a claim to drive the
-system DocumentsUI. Both exit status and a fresh exact XML result must pass; skipped, absent, malformed, failed and
+system DocumentsUI. Native evidence is exported as an allowlisted TestStorage proof before the orchestrator clears app data. Its run UUID/counters and fresh exact class/method XML are required. Both exit status and a fresh exact XML result must pass; skipped, absent, malformed, failed and
 blocked cases are failures. Per-case client counters retain real/injected provenance. No blocked case disappears from
 the full denominator, and a partial run cannot have `full_acceptance:true`.
 
@@ -85,3 +85,10 @@ the stage artifacts, including the initialized report if preparation failed. Ori
 the JSON report additionally contains any requirements not yet assigned an original Qase case. The expected FIN-362
 fake-model scenario hash is recorded as an expectation; a source file or old acceptance does not establish the current
 running provider revision. Real UI assertions demonstrate only the behavior actually observed in this run.
+
+
+Local independent partitions can run from separate clean worktrees/devices with repeated `--case` selections. Each is
+explicitly partial. `python3 scripts/stage-ui-reports.py /path/worker1/build/stage-ui /path/worker2/build/stage-ui --output build/stage-ui`
+constructs the full report only when every case occurs exactly once and workers use the same clean source revision/APK.
+Missing/duplicate cases, stale revisions, omitted scenario counters and incomplete cleanup fail aggregation. The manual
+GitHub workflow remains a single-device full run; local partitioning does not add automatic stage events.
