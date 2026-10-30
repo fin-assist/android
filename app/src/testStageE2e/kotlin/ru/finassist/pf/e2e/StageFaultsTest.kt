@@ -78,23 +78,23 @@ class StageFaultsTest {
 
     @Test
     fun `injected availability and rate limit bodies satisfy the actual error DTO`() {
-        fun verify(code: String, path: String = "/v1/profile") {
+        fun verify(code: String, expectedRetryable: Boolean, path: String = "/v1/profile") {
             request(path).execute().use {
                 val error = ru.finassist.pf.core.api.ApiJson.decodeFromString(
                     ru.finassist.pf.core.api.model.ErrorResponse.serializer(), it.body!!.string(),
                 ).error
                 assertEquals(code, error.code)
                 assertTrue(error.message.isNotBlank())
-                assertEquals(false, error.retryable)
+                assertEquals(expectedRetryable, error.retryable)
             }
         }
         faults.configure(mapOf("min_version" to "999.0.0"))
-        verify("CLIENT_VERSION_UNSUPPORTED")
+        verify("CLIENT_VERSION_UNSUPPORTED", false)
         faults.configure(mapOf("min_version" to "", "maintenance" to "unknown"))
-        verify("MAINTENANCE")
+        verify("MAINTENANCE", false)
         faults.configure(mapOf("maintenance" to "off", "stream_drops" to "1", "stream_rate_limits" to "1"))
         request("/v1/statements/test/progress").execute().close()
-        verify("RATE_LIMITED", "/v1/statements/test/progress")
+        verify("RATE_LIMITED", true, "/v1/statements/test/progress")
     }
 
     @Test
@@ -126,6 +126,11 @@ class StageFaultsTest {
         request("/v1/statements/test/progress").execute().use {
             assertEquals(429, it.code)
             assertEquals("3", it.header("Retry-After"))
+            val error = ru.finassist.pf.core.api.ApiJson.decodeFromString(
+                ru.finassist.pf.core.api.model.ErrorResponse.serializer(), it.body!!.string(),
+            ).error
+            assertEquals("RATE_LIMITED", error.code)
+            assertTrue(error.retryable)
         }
         request("/v1/statements/test/progress").execute().use { assertEquals("{}", it.body!!.string()) }
         assertEquals(2, realCalls)

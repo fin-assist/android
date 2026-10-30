@@ -222,7 +222,7 @@ class StageFaults @Inject constructor(
         }
         if (stream && afterDrop && consume("stream_rate_limits")) {
             record("stream_429")
-            return error(request, 429, "RATE_LIMITED", "Слишком много запросов. Попробуйте позже", value("stream_retry_s", "3"))
+            return error(request, 429, "RATE_LIMITED", "Слишком много запросов. Попробуйте позже", value("stream_retry_s", "3"), retryable = true)
         }
         if (stream && request.url.encodedPath == "/v1/auth/phone/events" && value("stream_drops", "0").toInt() == 0) {
             val callDelay = value("call_delay_ms", "0").toLong()
@@ -338,9 +338,12 @@ class StageFaults @Inject constructor(
         return result
     }
 
-    private fun error(request: okhttp3.Request, status: Int, code: String, message: String, retry: String? = null, until: String? = null): Response =
+    private fun error(
+        request: okhttp3.Request, status: Int, code: String, message: String,
+        retry: String? = null, until: String? = null, retryable: Boolean = false,
+    ): Response =
         response(request, status, buildJsonObject { put("error", buildJsonObject {
-            put("code", code); put("message", "Stage client fault fixture"); put("user_message", message); put("severity", "warning"); put("retryable", false)
+            put("code", code); put("message", "Stage client fault fixture"); put("user_message", message); put("severity", "warning"); put("retryable", retryable)
             until?.let { put("until", it) }
         }) }.toString(), retry)
 
