@@ -6,6 +6,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import okhttp3.Dispatcher
 import okhttp3.HttpUrl
+import okhttp3.Interceptor
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -84,6 +85,7 @@ internal object NetworkModule {
         gate: ServiceGate,
         clock: Clock,
         elapsedClock: ElapsedClock = AndroidElapsedClock,
+        @Named("clientInterceptors") clientInterceptors: Set<@JvmSuppressWildcards Interceptor> = emptySet(),
     ): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .eventListenerFactory(tlsFailures.eventListenerFactory())
@@ -91,6 +93,7 @@ internal object NetworkModule {
         // FIN-22: the version on every request (refresh included), and what the server says about it and maintenance.
         .addInterceptor(ClientVersionInterceptor(version))
         .addInterceptor(ServiceGateInterceptor(gate, clock, elapsedClock))
+        .apply { clientInterceptors.forEach(::addInterceptor) }
         // Network interceptor: runs per attempt (auth retry, redirect), so every attempt gets a fresh X-Request-Id.
         .addNetworkInterceptor(RequestIdInterceptor())
         .apply { if (logging) addInterceptor(HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BASIC)) }

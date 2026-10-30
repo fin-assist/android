@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Isolated test APK only. Ordinary stage/prod source sets contain none of these components. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <meta-data android:name="ru.finassist.pf.DOCUMENT_PICKER_OVERRIDE"
+            android:value="ru.finassist.pf.e2e.E2eDocumentPickerActivity" />
+        <activity android:name="ru.finassist.pf.e2e.E2eDocumentPickerActivity"
+            android:exported="false" android:theme="@style/Theme.Pf" />
+        <activity android:name="ru.finassist.pf.e2e.StageControlActivity"
+            android:excludeFromRecents="true" android:exported="true" android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="pfe2e" android:host="config" />
+            </intent-filter>
+        </activity>
+        <provider android:name="ru.finassist.pf.e2e.E2eStreamProbe"
+            android:authorities="${applicationId}.e2e.stream-probe" android:exported="false" />
+        <provider android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.e2e.files" android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/e2e_file_paths" />
+        </provider>
+    </application>
+</manifest>

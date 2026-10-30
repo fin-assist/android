@@ -5,6 +5,7 @@ import ru.finassist.pf.buildlogic.GenerateNetworkSecurityConfig
 import ru.finassist.pf.buildlogic.GeneratePinningManifest
 import ru.finassist.pf.buildlogic.LocalBackend
 import java.time.LocalDate
+import com.android.build.api.variant.BuildConfigField
 
 plugins {
     id("pf.android.application")
@@ -89,6 +90,7 @@ android {
         testInstrumentationRunnerArguments["useTestStorageService"] = "true"
         // Empty: the real clock. The e2e build pins "now" (see below).
         buildConfigField("String", "E2E_NOW", "\"\"")
+        buildConfigField("boolean", "STAGE_UI_TEST", "false")
         buildConfigField("boolean", "CRASH_REPORTING_ENABLED", tracerAppToken.isNotBlank().toString())
         // Enables the SDK's startup provider (providers/crash-tracer manifest).
         manifestPlaceholders["tracerEnabled"] = tracerAppToken.isNotBlank()
@@ -166,6 +168,13 @@ android {
         }
     }
 
+    // Variant-specific providers: the test APK has local toggles and no external SDKs.
+    sourceSets {
+        maybeCreate("stageDebug")
+        maybeCreate("stageRelease")
+        maybeCreate("stageE2e")
+    }
+
     // The same JaCoCo for the probes in the APK and for the report task (`:e2eCoverageReport`): execution data
     // of one version is not read by another.
     testCoverage {
@@ -186,10 +195,18 @@ android {
 }
 
 androidComponents {
-    // The e2e build type exists only for the fake backend; HTTP flavors have no test hooks.
+    // Stage UI hooks exist only in stageE2e, never ordinary stage builds or prod.
     beforeVariants(selector().withBuildType("e2e").withFlavor("env" to "local")) { it.enable = false }
-    beforeVariants(selector().withBuildType("e2e").withFlavor("env" to "stage")) { it.enable = false }
     beforeVariants(selector().withBuildType("e2e").withFlavor("env" to "prod")) { it.enable = false }
+
+    onVariants(selector().withName("stageE2e")) { variant ->
+        variant.buildConfigFields.put("E2E_NOW", BuildConfigField("String", "\"\"", "Real server clock"))
+        variant.buildConfigFields.put("STAGE_UI_TEST", BuildConfigField("boolean", "true", "Isolated stage harness"))
+        variant.buildConfigFields.put("CRASH_REPORTING_ENABLED", BuildConfigField("boolean", "false", "No SDK traffic"))
+        variant.buildConfigFields.put("RUSTORE_REMOTE_CONFIG_APP_ID", BuildConfigField("String", "\"\"", "No SDK traffic"))
+        variant.buildConfigFields.put("MYTRACKER_SDK_KEY", BuildConfigField("String", "\"\"", "No SDK traffic"))
+        variant.manifestPlaceholders.put("tracerEnabled", "false")
+    }
 
     onVariants { variant ->
         if (variant.flavorName != "mock") {
@@ -236,8 +253,13 @@ dependencies {
     "localImplementation"(projects.providers.trackingLog)
 
     "stageImplementation"(projects.core.network)
-    "stageImplementation"(projects.providers.togglesRustore)
-    "stageImplementation"(projects.providers.trackingMytracker)
+    "stageDebugImplementation"(projects.providers.togglesRustore)
+    "stageDebugImplementation"(projects.providers.trackingMytracker)
+    "stageReleaseImplementation"(projects.providers.togglesRustore)
+    "stageReleaseImplementation"(projects.providers.trackingMytracker)
+    "stageE2eImplementation"(projects.providers.togglesLocal)
+    "stageE2eImplementation"(projects.providers.trackingLog)
+    "stageE2eImplementation"(libs.okhttp)
 
     "prodImplementation"(projects.core.network)
     "prodImplementation"(projects.providers.togglesRustore)
@@ -292,6 +314,10 @@ tracer {
         appToken = stageTracerAppToken
         pluginToken = stageTracerPluginToken
         uploadMapping = stageTracerAppToken.isNotBlank() && stageTracerPluginToken.isNotBlank()
+    }
+    create("stageE2e") {
+        isDisabled = true
+        uploadMapping = false
     }
 }
 

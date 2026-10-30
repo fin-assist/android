@@ -69,6 +69,29 @@ class NetworkModuleTest {
     }
 
     @Test
+    fun `optional application interceptor is inherited by SSE without reaching the network`() {
+        var calls = 0
+        val client = NetworkModule.plainClient(
+            logging = false,
+            tlsFailures = stack.tlsFailures,
+            version = stack.version,
+            gate = stack.gate,
+            clock = ru.finassist.pf.core.common.time.SystemClock(),
+            elapsedClock = ru.finassist.pf.core.common.time.ElapsedClock { 1_000L },
+            clientInterceptors = setOf(okhttp3.Interceptor { chain ->
+                calls++
+                assertTrue(chain.request().header("X-Client-Version")!!.startsWith("android/"))
+                okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
+                    .code(204).message("Injected transport boundary").body(okhttp3.ResponseBody.create(null, "")).build()
+            }),
+        )
+        client.newCall(okhttp3.Request.Builder().url(server.url("/v1/profile")).build()).execute().close()
+        NetworkModule.sseClient(client).newCall(okhttp3.Request.Builder().url(server.url("/v1/auth/phone/events")).build()).execute().close()
+        assertEquals(2, calls)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
     fun `main client adds the session and refreshes on 401, keeping the plain setup`() {
         val client = stack.client
         assertIs<AuthInterceptor>(client.interceptors.last())

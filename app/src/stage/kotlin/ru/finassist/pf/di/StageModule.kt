@@ -15,7 +15,7 @@ object StageModule {
     fun apiBaseUrl(): String = BuildConfig.API_BASE_URL
 
     @Provides @Named("httpLogging")
-    fun httpLogging(): Boolean = BuildConfig.DEBUG
+    fun httpLogging(): Boolean = BuildConfig.DEBUG && !BuildConfig.STAGE_UI_TEST
 
     @Provides @Named("rustoreRemoteConfigAppId")
     fun rustoreAppId(): String = BuildConfig.RUSTORE_REMOTE_CONFIG_APP_ID
