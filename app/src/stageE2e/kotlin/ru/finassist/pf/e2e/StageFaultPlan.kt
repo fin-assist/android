@@ -35,8 +35,8 @@ object StageFaultPlan {
             "unknown_severity" -> "\"user_message\":\"Сервис получил новый тип ошибки. Попробуйте позже\",\"severity\":\"future_level\""
             "invalid_message" -> "\"user_message\":null,\"severity\":\"warning\""
             "legacy_response" -> ""
-            "retry_forbidden" -> return 429 to "{\"error\":{\"code\":\"RATE_LIMITED\",\"user_message\":\"Слишком много запросов. Попробуйте позже\",\"severity\":\"warning\",\"retryable\":false}}"
-            "terminal_failure" -> return 500 to "{\"error\":{\"code\":\"INTERNAL_ERROR\",\"user_message\":\"Не удалось выполнить запрос. Попробуйте позже\",\"severity\":\"error\",\"retryable\":false}}"
+            "retry_forbidden" -> return 429 to "{\"error\":{\"code\":\"RATE_LIMITED\",\"message\":\"Stage client fault fixture\",\"user_message\":\"Слишком много запросов. Попробуйте позже\",\"severity\":\"warning\",\"retryable\":false}}"
+            "terminal_failure" -> return 500 to "{\"error\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"Stage client fault fixture\",\"user_message\":\"Не удалось выполнить запрос. Попробуйте позже\",\"severity\":\"error\",\"retryable\":false}}"
             else -> kotlin.error("Unknown stage error fixture")
         }
         return 422 to "{\"error\":{\"code\":\"FUTURE_OPERATION_FAILURE\",\"message\":\"internal diagnostic must not be displayed\"${if (fields.isEmpty()) "" else ",$fields"}}}"

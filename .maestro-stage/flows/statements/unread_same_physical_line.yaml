@@ -82,10 +82,10 @@ tags:
     text: "Строка 31 · дата не прочитана"
     index: 1
 - assertVisible:
-    text: "нет даты"
+    text: "даты нет"
     index: 0
 - assertVisible:
-    text: "нет даты"
+    text: "даты нет"
     index: 1
 - assertVisible:
     id: "statements.unread.report"

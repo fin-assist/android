@@ -340,7 +340,7 @@ class StageFaults @Inject constructor(
 
     private fun error(request: okhttp3.Request, status: Int, code: String, message: String, retry: String? = null, until: String? = null): Response =
         response(request, status, buildJsonObject { put("error", buildJsonObject {
-            put("code", code); put("user_message", message); put("severity", "warning"); put("retryable", false)
+            put("code", code); put("message", "Stage client fault fixture"); put("user_message", message); put("severity", "warning"); put("retryable", false)
             until?.let { put("until", it) }
         }) }.toString(), retry)
 

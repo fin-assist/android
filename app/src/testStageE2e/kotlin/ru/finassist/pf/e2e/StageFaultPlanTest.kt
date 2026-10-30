@@ -44,7 +44,12 @@ class StageFaultPlanTest {
         val error = Json.parseToJsonElement(refused.second).jsonObject.getValue("error").jsonObject
         assertEquals("RATE_LIMITED", error.getValue("code").jsonPrimitive.content)
         assertEquals("false", error.getValue("retryable").jsonPrimitive.content)
-        StageFaultPlan.scenarios.forEach { Json.parseToJsonElement(StageFaultPlan.error(it).second) }
+        StageFaultPlan.scenarios.forEach {
+            val parsed = ru.finassist.pf.core.api.ApiJson.decodeFromString(
+                ru.finassist.pf.core.api.model.ErrorResponse.serializer(), StageFaultPlan.error(it).second,
+            )
+            kotlin.test.assertTrue(parsed.error.message.isNotBlank())
+        }
         assertFailsWith<IllegalStateException> { StageFaultPlan.error("arbitrary") }
     }
 

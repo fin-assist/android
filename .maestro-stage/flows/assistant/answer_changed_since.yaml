@@ -42,6 +42,10 @@ tags:
     visible:
       id: "assistant.answer"
     timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "FIN362_TOOLS_OK.*"
+    timeout: 60000
 - assertVisible: "FIN362_TOOLS_OK.*"
 - assertNotVisible: "С тех пор.*"
 
@@ -99,6 +103,10 @@ tags:
     visible:
       id: "assistant.answer"
     timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "С тех пор категории менялись"
+    timeout: 60000
 - assertVisible: "С тех пор категории менялись"
 
 - tapOn:
@@ -135,4 +143,8 @@ tags:
     visible:
       id: "assistant.answer"
     timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "С тех пор данные менялись"
+    timeout: 60000
 - assertVisible: "С тех пор данные менялись"

@@ -73,7 +73,7 @@ tags:
 - assertVisible: "В файле .* эти строки не прочитали — их нет в суммах\\."
 - assertNotVisible: ".*Остальные операции загружены.*"
 - assertVisible: "Строка 31 · дата не прочитана"
-- assertVisible: "нет даты"
+- assertVisible: "даты нет"
 - assertVisible: "Строка 38 · 5.октября"
 - assertVisible: "не распознали сумму"
 - assertVisible:

@@ -76,6 +76,10 @@ tags:
       id: "assistant.answer"
     timeout: 20000
 - assertVisible: ".*[Оо]сталось 4 из 5.*"
+- scrollUntilVisible:
+    element:
+      id: "assistant.answer.chip.operations"
+    timeout: 60000
 - assertVisible:
     id: "assistant.answer.chip.operations"
 
@@ -102,10 +106,10 @@ tags:
 - inputText: "#FIN362_ANALYTICS"
 - tapOn:
     id: "ds.chat.send"
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: "assistant.answer.chip.analytics"
-    timeout: 40000
+    timeout: 60000
 - assertVisible: ".*[Оо]сталось 3 из 5.*"
 - tapOn:
     id: "assistant.answer.chip.analytics"
