@@ -175,7 +175,8 @@ class StageControlActivity : ComponentActivity() {
         if (controls["expect_process_question"] != null) {
             val current = profileApi.getProfile()
             require(current.phone == run.phone && faults.canCleanup(current.phone, current.userId))
-            StageProcessQuestionEvidence.verify(run.run_id, assistantApi.listMessages(limit = 100), assistantApi.getLimit(), faults::count)
+            // api.md 7.3: history pages accept at most 50 messages; hasOlder must still be false.
+            StageProcessQuestionEvidence.verify(run.run_id, assistantApi.listMessages(limit = 50), assistantApi.getLimit(), faults::count)
         }
     }
 
