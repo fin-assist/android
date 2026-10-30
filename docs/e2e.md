@@ -101,9 +101,9 @@ The sidecar `build/e2e/sdk-cache.json` records matched/final keys, actual metada
 `miss` or `preinstalled`, and restore/install/save phase times. It is included in existing shard artifacts.
 `sdk-start` precedes the first restore, so total preparation includes all SDK transfer/install/save plus Android
 boot. `preparation.json` labels the normal path `fresh-cold-direct` with AVD cache `disabled`; it cannot activate the
-snapshot fallback, and it never saves a post-test snapshot. The SDK-only sample supports this engineering choice,
-but **the changed default workflow still needs separately authorized full cold-SDK/warm-SDK UI acceptance**. No
-additional SDK/UI run was performed while implementing it, and full workflow acceleration remains unverified.
+snapshot fallback, and it never saves a post-test snapshot. The authorized full cold-SDK/warm-SDK pair below
+passed on the unchanged default code and measured a preparation benefit. Its nearly equal whole-workflow times
+do not establish a substantial or stable total UI speedup.
 
 ### Optional clean AVD snapshot cache (FIN-378)
 
@@ -270,10 +270,11 @@ large logs and archives are not committed.
 
 Exact key differences caused three second-run misses. The current telemetry does not retain sanitized fingerprint
 components, so CPU fragmentation is not established as their cause. The conservative CPU model/features guard stays
-in place. FIN-378 remains open: functional caching and cross-runner restoration passed, while net acceleration,
-reliable hit rate and cache budget remain unresolved. Do not merge or mark it Done based on these samples.
+in place. These AVD-enabled samples verify functionality and cross-runner restoration, but do not justify default
+snapshot caching because its acceleration, hit rate and cache budget are unfavorable or unresolved. The default
+therefore uses SDK caching and a fresh cold AVD; its completed acceptance is recorded below.
 
-#### Opt-in SDK package experiment
+### Opt-in SDK package experiment
 
 `e2e.yml` has a `workflow_dispatch` boolean `sdk_benchmark`, default `false`. Only an explicitly selected manual
 run routes to reusable `sdk-preparation-benchmark.yml`; UI shards, reports and Qase are skipped. Normal main pushes
@@ -307,7 +308,8 @@ restore/setup, SDK manager, save/step and total durations,
 and logical package bytes. Individual cache transfer times are available in Actions step logs; compressed bytes
 come from the two exact cache entries after execution. Review total preparation distributions across four runners,
 seed/save cost, package sizes, update-check cost and repository cache pressure. The measured result supports the
-SDK package cache above; final default UI acceptance is still pending. This experiment cannot by itself establish full E2E speedup.
+SDK package cache above; the separate full default UI acceptance follows below. This experiment alone cannot
+establish full E2E speedup.
 
 
 The authorized [SDK-only run 40971458743](https://github.com/fin-assist/android/actions/runs/40971458743) used
@@ -346,8 +348,92 @@ cache entries (941,825,348 bytes) remained present in the during-run inventory. 
 per-job phase/step times and metadata artifact URLs are retained in the external compact evidence. After all reads the owner removed only those two experiment entries; the exact nine previous entries and bytes
 remained unchanged. The implementation therefore adopts SDK caching plus fresh cold AVD as the default and retains
 snapshot caching as manual opt-in. This change preserves online revision checks and includes package-update/cache
-costs in telemetry. FIN-378 remains open pending full UI acceptance of that default; the SDK-only experiment does
-not reverse the failed/unconfirmed AVD preparation result.
+costs in telemetry. The completed default UI pair below supplements this SDK-only experiment; neither result
+reverses the failed/unconfirmed AVD snapshot preparation result.
+
+### Full UI acceptance of the SDK default (2026-10-30)
+
+The owner authorized exactly two full UI runs on unchanged `5d34a342d9c6910e3bea62d021cc3f9cb0de96eb`, with
+`sdk_benchmark=false` and `avd_cache=false`. The SDK namespace was empty before the first; the second began only
+after the first completed and its actual merged coverage XML was checked.
+
+- [Cold SDK run 41002845291](https://github.com/fin-assist/android/actions/runs/41002845291):
+  04:25:50–04:48:36 UTC, **22m46s**. All eight package classifications were `miss`; only shard 1 saved the two
+  SDK entries before tests. Shards 2–4 performed no cache writes.
+- [Warm SDK run 41005104529](https://github.com/fin-assist/android/actions/runs/41005104529):
+  04:50:25–05:13:02 UTC, **22m37s**. All eight package classifications were `hit-current`, each matched key equaled
+  the actual final immutable key, and all SDK save steps were skipped. These are validated **prefix restores**:
+  `actions/cache` may report exact-primary-key `cache-hit=false` and still have restored a usable matched key.
+
+Both workflows and all eight shard jobs passed. Each run produced 55 Maestro cases (13/14/14/14) plus one native
+case, with no failure, error or skipped case. Reports passed; both actual merged coverage XML files were nonempty
+and contained 1,633 classes (112,484 covered instructions cold; 115,461 warm). Qase was skipped because these were
+manual runs, as designed. The SDK-only benchmark job and all optional snapshot steps were skipped. All eight boot
+modes were `fresh-cold-direct`, AVD cache was `disabled`, and logs contained no successful named-snapshot load.
+The running emulator was `37.2.13.0`, build `16740729`, in all eight jobs; installed emulator revision `37.2.13`,
+image revision `14`, and both package metadata hashes matched across the pair and the SDK-only benchmark.
+Runner telemetry was Linux/X64, ImageOS `ubuntu24`, ImageVersion `20261026.354.1` throughout this pair.
+
+Seconds below use `preparation.json`: SDK is `sdk-start` → `sdk-ready`, including **all** restore/install/save and
+helper CLI overhead; preparation is `sdk-start` → `tests-started`. Boot is the pre-emulator callback → helper
+readiness mark, including launch/readiness overhead. APK build uses the earlier Actions `Build APKs` step. E2E is
+`tests-started` → `tests-finished`, including APK installation, Maestro/native execution and script cleanup.
+These stages have different boundaries; do not sum parallel jobs into workflow wall time.
+
+| Sample / shard | SDK inclusive | Cold boot | Total preparation | APK build | E2E |
+|---|---:|---:|---:|---:|---:|
+| Cold SDK 1 | 62.9 | 39.4 | 110.8 | 76 | 1018.0 |
+| Cold SDK 2 | 79.4 | 48.6 | 136.5 | 77 | 961.0 |
+| Cold SDK 3 | 52.0 | 40.6 | 99.5 | 61 | 923.6 |
+| Cold SDK 4 | 53.2 | 40.5 | 100.9 | 72 | 940.2 |
+| Warm SDK 1 | 40.1 | 33.3 | 79.2 | 54 | 844.5 |
+| Warm SDK 2 | 28.4 | 47.1 | 84.2 | 75 | 965.4 |
+| Warm SDK 3 | 38.3 | 27.0 | 70.5 | 50 | 880.3 |
+| Warm SDK 4 | 40.5 | 40.1 | 90.1 | 85 | 1024.0 |
+
+The sidecar's inner SDK phases are listed separately below. They start inside `e2e-sdk-cache.py` and exclude about
+0.1s of surrounding CLI overhead, so they must not be substituted for the inclusive SDK column above. The final
+phase includes step overhead even when no cache is saved.
+
+| Sample / shard | Restore + recovery | Online install + metadata | Save + step overhead |
+|---|---:|---:|---:|
+| Cold SDK 1 | 0.8 | 40.3 | 21.6 |
+| Cold SDK 2 | 0.8 | 78.4 | 0.1 |
+| Cold SDK 3 | 0.7 | 51.1 | 0.0 |
+| Cold SDK 4 | 0.7 | 52.5 | 0.0 |
+| Warm SDK 1 | 32.7 | 7.3 | 0.0 |
+| Warm SDK 2 | 17.6 | 10.7 | 0.0 |
+| Warm SDK 3 | 33.1 | 4.9 | 0.3 |
+| Warm SDK 4 | 26.6 | 13.8 | 0.1 |
+
+In this pair, mean total preparation decreased **111.92 → 80.98s** (30.94s / 27.6%), median **105.83 → 81.69s**
+(22.8%); preparation decreased in all four shards. Mean inclusive SDK time decreased **61.86 → 36.87s**
+(25.00s / 40.4%), median **58.05 → 39.24s** (32.4%). The initial cold writer paid 21.61s for save/step overhead;
+that one-time population cost is included in this comparison and recurs when new SDK entries are needed.
+Warm online install/checks remained enabled and took 4.9–13.8s; restore/recovery took 17.6–33.1s. The action also
+performed its normal additional SDK check once per shard (3.7–7.1s cold/warm, no download-progress lines there).
+
+This is one same-code pair on unpaired hosted runners, not a stable latency guarantee. Cold-boot timing also
+varied (mean 42.28 → 36.88s), and APK build happened before SDK caching. Do not attribute those changes to cache.
+E2E duration changed by −173.6/+4.4/−43.3/+83.9s per shard; the critical shard changed from 1 to 4. Consequently,
+whole-workflow time improved by only **9s (0.66%)**, 22m46s → 22m37s. The measured result supports SDK/default
+**preparation benefit in this pair**, not a substantial or causal whole-UI speedup. Historical 22m38s on `ee17c3a`
+is a different revision/time/host sample, not an A/B control. Cross-ImageVersion SDK-key behavior has unit coverage;
+these runtime samples all used one ImageVersion.
+
+The two actual production SDK entries occupied **1,817,575,191 compressed bytes**: emulator 334,908,796 and image
+1,482,666,395. Use these API values rather than the earlier SDK-only archive sizes. Production logical bytes were
+not independently measured; 903,310,069 + 4,469,102,280 bytes from the benchmark are only a matching-revision/hash
+reference. Exactly two entries existed during the pair; all nine pre-existing entries (941,825,348 bytes) retained
+their IDs and sizes. After all artifacts/metadata were captured, the owner removed only the two generated branch
+SDK entries (IDs `9739015526`, `9739020978`); all nine prior entries remained unchanged. Main cannot consume those
+branch-only entries. Future SDK/ImageOS/action/schema updates can add immutable entries, so long-term cache budget
+and eviction behavior still require monitoring; this pair showed no loss of the prior entries.
+
+Compact per-run evidence, exact key/ID inventories, artifact URLs, phase/step timings, comparison methodology and
+owner cleanup receipts are retained outside git; large raw logs and archives are not committed. Runtime acceptance
+of this default is complete for the authorized pair. Any further SDK/UI run needs separate owner permission;
+merge still requires the owner's explicit instruction after the latest CI/review checks.
 
 ## Qase
 
