@@ -375,13 +375,9 @@ def run_case(row, api, args, private, prepared=None):
             passed = sum(report_passed(ET.parse(xml).getroot(), (classname, method)) for xml in xmls) == 1
             result.update(outcome="passed" if code == 0 and passed else "failed",
                           reason="" if code == 0 and passed else "native_or_report_failed")
-        (target / "execution.log").write_text(sanitize(output, api.secrets))
     except (StageFailure, OSError, KeyError, ValueError, ET.ParseError) as error:
         result["outcome"] = "failed"
         result["reason"] = str(error) if isinstance(error, StageFailure) else "harness_" + type(error).__name__
-    if flow_private and flow_private.exists():
-        save_materials(flow_private, target, api.secrets)
-        (target / "execution.log").write_text(sanitize(output, api.secrets))
     ownership_stop = {"requested": False}
     try:
         with defer_ownership_interrupts(ownership_stop):
@@ -472,9 +468,9 @@ def run_case(row, api, args, private, prepared=None):
                 evidence_failures.append("invalid_cleanup_receipt")
             if evidence_failures:
                 raise StageFailure(evidence_failures[0])
-        code, output = command(["adb", "-s", args.serial, "logcat", "-b", "crash", "-d"], timeout=20) if configured else (1, "")
+        code, crash_output = command(["adb", "-s", args.serial, "logcat", "-b", "crash", "-d"], timeout=20) if configured else (1, "")
         if code == 0:
-            (target / "crash.log").write_text(sanitize(output, api.secrets))
+            (target / "crash.log").write_text(sanitize(crash_output, api.secrets))
     except (StageFailure, OSError, KeyError, ValueError, ET.ParseError) as error:
         evidence_failure = str(error) if isinstance(error, StageFailure) else "harness_" + type(error).__name__
         if result["outcome"] == "passed":
@@ -482,6 +478,19 @@ def run_case(row, api, args, private, prepared=None):
             result["reason"] = evidence_failure
         else:
             result["evidence_failure"] = evidence_failure
+    # Artifact I/O can fail or be interrupted; it must follow authoritative ownership accounting.
+    try:
+        if flow_private and flow_private.exists():
+            save_materials(flow_private, target, api.secrets)
+        (target / "execution.log").write_text(sanitize(output, api.secrets))
+    except (StageFailure, OSError, ValueError) as error:
+        failure = str(error) if isinstance(error, StageFailure) else "harness_" + type(error).__name__
+        if result["outcome"] == "passed":
+            result.update(outcome="failed", reason=failure)
+        else:
+            result["artifact_failure"] = failure
+        if is_runner_interrupted(error):
+            ownership_stop["requested"] = True
     if ownership_stop["requested"]:
         if result["outcome"] == "passed":
             result.update(outcome="failed", reason="runner_interrupted")

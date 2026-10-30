@@ -239,7 +239,7 @@ class StageEvidenceFailureCleanupTest(unittest.TestCase):
     USER = "22222222-2222-4222-8222-222222222222"
     FOREIGN_PHONE = "+70000009999"
 
-    def run_evidence_case(self, *, missing_count=False, injected=False, retain=False, flow_passed=True, extra_registration=None, invalid_counts=False, interrupt_flow=False, interrupt_evidence=None):
+    def run_evidence_case(self, *, missing_count=False, injected=False, retain=False, flow_passed=True, extra_registration=None, invalid_counts=False, interrupt_flow=False, interrupt_evidence=None, interrupt_materials=False, receipt_mode=None, through_main=False):
         api = FakeApi([])
         api.unused.update((self.PHONE, self.FOREIGN_PHONE))
         api.evidence_read_timeouts = []
@@ -249,7 +249,7 @@ class StageEvidenceFailureCleanupTest(unittest.TestCase):
         evidence = {"run_id": RUN, "has_client_injections": injected,
                     "counts": {"real_requests": -1 if invalid_counts else 7},
                     "successful_registrations": registrations, "deleted_phones": []}
-        row = {"id": "qase-8", "status": "ready", "layer": "maestro", "setup": "first-session-seeded",
+        row = {"id": "qase-8", "qase_id": 8, "source": ".maestro/flows/operations/feed_and_detail.yaml", "status": "ready", "layer": "maestro", "setup": "first-session-seeded",
                "provenance": "real-stage", "stage_flow": ".maestro-stage/flows/operations/feed_and_detail.yaml"}
         if missing_count:
             row["required_counts"] = {"stream_429": 1}
@@ -279,18 +279,45 @@ class StageEvidenceFailureCleanupTest(unittest.TestCase):
                         handler(ui.signal.SIGTERM, None)
                     else:
                         raise StageFailure("runner_interrupted")
-                if interrupt_evidence == "unavailable" and read == 2:
+                if receipt_mode == "unavailable" or interrupt_evidence == "unavailable" and read == 2:
                     return 1, "no receipt available"
-                if interrupt_evidence == "foreign" and read == 2:
+                if receipt_mode == "foreign" or interrupt_evidence == "foreign" and read == 2:
                     return 0, json.dumps(evidence | {"run_id": str(uuid.uuid4())})
                 return 0, json.dumps(evidence | {"deleted_phones": [self.PHONE] if cleanup_sent else []})
             return 0, ""
+
+        save_materials = ui.save_materials
+
+        def collect_materials(*args):
+            if interrupt_materials:
+                self.assertTrue(api.evidence_read_timeouts)
+                self.assertEqual(len(api.owned), 0 if receipt_mode else 1)
+                if not receipt_mode and not retain:
+                    self.assertTrue(api.owned[0].deleted)
+                    self.assertTrue(cleanup_sent)
+                raise StageFailure("runner_interrupted")
+            save_materials(*args)
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             private = root / "private"
             private.mkdir()
-            with patch.object(ui, "ROOT", root), patch.object(ui, "OUT", root / "build/stage-ui"), patch.object(ui, "command", side_effect=fake_command):
+            with patch.object(ui, "ROOT", root), patch.object(ui, "OUT", root / "build/stage-ui"), patch.object(ui, "command", side_effect=fake_command), \
+                    patch.object(ui, "save_materials", side_effect=collect_materials):
+                if through_main:
+                    app = root / "app"
+                    app.mkdir()
+                    (app / "build.gradle.kts").write_text('val appVersionName = "0.2.16"\n')
+                    apk = app / "build/outputs/apk/stage/e2e/app-stage-e2e.apk"
+                    apk.parent.mkdir(parents=True)
+                    apk.write_bytes(b"synthetic-apk-placeholder")
+                    rows = [row, row | {"id": "qase-9", "qase_id": 9}]
+                    with patch.object(ui, "inventory", return_value={"cases": rows}), patch.object(ui, "StageApi", return_value=api), \
+                            patch.object(ui.shutil, "which", return_value="/synthetic/available"), patch.object(ui, "prepare_case", return_value=prepared), \
+                            patch.object(api, "delete_owned", wraps=api.delete_owned) as delete:
+                        self.assertEqual(ui.main(["--no-build"]), 1)
+                    report = json.loads((root / "build/stage-ui/report.json").read_text())
+                    return api, report["results"][0], commands, report, delete.call_count
                 result = ui.run_case(row, api, args, private, prepared)
         report = {"cleanup": []}
         with patch.object(api, "delete_owned", wraps=api.delete_owned) as delete:
@@ -341,6 +368,34 @@ class StageEvidenceFailureCleanupTest(unittest.TestCase):
         self.assertEqual(len(api.owned), 1)
         self.assertTrue(api.owned[0].deleted)
         self.assertEqual(report["cleanup"][0]["outcome"], "deleted")
+
+    def test_material_collection_interrupt_follows_ownership_cleanup_and_main_halts(self):
+        for through_main in (False, True):
+            with self.subTest(through_main=through_main):
+                api, result, commands, report, _ = self.run_evidence_case(interrupt_materials=True, through_main=through_main)
+                self.assertEqual(result["outcome"], "failed")
+                self.assertEqual(result["reason"], "runner_interrupted")
+                self.assertEqual(len(api.owned), 1)
+                self.assertTrue(api.owned[0].deleted)
+                self.assertEqual(report["cleanup"][0]["outcome"], "deleted")
+                if through_main:
+                    self.assertEqual(report["environment_failure"], "runner_interrupted")
+                    self.assertEqual(report["results"][1]["outcome"], "not_run")
+                    self.assertFalse(report["full_acceptance"])
+                    self.assertEqual(sum(command[0] == "maestro" for command in commands), 1)
+
+    def test_material_collection_interrupt_never_adopts_inaccessible_or_foreign_receipts(self):
+        for receipt in ("unavailable", "foreign"):
+            with self.subTest(receipt=receipt):
+                api, result, commands, report, host_deletes = self.run_evidence_case(interrupt_materials=True, receipt_mode=receipt, through_main=True)
+                self.assertEqual(result["outcome"], "failed")
+                self.assertEqual(result["artifact_failure"], "runner_interrupted")
+                self.assertEqual(report["environment_failure"], "runner_interrupted")
+                self.assertEqual(report["results"][1]["outcome"], "not_run")
+                self.assertEqual(api.owned, [])
+                self.assertEqual(report["cleanup"], [])
+                self.assertEqual(host_deletes, 0)
+                self.assertFalse(any("cleanup_run=owned" in str(item) for command in commands for item in command))
 
     def test_interrupt_of_first_evidence_read_retries_once_and_preserves_owned_cleanup(self):
         for retain in (False, True):
