@@ -879,7 +879,8 @@
       "before_flow": ".maestro-stage/checkpoints/assistant_process_death_before.yaml",
       "after_flow": ".maestro-stage/checkpoints/assistant_process_death_after.yaml",
       "required_counts": {
-        "real_ask_requests": 1,
+        "real_ask_requests": 2,
+        "real_ask_consent_required": 1,
         "real_ask_accepted": 1,
         "ask_response_held": 1
       }

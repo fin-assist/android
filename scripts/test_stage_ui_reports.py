@@ -23,7 +23,7 @@ def expected_case(identifier="qase-8", layer="maestro", status="ready"):
         source, qase = ".maestro-stage/flows/assistant/process_death.yaml", 60
     return {"id": identifier, "source": source, "qase_id": qase, "layer": layer, "status": status,
             "provenance": "client-injected" if layer == "checkpoint" else "real-stage", "blocked_reason": "server_capability_missing",
-            "required_counts": {"real_ask_requests": 1, "real_ask_accepted": 1, "ask_response_held": 1} if layer == "checkpoint" else {}}
+            "required_counts": {"real_ask_requests": 2, "real_ask_consent_required": 1, "real_ask_accepted": 1, "ask_response_held": 1} if layer == "checkpoint" else {}}
 
 
 def result(case):
@@ -32,8 +32,9 @@ def result(case):
                                                            "counts": {"real_requests": 7}})
     row["client_evidence"]["counts"].update(case.get("required_counts", {}))
     if case["layer"] == "checkpoint":
-        row["client_evidence"]["counts"].update(real_ask_requests=1, real_ask_accepted=1, ask_response_held=1, ask_response_released=0)
+        row["client_evidence"]["counts"].update(real_ask_requests=2, real_ask_consent_required=1, real_ask_accepted=1, ask_response_held=1, ask_response_released=0)
         row["checkpoint"] = {"process_disappeared": True, "accepted_before_death": 1,
+                             "requests_before_death": 2, "consent_refusals_before_death": 1,
                              "response_delivered_before_death": False, "server_restarted": False}
     return row
 
@@ -186,11 +187,15 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(next(case for case in cases if case["qase_id"]==51)["required_counts"]["pending_upload_seed"], 1)
 
     def test_process_death_requires_real_death_and_no_second_post(self):
-        for mutation in ("extra_post", "missing_sent_counter", "invalid_counts", "no_checkpoint", "released", "not_dead"):
+        for mutation in ("extra_post", "missing_sent_counter", "missing_consent_refusal", "extra_consent_refusal", "invalid_counts", "no_checkpoint", "released", "not_dead", "wrong_pre_death_requests", "wrong_pre_death_refusals"):
             with self.subTest(mutation=mutation):
                 data=self.valid();row=data[1]["results"][0]
-                if mutation == "extra_post":row["client_evidence"]["counts"]["real_ask_requests"] = 2
+                if mutation == "extra_post":row["client_evidence"]["counts"]["real_ask_requests"] = 3
                 if mutation == "missing_sent_counter":row["client_evidence"]["counts"].pop("real_ask_requests")
+                if mutation == "missing_consent_refusal":row["client_evidence"]["counts"].pop("real_ask_consent_required")
+                if mutation == "extra_consent_refusal":row["client_evidence"]["counts"]["real_ask_consent_required"]=2
+                if mutation == "wrong_pre_death_requests":row["checkpoint"]["requests_before_death"]=1
+                if mutation == "wrong_pre_death_refusals":row["checkpoint"]["consent_refusals_before_death"]=0
                 if mutation == "invalid_counts":row["client_evidence"]["counts"] = None
                 if mutation == "no_checkpoint":row.pop("checkpoint")
                 if mutation == "released":row["client_evidence"]["counts"]["ask_response_released"] = 1

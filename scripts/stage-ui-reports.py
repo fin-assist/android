@@ -37,7 +37,7 @@ UNKNOWN_CODE_COUNTERS = {
 SCENARIO_OBSERVATIONS = {
     19: {"offline": 2}, 34: {"maintenance": 2}, 43: {"stream_drop": 6},
     48: {"error_requests": 4}, 58: {"offline": 2},
-    60: {"real_ask_requests": 1, "real_ask_accepted": 1, "ask_response_held": 1},
+    60: {"real_ask_requests": 2, "real_ask_consent_required": 1, "real_ask_accepted": 1, "ask_response_held": 1},
 }
 
 
@@ -155,10 +155,12 @@ def case_problems(row, expected):
             checkpoint = row.get("checkpoint", {})
             if (not isinstance(checkpoint, dict) or checkpoint.get("process_disappeared") is not True
                     or type(checkpoint.get("accepted_before_death")) is not int or checkpoint["accepted_before_death"] != 1
+                    or type(checkpoint.get("requests_before_death")) is not int or checkpoint["requests_before_death"] != 2
+                    or type(checkpoint.get("consent_refusals_before_death")) is not int or checkpoint["consent_refusals_before_death"] != 1
                     or checkpoint.get("response_delivered_before_death") is not False
                     or checkpoint.get("server_restarted") is not False
                     or any(counts.get(key, 0) != value for key, value in {
-                        "real_ask_requests": 1, "real_ask_accepted": 1,
+                        "real_ask_requests": 2, "real_ask_consent_required": 1, "real_ask_accepted": 1,
                         "ask_response_held": 1, "ask_response_released": 0}.items())):
                 problems.append("invalid_process_death_evidence")
     return problems

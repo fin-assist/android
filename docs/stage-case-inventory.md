@@ -118,7 +118,7 @@ The following safe mechanisms would unblock the relevant cases: a run-scoped fak
 
 ## Additional process-death acceptance
 
-The original 56 cases do **not** prove death during an uncertain in-flight assistant request. App-lock cold launches occur after completed authentication; Qase51 seeds an unknown-age upload key and does not kill the process. Additional Qase60 / `process-death-assistant` uses a host checkpoint: actual Ask accepted, response still held and not released, Home, `am kill`, confirmed PID disappearance, relaunch/unlock and actual history. It checks one accepted POST, one persisted question and remaining quota4. `ready` is authored readiness, not a claim of a successful fresh run. A client-synthetic failed answer is not acceptable evidence.
+The original 56 cases do **not** prove death during an uncertain in-flight assistant request. App-lock cold launches occur after completed authentication; Qase51 seeds an unknown-age upload key and does not kill the process. Additional Qase60 / `process-death-assistant` uses a host checkpoint: actual Ask accepted, response still held and not released, Home, `am kill`, confirmed PID disappearance, relaunch/unlock and actual history. Its fresh account first receives one real `CONSENT_REQUIRED` refusal; after the user grants consent, one further POST is accepted and its response is held. It checks exactly two sent POSTs, exactly one known consent refusal, one accepted POST, one persisted question and remaining quota4. These counts are recorded before death and remain unchanged after recovery; a third POST, even if refused, fails the case. `ready` is authored readiness, not a claim of a successful fresh run. A client-synthetic failed answer is not acceptable evidence.
 
 A process-death test must record real pre/post request counts and the same server-side question identity without printing its tokens or private bodies. Its recovery should run against the independent stage backend that outlives the client.
 
@@ -161,3 +161,9 @@ and UI grouping assertions, rather than a fake timezone response.
 Qase3 uses `new-empty` with `registration_expected:false`: its first Start only reaches Call and returns to phone
 editing. It never registers, reads an account or needs a baseline ledger. The ordinary `new-empty` registration
 case still requires a correlated successful Register receipt; this exception does not relax that ownership check.
+
+Qase60 `required_counts` includes `real_ask_requests:2`, `real_ask_consent_required:1`,
+`real_ask_accepted:1` and `ask_response_held:1`. The aggregate checkpoint guard is stricter than these minima:
+it requires those exact counts, `ask_response_released:0`, and matching host observations
+`requests_before_death:2` / `consent_refusals_before_death:1`. The consent-refusal counter is observational
+and comes only from the actual contract refusal; it is not a fabricated answer or an injected consent error.
