@@ -57,7 +57,7 @@ class StageFaultsTest {
         assertEquals(1, realCalls)
         assertEquals(1, faults.count("real_requests"))
         val report = File(context.filesDir, "stage-evidence.json").readText()
-        assertFalse(report.contains("phone"))
+        assertFalse(report.contains("+70000001234"))
         assertFalse(report.contains("profile"))
         assertTrue(report.contains("\"has_client_injections\":false"))
         assertEquals(1, StageFaults(context, store).count("real_requests"))
@@ -151,6 +151,102 @@ class StageFaultsTest {
         assertTrue(finished.await(10, java.util.concurrent.TimeUnit.SECONDS))
         assertEquals("Stage harness rejected an invalid request or run receipt", failure?.message)
         assertEquals(0, realCalls)
+    }
+
+    private fun authenticatedRequest(path: String, method: String = "GET", body: String? = null, authorization: String = "Bearer synthetic-owned-token") =
+        client.newCall(Request.Builder().url("https://stage.plainfin.ru$path")
+            .header("Authorization", authorization).method(method, body?.toRequestBody()).build())
+
+    private fun bindOwnedProfile() {
+        responseText = """{"phone":"+70000001234"}"""
+        authenticatedRequest("/v1/profile").execute().close()
+    }
+
+    private val acceptedAsk = """{"question":{"id":"question-1","role":"user","text":"Synthetic question","created_at":"2026-10-30T12:00:00Z"},"answer_id":"answer-1","remaining_limit":9}"""
+
+    @Test
+    fun `accepted Ask is durably recorded before delivery and survives harness reload`() {
+        bindOwnedProfile()
+        faults.configure(mapOf("hold_ask_response_ms" to "60000"))
+        responseText = acceptedAsk
+        val finished = java.util.concurrent.CountDownLatch(1)
+        val failure = java.util.concurrent.atomic.AtomicReference<Exception?>()
+        val returned = java.util.concurrent.atomic.AtomicBoolean(false)
+        val worker = Thread {
+            try {
+                authenticatedRequest("/v1/assistant/messages", "POST", """{"text":"Synthetic question"}""").execute().use {
+                    returned.set(true)
+                }
+            } catch (error: Exception) {
+                failure.set(error)
+            } finally {
+                finished.countDown()
+            }
+        }
+        worker.start()
+        try {
+            val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
+            while (faults.count("ask_response_held") == 0 && System.nanoTime() < deadline) Thread.sleep(5)
+            assertEquals(1, faults.count("ask_response_held"))
+            assertEquals(1, faults.count("real_ask_accepted"))
+            assertFalse(returned.get())
+            val restarted = StageFaults(context, store)
+            assertEquals(1, restarted.count("real_ask_accepted"))
+            assertEquals(1, restarted.count("ask_response_held"))
+            val evidence = File(context.filesDir, "stage-evidence.json").readText()
+            assertTrue(evidence.contains("\"has_client_injections\":true"))
+            assertFalse(evidence.contains("synthetic-owned-token"))
+            assertFalse(evidence.contains("Synthetic question"))
+        } finally {
+            worker.interrupt()
+            assertTrue(finished.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        }
+        assertTrue(failure.get() is IOException)
+        assertEquals("Stage UI Ask response hold interrupted", failure.get()?.message)
+        assertFalse(returned.get())
+    }
+
+    @Test
+    fun `unheld successful Ask is a passive real metric and refused Ask is never accepted`() {
+        bindOwnedProfile()
+        responseText = acceptedAsk
+        authenticatedRequest("/v1/assistant/messages", "POST", "{}").execute().close()
+        assertEquals(1, faults.count("real_ask_accepted"))
+        assertEquals(0, faults.count("ask_response_held"))
+        assertTrue(File(context.filesDir, "stage-evidence.json").readText().contains("\"has_client_injections\":false"))
+        faults.configure(mapOf("hold_ask_response_ms" to "60000"))
+        responseStatus = 429
+        responseText = "{}"
+        authenticatedRequest("/v1/assistant/messages", "POST", "{}").execute().close()
+        assertEquals(1, faults.count("real_ask_accepted"))
+        assertEquals(0, faults.count("ask_response_held"))
+    }
+
+    @Test
+    fun `Ask cannot get a false held marker for an unverified authenticated profile`() {
+        faults.configure(mapOf("hold_ask_response_ms" to "60000"))
+        responseText = acceptedAsk
+        assertFailsWith<IOException> { authenticatedRequest("/v1/assistant/messages", "POST", "{}").execute() }
+        assertEquals(1, faults.count("real_ask_accepted"))
+        assertEquals(0, faults.count("ask_response_held"))
+    }
+
+    @Test
+    fun `only successful DELETE with the same actual owned authentication records deletion`() {
+        bindOwnedProfile()
+        responseStatus = 500
+        responseText = "{}"
+        authenticatedRequest("/v1/profile", "DELETE").execute().close()
+        assertFalse(File(context.filesDir, "stage-evidence.json").readText().contains("\"deleted_phones\":[\""))
+        responseStatus = 204
+        authenticatedRequest("/v1/profile", "DELETE", authorization = "Bearer foreign-token").execute().close()
+        assertFalse(File(context.filesDir, "stage-evidence.json").readText().contains("\"deleted_phones\":[\""))
+        authenticatedRequest("/v1/profile", "DELETE").execute().close()
+        val evidence = File(context.filesDir, "stage-evidence.json").readText()
+        assertTrue(evidence.contains("\"deleted_phones\":[\"+70000001234\"]"))
+        assertTrue(evidence.contains("\"has_client_injections\":false"))
+        assertFalse(evidence.contains("synthetic-owned-token"))
+        StageFaults(context, store)
     }
 
 }

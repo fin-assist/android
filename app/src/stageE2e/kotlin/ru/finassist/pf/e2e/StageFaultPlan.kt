@@ -8,7 +8,7 @@ object StageFaultPlan {
     fun validate(name: String, value: String) {
         val valid = when (name) {
             "offline", "unknown_codes" -> value.toBooleanStrictOrNull() != null
-            "network_delay_ms", "call_delay_ms" -> value.toLongOrNull() in 0L..60_000L
+            "network_delay_ms", "call_delay_ms", "hold_ask_response_ms" -> value.toLongOrNull() in 0L..60_000L
             "stream_drops", "stream_rate_limits" -> value.toIntOrNull() in 0..100
             "stream_retry_s", "maintenance_retry_after" -> value.toIntOrNull() in 0..120
             "error_operation" -> value in operations

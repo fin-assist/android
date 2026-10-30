@@ -26,6 +26,8 @@ import javax.inject.Singleton
 import ru.finassist.pf.BuildConfig
 import ru.finassist.pf.core.common.availability.ClientVersion
 import java.util.UUID
+import ru.finassist.pf.core.api.ApiJson
+import ru.finassist.pf.core.api.model.AskResponse
 
 /** Explicit client fault injection around the real HTTPS client; never a replacement backend. */
 @Singleton
@@ -37,6 +39,9 @@ class StageFaults @Inject constructor(
     private val evidenceFile = File(context.filesDir, "stage-evidence.json")
     private val authEvidence = StageAuthEvidence()
     private val registrations = mutableListOf<JsonObject>()
+    private val deletedPhones = mutableSetOf<String>()
+    // Ephemeral actual-response Authorization -> synthetic phone. Never persisted or rendered.
+    private val verifiedAuth = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val settings = mutableMapOf<String, String>()
     private val counts = mutableMapOf<String, Int>()
     private val rateLimited = MutableStateFlow(0)
@@ -67,6 +72,12 @@ class StageFaults @Inject constructor(
                 require(UUID.fromString(id).toString() == id)
                 registrations += registration
             }
+            saved["deleted_phones"]?.jsonArray?.forEach { item ->
+                val phone = item.jsonPrimitive.content
+                val run = runs.read()
+                require(phone == run.phone || phone == run.new_phone)
+                deletedPhones += phone
+            }
         }
     }
 
@@ -94,9 +105,10 @@ class StageFaults @Inject constructor(
     private fun saveEvidence() {
         val evidence = buildJsonObject {
             put("run_id", runs.read().run_id)
-            put("has_client_injections", counts.any { (name, count) -> name != "real_requests" && count > 0 })
+            put("has_client_injections", counts.any { (name, count) -> name !in setOf("real_requests", "real_ask_accepted") && count > 0 })
             put("counts", Json.encodeToJsonElement(counts.toMap()))
             put("successful_registrations", JsonArray(registrations.toList()))
+            put("deleted_phones", JsonArray(deletedPhones.sorted().map(::JsonPrimitive)))
         }
         // Only counters, run UUID and synthetic registration receipts; never tokens or financial payloads.
         writePrivate(evidenceFile, evidence.toString())
@@ -198,6 +210,42 @@ class StageFaults @Inject constructor(
         }
         record("real_requests")
         var result = chain.proceed(request)
+        if (result.isSuccessful && request.method == "GET" && request.url.encodedPath == "/v1/profile") {
+            val profile = Json.parseToJsonElement(result.peekBody(65_536).string()).jsonObject
+            val phone = (profile["phone"] as? JsonPrimitive)?.contentOrNull
+            val authorization = result.request.header("Authorization")
+            if (phone != null && (phone == run.phone || phone == run.new_phone) && authorization != null) {
+                verifiedAuth[authorization] = phone
+            }
+        }
+        if (result.isSuccessful && request.method == "POST" && request.url.encodedPath == "/v1/assistant/messages") {
+            ApiJson.decodeFromString(AskResponse.serializer(), result.peekBody(65_536).string())
+            record("real_ask_accepted")
+            val holdMs = value("hold_ask_response_ms", "0").toLong()
+            if (holdMs > 0) {
+                val phone = result.request.header("Authorization")?.let(verifiedAuth::get)
+                if (phone != run.phone) {
+                    result.close()
+                    throw IOException("Stage UI Ask hold requires the primary run-owned authenticated profile")
+                }
+                // These durable counters precede delivery, so the host can kill the real background process here.
+                record("ask_response_held")
+                try {
+                    Thread.sleep(holdMs)
+                } catch (_: InterruptedException) {
+                    result.close()
+                    Thread.currentThread().interrupt()
+                    throw IOException("Stage UI Ask response hold interrupted")
+                }
+            }
+        }
+        if (request.method == "DELETE" && request.url.encodedPath == "/v1/profile" && result.code in setOf(200, 204)) {
+            val phone = result.request.header("Authorization")?.let(verifiedAuth::get)
+            if (phone != null && (phone == run.phone || phone == run.new_phone)) synchronized(this) {
+                deletedPhones += phone
+                saveEvidence()
+            }
+        }
         if (result.isSuccessful && submittedPhone != null) {
             authEvidence.started(submittedPhone, result.peekBody(16_384).string())
         }

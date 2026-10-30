@@ -97,6 +97,10 @@ class StageControlActivity : ComponentActivity() {
             }, appLock)
             require(signIn.signIn(run.phone, "1234") == null)
         }
+        if (controls["hold_ask_response_ms"]?.toLong()?.let { it > 0 } == true) {
+            // A fresh real profile read binds the actual authenticated response to the primary run account.
+            require(profileApi.getProfile().phone == run.phone)
+        }
         controls["profile_timezone"]?.let { timezone ->
             require(profileApi.getProfile().phone == run.phone)
             profileApi.updateProfile(ProfileUpdate(timezone = timezone))

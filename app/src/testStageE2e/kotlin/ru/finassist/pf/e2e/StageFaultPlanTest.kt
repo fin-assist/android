@@ -18,12 +18,14 @@ class StageFaultPlanTest {
 
     @Test
     fun `controls reject arbitrary data and unbounded faults`() {
-        listOf("call_ttl_ms" to "10", "assistant_model_errors" to "1", "url" to "https://other.example", "offline" to "yes", "network_delay_ms" to "60001", "stream_drops" to "101", "error_operation" to "profile_delete").forEach { (name, value) ->
+        listOf("call_ttl_ms" to "10", "assistant_model_errors" to "1", "url" to "https://other.example", "offline" to "yes", "network_delay_ms" to "60001", "hold_ask_response_ms" to "60001", "hold_ask_response_ms" to "-1", "stream_drops" to "101", "error_operation" to "profile_delete").forEach { (name, value) ->
             assertFailsWith<IllegalArgumentException> { StageFaultPlan.validate(name, value) }
         }
         StageFaultPlan.validate("offline", "false")
         StageFaultPlan.validate("stream_drops", "100")
         StageFaultPlan.validate("call_delay_ms", "60000")
+        StageFaultPlan.validate("hold_ask_response_ms", "60000")
+        StageFaultPlan.validate("hold_ask_response_ms", "0")
     }
 
     @Test
