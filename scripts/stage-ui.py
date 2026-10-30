@@ -24,6 +24,33 @@ from stage_api import StageApi, StageFailure
 ROOT = Path(__file__).resolve().parent.parent
 APP = "ru.finassist.pf.stage.e2e"
 OUT = ROOT / "build/stage-ui"
+CONTROL_STATUS_VALUES = {
+    "operation": {"config", "setup_run", "cleanup_run", "sign_in", "expect_process_question"},
+    "phase": {"initial", "session", "lock", "document", "phone", "verification", "register", "session_commit",
+              "profile", "import", "import_progress", "analytics", "passcode", "cleanup_delete", "cleanup_local", "done"},
+    "outcome": {"started", "passed", "failed"},
+    "error_class": {"timeout", "session_state", "document_invalid", "verification_not_verified", "candidate_not_new",
+                    "registration_receipt_missing", "profile_identity_mismatch", "import_not_complete", "offline",
+                    "offline_dns", "offline_timeout", "offline_tls", "offline_connection", "rate_limited", "server",
+                    "unauthorized", "update_required", "maintenance", "api_error", "cancelled", "io_error",
+                    "invalid_argument", "invalid_state", "other"},
+}
+
+
+def control_status(raw, run_id):
+    """Project only matching-run closed diagnostics; arbitrary string fields are never public evidence."""
+    try:
+        status = json.loads(raw)
+        if not isinstance(status, dict) or status.get("run_id") != run_id:
+            return None
+        if not {"operation", "phase", "outcome"} <= status.keys():
+            return None
+        safe = {key: status[key] for key in CONTROL_STATUS_VALUES if key in status}
+        if all(isinstance(value, str) and value in CONTROL_STATUS_VALUES[key] for key, value in safe.items()):
+            return safe
+    except (ValueError, TypeError):
+        pass
+    return None
 
 
 def sanitize(text, secrets=()):
@@ -381,14 +408,9 @@ def run_case(row, api, args, private, prepared=None):
             result["evidence_failure"] = evidence_failure
     if configured:
         _, status_text = command(["adb", "-s", args.serial, "exec-out", "run-as", APP, "cat", "files/stage-control-status.json"], timeout=10)
-        try:
-            status = json.loads(status_text)
-            if status.get("run_id") == api.run_id:
-                safe = {key: status[key] for key in ("operation", "phase", "outcome", "error_class") if key in status}
-                if all(isinstance(value, str) and re.fullmatch(r"[a-z_]+", value) for value in safe.values()):
-                    result["control_status"] = safe
-        except (ValueError, TypeError):
-            pass
+        status = control_status(status_text, api.run_id)
+        if status is not None:
+            result["control_status"] = status
     result["seconds"] = round(time.monotonic() - started, 3)
     return result
 

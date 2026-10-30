@@ -9,7 +9,11 @@ import kotlinx.serialization.json.put
 import ru.finassist.pf.core.common.error.AppError
 import java.io.File
 import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.UUID
+import javax.net.ssl.SSLException
 
 /** Closed phases, persisted before a potentially suspending setup boundary. */
 enum class StageBootstrapPhase(val wire: String) {
@@ -60,7 +64,7 @@ class StageControlStatus(context: Context, private val runId: String, private va
         fun errorClass(error: Exception): String = when (error) {
             is TimeoutCancellationException -> "timeout"
             is StageBootstrapFailure -> error.code.wire
-            is AppError.Offline -> "offline"
+            is AppError.Offline -> offlineClass(error.cause)
             is AppError.RateLimited -> "rate_limited"
             is AppError.Server -> "server"
             is AppError.Unauthorized -> "unauthorized"
@@ -72,6 +76,21 @@ class StageControlStatus(context: Context, private val runId: String, private va
             is IllegalArgumentException -> "invalid_argument"
             is IllegalStateException -> "invalid_state"
             else -> "other"
+        }
+
+        private fun offlineClass(cause: Throwable?): String {
+            var current = cause
+            // Bound traversal even if an exception has a cyclic cause chain. Never inspect messages or class names.
+            repeat(8) {
+                when (current) {
+                    is UnknownHostException -> return "offline_dns"
+                    is SocketTimeoutException -> return "offline_timeout"
+                    is SSLException -> return "offline_tls"
+                    is ConnectException -> return "offline_connection"
+                }
+                current = current?.cause
+            }
+            return "offline"
         }
     }
 }

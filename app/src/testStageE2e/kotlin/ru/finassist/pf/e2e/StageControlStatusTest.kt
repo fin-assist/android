@@ -11,11 +11,52 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.io.File
 import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
+import ru.finassist.pf.core.common.error.AppError
 import kotlin.test.*
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
 class StageControlStatusTest {
+    @Test
+    fun `offline diagnostics distinguish closed transport causes without exporting sensitive messages`() {
+        val context = RuntimeEnvironment.getApplication()
+        val status = StageControlStatus(context, "11111111-2222-4333-8444-555555555555", StageControlOperation.SETUP)
+        val file = File(context.filesDir, "stage-control-status.json")
+        val sensitive = "Bearer secret-token +70000001234 https://private.invalid?token=private-token"
+        val failures = listOf(
+            AppError.Offline(UnknownHostException(sensitive)) to "offline_dns",
+            AppError.Offline(SocketTimeoutException(sensitive)) to "offline_timeout",
+            AppError.Offline(SSLException(sensitive)) to "offline_tls",
+            AppError.Offline(ConnectException(sensitive)) to "offline_connection",
+            AppError.Offline(IOException(sensitive, UnknownHostException(sensitive))) to "offline_dns",
+            AppError.Offline(IOException(sensitive)) to "offline",
+            AppError.Offline() to "offline",
+        )
+        for ((failure, expected) in failures) {
+            assertEquals(expected, StageControlStatus.errorClass(failure))
+            status.write(StageBootstrapPhase.DOCUMENT, StageControlOutcome.FAILED, failure)
+            val raw = file.readText()
+            assertEquals(expected, Json.parseToJsonElement(raw).jsonObject.getValue("error_class").jsonPrimitive.content)
+            assertFalse(raw.contains("secret-token"))
+            assertFalse(raw.contains("private-token"))
+            assertFalse(raw.contains("+70000001234"))
+            assertFalse(raw.contains("https://"))
+        }
+    }
+
+    @Test
+    fun `unrecognized cyclic causes retain generic offline classification`() {
+        val first = IOException("private first")
+        val second = IOException("private second")
+        first.initCause(second)
+        second.initCause(first)
+        assertEquals("offline", StageControlStatus.errorClass(AppError.Offline(first)))
+    }
+
     @Test
     fun `phase artifact records in-flight boundary and only closed safe failure codes`() {
         val context = RuntimeEnvironment.getApplication()

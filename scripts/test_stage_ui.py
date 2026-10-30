@@ -21,6 +21,26 @@ SPEC.loader.exec_module(ui)
 RUN = "11111111-2222-4333-8444-555555555555"
 
 
+class StageControlStatusTest(unittest.TestCase):
+    def test_closed_transport_diagnostics_retain_classification_and_drop_unrelated_data(self):
+        for code in ("offline", "offline_dns", "offline_timeout", "offline_tls", "offline_connection"):
+            raw = {"run_id": RUN, "operation": "setup_run", "phase": "document", "outcome": "failed", "error_class": code,
+                   "message": "Bearer private-token +70000001234", "url": "https://private.invalid"}
+            safe = ui.control_status(json.dumps(raw), RUN)
+            self.assertEqual(safe, {"operation": "setup_run", "phase": "document", "outcome": "failed", "error_class": code})
+            self.assertNotIn("private-token", json.dumps(safe))
+            self.assertNotIn("+7000000", json.dumps(safe))
+
+    def test_unknown_diagnostic_codes_invalid_shapes_and_foreign_runs_are_rejected(self):
+        baseline = {"run_id": RUN, "operation": "setup_run", "phase": "document", "outcome": "failed", "error_class": "offline_dns"}
+        for key in ("operation", "phase", "outcome", "error_class"):
+            self.assertIsNone(ui.control_status(json.dumps(baseline | {key: "private_lowercase_payload"}), RUN))
+        self.assertIsNone(ui.control_status(json.dumps(baseline | {"run_id": str(uuid.uuid4())}), RUN))
+        self.assertIsNone(ui.control_status("[]", RUN))
+        self.assertIsNone(ui.control_status("{}", RUN))
+        self.assertIsNone(ui.control_status("not-json", RUN))
+
+
 class FakeApi(StageApi):
     def __init__(self, replies):
         super().__init__(RUN, "android/0.2.16+1")
