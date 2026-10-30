@@ -106,7 +106,7 @@ jobs:
         id: unit-tests
         env:
           TEST_TASK: ${{ github.event_name == 'pull_request' && 'unitTest' || 'test' }}
-        run: ./gradlew "$TEST_TASK" :app:testStageDebugUnitTest :app:testStageReleaseUnitTest :build-logic:convention:test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew "$TEST_TASK" :app:testStageDebugUnitTest :app:testStageReleaseUnitTest :app:testStageE2eUnitTest :build-logic:convention:test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Saved from main and release branches only, like the Gradle cache: their caches are the ones every PR can read.
       # Only after green tests: then every jar a test needed has been fetched, and an entry, once saved, never changes.
@@ -266,7 +266,7 @@ jobs:
       # stageDebug as an installable stage artifact and stageRelease/prodRelease unsigned (CI has no signing key).
       # Other variants (mockRelease, prodDebug, localRelease) are not built here.
       - name: Assemble
-        run: ./gradlew assembleMockDebug assembleLocalDebug assembleStageDebug assembleStageRelease assembleProdRelease processLocalReleaseManifest :app:checkNoMockCode --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew assembleMockDebug assembleLocalDebug assembleStageDebug assembleStageRelease :app:assembleStageE2e :app:assembleStageE2eAndroidTest assembleProdRelease processLocalReleaseManifest :app:checkNoMockCode --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Check AGP output too: Android keeps flavor suffixes, the version sent in X-Client-Version does not.
       - name: Manifest and client versions match the app version

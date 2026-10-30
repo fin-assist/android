@@ -1,5 +1,9 @@
 # UI tests (e2e)
 
+The separate real-stage suite (FIN-386) is documented in [stage-ui.md](stage-ui.md), with the full
+[source-to-stage inventory](stage-case-inventory.md). Its isolated `stageE2e` APK and manual-only workflow do not
+change the mock suite or establish a successful stage run merely by existing. This page describes `mockE2e` below.
+
 Two layers, both on an emulator or device:
 
 | Layer | What | Where | Build |
@@ -636,6 +640,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 
 | Flow | Checks |
 |---|---|
+| `.maestro-stage/…/assistant/process_death` (stage only) | real accepted Ask → withheld response → host Home/am kill/PID checkpoint → unlock/recovery/history; exactly one server question and one accepted POST, quota charged once (Qase60, FIN-386). Authored; a pass requires a fresh stage report. |
 | `auth/register_new_user` (smoke) | independent 14+/PD before phone → new number → create account without another consent → passcode → first upload → result → feed (Qase2, FIN-365) |
 | `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the three tabs (Qase1, FIN-365) |
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |

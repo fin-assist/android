@@ -1,0 +1,41 @@
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Process death · restore actual history"
+---
+# Keep the Android task retained by Home + am kill; force-stop would test a different boundary.
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "applock.unlock"
+    timeout: 30000
+- runFlow:
+    file: ../subflows/enter_code.yaml
+    env:
+      CODE: "1234"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat.recovery"
+    timeout: 30000
+- assertVisible: ".*Результат предыдущей отправки неизвестен.*"
+- runFlow:
+    when:
+      visible: "Проверить историю"
+    commands:
+      - tapOn: "Проверить историю"
+- extendedWaitUntil:
+    visible: "FIN362_TOOLS_OK.*"
+    timeout: 40000
+- assertVisible:
+    id: "assistant.question"
+    index: 0
+- assertNotVisible:
+    id: "assistant.question"
+    index: 1
+- runFlow:
+    file: ../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_process_question=one"

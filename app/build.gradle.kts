@@ -172,7 +172,8 @@ android {
     sourceSets {
         maybeCreate("stageDebug")
         maybeCreate("stageRelease")
-        maybeCreate("stageE2e")
+        // Reuse the existing synthetic test files; this adds assets, never the fake backend's code/dependency.
+        maybeCreate("stageE2e").assets.srcDirs("src/mockE2e/assets", rootProject.file("mock/backend/src/main/assets"))
     }
 
     // The same JaCoCo for the probes in the APK and for the report task (`:e2eCoverageReport`): execution data

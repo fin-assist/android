@@ -56,6 +56,7 @@
     ".maestro/flows/assistant/retry_after_consent.yaml": 52,
     ".maestro/flows/auth/phone_confirmation_gates.yaml": 57,
     ".maestro/flows/auth/phone_consent_recovery.yaml": 58,
-    ".maestro/flows/auth/phone_restart.yaml": 59
+    ".maestro/flows/auth/phone_restart.yaml": 59,
+    ".maestro-stage/flows/assistant/process_death.yaml": 60
   }
 }

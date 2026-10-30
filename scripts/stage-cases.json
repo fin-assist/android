@@ -63,7 +63,7 @@
       "layer": "maestro",
       "status": "blocked",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "call_delay_ms",
         "call_ttl_ms"
@@ -97,7 +97,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real login; incorrect and correct local passcode after cold start."
     },
@@ -109,7 +109,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real login; cancel and confirm forgotten-code logout."
     },
@@ -121,7 +121,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real login; mismatched repeat and changed passcode after restart."
     },
@@ -133,7 +133,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real operation category update remains visible after reopening."
     },
@@ -145,7 +145,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real search over the imported Krabsbir fixture, empty result, amount/kind/category/period filters."
     },
@@ -157,7 +157,7 @@
       "layer": "maestro",
       "status": "blocked",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "unknown_codes"
       ],
@@ -172,7 +172,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "profile_timezone"
       ],
@@ -186,7 +186,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "fresh-baseline",
+      "setup": "first-session-fresh",
       "requirements": [],
       "assertions": "Fresh baseline extends statement coverage to today without changing operations; then real stale file replacement."
     },
@@ -198,7 +198,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Explicit fixture months; real analytics blocks, period navigation, transfer mode and category link."
     },
@@ -210,7 +210,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "flag.analytics.block.tiles",
         "flag.analytics.block.expense_categories",
@@ -227,7 +227,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "failing_blocks"
       ],
@@ -241,7 +241,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "unknown_codes"
       ],
@@ -255,7 +255,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real category/merchant/payment groups link to actual operations."
     },
@@ -267,7 +267,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real own-transfer 6000 is absent from scoped analytics search and present after scope removal."
     },
@@ -279,7 +279,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "provider-fin362-tools",
         "provider-fin362-analytics"
@@ -294,7 +294,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "provider-default-refusal",
         "provider-fin362-limit"
@@ -309,7 +309,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real upload, exact-byte duplicate import, three history records, delete newest only."
     },
@@ -321,7 +321,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Actual parser derives explicit calendar range, transaction fallback date and zero-operation history."
     },
@@ -333,7 +333,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real parser rejects CSV, non-statement and unsupported bank; cancel picker."
     },
@@ -360,7 +360,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real profile theme PATCH; cancel and confirm logout."
     },
@@ -372,7 +372,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "network_delay_ms"
       ],
@@ -386,7 +386,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "offline"
       ],
@@ -415,7 +415,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "min_version"
       ],
@@ -429,7 +429,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "maintenance",
         "maintenance_retry_after"
@@ -444,7 +444,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "maintenance",
         "maintenance_retry_after"
@@ -459,7 +459,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "stream_drops",
         "stream_rate_limits",
@@ -477,7 +477,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "offline"
       ],
@@ -491,7 +491,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "offline"
       ],
@@ -505,7 +505,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "stream_drops",
         "stream_rate_limits",
@@ -522,7 +522,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real unread parser line numbers and reasons; history opens unread list."
     },
@@ -534,7 +534,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Actual parser emits two identical unread occurrences on physical line 31."
     },
@@ -546,7 +546,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real correction preserves account/FITID identity and resolves historical unread rows; upload date comes from runner."
     },
@@ -558,7 +558,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real OFX operation without NAME displays fallback title; fixed 7 October header replaces frozen yesterday."
     },
@@ -570,7 +570,7 @@
       "layer": "maestro",
       "status": "blocked",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "unknown_codes"
       ],
@@ -585,7 +585,7 @@
       "layer": "maestro",
       "status": "blocked",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "provider-expiring-merchant-selection"
       ],
@@ -600,7 +600,7 @@
       "layer": "maestro",
       "status": "blocked",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "assistant_model_errors"
       ],
@@ -615,7 +615,7 @@
       "layer": "maestro",
       "status": "blocked",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "assistant_model_errors",
         "network_delay_ms"
@@ -631,7 +631,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "provider-fin362-off-topic"
       ],
@@ -645,7 +645,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Real history changed_since tracks category change and upload deletion."
     },
@@ -657,7 +657,7 @@
       "layer": "maestro",
       "status": "blocked",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [],
       "assertions": "Tool-backed no-results in covered period is charged.",
       "blocked_reason": "The stage fake-LLM has no verified merchant-not-found tool scenario for a covered period; a synthetic answer cannot prove server charging."
@@ -670,7 +670,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "error_operation",
         "error_scenario"
@@ -685,7 +685,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "provider-fin362-off-topic"
       ],
@@ -699,7 +699,7 @@
       "layer": "maestro",
       "status": "blocked",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "error_operation",
         "error_scenario",
@@ -717,7 +717,7 @@
       "layer": "maestro",
       "status": "ready",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "pending_upload_fixture",
         "expect_uploads"
@@ -732,7 +732,7 @@
       "layer": "maestro",
       "status": "blocked",
       "provenance": "client-injected",
-      "setup": "existing-seeded",
+      "setup": "first-session-seeded",
       "requirements": [
         "assistant_model_errors",
         "network_delay_ms"
@@ -788,17 +788,19 @@
   "additional_cases": [
     {
       "id": "process-death-assistant",
-      "qase_id": null,
-      "source": null,
-      "stage_flow": null,
-      "layer": "maestro",
-      "status": "blocked",
-      "provenance": "real-stage",
-      "setup": "existing-seeded",
+      "qase_id": 60,
+      "source": ".maestro-stage/flows/assistant/process_death.yaml",
+      "stage_flow": ".maestro-stage/flows/assistant/process_death.yaml",
+      "layer": "checkpoint",
+      "status": "ready",
+      "provenance": "client-injected",
+      "setup": "first-session-seeded",
       "requirements": [
-        "durable-in-flight-assistant-checkpoint"
+        "hold_ask_response_ms",
+        "host-process-death-checkpoint"
       ],
-      "blocked_reason": "A host checkpoint must kill the client after the real Ask was accepted but before its response reached the client, then reopen actual history without automatic POST; no such seam is implemented yet."
+      "before_flow": ".maestro-stage/checkpoints/assistant_process_death_before.yaml",
+      "after_flow": ".maestro-stage/checkpoints/assistant_process_death_after.yaml"
     }
   ],
   "provider_scenarios": {

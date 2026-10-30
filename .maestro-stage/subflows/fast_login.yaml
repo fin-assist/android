@@ -1,10 +1,10 @@
-# FIN-386. Stage-only helper; run scripts/stage-e2e.py to prepare owned state first.
+# FIN-386. Stage-only helper; run scripts/stage-ui.py to prepare owned state first.
 appId: ru.finassist.pf.stage.e2e
 ---
 - runFlow:
     file: config.yaml
     env:
-      LINK: "pfe2e://config?sign_in=existing"
+      LINK: "pfe2e://config?setup_run=${STAGE_SETUP_MODE}"
 - launchApp:
     stopApp: false
 - extendedWaitUntil:

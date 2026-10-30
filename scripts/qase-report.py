@@ -57,9 +57,9 @@ class TestResult:
 def test_key(case: ET.Element) -> str:
     """`.maestro/…` path for a Maestro flow (its `file` attribute is absolute), `<class>#<method>` otherwise."""
     file = case.get("file") or ""
-    marker = "/.maestro/"
-    if marker in file:
-        return ".maestro/" + file.split(marker, 1)[1]
+    for marker in ("/.maestro/", "/.maestro-stage/"):
+        if marker in file:
+            return marker[1:] + file.split(marker, 1)[1]
     return f"{case.get('classname', '')}#{case.get('name', '')}"
 
 

@@ -204,14 +204,14 @@ class CaseMapTest(unittest.TestCase):
         self.assertEqual(missing, [], "add these flows to scripts/qase-cases.json (and create the cases in Qase)")
 
     def test_every_mapped_flow_exists(self):
-        stale = sorted(k for k in self.cases if k.startswith(".maestro/") and not (ROOT / k).exists())
+        stale = sorted(k for k in self.cases if k.startswith((".maestro/", ".maestro-stage/")) and not (ROOT / k).exists())
         self.assertEqual(stale, [], "these flows were renamed or removed: update scripts/qase-cases.json")
 
     def test_every_mapped_native_test_exists(self):
         sources = ROOT / "app" / "src"
         stale = []
         for key in self.cases:
-            if key.startswith(".maestro/"):
+            if key.startswith((".maestro/", ".maestro-stage/")):
                 continue
             cls, method = key.split("#")
             path = next(iter(sources.glob(f"androidTest*/kotlin/{cls.replace('.', '/')}.kt")), None)

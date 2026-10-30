@@ -1,15 +1,15 @@
 # Stage UI case inventory (FIN-386)
 
-Source inventory at Android commit `661ff373bfa6357597d1d0e054159d662612b1b2`: **55 Maestro roots + 1 native case = 56**. Qase IDs 53–55 are absent from `scripts/qase-cases.json`; they are not silently counted as implemented cases. The mock tree and mapping remain unchanged.
+Source inventory at Android commit `661ff373bfa6357597d1d0e054159d662612b1b2`: **55 Maestro roots + 1 native case = 56**. Qase IDs 53–55 are absent from `scripts/qase-cases.json`; they are not silently counted as implemented cases. The mock tree and original mapping identities remain unchanged; the map adds stage-only case60.
 
 `scripts/stage-cases.json` is the executable selection/mapping contract. `ready` is an authored runnable candidate, not a completed test. A full run reports every source case and every `additional_cases` entry. Blocked, missing, cancelled and timed-out cases cannot become passed or disappear from the denominator.
 
 ## Preparation and isolation
 
 - `existing-seeded`: create a fresh owned synthetic phone through the actual stage verification/registration APIs, reject a collision with an existing account, upload the baseline OFX and await completed import and analytics readiness. The only baseline upload is the real imported one; no in-process backend exists.
-- `new-empty`: reserve a fresh unused owned phone but leave registration and first upload to the UI. Set `STAGE_PHONE` to the same fresh phone for receipt ownership checks.
+- `new-empty`: allocate a synthetic candidate without creating a verification request; the UI performs the first Start, registration and upload. A verified existing candidate is refused before its session can be adopted.
 - `existing-and-new`: prepare one existing seeded owned account and one fresh unused owned phone; the UI first checks the registration flag on the new phone and then signs into the owned existing one.
-- `fresh-baseline`: same as `existing-seeded`, but extend only the baseline OFX statement coverage `DTEND`/`DTSERVER` to the current profile calendar day. Keep transaction timestamps, FITIDs and values unchanged. Qase37 then replaces this fresh statement with the original stale fixture. Do not change application or server clocks.
+- `first-session-seeded` / `first-session-fresh`: actual registration and real OFX preparation inside the test APK, retaining the first encrypted session. No second Phone Start, fixed waiting period or auth bypass. The fresh variant extends only coverage dates to the current Moscow day; operations stay unchanged. Existing-account login prerequisites are separate and execute after independent feature scenarios; an unready prerequisite fails explicitly.
 - Before each case, the host clears **only** `ru.finassist.pf.stage.e2e`, then writes private `files/stage-run.json` containing `{run_id: UUID, phone: "+7000000xxxx"}`. Its helpers must not clear app data again. Clear/relaunch does not reset server state.
 - Any account/upload deletion is scoped to the accounts created by this run. Never discover an existing account and erase it to make a fixture fit. Cleanup failure is reported independently from assertion failure.
 
@@ -18,7 +18,7 @@ Source inventory at Android commit `661ff373bfa6357597d1d0e054159d662612b1b2`: *
 | Environment input | Meaning |
 |---|---|
 | `STAGE_PHONE` | Ten digits without +7 of the receipt-owned existing account, or the fresh phone in `new-empty`. |
-| `STAGE_PHONE_DISPLAY` | Formatted receipt phone, e.g. `+7 000 000-12-34`; strings prefix the leading plus with a regex escape. |
+| `STAGE_PHONE_DISPLAY` | Regex-safe receipt phone, e.g. `\+7 000 000-12-34`; YAML interpolates the variable without escaping its dollar sign. |
 | `STAGE_NEW_PHONE` | Ten digits of a fresh phone for registration/closed-registration cases. Never a shared fixture number. |
 | `STAGE_NEW_PHONE_DISPLAY` | The corresponding formatted new phone, reserved for new-phone assertions. |
 | `STAGE_FINANCIAL_QUESTION` | Exactly `#FIN362_TOOLS Покажи доходы и расходы по моим данным.` for the audited provider configuration. This is synthetic fixture input, not a model semantic-quality test. |
@@ -120,7 +120,7 @@ The following safe mechanisms would unblock the relevant cases: a run-scoped fak
 
 ## Additional process-death acceptance
 
-The original 56 cases do **not** prove death during an uncertain in-flight assistant request. App-lock cold launches occur after completed authentication; Qase51 seeds an unknown-age upload key and does not kill the process. The `process-death-assistant` additional inventory entry stays blocked/red until a host checkpoint accepts a real Ask, withholds its response, kills the client, relaunches/unlocks and verifies actual persisted history with no automatic new POST. A client-synthetic failed answer is not acceptable evidence.
+The original 56 cases do **not** prove death during an uncertain in-flight assistant request. App-lock cold launches occur after completed authentication; Qase51 seeds an unknown-age upload key and does not kill the process. Additional Qase60 / `process-death-assistant` uses a host checkpoint: actual Ask accepted, response still held and not released, Home, `am kill`, confirmed PID disappearance, relaunch/unlock and actual history. It checks one accepted POST, one persisted question and remaining quota4. `ready` is authored readiness, not a claim of a successful fresh run. A client-synthetic failed answer is not acceptable evidence.
 
 A process-death test must record real pre/post request counts and the same server-side question identity without printing its tokens or private bodies. Its recovery should run against the independent stage backend that outlives the client.
 
@@ -130,4 +130,4 @@ A process-death test must record real pre/post request counts and the same serve
 
 ## Authored baseline
 
-This inventory currently has 47 ready candidates and 9 blocked source cases, plus one blocked additional process-death case. No readiness flag claims a local/device pass. The report records fresh environment, selected APK/source SHA, provider fixture identity, account ownership evidence, assertion outcomes, client fault counters and sanitized failure materials separately.
+This inventory currently has 47 ready source candidates and 9 blocked source cases, plus the authored Qase60 process-death candidate. No readiness flag claims a local/device pass. The report records fresh environment, selected APK/source SHA, provider fixture expectation, account ownership evidence, assertion outcomes, client fault counters and sanitized failure materials separately. Backend/provider missing mechanisms are tracked by FIN-387.

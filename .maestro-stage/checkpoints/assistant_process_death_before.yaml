@@ -1,0 +1,44 @@
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Process death · accepted Ask checkpoint"
+---
+- runFlow: ../subflows/clear_state.yaml
+- runFlow: ../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.assistant"
+    timeout: 20000
+- tapOn:
+    id: "profile.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 20000
+- runFlow:
+    file: ../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?hold_ask_response_ms=60000"
+- tapOn:
+    id: "ds.chat.input"
+- inputText: ${STAGE_PROCESS_QUESTION}
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 20000

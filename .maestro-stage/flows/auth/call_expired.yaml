@@ -51,7 +51,7 @@ tags:
 - assertNotVisible:
     id: "auth.call.dial"
 - assertNotVisible: "Номер для звонка"
-- assertVisible: "Звонка с \\${STAGE_PHONE_DISPLAY} мы не дождались\\. Запросите номер ещё раз"
+- assertVisible: "Звонка с ${STAGE_PHONE_DISPLAY} мы не дождались\\. Запросите номер ещё раз"
 
 - runFlow:
     file: ../../subflows/config.yaml

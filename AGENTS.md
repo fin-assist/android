@@ -58,6 +58,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Screens vs mockups (snapshot comparison) | `design-check/README.md` (mockups: Figma, exported by `design-check/export.py`), `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks (sign-in without the screens — `E2eSignIn`), native gaps, shards in CI, Qase; default SDK package cache + fresh cold AVD, opt-in snapshot (`avd_cache`), SDK-only experiment (`sdk_benchmark`) | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/e2e-shards.py`, `scripts/qase-*`; `scripts/e2e-sdk-cache.py`, `scripts/e2e-cache.py`, `scripts/sdk-preparation-benchmark.py` |
 | Read-only live SSE 429 marker, mockE2e only (FIN-380) | `app/src/mockE2e/…/E2eStreamProbe.kt`; wait for `e2e.stream.rate_limited=1` before opening a control link or checking absence of errors; `docs/e2e.md` |
+| Real stage UI harness, isolated `stageE2e` APK (FIN-386) | `docs/stage-ui.md`, `docs/stage-case-inventory.md`; `.maestro-stage/`, `app/src/stageE2e/`, `app/src/androidTestStage/`; `scripts/stage-ui.py`, `stage_api.py`, `stage-cases.json`; `.github/workflows/stage-ui.yml` is manual-only |
 | Multiplatform readiness of `:core:api` and `:mock:backend`: rule, JVM-only inventory, check | `docs/kmp-readiness.md`; `scripts/check-kmp-ready.py`, `scripts/kmp-baseline.json` |
 | Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
 | UI test coverage: JaCoCo on the e2e build, scenario coverage of the flows | `docs/testing.md` («UI test coverage»); `:e2eCoverageReport` in root `build.gradle.kts`, `app/src/mockE2e/…/E2eCoverage.kt`, `scripts/ui-coverage.py` |
@@ -82,8 +83,10 @@ two distinct `sha256/` pins and an expiration within a year, or the configuratio
 refused certificate is the usual offline error plus a `network.tls` non-fatal (`core/network/…/TlsFailures.kt`).
 Decision and rotation: «Архитектура» → «Вход трафика» in Confluence PF. CI checks it on the merged manifests
 (`scripts/check-build-separation.py`, `pinned-release` with test pins) and keeps `:mock:*` off the
-`local`, `stage` and `prod` classpaths (`:app:checkNoMockCode`). Build type `e2e` (mock only): debug + UI-test hooks, pinned
-date, JaCoCo probes; the native tests run on it (docs/e2e.md).
+`local`, `stage` and `prod` classpaths (`:app:checkNoMockCode`). Build type `e2e`: debug + isolated UI-test hooks.
+`mockE2e` pins the date and uses JaCoCo probes; `stageE2e` keeps the real clock, HTTP/SSE, local test flags and no SDK
+traffic. Ordinary stageDebug/stageRelease and prod have no hooks. Native tests use their flavor's e2e build
+(docs/e2e.md, docs/stage-ui.md).
 
 ### Stack
 
@@ -181,9 +184,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   (every module, `build-logic/…/buildlogic/Coverage.kt`) runs the unit tests of the coverage variant only: `test`
   of JVM modules, `testDebugUnitTest` of Android libraries, `testMockDebugUnitTest` of `:app`.
 - CI (`.github/workflows/ci.yml`, FIN-176) runs the Gradle checks as parallel jobs: unit tests with coverage
-  (`unitTest :build-logic:convention:test` on a PR; `test`, the unit tests of every variant, on pushes to `main`,
+  (`unitTest :app:testStageE2eUnitTest :build-logic:convention:test` on a PR; `test`, the unit tests of every variant, on pushes to `main`,
   `release/**` and `stage-*/**`), `lintMockDebug lintStageDebug`, and the build of `assembleMockDebug assembleLocalDebug
-  assembleStageDebug assembleStageRelease assembleProdRelease` (release unsigned) with `:app:checkNoMockCode`, the Tracer check and the manifest checks
+  assembleStageDebug assembleStageRelease :app:assembleStageE2e :app:assembleStageE2eAndroidTest assembleProdRelease` (release unsigned) with `:app:checkNoMockCode`, the Tracer check and the manifest checks
   (`scripts/check-build-separation.py`, pinning included). A test that fails only in a release, `local`, `prod` or
   `e2e` variant is caught after the merge, not on the PR (stage app unit tests also run on PRs); run `./gradlew test` locally when a change is variant-specific.
 - FIN-185: the assemble job resolves `mockE2eRuntimeClasspath`, both stage runtime classpaths and `prodReleaseRuntimeClasspath` using

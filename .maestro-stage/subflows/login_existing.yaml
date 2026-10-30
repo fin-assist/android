@@ -1,0 +1,19 @@
+# FIN-386. Stage-only helper; run scripts/stage-ui.py to prepare owned state first.
+appId: ru.finassist.pf.stage.e2e
+---
+- launchApp:
+    stopApp: false
+- runFlow:
+    file: sign_in.yaml
+    env:
+      PHONE: "${STAGE_PHONE}"
+- runFlow: set_passcode.yaml
+- takeScreenshot: ${MAESTRO_FILENAME}_after_passcode
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 40000
+- extendedWaitUntil:
+    visible:
+      id: "operations.row"
+    timeout: 20000

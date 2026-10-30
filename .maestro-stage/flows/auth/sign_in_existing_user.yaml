@@ -7,7 +7,7 @@ tags:
   - auth
 ---
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- runFlow: ../../subflows/login_existing.yaml
 
 - assertVisible:
     id: "ds.tab.operations"
@@ -24,7 +24,7 @@ tags:
     visible:
       id: "profile.phone"
     timeout: 10000
-- assertVisible: ".*\\${STAGE_PHONE_DISPLAY}.*"
+- assertVisible: ".*${STAGE_PHONE_DISPLAY}.*"
 - tapOn:
     id: "ds.tab.operations"
 - assertVisible:

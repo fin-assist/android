@@ -1,0 +1,6 @@
+# Qase60. The host must observe the accepted-response marker and kill the background process between parts.
+# Direct Maestro execution cannot establish this boundary and must fail.
+appId: ru.finassist.pf.stage.e2e
+name: "[stage] Принятый вопрос переживает смерть клиента без повторного POST"
+---
+- assertTrue: ${false}
