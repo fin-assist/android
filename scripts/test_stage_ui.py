@@ -164,7 +164,7 @@ class StageTransportTest(unittest.TestCase):
 
 class StageReportingTest(unittest.TestCase):
     def test_checkpoint_kills_only_the_background_client_before_response_delivery(self):
-        evidence = {"run_id": RUN, "counts": {"real_ask_accepted": 1, "ask_response_held": 1}}
+        evidence = {"run_id": RUN, "counts": {"real_ask_requests": 1, "real_ask_accepted": 1, "ask_response_held": 1}}
         replies = [(0, json.dumps(evidence)), (0, "4242\n"), (0, ""), (0, ""), (1, ""), (0, json.dumps(evidence))]
         with patch.object(ui, "command", side_effect=replies) as command:
             result = ui.process_death_checkpoint("emulator-5554", RUN)
@@ -175,7 +175,7 @@ class StageReportingTest(unittest.TestCase):
         self.assertFalse(any("force-stop" in call for call in calls))
 
     def test_checkpoint_refuses_a_response_already_delivered_to_the_client(self):
-        evidence = {"run_id": RUN, "counts": {"real_ask_accepted": 1, "ask_response_held": 1, "ask_response_released": 1}}
+        evidence = {"run_id": RUN, "counts": {"real_ask_requests": 1, "real_ask_accepted": 1, "ask_response_held": 1, "ask_response_released": 1}}
         with patch.object(ui, "command", return_value=(0, json.dumps(evidence))) as command:
             with self.assertRaisesRegex(StageFailure, "already_delivered"):
                 ui.process_death_checkpoint("emulator-5554", RUN)

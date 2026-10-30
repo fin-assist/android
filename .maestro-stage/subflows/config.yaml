@@ -4,8 +4,10 @@ appId: ru.finassist.pf.stage.e2e
 - openLink: ${LINK}
 - extendedWaitUntil:
     visible:
-      id: "e2e.config.applied"
+      id: "e2e.config.applied|e2e.config.unmet"
     timeout: 190000
+- assertVisible:
+    id: "e2e.config.applied"
 - extendedWaitUntil:
     notVisible:
       id: "e2e.config.applied"

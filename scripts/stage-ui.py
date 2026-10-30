@@ -160,7 +160,7 @@ def process_death_checkpoint(serial, run_id):
     while True:
         evidence = read_client_evidence(serial, run_id)
         counts = evidence.get("counts", {})
-        if counts.get("real_ask_accepted") == 1 and counts.get("ask_response_held") == 1:
+        if counts.get("real_ask_requests") == 1 and counts.get("real_ask_accepted") == 1 and counts.get("ask_response_held") == 1:
             break
         if time.monotonic() >= deadline:
             raise StageFailure("accepted_ask_checkpoint_not_reached")
@@ -312,7 +312,7 @@ def run_case(row, api, args, private, prepared=None):
             # Reuse the first session for cleanup too. A logout case may defer its cleanup to suite end.
             registered = {item["phone"] for item in evidence.get("successful_registrations", [])}
             if registered:
-                cleanup_link = "pfe2e://config?offline=false&maintenance=off&min_version=&error_operation=off&network_delay_ms=0&hold_ask_response_ms=0&cleanup_run=owned"
+                cleanup_link = "pfe2e://config?cleanup_run=owned"
                 command(["adb", "-s", args.serial, "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "'" + cleanup_link + "'", "-p", APP], timeout=20)
                 deadline = time.monotonic() + 15
                 while time.monotonic() < deadline:
@@ -339,6 +339,16 @@ def run_case(row, api, args, private, prepared=None):
             result["reason"] = evidence_failure
         else:
             result["evidence_failure"] = evidence_failure
+    if configured:
+        _, status_text = command(["adb", "-s", args.serial, "exec-out", "run-as", APP, "cat", "files/stage-control-status.json"], timeout=10)
+        try:
+            status = json.loads(status_text)
+            if status.get("run_id") == api.run_id:
+                safe = {key: status[key] for key in ("operation", "phase", "outcome", "error_class") if key in status}
+                if all(isinstance(value, str) and re.fullmatch(r"[a-z_]+", value) for value in safe.values()):
+                    result["control_status"] = safe
+        except (ValueError, TypeError):
+            pass
     result["seconds"] = round(time.monotonic() - started, 3)
     return result
 
@@ -425,6 +435,14 @@ def main(argv=None):
             if code:
                 raise StageFailure("stage_e2e_build_failed")
         apk = ROOT / "app/build/outputs/apk/stage/e2e/app-stage-e2e.apk"
+        report["apk_sha256"] = hashlib.sha256(apk.read_bytes()).hexdigest()
+        _, source_commit = command(["git", "rev-parse", "HEAD"], timeout=10)
+        report["source_commit"] = source_commit.strip() if re.fullmatch(r"[0-9a-f]{40}\s*", source_commit) else "unknown"
+        _, source_status = command(["git", "status", "--porcelain"], timeout=10)
+        report["source_dirty"] = bool(source_status.strip())
+        _, device_api = command(["adb", "-s", args.serial, "shell", "getprop", "ro.build.version.sdk"], timeout=10)
+        report["device_api"] = int(device_api.strip()) if device_api.strip().isdigit() else None
+        write_report(report)
         code, output = command(["adb", "-s", args.serial, "install", "-r", "-t", str(apk)], timeout=120)
         (OUT / "install.log").write_text(sanitize(output))
         if code:

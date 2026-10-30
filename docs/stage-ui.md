@@ -10,7 +10,7 @@ the shared map additionally names the stage-only process-death case60.
 
 `stageE2e` installs as `ru.finassist.pf.stage.e2e`, alongside ordinary `stageDebug`/`stageRelease`. It uses
 the real `:core:network` HTTP/SSE adapters and fixed `https://stage.plainfin.ru/`, system TLS trust and the real
-clock. `:mock:backend` is absent. Local test flags, the bundled synthetic document picker and closed fault
+clock. Existing synthetic asset files are reused only by this variant; `:mock:backend` code/dependency is absent. Local test flags, the bundled synthetic document picker and closed fault
 controls live only in `app/src/stageE2e`. Remote Config, MyTracker, Tracer and HTTP logging are disabled in that
 APK. Ordinary stage and production variants retain their existing bindings and contain no controls.
 
