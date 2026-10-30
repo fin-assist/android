@@ -13,13 +13,13 @@ appId: ru.finassist.pf.stage.e2e
     timeout: 20000
 - scrollUntilVisible:
     element:
-      text: ${PERIOD_TITLE}
-      childOf:
-        id: "analytics.period.option"
-- tapOn:
-    text: ${PERIOD_TITLE}
-    childOf:
       id: "analytics.period.option"
+      containsDescendants:
+        - text: ${PERIOD_TITLE}
+- tapOn:
+    id: "analytics.period.option"
+    containsDescendants:
+      - text: ${PERIOD_TITLE}
 - extendedWaitUntil:
     visible: ${PERIOD_TITLE}
     timeout: 20000
