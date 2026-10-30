@@ -274,6 +274,6 @@ with the other script tests in CI. This guard does not authorize Compose/Android
 
 CI assembles stageDebug and stageRelease, publishes `app-stage-debug`, validates stage version suffix/identity,
 fixed HTTPS endpoint and default-off SDKs, and tests stage/prod pin isolation on generated manifests/resources.
-The stage debug guard is also run with production SDK sentinel properties and a different local backend URL;
+Both stage debug and release guards are also run with production SDK sentinel properties and a different local backend URL;
 those must not enter the stage BuildConfig or enable Tracer. `:app:checkNoMockCode` checks both stage runtime
 classpaths. These are build/configuration checks, not a public-stage UI acceptance run (docs/e2e.md).

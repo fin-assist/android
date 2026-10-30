@@ -41,7 +41,10 @@ val stageBaseUrl = "https://stage.plainfin.ru/"
 val buildDate: LocalDate = LocalDate.parse(providers.of(BuildDate::class.java) {}.get())
 val pinnedFlavors: Map<String, Pair<String, ApiPins.Pins?>> = mapOf(
     "prod" to (prodBaseUrl to ApiPins.parse(secret(ApiPins.PINS_PROPERTY), secret(ApiPins.EXPIRATION_PROPERTY), buildDate)),
-    "stage" to (stageBaseUrl to ApiPins.parse(secret("pf.stageApiPins"), secret("pf.stageApiPinsExpiration"), buildDate)),
+    "stage" to (stageBaseUrl to ApiPins.parse(
+        secret("pf.stageApiPins"), secret("pf.stageApiPinsExpiration"), buildDate,
+        pinsProperty = "pf.stageApiPins", expirationProperty = "pf.stageApiPinsExpiration",
+    )),
 )
 val pinningTasks = pinnedFlavors.mapNotNull { (flavor, environment) ->
     val (baseUrl, pins) = environment
@@ -50,6 +53,7 @@ val pinningTasks = pinnedFlavors.mapNotNull { (flavor, environment) ->
     val config = tasks.register<GenerateNetworkSecurityConfig>("generate${name}NetworkSecurityConfig") {
         config.set(ApiPins.networkSecurityConfig(ApiPins.host(baseUrl), pins))
         pinsExpiration.set(pins.expiration.toString())
+        pinsExpirationProperty.set(if (flavor == "stage") "pf.stageApiPinsExpiration" else ApiPins.EXPIRATION_PROPERTY)
     }
     val manifest = tasks.register<GeneratePinningManifest>("generate${name}PinningManifest")
     flavor to (config to manifest)

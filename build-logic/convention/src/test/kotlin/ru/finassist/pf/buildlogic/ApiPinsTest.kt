@@ -17,6 +17,26 @@ class ApiPinsTest {
     private val backup = pin(2)
 
     @Test
+    fun `stage diagnostics name only stage properties`() {
+        val both = "sha256/$current,sha256/$backup"
+        val invalidPairs = listOf(
+            both to "", null to "2027-04-01", "sha256/$current" to "2027-04-01",
+            "sha256/$current,sha256/$current" to "2027-04-01", both to "invalid-date",
+            both to today.toString(), both to today.plusDays(367).toString(),
+        )
+        invalidPairs.forEach { (pins, expiration) ->
+            val error = assertThrows(IllegalArgumentException::class.java) {
+                ApiPins.parse(pins, expiration, today, "pf.stageApiPins", "pf.stageApiPinsExpiration")
+            }
+            assertTrue(error.message, error.message!!.contains("pf.stageApiPins"))
+            assertFalse(error.message, error.message!!.contains("pf.apiPins"))
+        }
+        assertNull(ApiPins.parse(null, null, today, "pf.stageApiPins", "pf.stageApiPinsExpiration"))
+        assertEquals(ApiPins.parse(both, "2027-04-01", today),
+            ApiPins.parse(both, "2027-04-01", today, "pf.stageApiPins", "pf.stageApiPinsExpiration"))
+    }
+
+    @Test
     fun `no properties means no pinning`() {
         assertNull(ApiPins.parse(null, null, today))
         assertNull(ApiPins.parse("", "  ", today))

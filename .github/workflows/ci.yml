@@ -322,18 +322,21 @@ jobs:
           m=app/build/intermediates/merged_manifests
           b=app/build/generated/source/buildConfig
           {
-            ./gradlew generateStageDebugBuildConfig processStageDebugManifest --no-daemon \
+            ./gradlew generateStageDebugBuildConfig processStageDebugManifest \
+              generateStageReleaseBuildConfig processStageReleaseManifest --no-daemon \
               -Ppf.apiBaseUrl=http://unrelated.invalid:8080/ \
               -Ppf.rustoreRemoteConfigAppId=production-sentinel \
               -Ppf.mytrackerSdkKey=production-sentinel \
-              -Ppf.tracerAppToken=production-sentinel &&
+              -Ppf.tracerAppToken=production-sentinel \
+              -Ppf.tracerPluginToken=production-plugin-sentinel &&
             python3 scripts/check-build-separation.py stage-default \
               "$m/stageDebug/processStageDebugManifest/AndroidManifest.xml" \
               "$b/stage/debug/ru/finassist/pf/BuildConfig.java" &&
             python3 scripts/check-build-separation.py stage-default \
               "$m/stageRelease/processStageReleaseManifest/AndroidManifest.xml" \
               "$b/stage/release/ru/finassist/pf/BuildConfig.java" &&
-            python3 scripts/check-tracer-off.py "$m/stageDebug/processStageDebugManifest/AndroidManifest.xml"
+            python3 scripts/check-tracer-off.py "$m/stageDebug/processStageDebugManifest/AndroidManifest.xml" \
+              "$m/stageRelease/processStageReleaseManifest/AndroidManifest.xml"
           } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Certificate pinning of prod (FIN-121): CI has no real pins, so the generator is checked with test values (32

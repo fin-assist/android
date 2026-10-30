@@ -39,6 +39,16 @@ class GenerateNetworkSecurityConfigTest {
     }
 
     @Test
+    fun `stage task expiration recheck keeps its own property name`() {
+        val stage = task("2026-10-18")
+        stage.pinsExpirationProperty.set("pf.stageApiPinsExpiration")
+        val error = assertThrows(IllegalArgumentException::class.java) { stage.generate(today) }
+        assertTrue(error.message, error.message!!.contains("pf.stageApiPinsExpiration"))
+        assertFalse(error.message, error.message!!.contains("pf.apiPinsExpiration"))
+        assertFalse(written.exists())
+    }
+
+    @Test
     fun `active pins are written`() {
         task("2027-04-01").generate(today)
         assertEquals("<network-security-config />", written.readText())
