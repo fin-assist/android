@@ -68,6 +68,11 @@ tags:
     visible:
       id: "assistant.chat"
     timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.question"
+    direction: UP
+    timeout: 60000
 - assertVisible:
     id: "assistant.question"
 
