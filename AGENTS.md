@@ -300,6 +300,10 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   not replace that notice or submit the target. The same segment uses the same gate; payment action
   errors keep a separate presentation. A changed context retires the failed period request.
   Same/finer request keys remain valid; the mock rejects coarse-to-fine keys with canonical validation errors.
+- Analytics monthly chart points select the exact server-provided month key (FIN-398); the whole column,
+  including a covered zero, is a target. The successful response commits the period atomically and preserves
+  transfer mode and vertical scroll. `select_analytics_period` is usable only through the Analytics chart
+  capability; generic blocks and assistant rendering never expose it as a button.
 - Analytics refreshes on resume as well as statement/category events (FIN-394); after a data mutation old
   totals are cleared until a fresh response arrives. Loading and an empty recalculating response are
   preparation states rather than requests to upload another statement. With data, recalculation retains
@@ -317,6 +321,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   `core/blocks`; texts of blocks come from the server (in `mock` — `AnalyticsServerTexts`). A new primitive is a renderer in
   `CatalogV1` (it goes into `supports` by itself) plus the composer of the fake server. Design-check fixtures of the screen
   are golden responses the composer writes (`AnalyticsDesignFixturesTest`, `UPDATE_GOLDEN=1`).
+- `tile_group@2` (FIN-403) negotiates ordered primary and supplementary groups; its renderer also accepts
+  legacy v1 tiles. The server supplies headings and daily-average basis text. Missing/empty `supports` keeps
+  v1 responses; design-check fixtures explicitly advertise the current registry's supported versions.
 - A PR that adds or changes a user scenario covers it with a UI test in the same PR (docs/e2e.md, «When a change
   needs a UI test»). A scenario is what the user does and sees: a new screen or state, a step between screens, an
   error, empty or offline path they can reach, a flag that changes behaviour, a user-visible bug fix (the flow
