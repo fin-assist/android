@@ -189,3 +189,13 @@ FIN-397: a different history `before_id` is a new request input. `RequestRetryGa
 ends the old input's explicit refusal without changing the captured endpoint deadline, including an
 unresolved absolute wait. `recordEndpointWait` accepts only the wait from a stale-input reply and never
 shortens an existing one. An obsolete latest-read generation does not record into the newer read's gate.
+
+FIN-391: Analytics retains the exact failed type-switch request in a separate notice and retry gate.
+The Retry link and another tap of the same target segment share that gate; neither bypasses an
+original refusal or captured Retry-After. Resume and expiry never submit the target. A different
+selection or data context retires it. Errors of regular-payment dismissal keep their own presentation:
+showing or consuming that action's snackbar cannot relabel or consume the pending period notice.
+
+FIN-399/391 integration: pull-to-refresh and its current-read Retry keep any independent failed period
+switch and its captured refusal/wait. They read only the displayed period; neither success, failure nor
+recalculation polling resubmits or releases the saved target. The period notice still owns its explicit Retry.
