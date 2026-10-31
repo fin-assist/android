@@ -598,4 +598,19 @@ class SearchViewModelTest {
         assertEquals(calls + 1, api.queries.size)
     }
 
+    @Test fun `resetting the only query during refresh clears the spinner and ignores its old response`() {
+        api.lists += found("old")
+        val vm = vm(OperationsFilter(q = "query"))
+        val pending = kotlinx.coroutines.CompletableDeferred<Unit>()
+        api.gate = pending
+        vm.refresh()
+        assertTrue(vm.state.value.refreshing)
+        vm.reset()
+        assertEquals(SearchResult.Initial, vm.state.value.result)
+        assertFalse(vm.state.value.refreshing)
+        pending.complete(Unit)
+        assertEquals(SearchResult.Initial, vm.state.value.result)
+        assertFalse(vm.state.value.refreshing)
+    }
+
 }

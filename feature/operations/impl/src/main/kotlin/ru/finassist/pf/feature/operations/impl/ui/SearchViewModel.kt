@@ -246,7 +246,7 @@ class SearchViewModel @Inject constructor(
         searchJob?.cancel()
         val s = _state.value
         if (!s.hasFilters) {
-            _state.update { it.copy(result = SearchResult.Initial) }
+            _state.update { it.copy(result = SearchResult.Initial, refreshing = false) }
             return
         }
         _state.update { it.copy(refreshing = refresh) }
