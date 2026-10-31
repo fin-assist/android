@@ -7,7 +7,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import ru.finassist.pf.core.designsystem.theme.rememberReducedMotion
+import androidx.compose.material3.pulltorefresh.pullToRefreshIndicator
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
@@ -33,12 +42,28 @@ fun PfRefreshContainer(
         Box(Modifier.fillMaxSize().scrollable(rememberScrollableState { 0f }, Orientation.Vertical)) {
             content()
         }
-        PullToRefreshDefaults.Indicator(
-            state = state,
-            isRefreshing = refreshing,
-            containerColor = PfTheme.colors.surface,
-            color = PfTheme.colors.text,
-            modifier = Modifier.align(Alignment.TopCenter).testTag("ds.refresh.indicator"),
-        )
+        val static = rememberReducedMotion() || LocalInspectionMode.current
+        Box(
+            Modifier.align(Alignment.TopCenter).testTag("ds.refresh.indicator")
+                .pullToRefreshIndicator(state, refreshing, containerColor = PfTheme.colors.surface),
+            contentAlignment = Alignment.Center,
+        ) {
+            val indicator = Modifier.size(22.dp)
+            if (refreshing && !static) {
+                CircularProgressIndicator(modifier = indicator, color = PfTheme.colors.text, strokeWidth = 2.5.dp)
+            } else {
+                CircularProgressIndicator(
+                    progress = { if (refreshing) 0.75f else state.distanceFraction.coerceIn(0f, 1f) },
+                    modifier = indicator.clearAndSetSemantics {
+                        if (refreshing) {
+                            progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+                            contentDescription = "Обновляем данные"
+                        }
+                    },
+                    color = PfTheme.colors.text,
+                    strokeWidth = 2.5.dp,
+                )
+            }
+        }
     }
 }

@@ -104,10 +104,11 @@ class AnalyticsViewModelTest {
     private class FakeAssistant : AssistantApi {
         var limitCalls = 0
         var failure: AppError? = null
+        var limit = AssistantLimit(3, 5, at(30))
         override suspend fun getLimit(): AssistantLimit {
             limitCalls++
             failure?.let { throw it }
-            return AssistantLimit(3, 5, at(30))
+            return limit
         }
         override suspend fun listMessages(limit: Int?, beforeId: String?): MessagesList = error("unused")
         override suspend fun ask(key: IdempotencyKey, request: AskRequest): AskResponse = error("unused")
@@ -1211,6 +1212,47 @@ class AnalyticsViewModelTest {
         api.answers += data()
         vm.refresh()
         assertEquals(3, api.requests.size)
+    }
+
+    @Test fun `manual refresh updates quota even after analytics read is refused`() {
+        api.answers += data()
+        val vm = opened()
+        api.answers.clear()
+        api.answers += AppError.Api("FUTURE_REFUSAL", 429, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "FUTURE_REFUSAL", 429, requestRetryable = false))
+        assistant.limit = assistant.limit.copy(remaining = 1)
+        vm.refresh()
+        assertEquals(1, vm.state.value.limit?.remaining)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(2, assistant.limitCalls)
+        val failure = vm.state.value.errorPresentation
+        assistant.limit = assistant.limit.copy(remaining = 0)
+        vm.refresh()
+        assertEquals(2, api.requests.size)
+        assertEquals(3, assistant.limitCalls)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertEquals(failure, vm.state.value.errorPresentation)
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `quota only refresh respects its own retry after while analytics remains refused`() {
+        api.answers += data()
+        val vm = opened()
+        api.answers.clear()
+        api.answers += AppError.Api("FUTURE_REFUSAL", 429, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "FUTURE_REFUSAL", 429, requestRetryable = false))
+        assistant.failure = AppError.RateLimited(null, 2)
+        vm.refresh()
+        assertFalse(vm.state.value.limitRetryReady)
+        vm.refresh()
+        assertEquals(2, assistant.limitCalls)
+        scheduler.advanceTimeBy(2000)
+        scheduler.runCurrent()
+        assistant.failure = null
+        vm.refresh()
+        assertEquals(3, assistant.limitCalls)
+        assertEquals(2, api.requests.size)
+        assertTrue(vm.state.value.limitRetryReady)
     }
 
 }

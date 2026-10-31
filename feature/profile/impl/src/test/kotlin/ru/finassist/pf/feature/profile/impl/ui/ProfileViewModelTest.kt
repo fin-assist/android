@@ -813,18 +813,54 @@ class ProfileViewModelTest {
         assertEquals(0, profileApi.revokes)
     }
 
-    @Test fun `successful summary refresh clears only its failure even when profile retry is refused`() {
+    @Test fun `auxiliary failures and successful recovery preserve a profile refusal explanation`() {
         val vm = loaded()
         profileApi.getFailure = forbiddenProfileRequest()
         statementsApi.failure = AppError.Offline()
         vm.refresh()
-        assertEquals(ProfileErrorOrigin.STATEMENTS, vm.state.value.errorOrigin)
+        assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+        val explanation = vm.state.value.errorPresentation
         statementsApi.failure = null
         vm.refresh()
-        assertNull(vm.state.value.errorPresentation)
-        assertNull(vm.state.value.errorOrigin)
+        assertEquals(explanation, vm.state.value.errorPresentation)
+        assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
         assertFalse(vm.state.value.retryReady)
         assertEquals(2, profileApi.gets)
+    }
+
+    @Test fun `successful consent revocation ends an invalidated pending profile refresh`() {
+        val vm = loaded()
+        val oldRead = CompletableDeferred<Profile>()
+        profileApi.getReply = { oldRead.await() }
+        vm.refresh()
+        assertTrue(vm.state.value.refreshing)
+        vm.revokeConsent()
+        assertFalse(vm.state.value.refreshing)
+        oldRead.complete(profileApi.profile)
+        assertFalse(vm.state.value.refreshing)
+        assertFalse(vm.state.value.profile!!.assistantConsent!!.granted)
+    }
+
+    @Test fun `all three initial offline reads retain the full profile connection state`() {
+        profileApi.getFailure = AppError.Offline()
+        statementsApi.failure = AppError.Offline()
+        assistant.failure = AppError.Offline()
+        val vm = loaded()
+        assertTrue(vm.state.value.offline)
+        assertNull(vm.state.value.profile)
+        assertNull(vm.state.value.errorPresentation)
+        assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+    }
+
+    @Test fun `auxiliary error arriving before initial profile remains visible after profile succeeds`() {
+        val pending = CompletableDeferred<Profile>()
+        profileApi.getReply = { pending.await() }
+        statementsApi.failure = AppError.Offline()
+        val vm = loaded()
+        assertNull(vm.state.value.errorPresentation)
+        pending.complete(profileApi.profile)
+        assertEquals(ProfileErrorOrigin.STATEMENTS, vm.state.value.errorOrigin)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
     }
 
 }

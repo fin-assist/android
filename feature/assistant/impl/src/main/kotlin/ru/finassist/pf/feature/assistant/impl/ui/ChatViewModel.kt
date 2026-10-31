@@ -159,6 +159,7 @@ class ChatViewModel @Inject constructor(
     private var historyReadRevision = 0L
     private var historyReadPending = false
     private var limitReadPending = false
+    private var limitRevision = 0L
     /** A successful RetryAnswer invalidates snapshots begun before its in-place replacement. */
     private var replacementRevision = 0L
     /** Only locally accepted Ask messages enter this registry; GET pagination never does. */
@@ -333,10 +334,15 @@ class ChatViewModel @Inject constructor(
     private suspend fun refreshLimit(reportOffline: Boolean = false) {
         if (limitReadPending || !limitRetryGate.isReady()) return
         limitReadPending = true
+        val revision = limitRevision
         try {
             val limit = api.getLimit()
-            _state.update { it.copy(limit = limit, limitErrorPresentation = null) }
+            if (revision == limitRevision) _state.update { it.copy(limit = limit, limitErrorPresentation = null) }
         } catch (failure: AppError) {
+            if (revision != limitRevision) {
+                limitRetryGate.recordEndpointWait(failure)
+                return
+            }
             limitRetryGate.record(failure)
             if (reportOffline || failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
         } finally {
@@ -425,6 +431,7 @@ class ChatViewModel @Inject constructor(
                 val accepted = ++acceptanceRevision
                 acceptedMessageRevisions[question.id] = accepted
                 acceptedMessageRevisions[answer.id] = accepted
+                limitRevision++
                 updateHistoryState {
                     it.copy(
                         sending = false, draft = if (it.draft.trim() == text) "" else it.draft, offline = false,
@@ -451,6 +458,7 @@ class ChatViewModel @Inject constructor(
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.LIMIT_EXCEEDED -> {
                         // Not stored by the server (api.md 7.1): tomorrow the same key would pass, but it is a new day.
                         pending = null
+                        limitRevision++
                         _state.update { it.copy(limit = it.limit?.copy(remaining = 0) ?: AssistantLimit(0, 5, e.resetsAt ?: clock.now())) }
                     }
                     e is AppError.Offline -> _state.update { it.copy(offline = true) }
@@ -592,6 +600,7 @@ class ChatViewModel @Inject constructor(
                 val r = whileInProgress(key) { api.retry(key, answerId) }
                 retryKeys.remove(answerId)
                 replacementRevision++
+                limitRevision++
                 updateHistoryState { s ->
                     s.copy(
                         items = s.items.map { item ->
@@ -605,7 +614,10 @@ class ChatViewModel @Inject constructor(
                 retryGate.record(e)
                 _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable, blockedRetryAnswerId = answerId.takeIf { e.requestRetryable == false }, failedRetryAnswerId = answerId) }
                 when {
-                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.LIMIT_EXCEEDED -> _state.update { it.copy(limit = it.limit?.copy(remaining = 0)) }
+                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.LIMIT_EXCEEDED -> {
+                        limitRevision++
+                        _state.update { it.copy(limit = it.limit?.copy(remaining = 0)) }
+                    }
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_REQUIRED -> {
                         consentRevision++
                         pendingConsentRequest = PendingConsentRequest.Retry(answerId)
@@ -660,7 +672,9 @@ class ChatViewModel @Inject constructor(
         else -> false
     }
 
-    private fun applyEvent(answerId: String, event: AnswerEvent) = updateHistoryState { s ->
+    private fun applyEvent(answerId: String, event: AnswerEvent) {
+        if (event is AnswerEvent.Done || event is AnswerEvent.Error) limitRevision++
+        updateHistoryState { s ->
         val items = s.items.map { item ->
             if (item !is ChatItem.Answer || item.id != answerId) return@map item
             when (event) {
@@ -686,6 +700,7 @@ class ChatViewModel @Inject constructor(
         if (event is AnswerEvent.Done) tracker.track(Events.ASSISTANT_ANSWER_DONE, mapOf("charged" to event.event.charged.toString()))
         if (event is AnswerEvent.Error) tracker.track(Events.ASSISTANT_ANSWER_FAILED, mapOf("code" to event.event.code.code))
         s.copy(items = items, limit = limit)
+        }
     }
 
     private fun toItem(m: Message): ChatItem? = when (m.role) {

@@ -99,6 +99,28 @@ class ProfileViewModel @Inject constructor(
     private var themeGeneration = 0L
     private var statementsGeneration = 0L
     private var profileGeneration = 0L
+    private data class AuxiliaryFailure(val presentation: ErrorPresentation?, val outcome: String)
+    private val auxiliaryFailures = linkedMapOf<ProfileErrorOrigin, AuxiliaryFailure>()
+
+    private fun ProfileUiState.withAuxiliaryFailure(): ProfileUiState {
+        if (profile == null || errorOrigin == ProfileErrorOrigin.PROFILE) return this
+        val failure = auxiliaryFailures.entries.lastOrNull() ?: return this
+        return showRequestError(failure.key, failure.value.presentation, failure.value.outcome)
+    }
+
+    private fun auxiliaryFailed(origin: ProfileErrorOrigin, error: AppError, outcome: String) {
+        auxiliaryFailures[origin] = AuxiliaryFailure(error.presentation, outcome)
+        _state.update { it.withAuxiliaryFailure() }
+    }
+
+    private fun auxiliarySucceeded(origin: ProfileErrorOrigin) {
+        auxiliaryFailures.remove(origin)
+        _state.update {
+            val current = if (it.errorOrigin == origin) it.clearRequestError() else it
+            current.withAuxiliaryFailure()
+        }
+    }
+
     private var profileReadPending = false
     private var statementsReadPending = false
     private var limitReadPending = false
@@ -155,7 +177,7 @@ class ProfileViewModel @Inject constructor(
                     val origin = zoneChecker.captureObservation()
                     val p = profileApi.getProfile()
                     if (generation != profileGeneration) return@launch
-                    _state.update { it.copy(loading = false, profile = p) }
+                    _state.update { it.copy(loading = false, profile = p).withAuxiliaryFailure() }
                     syncFromServer(p, origin)
                 } catch (e: AppError) {
                     if (generation != profileGeneration) return@launch
@@ -181,13 +203,11 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val limit = assistantApi.getLimit()
-                _state.update {
-                    val current = if (it.errorOrigin == ProfileErrorOrigin.LIMIT) it.clearRequestError() else it
-                    current.copy(limit = limit)
-                }
+                _state.update { it.copy(limit = limit) }
+                auxiliarySucceeded(ProfileErrorOrigin.LIMIT)
             } catch (failure: AppError) {
                 limitRetryGate.record(failure)
-                _state.update { it.showRequestError(ProfileErrorOrigin.LIMIT, failure.presentation, "Не получилось обновить лимит вопросов") }
+                auxiliaryFailed(ProfileErrorOrigin.LIMIT, failure, "Не получилось обновить лимит вопросов")
             } finally {
                 limitReadPending = false
                 updateRefreshing()
@@ -206,6 +226,7 @@ class ProfileViewModel @Inject constructor(
     private fun changedProfileContext() {
         profileGeneration++
         profileReadPending = false
+        updateRefreshing()
         retryGate.clear()
         _state.update { it.clearRequestError().copy(requestRetryable = null) }
     }
@@ -218,14 +239,14 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val list = statementsApi.listStatements()
-                if (generation == statementsGeneration) _state.update {
-                    val current = if (it.errorOrigin == ProfileErrorOrigin.STATEMENTS) it.clearRequestError() else it
-                    current.copy(statements = list.summary, statementsLoaded = true)
+                if (generation == statementsGeneration) {
+                    _state.update { it.copy(statements = list.summary, statementsLoaded = true) }
+                    auxiliarySucceeded(ProfileErrorOrigin.STATEMENTS)
                 }
             } catch (failure: AppError) {
                 if (generation == statementsGeneration) {
                     statementsRetryGate.record(failure)
-                    _state.update { it.showRequestError(ProfileErrorOrigin.STATEMENTS, failure.presentation, "Не получилось обновить историю загрузок") }
+                    auxiliaryFailed(ProfileErrorOrigin.STATEMENTS, failure, "Не получилось обновить историю загрузок")
                 }
             } finally {
                 if (generation == statementsGeneration) {

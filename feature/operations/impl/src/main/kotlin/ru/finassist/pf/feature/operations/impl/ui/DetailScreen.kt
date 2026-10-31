@@ -83,7 +83,7 @@ internal fun DetailContent(
     onRefresh: () -> Unit = onRetry,
 ) {
     val d = PfTheme.dimens
-    PfRefreshContainer(state.refreshing, onRefresh, Modifier.fillMaxSize(), enabled = !state.saving && !state.picker) {
+    PfRefreshContainer(state.refreshing, onRefresh, Modifier.fillMaxSize(), enabled = !state.saving && !state.picker && !state.notFound) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(OperationsTags.DETAIL)) {
             val op = state.operation
             // The operation's name is the title (mockup `Detail`); «Операция» while it loads or fails.

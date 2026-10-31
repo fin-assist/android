@@ -79,6 +79,7 @@ data class AnalyticsUiState(
     val limitErrorPresentation: ErrorPresentation? = null,
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
+    val limitRetryReady: Boolean = true,
     val preparationTimedOut: Boolean = false,
     val recalculationPaused: Boolean = false,
 )
@@ -108,9 +109,11 @@ class AnalyticsViewModel @Inject constructor(
     private var importPollRevision: Long? = null
 
     private val limitRetryGate = RequestRetryGate(elapsedClock)
+    private var limitReadPending = false
     private val _state = MutableStateFlow(AnalyticsUiState(blocks = readBlocks(flags)))
     private val retryGate = RequestRetryGate(elapsedClock)
     init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
+    init { viewModelScope.launch { limitRetryGate.readiness.collect { ready -> _state.update { it.copy(limitRetryReady = ready) } } } }
     val state: StateFlow<AnalyticsUiState> = _state
     private var periodsJob: Job? = null
     private var periodsGeneration = 0L
@@ -209,12 +212,32 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     override fun refresh() {
-        if (loadJob?.isActive == true || !retryGate.isReady()) return
-        _state.update { it.copy(refreshing = true, errorPresentation = null, snackbar = null, requestRetryable = null) }
-        load(quiet = true)
+        if (_state.value.refreshing) return
+        val readAnalytics = loadJob?.isActive != true && retryGate.isReady()
+        val readLimit = _state.value.blocks.assistant && !limitReadPending && limitRetryGate.isReady()
+        if (!readAnalytics && !readLimit) return
+        _state.update {
+            if (readAnalytics) it.copy(refreshing = true, errorPresentation = null, snackbar = null, requestRetryable = null)
+            else it.copy(refreshing = true)
+        }
+        viewModelScope.launch {
+            val quotaJob = if (readLimit) launch { refreshLimit(reportOffline = true) } else null
+            val analyticsJob = if (readAnalytics) {
+                startLoad(quiet = true, updateLimit = false)
+                loadJob
+            } else null
+            try {
+                analyticsJob?.join()
+                quotaJob?.join()
+            } finally {
+                _state.update { it.copy(refreshing = false) }
+            }
+        }
     }
 
-    override fun load(quiet: Boolean) {
+    override fun load(quiet: Boolean) = startLoad(quiet, updateLimit = true)
+
+    private fun startLoad(quiet: Boolean, updateLimit: Boolean) {
         if (!retryGate.isReady()) return
         if (_state.value.preparationTimedOut) importPolls = 0
         loadJob?.cancel()
@@ -258,7 +281,7 @@ class AnalyticsViewModel @Inject constructor(
                 if (a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
                     _state.update { it.copy(hint = AnalyticsHint.CATEGORIES) }
                 }
-                if (_state.value.blocks.assistant) refreshLimit()
+                if (updateLimit && _state.value.blocks.assistant) refreshLimit()
                 // The server is still recalculating after an edit: ask again shortly (api.md 6.1 `recalculating`).
                 if (a.state?.recalculating == true) {
                     delay(RECALC_POLL_MS)
@@ -290,19 +313,22 @@ class AnalyticsViewModel @Inject constructor(
                         else if (e is AppError.Offline) "Прежний период сохранён" else "Не получилось обновить. Попробуйте ещё раз",
                     )
                 }
-            } finally {
-                _state.update { it.copy(refreshing = false) }
             }
         }
     }
 
-    private suspend fun refreshLimit() {
-        if (!limitRetryGate.isReady()) return
-        runCatching { assistantApi.getLimit() }.onSuccess { l -> _state.update { it.copy(limit = l, limitErrorPresentation = null) } }
-            .onFailure { failure -> if (failure is AppError) {
-                limitRetryGate.record(failure)
-                if (failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
-            } }
+    private suspend fun refreshLimit(reportOffline: Boolean = false) {
+        if (limitReadPending || !limitRetryGate.isReady()) return
+        limitReadPending = true
+        try {
+            val limit = assistantApi.getLimit()
+            _state.update { it.copy(limit = limit, limitErrorPresentation = null) }
+        } catch (failure: AppError) {
+            limitRetryGate.record(failure)
+            if (reportOffline || failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
+        } finally {
+            limitReadPending = false
+        }
     }
 
     /** Segmented control: keeps the current date so «Месяц → Квартал» opens the quarter containing it. */

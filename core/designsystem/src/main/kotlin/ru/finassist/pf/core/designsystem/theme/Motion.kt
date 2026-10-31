@@ -9,9 +9,9 @@ import androidx.compose.ui.platform.LocalContext
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Motion rules of the design system («Движение»). Only Analytics charts animate: an intro once per process
- * for each chart, and a 250 ms transition between values afterwards. With the system "Remove animations"
- * setting everything renders in its final state.
+ * Motion rules of the design system («Движение»). Charts animate an intro once per process and transition
+ * between values; the refresh indicator spins while reading. With the system "Remove animations" setting
+ * charts render their final state and the refresh indicator stays static.
  */
 object PfMotion {
     /** Growth of one bar / one category bar during the intro. */

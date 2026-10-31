@@ -116,12 +116,13 @@ interface AnalyticsHandlers {
 @Composable
 internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions, vm: AnalyticsHandlers) {
     val d = PfTheme.dimens
-    PfRefreshContainer(refreshing = state.refreshing, onRefresh = vm::refresh, enabled = state.retryReady && !state.loading, modifier = Modifier.fillMaxSize()) {
+    PfRefreshContainer(refreshing = state.refreshing, onRefresh = vm::refresh, enabled = (state.retryReady || (state.blocks.assistant && state.limitRetryReady)) && !state.loading, modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().testTag(AnalyticsTags.SCREEN)) {
             if (actions.back != null) PfPageHeader("Аналитика", onBack = actions.back) else PfTabHeader("Аналитика")
             val a = state.data
             state.limitErrorPresentation?.let {
-                ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4))
+                ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4),
+                    onRetry = ({ vm.refresh() }).takeIf { state.limitRetryReady })
             }
             state.errorPresentation?.let { presentation ->
                 ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику",

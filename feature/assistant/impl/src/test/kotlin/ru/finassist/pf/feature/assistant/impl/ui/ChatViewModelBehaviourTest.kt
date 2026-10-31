@@ -121,6 +121,7 @@ class ChatViewModelBehaviourTest {
         val streamOpens = mutableListOf<String>()
 
         var limitResult: AssistantLimit? = null
+        var limitReply: (suspend () -> AssistantLimit)? = null
 
         override suspend fun listMessages(limit: Int?, beforeId: String?): MessagesList {
             listCalls += beforeId
@@ -154,7 +155,7 @@ class ChatViewModelBehaviourTest {
             }
         }
 
-        override suspend fun getLimit(): AssistantLimit = limitResult ?: throw AppError.Offline()
+        override suspend fun getLimit(): AssistantLimit = limitReply?.invoke() ?: limitResult ?: throw AppError.Offline()
 
         fun script(answerId: String, vararg flows: Flow<AnswerEvent>) {
             streams.getOrPut(answerId) { ArrayDeque() }.addAll(flows)
@@ -1756,5 +1757,46 @@ class ChatViewModelBehaviourTest {
     private fun voiceAskRefusal(retryable: Boolean) = AppError.RateLimited(null, 3,
         ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = retryable,
             timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0)))
+
+    @Test fun `a quota GET begun before Ask cannot restore its spent remaining count`() {
+        val vm = newVm()
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { oldQuota.await() }
+        vm.refresh()
+        api.askOutcomes += askResponse(remaining = 0)
+        sendQuestion(vm)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        oldQuota.complete(limit)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+    }
+
+    @Test fun `a quota GET begun before Retry cannot restore its spent remaining count`() {
+        api.pages[null] = MessagesList(listOf(answer("old", AnswerStatus.FAILED, retryable = true)), hasOlder = false)
+        val vm = newVm()
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { oldQuota.await() }
+        vm.refresh()
+        api.retryOutcomes += RetryResponse("new", remainingLimit = 0)
+        vm.retry("old")
+        oldQuota.complete(limit)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+    }
+
+    @Test fun `a quota GET begun before terminal SSE cannot overwrite its remaining count`() {
+        api.pages[null] = MessagesList(listOf(answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val events = kotlinx.coroutines.flow.MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
+        api.script("a1", events)
+        val vm = newVm()
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { oldQuota.await() }
+        vm.refresh()
+        events.tryEmit(done(remaining = 0))
+        assertEquals(0, vm.state.value.limit?.remaining)
+        oldQuota.complete(limit)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+    }
 
 }
