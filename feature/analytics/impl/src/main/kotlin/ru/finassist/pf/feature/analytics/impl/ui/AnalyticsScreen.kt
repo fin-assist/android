@@ -124,7 +124,7 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
                 modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.load() }))
         }
         when {
-            state.loading || a?.state?.recalculating == true -> Column(
+            state.loading || (a?.hasData == false && a.state?.recalculating == true) -> Column(
                 Modifier.weight(1f).fillMaxWidth().padding(d.space5).testTag(AnalyticsTags.UPDATING),
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -254,7 +254,14 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         }
         if (s.recalculating) {
             Gap(d.space3)
-            PfNotice("Пересчитываем после изменений — цифры обновятся через несколько секунд", tone = NoticeTone.INFO)
+            PfNotice(
+                if (state.recalculationPaused) "Не удалось обновить показатели. Показаны данные до изменений"
+                else "Пересчитываем после изменений — цифры обновятся через несколько секунд",
+                tone = NoticeTone.INFO,
+                action = if (state.recalculationPaused && state.retryReady) ({
+                    PfNoticeLink("Повторить", onClick = { vm.load() }, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+                }) else null,
+            )
         }
     }
     // A past month or an incomplete quarter/year says which part of it the numbers cover; the tiles follow 8 dp

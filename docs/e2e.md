@@ -654,6 +654,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `operations/statement_stale` | on the preloaded statement the caption under the summary says «Данные по 1 октября» (the statement's end, not the last operation on 30 September); then the preloaded statement deleted, `stale.ofx` uploaded: «Операции» and «Аналитика» show «Данные в приложении по 20 сентября — с тех пор прошло больше двух недель», dated by the statement's end (`state.data_to`), not the last operation (15 September) — FIN-125 |
 | `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
 | `analytics/overview` (smoke) | blocks, previous month, month/quarter/year, «Без переводов», category → operations |
+| `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
@@ -676,7 +677,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
-| `statements/upload_and_history` (smoke) | new operations without a duplicate period row; saved Analytics tab refreshes after import, deletion with remaining data and last deletion (FIN-394); duplicate file → «История загрузок» |
+| `statements/upload_and_history` (smoke) | new operations without a duplicate period row; saved Analytics tab income changes from 0 to +1200 after import, and refreshes after deletion with remaining data and last deletion (FIN-394); duplicate file → «История загрузок» |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
 | `statements/upload_restored_key` | A seeded unknown-age UUID does not send the file or silently change key; the upload count remains 1 (preloaded statement). Only «Загрузить заново» starts a new action and changes the count to 2 (Qase51) — FIN-223 |
 | `assistant/retry_after_consent` | A model failure, consent revocation and denied RetryAnswer lead to consent correction; the same operation resumes and history contains one question with the successful replacement (Qase52) — FIN-223 |
@@ -869,8 +870,9 @@ refreshing, failed refresh after deletion, and server retry restrictions. `Analy
 `AnalyticsPreparingWithoutData` capture the preparation states. The reported SmartApe limitation for non-Russian source IP addresses is
 infrastructure-specific; it cannot be reproduced by the in-process mock (VPN guidance is FIN-396).
 
-FIN-394 delayed-projection regression: repository unit tests cover user isolation, an absent Analytics
-subscriber, concurrent import acknowledgement and deletion of pending uploads. Analytics unit tests cover
-`complete` → repeated `has_data:false` → data, recalculating, polling timeout with explicit retry and server
-refusal, and failed/forbidden polling after a recalculating response. The in-process mock publishes analytics synchronously, so that inter-service publication race is
-covered at the unit boundary rather than by a mock Maestro sleep or fake server response.
+FIN-394 delayed-projection regression uses the mock-only `analytics_pending_responses=0..100`
+control-link fixture. It makes the next valid analytics GETs return `has_data:false`, without changing
+imported operations or seeding the local import token. `analytics/import_preparation_retry` / Qase63
+performs real UI imports and checks preparation → data and timeout → explicit Retry. This models a delayed
+projection response, not the real inter-service transport. The corresponding unit tests cover countdown,
+authentication/validation, user isolation, generations, retry refusal and failed recalculation polling.

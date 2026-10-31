@@ -45,6 +45,8 @@ import javax.inject.Inject
  *   reach «Время на звонок вышло» without waiting 5 minutes.
  * - `network_delay_ms=<n>` — latency of every backend request (keeps a «busy» state up long enough to act on it).
  * - `assistant_model_errors=<n>` — the next n assistant answers fail with MODEL_ERROR («Повторить» under them).
+ * - `analytics_pending_responses=<0..100>` — next n valid analytics reads return `has_data=false`, simulating
+ *   publication lag after a UI import; zero restores the actual projection without changing the imported ledger.
  * - `stream_drops=<n>` — the next n openings of an SSE stream (call, import progress, answer) close after their first
  *   event without a terminal one, as the server does on its own failure; the app re-opens them (FIN-170).
  * - `stream_rate_limits=<n>` — the next n openings that follow a dropped one answer 429 with `Retry-After: 3`; the app
@@ -147,6 +149,11 @@ class E2eControlActivity : ComponentActivity() {
                 name == "call_ttl_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(verificationTtlMs = it) }
                 name == "network_delay_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(networkDelayMs = it) }
                 name == "assistant_model_errors" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(assistantModelErrors = it) }
+                name == "analytics_pending_responses" -> {
+                    val count = value.toIntOrNull()?.takeIf { it in 0..100 }
+                    if (count == null) unmet = "invalid analytics pending response count"
+                    else backend.mutex.withLock { backend.config = backend.config.copy(analyticsPendingResponses = count) }
+                }
                 name == "stream_drops" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(streamDrops = it) }
                 name == "stream_rate_limits" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(streamRateLimits = it) }
                 name == "stream_retry_s" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(streamRetrySeconds = it) }

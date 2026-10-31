@@ -7,12 +7,19 @@ tags:
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/fast_login.yaml
 # Open Analytics before mutating statements: the saved tab must refresh without a cold start.
+# October is covered by the fixture but has no operations until this import.
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
     visible:
       id: "analytics.block.tiles"
     timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.income"
+- assertVisible:
+    id: "analytics.tile.income"
+    text: ".*0[ \u00a0\u202f].*"
 - tapOn:
     id: "ds.tab.profile"
 - extendedWaitUntil:
@@ -47,16 +54,26 @@ tags:
     id: "statements.result.new"
 - assertNotVisible: "Все операции.*"
 
-# The result's analytics link refreshes the tab that was already opened.
+# Finish to Operations, then use the bottom tab: this restores the Analytics entry opened before import.
 - tapOn:
-    id: "statements.result.analytics"
+    id: "statements.result.done"
 - extendedWaitUntil:
     visible:
-      id: "analytics.block.tiles"
+      id: "ds.tab.analytics"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.analytics"
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.income"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.tile.income"
+      text: ".*1[ \u00a0\u202f]200.*"
     timeout: 15000
 - assertNotVisible:
     id: "analytics.empty"
-- assertVisible: "Октябрь 2026"
+# The income node changed from 0 to +1200 for the saved October context.
 
 # The same October file again: nothing new.
 - tapOn:

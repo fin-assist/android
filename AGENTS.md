@@ -279,7 +279,7 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
 - When the server sends a ready text for a code (`*_name`, `text`, lock texts), the UI shows that text for a code it does
   not know instead of building one itself or skipping it (FIN-83: import features and notices, `changed_since_text`).
 - Upload history uses inclusive profile calendar days `period_from` / `period_to`, without device-zone conversion
-  (FIN-198); old `uploads[].first_operation_at` / `last_operation_at` are removed. Import result 3.3 is unchanged.
+  (FIN-198); old `uploads[].first_operation_at` / `last_operation_at` are removed. Import result 3.3 keeps its field semantics; FIN-394 removes the redundant all-operations period row from its UI.
 - Operation details 4.2 and category change 4.3 require `occurred_at` from the selected record, including offset
   and fractional seconds (FIN-203); use the latest returned timestamp for retries and reopening the record.
 - A new block type or code value changes both `:core:api` and the fake backend `:mock:backend` in the same PR.
@@ -290,8 +290,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   An API already in `scripts/kmp-baseline.json` may be reused; an exception is justified in the PR and added there.
   `scripts/check-kmp-ready.py` (CI) fails on anything beyond the baseline; rule, inventory — `docs/kmp-readiness.md`.
 - Analytics refreshes on resume as well as statement/category events (FIN-394); after a data mutation old
-  totals are cleared until a fresh response arrives. Loading/recalculating is a preparation state, including
-  an empty response, rather than a request to upload another statement. A user-scoped local import token in
+  totals are cleared until a fresh response arrives. Loading and an empty recalculating response are
+  preparation states rather than requests to upload another statement. With data, recalculation retains
+  the screen and a notice; a stopped poll labels the previous values and offers an allowed explicit retry. A user-scoped local import token in
   `StatementsRepository` survives absent Analytics subscribers: a completed non-empty import followed by
   `has_data:false` is polled every 3 seconds, up to 10 responses, then offers an explicit refresh. The token
   is acknowledged only for the observed generation once data is present and not recalculating.

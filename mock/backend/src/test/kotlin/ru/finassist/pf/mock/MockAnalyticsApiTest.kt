@@ -49,6 +49,38 @@ class MockAnalyticsApiTest {
     }
 
     @Test
+    fun `publication fixture withholds exactly the configured reads without losing the imported ledger`() = runBlocking<Unit> {
+        val expected = api.getAnalytics(null, null, null)
+        backend.config = backend.config.copy(analyticsPendingResponses = 2)
+        repeat(2) { index ->
+            val pending = api.getAnalytics(null, null, null)
+            assertEquals(ru.finassist.pf.core.api.model.Analytics(hasData = false), pending)
+            assertEquals(1 - index, backend.config.analyticsPendingResponses)
+        }
+        assertEquals(expected, api.getAnalytics(null, null, null))
+        assertEquals(0, backend.config.analyticsPendingResponses)
+    }
+
+    @Test
+    fun `clearing publication fixture exposes the existing projection on the next read`() = runBlocking<Unit> {
+        backend.config = backend.config.copy(analyticsPendingResponses = 100)
+        assertFalse(api.getAnalytics(null, null, null).hasData)
+        backend.config = backend.config.copy(analyticsPendingResponses = 0)
+        assertTrue(api.getAnalytics(null, null, null).hasData)
+    }
+
+    @Test
+    fun `publication fixture never bypasses session or input checks`() = runBlocking<Unit> {
+        val signedOut = testBackend(userId = "", config = FAST.copy(analyticsPendingResponses = 2))
+        assertFailsWith<AppError.Unauthorized> { MockAnalyticsApi(signedOut).getAnalytics(null, null, null) }
+        assertEquals(2, signedOut.config.analyticsPendingResponses)
+        backend.config = backend.config.copy(analyticsPendingResponses = 2)
+        assertFailsWith<AppError.Api> { api.getAnalytics(PeriodTypeCode.UNKNOWN, null, null) }
+        assertFailsWith<AppError.Api> { api.getAnalytics(null, PeriodKey("2026-13-01"), null) }
+        assertEquals(2, backend.config.analyticsPendingResponses)
+    }
+
+    @Test
     fun `an unknown period type, transfer mode or a malformed key is a VALIDATION_ERROR`() = runBlocking<Unit> {
         val calls = listOf<suspend () -> Unit>(
             { api.getAnalytics(PeriodTypeCode.UNKNOWN, null, null) },

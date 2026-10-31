@@ -79,6 +79,7 @@ data class AnalyticsUiState(
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
     val preparationTimedOut: Boolean = false,
+    val recalculationPaused: Boolean = false,
 )
 
 /**
@@ -103,6 +104,7 @@ class AnalyticsViewModel @Inject constructor(
     private var loadJob: Job? = null
     private var initialized = false
     private var importPolls = 0
+    private var importPollRevision: Long? = null
 
     private val limitRetryGate = RequestRetryGate(elapsedClock)
     private val _state = MutableStateFlow(AnalyticsUiState(blocks = readBlocks(flags)))
@@ -148,7 +150,10 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     init {
-        viewModelScope.launch { merge(statements.events, operations.categoryChanges).collect { reloadChangedData() } }
+        viewModelScope.launch {
+            merge(statements.events.map { true }, operations.categoryChanges.map { false })
+                .collect { invalidate -> reloadChangedData(invalidate = invalidate) }
+        }
         viewModelScope.launch {
             reportZone.profile.map { reportZone.current }.distinctUntilChanged().drop(1).collect { if (loadJob != null) reloadChangedData() }
         }
@@ -175,16 +180,18 @@ class AnalyticsViewModel @Inject constructor(
     /** Returning to a saved tab also refreshes changes whose event arrived while its view model was absent. */
     fun onResume(params: AnalyticsParams?) {
         if (!initialized) init(params)
-        else if (loadJob?.isActive != true) load(quiet = true)
+        else if (!_state.value.preparationTimedOut && loadJob?.isActive != true) load(quiet = true)
     }
 
     /** Actual data/zone changes invalidate the old request context, including the period directory. */
-    private fun reloadChangedData(clearSnackbar: Boolean = true) {
+    private fun reloadChangedData(invalidate: Boolean = false, clearSnackbar: Boolean = true) {
         if (!initialized) return
         clearRestriction(periodsChanged = true)
-        // An import or deletion makes the previous totals obsolete, including on a failed refresh.
-        _state.update { it.copy(data = null, loading = true, offline = false, snackbar = if (clearSnackbar) null else it.snackbar, preparationTimedOut = false) }
-        load()
+        importPolls = 0
+        // An import or deletion invalidates the old totals. Other edits keep the screen and its scroll position.
+        if (invalidate) _state.update { it.copy(data = null, loading = true, offline = false,
+            snackbar = if (clearSnackbar) null else it.snackbar, preparationTimedOut = false) }
+        load(quiet = !invalidate)
     }
 
     private fun clearRestriction(periodsChanged: Boolean = false) {
@@ -206,9 +213,14 @@ class AnalyticsViewModel @Inject constructor(
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             if (!quiet) _state.update { it.copy(loading = it.data == null, offline = false, errorPresentation = null, requestRetryable = null) }
+            _state.update { it.copy(recalculationPaused = false) }
             val requested = Triple(period, date, transferMode)
             try {
                 val pendingImport = statements.pendingAnalyticsImport()
+                if (pendingImport != importPollRevision) {
+                    importPollRevision = pendingImport
+                    importPolls = 0
+                }
                 val exp = experiments
                 val a = api.getAnalytics(requested.first, requested.second, requested.third, supports = supports, exp = exp)
                 // `complete` confirms the ledger commit, while the analytics projection can still be absent.
@@ -246,6 +258,7 @@ class AnalyticsViewModel @Inject constructor(
                     load(quiet = true)
                 }
             } catch (e: AppError) {
+                importPolls = 0
                 retryGate.record(e)
                 // The screen keeps showing the previous data: return the parameters to what it shows, or the
                 // segment, the chip and the transfers sheet would describe a request that never succeeded.
@@ -262,9 +275,9 @@ class AnalyticsViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         loading = false,
-                        data = it.data.takeUnless { previous -> previous?.state?.recalculating == true },
+                        recalculationPaused = it.data?.state?.recalculating == true,
                         errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable,
-                        offline = it.data == null || it.data.state?.recalculating == true,
+                        offline = it.data == null,
                         snackbar = if (quiet || it.data == null) it.snackbar
                         else if (e is AppError.Offline) "Нет сети — показываем прежний период" else "Не получилось обновить. Попробуйте ещё раз",
                     )

@@ -1,0 +1,72 @@
+appId: ru.finassist.pf.mock.e2e
+name: Подготовка аналитики после импорта — готовность и повтор после ожидания
+tags:
+  - analytics
+  - statements
+---
+# A fresh Analytics ViewModel must read the marker recorded by the actual completed import.
+# No Analytics screen or synthetic pending marker is opened/seeded before the import.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_pending_responses=4"
+- runFlow: ../../subflows/import_october_to_analytics.yaml
+- extendedWaitUntil:
+    visible:
+      id: "analytics.updating"
+    timeout: 10000
+- assertNotVisible:
+    id: "analytics.empty"
+- assertNotVisible: "Загрузите выписку.*"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 20000
+- assertNotVisible:
+    id: "analytics.updating"
+- assertNotVisible:
+    id: "analytics.empty"
+
+# A separate fresh import holds publication past the bounded wait, then explicit Retry recovers.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_pending_responses=100"
+- runFlow: ../../subflows/import_october_to_analytics.yaml
+- extendedWaitUntil:
+    visible:
+      id: "analytics.updating"
+    timeout: 10000
+- assertNotVisible:
+    id: "analytics.empty"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.preparation_timeout"
+    timeout: 40000
+- assertNotVisible:
+    id: "analytics.empty"
+- assertVisible:
+    id: "analytics.retry"
+    enabled: true
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_pending_responses=0"
+# Returning from the control activity must not silently retry the timed-out preparation.
+- assertVisible:
+    id: "analytics.preparation_timeout"
+- tapOn:
+    id: "analytics.retry"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.preparation_timeout"
+- assertNotVisible:
+    id: "analytics.empty"
+- assertVisible: "Октябрь 2026"

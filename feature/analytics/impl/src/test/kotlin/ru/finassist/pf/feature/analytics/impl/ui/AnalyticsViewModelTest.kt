@@ -450,15 +450,16 @@ class AnalyticsViewModelTest {
         assertEquals(4L, statements.pendingImport)
     }
 
-    @Test fun `a failed recalculation poll leaves preparation and offers offline recovery`() {
+    @Test fun `a failed recalculation poll keeps labelled previous data and offers recovery`() {
         api.answers += data(recalculating = true)
         api.answers += AppError.Offline()
         val vm = opened()
         scheduler.advanceTimeBy(3_000)
         scheduler.runCurrent()
         assertFalse(vm.state.value.loading)
-        assertTrue(vm.state.value.offline)
-        assertNull(vm.state.value.data)
+        assertFalse(vm.state.value.offline)
+        assertNotNull(vm.state.value.data)
+        assertTrue(vm.state.value.recalculationPaused)
         api.answers.clear()
         api.answers += data()
         vm.load()
@@ -466,18 +467,52 @@ class AnalyticsViewModelTest {
         assertFalse(vm.state.value.offline)
     }
 
-    @Test fun `a refused recalculation poll stops preparation without showing obsolete numbers`() {
+    @Test fun `a refused recalculation poll labels previous numbers and stops polling`() {
         api.answers += data(recalculating = true)
         api.answers += refused()
         val vm = opened()
         scheduler.advanceTimeBy(3_000)
         scheduler.runCurrent()
         assertFalse(vm.state.value.loading)
-        assertNull(vm.state.value.data)
+        assertNotNull(vm.state.value.data)
+        assertTrue(vm.state.value.recalculationPaused)
         assertNotNull(vm.state.value.errorPresentation)
         assertFalse(vm.state.value.retryReady)
         vm.load()
         assertEquals(2, api.requests.size)
+    }
+
+    @Test fun `a new import generation receives a fresh full polling allowance after timeout`() {
+        statements.pendingImport = 1L
+        api.answers += Analytics(hasData = false)
+        val vm = opened()
+        scheduler.advanceTimeBy(30_000)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.preparationTimedOut)
+        assertEquals(10, api.requests.size)
+        vm.onResume(null)
+        assertEquals(10, api.requests.size, "resume is not an implicit retry after timeout")
+        statements.pendingImport = 2L
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("previous-source"))
+        assertFalse(vm.state.value.preparationTimedOut)
+        assertTrue(vm.state.value.loading)
+        assertEquals(11, api.requests.size)
+        scheduler.advanceTimeBy(30_000)
+        scheduler.runCurrent()
+        assertEquals(20, api.requests.size)
+        assertTrue(vm.state.value.preparationTimedOut)
+    }
+
+    @Test fun `a regular payment edit keeps the previous screen when its background refresh fails`() {
+        api.answers += data()
+        api.answers += AppError.Offline()
+        val vm = opened()
+        val previous = vm.state.value.data
+        vm.dismissRegular("rp_1")
+        assertEquals(previous, vm.state.value.data)
+        assertFalse(vm.state.value.loading)
+        assertFalse(vm.state.value.offline)
+        assertEquals("Убрали из регулярных платежей", vm.state.value.snackbar)
     }
 
     @Test fun `while the server recalculates the screen asks again every 3 seconds`() {
