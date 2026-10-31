@@ -75,10 +75,6 @@ tags:
 - assertVisible:
     id: "ds.tab.assistant"
     selected: true
-- runFlow:
-    file: ../../subflows/config.yaml
-    env:
-      LINK: "pfe2e://config?flag.assistant=true"
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:
@@ -141,3 +137,8 @@ tags:
 - assertVisible:
     id: "assistant.answer"
 - assertVisible: ".*[Оо]сталось 4 из 5.*"
+# Reset only after navigating through Consent and saving/restoring the tab under the false live flag.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?flag.assistant=true"

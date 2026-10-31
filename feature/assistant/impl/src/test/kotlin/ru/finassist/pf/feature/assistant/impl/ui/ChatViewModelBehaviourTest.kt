@@ -123,10 +123,11 @@ class ChatViewModelBehaviourTest {
 
         override suspend fun listMessages(limit: Int?, beforeId: String?): MessagesList {
             listCalls += beforeId
-            listFailure?.let { throw it }
-            val response = pages.getValue(beforeId)
+            val failure = listFailure
+            val response = if (failure == null) pages.getValue(beforeId) else null
             listGate?.await()
-            return response
+            failure?.let { throw it }
+            return checkNotNull(response)
         }
 
         override suspend fun ask(key: IdempotencyKey, request: AskRequest): AskResponse {
@@ -691,11 +692,15 @@ class ChatViewModelBehaviourTest {
         api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
         vm.retry("a1")
         assertEquals(listOf("q1", "a2", "q2", "a3"), vm.state.value.items.map { it.id })
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a2", AnswerStatus.GENERATING),
+            question("q2"), answer("a3")), hasOlder = false)
+        val reads = api.listCalls.size
         api.listGate!!.complete(Unit)
         assertEquals(listOf("q1", "a2", "q2", "a3"), vm.state.value.items.map { it.id })
         assertTrue(vm.state.value.items.none { it.id == "a1" }, "the stale retryable failure must stay removed")
         assertEquals(AnswerStatus.GENERATING, vm.answerItem("a2").status)
         assertEquals(1, api.retries.size)
+        assertEquals(reads + 1, api.listCalls.size, "the invalidated snapshot must be refreshed")
     }
 
     @Test fun `an older init read that started before the failed answer was shown cannot restore its replacement`() {
@@ -744,6 +749,99 @@ class ChatViewModelBehaviourTest {
         assertEquals(listOf("q8", "a8"), vm.state.value.items.map { it.id })
         assertTrue(vm.state.value.hasOlder)
         assertFalse(vm.state.value.loadingOlder)
+    }
+
+    @Test fun `an older page remains valid across an overlapping resume refresh`() {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        api.pages["q2"] = MessagesList(listOf(question("q1"), answer("a1")), hasOlder = false)
+        val vm = newVm()
+        vm.onResumed()
+        val olderRead = CompletableDeferred<Unit>()
+        api.listGate = olderRead
+        vm.loadOlder()
+        api.listGate = null
+        vm.onResumed()
+        olderRead.complete(Unit)
+        assertEquals(listOf("q1", "a1", "q2", "a2"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.hasOlder)
+    }
+
+    @Test fun `pagination completing during a non overlapping latest read is never treated as an accepted Ask`() {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        api.pages["q2"] = MessagesList(listOf(question("q1"), answer("a1")), hasOlder = false)
+        val vm = newVm()
+        api.pages[null] = MessagesList(listOf(question("q8"), answer("a8")), hasOlder = true)
+        val latestRead = CompletableDeferred<Unit>()
+        api.listGate = latestRead
+        vm.load()
+        api.listGate = null
+        vm.loadOlder()
+        assertEquals(listOf("q1", "a1", "q2", "a2"), vm.state.value.items.map { it.id })
+        latestRead.complete(Unit)
+        assertEquals(listOf("q8", "a8"), vm.state.value.items.map { it.id })
+        assertTrue(vm.state.value.hasOlder)
+    }
+
+    private fun failOlderReadAcrossChangedBoundary(error: AppError): ChatViewModel {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        val vm = newVm()
+        val olderRead = CompletableDeferred<Unit>()
+        api.listGate = olderRead
+        api.listFailure = error
+        vm.loadOlder()
+        api.listGate = null
+        api.listFailure = null
+        api.pages[null] = MessagesList(listOf(question("q8"), answer("a8")), hasOlder = true)
+        api.pages["q8"] = MessagesList(listOf(question("q7"), answer("a7")), hasOlder = false)
+        vm.load()
+        olderRead.complete(Unit)
+        assertNull(vm.state.value.olderErrorPresentation, "the obsolete page error is not presented")
+        return vm
+    }
+
+    @Test fun `a stale older page failure retains its Retry After restriction across a boundary change`() {
+        val vm = failOlderReadAcrossChangedBoundary(AppError.RateLimited(null, 3))
+        val reads = api.listCalls.size
+        vm.loadOlder()
+        assertEquals(reads, api.listCalls.size)
+        advance(2_999)
+        vm.loadOlder()
+        assertEquals(reads, api.listCalls.size)
+        advance(1)
+        vm.loadOlder()
+        assertEquals(reads + 1, api.listCalls.size)
+        assertEquals("q8", api.listCalls.last())
+    }
+
+    @Test fun `a stale older page explicit refusal is retained after its presentation is discarded`() {
+        val vm = failOlderReadAcrossChangedBoundary(AppError.Api(ErrorCodes.VALIDATION_ERROR, 400,
+            response = ErrorResponseInfo(ErrorCodes.VALIDATION_ERROR, 400, requestRetryable = false)))
+        val reads = api.listCalls.size
+        advance(60_000)
+        vm.loadOlder()
+        assertEquals(reads, api.listCalls.size)
+    }
+
+    @Test fun `a replacement during failed stream recovery rereads the authoritative history and keeps its skip id`() {
+        val streamFailed = CompletableDeferred<Unit>()
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED,
+            AnswerErrorCode.MODEL_ERROR, retryable = true), question("q2"), answer("x", AnswerStatus.GENERATING)), hasOlder = false)
+        api.script("x", flow { streamFailed.await(); throw AppError.Api(ErrorCodes.NOT_FOUND, 404) })
+        val vm = newVm()
+        val recoveryRead = CompletableDeferred<Unit>()
+        api.listGate = recoveryRead
+        streamFailed.complete(Unit)
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        vm.retry("a1")
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a2", AnswerStatus.COMPLETE),
+            question("q2"), answer("x", AnswerStatus.FAILED)), hasOlder = false)
+        val reads = api.listCalls.size
+        recoveryRead.complete(Unit)
+        assertEquals(reads + 1, api.listCalls.size)
+        assertEquals(AnswerStatus.FAILED, vm.answerItem("x").status)
+        assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a2").status)
+        assertFalse(vm.state.value.generating, "a discarded recovery read must not strand the composer")
+        assertEquals(1, api.streamOpens.count { it == "x" })
     }
 
     @Test fun `consent accepted through Profile unlocks retained draft without automatically sending`() {

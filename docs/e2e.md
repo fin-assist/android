@@ -902,3 +902,10 @@ FIN-397 — Not covered yet: restoring a Chat/Consent navigation entry after act
 in-process backend also disappear on death. Both route entries guard the boundary before screen/ViewModel
 creation and redirect disabled entries to Feed; a live composed entry keeps its snapshot. This branch is
 compiled and inspected, without a claim of process-death UI execution.
+
+FIN-397 shared-policy and history regressions: Qase61 keeps `assistant=false` throughout Consent/Back,
+consent correction and tab save/restore, then resets it only at the end. The bar and all route guards use
+the one composition-root snapshot. Unit tests separate locally accepted Ask ids from GET pagination,
+retain valid older pages across an overlapping refresh, preserve Retry-After/explicit refusals after a
+stale-page presentation is discarded, and repeat invalidated latest reads with the original stream skip id.
+A failed stream's authoritative status can therefore finish preparation instead of stranding the composer.

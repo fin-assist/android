@@ -40,6 +40,7 @@ import ru.finassist.pf.core.navigation.NavControllerNavigator
 import ru.finassist.pf.core.storage.AppPreferences
 import ru.finassist.pf.feature.analytics.api.AnalyticsRoutes
 import ru.finassist.pf.feature.assistant.api.AssistantRoutes
+import ru.finassist.pf.feature.assistant.impl.ui.LocalAssistantEnabled
 import ru.finassist.pf.feature.applock.api.AppLock
 import ru.finassist.pf.feature.applock.api.LockState
 import ru.finassist.pf.feature.applock.impl.ui.AppLockScreens
@@ -244,8 +245,10 @@ private fun MainLayer(
         else -> -1
     }
     Column(modifier.fillMaxSize()) {
-        NavHost(controller, startDestination = OperationsRoutes.Feed, modifier = Modifier.weight(1f)) {
-            entries.forEach { entry -> with(entry) { install(navigator) } }
+        CompositionLocalProvider(LocalAssistantEnabled provides assistantEnabled) {
+            NavHost(controller, startDestination = OperationsRoutes.Feed, modifier = Modifier.weight(1f)) {
+                entries.forEach { entry -> with(entry) { install(navigator) } }
+            }
         }
         if (activeTab >= 0) {
             PfTabBar(

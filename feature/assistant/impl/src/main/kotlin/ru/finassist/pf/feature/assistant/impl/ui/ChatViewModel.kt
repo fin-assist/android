@@ -156,6 +156,9 @@ class ChatViewModel @Inject constructor(
     private var historyReadRevision = 0L
     /** A successful RetryAnswer invalidates snapshots begun before its in-place replacement. */
     private var replacementRevision = 0L
+    /** Only locally accepted Ask messages enter this registry; GET pagination never does. */
+    private var acceptanceRevision = 0L
+    private val acceptedMessageRevisions = HashMap<String, Long>()
     /** Failed answers whose «Повторить» is in flight: a second tap must not send the same key again (FIN-75). */
     private val retrying = HashSet<String>()
 
@@ -205,12 +208,14 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(loading = it.items.isEmpty(), loadFailed = false, loadErrorPresentation = null, loadRetryable = null) }
             val mutationRevision = replacementRevision
+            val acceptedBeforeRead = acceptanceRevision
             try {
                 val beforeRead = _state.value.items
                 val list = api.listMessages(limit = PAGE)
                 if (readRevision != historyReadRevision) return@launch
                 if (mutationRevision != replacementRevision) {
                     _state.update { it.copy(loading = false) }
+                    reload(skipStream)
                     return@launch
                 }
                 val items = list.messages.mapNotNull(::toItem).distinctById()
@@ -226,7 +231,10 @@ class ChatViewModel @Inject constructor(
                     else current.items
                     // A POST or SSE event accepted after this GET started is newer than its snapshot.
                     val fresh = items.map { item -> currentById[item.id]?.takeIf { it != priorById[item.id] } ?: item }
-                    val acceptedDuringRead = current.items.filter { it.id !in priorById && items.none { freshItem -> freshItem.id == it.id } }
+                    val acceptedDuringRead = current.items.filter {
+                        (acceptedMessageRevisions[it.id] ?: 0L) > acceptedBeforeRead &&
+                            it.id !in priorById && items.none { freshItem -> freshItem.id == it.id }
+                    }
                     val merged = (older + fresh + acceptedDuringRead).distinctById()
                     val recovery = current.recovery?.let { candidate ->
                         if (candidate.target == ChatRecoveryTarget.ASK) candidate
@@ -242,8 +250,13 @@ class ChatViewModel @Inject constructor(
                 refreshLimit()
                 watchGenerating(skip = skipStream)
             } catch (e: AppError) {
-                if (readRevision != historyReadRevision || mutationRevision != replacementRevision) return@launch
                 loadGate.record(e)
+                if (readRevision != historyReadRevision) return@launch
+                if (mutationRevision != replacementRevision && loadGate.isReady()) {
+                    _state.update { it.copy(loading = false) }
+                    reload(skipStream)
+                    return@launch
+                }
                 _state.update { it.copy(loading = false, loadFailed = it.items.isEmpty(), offline = e is AppError.Offline, loadErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, loadRetryable = e.requestRetryable) }
             }
         }
@@ -256,22 +269,20 @@ class ChatViewModel @Inject constructor(
         if (!s.hasOlder || s.loadingOlder) return
         viewModelScope.launch {
             _state.update { it.copy(loadingOlder = true, olderErrorPresentation = null, olderRetryable = null) }
-            val readRevision = historyReadRevision
-            val mutationRevision = replacementRevision
             try {
                 val list = api.listMessages(limit = PAGE, beforeId = first.id)
-                if (readRevision != historyReadRevision || mutationRevision != replacementRevision || _state.value.items.firstOrNull()?.id != first.id) {
+                if (_state.value.items.firstOrNull()?.id != first.id) {
                     _state.update { it.copy(loadingOlder = false) }
                     return@launch
                 }
                 _state.update { st -> st.copy(loadingOlder = false,
                     items = (list.messages.mapNotNull(::toItem) + st.items).distinctById(), hasOlder = list.hasOlder) }
             } catch (e: AppError) {
-                if (readRevision != historyReadRevision || mutationRevision != replacementRevision || _state.value.items.firstOrNull()?.id != first.id) {
+                olderGate.record(e)
+                if (_state.value.items.firstOrNull()?.id != first.id) {
                     _state.update { it.copy(loadingOlder = false) }
                     return@launch
                 }
-                olderGate.record(e)
                 _state.update { it.copy(loadingOlder = false, olderErrorPresentation = e.presentation, olderRetryable = e.requestRetryable) }
             }
         }
@@ -364,6 +375,9 @@ class ChatViewModel @Inject constructor(
                 tracker.track(Events.ASSISTANT_QUESTION_SENT)
                 val question = ChatItem.Question(r.question.id, r.question.createdAt, r.question.text ?: text)
                 val answer = ChatItem.Answer(r.answerId, r.question.createdAt, AnswerStatus.GENERATING)
+                val accepted = ++acceptanceRevision
+                acceptedMessageRevisions[question.id] = accepted
+                acceptedMessageRevisions[answer.id] = accepted
                 _state.update {
                     it.copy(
                         sending = false, draft = if (it.draft.trim() == text) "" else it.draft, offline = false,

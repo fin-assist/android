@@ -90,8 +90,8 @@ experiment, switch the client to `UpdateBehaviour.Actual` (every request goes to
 uses code defaults until the first answer).
 
 
-FIN-397: the main bar snapshots `assistant` when its MainLayer is created. Config updates do not remove
-the active assistant tab halfway through that layer; the new value applies when the layer is entered anew.
-Chat and Consent entries also check their own boundary before creating a screen/ViewModel. A restored
-entry with `assistant=false` finishes to Operations without opening assistant history, limit or consent
-requests. A currently composed entry retains its flag snapshot across a live update.
+FIN-397: MainLayer snapshots `assistant` once and provides that same value through `LocalAssistantEnabled`
+to every Chat/Consent guard. Navigating away, opening consent and restoring a saved tab do not re-read a
+live flag update independently from the bar. A new main layer reads the new flag value; disabled restored
+entries redirect to Operations before screen/ViewModel creation, without assistant API calls. The local
+default is false, and ownership stays in the app composition root; no mutable singleton is used.
