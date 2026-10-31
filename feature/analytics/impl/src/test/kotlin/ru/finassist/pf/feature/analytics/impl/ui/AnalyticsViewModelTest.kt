@@ -196,6 +196,47 @@ class AnalyticsViewModelTest {
         ),
     )
 
+    @Test fun `rolling selections keep singleton requests and restore each calendar choice with transfer mode`() {
+        api.answers += data(mode = TransferMode.WITHOUT)
+        api.answers += data(PeriodTypeCode.ROLLING_YEAR, "rolling_year", TransferMode.WITHOUT)
+        api.answers += data(PeriodTypeCode.ROLLING_QUARTER, "rolling_quarter", TransferMode.WITHOUT)
+        api.answers += data(mode = TransferMode.WITHOUT)
+        val vm = opened(AnalyticsParams(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITHOUT))
+        vm.setPeriodType(PeriodTypeCode.ROLLING_YEAR)
+        assertEquals(Request(PeriodTypeCode.ROLLING_YEAR, PeriodKey.ROLLING_YEAR, TransferMode.WITHOUT), api.requests.last())
+        vm.setPeriodType(PeriodTypeCode.ROLLING_QUARTER)
+        assertEquals(Request(PeriodTypeCode.ROLLING_QUARTER, PeriodKey.ROLLING_QUARTER, TransferMode.WITHOUT), api.requests.last())
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITHOUT), api.requests.last())
+    }
+
+    @Test fun `failed rolling switch preserves the prior screen and retries the exact singleton and mode`() {
+        val previous = data(mode = TransferMode.WITHOUT)
+        api.answers += previous
+        api.answers += AppError.Offline()
+        api.answers += data(PeriodTypeCode.ROLLING_QUARTER, "rolling_quarter", TransferMode.WITHOUT)
+        val vm = opened(AnalyticsParams(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITHOUT))
+        vm.setPeriodType(PeriodTypeCode.ROLLING_QUARTER)
+        assertEquals(previous, vm.state.value.data)
+        assertTrue(vm.state.value.periodChangeFailed)
+        vm.retryPeriodChange()
+        assertEquals(Request(PeriodTypeCode.ROLLING_QUARTER, PeriodKey.ROLLING_QUARTER, TransferMode.WITHOUT), api.requests.last())
+        assertEquals(api.requests[1], api.requests[2])
+        assertEquals(PeriodTypeCode.ROLLING_QUARTER, vm.state.value.data!!.params!!.period)
+    }
+
+    @Test fun `edge chart action opens its exact calendar month without changing transfer mode`() {
+        api.answers += data(PeriodTypeCode.ROLLING_YEAR, "rolling_year", TransferMode.WITHOUT)
+        api.answers += data(date = "2025-10", mode = TransferMode.WITHOUT)
+        val vm = opened(AnalyticsParams(PeriodTypeCode.ROLLING_YEAR, PeriodKey.ROLLING_YEAR, TransferMode.WITHOUT))
+        val block = Block(id = "monthly_chart", type = BlockType.CHART)
+        val action = BlockAction(ActionType.SELECT_ANALYTICS_PERIOD, period = PeriodTypeCode.MONTH, date = PeriodKey("2025-10"))
+        vm.onAction(block, action) { error("period selection must not navigate away") }
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2025-10"), TransferMode.WITHOUT), api.requests.last())
+        vm.onAction(block, action) { error("duplicate month must remain here") }
+        assertEquals(2, api.requests.size)
+    }
+
     private fun names() = tracker.events.map { it.first.name }
 
     private val reportZone = ReportZone { java.time.ZoneId.of("Europe/Moscow") }

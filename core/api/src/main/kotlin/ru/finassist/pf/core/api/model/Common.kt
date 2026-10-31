@@ -36,7 +36,9 @@ class IdempotencyKey private constructor(
 /** Period type for Analytics (`period` query). Open set; the client only requests the values it knows. */
 @Serializable(with = PeriodTypeCode.Serializer::class)
 enum class PeriodTypeCode(override val code: String) : ApiCode {
-    MONTH("month"), QUARTER("quarter"), YEAR("year"), UNKNOWN("?");
+    MONTH("month"), QUARTER("quarter"), YEAR("year"), ROLLING_YEAR("rolling_year"), ROLLING_QUARTER("rolling_quarter"), UNKNOWN("?");
+
+    val isRolling: Boolean get() = this == ROLLING_YEAR || this == ROLLING_QUARTER
 
     object Serializer : OpenEnumSerializer<PeriodTypeCode>("PeriodType", entries, UNKNOWN)
 }

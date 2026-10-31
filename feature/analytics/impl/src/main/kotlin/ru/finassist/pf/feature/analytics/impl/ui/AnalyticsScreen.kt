@@ -87,6 +87,7 @@ class AnalyticsActions(
 )
 
 private val PERIOD_TYPES = listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.YEAR)
+private val ROLLING_TYPES = listOf(PeriodTypeCode.ROLLING_YEAR, PeriodTypeCode.ROLLING_QUARTER)
 
 @Composable
 fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: AnalyticsViewModel = hiltViewModel()) {
@@ -244,9 +245,19 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         Gap(d.space2)
         PfSegmentedControl(
             options = listOf("Месяц", "Квартал", "Год"),
-            selected = PERIOD_TYPES.indexOf(params.period).coerceAtLeast(0),
+            selected = PERIOD_TYPES.indexOf(params.period),
             onSelect = { vm.setPeriodType(PERIOD_TYPES[it]) },
         )
+        Gap(d.space2)
+        Column(verticalArrangement = Arrangement.spacedBy(d.space2)) {
+            ROLLING_TYPES.forEach { type ->
+                PfChip(
+                    if (type == PeriodTypeCode.ROLLING_YEAR) "Последние 12 месяцев" else "Последние 3 месяца",
+                    onClick = { vm.setPeriodType(type) }, selected = params.period == type,
+                    modifier = Modifier.testTag(AnalyticsTags.rolling(type.code)),
+                )
+            }
+        }
         if (blocks.transfersFilter) {
             Gap(d.space3)
             Row {
@@ -351,6 +362,7 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
         tags = AnalyticsBlockTags,
         onAction = { block, action -> vm.onAction(block, action, navigate) },
         expanded = state.expanded,
+        onSelectAnalyticsPeriod = { block, action -> vm.onAction(block, action, navigate) },
         onToggleExpanded = vm::toggleExpanded,
         decorate = { block, content ->
             // The coachmark lies over the card (mockup `AnalyticsHintCategories`).
@@ -480,6 +492,9 @@ internal object AnalyticsTags {
     const val TRANSFERS_WITH = "analytics.transfers.with"
     const val TRANSFERS_WITHOUT = "analytics.transfers.without"
     const val PERIOD_OPTION = "analytics.period.option"
+    fun rolling(code: String) = "analytics.period.$code"
+    // PfBarChart emits these stable keys for the shared chart primitive.
+    fun monthlyPoint(month: String) = "analytics.expense.monthly.point.$month"
     const val EXPENSE_CATEGORY = "analytics.expense_category"
     const val INCOME_CATEGORY = "analytics.income_category"
     const val ALL_CATEGORIES = "analytics.all_categories"

@@ -1,0 +1,72 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — последние 12 и 3 месяца по покрытию выписки
+tags:
+  - analytics
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.rolling_year"
+    timeout: 15000
+- tapOn:
+    id: "analytics.period.rolling_year"
+- extendedWaitUntil:
+    visible: "(?s).*2.октября.2025.*1.октября.2026.*"
+    timeout: 15000
+- assertVisible: "Последние 12 месяцев"
+- assertVisible:
+    id: "analytics.tile.expense"
+- assertNotVisible:
+    id: "analytics.tile.forecast"
+- assertVisible:
+    id: "ds.period.prev"
+    enabled: false
+- tapOn:
+    id: "analytics.transfers"
+- tapOn: "Без переводов"
+- extendedWaitUntil:
+    visible: "Без переводов"
+    timeout: 10000
+- tapOn:
+    id: "analytics.period.rolling_quarter"
+- extendedWaitUntil:
+    visible: "(?s).*2.июля.*1.октября.2026.*"
+    timeout: 15000
+- assertVisible: "Последние 3 месяца"
+- assertVisible: "Без переводов"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.monthly_chart"
+    direction: DOWN
+# The July point covers only 2–31 July but selects the exact full calendar month 2026-07.
+- scrollUntilVisible:
+    element:
+      id: "analytics.expense.monthly.point.2026-07"
+    direction: LEFT
+- tapOn:
+    id: "analytics.expense.monthly.point.2026-07"
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
+- extendedWaitUntil:
+    visible: "Июль 2026"
+    timeout: 15000
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible: "Без переводов"
+- tapOn:
+    id: "analytics.period.rolling_year"
+- extendedWaitUntil:
+    visible: "(?s).*2.октября.2025.*1.октября.2026.*"
+    timeout: 15000
+- tapOn:
+    id: "ds.segment.0"
+- extendedWaitUntil:
+    visible: "Июль 2026"
+    timeout: 15000
+- assertVisible: "Без переводов"

@@ -141,6 +141,12 @@ class AnalyticsDesignCheckTest {
     @Test fun analyticsLimit() =
         capture("AnalyticsLimit", ui(september()).copy(limit = AssistantLimit(remaining = 0, dailyMax = 5, resetsAt = day(9, 27))), heightDp = 2872)
 
+    // FIN-411 proposed artboards; authored/compiled only, no screenshot execution.
+    @Test fun analyticsRollingYear() = capture("AnalyticsRollingYear", ui(golden("rolling_year_actual")), heightDp = 1900)
+    @Test fun analyticsRollingYearDark() = capture("AnalyticsRollingYearDark", ui(golden("rolling_year_actual")), heightDp = 1900, dark = true)
+    @Test fun analyticsRollingQuarter() = capture("AnalyticsRollingQuarter", ui(golden("rolling_quarter_actual")), heightDp = 1900)
+    @Test fun analyticsRollingPartial() = capture("AnalyticsRollingPartial", ui(golden("rolling_partial_actual")), heightDp = 1900)
+
     @Test fun analyticsYear() = capture("AnalyticsYear", ui(year2026), heightDp = 1700)
 
     @Test fun analyticsEmpty() = capture("AnalyticsEmpty", ui(Analytics(hasData = false)).copy(limit = null), heightDp = 844)

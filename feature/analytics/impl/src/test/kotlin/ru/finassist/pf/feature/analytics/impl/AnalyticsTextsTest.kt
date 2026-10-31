@@ -25,6 +25,32 @@ class AnalyticsTextsTest {
         AnalyticsPeriodInfo(range = range, isCurrent = true, coverage = type, dataFrom = from?.let(::t), dataTo = to?.let(::t), gaps = emptyList())
 
     @Test
+    fun `rolling caption always names requested range separately from short coverage`() {
+        val p = AnalyticsPeriodInfo(
+            DateRange(t("2025-10-31T00:00:00+03:00"), t("2026-10-31T00:00:00+03:00")), false, Coverage.PARTIAL,
+            t("2026-08-20T00:00:00+03:00"), t("2026-10-30T23:59:59+03:00"), emptyList(),
+        )
+        assertEquals("Последние 12 месяцев", AnalyticsTexts.periodTitle(PeriodKey.ROLLING_YEAR))
+        assertEquals("Последние 3 месяца", AnalyticsTexts.periodTitle(PeriodKey.ROLLING_QUARTER))
+        val caption = AnalyticsTexts.partialPeriod(p, PeriodTypeCode.ROLLING_YEAR)!!.plain()
+        kotlin.test.assertTrue(caption.startsWith("31 октября 2025 — 30 октября 2026"))
+        kotlin.test.assertTrue(caption.contains("Данные за 20 августа — 30 октября"))
+        kotlin.test.assertTrue(caption.endsWith("период неполный"))
+        assertEquals("31 октября 2025 — 30 октября 2026", AnalyticsTexts.partialPeriod(p.copy(coverage = Coverage.COMPLETE), PeriodTypeCode.ROLLING_YEAR)!!.plain())
+    }
+
+    @Test
+    fun `rolling caption ends on the real anchor day before a skipped civil date`() {
+        val p = AnalyticsPeriodInfo(
+            DateRange(t("2010-12-31T00:00:00-10:00"), t("2011-12-31T00:00:00+14:00")), false, Coverage.COMPLETE,
+            t("2010-12-31T00:00:00-10:00"), t("2011-12-29T23:59:59-10:00"), emptyList(),
+        )
+        assertEquals("31 декабря 2010 — 29 декабря 2011", AnalyticsTexts.partialPeriod(p, PeriodTypeCode.ROLLING_YEAR)!!.plain())
+        assertEquals("31 декабря 2010 — 29 декабря 2011", AnalyticsTexts.partialPeriod(p.copy(dataTo = t("2011-12-29T08:00:00-10:00")), PeriodTypeCode.ROLLING_YEAR)!!.plain())
+        assertEquals("31 декабря 2010 — 30 декабря 2011", AnalyticsTexts.partialPeriod(p.copy(dataTo = null), PeriodTypeCode.ROLLING_YEAR)!!.plain())
+    }
+
+    @Test
     fun `period titles`() {
         assertEquals("Сентябрь 2026", AnalyticsTexts.periodTitle(PeriodKey("2026-09")))
         assertEquals("III квартал 2026", AnalyticsTexts.periodTitle(PeriodKey("2026-Q3")))

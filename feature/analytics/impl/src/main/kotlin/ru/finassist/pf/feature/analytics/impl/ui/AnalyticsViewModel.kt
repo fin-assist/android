@@ -25,6 +25,7 @@ import ru.finassist.pf.core.api.model.AnalyticsPeriodItem
 import ru.finassist.pf.core.api.model.AssistantLimit
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockAction
+import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
@@ -375,7 +376,7 @@ class AnalyticsViewModel @Inject constructor(
 
     /** Restore this segment's choice; only a first visit derives a key from the displayed period. */
     override fun setPeriodType(type: PeriodTypeCode) {
-        if (type == period) return
+        if (type == PeriodTypeCode.UNKNOWN || type == period) return
         val targetDate = dateForType(type)
         // The segment is another entry point to the same failed request, including its wait/refusal.
         if (failedPeriodRequest == Triple(type, targetDate, transferMode)) {
@@ -390,12 +391,13 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     private fun dateForType(type: PeriodTypeCode): PeriodKey? {
+        if (type.isRolling) return PeriodKey(type.code)
         selectedDates[type]?.let { return it }
         val target = PeriodType.fromCode(type.code) ?: return null
         val shown = _state.value.data
         val key = shown?.params?.date ?: date ?: return null
         // The API accepts exact or finer keys. Coarsening preserves the existing calendar anchor.
-        if (key.type.ordinal <= target.ordinal) return key
+        if (key.isCalendar && key.type.ordinal <= target.ordinal) return key
         val info = shown?.period ?: return null
         // dataTo is an inclusive covered instant; only the calendar range has an exclusive end.
         val last = if (info.coverage == Coverage.COMPLETE) info.range.to.minusNanos(1) else info.dataTo
@@ -485,6 +487,16 @@ class AnalyticsViewModel @Inject constructor(
                 navigate(action)
             }
             ActionType.OPEN_ASSISTANT -> navigate(action)
+            ActionType.SELECT_ANALYTICS_PERIOD -> {
+                if (block.id != "monthly_chart" || block.type != BlockType.CHART || block.v != 1 || !block.status.hasData || action.period != PeriodTypeCode.MONTH) return
+                val key = action.date?.takeIf { it.isCalendar && it.type == PeriodType.MONTH } ?: return
+                if (period == PeriodTypeCode.MONTH && date == key) return
+                date = key
+                period = PeriodTypeCode.MONTH
+                clearRestriction(periodsChanged = true)
+                tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to period.code))
+                load()
+            }
             ActionType.UNKNOWN -> Unit
         }
     }

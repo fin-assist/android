@@ -25,21 +25,32 @@ enum class PeriodType(val code: String) {
 }
 
 /**
- * Calendar period key as the API uses it: `2026-09` (month), `2026-Q3` (quarter), `2026` (year).
+ * Period selector: calendar `2026-09`, `2026-Q3`, `2026`, or coverage-anchored `rolling_year` / `rolling_quarter`.
+ * Rolling selectors have no local calendar boundaries: render the server response range.
  * Parsed on the client for labels and period navigation, and for neighbouring keys in the mock backend.
  * A finer initial navigation key may be derived from the server-provided period coverage (FIN-391).
  */
 @JvmInline
 @Serializable
 value class PeriodKey(val value: String) {
+    val isRolling: Boolean get() = this == ROLLING_YEAR || this == ROLLING_QUARTER
+    val isCalendar: Boolean get() = ANY.matches(value)
+
     val type: PeriodType
-        get() = when {
-            QUARTER.matches(value) -> PeriodType.QUARTER
-            MONTH.matches(value) -> PeriodType.MONTH
-            else -> PeriodType.YEAR
+        get() {
+            require(isCalendar) { "A coverage-anchored period has no calendar type" }
+            return when {
+                QUARTER.matches(value) -> PeriodType.QUARTER
+                MONTH.matches(value) -> PeriodType.MONTH
+                else -> PeriodType.YEAR
+            }
         }
 
-    val year: Int get() = value.substring(0, 4).toInt()
+    val year: Int
+        get() {
+            require(isCalendar) { "A coverage-anchored period has no calendar year" }
+            return value.substring(0, 4).toInt()
+        }
 
     /** 1..12 for a month key, 1..4 for a quarter key, null for a year key. */
     val index: Int? get() = when (type) {
@@ -77,7 +88,10 @@ value class PeriodKey(val value: String) {
         private val QUARTER = Regex("""^\d{4}-Q[1-4]$""")
         private val ANY = Regex("""^\d{4}(-(0[1-9]|1[0-2])|-Q[1-4])?$""")
 
-        fun isValid(value: String) = ANY.matches(value)
+        val ROLLING_YEAR = PeriodKey("rolling_year")
+        val ROLLING_QUARTER = PeriodKey("rolling_quarter")
+
+        fun isValid(value: String) = ANY.matches(value) || value == ROLLING_YEAR.value || value == ROLLING_QUARTER.value
 
         fun of(type: PeriodType, date: LocalDate): PeriodKey = when (type) {
             PeriodType.MONTH -> PeriodKey("%04d-%02d".format(date.year, date.monthValue))

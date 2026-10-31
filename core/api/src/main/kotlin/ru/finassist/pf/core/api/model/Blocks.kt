@@ -11,6 +11,7 @@ import ru.finassist.pf.core.api.ApiJson
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.ApiDateTime
 import ru.finassist.pf.core.common.time.DateRange
+import ru.finassist.pf.core.common.time.PeriodKey
 
 /**
  * Primitive of the block catalog (api.md «Блоки», FIN-4) — the Analytics screen and the assistant's answers. Open code:
@@ -70,18 +71,24 @@ enum class ActionType(override val code: String) : ApiCode {
     OPEN_OPERATIONS("open_operations"),
     OPEN_ASSISTANT("open_assistant"),
     DISMISS_REGULAR_PAYMENT("dismiss_regular_payment"),
+    SELECT_ANALYTICS_PERIOD("select_analytics_period"),
     UNKNOWN("?");
 
     object Serializer : OpenEnumSerializer<ActionType>("ActionType", entries, UNKNOWN)
 }
 
 /** An action from the fixed dictionary; an unknown one makes its element not clickable. */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class BlockAction(
     val type: ActionType,
     val filter: OperationsFilter? = null,
     val paymentId: String? = null,
     val label: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val period: PeriodTypeCode? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val date: PeriodKey? = null,
 )
 
 /** What a `value` is (api.md «Значения»). An unknown kind is not shown. */
@@ -193,6 +200,7 @@ data class ChartPoint(
     val dataTo: ApiDateTime? = null,
     /** Caption of a partial bar («по 25-е»). */
     val note: String? = null,
+    val action: BlockAction? = null,
 )
 
 object ChartPointList : TolerantListSerializer<ChartPoint>(ChartPoint.serializer())

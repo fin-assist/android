@@ -91,7 +91,7 @@ object AnalyticsComposer {
                 guarded("bank_fees") { listOf(bankFees(i.bankFees, period, s)) } +
                 guarded("small_frequent") { listOf(smallFrequent(i.smallFrequent, s)) }
         }.orEmpty()
-        val balance = guarded("balance") { if (type == PeriodTypeCode.YEAR) emptyList() else listOfNotNull(balance(s)) }
+        val balance = guarded("balance") { if (type == PeriodTypeCode.YEAR || type.isRolling) emptyList() else listOfNotNull(balance(s)) }
 
         val ordered = if (experiments[ORDER_EXPERIMENT] == "b") {
             expense + income + tiles + chart + insights + balance
@@ -224,7 +224,7 @@ object AnalyticsComposer {
         val selected = points.indexOfFirst { it.month == s.params!!.date.value }
         return when {
             selected >= 0 -> selected
-            s.params!!.period == PeriodTypeCode.YEAR -> null
+            s.params!!.period == PeriodTypeCode.YEAR || s.params!!.period.isRolling -> null
             else -> points.lastIndex
         }
     }
@@ -242,14 +242,16 @@ object AnalyticsComposer {
         } else {
             AnalyticsServerTexts.peakMonth(points)
         }
-        val secondary = if (params.period == PeriodTypeCode.YEAR) {
+        val secondary = if (params.period.isRolling) null else if (params.period == PeriodTypeCode.YEAR) {
             AnalyticsServerTexts.yearChartNote(points, s.period?.isCurrent == true)
         } else {
             AnalyticsServerTexts.typical(expense?.typical)
         }
         val data = ChartData(
             kind = ChartKind.BAR, valueKind = ValueKind.AMOUNT,
-            points = points.map { point(it, amount(it.expense)) },
+            points = points.map { p -> point(p, amount(p.expense)).copy(action = if (params.period.isRolling && p.coverage != Coverage.NO_DATA) {
+                BlockAction(ActionType.SELECT_ANALYTICS_PERIOD, period = PeriodTypeCode.MONTH, date = ru.finassist.pf.core.common.time.PeriodKey(p.month))
+            } else null) },
             highlightIndex = highlight(points, s),
             notes = listOfNotNull(main?.let { ChartNote(it, NoteTone.PRIMARY) }, secondary?.let { ChartNote(it, NoteTone.MUTED) }),
         )

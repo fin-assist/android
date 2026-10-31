@@ -20,6 +20,8 @@ object AnalyticsTexts {
     fun periodTitle(key: PeriodKey): String {
         val v = key.value
         return when {
+            key == PeriodKey.ROLLING_YEAR -> "Последние 12 месяцев"
+            key == PeriodKey.ROLLING_QUARTER -> "Последние 3 месяца"
             Regex("""^\d{4}-Q[1-4]$""").matches(v) -> "${QUARTERS[v.last().digitToInt() - 1]} квартал ${v.take(4)}"
             Regex("""^\d{4}-\d{2}$""").matches(v) -> RussianDates.monthTitle(YearMonth.parse(v))
             else -> v
@@ -29,6 +31,7 @@ object AnalyticsTexts {
     fun unitName(period: PeriodTypeCode): String = when (period) {
         PeriodTypeCode.QUARTER -> "квартал"
         PeriodTypeCode.YEAR -> "год"
+        PeriodTypeCode.ROLLING_YEAR, PeriodTypeCode.ROLLING_QUARTER -> "период"
         else -> "месяц"
     }
 
@@ -48,6 +51,8 @@ object AnalyticsTexts {
 
     /** Caption above the tiles of an incomplete quarter or year: «Апрель — сентябрь 2026 · год неполный». */
     fun partialPeriod(p: AnalyticsPeriodInfo, period: PeriodTypeCode): String? {
+        if (period.isRolling) return rollingRange(p) +
+            (coverage(p)?.let { " · $it" } ?: "")
         if (period == PeriodTypeCode.MONTH || p.coverage.effective == Coverage.COMPLETE) return null
         if (p.coverage.effective == Coverage.NO_DATA) return "За этот период данных нет"
         val from = p.dataFrom?.let(YearMonth::from) ?: return null
@@ -57,6 +62,14 @@ object AnalyticsTexts {
         val unit = if (period == PeriodTypeCode.QUARTER) "квартал неполный" else "год неполный"
         return "$months$year · $unit"
     }
+
+    /**
+     * Rolling coverage always ends on its anchor day, so dataTo identifies the real inclusive last date even
+     * when an IANA transition skipped the nominal day before range.to. The left edge always uses the full range.
+     */
+    private fun rollingRange(p: AnalyticsPeriodInfo): String = RussianDates.dayRange(
+        p.range.from.toLocalDate(), p.dataTo?.toLocalDate() ?: RussianDates.lastDayOf(p.range), withYear = true,
+    )
 
     /**
      * Period label: «Сентябрь 2026», but «1–25 сентября 2026» while the statement covers only part of the first
