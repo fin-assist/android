@@ -32,6 +32,7 @@ import ru.finassist.pf.core.api.model.TileGroupData
 import ru.finassist.pf.core.api.model.ValueKind
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.RussianDates
+import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.common.time.countWithNoun
 import java.time.YearMonth
 import kotlin.math.roundToInt
@@ -249,7 +250,11 @@ object AnalyticsComposer {
         }
         val data = ChartData(
             kind = ChartKind.BAR, valueKind = ValueKind.AMOUNT,
-            points = points.map { point(it, amount(it.expense)) },
+            points = points.map { monthly ->
+                point(monthly, amount(monthly.expense)).copy(action = if (monthly.coverage == Coverage.NO_DATA) null else BlockAction(
+                    ActionType.SELECT_ANALYTICS_PERIOD, period = PeriodTypeCode.MONTH, date = PeriodKey(monthly.month),
+                ))
+            },
             highlightIndex = highlight(points, s),
             notes = listOfNotNull(main?.let { ChartNote(it, NoteTone.PRIMARY) }, secondary?.let { ChartNote(it, NoteTone.MUTED) }),
         )
