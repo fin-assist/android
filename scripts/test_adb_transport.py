@@ -4,10 +4,13 @@ import io
 import importlib.util
 import json
 import os
+import signal
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -67,7 +70,12 @@ class TransportTests(unittest.TestCase):
                 self.assertEqual(run.call_count, 1)
                 self.assertEqual(run.call_args.args[0], ["adb", "-H", "127.0.0.1", "-P", "5037", "devices"])
         self.assertEqual(events, [])
-        with patch.object(transport, "run_bounded", return_value=(0, "List of devices attached\nemulator-5582\tdevice\n")):
+        for state in ("connecting", "host", "rescue", "detached", "no permissions (missing udev rules)", "future_state"):
+            output = "List of devices attached\nemulator-5582\tdevice\nother\t" + state + "\n"
+            with self.subTest(state=state), patch.object(transport, "run_bounded", return_value=(0, output)):
+                with self.assertRaises(transport.ProbeAbort):
+                    transport.verify_server_isolation("adb", "emulator-5582", lambda *event: None)
+        with patch.object(transport, "run_bounded", return_value=(0, "* daemon not running; starting now at tcp:5037\n* daemon started successfully\nList of devices attached\nemulator-5582\tdevice\n")):
             transport.verify_server_isolation("adb", "emulator-5582", lambda *event: events.append(event))
         self.assertEqual(events, [("server_isolation", {"verified": True, "listed_devices": 1})])
 
@@ -128,23 +136,84 @@ class TransportTests(unittest.TestCase):
                                           run=lambda *args, **kwargs: (124, ""), verify_isolation=lambda *args: None)
             self.assertEqual(len(result), 1)
             self.assertEqual(result[0]["returncode"], 124)
-            self.assertEqual(events[-1], ("series_aborted", {"reason": "process_timeout", "completed_repetitions": 1}))
+            self.assertEqual(events[-1], ("series_aborted", {"reason": "process_timeout", "completed_repetitions": 0}))
 
-    def test_timeout_kills_owned_process_group(self):
-        # Real child sleep exercises the timeout instead of mocking the implementation's timer.
+    def _assert_real_process_group_terminated(self, interrupt):
         processes = []
-        original_popen = transport.subprocess.Popen
+        original_popen = subprocess.Popen
+        with tempfile.TemporaryDirectory() as directory:
+            pid_file = Path(directory) / "pids.json"
+            launcher = ("import json,os,subprocess,sys,time;from pathlib import Path;"
+                        "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],"
+                        "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);"
+                        f"marker=Path({str(pid_file)!r});tmp=marker.with_suffix('.tmp');"
+                        "tmp.write_text(json.dumps([os.getpid(),child.pid]));tmp.replace(marker);"
+                        "time.sleep(60)")
+            pids = []
 
-        def start(*args, **kwargs):
-            process = original_popen(*args, **kwargs)
-            processes.append(process)
-            return process
+            def start(*args, **kwargs):
+                process = original_popen(*args, **kwargs)
+                processes.append(process)
+                # Establish a real descendant before communicate starts its actual timeout.
+                deadline = time.monotonic() + 5
+                while not pid_file.exists() and time.monotonic() < deadline:
+                    time.sleep(.01)
+                self.assertTrue(pid_file.exists(), "launcher did not create its child")
+                pids.extend(json.loads(pid_file.read_text()))
+                self.assertEqual(os.getpgid(pids[1]), process.pid)
+                if interrupt:
+                    communicate = process.communicate
+                    first_call = True
 
-        with patch.object(transport.subprocess, "Popen", side_effect=start):
-            status, _ = transport.run_bounded([sys.executable, "-c", "import time;time.sleep(30)"], .15)
-        self.assertEqual(status, 124)
-        with self.assertRaises(ProcessLookupError):
-            os.kill(processes[0].pid, 0)
+                    def interrupted(*args, **kwargs):
+                        nonlocal first_call
+                        if first_call:
+                            first_call = False
+                            raise KeyboardInterrupt()
+                        return communicate(*args, **kwargs)
+
+                    process.communicate = interrupted
+                return process
+
+            def alive(pid):
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    return False
+                status = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True,
+                                        text=True, timeout=1).stdout.strip()
+                # An orphan may briefly remain a zombie until init reaps it; it cannot run.
+                return bool(status) and not status.startswith("Z")
+
+            try:
+                with (Path(directory) / "console.log").open("w") as output:
+                    with patch.object(transport.subprocess, "Popen", side_effect=start):
+                        if interrupt:
+                            with self.assertRaises(KeyboardInterrupt):
+                                transport.run_bounded([sys.executable, "-c", launcher], .15, output=output)
+                        else:
+                            code, _ = transport.run_bounded([sys.executable, "-c", launcher], .15, output=output)
+                            self.assertEqual(code, 124)
+                self.assertEqual(len(pids), 2)
+                deadline = time.monotonic() + 2
+                while any(alive(pid) for pid in pids) and time.monotonic() < deadline:
+                    time.sleep(.02)
+                for pid in pids:
+                    self.assertFalse(alive(pid), f"owned process {pid} survived group termination")
+            finally:
+                # A regression must fail the test without leaving a live child behind.
+                for process in processes:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    process.wait(timeout=2)
+
+    def test_timeout_kills_launcher_and_real_descendant(self):
+        self._assert_real_process_group_terminated(interrupt=False)
+
+    def test_keyboard_interrupt_kills_launcher_and_real_descendant(self):
+        self._assert_real_process_group_terminated(interrupt=True)
 
     def test_successful_flow_with_failed_independent_probe_is_not_stable_transport(self):
         observed = threading.Event()
@@ -153,7 +222,7 @@ class TransportTests(unittest.TestCase):
             observed.set()
             return {"returncode": 1, "state": None, "offline": True}
 
-        def series(*args):
+        def series(*args, **kwargs):
             self.assertTrue(observed.wait(timeout=2))
             return [{"iteration": 1, "returncode": 0, "seconds": 0}]
 
@@ -172,6 +241,84 @@ class TransportTests(unittest.TestCase):
             self.assertFalse(summary["passed"])
             self.assertGreater(summary["probe_failure_count"], 0)
             self.assertEqual(out.stat().st_mode & 0o777, 0o700)
+
+    def test_main_marks_timeout_on_last_or_only_repeat_incomplete(self):
+        for codes in ([124], [0, 0, 124]):
+            with self.subTest(codes=codes), tempfile.TemporaryDirectory() as directory:
+                out = Path(directory) / "new"
+                results = [{"iteration": i + 1, "returncode": code, "seconds": 0} for i, code in enumerate(codes)]
+                with contextlib.redirect_stdout(io.StringIO()), patch.object(transport, "wait_for_boot"), \
+                        patch.object(transport, "probe", return_value={"returncode": 0, "state": "device", "offline": False}), \
+                        patch.object(transport, "run_series", return_value=results):
+                    code = transport.main(["--serial", "emulator-5582", "--avd-name", "own", "--transport", "direct",
+                                           "--repetitions", str(len(codes)), "--out", str(out)])
+                summary = json.loads((out / "summary.json").read_text())
+                self.assertEqual(code, 1)
+                self.assertFalse(summary["complete"])
+                self.assertEqual(summary["abort_reason"], "process_timeout")
+                self.assertEqual(summary["completed_repetitions"], len(codes) - 1)
+                self.assertEqual(summary["recorded_repetitions"], len(codes))
+
+    def test_main_rejects_non_device_state_even_with_successful_adb_exit(self):
+        for raw in ("offline\n", "unknown\n", "bootloader\n", ""):
+            with self.subTest(raw=raw), tempfile.TemporaryDirectory() as directory:
+                out = Path(directory) / "new"
+                observed = threading.Event()
+
+                def adb(command, timeout):
+                    if command[-1] == "get-state":
+                        observed.set()
+                        return 0, raw
+                    return 0, ""
+
+                def series(*args, **kwargs):
+                    self.assertTrue(observed.wait(timeout=2))
+                    return [{"iteration": 1, "returncode": 0, "seconds": 0}]
+
+                with contextlib.redirect_stdout(io.StringIO()), patch.object(transport, "wait_for_boot"), \
+                        patch.object(transport, "run_bounded", side_effect=adb), \
+                        patch.object(transport, "run_series", side_effect=series):
+                    code = transport.main(["--serial", "emulator-5582", "--avd-name", "own", "--transport", "direct",
+                                           "--repetitions", "1", "--out", str(out)])
+                summary = json.loads((out / "summary.json").read_text())
+                self.assertEqual(code, 1)
+                self.assertTrue(summary["flows_passed"])
+                self.assertFalse(summary["transport_clean"])
+                self.assertGreater(summary["probe_failure_count"], 0)
+
+    def test_main_preserves_failed_repeat_when_second_inventory_aborts(self):
+        original_series = transport.run_series
+        outputs = [(0, "List of devices attached\nemulator-5582\tdevice\n"),
+                   (0, "List of devices attached\nemulator-5582\tdevice\nother\tconnecting\n")]
+        calls = []
+
+        def run(command, timeout, **kwargs):
+            calls.append(command)
+            return 1, ""
+
+        def series(args, env, event, **kwargs):
+            return original_series(args, env, event, run=run, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory) / "new"
+            with contextlib.redirect_stdout(io.StringIO()), patch.object(transport, "wait_for_boot"), \
+                    patch.object(transport, "probe", return_value={"returncode": 0, "state": "device", "offline": False}), \
+                    patch.object(transport, "run_bounded", side_effect=outputs), \
+                    patch.object(transport, "run_series", side_effect=series):
+                code = transport.main(["--serial", "emulator-5582", "--avd-name", "own", "--transport", "server",
+                                       "--repetitions", "3", "--out", str(out)])
+            summary = json.loads((out / "summary.json").read_text())
+            self.assertEqual(code, 1)
+            self.assertEqual(len(calls), 1)
+            self.assertFalse(summary["complete"])
+            self.assertFalse(summary["flows_passed"])
+            self.assertEqual(summary["completed_repetitions"], 1)
+            self.assertEqual(summary["abort_reason"], "server_isolation")
+            self.assertEqual(summary["results"], json.loads((out / "results.json").read_text()))
+            self.assertEqual(summary["results"][0]["returncode"], 1)
+            phases = [json.loads(line)["phase"] for line in (out / "timeline.jsonl").read_text().splitlines()]
+            self.assertIn("series_aborted", phases)
+            self.assertNotIn("setup_failed", phases)
 
     def test_existing_output_cannot_be_overwritten(self):
         with tempfile.TemporaryDirectory() as directory:

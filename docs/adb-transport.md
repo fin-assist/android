@@ -62,14 +62,20 @@ python3 scripts/adb-transport.py --serial emulator-5582 --avd-name fin390_transp
 Every repetition has its own JUnit/material/debug directory and return code. Each Maestro **process group**
 is killed after the timeout; this bounds the shell launcher, Java and its children. After an ordinary flow failure, the runner continues
 the preselected diagnostic repetitions and preserves every result. A process timeout aborts the batch as
-incomplete: a killed Maestro process can leave a driver session that would contaminate the next attempt. It returns
+incomplete, including a timeout on the last or only repetition: a killed Maestro process can leave a
+driver session that would contaminate the next attempt. `recorded_repetitions` includes the timed-out
+attempt; `completed_repetitions` counts processes that exited before the deadline. Already recorded
+results stay in the summary when a later inventory gate aborts, with an explicit `abort_reason`
+(`boot_timeout`, `ownership`, `server_isolation`, `process_timeout` or another bounded command failure). It returns
 nonzero if any repetition failed or an independent adb probe failed. `flows_passed` records the Maestro
 result; `transport_clean` records the independent probes; `passed` requires both. A clean timeline is still
 only the sampled observation window. These repetitions never overwrite a product/Qase result or turn a failed
 suite into a pass. Output directories must be new; existing evidence is refused.
 
 `timeline.jsonl` records UTC and monotonic timestamps for boot, ownership, Maestro start/end and independent
-serial-pinned `adb get-state` / `adb shell true` samples. The sampled commands have three-second limits. The sampler is active load (two short adb commands per
+serial-pinned `adb get-state` / `adb shell true` samples. The sampled commands have three-second limits. A `get-state` sample requires both exit 0 and the exact
+state `device`; `offline`, `unknown`, bootloader, empty or unrecognised output counts as a failure even
+when adb exits 0. The shell liveness probe separately requires exit 0. The sampler is active load (two short adb commands per
 cycle, followed by 0.5 seconds of rest); keep it identical across comparisons. It may affect timing and is
 not a passive trace or proof of the lower-level disconnect cause.
 The public timeline only contains status values, exit codes and an offline flag; it copies no arbitrary
@@ -102,6 +108,11 @@ without snapshots. The owned AVD had completed first boot once; comparison cold 
 without a wipe or a logged-in account. The compared mock batches ran in the same cold boot, with the same APK and minimal
 flow hash, and no other listed device. Each configuration began with an XML-verified phone screen and
 no ANR dialog. Each Maestro process had a 90-second deadline; three repetitions were selected beforehand.
+The order was fixed **server → direct** in each environment, not alternated: server was the first batch
+after cold boot. Startup warmup, dexopt, initial driver installation and background work may therefore
+confound both duration differences and the location of the ANR. Neither is attributed to the route.
+A future experiment should alternate the order or cold-boot separately for each route; no extra UI runs
+were performed for this documentation correction.
 
 | Environment | Route | Process results | Independent adb samples |
 |---|---|---|---|
@@ -129,7 +140,11 @@ APK/flow hashes, timestamps, return codes and sample counts are in
 [`adb-transport-comparison.json`](adb-transport-comparison.json). All recorded batches used one content-pinned
 runner. After recording them, the published source tightened the inventory gate to run before every
 server repetition; the added negative unit test verifies that a newly listed neighbour prevents the next
-Maestro launch. This changes neither the generated flow nor the connection parameters.
+Maestro launch. Review also tightened unknown inventory/state handling and timeout/partial-summary
+semantics, with unit tests for those boundaries and real launcher/descendant termination. All four
+preserved timelines were recounted under the stricter state rule: every `get-state` sample was `device`,
+and all four failure counts remain zero. None of these changes alters the generated flow or connection
+parameters; the original UI results were neither repeated nor reclassified.
 
 Direct loopback is a locally tested **candidate** for further diagnostics in both environments. The historical post-bootstrap
 `host:transport:... device offline` failure has not been reproduced by these clean mock batches, and this PR

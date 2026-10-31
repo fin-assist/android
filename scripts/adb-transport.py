@@ -17,6 +17,14 @@ import time
 APP_IDS = {"ru.finassist.pf.mock.e2e", "ru.finassist.pf.stage", "ru.finassist.pf.stage.e2e"}
 
 
+class ProbeAbort(RuntimeError):
+    """A known diagnostic boundary with a safe, machine-readable reason."""
+
+    def __init__(self, reason, message):
+        super().__init__(message)
+        self.reason = reason
+
+
 def timestamp():
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
@@ -66,7 +74,7 @@ def probe(adb, serial, command):
     code, output = run_bounded(adb_command(adb, serial, *command), 3)
     # Never copy arbitrary adb output, logcat, keys, host identity or app data into the public timeline.
     state = output.strip() if output.strip() in {"device", "offline", "unknown"} else None
-    return {"returncode": code, "state": state, "offline": "device offline" in output}
+    return {"returncode": code, "state": state, "offline": state == "offline" or "device offline" in output}
 
 
 def wait_for_boot(adb, serial, avd_name, timeout, event):
@@ -77,20 +85,23 @@ def wait_for_boot(adb, serial, avd_name, timeout, event):
         if code == 0 and output.strip() == "1":
             break
         if time.monotonic() >= deadline:
-            raise RuntimeError("owned emulator did not finish booting before the deadline")
+            raise ProbeAbort("boot_timeout", "owned emulator did not finish booting before the deadline")
         time.sleep(min(1, max(0, deadline - time.monotonic())))
     code, output = run_bounded(adb_command(adb, serial, "emu", "avd", "name"), 3)
     if code or output.splitlines()[:1] != [avd_name]:
-        raise RuntimeError("serial does not belong to the explicitly named AVD")
+        raise ProbeAbort("ownership", "serial does not belong to the explicitly named AVD")
     event("ownership", {"verified": True})
 
 
 def verify_server_isolation(adb, serial, event):
     code, output = run_bounded([adb, "-H", "127.0.0.1", "-P", "5037", "devices"], 3)
-    devices = [line.split()[:2] for line in output.splitlines()
-               if re.match(r"^\S+\s+(device|offline|unauthorized|recovery|sideload|bootloader|authorizing)(?:\s|$)", line)]
+    service_lines = {"List of devices attached", "* daemon not running; starting now at tcp:5037",
+                     "* daemon started successfully", "* daemon not running; starting now at tcp:5037 *",
+                     "* daemon started successfully *"}
+    devices = [line.strip().split() for line in output.splitlines()
+               if line.strip() and line.strip() not in service_lines]
     if code or devices != [[serial, "device"]]:
-        raise RuntimeError("server comparison requires the owned AVD to be the only listed device")
+        raise ProbeAbort("server_isolation", "server comparison requires the owned AVD to be the only listed device")
     # Maestro 2.11 createAndroid has a byId -> discover fallback if a selected device disappears.
     # Refuse a comparison with other devices attached instead of disconnecting or touching them.
     event("server_isolation", {"verified": True, "listed_devices": 1})
@@ -106,8 +117,9 @@ def flow_text(app_id, root_id):
     )
 
 
-def run_series(args, env, event, run=run_bounded, verify_isolation=verify_server_isolation):
-    results = []
+def run_series(args, env, event, run=run_bounded, verify_isolation=verify_server_isolation, results=None):
+    if results is None:
+        results = []
     for number in range(1, args.repetitions + 1):
         if args.transport == "server":
             verify_isolation(args.adb, args.serial, event)
@@ -126,7 +138,7 @@ def run_series(args, env, event, run=run_bounded, verify_isolation=verify_server
         # A failed repetition stays failed. Later diagnostics never replace it with a green result.
         (args.out / "results.json").write_text(json.dumps(results, indent=2) + "\n")
         if code == 124:
-            event("series_aborted", {"reason": "process_timeout", "completed_repetitions": len(results)})
+            event("series_aborted", {"reason": "process_timeout", "completed_repetitions": len(results) - 1})
             break
     return results
 
@@ -173,13 +185,15 @@ def main(argv=None):
     stop = threading.Event()
     monitor_errors = []
     probe_failures = []
+    results = []
+    setup_complete = False
 
     def monitor():
         try:
             while not stop.is_set():
                 for name, command in (("adb_state", ["get-state"]), ("adb_shell", ["shell", "true"])):
                     sample = probe(args.adb, args.serial, command)
-                    if sample["returncode"] or sample["offline"]:
+                    if sample["returncode"] or sample["offline"] or (name == "adb_state" and sample["state"] != "device"):
                         probe_failures.append({"probe": name, **sample})
                     event(name, sample)
                 stop.wait(.5)
@@ -190,19 +204,29 @@ def main(argv=None):
     thread = None
     try:
         wait_for_boot(args.adb, args.serial, args.avd_name, args.boot_timeout, event)
+        setup_complete = True
         (args.out / "probe.yaml").write_text(content)
         thread = threading.Thread(target=monitor, name="owned-adb-probe", daemon=True)
         thread.start()
-        results = run_series(args, env, event)
-        summary.update(complete=len(results) == args.repetitions,
-                       flows_passed=all(result["returncode"] == 0 for result in results), results=results)
+        results = run_series(args, env, event, results=results)
     except (RuntimeError, OSError) as error:
-        summary["error"] = type(error).__name__
-        event("setup_failed", {"error": type(error).__name__})
+        reason = error.reason if isinstance(error, ProbeAbort) else "command_error"
+        summary.update(error=type(error).__name__, abort_reason=reason)
+        event("series_aborted" if setup_complete else "setup_failed", {"reason": reason})
+    except KeyboardInterrupt:
+        summary["abort_reason"] = "interrupted"
+        event("series_aborted" if setup_complete else "setup_failed", {"reason": "interrupted"})
+        raise
     finally:
         stop.set()
         if thread is not None:
             thread.join(timeout=8)
+        if any(result["returncode"] == 124 for result in results):
+            summary["abort_reason"] = "process_timeout"
+        summary.update(results=results, recorded_repetitions=len(results),
+                       completed_repetitions=sum(result["returncode"] != 124 for result in results),
+                       complete=len(results) == args.repetitions and "abort_reason" not in summary,
+                       flows_passed=bool(results) and all(result["returncode"] == 0 for result in results))
         summary.update(transport_clean=not probe_failures and not monitor_errors,
                        probe_failure_count=len(probe_failures), monitor_errors=monitor_errors)
         summary["passed"] = summary["complete"] and summary.get("flows_passed", False) and summary["transport_clean"]

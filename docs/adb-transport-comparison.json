@@ -25,8 +25,8 @@
   },
   "product_source_sha": "b9e427efe27e0e891e6d0222bd52bf1ef85e413d",
   "probe_runner_sha256": "7c9bdd2189e944f062183e72ff911e640412c5edaeede8e1174caa6fc4d3f318",
-  "published_runner_sha256": "ed3f567b8f6efec952dd2882a7f8f9c36bc380ccc0ca91b89c65be3150655906",
-  "publication_hardening": "Recorded batches used the same content-pinned runner. Published source moves the server inventory gate from once per batch to before every server session; no flow or connection changes. This hardening is covered by an added negative unit test; recorded batches are not reclassified or rerun.",
+  "published_runner_sha256": "961771c0e94926f921b0d78d73e53d5cc0fa82c3d37e19fe55874ef44b3bd3ca",
+  "publication_hardening": "Recorded batches used one content-pinned runner. Published source additionally checks inventory before every server session, rejects unknown inventory entries/non-device get-state samples, retains partial results on abort, and keeps last-repeat timeouts incomplete. New unit tests cover these boundaries and real launcher/child timeout and interruption cleanup. Preserved timelines were recounted with the stricter state rule; no UI batch was repeated or reclassified.",
   "runs": [
     {
       "serial": "emulator-5582",
@@ -61,7 +61,10 @@
       "monitor_errors": [],
       "finished": "2026-10-31T18:56:33.634+00:00",
       "sample_count": 588,
-      "sample_failures_verified": 0
+      "sample_failures_verified": 0,
+      "get_state_counts_verified": {
+        "device": 294
+      }
     },
     {
       "serial": "emulator-5582",
@@ -96,7 +99,10 @@
       "monitor_errors": [],
       "finished": "2026-10-31T18:59:48.243+00:00",
       "sample_count": 320,
-      "sample_failures_verified": 0
+      "sample_failures_verified": 0,
+      "get_state_counts_verified": {
+        "device": 160
+      }
     },
     {
       "serial": "emulator-5582",
@@ -131,7 +137,10 @@
       "monitor_errors": [],
       "finished": "2026-10-31T19:15:58.685+00:00",
       "sample_count": 312,
-      "sample_failures_verified": 0
+      "sample_failures_verified": 0,
+      "get_state_counts_verified": {
+        "device": 156
+      }
     },
     {
       "serial": "emulator-5582",
@@ -166,7 +175,10 @@
       "monitor_errors": [],
       "finished": "2026-10-31T19:19:43.866+00:00",
       "sample_count": 238,
-      "sample_failures_verified": 0
+      "sample_failures_verified": 0,
+      "get_state_counts_verified": {
+        "device": 119
+      }
     }
   ],
   "limits": [
@@ -181,5 +193,11 @@
     "hide_error_dialogs": "null",
     "own_xml_cleanup_returncode": 0,
     "own_emulator_stop_returncode": 0
-  }
+  },
+  "sample_verification_rule": "returncode != 0 OR offline flag OR (phase == adb_state AND state != device). Recounted from preserved private timeline.jsonl after review; original recorded summaries and outcomes unchanged.",
+  "fixed_route_order": [
+    "server",
+    "direct"
+  ],
+  "order_limit": "Server was first after cold boot in each environment; order was not alternated. Startup warmup, dexopt and driver installation may confound durations and ANR location. Neither is attributed to route."
 }
