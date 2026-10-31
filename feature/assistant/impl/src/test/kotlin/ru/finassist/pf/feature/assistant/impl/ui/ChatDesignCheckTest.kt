@@ -143,16 +143,25 @@ class ChatDesignCheckTest {
         onSend = {}, onVoice = {}, onOpenSearch = {}, onOpenAnalytics = {},
     )
 
-    private fun capture(name: String, state: ChatUiState, dark: Boolean = false, heightDp: Int = 844, environment: ConnectionEnvironment = ConnectionEnvironment.UNKNOWN) =
+    private fun capture(name: String, state: ChatUiState, dark: Boolean = false, heightDp: Int = 844, environment: ConnectionEnvironment = ConnectionEnvironment.UNKNOWN, voice: VoiceState = VoiceState()) =
         // The thread is a viewport over a scrolling list, as on the artboard: no full-height growth.
         DesignCheck.capture(name, dark = dark, heightDp = heightDp, fullHeight = false, tab = 2) {
             CompositionLocalProvider(LocalConnectionEnvironmentReader provides ConnectionEnvironmentReader { environment }) {
                 // Opened at the end of the thread, as the app scrolls it once the history has loaded.
                 val list = rememberLazyListState(initialFirstVisibleItemIndex = Int.MAX_VALUE)
-                ChatContent(state, zone = zone, today = today, voiceListening = false, actions = actions, listState = list)
+                ChatContent(state, zone = zone, today = today, voiceState = voice, actions = actions, listState = list)
             }
 
         }
+
+    @Test fun voicePreparing() = capture("ChatVoicePreparing", answered.copy(draft = "Мои расходы"), voice = VoiceState(VoicePhase.PREPARING))
+    @Test fun voiceListening() = capture("ChatVoiceListening", answered, voice = VoiceState(VoicePhase.LISTENING, level = 0.6f))
+    @Test fun voiceListeningDark() = capture("ChatVoiceListeningDark", answered, dark = true, voice = VoiceState(VoicePhase.LISTENING, level = 0.6f))
+    @Test fun voiceRecognizing() = capture("ChatVoiceRecognizing", answered, voice = VoiceState(VoicePhase.RECOGNIZING))
+    @Test fun voicePermission() = capture("ChatVoicePermission", answered.copy(draft = "Мои расходы"), voice = VoiceState(VoicePhase.ERROR, failure = VoiceFailure.PERMISSION))
+    @Test fun voiceNoSpeech() = capture("ChatVoiceNoSpeech", answered, voice = VoiceState(VoicePhase.ERROR, failure = VoiceFailure.NO_SPEECH))
+    @Test fun voiceUnavailable() = capture("ChatVoiceUnavailable", answered, voice = VoiceState(VoicePhase.ERROR, failure = VoiceFailure.UNAVAILABLE))
+    @Test fun voiceError() = capture("ChatVoiceError", answered, voice = VoiceState(VoicePhase.ERROR, failure = VoiceFailure.RECOGNITION))
 
     @Test fun chat() = capture("Chat", answered)
 
