@@ -121,7 +121,9 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
         Column(Modifier.fillMaxSize().testTag(AnalyticsTags.SCREEN)) {
             if (actions.back != null) PfPageHeader("Аналитика", onBack = actions.back) else PfTabHeader("Аналитика")
             val a = state.data
-            state.limitErrorPresentation?.let {
+            val quotaVisible = state.blocks.assistant && !state.loading && !state.offline &&
+                !state.preparationTimedOut && a?.hasData == true
+            state.limitErrorPresentation?.takeIf { quotaVisible }?.let {
                 ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4),
                     onRetry = ({ vm.refresh() }).takeIf { state.limitRetryReady })
             }

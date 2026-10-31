@@ -4,6 +4,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -80,6 +81,35 @@ class AnalyticsRetryCallbackTest {
             assertEquals(0, handlers.loads)
             assertEquals(0, handlers.periodRetries)
         }
+    }
+
+    @Test fun `stored quota error is visible only alongside its assistant card`() {
+        val data = ApiJson.decodeFromString(Analytics.serializer(), javaClass.getResource("/analytics/september.json")!!.readText())
+        val state = mutableStateOf(AnalyticsUiState(loading = false, offline = true, blocks = AnalyticsBlocks(),
+            limitErrorPresentation = ErrorPresentation(connectionFailure = true)))
+        compose.setContent {
+            CompositionLocalProvider(LocalInspectionMode provides true) {
+                PfTheme {
+                    AnalyticsContent(state.value, AnalyticsActions({}, {}, {}, { _, _ -> }, null), Handlers())
+                }
+            }
+        }
+        val quotaError = compose.onNodeWithText("Не получилось обновить лимит вопросов", substring = true)
+        quotaError.assertDoesNotExist()
+        compose.onNodeWithTag(AnalyticsTags.ASK).assertDoesNotExist()
+        compose.runOnIdle { state.value = state.value.copy(offline = false, data = Analytics(hasData = false)) }
+        quotaError.assertDoesNotExist()
+        compose.onNodeWithTag(AnalyticsTags.ASK).assertDoesNotExist()
+        // A quota failure may arrive before the analytics response: keep it for the later card.
+        compose.runOnIdle { state.value = state.value.copy(data = data.copy(blocks = emptyList())) }
+        quotaError.assertExists()
+        compose.onNodeWithTag(AnalyticsTags.ASK).assertExists()
+        compose.runOnIdle { state.value = state.value.copy(loading = true) }
+        quotaError.assertDoesNotExist()
+        compose.onNodeWithTag(AnalyticsTags.ASK).assertDoesNotExist()
+        compose.runOnIdle { state.value = state.value.copy(loading = false, blocks = AnalyticsBlocks(assistant = false)) }
+        quotaError.assertDoesNotExist()
+        compose.onNodeWithTag(AnalyticsTags.ASK).assertDoesNotExist()
     }
 
     @Test fun `refresh indicator tag follows the actual read lifecycle`() {

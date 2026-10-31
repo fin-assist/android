@@ -104,9 +104,11 @@ class AnalyticsViewModelTest {
     private class FakeAssistant : AssistantApi {
         var limitCalls = 0
         var failure: AppError? = null
+        var reply: (suspend () -> AssistantLimit)? = null
         var limit = AssistantLimit(3, 5, at(30))
         override suspend fun getLimit(): AssistantLimit {
             limitCalls++
+            reply?.let { return it() }
             failure?.let { throw it }
             return limit
         }
@@ -1677,6 +1679,57 @@ class AnalyticsViewModelTest {
         assertEquals(14, api.requests.size)
         assertEquals(failedTarget, api.requests.last())
         assertEquals(PeriodTypeCode.YEAR, vm.state.value.data?.params?.period)
+    }
+
+    @Test fun `fullscreen offline retry retains quota failure without changing the current error context`() {
+        api.answers += AppError.Offline()
+        val vm = opened()
+        assertEquals(0, assistant.limitCalls)
+        assistant.failure = AppError.Offline()
+        vm.refresh()
+        assertEquals(2, api.requests.size)
+        assertEquals(1, assistant.limitCalls)
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.offline)
+        assertFalse(vm.state.value.loading)
+        assertFalse(vm.state.value.refreshing)
+        assertTrue(vm.state.value.limitErrorPresentation?.connectionFailure == true)
+        assertTrue(vm.state.value.limitRetryReady)
+    }
+
+    @Test fun `quota failure before a late analytics success is retained for the newly shown card`() {
+        api.answers += AppError.Offline()
+        val vm = opened()
+        val analytics = CompletableDeferred<Analytics>()
+        api.reply = { analytics.await() }
+        assistant.failure = AppError.Offline()
+        vm.refresh()
+        val quotaError = assertNotNull(vm.state.value.limitErrorPresentation)
+        assertTrue(quotaError.connectionFailure)
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.refreshing)
+        analytics.complete(data())
+        assertEquals(true, vm.state.value.data?.hasData)
+        assertEquals(quotaError, vm.state.value.limitErrorPresentation)
+        assertFalse(vm.state.value.offline)
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `late quota failure remains visible after analytics succeeds`() {
+        api.answers += AppError.Offline()
+        val vm = opened()
+        api.answers.clear()
+        api.answers += data()
+        val quota = CompletableDeferred<AssistantLimit>()
+        assistant.reply = { quota.await() }
+        vm.refresh()
+        assertEquals(true, vm.state.value.data?.hasData)
+        assertNull(vm.state.value.limitErrorPresentation)
+        assertTrue(vm.state.value.refreshing)
+        quota.completeExceptionally(AppError.Offline())
+        assertEquals(true, vm.state.value.data?.hasData)
+        assertTrue(vm.state.value.limitErrorPresentation?.connectionFailure == true)
+        assertFalse(vm.state.value.refreshing)
     }
 
 }
