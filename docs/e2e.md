@@ -889,3 +889,16 @@ A flag update while the main layer is open leaves its tab bar intact; the disabl
 `analytics/blocks_switched_off`. Native `AiConsentSpacingTest` checks measured geometry after scrolling,
 including the form-error variant, instead of treating an unchecked snapshot as a spacing assertion.
 The native test is in `app/src/androidTestMock`, with its Qase mapping, and is compiled without execution.
+
+FIN-397 history refresh retains loaded earlier pages only when a shared message id proves a contiguous
+boundary. A non-overlapping latest page starts pagination again from its own server boundary, so new
+messages cannot hide a middle gap behind a cached `hasOlder=false`. Reads started before an accepted
+RetryAnswer are invalidated by its replacement revision; stale pages cannot restore the failed answer or
+move its replacement after later questions. Unit tests cover delayed latest/init reads, replacement
+position and an older-page request crossing a refreshed pagination boundary.
+
+FIN-397 — Not covered yet: restoring a Chat/Consent navigation entry after actual process death with
+`assistant=false` is not represented by a mock Maestro flow: the server and authentication state of the
+in-process backend also disappear on death. Both route entries guard the boundary before screen/ViewModel
+creation and redirect disabled entries to Feed; a live composed entry keeps its snapshot. This branch is
+compiled and inspected, without a claim of process-death UI execution.

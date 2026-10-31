@@ -153,6 +153,9 @@ class ChatViewModel @Inject constructor(
     private val streams = HashMap<String, Job>()
     private var wasPresented = false
     private val retryKeys = HashMap<String, IdempotencyKey>()
+    private var historyReadRevision = 0L
+    /** A successful RetryAnswer invalidates snapshots begun before its in-place replacement. */
+    private var replacementRevision = 0L
     /** Failed answers whose «Повторить» is in flight: a second tap must not send the same key again (FIN-75). */
     private val retrying = HashSet<String>()
 
@@ -198,20 +201,29 @@ class ChatViewModel @Inject constructor(
      */
     private fun reload(skipStream: String?) {
         if (!loadGate.isReady()) return
+        val readRevision = ++historyReadRevision
         viewModelScope.launch {
             _state.update { it.copy(loading = it.items.isEmpty(), loadFailed = false, loadErrorPresentation = null, loadRetryable = null) }
+            val mutationRevision = replacementRevision
             try {
                 val beforeRead = _state.value.items
                 val list = api.listMessages(limit = PAGE)
+                if (readRevision != historyReadRevision) return@launch
+                if (mutationRevision != replacementRevision) {
+                    _state.update { it.copy(loading = false) }
+                    return@launch
+                }
                 val items = list.messages.mapNotNull(::toItem).distinctById()
                 _state.update { current ->
-                    val firstFresh = items.firstOrNull()
-                    val overlap = firstFresh?.let { first -> current.items.indexOfFirst { it.id == first.id } } ?: -1
-                    val older = if (overlap >= 0) current.items.take(overlap)
-                    else if (firstFresh != null) current.items.filter { it.createdAt < firstFresh.createdAt }
-                    else current.items
                     val priorById = beforeRead.associateBy { it.id }
                     val currentById = current.items.associateBy { it.id }
+                    val firstFresh = items.firstOrNull()
+                    val overlap = firstFresh?.let { first -> current.items.indexOfFirst { it.id == first.id } } ?: -1
+                    // Without a shared id the pages cannot prove a contiguous prefix. Start pagination at
+                    // the server's fresh boundary instead of hiding a gap behind a cached hasOlder=false.
+                    val older = if (overlap >= 0) current.items.take(overlap)
+                    else if (firstFresh != null) emptyList()
+                    else current.items
                     // A POST or SSE event accepted after this GET started is newer than its snapshot.
                     val fresh = items.map { item -> currentById[item.id]?.takeIf { it != priorById[item.id] } ?: item }
                     val acceptedDuringRead = current.items.filter { it.id !in priorById && items.none { freshItem -> freshItem.id == it.id } }
@@ -230,6 +242,7 @@ class ChatViewModel @Inject constructor(
                 refreshLimit()
                 watchGenerating(skip = skipStream)
             } catch (e: AppError) {
+                if (readRevision != historyReadRevision || mutationRevision != replacementRevision) return@launch
                 loadGate.record(e)
                 _state.update { it.copy(loading = false, loadFailed = it.items.isEmpty(), offline = e is AppError.Offline, loadErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, loadRetryable = e.requestRetryable) }
             }
@@ -243,10 +256,21 @@ class ChatViewModel @Inject constructor(
         if (!s.hasOlder || s.loadingOlder) return
         viewModelScope.launch {
             _state.update { it.copy(loadingOlder = true, olderErrorPresentation = null, olderRetryable = null) }
+            val readRevision = historyReadRevision
+            val mutationRevision = replacementRevision
             try {
                 val list = api.listMessages(limit = PAGE, beforeId = first.id)
-                _state.update { st -> st.copy(loadingOlder = false, items = (list.messages.mapNotNull(::toItem) + st.items).distinctById(), hasOlder = list.hasOlder) }
+                if (readRevision != historyReadRevision || mutationRevision != replacementRevision || _state.value.items.firstOrNull()?.id != first.id) {
+                    _state.update { it.copy(loadingOlder = false) }
+                    return@launch
+                }
+                _state.update { st -> st.copy(loadingOlder = false,
+                    items = (list.messages.mapNotNull(::toItem) + st.items).distinctById(), hasOlder = list.hasOlder) }
             } catch (e: AppError) {
+                if (readRevision != historyReadRevision || mutationRevision != replacementRevision || _state.value.items.firstOrNull()?.id != first.id) {
+                    _state.update { it.copy(loadingOlder = false) }
+                    return@launch
+                }
                 olderGate.record(e)
                 _state.update { it.copy(loadingOlder = false, olderErrorPresentation = e.presentation, olderRetryable = e.requestRetryable) }
             }
@@ -506,6 +530,7 @@ class ChatViewModel @Inject constructor(
             try {
                 val r = whileInProgress(key) { api.retry(key, answerId) }
                 retryKeys.remove(answerId)
+                replacementRevision++
                 _state.update { s ->
                     s.copy(
                         items = s.items.map { item ->

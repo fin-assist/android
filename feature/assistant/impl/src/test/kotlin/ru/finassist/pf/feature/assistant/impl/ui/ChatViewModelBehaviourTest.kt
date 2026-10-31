@@ -680,6 +680,72 @@ class ChatViewModelBehaviourTest {
         assertEquals(listOf("q-a1", "a1"), vm.state.value.items.map { it.id })
     }
 
+    @Test fun `a delayed resume snapshot cannot resurrect the failed answer replaced by RetryAnswer`() {
+        val vm = vmWithFailedAnswer()
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED,
+            AnswerErrorCode.MODEL_ERROR, retryable = true), question("q2"), answer("a3")), hasOlder = false)
+        vm.load()
+        vm.onResumed()
+        api.listGate = CompletableDeferred()
+        vm.onResumed()
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        vm.retry("a1")
+        assertEquals(listOf("q1", "a2", "q2", "a3"), vm.state.value.items.map { it.id })
+        api.listGate!!.complete(Unit)
+        assertEquals(listOf("q1", "a2", "q2", "a3"), vm.state.value.items.map { it.id })
+        assertTrue(vm.state.value.items.none { it.id == "a1" }, "the stale retryable failure must stay removed")
+        assertEquals(AnswerStatus.GENERATING, vm.answerItem("a2").status)
+        assertEquals(1, api.retries.size)
+    }
+
+    @Test fun `an older init read that started before the failed answer was shown cannot restore its replacement`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED,
+            AnswerErrorCode.MODEL_ERROR, retryable = true)), hasOlder = false)
+        val initialRead = CompletableDeferred<Unit>()
+        api.listGate = initialRead
+        val vm = newVm()
+        api.listGate = null
+        vm.load()
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        vm.retry("a1")
+        initialRead.complete(Unit)
+        assertEquals(listOf("q1", "a2"), vm.state.value.items.map { it.id })
+        assertEquals(AnswerStatus.GENERATING, vm.answerItem("a2").status)
+    }
+
+    @Test fun `a non overlapping latest page resets the pagination boundary instead of creating a hidden gap`() {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        api.pages["q2"] = MessagesList(listOf(question("q1"), answer("a1")), hasOlder = false)
+        val vm = newVm()
+        vm.onResumed()
+        vm.loadOlder()
+        assertFalse(vm.state.value.hasOlder)
+        api.pages[null] = MessagesList(listOf(question("q8"), answer("a8")), hasOlder = true)
+        api.pages["q8"] = MessagesList(listOf(question("q7"), answer("a7")), hasOlder = true)
+        vm.onResumed()
+        assertEquals(listOf("q8", "a8"), vm.state.value.items.map { it.id })
+        assertTrue(vm.state.value.hasOlder)
+        vm.loadOlder()
+        assertEquals("q8", api.listCalls.last())
+        assertEquals(listOf("q7", "a7", "q8", "a8"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `an older page pending across a fresh pagination boundary cannot prepend a disconnected prefix`() {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        api.pages["q2"] = MessagesList(listOf(question("q1"), answer("a1")), hasOlder = false)
+        val vm = newVm()
+        val olderRead = CompletableDeferred<Unit>()
+        api.listGate = olderRead
+        vm.loadOlder()
+        api.listGate = null
+        api.pages[null] = MessagesList(listOf(question("q8"), answer("a8")), hasOlder = true)
+        vm.load()
+        olderRead.complete(Unit)
+        assertEquals(listOf("q8", "a8"), vm.state.value.items.map { it.id })
+        assertTrue(vm.state.value.hasOlder)
+        assertFalse(vm.state.value.loadingOlder)
+    }
+
     @Test fun `consent accepted through Profile unlocks retained draft without automatically sending`() {
         val vm = newVm()
         vm.onResumed()
