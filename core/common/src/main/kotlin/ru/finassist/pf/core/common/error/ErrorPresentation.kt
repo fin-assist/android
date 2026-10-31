@@ -82,6 +82,8 @@ enum class ErrorSeverity {
 data class ErrorPresentation(
     val userMessage: UserMessage = UserMessage.Absent,
     val severity: ErrorSeverity = ErrorSeverity.ERROR,
+    /** Local transport failure; never decoded from a server response. */
+    val connectionFailure: Boolean = false,
 ) {
     /** Fallbacks are controlled feature strings; diagnostic exception/API messages never belong here. */
     fun textOrFallback(fallback: String, legacySafeText: String? = null): String = when (val message = userMessage) {

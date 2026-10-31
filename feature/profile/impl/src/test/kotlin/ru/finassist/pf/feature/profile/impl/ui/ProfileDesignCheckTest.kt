@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.profile.impl.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
+import ru.finassist.pf.core.common.error.ConnectionEnvironment
+import ru.finassist.pf.core.common.error.ConnectionEnvironmentReader
+import ru.finassist.pf.core.designsystem.components.LocalConnectionEnvironmentReader
 import ru.finassist.pf.core.common.error.ErrorPresentation
 import ru.finassist.pf.core.common.error.ErrorSeverity
 import ru.finassist.pf.core.common.error.UserMessage
@@ -24,12 +28,20 @@ class ProfileDesignCheckTest {
         dark: Boolean = false,
         state: ProfileUiState = this.state,
         popups: Boolean = false,
+        environment: ConnectionEnvironment = ConnectionEnvironment.UNKNOWN,
     ) = DesignCheck.capture(name, dark = dark, heightDp = 984, tab = 3, popups = popups) {
-        ProfileContent(
-            state, actions, onRetry = {}, onRevokeConsent = {}, onThemeSheet = {}, onTheme = {}, onSupport = {},
-            onAskLogout = {}, onLogout = {}, onSnackbarShown = {}, versionName = "0.1.0",
-        )
+        CompositionLocalProvider(LocalConnectionEnvironmentReader provides ConnectionEnvironmentReader { environment }) {
+            ProfileContent(
+                state, actions, onRetry = {}, onRevokeConsent = {}, onThemeSheet = {}, onTheme = {}, onSupport = {},
+                onAskLogout = {}, onLogout = {}, onSnackbarShown = {}, versionName = "0.1.0",
+            )
+        }
+
     }
+
+    @Test fun offlineVpn() = capture("ProfileOfflineVpn", state = state.copy(loading = false, profile = null, offline = true), environment = ConnectionEnvironment.VPN)
+    @Test fun offlineVpnDark() = capture("ProfileOfflineVpnDark", dark = true, state = state.copy(loading = false, profile = null, offline = true), environment = ConnectionEnvironment.VPN)
+    @Test fun offlineWithoutVpn() = capture("ProfileOffline", state = state.copy(loading = false, profile = null, offline = true))
 
     @Test fun profile() = capture("Profile")
 

@@ -76,6 +76,7 @@ internal class FakeStatementsApi : StatementsApi {
     val streamOpens = mutableListOf<String>()
 
     var deleteFailure: AppError? = null
+    var deleteGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     val deleted = mutableListOf<String>()
 
     var unreadResult: Any = UnreadLinesList(emptyList())
@@ -98,6 +99,7 @@ internal class FakeStatementsApi : StatementsApi {
 
     override suspend fun deleteStatement(uploadId: String) {
         deleted += uploadId
+        deleteGate?.await()
         deleteFailure?.let { throw it }
     }
 

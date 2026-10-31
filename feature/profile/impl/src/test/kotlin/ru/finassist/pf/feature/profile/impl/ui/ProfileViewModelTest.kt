@@ -94,6 +94,7 @@ class ProfileViewModelTest {
         var updateFailure: AppError? = null
         var updateReply: (suspend (ProfileUpdate) -> Profile)? = null
         var revokeFailure: AppError? = null
+        var revokeGate: CompletableDeferred<Unit>? = null
         var revokes = 0
 
         override suspend fun getProfile(): Profile {
@@ -112,6 +113,7 @@ class ProfileViewModelTest {
         override suspend fun grantAssistantConsent(grant: AssistantConsentGrant): Profile = error("unused")
         override suspend fun revokeAssistantConsent() {
             revokes++
+            revokeGate?.await()
             revokeFailure?.let { throw it }
         }
     }
@@ -485,6 +487,18 @@ class ProfileViewModelTest {
         assertEquals(3, profileApi.gets)
     }
 
+    @Test fun `offline refresh exposes a connection hint without hiding the cached profile`() {
+        val vm = loaded()
+        profileApi.getFailure = AppError.Offline()
+        vm.load()
+        assertFalse(vm.state.value.offline)
+        assertEquals(profileApi.profile, vm.state.value.profile)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        profileApi.getFailure = null
+        vm.load()
+        assertNull(vm.state.value.errorPresentation)
+    }
+
     @Test fun `a failed refresh on resume keeps the shown profile`() {
         val vm = loaded()
         profileApi.getFailure = AppError.Server(500)
@@ -540,6 +554,41 @@ class ProfileViewModelTest {
         assertEquals(ZoneId.of("Asia/Vladivostok"), reportZone.current)
     }
 
+    @Test fun `changing theme preserves a failed profile read and its retry banner`() {
+        for (failure in listOf(AppError.Offline(), AppError.Server(503))) {
+            profileApi.getFailure = null
+            val vm = loaded()
+            profileApi.getFailure = failure
+            vm.load()
+            val presentation = vm.state.value.errorPresentation
+            assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+            assertTrue(presentation != null)
+            vm.setTheme(Theme.DARK)
+            assertEquals(presentation, vm.state.value.errorPresentation)
+            assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+            assertNull(vm.state.value.snackbar)
+        }
+    }
+
+    @Test fun `a new theme attempt removes the old offline hint before and after success`() {
+        val vm = loaded()
+        profileApi.updateFailure = AppError.Offline()
+        vm.setTheme(Theme.DARK)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertEquals(ProfileErrorOrigin.THEME, vm.state.value.errorOrigin)
+        assertTrue(vm.state.value.snackbar != null)
+        val pending = CompletableDeferred<Profile>()
+        profileApi.updateFailure = null
+        profileApi.updateReply = { pending.await() }
+        vm.setTheme(Theme.LIGHT)
+        assertNull(vm.state.value.errorPresentation)
+        assertNull(vm.state.value.snackbar)
+        pending.complete(profile(theme = Theme.LIGHT))
+        assertNull(vm.state.value.errorPresentation)
+        assertNull(vm.state.value.snackbar)
+        assertEquals("light", localTheme())
+    }
+
     @Test fun `a chosen theme closes the sheet, is saved locally and on the server`() {
         val vm = vm()
         vm.openThemeSheet(true)
@@ -586,17 +635,91 @@ class ProfileViewModelTest {
         assertFalse(vm.state.value.consentBusy)
     }
 
+    @Test fun `a revoke outcome cannot become a profile read error across resume and retry`() {
+        val vm = loaded()
+        profileApi.revokeFailure = AppError.Offline()
+        vm.revokeConsent()
+        assertEquals("Согласие не отозвано", vm.state.value.snackbar)
+        profileApi.getFailure = AppError.Offline()
+        vm.load()
+        assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertNull(vm.state.value.snackbar, "the read error keeps its own fallback and retry action")
+        profileApi.revokeFailure = null
+        vm.revokeConsent()
+        assertEquals(false, vm.state.value.profile?.assistantConsent?.granted)
+        assertNull(vm.state.value.snackbar)
+        assertNull(vm.state.value.errorOrigin)
+        assertNull(vm.state.value.errorPresentation)
+    }
+
+    @Test fun `a theme outcome never migrates into the next profile read banner`() {
+        val vm = loaded()
+        profileApi.updateFailure = AppError.Offline()
+        vm.setTheme(Theme.DARK)
+        assertEquals(ProfileErrorOrigin.THEME, vm.state.value.errorOrigin)
+        profileApi.getFailure = AppError.Offline()
+        vm.load()
+        val readPresentation = vm.state.value.errorPresentation
+        assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+        assertNull(vm.state.value.snackbar)
+        profileApi.updateFailure = null
+        vm.setTheme(Theme.LIGHT)
+        assertEquals(readPresentation, vm.state.value.errorPresentation)
+        assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+        assertNull(vm.state.value.snackbar)
+        profileApi.getFailure = null
+        vm.load()
+        assertNull(vm.state.value.errorOrigin)
+        assertNull(vm.state.value.snackbar)
+    }
+
+    @Test fun `clearing any profile error removes its outcome and preserves ordinary notifications`() {
+        val notification = ProfileUiState(flags = ProfileFlags(true, true, true), snackbar = "Сохранено")
+        assertEquals(notification, notification.clearRequestError())
+        for (origin in ProfileErrorOrigin.entries) {
+            val cleared = notification.copy(errorOrigin = origin, errorPresentation = AppError.Offline().presentation,
+                snackbar = "Старый исход ошибки").clearRequestError()
+            assertNull(cleared.errorOrigin)
+            assertNull(cleared.errorPresentation)
+            assertNull(cleared.snackbar)
+        }
+    }
+
+    @Test fun `retrying a failed revoke clears its stale outcome before success`() {
+        val vm = loaded()
+        profileApi.revokeFailure = AppError.Offline()
+        vm.revokeConsent()
+        assertEquals("Согласие не отозвано", vm.state.value.snackbar)
+        assertEquals(ProfileErrorOrigin.CONSENT, vm.state.value.errorOrigin)
+        val pending = CompletableDeferred<Unit>()
+        profileApi.revokeFailure = null
+        profileApi.revokeGate = pending
+        vm.revokeConsent()
+        assertTrue(vm.state.value.consentBusy)
+        assertNull(vm.state.value.snackbar)
+        assertNull(vm.state.value.errorPresentation)
+        pending.complete(Unit)
+        assertEquals(false, vm.state.value.profile?.assistantConsent?.granted)
+        assertFalse(vm.state.value.consentBusy)
+        assertNull(vm.state.value.snackbar)
+        assertNull(vm.state.value.errorPresentation)
+    }
+
     @Test fun `a failed revoke keeps the consent and says why`() {
         val vm = loaded()
         profileApi.revokeFailure = AppError.Offline()
         vm.revokeConsent()
-        assertEquals("Нет сети — согласие не отозвано", vm.state.value.snackbar)
+        assertEquals("Согласие не отозвано", vm.state.value.snackbar)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertEquals(ProfileErrorOrigin.CONSENT, vm.state.value.errorOrigin)
         assertEquals(true, vm.state.value.profile?.assistantConsent?.granted)
         assertFalse(vm.state.value.consentBusy)
 
         profileApi.revokeFailure = AppError.Server(500)
         vm.revokeConsent()
         assertEquals("Не получилось. Попробуйте ещё раз", vm.state.value.snackbar)
+        assertEquals(false, vm.state.value.errorPresentation?.connectionFailure)
         assertTrue(tracker.events.none { it.first == Events.ASSISTANT_CONSENT_REVOKED })
 
         vm.consumeSnackbar()

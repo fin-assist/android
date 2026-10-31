@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.ConnectionFailureState
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
@@ -98,7 +99,7 @@ internal fun FeedContent(
         }
         state.errorPresentation?.let { presentation ->
             ErrorMessage(
-                presentation, "Не получилось загрузить операции. Попробуйте ещё раз",
+                presentation, "Не получилось загрузить операции",
                 modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
                 onRetry = if (state.moreFailed) onLoadMore.takeIf { state.moreRetryReady } else onRetry.takeIf { state.retryReady },
             )
@@ -106,7 +107,7 @@ internal fun FeedContent(
         when {
             state.loading -> Unit
             state.errorPresentation != null && state.items.isEmpty() -> Unit
-            state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(OperationsTags.FEED_OFFLINE)) {
+            state.offline -> ConnectionFailureState(modifier = Modifier.testTag(OperationsTags.FEED_OFFLINE)) {
                 PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(OperationsTags.FEED_RETRY))
             }
             state.isEmpty -> Column(

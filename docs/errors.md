@@ -23,6 +23,36 @@ feature's endpoint/scenario adapter. `ErrorContext.REQUEST`, `GENERIC_EVENT` and
 prevent an identically named result code from activating a REST auth/maintenance/quota flow.
 Assistant terminal results and history preserve their separate new-attempt permission.
 
+## Connection failures (FIN-396)
+
+`AppError.Offline` marks a local transport failure in `ErrorPresentation.connectionFailure`; this flag
+is never decoded from server text. `ConnectionFailureState`, `ErrorMessage` and the chat offline notice
+read `ConnectivityManager` locally while presenting that failure. When the active network reports
+`TRANSPORT_VPN`, the hint suggests trying without VPN. Other networks, no active network, missing
+capabilities or a denied system observation use the ordinary internet hint. This observation proves
+neither the server route nor the cause of a failure; a per-app VPN says nothing about a browser.
+Connection notices preserve the feature's controlled outcome text (for example, consent not revoked,
+account not deleted, category unchanged) below the common connection title and next to the local hint.
+Outcome strings name only the result, without a network diagnosis or recovery advice; the common local
+hint owns the advice. The native UI regression uses the actual profile outcome constant, not a test-only
+substitute. Full-screen states have no mutation outcome. Profile theme retries clear only an error whose typed origin
+is THEME; unrelated read, limit, statement or consent errors keep their presentation and retry context.
+Profile and history clear/show helpers update the error origin, presentation and outcome atomically.
+Clearing an error removes its outcome while preserving ordinary notifications with no error origin;
+showing another error installs only that error's outcome, or none for a read failure. Resume and
+confirmed data-context changes use the same rule, so a failed mutation cannot become a later read's
+fallback or hide its retry action. A successful mutation cannot retain an old failure outcome.
+After a confirmed statement DELETE, History immediately removes that row and invalidates the old
+aggregate summary before refreshing. A failed subsequent GET shows its independent read error/retry
+while the deleted source stays absent; remaining rows are kept until a successful refresh.
+Assistant consent document/PUT errors use this same presentation. Chat send/stream failures keep their
+existing offline composer panel, which uses the common local hint; history SSE drops retain automatic
+reopening and do not produce a terminal offline notice.
+No request is prevented, sent or retried by this reader. Each new attempt/error presentation checks
+the current environment; feature callbacks retain their original idempotency and retry gates.
+`LocalConnectionEnvironmentReader` supplies deterministic presentation fixtures without changing a
+network request or storing network identifiers.
+
 ## Repeating a request
 
 REST `retryable` describes the original request only. Explicit `false` prevents direct retries and

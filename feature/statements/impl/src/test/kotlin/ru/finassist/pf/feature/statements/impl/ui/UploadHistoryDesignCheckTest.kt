@@ -57,7 +57,7 @@ class UploadHistoryDesignCheckTest {
 
     @Test fun uploadHistoryDeleted() = capture(
         "UploadHistoryDeleted",
-        state.copy(list = StatementsList(summary.copy(uploadCount = 2), listOf(all, aug)), snackbar = "Загрузка удалена, аналитика пересчитана"),
+        state.copy(list = StatementsList(summary.copy(uploadCount = 2), listOf(all, aug)), snackbar = "Загрузка удалена, обновляем аналитику"),
     )
 
     @Test fun uploadHistoryResolved() {

@@ -276,10 +276,11 @@ class AnalyticsViewModel @Inject constructor(
                     it.copy(
                         loading = false,
                         recalculationPaused = it.data?.state?.recalculating == true,
-                        errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable,
+                        errorPresentation = if (e is AppError.Offline && it.data == null) null else e.presentation,
+                        requestRetryable = e.requestRetryable,
                         offline = it.data == null,
                         snackbar = if (quiet || it.data == null) it.snackbar
-                        else if (e is AppError.Offline) "Нет сети — показываем прежний период" else "Не получилось обновить. Попробуйте ещё раз",
+                        else if (e is AppError.Offline) "Прежний период сохранён" else "Не получилось обновить. Попробуйте ещё раз",
                     )
                 }
             }
@@ -368,7 +369,7 @@ class AnalyticsViewModel @Inject constructor(
             } catch (e: AppError) {
                 if (!periodsContextIsCurrent(generation, type, zone)) return@launch
                 periodsRetryGate.record(e)
-                _state.update { it.copy(periodsFailed = true, periodsErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, periodsRetryable = e.requestRetryable) }
+                _state.update { it.copy(periodsFailed = true, periodsErrorPresentation = e.presentation, periodsRetryable = e.requestRetryable) }
             }
         }
     }
@@ -410,7 +411,7 @@ class AnalyticsViewModel @Inject constructor(
                 reloadChangedData(clearSnackbar = false)
             } catch (e: AppError) {
                 gate.record(e)
-                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, snackbar = if (e is AppError.Offline) "Нет сети — не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
+                _state.update { it.copy(errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
             }
         }
     }

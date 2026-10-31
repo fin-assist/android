@@ -5,6 +5,8 @@ import ru.finassist.pf.core.api.model.Theme
 import ru.finassist.pf.core.common.time.countWithNoun
 
 object ProfileTexts {
+    const val CONSENT_NOT_REVOKED = "Согласие не отозвано"
+
     /** `+79161234567` → `+7 916 123-45-67`; anything else is shown as is. */
     fun phone(e164: String): String {
         val d = e164.filter(Char::isDigit)

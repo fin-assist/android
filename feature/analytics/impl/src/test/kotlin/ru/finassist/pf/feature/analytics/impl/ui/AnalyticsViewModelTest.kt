@@ -306,7 +306,8 @@ class AnalyticsViewModelTest {
         val vm = opened()
         vm.setPeriodType(PeriodTypeCode.YEAR)
         assertEquals(PeriodTypeCode.YEAR, api.requests.last().period)
-        assertEquals("Нет сети — показываем прежний период", vm.state.value.snackbar)
+        assertEquals("Прежний период сохранён", vm.state.value.snackbar)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertFalse(vm.state.value.offline)
         assertEquals("2026-09", vm.state.value.data?.params?.date?.value)
 
@@ -885,15 +886,29 @@ class AnalyticsViewModelTest {
         assertEquals(2, api.requests.size)
     }
 
+    @Test fun `period directory failures distinguish local connection from server failure`() {
+        api.answers += data()
+        val vm = opened()
+        for (failure in listOf(AppError.Offline(), AppError.Server(503))) {
+            api.periodsFailure = failure
+            vm.openSheet(null)
+            vm.openSheet(AnalyticsSheet.PERIODS)
+            assertTrue(vm.state.value.periodsFailed)
+            assertEquals(failure is AppError.Offline, vm.state.value.periodsErrorPresentation?.connectionFailure)
+        }
+    }
+
     @Test fun `a regular payment that could not be dismissed says why`() {
         api.answers += data()
         val vm = opened()
         api.dismissFailure = AppError.Offline()
         vm.dismissRegular("rp_1")
-        assertEquals("Нет сети — не получилось убрать", vm.state.value.snackbar)
+        assertEquals("Не получилось убрать", vm.state.value.snackbar)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         api.dismissFailure = AppError.Server(500)
         vm.dismissRegular("rp_1")
         assertEquals("Не получилось убрать. Попробуйте ещё раз", vm.state.value.snackbar)
+        assertEquals(false, vm.state.value.errorPresentation?.connectionFailure)
         assertEquals(1, api.requests.size)
         assertTrue(tracker.events.none { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
     }
