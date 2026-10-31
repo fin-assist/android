@@ -130,11 +130,13 @@ tags:
     id: "ds.period.pick"
 - scrollUntilVisible:
     element:
-      id: "analytics.period.option"
       text: "Сентябрь 2026.*"
+      childOf:
+        id: "analytics.period.option"
 - tapOn:
-    id: "analytics.period.option"
     text: "Сентябрь 2026.*"
+    childOf:
+      id: "analytics.period.option"
 - extendedWaitUntil:
     visible: "Сентябрь 2026"
     timeout: 10000
