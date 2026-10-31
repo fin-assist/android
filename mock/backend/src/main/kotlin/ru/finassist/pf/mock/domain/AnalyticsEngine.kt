@@ -53,6 +53,10 @@ class AnalyticsEngine(
 
     fun periods(type: PeriodTypeCode): AnalyticsPeriodsList {
         val cov = coverage()
+        if (type.isRolling) {
+            val dates = rollingRange(type, cov) ?: return AnalyticsPeriodsList(emptyList())
+            return AnalyticsPeriodsList(listOf(AnalyticsPeriodItem(PeriodKey(type.code), range(dates.first, dates.second), rollingCoverage(dates.first, dates.second, cov))))
+        }
         if (type == PeriodTypeCode.ALL_TIME) {
             val from = cov.firstDay ?: return AnalyticsPeriodsList(emptyList())
             val to = cov.lastDay!!.plusDays(1)
@@ -75,6 +79,7 @@ class AnalyticsEngine(
     fun analytics(period: PeriodTypeCode?, date: PeriodKey?, mode: TransferMode): AnalyticsSnapshot {
         val cov = coverage()
         if (cov.isEmpty || ledger.all.isEmpty()) return AnalyticsSnapshot(hasData = false)
+        if (period?.isRolling == true) return rollingAnalytics(period, mode, cov)
         if (period == PeriodTypeCode.ALL_TIME) return allTime(mode, cov)
         val type = (period ?: PeriodTypeCode.MONTH).toCommon()
         val available = periodsWithData(type)
@@ -168,6 +173,82 @@ class AnalyticsEngine(
             incomeCategories = incomeBreakdown(ops, income, periodRange, mode),
             monthlyChart = monthlyChart(PeriodType.ALL_TIME, PeriodKey.ALL_TIME, visible, cov),
             state = state(cov, periodRange, stale),
+        )
+    }
+
+    /** Coverage anchors define rolling periods even when their last day has no operations. */
+    private fun rollingRange(type: PeriodTypeCode, cov: Coverage): Pair<LocalDate, LocalDate>? {
+        val end = cov.lastDay?.plusDays(1)?.atStartOfDay(zone)?.toLocalDate() ?: return null
+        val start = end.minusMonths(if (type == PeriodTypeCode.ROLLING_YEAR) 12 else 3).atStartOfDay(zone).toLocalDate()
+        return start to end
+    }
+
+    /** A historical IANA transition can remove a whole civil date; it is neither a covered day nor a gap. */
+    private fun rollingDays(from: LocalDate, to: LocalDate): Sequence<LocalDate> =
+        generateSequence(from) { it.plusDays(1) }.takeWhile { it.isBefore(to) }
+            .filter { it.atStartOfDay(zone).toLocalDate() == it }
+
+    private fun rollingCoverage(from: LocalDate, to: LocalDate, cov: Coverage): ApiCoverage =
+        if (rollingDays(from, to).all(cov::isCovered)) ApiCoverage.COMPLETE else ApiCoverage.PARTIAL
+
+    private fun rollingFullMonth(month: YearMonth, cov: Coverage): Boolean =
+        !month.plusMonths(1).atDay(1).atStartOfDay(zone).toLocalDate().isAfter(today()) &&
+            rollingCoverage(month.atDay(1), month.plusMonths(1).atDay(1), cov) == ApiCoverage.COMPLETE
+
+    private fun rollingGaps(from: LocalDate, to: LocalDate, cov: Coverage): List<DateRange> =
+        cov.gapsWithin(from, to).filter { it.from.isBefore(it.to) }
+
+    private fun rollingDataEnd(from: LocalDate, to: LocalDate, cov: Coverage): OffsetDateTime? =
+        dataEnd(from, to, cov)?.atZoneSameInstant(zone)?.toOffsetDateTime()
+
+    private fun rollingAnalytics(type: PeriodTypeCode, mode: TransferMode, cov: Coverage): AnalyticsSnapshot {
+        val (from, to) = rollingRange(type, cov)!!
+        val selected = range(from, to)
+        val visible = scope.visible(mode)
+        val ops = scope.inRange(visible, selected.from, selected.to)
+        val expense = scope.expenseTotal(ops)
+        val income = scope.incomeTotal(ops)
+        val bounds = cov.dataBounds(from, to)
+        val days = rollingDays(from, minOf(to, today().plusDays(1))).count(cov::isCovered).coerceAtLeast(1)
+        val expenseFilter = OperationsFilter(from = selected.from, to = selected.to, kind = expenseKind(), transferMode = mode)
+        val points = generateSequence(YearMonth.from(from)) { it.plusMonths(1) }
+            .takeWhile { it.atDay(1).atStartOfDay(zone).toLocalDate().isBefore(to) }.map { month ->
+                val monthFrom = month.atDay(1).atStartOfDay(zone).toLocalDate()
+                val monthTo = month.plusMonths(1).atDay(1).atStartOfDay(zone).toLocalDate()
+                val first = maxOf(from, monthFrom)
+                val end = minOf(to, monthTo)
+                val covered = cov.dataBounds(first, end)
+                val pointOps = scope.inDays(visible, first, end)
+                val fullness = when {
+                    covered == null -> ApiCoverage.NO_DATA
+                    first == monthFrom && end == monthTo && rollingFullMonth(month, cov) -> ApiCoverage.COMPLETE
+                    else -> ApiCoverage.PARTIAL
+                }
+                MonthlyPoint(
+                    month = month.toApiMonth(), range = range(first, end),
+                    expense = covered?.let { Money(scope.expenseTotal(pointOps)) },
+                    income = covered?.let { Money(scope.incomeTotal(pointOps)) }, coverage = fullness,
+                    dataFrom = covered?.first?.at(), dataTo = rollingDataEnd(first, end, cov), gaps = rollingGaps(first, end, cov),
+                )
+            }.toList()
+        return AnalyticsSnapshot(
+            hasData = true, params = AnalyticsParams(type, PeriodKey(type.code), mode),
+            period = AnalyticsPeriodInfo(selected, false, rollingCoverage(from, to, cov), bounds?.first?.at(), rollingDataEnd(from, to, cov), rollingGaps(from, to, cov)),
+            navigation = AnalyticsNavigation(),
+            tiles = AnalyticsTiles(
+                expense = Metric(MetricStatus.READY, filters = expenseFilter, value = Money(expense)),
+                income = Metric(MetricStatus.READY, filters = expenseFilter.copy(kind = OperationKindFilter.INCOME), value = Money(income)),
+                balance = Metric(MetricStatus.READY, value = Money(income - expense), shareOfIncome = if (income > 0) (income - expense).toDouble() / income else null),
+                dailyExpense = Metric(MetricStatus.READY, value = Money(expense / days)),
+            ),
+            expenseCategories = expenseBreakdown(ops, expense, selected, mode),
+            incomeCategories = incomeBreakdown(ops, income, selected, mode),
+            monthlyChart = MonthlyChart(MetricStatus.READY, points = points),
+            state = AnalyticsState(
+                stale = ChronoUnit.DAYS.between(cov.lastDay, today()) > STALE_DAYS,
+                lastOperationAt = ledger.all.maxOfOrNull { it.occurredAt }?.atZoneSameInstant(zone)?.toOffsetDateTime(), dataFrom = cov.firstDay!!.at(), dataTo = cov.lastDay!!.plusDays(1).at(),
+                fullMonths = cov.monthsWithData.count { rollingFullMonth(it, cov) }, unreadLinesCount = unreadLinesIn(selected.from, selected.to), calculatedAt = now(), recalculating = false,
+            ),
         )
     }
 

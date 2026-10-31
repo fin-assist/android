@@ -121,4 +121,3 @@ fun BlockChartBars(data: ChartData, chartId: String, height: Dp, currency: Strin
 
 /** Partial bar fill when a point does not say which days it covers. */
 private const val DEFAULT_PARTIAL_FILL = 0.5f
-

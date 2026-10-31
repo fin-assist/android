@@ -47,6 +47,13 @@ object AnalyticsDesignFixtures {
             load(statement("2025-10-30", "2026-10-30", trn("forecast-history", "2026-08-15T12:00", 1000, "Магазин", "Супермаркеты")))
         }.analytics.analytics(PeriodTypeCode.YEAR, PeriodKey("2026"), TransferMode.WITH)
 
+    fun rollingActual(type: PeriodTypeCode, short: Boolean = false): AnalyticsSnapshot =
+        testBackend(TestClock("2026-10-31T12:00:00+03:00")).apply {
+            load(statement(if (short) "2026-08-20" else "2025-10-30", "2026-10-30",
+                trn("rolling-grocery", "2026-08-21T12:00", 1000, "Магазин", "Супермаркеты"),
+                trn("rolling-income", "2026-09-01T12:00", 3000, "Зарплата", "Зарплата", debit = false)))
+        }.analytics.analytics(type, null, TransferMode.WITH)
+
     val noData: AnalyticsSnapshot
         get() = testBackend(TestClock(OffsetDateTime.parse("2026-10-08T12:00:00+03:00"))).apply {
             load(statement("2026-10-01", "2026-10-07", trn("other-month", "2026-10-05T12:00", 500, "Магазин", "Супермаркеты")))

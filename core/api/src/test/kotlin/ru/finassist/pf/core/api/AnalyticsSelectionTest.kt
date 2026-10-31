@@ -2,6 +2,8 @@ package ru.finassist.pf.core.api
 
 import org.junit.Test
 import ru.finassist.pf.core.api.model.AnalyticsParams
+import ru.finassist.pf.core.api.model.AnswerSnapshotEvent
+import ru.finassist.pf.core.api.model.MessagesList
 import ru.finassist.pf.core.api.model.Chip
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.common.time.PeriodKey
@@ -26,9 +28,30 @@ class AnalyticsSelectionTest {
         }
     }
 
+    @Test fun `snapshots and history retain calendar siblings while rolling selections remain analytics-only`() {
+        val chips = listOf("month" to "2026-10", "quarter" to "2026-Q4", "year" to "2026",
+            "rolling_year" to "rolling_year", "rolling_quarter" to "rolling_quarter", "all_time" to "all_time", "week" to "2026-W40")
+            .joinToString(",", "[", "]") { (period, date) ->
+                """{"label":"$period","screen":"analytics","params":{"period":"$period","date":"$date","transfer_mode":"with"}}"""
+            }
+        val snapshot = ApiJson.decodeFromString(AnswerSnapshotEvent.serializer(),
+            """{"status":"complete","blocks":[],"chips":$chips}""")
+        val history = ApiJson.decodeFromString(MessagesList.serializer(),
+            """{"messages":[{"id":"a","role":"assistant","status":"complete","created_at":"2026-10-01T12:00:00+03:00","blocks":[],"chips":$chips}],"has_older":false}""")
+        for (decoded in listOf(snapshot.chips, history.messages.single().chips!!)) {
+            assertEquals(listOf("month", "quarter", "year"), decoded.filter { it.isSupported }.map { it.label })
+            for (rolling in decoded.filter { it.params!!.period.isRolling }) {
+                assertTrue(rolling.params!!.isValidSelection, "rolling selections remain valid on the Analytics screen")
+                assertFalse(rolling.isSupported, "the assistant has no negotiated rolling capability")
+            }
+        }
+        assertTrue(ApiJson.decodeFromString(Chip.serializer(), """{"label":"Operations","screen":"operations"}""").isSupported)
+    }
+
     @Test fun `analytics chips remain calendar-only and malformed future chips are hidden individually`() {
         for ((type, key, supported) in listOf(Triple("month", "2026-10", true), Triple("quarter", "2026-Q4", true),
             Triple("year", "2026", true), Triple("week", "2026-W40", false), Triple("all_time", "all_time", false),
+            Triple("rolling_year", "rolling_year", false), Triple("rolling_quarter", "rolling_quarter", false),
             Triple("month", "not-a-key", false), Triple("year", "2026-10", false))) {
             val chip = ApiJson.decodeFromString(Chip.serializer(),
                 """{"label":"Analytics","screen":"analytics","params":{"period":"$type","date":"$key","transfer_mode":"with"},"future":true}""")

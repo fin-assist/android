@@ -78,6 +78,7 @@ enum class ActionType(override val code: String) : ApiCode {
 }
 
 /** An action from the fixed dictionary; an unknown one makes its element not clickable. */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class BlockAction(
     val type: ActionType,
@@ -85,8 +86,10 @@ data class BlockAction(
     val paymentId: String? = null,
     val label: String? = null,
     /** Only `select_analytics_period`: unknown types leave the action inert. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val period: PeriodTypeCode? = null,
     /** Only `select_analytics_period`: an exact key of [period], validated before enabling the action. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val date: PeriodKey? = null,
 )
 

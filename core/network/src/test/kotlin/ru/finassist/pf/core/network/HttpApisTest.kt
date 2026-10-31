@@ -453,6 +453,17 @@ class HttpApisTest {
     }
 
     @Test
+    fun `rolling analytics request carries the exact singleton and transfer mode`() = runBlocking {
+        for (period in listOf(PeriodTypeCode.ROLLING_YEAR, PeriodTypeCode.ROLLING_QUARTER)) {
+            reply("""{"has_data":false}""")
+            api.analytics.getAnalytics(period, PeriodKey(period.code), TransferMode.WITHOUT)
+            val request = taken()
+            assertEquals("/v1/analytics", request.path?.substringBefore('?'))
+            assertEquals(mapOf("period" to period.code, "date" to period.code, "transfer_mode" to "without"), request.queryNames().associateWith { request.query(it) })
+        }
+    }
+
+    @Test
     fun `analytics periods and regular payment dismissal`() = runBlocking {
         reply("""{"periods":[]}""")
         reply("""{"periods":[]}""")

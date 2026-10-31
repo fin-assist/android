@@ -73,6 +73,7 @@ import ru.finassist.pf.core.designsystem.components.PfSnackbar
 import ru.finassist.pf.core.designsystem.components.PfStatTile
 import ru.finassist.pf.core.designsystem.components.PfTabHeader
 import ru.finassist.pf.core.designsystem.icons.PfIcons
+import java.time.ZoneId
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.analytics.impl.domain.AnalyticsTexts
@@ -87,6 +88,7 @@ class AnalyticsActions(
 )
 
 private val PERIOD_TYPES = listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.YEAR, PeriodTypeCode.ALL_TIME)
+private val ROLLING_TYPES = listOf(PeriodTypeCode.ROLLING_YEAR, PeriodTypeCode.ROLLING_QUARTER)
 
 @Composable
 fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: AnalyticsViewModel = hiltViewModel()) {
@@ -250,6 +252,16 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
             modifier = Modifier.testTag(AnalyticsTags.PERIOD_TYPES),
             optionTag = { if (it == PERIOD_TYPES.lastIndex) AnalyticsTags.ALL_TIME else "ds.segment.$it" },
         )
+        Gap(d.space2)
+        Column(verticalArrangement = Arrangement.spacedBy(d.space2)) {
+            ROLLING_TYPES.forEach { type ->
+                PfChip(
+                    if (type == PeriodTypeCode.ROLLING_YEAR) "Последние 12 месяцев" else "Последние 3 месяца",
+                    onClick = { vm.setPeriodType(type) }, selected = params.period == type,
+                    modifier = Modifier.testTag(AnalyticsTags.rolling(type.code)),
+                )
+            }
+        }
         if (blocks.transfersFilter) {
             Gap(d.space3)
             Row {
@@ -289,7 +301,7 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
     }
     // A past month or an incomplete quarter/year says which part of it the numbers cover; the tiles follow 8 dp
     // under it (mockup `AnalyticsYear`: `margin-bottom: space-2 − space-4`).
-    val coverageCaption = analyticsCoverageCaption(period, params.period, prepared)
+    val coverageCaption = analyticsCoverageCaption(period, params.period, prepared, LocalPfClock.current.zone)
     coverageCaption?.let {
         Gap(d.space4)
         Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
@@ -306,7 +318,7 @@ internal fun prepareAnalyticsBlocks(blocks: List<Block>, hidden: Set<String>): L
     BlockLayout.visible(registry.prepareAll(blocks), { it.block }) { it.block.id != null && it.block.id in hidden }
 
 /** The server's visible message replaces the local no-data caption; hidden or unsupported blocks need a fallback. */
-internal fun analyticsCoverageCaption(period: AnalyticsPeriodInfo, type: PeriodTypeCode, prepared: List<PreparedBlock>): String? {
+internal fun analyticsCoverageCaption(period: AnalyticsPeriodInfo, type: PeriodTypeCode, prepared: List<PreparedBlock>, zone: ZoneId): String? {
     if (period.coverage.effective == Coverage.NO_DATA) {
         val serverMessage = prepared.any {
             val block = it.block
@@ -315,7 +327,7 @@ internal fun analyticsCoverageCaption(period: AnalyticsPeriodInfo, type: PeriodT
         }
         return if (serverMessage) null else AnalyticsTexts.coverage(period)
     }
-    return AnalyticsTexts.partialPeriod(period, type) ?: AnalyticsTexts.coverage(period).takeIf { !period.isCurrent }
+    return AnalyticsTexts.partialPeriod(period, type, zone) ?: AnalyticsTexts.coverage(period).takeIf { !period.isCurrent }
 }
 
 /** Test tags of the blocks — the ones the UI tests have used since before FIN-4. */
@@ -485,6 +497,9 @@ internal object AnalyticsTags {
     const val TRANSFERS_WITH = "analytics.transfers.with"
     const val TRANSFERS_WITHOUT = "analytics.transfers.without"
     const val PERIOD_OPTION = "analytics.period.option"
+    fun rolling(code: String) = "analytics.period.$code"
+    // PfBarChart emits these stable keys for the shared chart primitive.
+    fun monthlyPoint(month: String) = "analytics.expense.monthly.point.$month"
     const val PERIOD_TYPES = "analytics.period.types"
     const val ALL_TIME = "analytics.period.all_time"
     const val ALL_TIME_RANGE = "analytics.period.all_time.range"

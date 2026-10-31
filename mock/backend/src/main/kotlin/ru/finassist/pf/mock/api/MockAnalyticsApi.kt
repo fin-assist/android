@@ -34,9 +34,14 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
         backend.simulateNetwork()
         backend.requireSession()
         if (period == PeriodTypeCode.UNKNOWN || transferMode == TransferMode.UNKNOWN) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
-        if (date != null && !PeriodKey.isValid(date.value)) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
-        val wrongAllTime = date != null && ((period == PeriodTypeCode.ALL_TIME) != (date == PeriodKey.ALL_TIME))
-        val coarserDate = wrongAllTime || (date != null && when (period ?: PeriodTypeCode.MONTH) {
+        if (date != null && !PeriodKey.isValid(date.value)) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+            details = if (period?.isRolling == true) listOf(AppError.FieldError("date", FieldErrorCodes.INVALID_FORMAT, "date must match the singleton period")) else emptyList())
+        val selectedPeriod = period ?: PeriodTypeCode.MONTH
+        val singleton = selectedPeriod.takeIf { it.isRolling || it == PeriodTypeCode.ALL_TIME }?.code
+        val wrongSingleton = date != null && if (singleton != null) date.value != singleton else !date.isCalendar
+        if (wrongSingleton) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+            details = listOf(AppError.FieldError("date", FieldErrorCodes.INVALID_FORMAT, "date must match the singleton period")))
+        val coarserDate = date != null && singleton == null && (when (selectedPeriod) {
             PeriodTypeCode.MONTH -> date.type != PeriodType.MONTH
             PeriodTypeCode.QUARTER -> date.type == PeriodType.YEAR
             else -> false

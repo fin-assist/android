@@ -147,6 +147,7 @@ object AnalyticsServerTexts {
         PeriodTypeCode.MONTH, PeriodTypeCode.UNKNOWN -> RussianDates.monthNominative(month.month)
         PeriodTypeCode.QUARTER -> "прошлый квартал"
         PeriodTypeCode.YEAR -> "прошлый год"
+        PeriodTypeCode.ROLLING_YEAR, PeriodTypeCode.ROLLING_QUARTER -> "прошлый период"
         PeriodTypeCode.ALL_TIME -> "прошлый период"
     }
 

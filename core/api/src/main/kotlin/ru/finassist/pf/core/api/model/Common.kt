@@ -36,7 +36,9 @@ class IdempotencyKey private constructor(
 /** Period type for Analytics (`period` query). Open set; the client only requests the values it knows. */
 @Serializable(with = PeriodTypeCode.Serializer::class)
 enum class PeriodTypeCode(override val code: String) : ApiCode {
-    MONTH("month"), QUARTER("quarter"), YEAR("year"), ALL_TIME("all_time"), UNKNOWN("?");
+    MONTH("month"), QUARTER("quarter"), YEAR("year"), ALL_TIME("all_time"), ROLLING_YEAR("rolling_year"), ROLLING_QUARTER("rolling_quarter"), UNKNOWN("?");
+
+    val isRolling: Boolean get() = this == ROLLING_YEAR || this == ROLLING_QUARTER
 
     object Serializer : OpenEnumSerializer<PeriodTypeCode>("PeriodType", entries, UNKNOWN)
 }
@@ -112,10 +114,11 @@ data class AnalyticsParams(
 ) {
     /** Unknown types and mismatched keys cannot be submitted as a known analytics selection. */
     val isValidSelection: Boolean get() = PeriodKey.isValid(date.value) && when (period) {
-        PeriodTypeCode.MONTH -> date.type == ru.finassist.pf.core.common.time.PeriodType.MONTH
-        PeriodTypeCode.QUARTER -> date.type == ru.finassist.pf.core.common.time.PeriodType.QUARTER
-        PeriodTypeCode.YEAR -> date.type == ru.finassist.pf.core.common.time.PeriodType.YEAR
+        PeriodTypeCode.MONTH -> date.isCalendar && date.type == ru.finassist.pf.core.common.time.PeriodType.MONTH
+        PeriodTypeCode.QUARTER -> date.isCalendar && date.type == ru.finassist.pf.core.common.time.PeriodType.QUARTER
+        PeriodTypeCode.YEAR -> date.isCalendar && date.type == ru.finassist.pf.core.common.time.PeriodType.YEAR
         PeriodTypeCode.ALL_TIME -> date == PeriodKey.ALL_TIME
+        PeriodTypeCode.ROLLING_YEAR, PeriodTypeCode.ROLLING_QUARTER -> date.value == period.code
         PeriodTypeCode.UNKNOWN -> false
     }
 }

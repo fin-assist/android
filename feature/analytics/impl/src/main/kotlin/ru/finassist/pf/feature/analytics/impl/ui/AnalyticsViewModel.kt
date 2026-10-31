@@ -391,6 +391,7 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     private fun dateForType(type: PeriodTypeCode): PeriodKey? {
+        if (type.isRolling) return PeriodKey(type.code)
         if (type == PeriodTypeCode.ALL_TIME) return PeriodKey.ALL_TIME
         selectedDates[type]?.let { return it }
         val target = PeriodType.fromCode(type.code) ?: return null
