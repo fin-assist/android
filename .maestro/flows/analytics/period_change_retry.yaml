@@ -52,6 +52,15 @@ tags:
     env:
       LINK: "pfe2e://config?offline=false"
 # Resume is not consent to retry the failed target, nor to replace its notice with a refresh of the old month.
+# The content retained its scroll at regular payments. Bring the complete period controls back into view.
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
+- scrollUntilVisible:
+    element:
+      id: "analytics.ask"
+    direction: UP
 - assertVisible: "Сентябрь 2026"
 - assertVisible:
     id: "analytics.period.retry"
