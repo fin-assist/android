@@ -389,7 +389,7 @@ class HistoryViewModelTest {
         val s = vm.state.value
         assertNull(s.confirmDelete)
         assertFalse(s.deleting)
-        assertEquals("Загрузка удалена, аналитика пересчитана", s.snackbar)
+        assertEquals("Загрузка удалена, обновляем аналитику", s.snackbar)
         assertEquals(StatementsList(uploads = emptyList()), s.list)
         assertEquals(listOf<StatementsEvent>(StatementsEvent.UploadDeleted("u1")), repoEvents)
         assertTrue(Events.STATEMENTS_UPLOAD_DELETED in tracker.names())
@@ -462,9 +462,9 @@ class HistoryViewModelTest {
         vm.askDelete(upload("u1")); vm.delete()
         assertNull(vm.state.value.errorOrigin)
         assertNull(vm.state.value.errorPresentation)
-        assertEquals("Загрузка удалена, аналитика пересчитана", vm.state.value.snackbar)
+        assertEquals("Загрузка удалена, обновляем аналитику", vm.state.value.snackbar)
         vm.load()
-        assertEquals("Загрузка удалена, аналитика пересчитана", vm.state.value.snackbar,
+        assertEquals("Загрузка удалена, обновляем аналитику", vm.state.value.snackbar,
             "ordinary successful notifications survive a later successful refresh")
     }
 
@@ -498,7 +498,7 @@ class HistoryViewModelTest {
         api.listOutcomes += StatementsList(uploads = emptyList())
         pending.complete(Unit)
         assertFalse(vm.state.value.deleting)
-        assertEquals("Загрузка удалена, аналитика пересчитана", vm.state.value.snackbar)
+        assertEquals("Загрузка удалена, обновляем аналитику", vm.state.value.snackbar)
         assertEquals(emptyList(), vm.state.value.list?.uploads)
     }
 

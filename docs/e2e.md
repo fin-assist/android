@@ -692,6 +692,8 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; existing «Повторить» after recovery (Qase19, FIN-396) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `ConnectionFailureHintTest` | fake local reader → VPN text; change observation and explicit retry → internet hint without VPN text, for full-screen state and ErrorMessage (Qase62, FIN-396); Compose dependency injection cannot be driven by Maestro without adding an app hook |
+| native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
+| native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
 | native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
 
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
@@ -887,3 +889,10 @@ Not covered yet: a real system VPN route and switching its tunnel during a faile
 mock does not traverse a VPN; Maestro cannot create a configured VPN tunnel/provider on its own.
 The Android system reader has Robolectric coverage and the presentation dependency has fake-reader
 fixtures; neither is proof of a particular VPN's route or FIN-394's network cause.
+
+FIN-396 screen transitions use native state/reader injection to assert the real ProfileContent and
+HistoryContent fallback and Retry branches without introducing a production/e2e state hook. The lower unit
+layer drives the real ViewModel failure/retry chains; these native cases are authored and compiled only.
+A confirmed DELETE removes its source from the client list immediately; a later failed read keeps an
+available read retry and cannot redisplay the deleted row. The success notice says analytics is updating,
+rather than claiming its asynchronous projection has already completed.

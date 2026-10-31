@@ -212,7 +212,7 @@ class HistoryViewModel @Inject constructor(
                         list = state.list?.let { list ->
                             list.copy(summary = null, uploads = list.uploads.filterNot { it.uploadId == upload.uploadId })
                         },
-                        snackbar = "Загрузка удалена, аналитика пересчитана",
+                        snackbar = "Загрузка удалена, обновляем аналитику",
                     )
                 }
                 repository.uploadDeleted(upload.uploadId)
