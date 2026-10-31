@@ -1538,4 +1538,65 @@ class AnalyticsViewModelTest {
         assertTrue(api.requests.drop(2).all { it.period == PeriodTypeCode.MONTH })
     }
 
+    @Test fun `retrying paused recalculation through refresh retains a refused period target`() {
+        api.answers += data(recalculating = true)
+        api.answers += refused()
+        api.answers += data()
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertTrue(vm.state.value.recalculationPaused)
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.refresh()
+        assertEquals(PeriodTypeCode.MONTH, api.requests.last().period)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        assertFalse(vm.state.value.recalculationPaused)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(3, api.requests.size)
+    }
+
+    @Test fun `recalculation polling after manual refresh preserves a failed period target wait`() {
+        api.answers += data()
+        api.answers += AppError.RateLimited(null, 60)
+        api.answers += data(recalculating = true)
+        api.answers += data()
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.refresh()
+        assertTrue(vm.state.value.data?.state?.recalculating == true)
+        scheduler.advanceTimeBy(3000)
+        scheduler.runCurrent()
+        assertFalse(vm.state.value.data?.state?.recalculating == true)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(4, api.requests.size)
+        assertTrue(api.requests.drop(2).all { it.period == PeriodTypeCode.MONTH })
+    }
+
+    @Test fun `import publication polling after manual refresh preserves a refused period target`() {
+        statements.pendingImport = 42L
+        api.answers += data(recalculating = true)
+        api.answers += refused()
+        api.answers += Analytics(hasData = false)
+        api.answers += data()
+        val vm = opened()
+        assertTrue(statements.acknowledged.isEmpty())
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.refresh()
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.loading)
+        scheduler.advanceTimeBy(3000)
+        scheduler.runCurrent()
+        assertEquals(PeriodTypeCode.MONTH, vm.state.value.data?.params?.period)
+        assertEquals(listOf(42L), statements.acknowledged)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(4, api.requests.size)
+        assertTrue(api.requests.drop(2).all { it.period == PeriodTypeCode.MONTH })
+    }
+
 }

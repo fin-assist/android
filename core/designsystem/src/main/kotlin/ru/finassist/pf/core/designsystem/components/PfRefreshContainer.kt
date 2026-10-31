@@ -44,7 +44,8 @@ fun PfRefreshContainer(
         }
         val static = rememberReducedMotion() || LocalInspectionMode.current
         Box(
-            Modifier.align(Alignment.TopCenter).testTag("ds.refresh.indicator")
+            Modifier.align(Alignment.TopCenter)
+                .then(if (refreshing) Modifier.testTag("ds.refresh.indicator") else Modifier)
                 .pullToRefreshIndicator(state, refreshing, containerColor = PfTheme.colors.surface),
             contentAlignment = Alignment.Center,
         ) {

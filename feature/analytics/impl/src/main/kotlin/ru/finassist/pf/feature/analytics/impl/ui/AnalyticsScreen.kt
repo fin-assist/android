@@ -132,7 +132,8 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
             }
             state.errorPresentation?.let { presentation ->
                 ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику",
-                    modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.refresh() }))
+                    modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.refresh() }),
+                    retryModifier = Modifier.testTag(AnalyticsTags.RETRY))
             }
             when {
                 state.loading || (a?.hasData == false && a.state?.recalculating == true) -> Column(
@@ -271,7 +272,7 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
                 else "Пересчитываем после изменений — цифры обновятся через несколько секунд",
                 tone = NoticeTone.INFO,
                 action = if (state.recalculationPaused && state.retryReady) ({
-                    PfNoticeLink("Повторить", onClick = { vm.load() }, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+                    PfNoticeLink("Повторить", onClick = { vm.refresh() }, modifier = Modifier.testTag(AnalyticsTags.RETRY))
                 }) else null,
             )
         }
