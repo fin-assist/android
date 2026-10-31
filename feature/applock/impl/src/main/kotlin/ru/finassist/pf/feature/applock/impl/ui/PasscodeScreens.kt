@@ -84,12 +84,10 @@ private fun PasscodePad(
     val d = PfTheme.dimens
     val introductionScroll = rememberScrollState()
     val digitLineHeight = with(LocalDensity.current) { PfTheme.type.title1.lineHeight.toDp() }
-    LaunchedEffect(error, introductionScroll) {
-        if (error != null) {
-            // Measurement publishes the range after error, font or viewport changes; observe that range.
-            snapshotFlow { introductionScroll.maxValue }.collect { maximum ->
-                if (maximum != Int.MAX_VALUE) introductionScroll.scrollTo(maximum)
-            }
+    LaunchedEffect(introductionScroll) {
+        // Reveal dots as well as errors after measurement. User scrolling does not change this range.
+        snapshotFlow { introductionScroll.maxValue }.collect { maximum ->
+            if (maximum != Int.MAX_VALUE) introductionScroll.scrollTo(maximum)
         }
     }
     Column(
@@ -166,7 +164,7 @@ fun PasscodeSetupScreen(onDone: () -> Unit, vm: PasscodeEntryViewModel = hiltVie
 
 /** First-run passcode steps drawn from a ready state (design-check snapshots render it without a ViewModel). */
 @Composable
-internal fun PasscodeSetupContent(
+fun PasscodeSetupContent(
     state: PasscodeEntryUiState,
     onDigit: (Int) -> Unit,
     onDelete: () -> Unit,
@@ -324,7 +322,7 @@ fun ChangePasscodeScreen(onBack: () -> Unit, onDone: () -> Unit, vm: PasscodeEnt
 
 /** Change-passcode steps drawn from a ready state (design-check snapshots render it without a ViewModel). */
 @Composable
-internal fun ChangePasscodeContent(
+fun ChangePasscodeContent(
     state: PasscodeEntryUiState,
     onBack: () -> Unit,
     onDigit: (Int) -> Unit,

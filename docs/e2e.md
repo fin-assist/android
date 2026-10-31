@@ -704,6 +704,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion` | actual ChatScreen/VoiceInput requests RECORD_AUDIO → real system denial through UiAutomation → clear permission notice → close → original draft, quota=5 and Ask=0 (Qase72, FIN-404); authored, compiled only; no speech service needed |
 | native `PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport` | wrong PIN: full error/dots, keypad and recovery action at 360×640 dp (FIN-389, [Qase77](https://app.qase.io/case/PLAINFIN-77)); native geometry complements Maestro cases 5/18 |
+| native `PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont` | setup NEW/REPEAT, change OLD/NEW/REPEAT, unlock/confirm without error at 360×640 dp / font2 / insets48+48: automatic dots visibility, first digit/delete/back/footer; user scroll survives unchanged-range recomposition ([Qase78](https://app.qase.io/case/PLAINFIN-78), FIN-389) |
 | native `ConnectionFailureHintTest` | fake local reader → VPN text; change observation and explicit retry → internet hint without VPN text, for full-screen state and ErrorMessage (Qase62, FIN-396); Compose dependency injection cannot be driven by Maestro without adding an app hook |
 | native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
 | native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
@@ -1059,3 +1060,10 @@ transitions and recovery. The body measures space left by the actual header and 
 and the scaled digit line height. The 390×844 design-check layout keeps its original sizes. At larger text
 sizes, only the introductory area scrolls; its measured range automatically reveals the dots/error while the
 keypad stays fixed. The test compares keypad geometry before/after error and checks every digit/delete/footer.
+
+`PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont` ([Qase78](https://app.qase.io/case/PLAINFIN-78))
+checks all seven error-free setup/change/unlock/confirmation states at the supported portrait boundary
+360×640 dp, font scale 2 and 48/48 dp bars. The range observer reveals dots even without an error.
+After automatic visibility/action checks, a separate manual scroll-up assertion verifies that a digit-only
+recomposition with an unchanged range respects the user’s position. The regression scope is portrait
+640–760 dp, font scales 1–2 and system insets 24–48 dp; the regular 390×844 dp design checks remain the baseline.

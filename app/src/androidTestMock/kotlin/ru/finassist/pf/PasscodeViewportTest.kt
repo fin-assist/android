@@ -19,6 +19,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -33,6 +35,10 @@ import org.junit.runner.RunWith
 import ru.finassist.pf.core.designsystem.theme.LocalPfSystemBars
 import ru.finassist.pf.core.designsystem.theme.PfSystemBars
 import ru.finassist.pf.core.designsystem.theme.PfTheme
+import ru.finassist.pf.feature.applock.impl.ui.ChangePasscodeContent
+import ru.finassist.pf.feature.applock.impl.ui.EnterStep
+import ru.finassist.pf.feature.applock.impl.ui.PasscodeEntryUiState
+import ru.finassist.pf.feature.applock.impl.ui.PasscodeSetupContent
 import ru.finassist.pf.feature.applock.impl.ui.ConfirmPasscodeContent
 import ru.finassist.pf.feature.applock.impl.ui.ConfirmUiState
 import ru.finassist.pf.feature.applock.impl.ui.UnlockContent
@@ -122,6 +128,76 @@ class PasscodeViewportTest {
         }
     }
 
+    @Test fun errorFreePasscodeFamilyShowsDotsAtLargeFont() {
+        val mode = mutableStateOf(0)
+        val entered = mutableStateOf("")
+        var density = 1f
+        var backs = 0
+        var forgot = 0
+        compose.setContent {
+            density = LocalDensity.current.density
+            CompositionLocalProvider(
+                LocalDensity provides Density(density, 2f),
+                LocalPfSystemBars provides PfSystemBars(
+                    statusBars = WindowInsets(top = 48.dp), navigationBars = WindowInsets(bottom = 48.dp),
+                ),
+            ) {
+                PfTheme(darkTheme = false) {
+                    Box(Modifier.requiredSize(360.dp, 640.dp).testTag("test.viewport")) {
+                        val onDigit: (Int) -> Unit = { entered.value += it.toString() }
+                        val onDelete: () -> Unit = { entered.value = entered.value.dropLast(1) }
+                        when (mode.value) {
+                            0, 1 -> PasscodeSetupContent(
+                                PasscodeEntryUiState(if (mode.value == 0) EnterStep.NEW else EnterStep.REPEAT, entered.value),
+                                onDigit, onDelete, onEnableBiometric = {}, onSkipBiometric = {},
+                            )
+                            2, 3, 4 -> ChangePasscodeContent(
+                                PasscodeEntryUiState(listOf(EnterStep.OLD, EnterStep.NEW, EnterStep.REPEAT)[mode.value - 2], entered.value),
+                                onBack = { backs++ }, onDigit, onDelete,
+                            )
+                            5 -> UnlockContent(
+                                UnlockUiState(entered = entered.value), onDigit, onDelete, onBiometric = {},
+                                onAskForgot = { forgot++ }, onForgot = {},
+                            )
+                            else -> ConfirmPasscodeContent(
+                                ConfirmUiState(entered = entered.value), onBack = { backs++ }, onDigit, onDelete,
+                                onBiometric = {}, onAskForgot = { forgot++ }, onForgot = {},
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        for (screen in 0..6) {
+            compose.runOnIdle { mode.value = screen; entered.value = "" }
+            val extras = buildList {
+                if (screen in 2..4 || screen == 6) add("ds.back")
+                if (screen == 5) add("applock.unlock.forgot")
+                if (screen == 6) add("applock.confirm.forgot")
+            }
+            val context = "error-free family mode=$screen height640/font2/insets48"
+            assertGeometry(density, context, 48, "ds.passcode.dots", extras)
+            compose.onNodeWithTag("ds.numpad.9").performClick()
+            compose.onNodeWithTag("ds.passcode.dots").assertContentDescriptionEquals("Код-пароль: введено 1 из 4 цифр")
+            assertGeometry(density, "$context first digit", 48, "ds.passcode.dots", extras)
+            compose.onNodeWithTag("ds.numpad.delete").performClick()
+            compose.onNodeWithTag("ds.passcode.dots").assertContentDescriptionEquals("Код-пароль: введено 0 из 4 цифр")
+            if ("ds.back" in extras) compose.onNodeWithTag("ds.back").performClick()
+            if (screen >= 5) compose.onNodeWithTag(footerTag(if (screen == 5) 0 else 2)).performClick()
+        }
+        compose.runOnIdle { assertEquals(4, backs); assertEquals(2, forgot) }
+
+        // Only after the automatic checks: the user's scroll up must survive a digit-only recomposition.
+        val introduction = compose.onNode(hasScrollAction())
+        val range = introduction.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+        compose.runOnIdle { assertTrue("The boundary must actually overflow", range.value() > 0f) }
+        introduction.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, -10000f) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(0f, range.value(), 0.01f); entered.value = "1" }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("Do not override a user's scroll without a new range", 0f, range.value(), 0.01f) }
+    }
+
     private fun assertFullyVisible(mode: Int, density: Float, context: String, inset: Int) {
         val layouts = mutableListOf<TextLayoutResult>()
         compose.onNodeWithTag("ds.passcode.error").assertIsDisplayed()
@@ -130,9 +206,12 @@ class PasscodeViewportTest {
         val layout = layouts.single()
         assertFalse("$context text=${layout.layoutInput.text} size=${layout.size} lines=${layout.lineCount} " +
             "widthOverflow=${layout.didOverflowWidth} heightOverflow=${layout.didOverflowHeight}", layout.hasVisualOverflow)
+        assertGeometry(density, context, inset, "ds.passcode.error", listOf("ds.passcode.error", footerTag(mode)))
+    }
+
+    private fun assertGeometry(density: Float, context: String, inset: Int, lastBlock: String, extraTags: List<String>) {
         val viewport = compose.onNodeWithTag("test.viewport").getUnclippedBoundsInRoot()
-        val tags = listOf("ds.passcode.error", "ds.passcode.dots", "ds.numpad.delete", footerTag(mode)) +
-            (0..9).map { "ds.numpad.$it" }
+        val tags = listOf("ds.passcode.dots", "ds.numpad.delete") + (0..9).map { "ds.numpad.$it" } + extraTags
         val nodes = compose.onAllNodes(SemanticsMatcher("PIN geometry") { node ->
             node.config.getOrNull(SemanticsProperties.TestTag)?.let { it in tags } == true
         }).fetchSemanticsNodes()
@@ -149,9 +228,9 @@ class PasscodeViewportTest {
             assertEquals("$context $tag bottom clipped", full.bottom, clipped.bottom, 0.6f * density)
             assertTrue("$context $tag above bottom inset", full.bottom / density <= (viewport.bottom - inset.dp).value)
         }
-        val error = byTag.getValue("ds.passcode.error")
+        val bottom = byTag.getValue(lastBlock)
         val keypad = byTag.getValue("ds.numpad.1")
-        assertTrue("$context error must not overlap the keypad", error.positionInRoot.y + error.size.height <= keypad.positionInRoot.y)
+        assertTrue("$context $lastBlock must not overlap the keypad", bottom.positionInRoot.y + bottom.size.height <= keypad.positionInRoot.y)
 
     }
 
