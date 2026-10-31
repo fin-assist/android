@@ -14,6 +14,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.BlockLock
+import ru.finassist.pf.core.api.model.LockReason
 import ru.finassist.pf.core.api.model.BlockStatus
 import ru.finassist.pf.core.blocks.BlockContext
 import ru.finassist.pf.core.blocks.BlockTags
@@ -44,6 +46,10 @@ class GroupedTilesDesignCheckTest {
     @Test fun groupedSummaryLockedForecast() = capture("AnalyticsGroupedSummaryLocked", GroupedTilesFixtures.block(locked = true), narrow = true)
     @Test fun groupedSummaryNoData() = capture("AnalyticsGroupedSummaryNoData", GroupedTilesFixtures.block().copy(
         status = BlockStatus.NONE, emptyText = "За этот период данных нет"))
+    @Test fun groupedSummaryLockedEnvelope() = capture("AnalyticsGroupedSummaryLockedEnvelope", GroupedTilesFixtures.block().copy(
+        status = BlockStatus.LOCKED, lock = BlockLock(LockReason.NEED_FULL_MONTHS, "Нужно больше полных месяцев")))
+    @Test fun groupedSummaryUnknownStatus() = capture("AnalyticsGroupedSummaryUnknownStatus", GroupedTilesFixtures.block().copy(
+        status = BlockStatus.UNKNOWN))
     @Test fun groupedSummaryLegacy() = capture("AnalyticsGroupedSummaryLegacy", GroupedTilesFixtures.legacy())
     @Test fun groupedSummaryUnknownVersion() = capture("AnalyticsGroupedSummaryUnknown", GroupedTilesFixtures.block().copy(
         v = 99, altText = "Сервер прислал новую версию сводки. Расходы за период 84 320 ₽, доходы 156 900 ₽."))

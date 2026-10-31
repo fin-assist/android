@@ -20,6 +20,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -37,6 +41,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.BlockLock
+import ru.finassist.pf.core.api.model.BlockStatus
+import ru.finassist.pf.core.api.model.LockReason
 import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.TileGroupDataV2
 import ru.finassist.pf.core.api.model.TileGroupSection
@@ -71,6 +78,28 @@ class GroupedTilesLayoutTest {
         }
         compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
+    }
+
+    private fun assertEnvelopeLock(status: BlockStatus, lock: BlockLock?, expected: String) {
+        val actions = mutableListOf<String>()
+        // The nested READY amount and valid action must never override the envelope's lock.
+        show(GroupedTilesFixtures.block().copy(status = status, lock = lock)) { actions += it }
+        compose.onNodeWithText(expected).assertIsDisplayed().assertHasNoClickAction()
+        compose.onNodeWithText(expected).performTouchInput { click() }
+        compose.onNodeWithTag("groups.tile.cost").assertDoesNotExist()
+        compose.onNodeWithText(requireNotNull(BlockFormat.value(8_432_000.0, ValueKind.AMOUNT)), useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("Дополнительные показатели").assertDoesNotExist()
+        compose.onAllNodes(hasClickAction()).assertCountEquals(0)
+        assertTrue(actions.isEmpty())
+    }
+
+    @Test fun `locked group envelope hides ready child amounts and actions`() {
+        assertEnvelopeLock(BlockStatus.LOCKED,
+            BlockLock(LockReason.NEED_FULL_MONTHS, "Нужно больше полных месяцев"), "Нужно больше полных месяцев")
+    }
+
+    @Test fun `unknown group envelope uses the generic lock instead of ready child amounts and actions`() {
+        assertEnvelopeLock(BlockStatus.UNKNOWN, null, "Пока недоступно")
     }
 
     @Test fun `larger system text retains the signed result and separated additional heading`() {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.sp
@@ -26,6 +27,10 @@ object GroupedTileRenderer : BlockRenderer {
     override fun prepare(block: Block): (@Composable (BlockContext) -> Unit)? {
         if (block.v == 1) return TileGroupRenderer.prepare(block)
         if (block.v != version) return null
+        if (block.status.effective == BlockStatus.LOCKED) {
+            val text = BlockFormat.lockText(block.lock) ?: BlockFormat.LOCKED_FALLBACK
+            return { Text(text, style = PfTheme.type.body, color = PfTheme.colors.textMuted) }
+        }
         if (block.status.effective == BlockStatus.UNAVAILABLE || block.status.effective == BlockStatus.NONE) {
             return TileGroupRenderer.prepare(block)
         }

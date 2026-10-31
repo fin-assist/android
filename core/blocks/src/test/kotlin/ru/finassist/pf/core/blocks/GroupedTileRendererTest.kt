@@ -38,6 +38,15 @@ class GroupedTileRendererTest {
         }
     }
 
+    @Test fun `locked and unknown envelopes are handled without reading child data`() {
+        for (status in listOf(BlockStatus.LOCKED, BlockStatus.UNKNOWN)) {
+            val block = grouped(listOf(TileGroupSection(listOf(tile)))).copy(status = status)
+            assertNotNull(GroupedTileRenderer.prepare(block))
+            assertNotNull(GroupedTileRenderer.prepare(block.copy(data = null)), "envelope lock must not depend on a payload")
+            assertNotNull(CatalogV1.registry().prepare(block.copy(data = null)))
+        }
+    }
+
     @Test fun `unknown versions are left to the registry text fallback`() {
         val block = grouped(listOf(TileGroupSection(listOf(tile)))).copy(v = 3)
         assertNull(GroupedTileRenderer.prepare(block))
