@@ -75,6 +75,7 @@ class ChatViewModelBehaviourTest {
     }
     private val dispatcher = UnconfinedTestDispatcher()
     private val limit = AssistantLimit(remaining = 4, dailyMax = 5, resetsAt = now.plusHours(12))
+    private val profileApi = ConsentProfileFake()
 
     private fun question(id: String, text: String = "Вопрос $id") =
         Message(id = id, role = MessageRole.USER, text = text, createdAt = now)
@@ -101,6 +102,7 @@ class ChatViewModelBehaviourTest {
         /** Pages by `beforeId` (null — the latest page). */
         val pages = HashMap<String?, MessagesList>().apply { put(null, MessagesList(emptyList(), hasOlder = false)) }
         var listFailure: AppError? = null
+        var listGate: CompletableDeferred<Unit>? = null
         val listCalls = mutableListOf<String?>()
 
         /** Each `ask` takes the next outcome: an [AskResponse] or an [AppError] to throw. */
@@ -122,7 +124,9 @@ class ChatViewModelBehaviourTest {
         override suspend fun listMessages(limit: Int?, beforeId: String?): MessagesList {
             listCalls += beforeId
             listFailure?.let { throw it }
-            return pages.getValue(beforeId)
+            val response = pages.getValue(beforeId)
+            listGate?.await()
+            return response
         }
 
         override suspend fun ask(key: IdempotencyKey, request: AskRequest): AskResponse {
@@ -171,7 +175,7 @@ class ChatViewModelBehaviourTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private fun newVm(savedState: SavedStateHandle = SavedStateHandle()) = ChatViewModel(savedState, api, tracker, clock, ElapsedClock { dispatcher.scheduler.currentTime })
+    private fun newVm(savedState: SavedStateHandle = SavedStateHandle()) = ChatViewModel(savedState, api, tracker, clock, ElapsedClock { dispatcher.scheduler.currentTime }, profileApi)
 
     private fun advance(ms: Long) {
         dispatcher.scheduler.advanceTimeBy(ms)
@@ -638,6 +642,103 @@ class ChatViewModelBehaviourTest {
         assertEquals(listOf("q1", "a1"), vm.state.value.items.map { it.id })
         assertEquals("Следующий вопрос", vm.state.value.draft)
         assertTrue(api.asks.isEmpty(), "tab changes must only read history, never send a question")
+    }
+
+    @Test fun `returning after older pages were loaded retains them and their pagination boundary`() {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        api.pages["q2"] = MessagesList(listOf(question("q1"), answer("a1")), hasOlder = false)
+        val vm = newVm()
+        vm.onResumed()
+        vm.loadOlder()
+        assertEquals(listOf("q1", "a1", "q2", "a2"), vm.state.value.items.map { it.id })
+        vm.pauseStreams()
+        vm.onResumed()
+        assertEquals(listOf("q1", "a1", "q2", "a2"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.hasOlder)
+    }
+
+    @Test fun `resume during Ask never starts a history read that can erase its accepted answer`() {
+        val vm = newVm()
+        vm.onResumed()
+        api.askOutcomes += askResponse("a1")
+        api.askGate = CompletableDeferred()
+        sendQuestion(vm)
+        val reads = api.listCalls.size
+        vm.onResumed()
+        assertEquals(reads, api.listCalls.size)
+        api.askGate!!.complete(Unit)
+        assertEquals(listOf("q-a1", "a1"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `a delayed history snapshot cannot erase Ask accepted after that read began`() {
+        val vm = newVm()
+        api.listGate = CompletableDeferred()
+        vm.load()
+        api.askOutcomes += askResponse("a1")
+        sendQuestion(vm)
+        api.listGate!!.complete(Unit)
+        assertEquals(listOf("q-a1", "a1"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `consent accepted through Profile unlocks retained draft without automatically sending`() {
+        val vm = newVm()
+        vm.onResumed()
+        api.askOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        sendQuestion(vm)
+        vm.consumeEvent()
+        profileApi.profile = profileApi.profile.copy(consents = listOf(
+            ru.finassist.pf.core.api.model.Consent(ru.finassist.pf.core.api.model.ConsentType.ASSISTANT, true, "1", "1")))
+        vm.onResumed()
+        assertFalse(vm.state.value.consentRequired)
+        assertFalse(vm.state.value.askBlocked)
+        assertTrue(vm.state.value.askRetryReady)
+        assertEquals(1, api.asks.size)
+        assertEquals("Сколько я трачу на такси?", vm.state.value.draft)
+        api.askOutcomes += askResponse("a1")
+        vm.send()
+        assertEquals(2, api.asks.size)
+        assertEquals(api.asks.first().key, api.asks.last().key)
+    }
+
+    @Test fun `missing outdated or unreadable Profile consent never clears a retained refusal`() {
+        val vm = newVm()
+        vm.onResumed()
+        api.askOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        sendQuestion(vm)
+        vm.consumeEvent()
+        vm.onResumed()
+        assertTrue(vm.state.value.consentRequired)
+        profileApi.profile = profileApi.profile.copy(consents = listOf(
+            ru.finassist.pf.core.api.model.Consent(ru.finassist.pf.core.api.model.ConsentType.ASSISTANT, true, "1", "2")))
+        vm.onResumed()
+        assertTrue(vm.state.value.consentRequired)
+        profileApi.failure = AppError.Offline()
+        vm.onResumed()
+        assertTrue(vm.state.value.consentRequired)
+        vm.send()
+        assertEquals(1, api.asks.size)
+    }
+
+    @Test fun `Profile correction enables explicit RetryAnswer without starting it on resume`() {
+        val vm = vmWithFailedAnswer()
+        vm.onResumed()
+        api.retryOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        vm.retry("a1")
+        vm.consumeEvent()
+        profileApi.profile = profileApi.profile.copy(consents = listOf(
+            ru.finassist.pf.core.api.model.Consent(ru.finassist.pf.core.api.model.ConsentType.ASSISTANT, true, "1", "1")))
+        vm.onResumed()
+        assertFalse(vm.state.value.consentRequired)
+        assertNull(vm.state.value.blockedRetryAnswerId)
+        assertEquals(1, api.retries.size)
+        api.retryOutcomes += RetryResponse("a2", 2)
+        vm.retry("a1")
+        assertEquals(2, api.retries.size)
+        assertEquals(api.retries.first().first, api.retries.last().first)
+        assertTrue(api.asks.isEmpty())
     }
 
     @Test fun `restored Ask after consent requires explicit new intent before generating a fresh key`() {

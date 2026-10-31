@@ -22,8 +22,43 @@ tags:
 - hideKeyboard
 - tapOn:
     id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+# A mode-specific chat pushed by a card is a detail screen; Back returns to its real parent tab.
+- assertNotVisible:
+    id: "ds.tab.assistant"
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "ds.tab.analytics"
+    selected: true
 - tapOn:
     id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.assistant"
+    timeout: 10000
+- tapOn:
+    id: "profile.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertNotVisible:
+    id: "ds.tab.assistant"
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "ds.tab.profile"
+    selected: true
 - tapOn:
     id: "ds.tab.assistant"
 - assertVisible: "Kaspersky"
@@ -32,6 +67,18 @@ tags:
     selected: true
 - assertNotVisible:
     id: "assistant.question"
+# A remote change does not strand a tab that already entered its MainLayer boundary.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?flag.assistant=false"
+- assertVisible:
+    id: "ds.tab.assistant"
+    selected: true
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?flag.assistant=true"
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:

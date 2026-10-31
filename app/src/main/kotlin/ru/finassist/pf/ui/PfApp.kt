@@ -40,8 +40,6 @@ import ru.finassist.pf.core.navigation.NavControllerNavigator
 import ru.finassist.pf.core.storage.AppPreferences
 import ru.finassist.pf.feature.analytics.api.AnalyticsRoutes
 import ru.finassist.pf.feature.assistant.api.AssistantRoutes
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import ru.finassist.pf.feature.applock.api.AppLock
 import ru.finassist.pf.feature.applock.api.LockState
 import ru.finassist.pf.feature.applock.impl.ui.AppLockScreens
@@ -231,16 +229,17 @@ private fun MainLayer(
     }
     val backStack by controller.currentBackStackEntryAsState()
     val destination = backStack?.destination
-    val assistantEnabled by remember(flags) {
-        flags.changes.onStart { emit(Unit) }.map { flags.isEnabled(Flag.ASSISTANT) }
-    }.collectAsStateWithLifecycle(initialValue = flags.isEnabled(Flag.ASSISTANT))
+    val assistantEnabled = remember(flags) { flags.isEnabled(Flag.ASSISTANT) }
     val tabs = PfMainTabs.filter { assistantEnabled || it.id != "assistant" }
     val routes = tabRoutes.filterIndexed { index, _ -> assistantEnabled || index != 2 }
     val activeTab = when {
         destination == null -> -1
         destination.hasRoute<OperationsRoutes.Feed>() -> 0
         destination.hasRoute<AnalyticsRoutes.Home>() -> 1
-        destination.hasRoute<AssistantRoutes.Chat>() -> tabs.indexOfFirst { it.id == "assistant" }
+        // Cards can push a mode-specific chat above Analytics or Profile. It is a detail screen,
+        // not the saved Assistant tab: showing a bar there would restore its parent tab with that chat on top.
+        destination.hasRoute<AssistantRoutes.Chat>() && controller.previousBackStackEntry?.destination?.hasRoute<OperationsRoutes.Feed>() == true ->
+            tabs.indexOfFirst { it.id == "assistant" }
         destination.hasRoute<ProfileRoutes.Home>() -> tabs.indexOfFirst { it.id == "profile" }
         else -> -1
     }

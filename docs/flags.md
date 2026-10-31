@@ -89,3 +89,6 @@ user cohort can therefore lag up to one sync interval after an account change. I
 experiment, switch the client to `UpdateBehaviour.Actual` (every request goes to the server; cold start then
 uses code defaults until the first answer).
 
+
+FIN-397: the main bar snapshots `assistant` when its MainLayer is created. Config updates do not remove
+the active assistant tab halfway through that layer; the new value applies when the layer is entered anew.

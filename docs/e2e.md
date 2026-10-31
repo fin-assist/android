@@ -659,6 +659,8 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
 | `analytics/search_scope_own_transfers` | September «Расходы» tile → search «как на Аналитике»; without «Только расходы» and with the amount 6 000 ₽ nothing is found — the single «Себе в другой банк» of 27 September is out, as in the Analytics figure; without the scope chip it is found — FIN-164 |
 | `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card, profile and bottom tab) |
+| `assistant/tab_consent_in_profile` | denied draft in retained tab → consent through Profile → server read enables explicit send without submitting on resume (Qase65, FIN-397) |
+| `AiConsentSpacingTest#keepsTwentyFourDpAfterConsentContentWhenScrolledAtLargeFont` | native geometry assertion: scroll to submit in 640 dp viewport / 150% text, verify ≥24 dp after full checkbox/error block with and without formError (Qase64, FIN-394/397); authored, compile only |
 | `assistant/tab_and_consent_recovery` | bottom tab keeps draft/history across Operations, Analytics and Profile; consent Back → Give consent → grant preserves draft without automatic send, explicit send creates one question (Qase61, FIN-397, FIN-394) |
 | `assistant/ask_question` (smoke) | disclosure of question/history, account-phone/file exclusion and masking limits → consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search (Qase12, FIN-366) |
 | `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
@@ -880,3 +882,10 @@ flows and fixtures were not executed: no UI/Maestro/instrumented/DesignCheck run
 
 Layout-only consent spacing is represented by the authored `AiConsentLargeText` design-check fixture:
 640 dp viewport, 150% text, checkbox error and form error; the fixed gap remains in the scrollable content.
+
+FIN-397 review regressions: `assistant/tab_and_consent_recovery` also checks that mode-specific chats pushed
+by Analytics/Profile cards have Back navigation to their parent and do not impersonate the saved Assistant tab.
+A flag update while the main layer is open leaves its tab bar intact; the disabled-at-entry variant remains
+`analytics/blocks_switched_off`. Native `AiConsentSpacingTest` checks measured geometry after scrolling,
+including the form-error variant, instead of treating an unchecked snapshot as a spacing assertion.
+The native test is in `app/src/androidTestMock`, with its Qase mapping, and is compiled without execution.

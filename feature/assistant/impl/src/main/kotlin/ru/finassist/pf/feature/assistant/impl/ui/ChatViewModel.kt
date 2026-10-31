@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.AssistantApi
+import ru.finassist.pf.core.api.ProfileApi
 import ru.finassist.pf.core.api.SseReopenState
 import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.model.AnswerEvent
@@ -126,6 +127,7 @@ class ChatViewModel @Inject constructor(
     private val tracker: Tracker,
     private val clock: Clock,
     private val elapsedClock: ElapsedClock,
+    private val profileApi: ProfileApi,
 ) : ViewModel() {
     private val transferMode: TransferMode =
         TransferMode.entries.firstOrNull { it.code == savedState.toRoute<AssistantRoutes.Chat>().transferMode } ?: TransferMode.WITH
@@ -135,6 +137,9 @@ class ChatViewModel @Inject constructor(
     private val askGate = RequestRetryGate(elapsedClock)
     private val loadGate = RequestRetryGate(elapsedClock)
     private val olderGate = RequestRetryGate(elapsedClock)
+    private val consentReadGate = RequestRetryGate(elapsedClock)
+    private var consentReadJob: Job? = null
+    private var consentRevision = 0L
     private val retryGates = mutableMapOf<String, RequestRetryGate>()
     init {
         viewModelScope.launch { askGate.readiness.collect { ready -> _state.update { it.copy(askRetryReady = ready) } } }
@@ -196,9 +201,21 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(loading = it.items.isEmpty(), loadFailed = false, loadErrorPresentation = null, loadRetryable = null) }
             try {
+                val beforeRead = _state.value.items
                 val list = api.listMessages(limit = PAGE)
                 val items = list.messages.mapNotNull(::toItem).distinctById()
                 _state.update { current ->
+                    val firstFresh = items.firstOrNull()
+                    val overlap = firstFresh?.let { first -> current.items.indexOfFirst { it.id == first.id } } ?: -1
+                    val older = if (overlap >= 0) current.items.take(overlap)
+                    else if (firstFresh != null) current.items.filter { it.createdAt < firstFresh.createdAt }
+                    else current.items
+                    val priorById = beforeRead.associateBy { it.id }
+                    val currentById = current.items.associateBy { it.id }
+                    // A POST or SSE event accepted after this GET started is newer than its snapshot.
+                    val fresh = items.map { item -> currentById[item.id]?.takeIf { it != priorById[item.id] } ?: item }
+                    val acceptedDuringRead = current.items.filter { it.id !in priorById && items.none { freshItem -> freshItem.id == it.id } }
+                    val merged = (older + fresh + acceptedDuringRead).distinctById()
                     val recovery = current.recovery?.let { candidate ->
                         if (candidate.target == ChatRecoveryTarget.ASK) candidate
                         else candidate.copy(historyChecked = true).takeIf {
@@ -207,7 +224,8 @@ class ChatViewModel @Inject constructor(
                             }
                         }
                     }
-                    current.copy(loading = false, items = items, hasOlder = list.hasOlder, offline = false, recovery = recovery)
+                    current.copy(loading = false, items = merged, hasOlder = if (older.isNotEmpty()) current.hasOlder else list.hasOlder,
+                        offline = false, recovery = recovery)
                 }
                 refreshLimit()
                 watchGenerating(skip = skipStream)
@@ -246,8 +264,33 @@ class ChatViewModel @Inject constructor(
 
     /** A saved tab keeps its draft; re-reading on later visits updates history and changed-since markers. */
     fun onResumed() {
-        if (wasPresented) load() else wasPresented = true
+        if (wasPresented && !_state.value.sending) load() else wasPresented = true
+        refreshConsentIfRequired()
         resumeStreams()
+    }
+
+    /** A consent accepted in Profile can correct this retained tab; a failed read never lifts a refusal. */
+    private fun refreshConsentIfRequired() {
+        if (!_state.value.consentRequired || consentReadJob?.isActive == true || !consentReadGate.isReady()) return
+        val revision = consentRevision
+        consentReadJob = viewModelScope.launch {
+            try {
+                val consent = profileApi.getProfile().assistantConsent
+                if (consent == null || consent.needsRenewal || revision != consentRevision || !_state.value.consentRequired) return@launch
+                when (val operation = pendingConsentRequest) {
+                    PendingConsentRequest.Ask -> enableConsentedDraft()
+                    is PendingConsentRequest.Retry -> {
+                        retryGates[operation.answerId]?.clear()
+                        _state.update { it.copy(blockedRetryAnswerId = null, errorPresentation = null, requestRetryable = null) }
+                    }
+                    null -> Unit
+                }
+                pendingConsentRequest = null
+                _state.update { it.copy(consentRequired = false) }
+            } catch (error: AppError) {
+                consentReadGate.record(error)
+            }
+        }
     }
 
     /** Re-open streams of answers still generating. */
@@ -316,6 +359,7 @@ class ChatViewModel @Inject constructor(
                 _state.update { it.copy(sending = false, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable, askBlocked = e.requestRetryable == false) }
                 when {
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_REQUIRED -> {
+                        consentRevision++
                         pendingConsentRequest = PendingConsentRequest.Ask
                         _state.update { it.copy(event = ChatEvent.OPEN_CONSENT, consentRequired = true, askBlocked = true) }
                     }
@@ -386,15 +430,19 @@ class ChatViewModel @Inject constructor(
         val waiting = pending
         if (operation == PendingConsentRequest.Ask) {
             tracker.track(Events.ASSISTANT_CONSENT_GRANTED)
-            blockedAskText = null
-            askGate.clear()
-            _state.update { it.copy(requestRetryable = null, errorPresentation = null, askBlocked = false) }
+            enableConsentedDraft()
         }
         if (waiting == null) return
         if (waiting.second.replayWindow?.isOpen(elapsedClock) != true) {
             requireRecovery(ChatRecovery(ChatRecoveryTarget.ASK))
             return
         }
+    }
+
+    private fun enableConsentedDraft() {
+        blockedAskText = null
+        askGate.clear()
+        _state.update { it.copy(requestRetryable = null, errorPresentation = null, askBlocked = false) }
     }
 
     private fun requireRecovery(recovery: ChatRecovery) {
@@ -473,6 +521,7 @@ class ChatViewModel @Inject constructor(
                 when {
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.LIMIT_EXCEEDED -> _state.update { it.copy(limit = it.limit?.copy(remaining = 0)) }
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_REQUIRED -> {
+                        consentRevision++
                         pendingConsentRequest = PendingConsentRequest.Retry(answerId)
                         _state.update { it.copy(event = ChatEvent.OPEN_CONSENT, consentRequired = true) }
                     }
