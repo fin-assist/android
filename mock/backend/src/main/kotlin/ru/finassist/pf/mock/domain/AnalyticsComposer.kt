@@ -91,7 +91,7 @@ object AnalyticsComposer {
                 guarded("bank_fees") { listOf(bankFees(i.bankFees, period, s)) } +
                 guarded("small_frequent") { listOf(smallFrequent(i.smallFrequent, s)) }
         }.orEmpty()
-        val balance = guarded("balance") { if (type == PeriodTypeCode.YEAR) emptyList() else listOfNotNull(balance(s)) }
+        val balance = guarded("balance") { if (type == PeriodTypeCode.YEAR || type == PeriodTypeCode.ALL_TIME) emptyList() else listOfNotNull(balance(s)) }
 
         val ordered = if (experiments[ORDER_EXPERIMENT] == "b") {
             expense + income + tiles + chart + insights + balance
@@ -224,7 +224,7 @@ object AnalyticsComposer {
         val selected = points.indexOfFirst { it.month == s.params!!.date.value }
         return when {
             selected >= 0 -> selected
-            s.params!!.period == PeriodTypeCode.YEAR -> null
+            s.params!!.period == PeriodTypeCode.YEAR || s.params!!.period == PeriodTypeCode.ALL_TIME -> null
             else -> points.lastIndex
         }
     }

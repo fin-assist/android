@@ -29,11 +29,12 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
         backend.requireSession()
         if (period == PeriodTypeCode.UNKNOWN || transferMode == TransferMode.UNKNOWN) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
         if (date != null && !PeriodKey.isValid(date.value)) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
-        val coarserDate = date != null && when (period ?: PeriodTypeCode.MONTH) {
+        val wrongAllTime = date != null && ((period == PeriodTypeCode.ALL_TIME) != (date == PeriodKey.ALL_TIME))
+        val coarserDate = wrongAllTime || (date != null && when (period ?: PeriodTypeCode.MONTH) {
             PeriodTypeCode.MONTH -> date.type != PeriodType.MONTH
             PeriodTypeCode.QUARTER -> date.type == PeriodType.YEAR
             else -> false
-        }
+        })
         if (coarserDate) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
             details = listOf(AppError.FieldError("date", FieldErrorCodes.INVALID_FORMAT, "date must be exact or finer than period")))
         val pending = backend.mutex.withLock {
@@ -73,6 +74,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
     override suspend fun listPeriods(period: PeriodTypeCode?): AnalyticsPeriodsList {
         backend.simulateNetwork()
         backend.requireSession()
+        if (period == PeriodTypeCode.UNKNOWN) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
         return backend.mutex.withLock { backend.analytics.periods(period ?: PeriodTypeCode.MONTH) }
     }
 

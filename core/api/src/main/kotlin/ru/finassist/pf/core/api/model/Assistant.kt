@@ -93,7 +93,14 @@ data class Chip(
     val screen: ChipScreen,
     val filters: OperationsFilter? = null,
     val params: AnalyticsParams? = null,
-)
+) {
+    /** Analytics chips stay calendar-only until the assistant negotiates all-time support (FIN-409). */
+    val isSupported: Boolean get() = when (screen) {
+        ChipScreen.OPERATIONS -> true
+        ChipScreen.ANALYTICS -> params?.let { it.isValidSelection && it.period != PeriodTypeCode.ALL_TIME } == true
+        ChipScreen.UNKNOWN -> false
+    }
+}
 
 @Serializable(with = ChangedSince.Serializer::class)
 enum class ChangedSince(override val code: String) : ApiCode {

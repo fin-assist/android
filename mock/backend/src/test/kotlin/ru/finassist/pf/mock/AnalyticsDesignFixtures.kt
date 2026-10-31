@@ -266,4 +266,12 @@ object AnalyticsDesignFixtures {
     val stale: AnalyticsSnapshot = september().let { a ->
         a.copy(tiles = a.tiles!!.copy(forecast = locked(LockReason.STALE_DATA)), state = analyticsState.copy(stale = true, dataTo = day(9, 26)))
     }
+    /** Long history with a gap and long amounts, composed by the actual all-time calculator. */
+    val allTime: AnalyticsSnapshot by lazy {
+        val b = testBackend(TestClock("2026-10-31T12:00:00+03:00"))
+        b.load(statement("2024-10-01", "2024-10-31", trn("old", "2024-10-03T12:00", 123_456_789, "Shop", "Супермаркеты")))
+        b.load(statement("2026-10-01", "2026-10-30", trn("new", "2026-10-03T12:00", 200_000_000, "Salary", "Зарплата", debit = false)))
+        b.analytics.analytics(PeriodTypeCode.ALL_TIME, null, TransferMode.WITH)
+    }
+
 }

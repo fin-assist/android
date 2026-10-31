@@ -155,7 +155,7 @@ class AnalyticsViewModel @Inject constructor(
     fun init(params: AnalyticsParams?) {
         if (initialized) return
         initialized = true
-        if (params != null) {
+        if (params?.isValidSelection == true) {
             period = params.period
             date = params.date
             transferMode = allowedMode(params.transferMode)
@@ -375,7 +375,7 @@ class AnalyticsViewModel @Inject constructor(
 
     /** Restore this segment's choice; only a first visit derives a key from the displayed period. */
     override fun setPeriodType(type: PeriodTypeCode) {
-        if (type == period) return
+        if (type == PeriodTypeCode.UNKNOWN || type == period) return
         val targetDate = dateForType(type)
         // The segment is another entry point to the same failed request, including its wait/refusal.
         if (failedPeriodRequest == Triple(type, targetDate, transferMode)) {
@@ -390,15 +390,16 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     private fun dateForType(type: PeriodTypeCode): PeriodKey? {
+        if (type == PeriodTypeCode.ALL_TIME) return PeriodKey.ALL_TIME
         selectedDates[type]?.let { return it }
         val target = PeriodType.fromCode(type.code) ?: return null
         val shown = _state.value.data
         val key = shown?.params?.date ?: date ?: return null
         // The API accepts exact or finer keys. Coarsening preserves the existing calendar anchor.
-        if (key.type.ordinal <= target.ordinal) return key
+        if (key.isCalendar && key.type.ordinal <= target.ordinal) return key
         val info = shown?.period ?: return null
         // dataTo is an inclusive covered instant; only the calendar range has an exclusive end.
-        val last = if (info.coverage == Coverage.COMPLETE) info.range.to.minusNanos(1) else info.dataTo
+        val last = if (key.isCalendar && info.coverage == Coverage.COMPLETE) info.range.to.minusNanos(1) else info.dataTo
         if (last == null || last !in info.range) return null
         return PeriodKey.of(target, last.atZoneSameInstant(reportZone.current).toLocalDate())
     }

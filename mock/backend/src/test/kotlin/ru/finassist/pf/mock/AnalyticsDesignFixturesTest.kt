@@ -32,6 +32,7 @@ class AnalyticsDesignFixturesTest {
         "no_data" to f.noData,
         "early" to f.early,
         "stale" to f.stale,
+        "all_time" to f.allTime,
     )
 
     /**

@@ -1732,4 +1732,75 @@ class AnalyticsViewModelTest {
         assertFalse(vm.state.value.refreshing)
     }
 
+    private fun allTimeData(mode: TransferMode = TransferMode.WITH) = data(PeriodTypeCode.ALL_TIME, "all_time", mode).copy(
+        period = ru.finassist.pf.core.api.model.AnalyticsPeriodInfo(
+            range = DateRange(OffsetDateTime.parse("2025-10-30T00:00:00+03:00"), OffsetDateTime.parse("2026-10-31T00:00:00+03:00")),
+            isCurrent = false, coverage = Coverage.PARTIAL,
+            dataFrom = OffsetDateTime.parse("2025-10-30T00:00:00+03:00"),
+            dataTo = OffsetDateTime.parse("2026-10-30T23:59:59+03:00"), gaps = emptyList(),
+        ),
+    )
+
+    @Test fun `all-time sends its marker and preserves transfers and the successful calendar selections`() {
+        api.answers += data(date = "2026-07", mode = TransferMode.WITHOUT)
+        api.answers += allTimeData(TransferMode.WITHOUT)
+        api.answers += data(date = "2026-07", mode = TransferMode.WITHOUT)
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.ALL_TIME)
+        assertEquals(Request(PeriodTypeCode.ALL_TIME, PeriodKey.ALL_TIME, TransferMode.WITHOUT), api.requests.last())
+        assertEquals(PeriodTypeCode.ALL_TIME, vm.state.value.data?.params?.period)
+        vm.setPeriodType(PeriodTypeCode.ALL_TIME)
+        assertEquals(2, api.requests.size)
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-07"), TransferMode.WITHOUT), api.requests.last())
+    }
+
+    @Test fun `a first calendar selection from all-time uses the last covered profile instant`() {
+        reportZone.set("Asia/Vladivostok")
+        api.answers += allTimeData().let { it.copy(period = it.period!!.copy(
+            coverage = Coverage.COMPLETE,
+            dataTo = OffsetDateTime.parse("2026-12-31T16:30:00Z"),
+            range = DateRange(OffsetDateTime.parse("2025-01-01T00:00:00+10:00"), OffsetDateTime.parse("2027-01-02T00:00:00+10:00")),
+        )) }
+        api.answers += data(PeriodTypeCode.QUARTER, "2027-Q1")
+        val vm = opened(AnalyticsParams(PeriodTypeCode.ALL_TIME, PeriodKey.ALL_TIME, TransferMode.WITH))
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        assertEquals(Request(PeriodTypeCode.QUARTER, PeriodKey("2027-Q1"), TransferMode.WITH), api.requests.last())
+    }
+
+    @Test fun `failed all-time switch retains the old screen and retries the exact marker only explicitly`() {
+        api.answers += data(date = "2026-09", mode = TransferMode.WITHOUT)
+        api.answers += AppError.Offline()
+        api.answers += allTimeData(TransferMode.WITHOUT)
+        val vm = opened()
+        val previous = vm.state.value.data
+        vm.setPeriodType(PeriodTypeCode.ALL_TIME)
+        assertEquals(previous, vm.state.value.data)
+        assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.onResume(null)
+        assertEquals(2, api.requests.size)
+        vm.retryPeriodChange()
+        assertEquals(Request(PeriodTypeCode.ALL_TIME, PeriodKey.ALL_TIME, TransferMode.WITHOUT), api.requests.last())
+        assertEquals(PeriodTypeCode.ALL_TIME, vm.state.value.data?.params?.period)
+        assertNull(vm.state.value.periodChangeErrorPresentation)
+    }
+
+    @Test fun `a deleted source reloads all-time instead of reverting to a calendar default`() {
+        api.answers += allTimeData(TransferMode.WITHOUT)
+        api.answers += Analytics(hasData = false)
+        val vm = opened(AnalyticsParams(PeriodTypeCode.ALL_TIME, PeriodKey.ALL_TIME, TransferMode.WITHOUT))
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("source"))
+        assertEquals(Request(PeriodTypeCode.ALL_TIME, PeriodKey.ALL_TIME, TransferMode.WITHOUT), api.requests.last())
+        assertEquals(false, vm.state.value.data?.hasData)
+        assertFalse(vm.state.value.loading)
+    }
+
+    @Test fun `unsupported route params fall back to the default known request`() {
+        api.answers += data()
+        val vm = opened(AnalyticsParams(PeriodTypeCode.UNKNOWN, PeriodKey("2026-W40"), TransferMode.WITHOUT))
+        assertEquals(Request(PeriodTypeCode.MONTH, null, TransferMode.WITH), api.requests.single())
+        vm.setPeriodType(PeriodTypeCode.UNKNOWN)
+        assertEquals(1, api.requests.size)
+    }
+
 }

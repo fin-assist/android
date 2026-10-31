@@ -244,8 +244,14 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         Gap(d.space2)
         PfSegmentedControl(
             options = listOf("Месяц", "Квартал", "Год"),
-            selected = PERIOD_TYPES.indexOf(params.period).coerceAtLeast(0),
+            selected = PERIOD_TYPES.indexOf(params.period),
             onSelect = { vm.setPeriodType(PERIOD_TYPES[it]) },
+        )
+        Gap(d.space2)
+        PfChip(
+            "За всё время", onClick = { vm.setPeriodType(PeriodTypeCode.ALL_TIME) },
+            selected = params.period == PeriodTypeCode.ALL_TIME,
+            modifier = Modifier.testTag(AnalyticsTags.ALL_TIME),
         )
         if (blocks.transfersFilter) {
             Gap(d.space3)
@@ -289,7 +295,8 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
     val coverageCaption = analyticsCoverageCaption(period, params.period, prepared)
     coverageCaption?.let {
         Gap(d.space4)
-        Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
+        Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+            modifier = if (params.period == PeriodTypeCode.ALL_TIME) Modifier.testTag(AnalyticsTags.ALL_TIME_RANGE) else Modifier)
     }
 
     Blocks(a, state, vm, actions, prepared, afterCaption = coverageCaption != null)
@@ -480,6 +487,8 @@ internal object AnalyticsTags {
     const val TRANSFERS_WITH = "analytics.transfers.with"
     const val TRANSFERS_WITHOUT = "analytics.transfers.without"
     const val PERIOD_OPTION = "analytics.period.option"
+    const val ALL_TIME = "analytics.period.all_time"
+    const val ALL_TIME_RANGE = "analytics.period.all_time.range"
     const val EXPENSE_CATEGORY = "analytics.expense_category"
     const val INCOME_CATEGORY = "analytics.income_category"
     const val ALL_CATEGORIES = "analytics.all_categories"
