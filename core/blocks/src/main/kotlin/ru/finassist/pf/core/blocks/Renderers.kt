@@ -38,7 +38,6 @@ import ru.finassist.pf.core.api.model.NoteTone
 import ru.finassist.pf.core.api.model.RankedListData
 import ru.finassist.pf.core.api.model.RowsData
 import ru.finassist.pf.core.api.model.TextData
-import ru.finassist.pf.core.api.model.Tile
 import ru.finassist.pf.core.api.model.TileGroupData
 import ru.finassist.pf.core.api.model.ValueKind
 import ru.finassist.pf.core.common.time.RussianDates
@@ -55,7 +54,6 @@ import ru.finassist.pf.core.designsystem.components.PfDivider
 import ru.finassist.pf.core.designsystem.components.PfInsightCard
 import ru.finassist.pf.core.designsystem.components.PfLink
 import ru.finassist.pf.core.designsystem.components.PfSectionTitle
-import ru.finassist.pf.core.designsystem.components.PfStatTile
 import ru.finassist.pf.core.designsystem.components.ValueTone
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
@@ -65,7 +63,7 @@ import kotlin.math.abs
 /** Catalog version 1 (api.md «Каталог примитивов»): the renderers of the Analytics screen. */
 object CatalogV1 {
     val renderers: List<BlockRenderer> = listOf(
-        HeadingRenderer, TextRenderer, RowsRenderer, ChartRenderer, TileGroupRenderer, RankedListRenderer, InsightCardRenderer,
+        HeadingRenderer, TextRenderer, RowsRenderer, ChartRenderer, GroupedTileRenderer, RankedListRenderer, InsightCardRenderer,
     )
 
     fun registry() = BlockRegistry(renderers, fallback = AltTextRenderer)
@@ -232,25 +230,10 @@ private fun Tiles(block: Block, data: TileGroupData, ctx: BlockContext) {
     Column(verticalArrangement = Arrangement.spacedBy(d.space4)) {
         data.tiles.chunked(2).forEach { pair ->
             Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(d.space4)) {
-                pair.forEach { tile -> TileView(block, tile, ctx, Modifier.weight(1f).fillMaxHeight()) }
+                pair.forEach { tile -> BlockTile(block, tile, ctx, Modifier.weight(1f).fillMaxHeight()) }
             }
         }
     }
-}
-
-@Composable
-private fun TileView(block: Block, tile: Tile, ctx: BlockContext, modifier: Modifier) {
-    val tag = ctx.tags.tile(tile.id)
-    if (!tile.status.hasData) {
-        PfStatTile(tile.title, modifier.testTag(tag), locked = true, lockedText = BlockFormat.lockText(tile.lock), chartId = tag)
-        return
-    }
-    PfStatTile(
-        tile.title, modifier.testTag(tag),
-        value = BlockFormat.value(tile.value, tile.valueKind, ctx.currency, tile.approx, tile.showPlus),
-        valueLabel = BlockFormat.spoken(tile.value, tile.valueKind, ctx.currency, tile.approx, tile.showPlus),
-        note = tile.caption, chartId = tag, onClick = ctx.clickOf(block, tile.action),
-    )
 }
 
 object RankedListRenderer : BlockRenderer {

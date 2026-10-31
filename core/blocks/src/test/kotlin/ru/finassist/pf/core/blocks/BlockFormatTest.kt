@@ -46,7 +46,7 @@ class BlockFormatTest {
 
     @Test fun `the registry says what it draws and skips what it cannot (FIN-7)`() {
         val registry = CatalogV1.registry()
-        assertEquals("chart@1,heading@1,insight_card@1,ranked_list@1,rows@1,text@1,tile_group@1", registry.supports)
+        assertEquals("chart@1,heading@1,insight_card@1,ranked_list@1,rows@1,text@1,tile_group@2", registry.supports)
         val heading = Block.of(BlockType.HEADING, HeadingData.serializer(), HeadingData("Раздел"))
         assertNotNull(registry.prepare(heading))
         assertNull(registry.prepare(heading.copy(v = 2, altText = null)), "a newer version without alt_text is skipped")
