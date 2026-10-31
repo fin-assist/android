@@ -107,8 +107,8 @@ fun ChatScreen(
     val voice = rememberVoiceInput(onResult = vm::appendVoiceText)
     val voiceState by voice.state.collectAsStateWithLifecycle()
     BackHandler(voiceState.active, onBack = voice.cancel)
-    LaunchedEffect(state.sending, state.generating, state.limitExhausted, state.offline, state.consentRequired) {
-        if (state.sending || state.generating || state.limitExhausted || state.offline || state.consentRequired) voice.cancel()
+    LaunchedEffect(state.sending, state.generating, state.limitExhausted, state.offline) {
+        if (state.sending || state.generating || state.limitExhausted || state.offline) voice.cancel()
     }
     ChatContent(
         state = state,
@@ -283,7 +283,7 @@ internal fun ChatContent(
             )
         }
         VoicePanel(voiceState, actions.onVoiceFinish, actions.onVoiceCancel, actions.onVoice,
-            retryEnabled = !state.sending && !state.generating && !state.limitExhausted && !state.offline && !state.consentRequired)
+            retryEnabled = !state.sending && !state.generating && !state.limitExhausted && !state.offline)
         if (!voiceState.active) PfChatComposer(
             value = state.draft,
             onValueChange = actions.onDraft,

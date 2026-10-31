@@ -84,13 +84,9 @@ internal fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
                 }
                 override fun onError(error: Int) {
                     if (!session.accepts(id)) return
-                    val failure = when (error) {
-                        SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> VoiceFailure.NO_SPEECH
-                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> VoiceFailure.PERMISSION
-                        else -> VoiceFailure.RECOGNITION
-                    }
+                    val failure = voiceFailure(error)
                     // A service may exist without a Russian model. Offer the system provider on the next attempt.
-                    if (onDevice && failure == VoiceFailure.RECOGNITION) onDeviceFailed.value = true
+                    if (fallsBackToSystem(onDevice, failure)) onDeviceFailed.value = true
                     session.fail(id, failure)
                     release()
                 }
@@ -103,12 +99,10 @@ internal fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
                 .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true))
-        } catch (_: SecurityException) {
-            session.fail(id, VoiceFailure.PERMISSION)
-            release()
-        } catch (_: RuntimeException) {
-            if (onDevice) onDeviceFailed.value = true
-            session.fail(id, VoiceFailure.UNAVAILABLE)
+        } catch (error: RuntimeException) {
+            val failure = voiceFailure(error)
+            if (fallsBackToSystem(onDevice, failure)) onDeviceFailed.value = true
+            session.fail(id, failure)
             release()
         }
     }
@@ -127,7 +121,7 @@ internal fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
             cancel()
         }
     }
-    return VoiceInput(
+    return remember(context, view, permission) { VoiceInput(
         state = session.state,
         start = {
             // Wait for the previous permission dialog even when its session was cancelled.
@@ -152,7 +146,7 @@ internal fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
             }
         },
         cancel = ::cancel,
-    )
+    ) }
 }
 
 private fun hasMic(context: Context) =
