@@ -863,5 +863,3 @@ No stage e2e hooks are shipped. CI assembles both stage variants, checks identit
 classpaths; the existing HTTP/SSE unit suites cover the transport. The Android → public stage flow
 (synthetic auth → OFX → progress → operations/analytics → assistant) remains a separate device acceptance run;
 it was not executed for this build-environment change. This is not a new screen or a claim of stage UI coverage.
-
-FIN-395: cold import-config failure uses the approved `https://tbank-online.com/login` fallback; a successful config reload and later failure preserve the latest server `login_url` (UploadViewModelTest). Browser destination is asserted by native StatementPickerTest/Qase16 because Maestro cannot inspect the outgoing intent. UI/native/DesignCheck tests were not run locally.

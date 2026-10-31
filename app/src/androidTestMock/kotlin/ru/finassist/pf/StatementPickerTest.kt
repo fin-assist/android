@@ -67,7 +67,7 @@ class StatementPickerTest {
 
         // Browser intents need Espresso-Intents: Maestro cannot assert the actual destination URI.
         val loginIntent = allOf(hasAction(Intent.ACTION_VIEW), hasData("https://tbank-online.com/login"))
-        intending(loginIntent).respondWith(Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null))
+        intending(hasAction(Intent.ACTION_VIEW)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null))
         compose.onNodeWithTag("statements.upload.login").performScrollTo().performClick()
         intended(loginIntent)
 
