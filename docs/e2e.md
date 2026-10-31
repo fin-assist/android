@@ -896,3 +896,9 @@ layer drives the real ViewModel failure/retry chains; these native cases are aut
 A confirmed DELETE removes its source from the client list immediately; a later failed read keeps an
 available read retry and cannot redisplay the deleted row. The success notice says analytics is updating,
 rather than claiming its asynchronous projection has already completed.
+
+`UploadHistoryDeleted` also differs from the existing Figma artboard: the success text is now
+«Загрузка удалена, обновляем аналитику» instead of «Загрузка удалена, аналитика пересчитана».
+The DELETE confirms removal of the source; publication of its analytics projection can finish later.
+Proposed artboard sync: update the `UploadHistoryDeleted` success notice to the new text. This copy
+clarification is tracked in FIN-396 alongside PR #232; it does not claim visual acceptance.
