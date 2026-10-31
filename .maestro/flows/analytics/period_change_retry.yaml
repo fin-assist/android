@@ -34,6 +34,19 @@ tags:
     checked: true
 - assertVisible:
     id: "analytics.period.retry"
+# The saved month remains interactive. A second, unrelated failure must keep its own message.
+- scrollUntilVisible:
+    element: "Не подписка"
+    direction: DOWN
+- tapOn:
+    text: "Не подписка"
+    index: 0
+- extendedWaitUntil:
+    visible: "(?s).*Не получилось убрать.*"
+    timeout: 10000
+- assertVisible: "(?s).*Не удалось сменить период.*"
+- assertVisible:
+    id: "analytics.period.retry"
 - runFlow:
     file: ../../subflows/config.yaml
     env:

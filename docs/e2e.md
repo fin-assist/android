@@ -653,7 +653,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `operations/days_in_profile_zone` | `profile_timezone=Asia/Vladivostok`: after the profile is read, the feed groups days in the profile zone, not the device's — an evening operation in Moscow moves to the next day — FIN-92 |
 | `operations/statement_stale` | on the preloaded statement the caption under the summary says «Данные по 1 октября» (the statement's end, not the last operation on 30 September); then the preloaded statement deleted, `stale.ofx` uploaded: «Операции» and «Аналитика» show «Данные в приложении по 20 сентября — с тех пор прошло больше двух недель», dated by the statement's end (`state.data_to`), not the last operation (15 September) — FIN-125 |
 | `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
-| `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month (Qase73, FIN-391); authored, not executed |
+| `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month (Qase73, FIN-391); authored, not executed |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
@@ -984,3 +984,8 @@ FIN-391 failure path: Qase73 is mock-only transport recovery; resume does not su
 Unit tests cover exact target retry, request_retryable=false, captured Retry-After, expiry without an
 automatic request, new intents and duplicate taps. AnalyticsPeriodChangeFailed/…Dark and
 AnalyticsPeriodChangeRetryBlocked are proposed artboards, authored/compiled without snapshot execution.
+
+FIN-391 review regressions: Qase73 also makes «Не подписка» fail while the period notice is visible;
+both messages keep their meaning and the period action retries only its saved target. The proposed
+AnalyticsPeriodAndDismissalErrors artboard and a VM test cover the combined state. The same segment
+cannot bypass the period gate during Retry-After or an original-request refusal.

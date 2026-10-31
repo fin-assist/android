@@ -80,11 +80,13 @@ data class AnalyticsUiState(
     val limitErrorPresentation: ErrorPresentation? = null,
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
-    val periodChangeFailed: Boolean = false,
+    val periodChangeErrorPresentation: ErrorPresentation? = null,
     val periodChangeRetryReady: Boolean = true,
     val preparationTimedOut: Boolean = false,
     val recalculationPaused: Boolean = false,
-)
+) {
+    val periodChangeFailed: Boolean get() = periodChangeErrorPresentation != null
+}
 
 /**
  * Analytics (api.md 6.1–6.3). Parameters live here: period type, period key and transfer mode; every change
@@ -213,7 +215,7 @@ class AnalyticsViewModel @Inject constructor(
     private fun clearPeriodChangeFailure() {
         failedPeriodRequest = null
         periodChangeRetryGate.clear()
-        _state.update { it.copy(periodChangeFailed = false) }
+        _state.update { it.copy(periodChangeErrorPresentation = null) }
     }
 
     /** Explicit retry owns the failed target; a plain refresh still belongs to the period on screen. */
@@ -309,9 +311,9 @@ class AnalyticsViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         loading = false,
-                        periodChangeFailed = failedSwitch,
+                        periodChangeErrorPresentation = if (failedSwitch) e.presentation else null,
                         recalculationPaused = it.data?.state?.recalculating == true,
-                        errorPresentation = if (e is AppError.Offline && it.data == null) null else e.presentation,
+                        errorPresentation = if (failedSwitch || (e is AppError.Offline && it.data == null)) null else e.presentation,
                         requestRetryable = e.requestRetryable,
                         offline = it.data == null,
                         snackbar = if (failedSwitch) null else if (quiet || it.data == null) it.snackbar
@@ -334,7 +336,13 @@ class AnalyticsViewModel @Inject constructor(
     /** Restore this segment's choice; only a first visit derives a key from the displayed period. */
     override fun setPeriodType(type: PeriodTypeCode) {
         if (type == period) return
-        date = dateForType(type)
+        val targetDate = dateForType(type)
+        // The segment is another entry point to the same failed request, including its wait/refusal.
+        if (failedPeriodRequest == Triple(type, targetDate, transferMode)) {
+            retryPeriodChange()
+            return
+        }
+        date = targetDate
         period = type
         clearRestriction(periodsChanged = true)
         tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to type.code))

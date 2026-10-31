@@ -98,11 +98,15 @@ class AnalyticsDesignCheckTest {
 
     // FIN-391: proposed artboards, authored and compiled only; no UI/DesignCheck execution.
     @Test fun analyticsPeriodChangeFailed() = capture("AnalyticsPeriodChangeFailed", ui(september()).copy(
-        periodChangeFailed = true, errorPresentation = ErrorPresentation()), heightDp = 2960)
+        periodChangeErrorPresentation = ErrorPresentation()), heightDp = 2960)
     @Test fun analyticsPeriodChangeFailedDark() = capture("AnalyticsPeriodChangeFailedDark", ui(september()).copy(
-        periodChangeFailed = true, errorPresentation = ErrorPresentation()), heightDp = 2960, dark = true)
+        periodChangeErrorPresentation = ErrorPresentation()), heightDp = 2960, dark = true)
     @Test fun analyticsPeriodChangeRetryBlocked() = capture("AnalyticsPeriodChangeRetryBlocked", ui(september()).copy(
-        periodChangeFailed = true, periodChangeRetryReady = false, errorPresentation = ErrorPresentation()), heightDp = 2960)
+        periodChangeRetryReady = false, periodChangeErrorPresentation = ErrorPresentation()), heightDp = 2960)
+
+    @Test fun analyticsPeriodAndDismissalErrors() = capture("AnalyticsPeriodAndDismissalErrors", ui(september()).copy(
+        periodChangeErrorPresentation = ErrorPresentation(), errorPresentation = ErrorPresentation(),
+        snackbar = "Не получилось убрать"), heightDp = 3080)
 
     @Test fun analytics() = capture("Analytics", ui(september()), heightDp = 2848)
 
