@@ -907,8 +907,8 @@ compiled and inspected, without a claim of process-death UI execution.
 FIN-397 shared-policy and history regressions: Qase61 keeps `assistant=false` throughout Consent/Back,
 consent correction and tab save/restore, then resets it only at the end. The bar and all route guards use
 the one composition-root snapshot. Unit tests separate locally accepted Ask ids from GET pagination,
-retain valid older pages across an overlapping refresh, preserve Retry-After/explicit refusals after a
-stale-page presentation is discarded, and repeat invalidated latest reads with the original stream skip id.
+retain valid older pages across an overlapping refresh, preserve endpoint Retry-After while original refusals remain scoped to their
+before_id after a stale-page presentation is discarded, and repeat invalidated latest reads with the original stream skip id.
 A failed stream's authoritative status can therefore finish preparation instead of stranding the composer.
 
 FIN-397 configuration stability: Qase61 now rotates LANDSCAPE_LEFT → PORTRAIT after live false and asserts
@@ -916,3 +916,9 @@ that the saved draft and zero questions survive Activity recreation. Qase68 star
 sign-in, enables before first Analytics entry, then disables again and rotates before entering Consent.
 Policy unit tests retain the same policy through a new owner backed by the layer ViewModelStore and
 verify that a genuinely new false policy denies entry. The authored orientation flows were not executed.
+
+FIN-397 retry context: all history mutations reconcile the first-message boundary. A new `before_id`
+clears only the old original-request refusal/presentation and retains the exact captured endpoint wait.
+Stale page replies contribute only conservative endpoint waits; stale latest-read failures cannot mutate
+the newer request gate. Unit regressions cover both completion orders of overlapping latest reads,
+new boundary after false, false plus wait, and first-answer replacement changing the boundary.
