@@ -637,7 +637,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | Flow | Checks |
 |---|---|
 | `auth/register_new_user` (smoke) | independent 14+/PD before phone → new number → create account without another consent → passcode → first upload → result → feed (Qase2, FIN-365) |
-| `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the three tabs (Qase1, FIN-365) |
+| `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the main tabs (Qase1, FIN-365) |
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
 | `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains confirmations; repeated confirm_phone keeps both checked and input enabled (Qase57, FIN-365, FIN-375) |
 | `auth/phone_consent_recovery` | document offline → explicit refresh → confirmations → Start offline → retry with the existing intent (Qase58, FIN-365) |
@@ -659,7 +659,11 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
 | `analytics/search_scope_own_transfers` | September «Расходы» tile → search «как на Аналитике»; without «Только расходы» and with the amount 6 000 ₽ nothing is found — the single «Себе в другой банк» of 27 September is out, as in the Analytics figure; without the scope chip it is found — FIN-164 |
-| `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card and profile) |
+| `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card, profile and bottom tab) |
+| `assistant/late_enable` | layer starts false → explicit Analytics entry after true → admitted Chat remains through false, orientation recreation and Consent/Back → admitted tab is visible/selected while flag remains false, without sending automatically (Qase68, FIN-397); authored, not executed |
+| `assistant/tab_consent_in_profile` | denied draft in retained tab → consent through Profile → server read enables explicit send without submitting on resume (Qase65, FIN-397) |
+| `AiConsentSpacingTest#keepsTwentyFourDpAfterConsentContentWhenScrolledAtLargeFont` | native geometry assertion: scroll to submit in 640 dp viewport / 150% text, verify ≥24 dp after full checkbox/error block with and without formError (Qase64, FIN-394/397); authored, compile only |
+| `assistant/tab_and_consent_recovery` | bottom tab keeps draft/history across Operations, Analytics and Profile; consent Back → Give consent → grant preserves draft without automatic send, explicit send creates one question (Qase61, FIN-397, FIN-394) |
 | `assistant/ask_question` (smoke) | disclosure of question/history, account-phone/file exclusion and masking limits → consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search (Qase12, FIN-366) |
 | `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
 | `assistant/off_topic` | a question not about finances (`weather`): the server's OFF_TOPIC text, no «Повторить» (`retryable: false`), still 5 of 5; the next question is answered, 4 of 5 — FIN-160 |
@@ -692,7 +696,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
 | `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
-| native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
+| native `StatementPickerTest` | login button opens exactly `https://tbank-online.com/login` in an intercepted ACTION_VIEW (FIN-395; Qase16), then upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
 
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
@@ -876,3 +880,58 @@ imported operations or seeding the local import token. `analytics/import_prepara
 performs real UI imports and checks preparation → data and timeout → explicit Retry. This models a delayed
 projection response, not the real inter-service transport. The corresponding unit tests cover countdown,
 authentication/validation, user isolation, generations, retry refusal and failed recalculation polling.
+
+### FIN-397 and FIN-394 assistant navigation and consent
+
+The main bar orders Operations, Analytics, Assistant and Profile; `assistant=false` also hides the assistant tab.
+The tab uses the existing saved back stacks, retaining the chat ViewModel, history and draft between switches.
+A denied Ask exposes «Дать согласие» after Back; consent correction returns to the draft with Send enabled,
+without submitting it. The next explicit send retains a still-valid operation key; uncertain/expired keys
+retain their existing explicit recovery flow. Corrective RetryAnswer remains the same existing operation.
+`assistant/tab_and_consent_recovery` / Qase61 covers the new navigation and recovery; Qase12 and the
+existing assistant flows now explicitly send the first draft after granting consent. The consent layout uses
+a fixed 24 dp gap after all checkbox/error content so scroll overflow cannot collapse it.
+Design-check fixtures include the active assistant tab and light/dark consent recovery. These authored
+flows and fixtures were not executed: no UI/Maestro/instrumented/DesignCheck run was authorized.
+
+Layout-only consent spacing is represented by the authored `AiConsentLargeText` design-check fixture:
+640 dp viewport, 150% text, checkbox error and form error; the fixed gap remains in the scrollable content.
+
+FIN-397 review regressions: `assistant/tab_and_consent_recovery` also checks that mode-specific chats pushed
+by Analytics/Profile cards have Back navigation to their parent and do not impersonate the saved Assistant tab.
+A flag update while the main layer is open leaves its tab bar intact; the disabled-at-entry variant remains
+`analytics/blocks_switched_off`. Native `AiConsentSpacingTest` checks measured geometry after scrolling,
+including the form-error variant, instead of treating an unchecked snapshot as a spacing assertion.
+The native test is in `app/src/androidTestMock`, with its Qase mapping, and is compiled without execution.
+
+FIN-397 history refresh retains loaded earlier pages only when a shared message id proves a contiguous
+boundary. A non-overlapping latest page starts pagination again from its own server boundary, so new
+messages cannot hide a middle gap behind a cached `hasOlder=false`. Reads started before an accepted
+RetryAnswer are invalidated by its replacement revision; stale pages cannot restore the failed answer or
+move its replacement after later questions. Unit tests cover delayed latest/init reads, replacement
+position and an older-page request crossing a refreshed pagination boundary.
+
+FIN-397 — Not covered yet: restoring a Chat/Consent navigation entry after actual process death with
+`assistant=false` is not represented by a mock Maestro flow: the server and authentication state of the
+in-process backend also disappear on death. Both route entries guard the boundary before screen/ViewModel
+creation and redirect disabled entries to Feed; a live composed entry keeps its snapshot. This branch is
+compiled and inspected, without a claim of process-death UI execution.
+
+FIN-397 shared-policy and history regressions: Qase61 keeps `assistant=false` throughout Consent/Back,
+consent correction and tab save/restore, then resets it only at the end. The bar and all route guards use
+the one composition-root snapshot. Unit tests separate locally accepted Ask ids from GET pagination,
+retain valid older pages across an overlapping refresh, preserve endpoint Retry-After while original refusals remain scoped to their
+before_id after a stale-page presentation is discarded, and repeat invalidated latest reads with the original stream skip id.
+A failed stream's authoritative status can therefore finish preparation instead of stranding the composer.
+
+FIN-397 configuration stability: Qase61 now rotates LANDSCAPE_LEFT → PORTRAIT after live false and asserts
+that the saved draft and zero questions survive Activity recreation. Qase68 starts with false before
+sign-in, enables before first Analytics entry, then disables again and rotates before entering Consent.
+Policy unit tests retain the same policy through a new owner backed by the layer ViewModelStore and
+verify that a genuinely new false policy denies entry. The authored orientation flows were not executed.
+
+FIN-397 retry context: all history mutations reconcile the first-message boundary. A new `before_id`
+clears only the old original-request refusal/presentation and retains the exact captured endpoint wait.
+Stale page replies contribute only conservative endpoint waits; stale latest-read failures cannot mutate
+the newer request gate. Unit regressions cover both completion orders of overlapping latest reads,
+new boundary after false, false plus wait, and first-answer replacement changing the boundary.

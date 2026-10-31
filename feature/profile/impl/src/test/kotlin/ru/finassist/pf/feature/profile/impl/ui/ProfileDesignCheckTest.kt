@@ -24,7 +24,7 @@ class ProfileDesignCheckTest {
         dark: Boolean = false,
         state: ProfileUiState = this.state,
         popups: Boolean = false,
-    ) = DesignCheck.capture(name, dark = dark, heightDp = 984, tab = 2, popups = popups) {
+    ) = DesignCheck.capture(name, dark = dark, heightDp = 984, tab = 3, popups = popups) {
         ProfileContent(
             state, actions, onRetry = {}, onRevokeConsent = {}, onThemeSheet = {}, onTheme = {}, onSupport = {},
             onAskLogout = {}, onLogout = {}, onSnackbarShown = {}, versionName = "0.1.0",

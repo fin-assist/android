@@ -87,7 +87,7 @@ fun ChatScreen(
     val zone = clock.zone
 
     LifecycleResumeEffect(Unit) {
-        vm.resumeStreams()
+        vm.onResumed()
         onPauseOrDispose { vm.pauseStreams() }
     }
     LaunchedEffect(state.event) {
@@ -123,6 +123,7 @@ fun ChatScreen(
                 onOpenSearch = onOpenSearch,
                 onOpenAnalytics = onOpenAnalytics,
                 onStartNewRequest = vm::startNewRequest,
+                onOpenConsent = vm::openConsent,
             )
         },
     )
@@ -142,6 +143,7 @@ internal class ChatActions(
     val onOpenSearch: (OperationsFilter) -> Unit,
     val onOpenAnalytics: (AnalyticsParams) -> Unit,
     val onStartNewRequest: () -> Unit = {},
+    val onOpenConsent: () -> Unit = {},
 )
 
 @Composable
@@ -244,7 +246,15 @@ internal fun ChatContent(
                 if (state.loadRetryReady && !state.loading) PfLink("Проверить историю", onClick = actions.onReload)
             }
         }
-        if (state.errorPresentation != null && !state.offline) {
+        if (state.consentRequired) {
+            PfNotice(
+                "Чтобы продолжить, нужно согласие",
+                tone = NoticeTone.WARNING,
+                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2),
+                action = { PfNoticeLink("Дать согласие", onClick = actions.onOpenConsent,
+                    modifier = Modifier.testTag(AssistantTags.CONSENT_REOPEN)) },
+            )
+        } else if (state.errorPresentation != null && !state.offline) {
             ErrorMessage(state.errorPresentation, "Не получилось отправить вопрос",
                 modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(AssistantTags.SEND_FAILED),
                 onRetry = state.failedRetryAnswerId?.let { id ->
@@ -270,7 +280,7 @@ internal fun ChatContent(
             onValueChange = actions.onDraft,
             onSend = actions.onSend,
             onVoice = actions.onVoice,
-            sendEnabled = state.askRetryReady && !state.askBlocked,
+            sendEnabled = state.askRetryReady && !state.askBlocked && !state.consentRequired,
             // Offline replaces the input with a notice (mockup `ChatOffline`); the app has no network monitor, so
             // the notice has «Повторить» (FIN-40, decided with the owner).
             state = when {
@@ -429,6 +439,8 @@ internal const val GENERIC_ANSWER_ERROR = "Не получилось ответ�
 
 /** Test tags of the assistant screens (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object AssistantTags {
+    const val CONSENT_BODY = "assistant.consent.body"
+    const val CONSENT_REOPEN = "assistant.consent.reopen"
     const val RECOVERY = "assistant.chat.recovery"
     const val NEW_INTENT = "assistant.chat.new_intent"
     const val CHAT = "assistant.chat"

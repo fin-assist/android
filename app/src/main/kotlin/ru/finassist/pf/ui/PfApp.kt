@@ -39,6 +39,10 @@ import ru.finassist.pf.core.navigation.FeatureEntry
 import ru.finassist.pf.core.navigation.NavControllerNavigator
 import ru.finassist.pf.core.storage.AppPreferences
 import ru.finassist.pf.feature.analytics.api.AnalyticsRoutes
+import ru.finassist.pf.feature.assistant.api.AssistantRoutes
+import ru.finassist.pf.feature.assistant.impl.ui.LocalAssistantAvailability
+import ru.finassist.pf.feature.assistant.impl.ui.AssistantAvailabilityPolicy
+import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.finassist.pf.feature.applock.api.AppLock
 import ru.finassist.pf.feature.applock.api.LockState
 import ru.finassist.pf.feature.applock.impl.ui.AppLockScreens
@@ -204,7 +208,7 @@ private const val AVAILABILITY_UPDATE = "Availability.Update"
 private const val AVAILABILITY_MAINTENANCE = "Availability.Maintenance"
 
 /** Routes of [PfMainTabs], by index. */
-private val tabRoutes: List<Any> = listOf(OperationsRoutes.Feed, AnalyticsRoutes.Home, ProfileRoutes.Home)
+private val tabRoutes: List<Any> = listOf(OperationsRoutes.Feed, AnalyticsRoutes.Home, AssistantRoutes.Chat(), ProfileRoutes.Home)
 
 @Composable
 private fun MainLayer(
@@ -228,22 +232,34 @@ private fun MainLayer(
     }
     val backStack by controller.currentBackStackEntryAsState()
     val destination = backStack?.destination
+    val assistantPolicy: AssistantAvailabilityPolicy = viewModel {
+        AssistantAvailabilityPolicy(flags.isEnabled(Flag.ASSISTANT))
+    }
+    val assistantEnabled by assistantPolicy.enabled.collectAsStateWithLifecycle()
+    val tabs = PfMainTabs.filter { assistantEnabled || it.id != "assistant" }
+    val routes = tabRoutes.filterIndexed { index, _ -> assistantEnabled || index != 2 }
     val activeTab = when {
         destination == null -> -1
         destination.hasRoute<OperationsRoutes.Feed>() -> 0
         destination.hasRoute<AnalyticsRoutes.Home>() -> 1
-        destination.hasRoute<ProfileRoutes.Home>() -> 2
+        // Cards can push a mode-specific chat above Analytics or Profile. It is a detail screen,
+        // not the saved Assistant tab: showing a bar there would restore its parent tab with that chat on top.
+        destination.hasRoute<AssistantRoutes.Chat>() && controller.previousBackStackEntry?.destination?.hasRoute<OperationsRoutes.Feed>() == true ->
+            tabs.indexOfFirst { it.id == "assistant" }
+        destination.hasRoute<ProfileRoutes.Home>() -> tabs.indexOfFirst { it.id == "profile" }
         else -> -1
     }
     Column(modifier.fillMaxSize()) {
-        NavHost(controller, startDestination = OperationsRoutes.Feed, modifier = Modifier.weight(1f)) {
-            entries.forEach { entry -> with(entry) { install(navigator) } }
+        CompositionLocalProvider(LocalAssistantAvailability provides assistantPolicy) {
+            NavHost(controller, startDestination = OperationsRoutes.Feed, modifier = Modifier.weight(1f)) {
+                entries.forEach { entry -> with(entry) { install(navigator) } }
+            }
         }
         if (activeTab >= 0) {
             PfTabBar(
-                items = PfMainTabs,
+                items = tabs,
                 active = activeTab,
-                onSelect = { index -> if (index != activeTab) navigator.openTab(tabRoutes[index]) },
+                onSelect = { index -> if (index != activeTab) navigator.openTab(routes[index]) },
             )
         }
     }

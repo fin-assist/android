@@ -141,7 +141,7 @@ class ChatDesignCheckTest {
 
     private fun capture(name: String, state: ChatUiState, dark: Boolean = false, heightDp: Int = 844) =
         // The thread is a viewport over a scrolling list, as on the artboard: no full-height growth.
-        DesignCheck.capture(name, dark = dark, heightDp = heightDp, fullHeight = false) {
+        DesignCheck.capture(name, dark = dark, heightDp = heightDp, fullHeight = false, tab = 2) {
             // Opened at the end of the thread, as the app scrolls it once the history has loaded.
             val list = rememberLazyListState(initialFirstVisibleItemIndex = Int.MAX_VALUE)
             ChatContent(state, zone = zone, today = today, voiceListening = false, actions = actions, listState = list)
@@ -152,6 +152,12 @@ class ChatDesignCheckTest {
     @Test fun chatDark() = capture("ChatDark", answered, dark = true)
 
     @Test fun chatEmpty() = capture("ChatEmpty", ChatUiState(loading = false, limit = limit(5)))
+
+    @Test fun consentRecovery() = capture("ChatConsentRecovery", ChatUiState(loading = false,
+        draft = "Сколько я трачу на такси?", consentRequired = true, askBlocked = true, limit = limit(5)))
+
+    @Test fun consentRecoveryDark() = capture("ChatConsentRecoveryDark", ChatUiState(loading = false,
+        draft = "Сколько я трачу на такси?", consentRequired = true, askBlocked = true, limit = limit(5)), dark = true)
 
     @Test fun chatBusy() = capture(
         "ChatBusy",
