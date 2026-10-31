@@ -26,8 +26,8 @@ enum class PeriodType(val code: String) {
 
 /**
  * Calendar period key as the API uses it: `2026-09` (month), `2026-Q3` (quarter), `2026` (year).
- * Parsed on the client only to build labels and to compute the neighbouring key for the mock backend;
- * it is always sent back to the server verbatim.
+ * Parsed on the client for labels and period navigation, and for neighbouring keys in the mock backend.
+ * A finer initial navigation key may be derived from the server-provided period coverage (FIN-391).
  */
 @JvmInline
 @Serializable
