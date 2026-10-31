@@ -26,54 +26,64 @@
         {
             "id": "tiles",
             "type": "tile_group",
-            "alt_text": "Доходы минус расходы 76 543 211 ₽, Расходы 123 456 789 ₽, Расходы в день 2 023 881,78 ₽, Доходы 200 000 000 ₽",
+            "v": 2,
+            "alt_text": "Расходы за период 123 456 789 ₽, Доходы за период 200 000 000 ₽, Доходы минус расходы 76 543 211 ₽, Средние расходы в день 2 023 881,78 ₽",
             "data": {
-                "tiles": [
+                "groups": [
                     {
-                        "id": "balance",
-                        "title": "Доходы минус расходы",
-                        "value": 7.6543211E9,
-                        "value_kind": "amount",
-                        "caption": "38% дохода · по выписке"
-                    },
-                    {
-                        "id": "expense",
-                        "title": "Расходы",
-                        "value": 1.23456789E10,
-                        "value_kind": "amount",
-                        "caption": "1 октября 2024 — 30 октября 2026",
-                        "action": {
-                            "type": "open_operations",
-                            "filter": {
-                                "from": "2024-10-01T00:00:00+03:00",
-                                "to": "2026-10-31T00:00:00+03:00",
-                                "kind": "expense",
-                                "transfer_mode": "with"
+                        "tiles": [
+                            {
+                                "id": "expense",
+                                "title": "Расходы за период",
+                                "value": 1.23456789E10,
+                                "value_kind": "amount",
+                                "caption": "1 октября 2024 — 30 октября 2026",
+                                "action": {
+                                    "type": "open_operations",
+                                    "filter": {
+                                        "from": "2024-10-01T00:00:00+03:00",
+                                        "to": "2026-10-31T00:00:00+03:00",
+                                        "kind": "expense",
+                                        "transfer_mode": "with"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "income",
+                                "title": "Доходы за период",
+                                "value": 2.0E10,
+                                "value_kind": "amount",
+                                "show_plus": true,
+                                "action": {
+                                    "type": "open_operations",
+                                    "filter": {
+                                        "from": "2024-10-01T00:00:00+03:00",
+                                        "to": "2026-10-31T00:00:00+03:00",
+                                        "kind": "income",
+                                        "transfer_mode": "with"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "balance",
+                                "title": "Доходы минус расходы",
+                                "value": 7.6543211E9,
+                                "value_kind": "amount",
+                                "caption": "38% дохода · по выписке"
                             }
-                        }
+                        ]
                     },
                     {
-                        "id": "daily_expense",
-                        "title": "Расходы в день",
-                        "value": 2.02388178E8,
-                        "value_kind": "amount",
-                        "caption": "в среднем за октябрь 2024 — октябрь 2026"
-                    },
-                    {
-                        "id": "income",
-                        "title": "Доходы",
-                        "value": 2.0E10,
-                        "value_kind": "amount",
-                        "show_plus": true,
-                        "action": {
-                            "type": "open_operations",
-                            "filter": {
-                                "from": "2024-10-01T00:00:00+03:00",
-                                "to": "2026-10-31T00:00:00+03:00",
-                                "kind": "income",
-                                "transfer_mode": "with"
+                        "tiles": [
+                            {
+                                "id": "daily_expense",
+                                "title": "Средние расходы в день",
+                                "value": 2.02388178E8,
+                                "value_kind": "amount",
+                                "caption": "По дням с данными не позже сегодня; пропуски не учитываются\nв среднем за октябрь 2024 — октябрь 2026"
                             }
-                        }
+                        ],
+                        "title": "Дополнительные показатели"
                     }
                 ]
             }
@@ -93,7 +103,12 @@
                             "to": "2024-11-01T00:00:00+03:00"
                         },
                         "value": 1.23456789E10,
-                        "coverage": "complete"
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2024-10"
+                        }
                     },
                     {
                         "range": {
@@ -265,7 +280,12 @@
                         "coverage": "partial",
                         "data_from": "2026-10-01T00:00:00+03:00",
                         "data_to": "2026-10-30T23:59:59+03:00",
-                        "note": "по 30-е"
+                        "note": "по 30-е",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-10"
+                        }
                     }
                 ],
                 "notes": [

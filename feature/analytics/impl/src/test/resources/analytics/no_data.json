@@ -19,11 +19,12 @@
         {
             "id": "tiles",
             "type": "tile_group",
+            "v": 2,
             "status": "none",
             "alt_text": "За этот период данных нет",
             "empty_text": "За этот период данных нет",
             "data": {
-                "tiles": []
+                "groups": []
             }
         },
         {

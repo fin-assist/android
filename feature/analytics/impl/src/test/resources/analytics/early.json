@@ -21,61 +21,72 @@
         {
             "id": "tiles",
             "type": "tile_group",
-            "alt_text": "Доходы минус расходы 72 580 ₽, Расходы 84 320 ₽, Расходы в день 3 370 ₽, Доходы 156 900 ₽, Прогноз расходов 101 200 ₽",
+            "v": 2,
+            "alt_text": "Расходы за период 84 320 ₽, Доходы за период 156 900 ₽, Доходы минус расходы 72 580 ₽, Средние расходы в день 3 370 ₽, Прогноз расходов 101 200 ₽",
             "data": {
-                "tiles": [
+                "groups": [
                     {
-                        "id": "balance",
-                        "title": "Доходы минус расходы",
-                        "value": 7258000.0,
-                        "value_kind": "amount",
-                        "caption": "46% дохода · по выписке"
-                    },
-                    {
-                        "id": "expense",
-                        "title": "Расходы",
-                        "value": 8432000.0,
-                        "value_kind": "amount",
-                        "caption": "1–25 сентября",
-                        "action": {
-                            "type": "open_operations",
-                            "filter": {
-                                "from": "2026-09-01T00:00:00+03:00",
-                                "to": "2026-10-01T00:00:00+03:00",
-                                "kind": "expense",
-                                "transfer_mode": "with"
+                        "tiles": [
+                            {
+                                "id": "expense",
+                                "title": "Расходы за период",
+                                "value": 8432000.0,
+                                "value_kind": "amount",
+                                "caption": "1–25 сентября",
+                                "action": {
+                                    "type": "open_operations",
+                                    "filter": {
+                                        "from": "2026-09-01T00:00:00+03:00",
+                                        "to": "2026-10-01T00:00:00+03:00",
+                                        "kind": "expense",
+                                        "transfer_mode": "with"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "income",
+                                "title": "Доходы за период",
+                                "value": 1.569E7,
+                                "value_kind": "amount",
+                                "show_plus": true,
+                                "action": {
+                                    "type": "open_operations",
+                                    "filter": {
+                                        "from": "2026-09-01T00:00:00+03:00",
+                                        "to": "2026-10-01T00:00:00+03:00",
+                                        "kind": "income",
+                                        "transfer_mode": "with"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "balance",
+                                "title": "Доходы минус расходы",
+                                "value": 7258000.0,
+                                "value_kind": "amount",
+                                "caption": "46% дохода · по выписке"
                             }
-                        }
+                        ]
                     },
                     {
-                        "id": "daily_expense",
-                        "title": "Расходы в день",
-                        "value": 337000.0,
-                        "value_kind": "amount"
-                    },
-                    {
-                        "id": "income",
-                        "title": "Доходы",
-                        "value": 1.569E7,
-                        "value_kind": "amount",
-                        "show_plus": true,
-                        "action": {
-                            "type": "open_operations",
-                            "filter": {
-                                "from": "2026-09-01T00:00:00+03:00",
-                                "to": "2026-10-01T00:00:00+03:00",
-                                "kind": "income",
-                                "transfer_mode": "with"
+                        "tiles": [
+                            {
+                                "id": "daily_expense",
+                                "title": "Средние расходы в день",
+                                "value": 337000.0,
+                                "value_kind": "amount",
+                                "caption": "По дням с данными не позже сегодня; пропуски не учитываются"
+                            },
+                            {
+                                "id": "forecast",
+                                "title": "Прогноз расходов",
+                                "value": 1.012E7,
+                                "value_kind": "amount",
+                                "approx": true,
+                                "caption": "на сентябрь"
                             }
-                        }
-                    },
-                    {
-                        "id": "forecast",
-                        "title": "Прогноз расходов",
-                        "value": 1.012E7,
-                        "value_kind": "amount",
-                        "approx": true,
-                        "caption": "на сентябрь"
+                        ],
+                        "title": "Дополнительные показатели"
                     }
                 ]
             }

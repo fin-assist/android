@@ -25,6 +25,12 @@ import ru.finassist.pf.mock.domain.AnalyticsComposer
 class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
 
     override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?, supports: String?, exp: String?): Analytics {
+        val supported = try {
+            AnalyticsComposer.parseSupports(supports)
+        } catch (e: IllegalArgumentException) {
+            throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+                details = listOf(AppError.FieldError("supports", FieldErrorCodes.INVALID_FORMAT, "supports must contain type@positive_int32")))
+        }
         backend.simulateNetwork()
         backend.requireSession()
         if (period == PeriodTypeCode.UNKNOWN || transferMode == TransferMode.UNKNOWN) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
@@ -48,7 +54,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
         val snapshot = backend.mutex.withLock { backend.analytics.analytics(period, date, transferMode ?: TransferMode.WITH) }
         val composed = AnalyticsComposer.compose(
             snapshot,
-            supports = AnalyticsComposer.parseSupports(supports),
+            supports = supported,
             experiments = AnalyticsComposer.parseExperiments(exp),
             failing = backend.config.failingBlocks,
         )

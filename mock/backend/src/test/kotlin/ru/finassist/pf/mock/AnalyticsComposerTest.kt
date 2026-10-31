@@ -43,8 +43,8 @@ class AnalyticsComposerTest {
     }
 
     @Test fun `only blocks the client supports are sent`() {
-        val supports = AnalyticsComposer.parseSupports("tile_group@1,chart@1,ranked_list@0")
-        assertEquals(mapOf("tile_group" to 1, "chart" to 1, "ranked_list" to 0), supports)
+        val supports = AnalyticsComposer.parseSupports("tile_group@1,chart@1")
+        assertEquals(mapOf("tile_group" to 1, "chart" to 1), supports)
         assertEquals(listOf("tiles", "monthly_chart", "balance"), ids(f.september(), supports = supports))
         assertEquals(mapOf("analytics_order" to "b"), AnalyticsComposer.parseExperiments("analytics_order:b,broken"))
     }

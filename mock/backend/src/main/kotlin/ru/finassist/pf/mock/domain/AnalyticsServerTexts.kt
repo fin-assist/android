@@ -172,6 +172,12 @@ object AnalyticsServerTexts {
         return "в среднем за ${RussianDates.monthRange(YearMonth.from(from), YearMonth.from(to.minusSeconds(1)))}"
     }
 
+    /** The average always names its covered-day basis; a comparison supplements it without replacing it. */
+    fun dailyBasis(comparison: String?): String {
+        val basis = "По дням с данными не позже сегодня; пропуски не учитываются"
+        return comparison?.takeIf { it.isNotBlank() }?.let { "$basis\n$it" } ?: basis
+    }
+
     /** Note of the forecast tile, label is always «Прогноз расходов»: «на сентябрь», «на III квартал», «на 2026 год». */
     fun forecastNote(key: PeriodKey): String {
         val v = key.value
