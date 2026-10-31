@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -112,6 +113,7 @@ object DesignCheck {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
     }
 
+    @OptIn(ExperimentalComposeUiApi::class)
     private fun render(
         heightDp: Int,
         dark: Boolean,
@@ -141,6 +143,13 @@ object DesignCheck {
         }
         // Let intro animations (charts, tiles) reach their final frame, as on the static mockup.
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+        // Auto-sized amounts can request another layout from onTextLayout. Robolectric needs explicit passes
+        // between frames; advancing the looper once may otherwise capture the intentionally hidden first size.
+        val root = findComposeRoot(activity.window.decorView)
+        repeat(16) {
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(16))
+            root?.measureAndLayoutForTest()
+        }
         return controller
     }
 
