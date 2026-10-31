@@ -290,7 +290,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   `android.*`, `androidx.*`, Dagger / Hilt, JVM-only libraries or JVM-only stdlib (`synchronized`, `String.format`).
   An API already in `scripts/kmp-baseline.json` may be reused; an exception is justified in the PR and added there.
   `scripts/check-kmp-ready.py` (CI) fails on anything beyond the baseline; rule, inventory — `docs/kmp-readiness.md`.
-- Analytics also offers «За всё время» (FIN-400): the all_time marker has no fabricated calendar bounds;
+- Analytics offers Month/Quarter/Year/«За всё время» in one horizontally scrollable segmented row (FIN-400),
+  with full single-line labels, at least 48 dp touch targets and automatic reveal of the selected option.
+  Manual scrolling remains available. The all_time marker has no fabricated calendar bounds;
   the displayed range comes from the response. It retains transfer mode, calendar selections and import/deletion
   refresh semantics. Assistant chips remain calendar-only; unknown/mismatched analytics chip params are hidden individually.
 - Analytics Month/Quarter/Year each retain their own successful selection (FIN-391); switching another

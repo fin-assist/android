@@ -12,6 +12,11 @@ tags:
 - extendedWaitUntil:
     visible: "Октябрь 2026"
     timeout: 15000
+# Bounded horizontal reveal: on wide screens this clamps without moving the row.
+- swipe:
+    from:
+      id: "analytics.period.types"
+    direction: LEFT
 - tapOn:
     id: "analytics.period.all_time"
 - extendedWaitUntil:
@@ -35,6 +40,10 @@ tags:
       text: "Без переводов.*"
     timeout: 10000
 # Calendar selection is restored; a failed all-time transition retains that exact screen.
+- swipe:
+    from:
+      id: "analytics.period.types"
+    direction: RIGHT
 - tapOn:
     id: "ds.segment.0"
 - extendedWaitUntil:
@@ -44,6 +53,11 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?offline=true"
+# Bounded horizontal reveal: on wide screens this clamps without moving the row.
+- swipe:
+    from:
+      id: "analytics.period.types"
+    direction: LEFT
 - tapOn:
     id: "analytics.period.all_time"
 - extendedWaitUntil:
@@ -51,6 +65,10 @@ tags:
       id: "analytics.period.retry"
     timeout: 15000
 - assertVisible: "Октябрь 2026"
+- swipe:
+    from:
+      id: "analytics.period.types"
+    direction: RIGHT
 - assertVisible:
     id: "ds.segment.0"
     checked: true

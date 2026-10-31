@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,11 +23,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
+import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -48,6 +59,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import ru.finassist.pf.core.designsystem.icons.PfIcon
@@ -399,16 +411,36 @@ fun PfSegmentedControl(
     selected: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    /** Keep full single-line labels in a horizontally scrollable row with 48 dp targets; reveal selection changes. */
+    scrollable: Boolean = false,
+    /** Stable tag of each option; the default preserves `ds.segment.<index>`. */
+    optionTag: (Int) -> String = PfTestTags::segment,
 ) {
     val c = PfTheme.colors
     val outer = RoundedCornerShape(PfTheme.dimens.radiusMd)
+    val scroll = rememberScrollState()
+    val viewport = remember { mutableIntStateOf(0) }
+    val bounds = remember { mutableStateMapOf<Int, Pair<Int, Int>>() }
+    LaunchedEffect(scrollable, selected, bounds[selected], viewport.intValue) {
+        val target = bounds[selected]
+        if (scrollable && target != null && viewport.intValue > 0) {
+            val maximum = snapshotFlow { scroll.maxValue }.first { it != Int.MAX_VALUE }
+            val position = when {
+                target.first < scroll.value -> target.first
+                target.second > scroll.value + viewport.intValue -> target.second - viewport.intValue
+                else -> scroll.value
+            }
+            scroll.scrollTo(position.coerceIn(0, maximum))
+        }
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(PfTheme.dimens.control)
+            .height(if (scrollable) PfTheme.dimens.touch + 8.dp else PfTheme.dimens.control)
             .background(c.surface, outer)
             .border(1.dp, c.border, outer)
-            .padding(4.dp),
+            .padding(4.dp)
+            .then(if (scrollable) Modifier.onSizeChanged { viewport.intValue = it.width }.horizontalScroll(scroll) else Modifier),
         // `.pf-seg { gap: var(--space-1) }`; the frame is an inset outline, so it overlaps the 4 dp padding.
         horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space1),
     ) {
@@ -416,14 +448,18 @@ fun PfSegmentedControl(
             val isSelected = i == selected
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .height(40.dp)
+                    .then(if (scrollable) Modifier.width(IntrinsicSize.Max).widthIn(min = PfTheme.dimens.touch)
+                        .onGloballyPositioned { coordinates ->
+                            val start = coordinates.positionInParent().x.roundToInt()
+                            bounds[i] = start to start + coordinates.size.width
+                        }
+                        else Modifier.weight(1f).fillMaxWidth())
+                    .height(if (scrollable) PfTheme.dimens.touch else 40.dp)
                     .clip(RoundedCornerShape(PfTheme.dimens.radiusSm))
                     .background(if (isSelected) c.accentSoft else Color.Transparent)
                     .clickable(role = Role.Tab) { onSelect(i) }
                     .semantics { this.contentDescription = option; if (isSelected) toggleableState = ToggleableState.On }
-                    .testTag(PfTestTags.segment(i)),
+                    .testTag(optionTag(i)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -431,6 +467,8 @@ fun PfSegmentedControl(
                     style = if (isSelected) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.body,
                     color = if (isSelected) c.accent else c.textMuted,
                     maxLines = 1,
+                    textAlign = if (scrollable) TextAlign.Center else TextAlign.Unspecified,
+                    modifier = if (scrollable) Modifier.fillMaxWidth().padding(horizontal = PfTheme.dimens.space2) else Modifier,
                 )
             }
         }

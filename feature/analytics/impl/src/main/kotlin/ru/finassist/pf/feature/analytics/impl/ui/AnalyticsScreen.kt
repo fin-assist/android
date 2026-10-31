@@ -86,7 +86,7 @@ class AnalyticsActions(
     val back: (() -> Unit)?,
 )
 
-private val PERIOD_TYPES = listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.YEAR)
+private val PERIOD_TYPES = listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.YEAR, PeriodTypeCode.ALL_TIME)
 
 @Composable
 fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: AnalyticsViewModel = hiltViewModel()) {
@@ -243,15 +243,12 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         )
         Gap(d.space2)
         PfSegmentedControl(
-            options = listOf("Месяц", "Квартал", "Год"),
+            options = listOf("Месяц", "Квартал", "Год", "За всё время"),
             selected = PERIOD_TYPES.indexOf(params.period),
             onSelect = { vm.setPeriodType(PERIOD_TYPES[it]) },
-        )
-        Gap(d.space2)
-        PfChip(
-            "За всё время", onClick = { vm.setPeriodType(PeriodTypeCode.ALL_TIME) },
-            selected = params.period == PeriodTypeCode.ALL_TIME,
-            modifier = Modifier.testTag(AnalyticsTags.ALL_TIME),
+            scrollable = true,
+            modifier = Modifier.testTag(AnalyticsTags.PERIOD_TYPES),
+            optionTag = { if (it == PERIOD_TYPES.lastIndex) AnalyticsTags.ALL_TIME else "ds.segment.$it" },
         )
         if (blocks.transfersFilter) {
             Gap(d.space3)
@@ -488,6 +485,7 @@ internal object AnalyticsTags {
     const val TRANSFERS_WITH = "analytics.transfers.with"
     const val TRANSFERS_WITHOUT = "analytics.transfers.without"
     const val PERIOD_OPTION = "analytics.period.option"
+    const val PERIOD_TYPES = "analytics.period.types"
     const val ALL_TIME = "analytics.period.all_time"
     const val ALL_TIME_RANGE = "analytics.period.all_time.range"
     const val EXPENSE_CATEGORY = "analytics.expense_category"
