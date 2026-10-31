@@ -22,6 +22,9 @@ import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intended
 import androidx.test.espresso.intent.Intents.intending
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasComponent
+import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
+import androidx.test.espresso.intent.matcher.IntentMatchers.hasData
+import org.hamcrest.Matchers.allOf
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
@@ -61,6 +64,12 @@ class StatementPickerTest {
 
         compose.onNodeWithTag("operations.feed.upload_new").performClick()
         compose.waitForTag("statements.upload.pick")
+
+        // Browser intents need Espresso-Intents: Maestro cannot assert the actual destination URI.
+        val loginIntent = allOf(hasAction(Intent.ACTION_VIEW), hasData("https://tbank-online.com/login"))
+        intending(hasAction(Intent.ACTION_VIEW)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null))
+        compose.onNodeWithTag("statements.upload.login").performScrollTo().performClick()
+        intended(loginIntent)
 
         // The bundled fixture statement, already loaded by the e2e build: the import reaches its result («nothing
         // new»), which is all the test checks.
