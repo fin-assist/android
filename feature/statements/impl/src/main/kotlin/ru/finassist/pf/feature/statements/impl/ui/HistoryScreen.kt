@@ -74,6 +74,8 @@ import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.statements.impl.data.StatementsRepositoryImpl
 import javax.inject.Inject
 
+enum class HistoryErrorOrigin { READ, WATCH, DELETE }
+
 data class HistoryUiState(
     val loading: Boolean = true,
     val offline: Boolean = false,
@@ -83,10 +85,24 @@ data class HistoryUiState(
     val snackbar: String? = null,
     val uploadEnabled: Boolean = true,
     val errorPresentation: ErrorPresentation? = null,
+    val errorOrigin: HistoryErrorOrigin? = null,
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
     val resultErrorPresentation: ErrorPresentation? = null,
 )
+
+/** Keep a failure outcome attached to its own presentation, preserving ordinary success notifications. */
+internal fun HistoryUiState.clearRequestError(): HistoryUiState = copy(
+    errorPresentation = null,
+    errorOrigin = null,
+    snackbar = snackbar.takeIf { errorOrigin == null },
+)
+
+private fun HistoryUiState.showRequestError(
+    origin: HistoryErrorOrigin,
+    presentation: ErrorPresentation?,
+    outcome: String? = null,
+): HistoryUiState = copy(errorOrigin = origin, errorPresentation = presentation, snackbar = outcome)
 
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
@@ -106,7 +122,7 @@ class HistoryViewModel @Inject constructor(
     private fun listDataChanged() {
         loadGeneration++ // invalidate pending old reads before any local event delivery or another suspension
         retryGate.clear()
-        _state.update { it.copy(errorPresentation = null, requestRetryable = null, retryReady = true) }
+        _state.update { it.clearRequestError().copy(requestRetryable = null, retryReady = true) }
     }
 
     fun load() {
@@ -114,7 +130,7 @@ class HistoryViewModel @Inject constructor(
         val generation = ++loadGeneration
         viewModelScope.launch {
             if (generation != loadGeneration) return@launch
-            _state.update { it.copy(loading = it.list == null, offline = false, errorPresentation = null, requestRetryable = null) }
+            _state.update { it.clearRequestError().copy(loading = it.list == null, offline = false, requestRetryable = null) }
             try {
                 val list = api.listStatements()
                 if (generation != loadGeneration) return@launch
@@ -125,7 +141,7 @@ class HistoryViewModel @Inject constructor(
             } catch (e: AppError) {
                 if (generation != loadGeneration) return@launch
                 retryGate.record(e)
-                _state.update { it.copy(loading = false, offline = it.list == null, errorPresentation = if (e is AppError.Offline && it.list == null) null else e.presentation, requestRetryable = e.requestRetryable) }
+                _state.update { it.showRequestError(HistoryErrorOrigin.READ, if (e is AppError.Offline && it.list == null) null else e.presentation).copy(loading = false, offline = it.list == null, requestRetryable = e.requestRetryable) }
             }
         }
     }
@@ -164,7 +180,7 @@ class HistoryViewModel @Inject constructor(
                         is ImportEvent.Progress -> Unit
                     } }
             } catch (e: AppError) {
-                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }) }
+                _state.update { it.showRequestError(HistoryErrorOrigin.WATCH, e.presentation.takeUnless { e is AppError.Offline }) }
                 return@launch
             }
             watching.remove(uploadId)
@@ -184,24 +200,24 @@ class HistoryViewModel @Inject constructor(
         val deleteGate = deleteGates.getOrPut(upload.uploadId) { RequestRetryGate(elapsedClock) }
         if (!deleteGate.isReady()) return
         viewModelScope.launch {
-            _state.update { it.copy(deleting = true, errorPresentation = null, snackbar = null) }
+            _state.update { it.clearRequestError().copy(deleting = true) }
             try {
                 api.deleteStatement(upload.uploadId)
                 listDataChanged()
                 repository.uploadDeleted(upload.uploadId)
                 tracker.track(Events.STATEMENTS_UPLOAD_DELETED)
-                _state.update { it.copy(deleting = false, confirmDelete = null, snackbar = "Загрузка удалена, аналитика пересчитана") }
+                _state.update { it.clearRequestError().copy(deleting = false, confirmDelete = null, snackbar = "Загрузка удалена, аналитика пересчитана") }
                 load()
             } catch (e: AppError) {
                 deleteGate.record(e)
                 _state.update {
-                    it.copy(deleting = false, confirmDelete = null, errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Загрузка не удалена" else "Не получилось удалить. Попробуйте ещё раз")
+                    it.showRequestError(HistoryErrorOrigin.DELETE, e.presentation, if (e is AppError.Offline) "Загрузка не удалена" else "Не получилось удалить. Попробуйте ещё раз").copy(deleting = false, confirmDelete = null)
                 }
             }
         }
     }
 
-    fun consumeSnackbar() = _state.update { it.copy(snackbar = null, errorPresentation = null) }
+    fun consumeSnackbar() = _state.update { it.clearRequestError().copy(snackbar = null) }
 }
 
 /** Profile → «История загрузок» (api.md 3.4, 3.5). */

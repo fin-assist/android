@@ -37,8 +37,11 @@ Outcome strings name only the result, without a network diagnosis or recovery ad
 hint owns the advice. The native UI regression uses the actual profile outcome constant, not a test-only
 substitute. Full-screen states have no mutation outcome. Profile theme retries clear only an error whose typed origin
 is THEME; unrelated read, limit, statement or consent errors keep their presentation and retry context.
-A new consent-revoke attempt clears its own CONSENT outcome before dispatch, and a new statement-delete
-attempt clears the previous failed-delete snackbar. A successful mutation cannot retain an old failure outcome.
+Profile and history clear/show helpers update the error origin, presentation and outcome atomically.
+Clearing an error removes its outcome while preserving ordinary notifications with no error origin;
+showing another error installs only that error's outcome, or none for a read failure. Resume and
+confirmed data-context changes use the same rule, so a failed mutation cannot become a later read's
+fallback or hide its retry action. A successful mutation cannot retain an old failure outcome.
 Assistant consent document/PUT errors use this same presentation. Chat send/stream failures keep their
 existing offline composer panel, which uses the common local hint; history SSE drops retain automatic
 reopening and do not produce a terminal offline notice.

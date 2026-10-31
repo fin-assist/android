@@ -60,6 +60,19 @@ data class ProfileUiState(
     val retryReady: Boolean = true,
 )
 
+/** An error's origin, presentation and outcome move together; ordinary success notices have no origin. */
+internal fun ProfileUiState.clearRequestError(): ProfileUiState = copy(
+    errorPresentation = null,
+    errorOrigin = null,
+    snackbar = snackbar.takeIf { errorOrigin == null },
+)
+
+private fun ProfileUiState.showRequestError(
+    origin: ProfileErrorOrigin,
+    presentation: ErrorPresentation?,
+    outcome: String? = null,
+): ProfileUiState = copy(errorOrigin = origin, errorPresentation = presentation, snackbar = outcome)
+
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val profileApi: ProfileApi,
@@ -115,7 +128,7 @@ class ProfileViewModel @Inject constructor(
         if (retryGate.isReady()) {
             val generation = ++profileGeneration
             viewModelScope.launch {
-                _state.update { it.copy(loading = it.profile == null, offline = false, errorPresentation = null, errorOrigin = null, requestRetryable = null) }
+                _state.update { it.clearRequestError().copy(loading = it.profile == null, offline = false, requestRetryable = null) }
                 try {
                     val origin = zoneChecker.captureObservation()
                     val p = profileApi.getProfile()
@@ -125,7 +138,7 @@ class ProfileViewModel @Inject constructor(
                 } catch (e: AppError) {
                     if (generation != profileGeneration) return@launch
                     retryGate.record(e)
-                    _state.update { it.copy(loading = false, offline = it.profile == null, errorPresentation = if (e is AppError.Offline && it.profile == null) null else e.presentation, errorOrigin = ProfileErrorOrigin.PROFILE, requestRetryable = e.requestRetryable) }
+                    _state.update { it.showRequestError(ProfileErrorOrigin.PROFILE, if (e is AppError.Offline && it.profile == null) null else e.presentation).copy(loading = false, offline = it.profile == null, requestRetryable = e.requestRetryable) }
                 }
             }
         }
@@ -135,7 +148,7 @@ class ProfileViewModel @Inject constructor(
             viewModelScope.launch { runCatching { assistantApi.getLimit() }.onSuccess { l -> _state.update { it.copy(limit = l) } }
                 .onFailure { failure -> if (failure is AppError) {
                     limitRetryGate.record(failure)
-                    if (failure !is AppError.Offline) _state.update { it.copy(errorPresentation = failure.presentation, errorOrigin = ProfileErrorOrigin.LIMIT, snackbar = "Не получилось обновить лимит вопросов") }
+                    if (failure !is AppError.Offline) _state.update { it.showRequestError(ProfileErrorOrigin.LIMIT, failure.presentation, "Не получилось обновить лимит вопросов") }
                 } } }
         }
     }
@@ -151,7 +164,7 @@ class ProfileViewModel @Inject constructor(
     private fun changedProfileContext() {
         profileGeneration++
         retryGate.clear()
-        _state.update { it.copy(errorPresentation = null, errorOrigin = null, requestRetryable = null) }
+        _state.update { it.clearRequestError().copy(requestRetryable = null) }
     }
 
     private fun loadStatements() {
@@ -163,7 +176,7 @@ class ProfileViewModel @Inject constructor(
             }.onFailure { failure ->
                 if (generation == statementsGeneration && failure is AppError) {
                     statementsRetryGate.record(failure)
-                    if (failure !is AppError.Offline) _state.update { it.copy(errorPresentation = failure.presentation, errorOrigin = ProfileErrorOrigin.STATEMENTS, snackbar = "Не получилось обновить историю загрузок") }
+                    if (failure !is AppError.Offline) _state.update { it.showRequestError(ProfileErrorOrigin.STATEMENTS, failure.presentation, "Не получилось обновить историю загрузок") }
                 }
             }
         }
@@ -189,7 +202,7 @@ class ProfileViewModel @Inject constructor(
         blockedTheme = theme
         _state.update {
             if (it.errorOrigin == ProfileErrorOrigin.THEME) {
-                it.copy(themeSheet = false, errorPresentation = null, errorOrigin = null, snackbar = null)
+                it.clearRequestError().copy(themeSheet = false)
             } else it.copy(themeSheet = false)
         }
         viewModelScope.launch {
@@ -201,7 +214,7 @@ class ProfileViewModel @Inject constructor(
             }.onFailure { failure ->
                 if (generation == themeGeneration && failure is AppError) {
                     themeRetryGate.record(failure)
-                    _state.update { it.copy(errorPresentation = failure.presentation, errorOrigin = ProfileErrorOrigin.THEME, snackbar = "Не получилось сохранить тему") }
+                    _state.update { it.showRequestError(ProfileErrorOrigin.THEME, failure.presentation, "Не получилось сохранить тему") }
                 }
             }
         }
@@ -213,7 +226,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update {
                 if (it.errorOrigin == ProfileErrorOrigin.CONSENT) {
-                    it.copy(consentBusy = true, errorPresentation = null, errorOrigin = null, snackbar = null)
+                    it.clearRequestError().copy(consentBusy = true)
                 } else it.copy(consentBusy = true)
             }
             try {
@@ -224,7 +237,7 @@ class ProfileViewModel @Inject constructor(
                 _state.update { s -> s.copy(consentBusy = false, profile = s.profile?.let { p -> p.assistantConsent?.let { c -> p.withConsent(c.copy(granted = false)) } ?: p }) }
             } catch (e: AppError) {
                 consentRetryGate.record(e)
-                _state.update { it.copy(consentBusy = false, errorPresentation = e.presentation, errorOrigin = ProfileErrorOrigin.CONSENT, snackbar = if (e is AppError.Offline) ProfileTexts.CONSENT_NOT_REVOKED else "Не получилось. Попробуйте ещё раз") }
+                _state.update { it.showRequestError(ProfileErrorOrigin.CONSENT, e.presentation, if (e is AppError.Offline) ProfileTexts.CONSENT_NOT_REVOKED else "Не получилось. Попробуйте ещё раз").copy(consentBusy = false) }
             }
         }
     }
@@ -238,5 +251,5 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    fun consumeSnackbar() = _state.update { it.copy(snackbar = null, errorPresentation = null, errorOrigin = null) }
+    fun consumeSnackbar() = _state.update { it.clearRequestError().copy(snackbar = null) }
 }

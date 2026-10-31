@@ -413,6 +413,42 @@ class HistoryViewModelTest {
         assertTrue(repoEvents.isEmpty())
     }
 
+    @Test fun `a failed delete outcome cannot replace a later list failure and its retry`() {
+        api.listOutcomes += done
+        api.deleteFailure = AppError.Offline()
+        val vm = newVm()
+        vm.load()
+        vm.askDelete(upload("u1")); vm.delete()
+        assertEquals(HistoryErrorOrigin.DELETE, vm.state.value.errorOrigin)
+        assertEquals("Загрузка не удалена", vm.state.value.snackbar)
+        api.listOutcomes.clear(); api.listOutcomes += AppError.Offline()
+        vm.load()
+        assertEquals(HistoryErrorOrigin.READ, vm.state.value.errorOrigin)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertNull(vm.state.value.snackbar, "the read error retains its own retry action")
+        api.deleteFailure = null
+        api.listOutcomes.clear(); api.listOutcomes += StatementsList(uploads = emptyList())
+        vm.askDelete(upload("u1")); vm.delete()
+        assertNull(vm.state.value.errorOrigin)
+        assertNull(vm.state.value.errorPresentation)
+        assertEquals("Загрузка удалена, аналитика пересчитана", vm.state.value.snackbar)
+        vm.load()
+        assertEquals("Загрузка удалена, аналитика пересчитана", vm.state.value.snackbar,
+            "ordinary successful notifications survive a later successful refresh")
+    }
+
+    @Test fun `clearing every history error removes its outcome without deleting success notices`() {
+        val notification = HistoryUiState(snackbar = "Загрузка удалена")
+        assertEquals(notification, notification.clearRequestError())
+        for (origin in HistoryErrorOrigin.entries) {
+            val cleared = notification.copy(errorOrigin = origin, errorPresentation = AppError.Offline().presentation,
+                snackbar = "Старый исход ошибки").clearRequestError()
+            assertNull(cleared.errorOrigin)
+            assertNull(cleared.errorPresentation)
+            assertNull(cleared.snackbar)
+        }
+    }
+
     @Test fun `retrying a deletion clears its old failed outcome while pending`() {
         api.listOutcomes += done
         api.deleteFailure = AppError.Offline()

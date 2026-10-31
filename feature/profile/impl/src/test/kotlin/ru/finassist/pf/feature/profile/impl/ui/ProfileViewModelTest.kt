@@ -633,6 +633,57 @@ class ProfileViewModelTest {
         assertFalse(vm.state.value.consentBusy)
     }
 
+    @Test fun `a revoke outcome cannot become a profile read error across resume and retry`() {
+        val vm = loaded()
+        profileApi.revokeFailure = AppError.Offline()
+        vm.revokeConsent()
+        assertEquals("Согласие не отозвано", vm.state.value.snackbar)
+        profileApi.getFailure = AppError.Offline()
+        vm.load()
+        assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertNull(vm.state.value.snackbar, "the read error keeps its own fallback and retry action")
+        profileApi.revokeFailure = null
+        vm.revokeConsent()
+        assertEquals(false, vm.state.value.profile?.assistantConsent?.granted)
+        assertNull(vm.state.value.snackbar)
+        assertNull(vm.state.value.errorOrigin)
+        assertNull(vm.state.value.errorPresentation)
+    }
+
+    @Test fun `a theme outcome never migrates into the next profile read banner`() {
+        val vm = loaded()
+        profileApi.updateFailure = AppError.Offline()
+        vm.setTheme(Theme.DARK)
+        assertEquals(ProfileErrorOrigin.THEME, vm.state.value.errorOrigin)
+        profileApi.getFailure = AppError.Offline()
+        vm.load()
+        val readPresentation = vm.state.value.errorPresentation
+        assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+        assertNull(vm.state.value.snackbar)
+        profileApi.updateFailure = null
+        vm.setTheme(Theme.LIGHT)
+        assertEquals(readPresentation, vm.state.value.errorPresentation)
+        assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+        assertNull(vm.state.value.snackbar)
+        profileApi.getFailure = null
+        vm.load()
+        assertNull(vm.state.value.errorOrigin)
+        assertNull(vm.state.value.snackbar)
+    }
+
+    @Test fun `clearing any profile error removes its outcome and preserves ordinary notifications`() {
+        val notification = ProfileUiState(flags = ProfileFlags(true, true, true), snackbar = "Сохранено")
+        assertEquals(notification, notification.clearRequestError())
+        for (origin in ProfileErrorOrigin.entries) {
+            val cleared = notification.copy(errorOrigin = origin, errorPresentation = AppError.Offline().presentation,
+                snackbar = "Старый исход ошибки").clearRequestError()
+            assertNull(cleared.errorOrigin)
+            assertNull(cleared.errorPresentation)
+            assertNull(cleared.snackbar)
+        }
+    }
+
     @Test fun `retrying a failed revoke clears its stale outcome before success`() {
         val vm = loaded()
         profileApi.revokeFailure = AppError.Offline()
