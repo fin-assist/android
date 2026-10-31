@@ -70,7 +70,7 @@ class UploadViewModelTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     private val config = ImportConfig(
-        downloadUrl = "https://www.tbank.ru/export", loginUrl = "https://www.tbank.ru/login/",
+        downloadUrl = "https://www.tbank.ru/export", loginUrl = "https://tbank-online.com/login",
         maxFileSizeBytes = 5L * 1024 * 1024, acceptedFormats = listOf("OFX"),
         suggestedPeriod = DateRange(OffsetDateTime.parse("2025-09-26T00:00:00+03:00"), OffsetDateTime.parse("2026-09-26T00:00:00+03:00")),
     )
@@ -160,6 +160,23 @@ class UploadViewModelTest {
         val period = vm.state.value.config!!.suggestedPeriod
         assertEquals(OffsetDateTime.parse("2025-10-08T12:00:00+03:00"), period.from)
         assertEquals(OffsetDateTime.parse("2026-10-09T12:00:00+03:00"), period.to)
+    }
+
+    @Test fun `cold config failure never opens the obsolete login address`() {
+        api.configFailure = AppError.Server(500)
+        val state = newViewModel().state.value
+        assertEquals("https://tbank-online.com/login", assertIs<UploadPhase.Guide>(state.phase).config.loginUrl)
+        assertEquals("https://tbank-online.com/login", state.config!!.downloadUrl)
+    }
+
+    @Test fun `server destination changes apply on reload and survive a later config failure`() {
+        val destination = "https://bank.example/new-login"
+        api.currentConfig = config.copy(loginUrl = destination)
+        vm.load()
+        assertEquals(destination, assertIs<UploadPhase.Guide>(vm.state.value.phase).config.loginUrl)
+        api.configFailure = AppError.Server(500)
+        vm.load()
+        assertEquals(destination, assertIs<UploadPhase.Guide>(vm.state.value.phase).config.loginUrl)
     }
 
     /** The file is read on the IO dispatcher: wait until the state settles. */
