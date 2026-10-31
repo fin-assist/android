@@ -100,13 +100,14 @@ jobs:
           restore-keys: ${{ steps.robolectric.outputs.prefix }}
 
       # PR: `unitTest` of every module — the variant the coverage is measured on (jvm, debug of libraries, mockDebug
-      # of the app; build-logic Coverage.kt). Stage-specific app tests also run on a PR. Push: `test` of every
+      # of the app; build-logic Coverage.kt). Stage-specific app tests also run on a PR. Analytics release
+      # Robolectric tests guard the shared Compose host manifest on PRs too (FIN-414). Push: `test` of every
       # variant — release, local, prod and e2e included — so a test failing only there is caught before a release.
       - name: Unit tests
         id: unit-tests
         env:
           TEST_TASK: ${{ github.event_name == 'pull_request' && 'unitTest' || 'test' }}
-        run: ./gradlew "$TEST_TASK" :app:testStageDebugUnitTest :app:testStageReleaseUnitTest :build-logic:convention:test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew "$TEST_TASK" :feature:analytics:impl:testReleaseUnitTest :app:testStageDebugUnitTest :app:testStageReleaseUnitTest :build-logic:convention:test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Saved from main and release branches only, like the Gradle cache: their caches are the ones every PR can read.
       # Only after green tests: then every jar a test needed has been fetched, and an entry, once saved, never changes.

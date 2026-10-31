@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Checks that test hooks and cleartext HTTP stay where they belong (FIN-120, AGENTS.md «Security»).
 
-`release` — merged manifests of builds that may reach users (prodRelease, localRelease): no e2e or mock hooks
-(`ru.finassist.pf.e2e.*`, the `pfe2e` control link, the document picker override), not debuggable, cleartext
+`release` — merged manifests of builds that may reach users (prodRelease, stageRelease, localRelease): no e2e or mock hooks
+(`ru.finassist.pf.e2e.*`, the `pfe2e` control link, the document picker override), no Compose test ComponentActivity, not debuggable, cleartext
 explicitly off and no network security config, so no exception to it either.
 
 `local-debug` — the merged manifest of localDebug, its network security config and its BuildConfig.java: no test
@@ -49,6 +49,11 @@ def release_problems(manifest_xml: str, allow_config: bool = False) -> list[str]
     """Release rules; [allow_config] — a pinned build, which must use the app's own config instead of having none."""
     root = ET.fromstring(manifest_xml)
     problems = [f"test hook: {hook}" for hook in test_hooks(root)]
+    for element in root.iter():
+        if element.tag in ("activity", "activity-alias") and "androidx.activity.ComponentActivity" in (
+            element.get(ANDROID + "name"), element.get(ANDROID + "targetActivity")
+        ):
+            problems.append("Compose test activity in a release build: androidx.activity.ComponentActivity")
     application = root.find("application")
     if application is None:
         return problems + ["no <application>"]

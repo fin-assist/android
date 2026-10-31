@@ -22,6 +22,24 @@ What a change needs:
 
 A test asserts behaviour. A test that only runs lines to raise the number is not a test.
 
+## Compose host for local unit tests
+
+`configureCompose` adds `ui-test-manifest` as `testImplementation` so AGP merges its `ComponentActivity`
+into the Robolectric unit-test manifest for every build type, including release (FIN-414). The separate
+`debugImplementation` remains for device tests against debug builds. Never add this dependency to
+`implementation` or `releaseImplementation`: the host must stay out of distributable release APKs.
+`scripts/check-build-separation.py release` (also used by `pinned-release`) rejects that test Activity.
+
+CI runs `:feature:analytics:impl:testReleaseUnitTest` on PRs alongside `unitTest`, so the Compose rule tests
+(`AnalyticsPeriodControlTest`, `AnalyticsRetryCallbackTest`, `GroupedTilesLayoutTest`) exercise the shared
+convention in both debug and release before merge. Pushes still run `test` for every variant. To check locally:
+
+```bash
+./gradlew :feature:analytics:impl:testDebugUnitTest :feature:analytics:impl:testReleaseUnitTest
+```
+
+These are host JVM tests; they do not start an emulator or the Maestro/design-check suites.
+
 ## Calculation fixtures
 
 `CalcFixturesTest` (`mock/backend/src/test/…/mock/calc/`, FIN-108) runs the calculation fixtures of
