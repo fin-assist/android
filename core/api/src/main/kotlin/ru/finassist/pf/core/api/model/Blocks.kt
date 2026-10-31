@@ -212,6 +212,19 @@ data class ChartNote(val text: String, @EncodeDefault val tone: NoteTone = NoteT
 @Serializable
 data class TileGroupData(@Serializable(with = TileList::class) val tiles: List<Tile>)
 
+/** `tile_group@2`: server-ordered sections of tiles; an invalid section is skipped independently. */
+@Serializable
+data class TileGroupDataV2(@Serializable(with = TileGroupSectionList::class) val groups: List<TileGroupSection>)
+
+/** A visually separated section. The optional title is server text; tiles retain the version 1 schema. */
+@Serializable
+data class TileGroupSection(
+    @Serializable(with = TileList::class) val tiles: List<Tile>,
+    val title: String? = null,
+)
+
+object TileGroupSectionList : TolerantListSerializer<TileGroupSection>(TileGroupSection.serializer())
+
 object TileList : TolerantListSerializer<Tile>(Tile.serializer())
 
 @Serializable
