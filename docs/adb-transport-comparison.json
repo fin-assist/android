@@ -1,0 +1,185 @@
+{
+  "maestro": "2.11.0",
+  "jdk": 21,
+  "host": "macOS x86_64",
+  "emulator": "37.2.12 build16428233",
+  "platform_tools": "37.0.1-15733141",
+  "image": "android-35/google_apis_playstore/x86_64 revision9",
+  "avd": {
+    "cpus": 2,
+    "ram_mib": 2048,
+    "resolution": "1080x2400",
+    "density": 420,
+    "gpu": "swiftshader_indirect",
+    "snapshots": false,
+    "cold_boot": true,
+    "wipe_on_comparison_boot": false
+  },
+  "apks": {
+    "mock": {
+      "sha256": "8b39e5bf9944bd63eea98653727a713913087527e0bee9ece619db952d304c7a"
+    },
+    "stage": {
+      "sha256": "fb893ac124477ba8651900e7c18dbf05649c3fc1a0cc6478dc5b17e278b8b00c"
+    }
+  },
+  "product_source_sha": "b9e427efe27e0e891e6d0222bd52bf1ef85e413d",
+  "probe_runner_sha256": "7c9bdd2189e944f062183e72ff911e640412c5edaeede8e1174caa6fc4d3f318",
+  "published_runner_sha256": "ed3f567b8f6efec952dd2882a7f8f9c36bc380ccc0ca91b89c65be3150655906",
+  "publication_hardening": "Recorded batches used the same content-pinned runner. Published source moves the server inventory gate from once per batch to before every server session; no flow or connection changes. This hardening is covered by an added negative unit test; recorded batches are not reclassified or rerun.",
+  "runs": [
+    {
+      "serial": "emulator-5582",
+      "avd_name": "fin390_transport",
+      "transport": "server",
+      "app_id": "ru.finassist.pf.mock.e2e",
+      "repetitions": 3,
+      "flow_sha256": "7d7b43bca374be5ec5a6d4f611fb1470c794536e8442ce131feab70efe677939",
+      "started": "2026-10-31T18:53:01.180+00:00",
+      "complete": true,
+      "passed": false,
+      "flows_passed": false,
+      "results": [
+        {
+          "iteration": 1,
+          "returncode": 0,
+          "seconds": 71.038
+        },
+        {
+          "iteration": 2,
+          "returncode": 1,
+          "seconds": 78.178
+        },
+        {
+          "iteration": 3,
+          "returncode": 0,
+          "seconds": 62.962
+        }
+      ],
+      "transport_clean": true,
+      "probe_failure_count": 0,
+      "monitor_errors": [],
+      "finished": "2026-10-31T18:56:33.634+00:00",
+      "sample_count": 588,
+      "sample_failures_verified": 0
+    },
+    {
+      "serial": "emulator-5582",
+      "avd_name": "fin390_transport",
+      "transport": "direct",
+      "app_id": "ru.finassist.pf.mock.e2e",
+      "repetitions": 3,
+      "flow_sha256": "7d7b43bca374be5ec5a6d4f611fb1470c794536e8442ce131feab70efe677939",
+      "started": "2026-10-31T18:57:56.379+00:00",
+      "complete": true,
+      "passed": true,
+      "flows_passed": true,
+      "results": [
+        {
+          "iteration": 1,
+          "returncode": 0,
+          "seconds": 36.795
+        },
+        {
+          "iteration": 2,
+          "returncode": 0,
+          "seconds": 40.449
+        },
+        {
+          "iteration": 3,
+          "returncode": 0,
+          "seconds": 34.447
+        }
+      ],
+      "transport_clean": true,
+      "probe_failure_count": 0,
+      "monitor_errors": [],
+      "finished": "2026-10-31T18:59:48.243+00:00",
+      "sample_count": 320,
+      "sample_failures_verified": 0
+    },
+    {
+      "serial": "emulator-5582",
+      "avd_name": "fin390_transport",
+      "transport": "server",
+      "app_id": "ru.finassist.pf.stage",
+      "repetitions": 3,
+      "flow_sha256": "7f8fd520d79695c47b7a13a3fb1698176271453fd0858c5af7195445a8ea5f94",
+      "started": "2026-10-31T19:14:07.222+00:00",
+      "complete": true,
+      "passed": true,
+      "flows_passed": true,
+      "results": [
+        {
+          "iteration": 1,
+          "returncode": 0,
+          "seconds": 45.201
+        },
+        {
+          "iteration": 2,
+          "returncode": 0,
+          "seconds": 36.323
+        },
+        {
+          "iteration": 3,
+          "returncode": 0,
+          "seconds": 29.601
+        }
+      ],
+      "transport_clean": true,
+      "probe_failure_count": 0,
+      "monitor_errors": [],
+      "finished": "2026-10-31T19:15:58.685+00:00",
+      "sample_count": 312,
+      "sample_failures_verified": 0
+    },
+    {
+      "serial": "emulator-5582",
+      "avd_name": "fin390_transport",
+      "transport": "direct",
+      "app_id": "ru.finassist.pf.stage",
+      "repetitions": 3,
+      "flow_sha256": "7f8fd520d79695c47b7a13a3fb1698176271453fd0858c5af7195445a8ea5f94",
+      "started": "2026-10-31T19:18:22.390+00:00",
+      "complete": true,
+      "passed": true,
+      "flows_passed": true,
+      "results": [
+        {
+          "iteration": 1,
+          "returncode": 0,
+          "seconds": 27.98
+        },
+        {
+          "iteration": 2,
+          "returncode": 0,
+          "seconds": 26.907
+        },
+        {
+          "iteration": 3,
+          "returncode": 0,
+          "seconds": 26.331
+        }
+      ],
+      "transport_clean": true,
+      "probe_failure_count": 0,
+      "monitor_errors": [],
+      "finished": "2026-10-31T19:19:43.866+00:00",
+      "sample_count": 238,
+      "sample_failures_verified": 0
+    }
+  ],
+  "limits": [
+    "Three predetermined repetitions per environment/route; no full-suite acceptance or Linux UI claim.",
+    "Historical post-bootstrap host:transport device offline was not reproduced by these clean batches; root cause and fix remain unconfirmed.",
+    "One mock server-route repetition failed with application FocusEvent ANR; it remains failed.",
+    "Boot/system-ANR setup failures and incomplete exploratory batches remain separate local evidence; system dialogs were not disabled.",
+    "No account registrations or API mutations; no server registration receipt exists to clean up."
+  ],
+  "cleanup": {
+    "at": "2026-10-31T19:20:45.282762+00:00",
+    "hide_error_dialogs": "null",
+    "own_xml_cleanup_returncode": 0,
+    "own_emulator_stop_returncode": 0
+  }
+}
