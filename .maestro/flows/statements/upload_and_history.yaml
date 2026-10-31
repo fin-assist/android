@@ -19,7 +19,7 @@ tags:
       id: "analytics.tile.income"
 - assertVisible:
     id: "analytics.tile.income"
-    text: ".*0[ \u00a0\u202f].*"
+    text: "^Доходы, 0[ \u00a0\u202f]₽(?:,.*)?$"
 - tapOn:
     id: "ds.tab.profile"
 - extendedWaitUntil:
@@ -69,7 +69,7 @@ tags:
 - extendedWaitUntil:
     visible:
       id: "analytics.tile.income"
-      text: ".*1[ \u00a0\u202f]200.*"
+      text: "^Доходы, [+]1[ \u00a0\u202f]200[ \u00a0\u202f]₽(?:,.*)?$"
     timeout: 15000
 - assertNotVisible:
     id: "analytics.empty"
