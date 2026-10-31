@@ -42,6 +42,9 @@ Clearing an error removes its outcome while preserving ordinary notifications wi
 showing another error installs only that error's outcome, or none for a read failure. Resume and
 confirmed data-context changes use the same rule, so a failed mutation cannot become a later read's
 fallback or hide its retry action. A successful mutation cannot retain an old failure outcome.
+After a confirmed statement DELETE, History immediately removes that row and invalidates the old
+aggregate summary before refreshing. A failed subsequent GET shows its independent read error/retry
+while the deleted source stays absent; remaining rows are kept until a successful refresh.
 Assistant consent document/PUT errors use this same presentation. Chat send/stream failures keep their
 existing offline composer panel, which uses the common local hint; history SSE drops retain automatic
 reopening and do not produce a terminal offline notice.

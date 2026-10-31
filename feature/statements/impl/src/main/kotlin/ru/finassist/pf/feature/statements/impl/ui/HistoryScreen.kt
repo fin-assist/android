@@ -204,9 +204,19 @@ class HistoryViewModel @Inject constructor(
             try {
                 api.deleteStatement(upload.uploadId)
                 listDataChanged()
+                // The DELETE response is authoritative even when the following list refresh fails.
+                _state.update { state ->
+                    state.clearRequestError().copy(
+                        deleting = false,
+                        confirmDelete = null,
+                        list = state.list?.let { list ->
+                            list.copy(summary = null, uploads = list.uploads.filterNot { it.uploadId == upload.uploadId })
+                        },
+                        snackbar = "Загрузка удалена, аналитика пересчитана",
+                    )
+                }
                 repository.uploadDeleted(upload.uploadId)
                 tracker.track(Events.STATEMENTS_UPLOAD_DELETED)
-                _state.update { it.clearRequestError().copy(deleting = false, confirmDelete = null, snackbar = "Загрузка удалена, аналитика пересчитана") }
                 load()
             } catch (e: AppError) {
                 deleteGate.record(e)

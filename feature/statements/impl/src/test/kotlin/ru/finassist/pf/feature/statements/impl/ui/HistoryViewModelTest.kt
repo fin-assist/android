@@ -398,6 +398,37 @@ class HistoryViewModelTest {
         assertNull(vm.state.value.snackbar)
     }
 
+    @Test fun `a confirmed delete stays visible when the following list read fails`() {
+        val deleted = upload("u1")
+        for (remaining in listOf(emptyList(), listOf(upload("u2")))) {
+            for (failure in listOf(AppError.Offline(), AppError.Server(503))) {
+                val source = FakeStatementsApi()
+                source.listOutcomes += StatementsList(
+                    summary = ru.finassist.pf.core.api.model.StatementsSummary(1 + remaining.size,
+                        10 * (1 + remaining.size), deleted.uploadedAt, deleted.uploadedAt, emptyList()),
+                    uploads = listOf(deleted) + remaining,
+                )
+                source.listOutcomes += failure
+                val vm = newVm(source = source)
+                vm.load()
+                vm.askDelete(deleted); vm.delete()
+                assertEquals(listOf("u1"), source.deleted)
+                assertEquals(remaining, vm.state.value.list?.uploads,
+                    "the failed GET must not resurrect a source removed by a confirmed DELETE")
+                assertNull(vm.state.value.list?.summary, "old aggregate coverage is no longer authoritative")
+                assertEquals(HistoryErrorOrigin.READ, vm.state.value.errorOrigin)
+                assertEquals(failure is AppError.Offline, vm.state.value.errorPresentation?.connectionFailure)
+                assertNull(vm.state.value.snackbar, "the read failure uses its own fallback and retry")
+                assertTrue(vm.state.value.retryReady)
+                source.listOutcomes.clear(); source.listOutcomes += StatementsList(uploads = remaining)
+                vm.load()
+                assertNull(vm.state.value.errorOrigin)
+                assertNull(vm.state.value.errorPresentation)
+                assertEquals(remaining, vm.state.value.list?.uploads)
+            }
+        }
+    }
+
     @Test fun `deleting offline keeps the upload and says why`() {
         api.listOutcomes += done
         api.deleteFailure = AppError.Offline()
