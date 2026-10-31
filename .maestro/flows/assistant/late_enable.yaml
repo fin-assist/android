@@ -64,6 +64,25 @@ tags:
 - assertVisible: "Kaspersky"
 - assertNotVisible:
     id: "assistant.question"
+# Return from the nested chat before resetting the flag: the admitted tab must now exist under false.
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "ds.tab.analytics"
+      selected: true
+    timeout: 10000
+- assertVisible:
+    id: "ds.tab.assistant"
+- tapOn:
+    id: "ds.tab.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "ds.tab.assistant"
+      selected: true
+    timeout: 10000
+- assertNotVisible:
+    id: "assistant.question"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
