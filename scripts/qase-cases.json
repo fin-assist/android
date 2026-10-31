@@ -67,6 +67,7 @@
     "ru.finassist.pf.ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries": 67,
     ".maestro/flows/assistant/late_enable.yaml": 68,
     ".maestro/flows/analytics/facts_and_forecast.yaml": 71,
+    "ru.finassist.pf.VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion": 72,
     ".maestro/flows/refresh/server_data.yaml": 70
   }
 }

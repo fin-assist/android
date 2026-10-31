@@ -2,6 +2,7 @@ package ru.finassist.pf.feature.assistant.impl.ui
 
 import ru.finassist.pf.core.designsystem.components.PfRefreshContainer
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.getValue
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import androidx.compose.foundation.layout.Arrangement
@@ -104,16 +105,21 @@ fun ChatScreen(
             vm.onConsentGranted()
         }
     }
-    val voice = rememberVoiceInput(onResult = { vm.send(voiceText = it) })
+    val voice = rememberVoiceInput(onResult = vm::appendVoiceText)
+    val voiceState by voice.state.collectAsStateWithLifecycle()
+    BackHandler(voiceState.active, onBack = voice.cancel)
+    LaunchedEffect(state.sending, state.generating, state.limitExhausted, state.offline) {
+        if (state.sending || state.generating || state.limitExhausted || state.offline) voice.cancel()
+    }
     ChatContent(
         state = state,
         zone = zone,
         // Read on every recomposition, as before FIN-71: a chat left open past midnight relabels its days.
         today = clock.today(),
-        voiceListening = voice.listening,
-        actions = remember(vm, voice.start, onBack, onOpenSearch, onOpenAnalytics) {
+        voiceState = voiceState,
+        actions = remember(vm, voice.start, voice.finish, voice.cancel, onBack, onOpenSearch, onOpenAnalytics) {
             ChatActions(
-                onBack = onBack,
+                onBack = { voice.cancel(); onBack() },
                 onReload = vm::load,
                 onRefresh = vm::refresh,
                 onLoadOlder = vm::loadOlder,
@@ -122,6 +128,8 @@ fun ChatScreen(
                 onDraft = vm::setDraft,
                 onSend = { vm.send() },
                 onVoice = voice.start,
+                onVoiceFinish = voice.finish,
+                onVoiceCancel = voice.cancel,
                 onOpenSearch = onOpenSearch,
                 onOpenAnalytics = onOpenAnalytics,
                 onStartNewRequest = vm::startNewRequest,
@@ -147,6 +155,8 @@ internal class ChatActions(
     val onStartNewRequest: () -> Unit = {},
     val onOpenConsent: () -> Unit = {},
     val onRefresh: () -> Unit = onReload,
+    val onVoiceFinish: () -> Unit = {},
+    val onVoiceCancel: () -> Unit = {},
 )
 
 @Composable
@@ -154,7 +164,7 @@ internal fun ChatContent(
     state: ChatUiState,
     zone: ZoneId,
     today: LocalDate,
-    voiceListening: Boolean,
+    voiceState: VoiceState = VoiceState(),
     actions: ChatActions,
     listState: LazyListState = rememberLazyListState(),
 ) {
@@ -231,9 +241,6 @@ internal fun ChatContent(
                     }
                 }
             }
-            if (voiceListening) {
-                Text("Слушаю…", style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(horizontal = d.space5, vertical = d.space1))
-            }
             state.recovery?.let { recovery ->
                 Column(Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(AssistantTags.RECOVERY)) {
                     PfNotice(
@@ -280,7 +287,9 @@ internal fun ChatContent(
                     modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(PfTestTags.LIMIT_METER),
                 )
             }
-            PfChatComposer(
+            VoicePanel(voiceState, actions.onVoiceFinish, actions.onVoiceCancel, actions.onVoice,
+                retryEnabled = !state.sending && !state.generating && !state.limitExhausted && !state.offline)
+            if (!voiceState.active) PfChatComposer(
                 value = state.draft,
                 onValueChange = actions.onDraft,
                 onSend = actions.onSend,
@@ -291,7 +300,7 @@ internal fun ChatContent(
                 state = when {
                     state.limitExhausted -> ComposerState.LIMIT
                     state.offline -> ComposerState.OFFLINE
-                    state.sending || state.generating || voiceListening -> ComposerState.BUSY
+                    state.sending || state.generating -> ComposerState.BUSY
                     else -> ComposerState.IDLE
                 },
                 onRetry = actions.onRetryAfterFailure,
