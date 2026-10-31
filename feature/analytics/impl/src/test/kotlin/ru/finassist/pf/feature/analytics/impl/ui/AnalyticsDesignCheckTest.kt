@@ -95,6 +95,19 @@ class AnalyticsDesignCheckTest {
     @Test fun analyticsPreparingWithoutData() = capture("AnalyticsPreparingWithoutData", ui(september().copy(hasData = false,
         state = analyticsState.copy(recalculating = true))), heightDp = 844)
 
+    private fun noData() = golden("no_data").also { response ->
+        kotlin.test.assertTrue(response.hasData, "another period still has financial data")
+        kotlin.test.assertEquals(ru.finassist.pf.core.api.model.Coverage.NO_DATA, response.period?.coverage)
+        val tiles = response.blocks.single { it.id == "tiles" }
+        kotlin.test.assertEquals(ru.finassist.pf.core.api.model.BlockStatus.NONE, tiles.status)
+        kotlin.test.assertEquals("За этот период данных нет", tiles.emptyText)
+        kotlin.test.assertTrue(tiles.decode(ru.finassist.pf.core.api.model.TileGroupData.serializer())!!.tiles.isEmpty())
+    }
+
+    @Test fun analyticsNoData() = capture("AnalyticsNoData", ui(noData()), heightDp = 844)
+    @Test fun analyticsNoDataDark() = capture("AnalyticsNoDataDark", ui(noData()), heightDp = 844, dark = true)
+    @Test fun analyticsNoDataTilesHidden() = capture("AnalyticsNoDataTilesHidden", ui(noData()).copy(blocks = blocks.copy(hidden = setOf("tiles"))), heightDp = 844)
+
     @Test fun analyticsForecastHistory() = capture("AnalyticsForecastHistory", ui(golden("rolling_year")), heightDp = 1600)
     @Test fun analyticsForecastHistoryDark() = capture("AnalyticsForecastHistoryDark", ui(golden("rolling_year")), heightDp = 1600, dark = true)
 

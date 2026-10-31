@@ -18,7 +18,9 @@ import java.time.OffsetDateTime
 import java.time.YearMonth
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Texts of the Analytics blocks, built by the server since FIN-4 (moved from the client with [AnalyticsTexts]). */
 class AnalyticsServerTextsTest {
@@ -47,6 +49,29 @@ class AnalyticsServerTextsTest {
         assertEquals("Нужно 3 полных месяца, есть 1", AnalyticsTexts.lock(MetricLock(LockReason.NEED_FULL_MONTHS, 3, 1), state).plain())
         assertEquals("Нужно 2 месяца с данными, есть 1", AnalyticsTexts.lock(MetricLock(LockReason.NEED_MONTHS_WITH_DATA, 2, 1), state).plain())
         assertEquals("Пока недоступно", AnalyticsTexts.lock(MetricLock(LockReason.UNKNOWN), state))
+    }
+
+    @Test
+    fun `inconsistent forecast history keeps the rule without inventing month lists`() {
+        val complete = (1..4).map { point(it, 100) }
+        val lock = MetricLock(LockReason.NEED_FULL_MONTHS, required = 12, available = 5)
+        val incomplete = point(5, 100, coverage = Coverage.PARTIAL, dataFrom = "2026-05-01T00:00:00+03:00", dataTo = "2026-05-11T00:00:00+03:00")
+        val variants = listOf(
+            state to null,
+            state to complete,
+            state to (complete + point(5, 100) + incomplete.copy(dataFrom = null)),
+            state to (complete + point(5, 100) + incomplete.copy(dataTo = null)),
+            null to (complete + point(5, 100)),
+        )
+        for ((snapshotState, history) in variants) {
+            val text = AnalyticsTexts.forecastLock(lock, snapshotState, history).plain()
+            assertTrue(text.startsWith("Нужно 12 полных месяцев, есть 5"), text)
+            assertTrue(text.contains("независимо от выбранного года"), text)
+            assertTrue(text.contains("Полный месяц — завершённый календарный месяц с данными за каждый день."), text)
+            assertFalse(text.contains("Учтены полные месяцы"), text)
+            assertFalse(text.contains("Неполные месяцы:"), text)
+            assertFalse(text.contains("Месяцы без данных:"), text)
+        }
     }
 
     @Test

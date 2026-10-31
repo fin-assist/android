@@ -11,6 +11,10 @@ import ru.finassist.pf.core.blocks.BlockContext
 import ru.finassist.pf.core.blocks.BlockLayout
 import ru.finassist.pf.core.blocks.BlockTags
 import ru.finassist.pf.core.blocks.BlocksColumn
+import ru.finassist.pf.core.blocks.PreparedBlock
+import ru.finassist.pf.core.blocks.TileGroupRenderer
+import ru.finassist.pf.core.api.model.AnalyticsPeriodInfo
+import ru.finassist.pf.core.api.model.BlockStatus
 import ru.finassist.pf.core.blocks.CatalogV1
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.Arrangement
@@ -184,6 +188,7 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
     val params = a.params ?: return
     val period = a.period ?: return
     val blocks = state.blocks
+    val prepared = remember(a.blocks, blocks.hidden) { prepareAnalyticsBlocks(a.blocks, blocks.hidden) }
     val d = PfTheme.dimens
 
     if (blocks.assistant) {
@@ -267,17 +272,33 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
     }
     // A past month or an incomplete quarter/year says which part of it the numbers cover; the tiles follow 8 dp
     // under it (mockup `AnalyticsYear`: `margin-bottom: space-2 − space-4`).
-    val coverageCaption = AnalyticsTexts.partialPeriod(period, params.period) ?: AnalyticsTexts.coverage(period).takeIf { !period.isCurrent }
+    val coverageCaption = analyticsCoverageCaption(period, params.period, prepared)
     coverageCaption?.let {
         Gap(d.space4)
         Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
     }
 
-    Blocks(a, state, vm, actions, afterCaption = coverageCaption != null)
+    Blocks(a, state, vm, actions, prepared, afterCaption = coverageCaption != null)
 }
 
 /** Registry of the renderers (FIN-7): the catalog version this client draws. */
 private val registry = CatalogV1.registry()
+
+internal fun prepareAnalyticsBlocks(blocks: List<Block>, hidden: Set<String>): List<PreparedBlock> =
+    BlockLayout.visible(registry.prepareAll(blocks), { it.block }) { it.block.id != null && it.block.id in hidden }
+
+/** The server's visible message replaces the local no-data caption; hidden or unsupported blocks need a fallback. */
+internal fun analyticsCoverageCaption(period: AnalyticsPeriodInfo, type: PeriodTypeCode, prepared: List<PreparedBlock>): String? {
+    if (period.coverage.effective == Coverage.NO_DATA) {
+        val serverMessage = prepared.any {
+            val block = it.block
+            block.id == "tiles" && block.type == BlockType.TILE_GROUP && block.v <= TileGroupRenderer.version &&
+                block.status.effective == BlockStatus.NONE && !block.emptyText.isNullOrBlank()
+        }
+        return if (serverMessage) null else AnalyticsTexts.coverage(period)
+    }
+    return AnalyticsTexts.partialPeriod(period, type) ?: AnalyticsTexts.coverage(period).takeIf { !period.isCurrent }
+}
 
 /** Test tags of the blocks — the ones the UI tests have used since before FIN-4. */
 private object AnalyticsBlockTags : BlockTags("analytics") {
@@ -302,13 +323,8 @@ private object AnalyticsBlockTags : BlockTags("analytics") {
  * drawn by the registry; a block it cannot draw is skipped. Spacing follows the mockups by the kind of block.
  */
 @Composable
-private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers, actions: AnalyticsActions, afterCaption: Boolean) {
+private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers, actions: AnalyticsActions, prepared: List<PreparedBlock>, afterCaption: Boolean) {
     val d = PfTheme.dimens
-    val hidden = state.blocks.hidden
-    val prepared = remember(a.blocks, hidden) {
-        // Prepared first: a heading over blocks that did not decode goes as well.
-        BlockLayout.visible(registry.prepareAll(a.blocks), { it.block }) { p -> p.block.id != null && p.block.id in hidden }
-    }
     val navigate: (BlockAction) -> Unit = { action ->
         when (action.type) {
             ActionType.OPEN_OPERATIONS -> action.filter?.let(actions.openSearch)
