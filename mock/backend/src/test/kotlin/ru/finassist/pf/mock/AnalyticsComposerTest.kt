@@ -62,9 +62,9 @@ class AnalyticsComposerTest {
     @Test fun `texts and actions come from the server`() {
         val a = AnalyticsComposer.compose(f.september())
         val tiles = assertNotNull(a.blocks.first { it.id == "tiles" }.decode(TileGroupData.serializer())).tiles
-        assertEquals(listOf("balance", "forecast", "daily_expense", "income"), tiles.map { it.id })
+        assertEquals(listOf("balance", "expense", "daily_expense", "income", "forecast"), tiles.map { it.id })
         assertEquals("46% дохода · по выписке", tiles[0].caption)
-        assertTrue(tiles[1].approx)
+        assertTrue(tiles[4].approx)
         assertTrue(tiles[3].showPlus)
         assertEquals(ActionType.OPEN_OPERATIONS, tiles[3].action?.type)
         val income = assertNotNull(a.blocks.first { it.id == "income_categories" }.decode(RankedListData.serializer()))

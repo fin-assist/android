@@ -654,6 +654,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `operations/days_in_profile_zone` | `profile_timezone=Asia/Vladivostok`: after the profile is read, the feed groups days in the profile zone, not the device's — an evening operation in Moscow moves to the next day — FIN-92 |
 | `operations/statement_stale` | on the preloaded statement the caption under the summary says «Данные по 1 октября» (the statement's end, not the last operation on 30 September); then the preloaded statement deleted, `stale.ofx` uploaded: «Операции» and «Аналитика» show «Данные в приложении по 20 сентября — с тех пор прошло больше двух недель», dated by the statement's end (`state.data_to`), not the last operation (15 September) — FIN-125 |
 | `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
+| `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast with the history explanation; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; authored, not executed |
 | `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month (Qase73, FIN-391); authored, not executed |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
@@ -988,6 +989,27 @@ clears only the old original-request refusal/presentation and retains the exact 
 Stale page replies contribute only conservative endpoint waits; stale latest-read failures cannot mutate
 the newer request gate. Unit regressions cover both completion orders of overlapping latest reads,
 new boundary after false, false plus wait, and first-answer replacement changing the boundary.
+
+
+FIN-401/402: actual expenses remain one of four fact tiles; a fresh current period may append a fifth forecast tile.
+The unpaired forecast spans the row, so the global calendar-history explanation is readable. No-data periods return
+an empty tile group rather than zero. `ForecastHistoryTest` covers the rolling year, union of multiple OFX periods,
+non-adjacent full months and gaps, including a long missing interval compressed to a range. `AnalyticsForecastHistory*` design checks are authored with the rolling-year
+JSON response; both new history states passed locally on Robolectric. A full repeat of the 22 AnalyticsDesignCheck
+states reached its 300-second process timeout.
+The new Maestro flow was not executed locally. Qase case 71 was created after explicit approval.
+
+FIN-401/402 review regressions extend the same Qase71 flow with the saved September context after selective
+statement deletion, explicit month selection after restoring the previously selected month (FIN-391), and scoped-search assertions.
+The `no_data` golden is composed from real synthetic mock state with another month still present (`has_data=true`),
+not the account-wide empty state. `AnalyticsNoData`, `AnalyticsNoDataDark` and `AnalyticsNoDataTilesHidden` design
+checks cover the server explanation and the local fallback when the tile block is disabled. Caption unit tests
+also cover absent, unsupported-version and missing/blank server text. A supported visible server message replaces
+the local caption to avoid duplication; hidden/unsupported blocks retain it. The extended Maestro flow remains
+authored without a UI/device run. All three new Robolectric captures passed locally (48-second build), and their
+images were inspected for the single explanation and absence of monetary tiles. No approved Figma artboards exist
+for these no-data states yet. The targeted unit pass (37 tests: mock texts/history/golden plus caption fallback)
+passed; malformed or absent forecast history retains the calendar-month rule without guessing any month list.
 
 
 FIN-399: screens backed by GET requests use `PfRefreshContainer`; its bounded non-consuming scroll target also

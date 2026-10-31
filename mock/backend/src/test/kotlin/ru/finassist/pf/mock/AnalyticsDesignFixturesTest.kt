@@ -28,6 +28,8 @@ class AnalyticsDesignFixturesTest {
         "september" to f.september(),
         "september_no_transfers" to f.september(noTransfers = true),
         "year_2026" to f.year2026,
+        "rolling_year" to f.rollingYear,
+        "no_data" to f.noData,
         "early" to f.early,
         "stale" to f.stale,
     )
@@ -53,7 +55,13 @@ class AnalyticsDesignFixturesTest {
             }
             val response = json.encodeToJsonElement(Analytics.serializer(), AnalyticsComposer.compose(snapshot)) as JsonObject
             walk(response)
-            assertTrue(actions.isNotEmpty(), "$name.json has no open_operations")
+            if (name == "no_data") {
+                assertTrue(snapshot.hasData, "no_data must retain data in another period")
+                assertEquals(ru.finassist.pf.core.api.model.Coverage.NO_DATA, snapshot.period?.coverage)
+                assertTrue(actions.isEmpty(), "a no-data period must not offer monetary actions")
+            } else {
+                assertTrue(actions.isNotEmpty(), "$name.json has no open_operations")
+            }
             val range = (response["period"] as JsonObject)["range"] as JsonObject
             val mode = (response["params"] as JsonObject)["transfer_mode"]
             actions.forEach { action ->
