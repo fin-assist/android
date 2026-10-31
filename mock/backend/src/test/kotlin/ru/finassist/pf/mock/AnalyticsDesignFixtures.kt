@@ -42,6 +42,23 @@ import java.time.ZoneOffset
  * 2026 by the 25th): the composer turns it into the golden responses the client's design check renders (FIN-4).
  */
 object AnalyticsDesignFixtures {
+    val rollingYear: AnalyticsSnapshot
+        get() = testBackend(TestClock(OffsetDateTime.parse("2026-10-31T12:00:00+03:00"))).apply {
+            load(statement("2025-10-30", "2026-10-30", trn("forecast-history", "2026-08-15T12:00", 1000, "Магазин", "Супермаркеты")))
+        }.analytics.analytics(PeriodTypeCode.YEAR, PeriodKey("2026"), TransferMode.WITH)
+
+    fun rollingActual(type: PeriodTypeCode, short: Boolean = false): AnalyticsSnapshot =
+        testBackend(TestClock("2026-10-31T12:00:00+03:00")).apply {
+            load(statement(if (short) "2026-08-20" else "2025-10-30", "2026-10-30",
+                trn("rolling-grocery", "2026-08-21T12:00", 1000, "Магазин", "Супермаркеты"),
+                trn("rolling-income", "2026-09-01T12:00", 3000, "Зарплата", "Зарплата", debit = false)))
+        }.analytics.analytics(type, null, TransferMode.WITH)
+
+    val noData: AnalyticsSnapshot
+        get() = testBackend(TestClock(OffsetDateTime.parse("2026-10-08T12:00:00+03:00"))).apply {
+            load(statement("2026-10-01", "2026-10-07", trn("other-month", "2026-10-05T12:00", 500, "Магазин", "Супермаркеты")))
+        }.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+
     fun day(m: Int, d: Int) = OffsetDateTime.of(2026, m, d, 0, 0, 0, 0, ZoneOffset.ofHours(3))
     fun month(m: Int) = DateRange(day(m, 1), if (m == 12) OffsetDateTime.of(2027, 1, 1, 0, 0, 0, 0, ZoneOffset.ofHours(3)) else day(m + 1, 1))
     fun rub(v: Long) = Money(v * 100)
@@ -256,4 +273,12 @@ object AnalyticsDesignFixtures {
     val stale: AnalyticsSnapshot = september().let { a ->
         a.copy(tiles = a.tiles!!.copy(forecast = locked(LockReason.STALE_DATA)), state = analyticsState.copy(stale = true, dataTo = day(9, 26)))
     }
+    /** Long history with a gap and long amounts, composed by the actual all-time calculator. */
+    val allTime: AnalyticsSnapshot by lazy {
+        val b = testBackend(TestClock("2026-10-31T12:00:00+03:00"))
+        b.load(statement("2024-10-01", "2024-10-31", trn("old", "2024-10-03T12:00", 123_456_789, "Shop", "Супермаркеты")))
+        b.load(statement("2026-10-01", "2026-10-30", trn("new", "2026-10-03T12:00", 200_000_000, "Salary", "Зарплата", debit = false)))
+        b.analytics.analytics(PeriodTypeCode.ALL_TIME, null, TransferMode.WITH)
+    }
+
 }

@@ -108,18 +108,19 @@ class FeedViewModel @Inject constructor(
     }
 
     fun load() {
-        if (!retryGate.isReady()) return
+        if (firstPagePending || !retryGate.isReady()) return
         val requestGeneration = ++generation
         pendingLoadMore = pendingLoadMore || _state.value.loadingMore
         firstPagePending = true
         viewModelScope.launch {
             if (requestGeneration != generation) return@launch
-            _state.update { it.copy(loading = it.items.isEmpty(), offline = false, loadingMore = false, moreFailed = false, errorPresentation = null, requestRetryable = null) }
+            _state.update { it.copy(loading = it.items.isEmpty(), refreshing = it.items.isNotEmpty(), offline = false, loadingMore = false, moreFailed = false, errorPresentation = null, requestRetryable = null) }
             fetchFirst(requestGeneration)
         }
     }
 
     fun refresh(changedContext: Boolean = false) {
+        if (firstPagePending && !changedContext) return
         if (changedContext) {
             retryGate.clear()
             pageRetryGates.values.forEach { it.clear() }
@@ -149,7 +150,7 @@ class FeedViewModel @Inject constructor(
         } catch (e: AppError) {
             if (requestGeneration != generation) return
             retryGate.record(e)
-            _state.update { it.copy(loading = false, refreshing = false, offline = it.items.isEmpty(), errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+            _state.update { it.copy(loading = false, refreshing = false, offline = it.items.isEmpty(), errorPresentation = if (e is AppError.Offline && it.items.isEmpty()) null else e.presentation, requestRetryable = e.requestRetryable) }
         }
         firstPagePending = false
         if (pendingLoadMore) {
@@ -191,7 +192,7 @@ class FeedViewModel @Inject constructor(
                 if (requestGeneration != generation) return@launch
                 pageGate.record(e)
                 pendingLoadMore = false
-                _state.update { it.copy(loadingMore = false, moreFailed = true, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(loadingMore = false, moreFailed = true, errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
             }
         }
     }

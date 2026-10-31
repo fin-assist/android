@@ -51,6 +51,40 @@ class StatementsRepositoryImplTest {
         assertNull(repository.lastResult("u1"))
     }
 
+    @Test fun `nonempty import readiness belongs to its user and survives an absent subscriber`() = runTest {
+        repository.importCompleted("u1", importResult(newCount = 5))
+        val revision = repository.pendingAnalyticsImport()!!
+        tokens.userId = "user-2"
+        assertNull(repository.pendingAnalyticsImport())
+        repository.analyticsImportReady(revision)
+        tokens.userId = "user-1"
+        assertEquals(revision, repository.pendingAnalyticsImport())
+        repository.analyticsImportReady(revision)
+        assertNull(repository.pendingAnalyticsImport())
+    }
+
+    @Test fun `an older analytics response cannot acknowledge a newer import`() = runTest {
+        repository.importCompleted("u1", importResult(newCount = 5))
+        val before = repository.pendingAnalyticsImport()!!
+        repository.importCompleted("u2", importResult(newCount = 1))
+        val after = repository.pendingAnalyticsImport()!!
+        assertTrue(after > before)
+        repository.analyticsImportReady(before)
+        assertEquals(after, repository.pendingAnalyticsImport())
+        repository.uploadDeleted("u1")
+        assertEquals(after, repository.pendingAnalyticsImport())
+        repository.uploadDeleted("u2")
+        assertNull(repository.pendingAnalyticsImport())
+    }
+
+    @Test fun `a duplicate or empty import does not invent pending analytics`() = runTest {
+        repository.importCompleted("u1", importResult(newCount = 0))
+        assertNull(repository.pendingAnalyticsImport())
+        tokens.userId = null
+        repository.importCompleted("u2", importResult(newCount = 1))
+        assertNull(repository.pendingAnalyticsImport())
+    }
+
     @Test fun `the first import with new operations turns the hints on once`() = runTest {
         repository.importCompleted("u1", importResult(newCount = 5, isFirstImport = true))
         awaitHintsWritten()

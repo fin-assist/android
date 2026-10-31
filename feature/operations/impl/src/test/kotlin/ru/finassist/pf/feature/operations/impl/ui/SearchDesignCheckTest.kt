@@ -99,4 +99,7 @@ class SearchDesignCheckTest {
     // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
     @Test fun serverWarning() = capture("SearchServerWarning", results.copy(result = SearchResult.Failed, errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)), heightDp = 892)
 
+    @Test fun refreshing() = capture("SearchRefreshing", results.copy(refreshing = true), heightDp = 844)
+    @Test fun refreshingDark() = capture("SearchRefreshingDark", results.copy(refreshing = true), heightDp = 844, dark = true)
+
 }

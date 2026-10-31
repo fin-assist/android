@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.profile.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.PfRefreshContainer
+import ru.finassist.pf.core.designsystem.components.ConnectionFailureState
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import android.content.Context
 import android.content.Intent
@@ -81,7 +83,7 @@ fun ProfileScreen(
     }
     ProfileContent(
         state = state, actions = actions,
-        onRetry = vm::load, onRevokeConsent = vm::revokeConsent, onThemeSheet = vm::openThemeSheet, onTheme = vm::setTheme,
+        onRetry = vm::load, onRefresh = vm::refresh, onRevokeConsent = vm::revokeConsent, onThemeSheet = vm::openThemeSheet, onTheme = vm::setTheme,
         onSupport = { userId -> writeSupport(context, userId) }, onAskLogout = vm::askLogout, onLogout = vm::logout,
         onSnackbarShown = vm::consumeSnackbar,
         versionName = remember { appVersion(context) },
@@ -104,7 +106,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 
 /** The profile drawn from a ready state (design-check snapshots render it without a ViewModel). */
 @Composable
-internal fun ProfileContent(
+fun ProfileContent(
     state: ProfileUiState,
     actions: ProfileActions,
     onRetry: () -> Unit,
@@ -119,90 +121,98 @@ internal fun ProfileContent(
     deleteState: DeleteUiState = DeleteUiState(),
     onDeleteAccount: () -> Unit = {},
     onDismissDelete: () -> Unit = {},
+    onRefresh: () -> Unit = onRetry,
 ) {
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize().testTag(ProfileTags.SCREEN)) {
-        PfTabHeader("Профиль")
-        val p = state.profile
-        state.errorPresentation?.let { presentation ->
-            ErrorMessage(presentation, state.snackbar ?: "Не получилось обновить профиль. Попробуйте ещё раз",
-                modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else onRetry)
-        }
-        when {
-            state.loading -> Unit
-            state.errorPresentation != null && p == null -> Unit
-            state.offline || p == null -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(ProfileTags.OFFLINE)) {
-                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(ProfileTags.RETRY))
+    PfRefreshContainer(refreshing = state.refreshing, onRefresh = onRefresh, enabled = (state.retryReady || state.statementsRetryReady || (state.flags.assistant && state.limitRetryReady)) && !state.loading, modifier = Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().testTag(ProfileTags.SCREEN)) {
+            PfTabHeader("Профиль")
+            val p = state.profile
+            state.errorPresentation?.let { presentation ->
+                ErrorMessage(presentation, state.snackbar ?: "Не получилось обновить профиль",
+                    modifier = Modifier.padding(d.space4), onRetry = when (state.errorOrigin) {
+                        ProfileErrorOrigin.PROFILE -> onRetry.takeIf { state.retryReady }
+                        ProfileErrorOrigin.STATEMENTS -> onRetry.takeIf { state.statementsRetryReady }
+                        ProfileErrorOrigin.LIMIT -> onRetry.takeIf { state.limitRetryReady }
+                        else -> null
+                    })
             }
-            else -> Column(
-                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(top = d.space4, bottom = d.space6),
-                verticalArrangement = Arrangement.spacedBy(d.space6),
-            ) {
-                PfCard {
-                    Text("Номер телефона", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
-                    Text(ProfileTexts.phone(p.phone), style = PfTheme.type.title2, color = PfTheme.colors.text, maxLines = 1, modifier = Modifier.padding(top = d.space1).testTag(ProfileTags.PHONE))
+            when {
+                state.loading -> Unit
+                state.errorPresentation != null && p == null -> Unit
+                state.offline || p == null -> ConnectionFailureState(modifier = Modifier.testTag(ProfileTags.OFFLINE)) {
+                    PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(ProfileTags.RETRY))
                 }
-                Section("Источник данных") {
-                    PfCard(flush = true) {
-                        PfListRow(
-                            "Выписка",
-                            icon = PfIcons.LANDMARK,
-                            description = if (state.statementsLoaded) ProfileTexts.statement(state.statements) else null,
-                            onClick = if (state.statements == null && state.flags.upload) actions.openUpload else actions.openHistory,
-                            divider = false,
-                            modifier = Modifier.testTag(ProfileTags.STATEMENTS),
-                        )
+                else -> Column(
+                    Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(top = d.space4, bottom = d.space6),
+                    verticalArrangement = Arrangement.spacedBy(d.space6),
+                ) {
+                    PfCard {
+                        Text("Номер телефона", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
+                        Text(ProfileTexts.phone(p.phone), style = PfTheme.type.title2, color = PfTheme.colors.text, maxLines = 1, modifier = Modifier.padding(top = d.space1).testTag(ProfileTags.PHONE))
                     }
-                }
-                if (state.flags.assistant) {
-                    Section("Помощник") {
+                    Section("Источник данных") {
                         PfCard(flush = true) {
-                            val limit = state.limit
                             PfListRow(
-                                "Помощник",
-                                icon = PfIcons.MESSAGE,
-                                value = limit?.let { if (it.remaining == it.dailyMax) "${it.dailyMax} вопросов в день" else "осталось ${it.remaining} из ${it.dailyMax}" },
-                                onClick = actions.openChat,
-                                modifier = Modifier.testTag(ProfileTags.ASSISTANT),
-                            )
-                            val granted = p.assistantConsent?.let { it.granted && !it.needsRenewal } == true
-                            PfListRow(
-                                "Передавать данные помощнику",
-                                icon = PfIcons.SEND,
-                                description = "Без этого помощник не отвечает, прошлые ответы остаются",
-                                switchChecked = granted,
-                                onSwitch = { on -> if (state.consentBusy) Unit else if (on) actions.openConsent() else onRevokeConsent() },
+                                "Выписка",
+                                icon = PfIcons.LANDMARK,
+                                description = if (state.statementsLoaded) ProfileTexts.statement(state.statements) else null,
+                                onClick = if (state.statements == null && state.flags.upload) actions.openUpload else actions.openHistory,
                                 divider = false,
-                                modifier = Modifier.testTag(ProfileTags.ASSISTANT_CONSENT),
+                                modifier = Modifier.testTag(ProfileTags.STATEMENTS),
                             )
                         }
                     }
-                }
-                Section("Настройки") {
-                    PfCard(flush = true) {
-                        PfListRow("Код-пароль и биометрия", icon = PfIcons.FINGERPRINT, value = ProfileTexts.biometric(state.biometric), onClick = actions.openSecurity, modifier = Modifier.testTag(ProfileTags.SECURITY))
-                        PfListRow("Тема", icon = PfIcons.MOON, value = ProfileTexts.theme(state.theme), onClick = { onThemeSheet(true) }, divider = false, modifier = Modifier.testTag(ProfileTags.THEME))
+                    if (state.flags.assistant) {
+                        Section("Помощник") {
+                            PfCard(flush = true) {
+                                val limit = state.limit
+                                PfListRow(
+                                    "Помощник",
+                                    icon = PfIcons.MESSAGE,
+                                    value = limit?.let { if (it.remaining == it.dailyMax) "${it.dailyMax} вопросов в день" else "осталось ${it.remaining} из ${it.dailyMax}" },
+                                    onClick = actions.openChat,
+                                    modifier = Modifier.testTag(ProfileTags.ASSISTANT),
+                                )
+                                val granted = p.assistantConsent?.let { it.granted && !it.needsRenewal } == true
+                                PfListRow(
+                                    "Передавать данные помощнику",
+                                    icon = PfIcons.SEND,
+                                    description = "Без этого помощник не отвечает, прошлые ответы остаются",
+                                    switchChecked = granted,
+                                    onSwitch = { on -> if (state.consentBusy) Unit else if (on) actions.openConsent() else onRevokeConsent() },
+                                    divider = false,
+                                    modifier = Modifier.testTag(ProfileTags.ASSISTANT_CONSENT),
+                                )
+                            }
+                        }
+                    }
+                    Section("Настройки") {
+                        PfCard(flush = true) {
+                            PfListRow("Код-пароль и биометрия", icon = PfIcons.FINGERPRINT, value = ProfileTexts.biometric(state.biometric), onClick = actions.openSecurity, modifier = Modifier.testTag(ProfileTags.SECURITY))
+                            PfListRow("Тема", icon = PfIcons.MOON, value = ProfileTexts.theme(state.theme), onClick = { onThemeSheet(true) }, divider = false, modifier = Modifier.testTag(ProfileTags.THEME))
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(d.space2)) {
+                        PfCard(flush = true) {
+                            PfListRow("Написать в поддержку", icon = PfIcons.LIFE_BUOY, onClick = { onSupport(p.userId) })
+                            PfListRow("Выйти", icon = PfIcons.LOG_OUT, tone = RowTone.ACCENT, onClick = { onAskLogout(true) }, divider = false, modifier = Modifier.testTag(ProfileTags.LOGOUT))
+                        }
+                        if (state.flags.deleteAccount) PfLink("Удалить аккаунт и все данные", onClick = actions.openDeleteAccount, modifier = Modifier.testTag(ProfileTags.DELETE_ACCOUNT))
+                        Text(
+                            ProfileTexts.footer(versionName),
+                            style = PfTheme.type.hint, color = PfTheme.colors.textMuted, textAlign = TextAlign.Center,
+                        )
                     }
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(d.space2)) {
-                    PfCard(flush = true) {
-                        PfListRow("Написать в поддержку", icon = PfIcons.LIFE_BUOY, onClick = { onSupport(p.userId) })
-                        PfListRow("Выйти", icon = PfIcons.LOG_OUT, tone = RowTone.ACCENT, onClick = { onAskLogout(true) }, divider = false, modifier = Modifier.testTag(ProfileTags.LOGOUT))
-                    }
-                    if (state.flags.deleteAccount) PfLink("Удалить аккаунт и все данные", onClick = actions.openDeleteAccount, modifier = Modifier.testTag(ProfileTags.DELETE_ACCOUNT))
-                    Text(
-                        ProfileTexts.footer(versionName),
-                        style = PfTheme.type.hint, color = PfTheme.colors.textMuted, textAlign = TextAlign.Center,
-                    )
+            }
+            state.snackbar?.takeIf { state.errorPresentation == null }?.let { text ->
+                LaunchedEffect(text) {
+                    delay(3000)
+                    onSnackbarShown()
                 }
+                PfSnackbar(text, Modifier.padding(d.space4))
             }
-        }
-        state.snackbar?.takeIf { state.errorPresentation == null }?.let { text ->
-            LaunchedEffect(text) {
-                delay(3000)
-                onSnackbarShown()
-            }
-            PfSnackbar(text, Modifier.padding(d.space4))
         }
     }
     if (state.themeSheet) {

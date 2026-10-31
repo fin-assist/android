@@ -21,11 +21,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
+import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -46,8 +55,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import ru.finassist.pf.core.designsystem.icons.PfIcon
@@ -72,14 +84,14 @@ fun PfTextField(
     /** Tag of the editable field itself (not the label block), so UI tests can tap and type into it. */
     testTag: String? = null,
 ) {
-    FieldFrame(label, value.isEmpty(), placeholder, hint, error, modifier, testTag) { interaction, fieldModifier, decoration ->
+    FieldFrame(label, value.isEmpty(), placeholder, hint, error, modifier, testTag, enabled) { interaction, fieldModifier, decoration ->
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
             enabled = enabled,
             singleLine = singleLine,
             interactionSource = interaction,
-            textStyle = PfTheme.type.lead.copy(color = PfTheme.colors.text, fontSize = 16.sp),
+            textStyle = PfTheme.type.lead.copy(color = if (enabled) PfTheme.colors.text else PfTheme.colors.textMuted, fontSize = 16.sp),
             cursorBrush = SolidColor(PfTheme.colors.accent),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
             keyboardActions = KeyboardActions(onAny = { onImeAction() }),
@@ -109,7 +121,7 @@ fun PfTextField(
     enabled: Boolean = true,
     testTag: String? = null,
 ) {
-    FieldFrame(label, value.text.isEmpty(), placeholder, hint, error, modifier, testTag) { interaction, fieldModifier, decoration ->
+    FieldFrame(label, value.text.isEmpty(), placeholder, hint, error, modifier, testTag, enabled) { interaction, fieldModifier, decoration ->
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -117,7 +129,7 @@ fun PfTextField(
             singleLine = true,
             interactionSource = interaction,
             visualTransformation = visualTransformation,
-            textStyle = PfTheme.type.lead.copy(color = PfTheme.colors.text, fontSize = 16.sp),
+            textStyle = PfTheme.type.lead.copy(color = if (enabled) PfTheme.colors.text else PfTheme.colors.textMuted, fontSize = 16.sp),
             cursorBrush = SolidColor(PfTheme.colors.accent),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
             keyboardActions = KeyboardActions(onAny = { onImeAction() }),
@@ -137,12 +149,14 @@ private fun FieldFrame(
     error: String?,
     modifier: Modifier,
     testTag: String?,
+    enabled: Boolean,
     field: @Composable (MutableInteractionSource, Modifier, @Composable (@Composable () -> Unit) -> Unit) -> Unit,
 ) {
     val c = PfTheme.colors
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val borderColor = when {
+        !enabled -> c.border
         error != null -> c.warningText
         focused -> c.accent
         else -> c.borderStrong
@@ -159,18 +173,23 @@ private fun FieldFrame(
             Modifier
                 .fillMaxWidth()
                 .height(PfTheme.dimens.field)
-                .background(c.surface, RoundedCornerShape(PfTheme.dimens.radiusMd))
+                .background(if (enabled) c.surface else c.bg, RoundedCornerShape(PfTheme.dimens.radiusMd))
                 .border(borderWidth, borderColor, RoundedCornerShape(PfTheme.dimens.radiusMd))
                 .padding(horizontal = PfTheme.dimens.space4 + borderWidth)
                 .semantics { if (error != null) this.error(error) }
                 .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         ) { inner ->
-            Box(contentAlignment = Alignment.CenterStart) {
-                if (isEmpty && placeholder != null) {
-                    // Same size as the typed text (16), so the first digit does not make the line jump.
-                    Text(placeholder, style = PfTheme.type.lead.copy(fontSize = 16.sp), color = c.textMuted, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (!enabled) {
+                    PfIcon(PfIcons.LOCK, contentDescription = "Поле недоступно", size = PfTheme.dimens.iconMd, tint = c.textMuted)
+                    Spacer(Modifier.width(PfTheme.dimens.space2))
                 }
-                inner()
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (isEmpty && placeholder != null) {
+                        Text(placeholder, style = PfTheme.type.lead.copy(fontSize = 16.sp), color = c.textMuted, maxLines = 1)
+                    }
+                    inner()
+                }
             }
         }
         val below = error ?: hint
@@ -392,40 +411,89 @@ fun PfSegmentedControl(
     selected: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    /** Keep full single-line labels and 48 dp targets; share spare width equally, otherwise scroll and reveal selection changes. */
+    scrollable: Boolean = false,
+    /** Stable tag of each option; the default preserves `ds.segment.<index>`. */
+    optionTag: (Int) -> String = PfTestTags::segment,
 ) {
     val c = PfTheme.colors
     val outer = RoundedCornerShape(PfTheme.dimens.radiusMd)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(PfTheme.dimens.control)
-            .background(c.surface, outer)
-            .border(1.dp, c.border, outer)
-            .padding(4.dp),
-        // `.pf-seg { gap: var(--space-1) }`; the frame is an inset outline, so it overlaps the 4 dp padding.
-        horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space1),
-    ) {
-        options.forEachIndexed { i, option ->
-            val isSelected = i == selected
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .height(40.dp)
-                    .clip(RoundedCornerShape(PfTheme.dimens.radiusSm))
-                    .background(if (isSelected) c.accentSoft else Color.Transparent)
-                    .clickable(role = Role.Tab) { onSelect(i) }
-                    .semantics { this.contentDescription = option; if (isSelected) toggleableState = ToggleableState.On }
-                    .testTag(PfTestTags.segment(i)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    option,
-                    style = if (isSelected) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.body,
-                    color = if (isSelected) c.accent else c.textMuted,
-                    maxLines = 1,
-                )
+    val scroll = rememberScrollState()
+    val viewport = remember { mutableIntStateOf(0) }
+    val bounds = remember { mutableStateMapOf<Int, Pair<Int, Int>>() }
+    LaunchedEffect(scrollable, selected, bounds[selected], viewport.intValue) {
+        val target = bounds[selected]
+        if (scrollable && target != null && viewport.intValue > 0) {
+            val maximum = snapshotFlow { scroll.maxValue }.first { it != Int.MAX_VALUE }
+            val position = when {
+                target.first < scroll.value -> target.first
+                target.second > scroll.value + viewport.intValue -> target.second - viewport.intValue
+                else -> scroll.value
             }
+            scroll.scrollTo(position.coerceIn(0, maximum))
+        }
+    }
+    val gap = PfTheme.dimens.space1
+    val touch = PfTheme.dimens.touch
+    val frame = modifier
+        .fillMaxWidth()
+        .height(if (scrollable) touch + 8.dp else PfTheme.dimens.control)
+        .background(c.surface, outer)
+        .border(1.dp, c.border, outer)
+        .padding(4.dp)
+        .then(if (scrollable) Modifier.onSizeChanged { viewport.intValue = it.width }.horizontalScroll(scroll) else Modifier)
+    val option: @Composable (Int, Modifier) -> Unit = { i, sizing ->
+        val isSelected = i == selected
+        Box(
+            modifier = sizing
+                .height(if (scrollable) touch else 40.dp)
+                .clip(RoundedCornerShape(PfTheme.dimens.radiusSm))
+                .background(if (isSelected) c.accentSoft else Color.Transparent)
+                .clickable(role = Role.Tab) { onSelect(i) }
+                .semantics { contentDescription = options[i]; if (isSelected) toggleableState = ToggleableState.On }
+                .testTag(optionTag(i)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                options[i],
+                style = if (isSelected) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.body,
+                color = if (isSelected) c.accent else c.textMuted,
+                maxLines = 1,
+                textAlign = if (scrollable) TextAlign.Center else TextAlign.Unspecified,
+                modifier = if (scrollable) Modifier.fillMaxWidth().padding(horizontal = PfTheme.dimens.space2) else Modifier,
+            )
+        }
+    }
+    if (scrollable) {
+        Layout(modifier = frame, content = {
+            options.indices.forEach { i ->
+                option(i, Modifier.onGloballyPositioned { coordinates ->
+                    val start = coordinates.positionInParent().x.roundToInt()
+                    bounds[i] = start to start + coordinates.size.width
+                })
+            }
+        }) { measurables, constraints ->
+            val height = constraints.maxHeight
+            val spacing = gap.roundToPx()
+            val widths = measurables.map { it.maxIntrinsicWidth(height).coerceAtLeast(touch.roundToPx()) }
+            val naturalWidth = widths.sum() + spacing * (widths.size - 1).coerceAtLeast(0)
+            val extra = (viewport.intValue - naturalWidth).coerceAtLeast(0)
+            val count = widths.size.coerceAtLeast(1)
+            val children = measurables.mapIndexed { i, measurable ->
+                val width = widths[i] + extra / count + if (i < extra % count) 1 else 0
+                measurable.measure(Constraints.fixed(width, height))
+            }
+            layout(naturalWidth + extra, height) {
+                var x = 0
+                children.forEach { child ->
+                    child.placeRelative(x, 0)
+                    x += child.width + spacing
+                }
+            }
+        }
+    } else {
+        Row(modifier = frame, horizontalArrangement = Arrangement.spacedBy(gap)) {
+            options.indices.forEach { i -> option(i, Modifier.weight(1f).fillMaxWidth()) }
         }
     }
 }

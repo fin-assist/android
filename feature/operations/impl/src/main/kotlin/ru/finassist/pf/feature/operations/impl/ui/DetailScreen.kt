@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.PfRefreshContainer
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfInsets
@@ -58,7 +59,7 @@ fun DetailScreen(onBack: () -> Unit, vm: DetailViewModel = hiltViewModel()) {
     DetailContent(
         state = state, zone = clock.zone, today = clock.today(), onBack = onBack, onRetry = vm::load,
         onOpenPicker = vm::openPicker, onClosePicker = vm::closePicker, onChoose = vm::choose, onSave = vm::save,
-        onSnackbarShown = vm::consumeSnackbar,
+        onSnackbarShown = vm::consumeSnackbar, onRefresh = vm::refresh,
     )
 }
 
@@ -79,71 +80,75 @@ internal fun DetailContent(
     onSave: () -> Unit,
     onSnackbarShown: () -> Unit,
     pickerQuery: String = "",
+    onRefresh: () -> Unit = onRetry,
 ) {
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(OperationsTags.DETAIL)) {
-        val op = state.operation
-        // The operation's name is the title (mockup `Detail`); «Операция» while it loads or fails.
-        PfPageHeader(
-            op?.let { OperationFormat.title(it.title) } ?: "Операция", onBack = onBack,
-            modifier = if (op != null) Modifier.testTag(OperationsTags.DETAIL_TITLE) else Modifier,
-        )
-        state.errorPresentation?.let { presentation ->
-            ErrorMessage(
-                presentation,
-                if (state.notFound) "Операции больше нет. Возможно, удалили загрузку, в которой она была" else "Не получилось загрузить. Попробуйте ещё раз",
-                modifier = Modifier.padding(d.space4),
-                onRetry = if (state.notFound || !state.retryReady) null else onRetry,
+    PfRefreshContainer(state.refreshing, onRefresh, Modifier.fillMaxSize(), enabled = !state.saving && !state.picker && !state.notFound) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(OperationsTags.DETAIL)) {
+            val op = state.operation
+            // The operation's name is the title (mockup `Detail`); «Операция» while it loads or fails.
+            PfPageHeader(
+                op?.let { OperationFormat.title(it.title) } ?: "Операция", onBack = onBack,
+                modifier = if (op != null) Modifier.testTag(OperationsTags.DETAIL_TITLE) else Modifier,
             )
-        }
-        when {
-            state.loading -> Unit
-            state.errorPresentation != null && (state.notFound || op == null) -> Unit
-            state.notFound -> PfEmptyState(PfIcons.FILE_TEXT, "Операции больше нет", "Возможно, удалили загрузку, в которой она была")
-            op == null -> PfEmptyState(PfIcons.ALERT, "Не получилось загрузить", "Проверьте интернет и попробуйте ещё раз") {
-                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
+            state.errorPresentation?.let { presentation ->
+                ErrorMessage(
+                    presentation,
+                    if (state.notFound) "Операции больше нет. Возможно, удалили загрузку, в которой она была" else "Не получилось загрузить",
+                    modifier = Modifier.padding(d.space4),
+                    onRetry = if (state.notFound || !state.retryReady) null else onRetry,
+                )
             }
-            else -> Column(
-                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = d.space5, end = d.space5, top = d.space4, bottom = d.space4),
-                verticalArrangement = Arrangement.spacedBy(d.space5),
-            ) {
-                Hero(op, zone)
-                PfCard(flush = true) {
-                    PfListRow(
-                        title = "Категория",
-                        description = op.noteDetails ?: if (op.isCategoryManual) "Вы выбрали сами" else null,
-                        value = op.categoryName,
-                        valueAccent = true,
-                        onClick = onOpenPicker,
-                        divider = false,
-                        modifier = Modifier.testTag(OperationsTags.DETAIL_CATEGORY),
-                    )
+            when {
+                state.loading -> Unit
+                state.errorPresentation != null && (state.notFound || op == null) -> Unit
+                state.notFound -> PfEmptyState(PfIcons.FILE_TEXT, "Операции больше нет", "Возможно, удалили загрузку, в которой она была")
+                op == null -> PfEmptyState(PfIcons.ALERT, "Не получилось загрузить", "Проверьте интернет и попробуйте ещё раз") {
+                    PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
                 }
-                Column {
-                    PfSectionTitle("Из выписки")
-                    Spacer(Modifier.height(d.space2))
-                    PfCard {
-                        val rows = OperationFormat.statementRows(op) { dateTime(it, zone, today) }
-                        rows.forEachIndexed { i, row ->
-                            PfDataRow(
-                                row.label, row.value, sublabel = row.sublabel, divider = i < rows.lastIndex,
-                                modifier = row.spoken?.let { spoken -> Modifier.semantics { contentDescription = "${row.label}: $spoken" } } ?: Modifier,
-                            )
+                else -> Column(
+                    Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = d.space5, end = d.space5, top = d.space4, bottom = d.space4),
+                    verticalArrangement = Arrangement.spacedBy(d.space5),
+                ) {
+                    Hero(op, zone)
+                    PfCard(flush = true) {
+                        PfListRow(
+                            title = "Категория",
+                            description = op.noteDetails ?: if (op.isCategoryManual) "Вы выбрали сами" else null,
+                            value = op.categoryName,
+                            valueAccent = true,
+                            onClick = onOpenPicker,
+                            divider = false,
+                            modifier = Modifier.testTag(OperationsTags.DETAIL_CATEGORY),
+                        )
+                    }
+                    Column {
+                        PfSectionTitle("Из выписки")
+                        Spacer(Modifier.height(d.space2))
+                        PfCard {
+                            val rows = OperationFormat.statementRows(op) { dateTime(it, zone, today) }
+                            rows.forEachIndexed { i, row ->
+                                PfDataRow(
+                                    row.label, row.value, sublabel = row.sublabel, divider = i < rows.lastIndex,
+                                    modifier = row.spoken?.let { spoken -> Modifier.semantics { contentDescription = "${row.label}: $spoken" } } ?: Modifier,
+                                )
+                            }
                         }
                     }
-                }
-                if (op.status == OperationStatus.PENDING) {
-                    PfNotice("Операция ещё не проведена банком — сумма может измениться", tone = NoticeTone.INFO)
+                    if (op.status == OperationStatus.PENDING) {
+                        PfNotice("Операция ещё не проведена банком — сумма может измениться", tone = NoticeTone.INFO)
+                    }
                 }
             }
-        }
-        state.snackbar?.let { text ->
-            LaunchedEffect(text) {
-                delay(3000)
-                onSnackbarShown()
+            state.snackbar?.let { text ->
+                LaunchedEffect(text) {
+                    delay(3000)
+                    onSnackbarShown()
+                }
+                PfSnackbar(text, Modifier.padding(d.space4))
             }
-            PfSnackbar(text, Modifier.padding(d.space4))
         }
+
     }
 
     val op = state.operation

@@ -23,46 +23,72 @@
         {
             "id": "tiles",
             "type": "tile_group",
-            "alt_text": "Доходы минус расходы 64 670 ₽, Прогноз расходов 94 500 ₽, Расходы в день 3 150 ₽, Доходы 143 390 ₽",
+            "v": 2,
+            "alt_text": "Расходы за период 78 720 ₽, Доходы за период 143 390 ₽, Доходы минус расходы 64 670 ₽, Средние расходы в день 3 150 ₽, Прогноз расходов 94 500 ₽",
             "data": {
-                "tiles": [
+                "groups": [
                     {
-                        "id": "balance",
-                        "title": "Доходы минус расходы",
-                        "value": 6467000.0,
-                        "value_kind": "amount",
-                        "caption": "45% дохода · по выписке"
-                    },
-                    {
-                        "id": "forecast",
-                        "title": "Прогноз расходов",
-                        "value": 9450000.0,
-                        "value_kind": "amount",
-                        "approx": true,
-                        "caption": "на сентябрь"
-                    },
-                    {
-                        "id": "daily_expense",
-                        "title": "Расходы в день",
-                        "value": 315000.0,
-                        "value_kind": "amount",
-                        "caption": "в августе — 2 690 ₽"
-                    },
-                    {
-                        "id": "income",
-                        "title": "Доходы",
-                        "value": 1.4339E7,
-                        "value_kind": "amount",
-                        "show_plus": true,
-                        "action": {
-                            "type": "open_operations",
-                            "filter": {
-                                "from": "2026-09-01T00:00:00+03:00",
-                                "to": "2026-10-01T00:00:00+03:00",
-                                "kind": "income",
-                                "transfer_mode": "without"
+                        "tiles": [
+                            {
+                                "id": "expense",
+                                "title": "Расходы за период",
+                                "value": 7872000.0,
+                                "value_kind": "amount",
+                                "caption": "1–25 сентября",
+                                "action": {
+                                    "type": "open_operations",
+                                    "filter": {
+                                        "from": "2026-09-01T00:00:00+03:00",
+                                        "to": "2026-10-01T00:00:00+03:00",
+                                        "kind": "expense",
+                                        "transfer_mode": "without"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "income",
+                                "title": "Доходы за период",
+                                "value": 1.4339E7,
+                                "value_kind": "amount",
+                                "show_plus": true,
+                                "action": {
+                                    "type": "open_operations",
+                                    "filter": {
+                                        "from": "2026-09-01T00:00:00+03:00",
+                                        "to": "2026-10-01T00:00:00+03:00",
+                                        "kind": "income",
+                                        "transfer_mode": "without"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "balance",
+                                "title": "Доходы минус расходы",
+                                "value": 6467000.0,
+                                "value_kind": "amount",
+                                "caption": "45% дохода · по выписке"
                             }
-                        }
+                        ]
+                    },
+                    {
+                        "tiles": [
+                            {
+                                "id": "daily_expense",
+                                "title": "Средние расходы в день",
+                                "value": 315000.0,
+                                "value_kind": "amount",
+                                "caption": "По дням с данными не позже сегодня; пропуски не учитываются\nв августе — 2 690 ₽"
+                            },
+                            {
+                                "id": "forecast",
+                                "title": "Прогноз расходов",
+                                "value": 9450000.0,
+                                "value_kind": "amount",
+                                "approx": true,
+                                "caption": "на сентябрь"
+                            }
+                        ],
+                        "title": "Дополнительные показатели"
                     }
                 ]
             }
@@ -82,7 +108,12 @@
                             "to": "2026-05-01T00:00:00+03:00"
                         },
                         "value": 8510000.0,
-                        "coverage": "complete"
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-04"
+                        }
                     },
                     {
                         "range": {
@@ -90,7 +121,12 @@
                             "to": "2026-06-01T00:00:00+03:00"
                         },
                         "value": 7300000.0,
-                        "coverage": "complete"
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-05"
+                        }
                     },
                     {
                         "range": {
@@ -98,7 +134,12 @@
                             "to": "2026-07-01T00:00:00+03:00"
                         },
                         "value": 8260000.0,
-                        "coverage": "complete"
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-06"
+                        }
                     },
                     {
                         "range": {
@@ -106,7 +147,12 @@
                             "to": "2026-08-01T00:00:00+03:00"
                         },
                         "value": 8980000.0,
-                        "coverage": "complete"
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-07"
+                        }
                     },
                     {
                         "range": {
@@ -114,7 +160,12 @@
                             "to": "2026-09-01T00:00:00+03:00"
                         },
                         "value": 8340000.0,
-                        "coverage": "complete"
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-08"
+                        }
                     },
                     {
                         "range": {
@@ -124,7 +175,12 @@
                         "value": 7872000.0,
                         "coverage": "partial",
                         "data_to": "2026-09-25T00:00:00+03:00",
-                        "note": "по 25-е"
+                        "note": "по 25-е",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-09"
+                        }
                     }
                 ],
                 "highlight_index": 5,

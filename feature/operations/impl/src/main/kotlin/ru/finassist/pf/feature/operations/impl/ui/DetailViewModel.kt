@@ -31,6 +31,7 @@ import javax.inject.Inject
 
 data class DetailUiState(
     val loading: Boolean = true,
+    val refreshing: Boolean = false,
     val error: Boolean = false,
     val notFound: Boolean = false,
     val operation: OperationDetails? = null,
@@ -79,25 +80,54 @@ class DetailViewModel @Inject constructor(
     init { viewModelScope.launch { pickerRetryGate.readiness.collect { ready -> _state.update { it.copy(pickerRetryReady = ready) } } } }
     val state: StateFlow<DetailUiState> = _state
 
+    private var loading = false
+    private var readGeneration = 0L
+
     init {
         tracker.track(Events.OPERATIONS_DETAIL_OPENED)
         load()
     }
 
-    fun load() {
-        if (!retryGate.isReady()) return
+    fun refresh() {
+        if (_state.value.saving || _state.value.picker || _state.value.notFound) return
+        load(refresh = true)
+    }
+
+    fun load() = load(refresh = false)
+
+    private fun load(refresh: Boolean) {
+        if (loading || !retryGate.isReady()) return
+        loading = true
+        val generation = ++readGeneration
+        _state.update { it.copy(refreshing = refresh) }
         viewModelScope.launch {
             _state.update { it.copy(loading = it.operation == null, error = false, notFound = false, errorPresentation = null, requestRetryable = null) }
             try {
                 val op = api.getOperation(id, occurredAt)
+                if (generation != readGeneration) return@launch
+                val cats = runCatching { categories.categories() }.getOrDefault(emptyList())
+                if (generation != readGeneration) return@launch
                 remember(op)
                 operations.updateRecords(listOf(op))
-                val cats = runCatching { categories.categories() }.getOrDefault(emptyList())
                 _state.update { it.copy(loading = false, operation = op, categories = cats) }
             } catch (e: AppError) {
+                if (generation != readGeneration) {
+                    retryGate.recordEndpointWait(e)
+                    return@launch
+                }
                 retryGate.record(e)
                 val notFound = e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.NOT_FOUND
-                _state.update { it.copy(loading = false, error = !notFound, notFound = notFound, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                _state.update {
+                    it.copy(loading = false, error = !notFound, notFound = notFound,
+                        operation = if (notFound) null else it.operation,
+                        picker = !notFound && it.picker, draftCategoryId = it.draftCategoryId.takeUnless { notFound },
+                        errorPresentation = e.presentation, requestRetryable = e.requestRetryable)
+                }
+            } finally {
+                if (generation == readGeneration) {
+                    loading = false
+                    _state.update { it.copy(refreshing = false) }
+                }
             }
         }
     }
@@ -129,6 +159,11 @@ class DetailViewModel @Inject constructor(
                 val response = api.changeCategory(op.id, ChangeCategoryRequest(target, op.occurredAt.toWire()))
                 // A pair split in two or a debit that became a pair: keep showing the record that carries the choice.
                 val shown = response.items.firstOrNull { it.categoryId == target } ?: response.items.firstOrNull() ?: op
+                // A read started before the mutation cannot restore its old identity or category.
+                readGeneration++
+                loading = false
+                retryGate.clearOriginalRefusal()
+                _state.update { it.copy(loading = false, refreshing = false, error = false, notFound = false, errorPresentation = null, requestRetryable = null) }
                 remember(shown)
                 operations.updateRecords(response.items)
                 val message = when {
@@ -148,10 +183,10 @@ class DetailViewModel @Inject constructor(
                 pickerRetryGate.record(e)
                 val text = when {
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CATEGORY_NOT_ASSIGNABLE -> "Эту категорию нельзя назначить этой операции"
-                    e is AppError.Offline -> "Нет сети — категория не изменилась"
+                    e is AppError.Offline -> "Категория не изменилась"
                     else -> "Не получилось сохранить. Попробуйте ещё раз"
                 }
-                _state.update { it.copy(saving = false, pickerError = text, pickerErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, pickerRequestRetryable = e.requestRetryable) }
+                _state.update { it.copy(saving = false, pickerError = text, pickerErrorPresentation = e.presentation, pickerRequestRetryable = e.requestRetryable) }
             }
         }
     }

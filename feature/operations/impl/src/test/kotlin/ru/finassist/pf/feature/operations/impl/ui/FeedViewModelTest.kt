@@ -91,12 +91,27 @@ class FeedViewModelTest {
         api.lists += page("op_1")
         val vm = vm()
         assertTrue(vm.state.value.offline)
+        assertEquals(null, vm.state.value.errorPresentation) // the tagged full-screen connection state owns the hint
         assertFalse(vm.state.value.loading)
         assertFalse(vm.state.value.isEmpty) // offline is not «no operations»
 
         vm.load()
         assertFalse(vm.state.value.offline)
         assertEquals(listOf("op_1"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `a disconnected refresh keeps rows and exposes the local hint until retry succeeds`() {
+        api.lists += page("op_1")
+        api.lists += AppError.Offline()
+        api.lists += page("op_1", "op_2")
+        val vm = vm()
+        vm.refresh()
+        assertEquals(listOf("op_1"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.offline)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        vm.load()
+        assertEquals(null, vm.state.value.errorPresentation)
+        assertEquals(listOf("op_1", "op_2"), vm.state.value.items.map { it.id })
     }
 
     @Test fun `a failed refresh keeps the list on screen`() {
@@ -320,7 +335,8 @@ class FeedViewModelTest {
         val fresh = CompletableDeferred<OperationsList>()
         pendingReplies(old, fresh)
         vm.refresh()
-        vm.refresh()
+        // A confirmed server-data change supersedes an old read; repeated gestures are deduplicated.
+        vm.refresh(changedContext = true)
         old.completeExceptionally(AppError.Offline())
         assertTrue(vm.state.value.refreshing)
         assertFalse(vm.state.value.offline)
@@ -451,7 +467,8 @@ class FeedViewModelTest {
         pendingReplies(oldPage, firstRefresh, latestRefresh, resumed)
         vm.loadMore()
         vm.refresh()
-        vm.refresh()
+        // A confirmed server-data change supersedes an old read; repeated gestures are deduplicated.
+        vm.refresh(changedContext = true)
         firstRefresh.complete(page("op_stale", next = 2))
         assertEquals(4, api.queries.size)
         assertTrue(vm.state.value.refreshing)
@@ -491,7 +508,8 @@ class FeedViewModelTest {
         val fresh = CompletableDeferred<OperationsList>()
         pendingReplies(old, fresh)
         vm.refresh()
-        vm.refresh()
+        // A confirmed server-data change supersedes an old read; repeated gestures are deduplicated.
+        vm.refresh(changedContext = true)
         fresh.complete(page("current"))
         old.completeExceptionally(refusal())
         assertTrue(vm.state.value.retryReady)
@@ -592,6 +610,24 @@ class FeedViewModelTest {
         vm.loadMore()
         assertEquals(4, api.queries.size)
         assertEquals(listOf("refreshed", "older"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `pull refresh ignores repeated gestures and keeps rows while pending`() {
+        api.lists += page("op_1")
+        val vm = vm()
+        val gate = CompletableDeferred<Unit>()
+        api.gate = gate
+        api.lists.clear()
+        api.lists += page("op_2")
+        vm.refresh()
+        vm.refresh()
+        vm.load()
+        assertEquals(2, api.queries.size)
+        assertTrue(vm.state.value.refreshing)
+        assertEquals(listOf("op_1"), vm.state.value.items.map { it.id })
+        gate.complete(Unit)
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(listOf("op_2"), vm.state.value.items.map { it.id })
     }
 
 }

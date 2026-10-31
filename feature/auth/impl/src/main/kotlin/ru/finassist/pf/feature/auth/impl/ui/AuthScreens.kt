@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.auth.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.connectionFailureTexts
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import android.content.Intent
 import android.net.Uri
@@ -131,7 +132,8 @@ internal fun PhoneContent(
                 label = "Номер телефона",
                 placeholder = "+7 900 000-00-00",
                 visualTransformation = PhoneMaskTransformation,
-                hint = "Для подтверждения позвоните нам с этого номера",
+                hint = if (state.ageConfirmed) "Для подтверждения позвоните нам с этого номера"
+                else "Чтобы ввести номер, подтвердите, что вам исполнилось 14 лет",
                 error = state.error.takeIf { state.errorPresentation == null },
                 keyboardType = KeyboardType.Phone,
                 imeAction = ImeAction.Done,
@@ -279,7 +281,7 @@ internal fun CallContent(
                 CallPhase.ERROR -> ErrorMessage(state.errorPresentation ?: ru.finassist.pf.core.common.error.ErrorPresentation(), "Не получилось проверить звонок. Попробуйте ещё раз",
                     onRetry = if (!state.retryReady || state.replayUnavailable) null else onRetry)
                 CallPhase.OFFLINE -> {
-                    PfNotice("Нет сети — не можем дождаться звонка. Проверьте интернет", tone = NoticeTone.WARNING, alert = true)
+                    PfNotice(connectionFailureTexts().message, tone = NoticeTone.WARNING, alert = true)
                     PfButton("Повторить", onClick = onRetry, enabled = state.retryReady && !state.replayUnavailable, block = true)
                 }
             }

@@ -39,6 +39,31 @@ class PeriodKeyTest {
     }
 
     @Test
+    fun `rolling keys are valid selectors without calendar boundaries`() {
+        for (key in listOf(PeriodKey.ROLLING_YEAR, PeriodKey.ROLLING_QUARTER)) {
+            kotlin.test.assertTrue(PeriodKey.isValid(key.value))
+            kotlin.test.assertTrue(key.isRolling)
+            kotlin.test.assertFalse(key.isCalendar)
+            kotlin.test.assertFailsWith<IllegalArgumentException> { key.start() }
+            kotlin.test.assertFailsWith<IllegalArgumentException> { key.year }
+        }
+        kotlin.test.assertFalse(PeriodKey.isValid("rolling_month"))
+    }
+
+    @Test
+    fun `all-time marker has no fabricated calendar boundaries or year`() {
+        val key = PeriodKey.ALL_TIME
+        assertEquals(PeriodType.ALL_TIME, key.type)
+        kotlin.test.assertFalse(key.isCalendar)
+        kotlin.test.assertTrue(PeriodKey.isValid(key.value))
+        kotlin.test.assertNull(key.index)
+        kotlin.test.assertFailsWith<IllegalArgumentException> { key.year }
+        kotlin.test.assertFailsWith<IllegalStateException> { key.start() }
+        kotlin.test.assertFailsWith<IllegalStateException> { key.endExclusive() }
+        assertEquals(key, PeriodKey.of(PeriodType.ALL_TIME, LocalDate.of(2026, 10, 30)))
+    }
+
+    @Test
     fun `russian plurals`() {
         assertEquals("операция", pluralize(1, "операция", "операции", "операций"))
         assertEquals("операции", pluralize(3, "операция", "операции", "операций"))

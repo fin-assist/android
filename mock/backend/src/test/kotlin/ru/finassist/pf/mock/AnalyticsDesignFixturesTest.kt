@@ -22,14 +22,22 @@ import kotlin.test.assertTrue
 class AnalyticsDesignFixturesTest {
     private val dir = File("../../feature/analytics/impl/src/test/resources/analytics")
     private val json = kotlinx.serialization.json.Json(ApiJson) { prettyPrint = true }
+    // AnalyticsGoldenCapabilitiesTest binds this request to the real client's CatalogV1 registry.
+    private val supports = requireNotNull(AnalyticsComposer.parseSupports(File(dir, "supports.txt").readText().trim()))
 
     private val f = AnalyticsDesignFixtures
     private val golden = mapOf(
         "september" to f.september(),
         "september_no_transfers" to f.september(noTransfers = true),
         "year_2026" to f.year2026,
+        "rolling_year" to f.rollingYear,
+        "rolling_year_actual" to f.rollingActual(ru.finassist.pf.core.api.model.PeriodTypeCode.ROLLING_YEAR),
+        "rolling_quarter_actual" to f.rollingActual(ru.finassist.pf.core.api.model.PeriodTypeCode.ROLLING_QUARTER),
+        "rolling_partial_actual" to f.rollingActual(ru.finassist.pf.core.api.model.PeriodTypeCode.ROLLING_YEAR, short = true),
+        "no_data" to f.noData,
         "early" to f.early,
         "stale" to f.stale,
+        "all_time" to f.allTime,
     )
 
     /**
@@ -51,9 +59,15 @@ class AnalyticsDesignFixturesTest {
                     else -> Unit
                 }
             }
-            val response = json.encodeToJsonElement(Analytics.serializer(), AnalyticsComposer.compose(snapshot)) as JsonObject
+            val response = json.encodeToJsonElement(Analytics.serializer(), AnalyticsComposer.compose(snapshot, supports)) as JsonObject
             walk(response)
-            assertTrue(actions.isNotEmpty(), "$name.json has no open_operations")
+            if (name == "no_data") {
+                assertTrue(snapshot.hasData, "no_data must retain data in another period")
+                assertEquals(ru.finassist.pf.core.api.model.Coverage.NO_DATA, snapshot.period?.coverage)
+                assertTrue(actions.isEmpty(), "a no-data period must not offer monetary actions")
+            } else {
+                assertTrue(actions.isNotEmpty(), "$name.json has no open_operations")
+            }
             val range = (response["period"] as JsonObject)["range"] as JsonObject
             val mode = (response["params"] as JsonObject)["transfer_mode"]
             actions.forEach { action ->
@@ -70,7 +84,7 @@ class AnalyticsDesignFixturesTest {
     fun `golden responses of the design check are up to date`() {
         val update = System.getenv("UPDATE_GOLDEN") == "1"
         golden.forEach { (name, snapshot) ->
-            val text = json.encodeToString(Analytics.serializer(), AnalyticsComposer.compose(snapshot)) + "\n"
+            val text = json.encodeToString(Analytics.serializer(), AnalyticsComposer.compose(snapshot, supports)) + "\n"
             val file = File(dir, "$name.json")
             if (update) {
                 dir.mkdirs()

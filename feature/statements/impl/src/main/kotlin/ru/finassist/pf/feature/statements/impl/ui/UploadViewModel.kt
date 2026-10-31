@@ -145,10 +145,10 @@ class UploadViewModel @Inject constructor(
         }
     }
 
-    /** Config is only links and numbers; without it the guide still works with the defaults from api.md. */
+    /** Keep a received server destination; cold fallback uses the approved login page (FIN-395). */
     private fun fallbackConfig() = config ?: ImportConfig(
-        downloadUrl = "https://www.tbank.ru/login/",
-        loginUrl = "https://www.tbank.ru/login/",
+        downloadUrl = "https://tbank-online.com/login",
+        loginUrl = "https://tbank-online.com/login",
         maxFileSizeBytes = 10L * 1024 * 1024,
         acceptedFormats = listOf("OFX"),
         suggestedPeriod = ru.finassist.pf.core.common.time.DateRange(
@@ -302,7 +302,7 @@ class UploadViewModel @Inject constructor(
         }
     }
 
-    private fun handle(uploadId: String, fileName: String, event: ImportEvent) {
+    private suspend fun handle(uploadId: String, fileName: String, event: ImportEvent) {
         when (event) {
             is ImportEvent.Progress -> _state.update { s ->
                 val b = s.phase as? UploadPhase.Busy ?: return@update s
@@ -324,7 +324,7 @@ class UploadViewModel @Inject constructor(
         }
     }
 
-    private fun finish(uploadId: String, event: ImportEvent.Complete) {
+    private suspend fun finish(uploadId: String, event: ImportEvent.Complete) {
         repository.importCompleted(uploadId, event.result)
         tracker.track(Events.STATEMENTS_UPLOAD_COMPLETED, mapOf("new_count" to event.result.newCount.toString()))
         _state.update { it.copy(doneUploadId = uploadId, askCancel = false) }

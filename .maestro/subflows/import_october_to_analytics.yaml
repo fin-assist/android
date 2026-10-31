@@ -1,0 +1,36 @@
+# Imports through the real UI, then opens Analytics for the first time in this client session.
+# The publication-lag fixture changes only the projection responses, never the import/pending marker.
+appId: ru.finassist.pf.mock.e2e
+---
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.new"
+- tapOn:
+    id: "statements.result.analytics"

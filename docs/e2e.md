@@ -636,12 +636,13 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 
 | Flow | Checks |
 |---|---|
+| `refresh/server_data` | pull-to-refresh on the feed, operation details, empty search, selected analytics month, profile, upload history, unread lines and an assistant draft; offline retains data/query/period, online clears the failure; after a failed Year switch, failed/successful Month pulls and current-read Retry preserve Month and its separate target notice, then only the Year Retry changes the period; a history read never asks or retries a question (Qase70, FIN-399); authored, not executed |
 | `auth/register_new_user` (smoke) | independent 14+/PD before phone → new number → create account without another consent → passcode → first upload → result → feed (Qase2, FIN-365) |
-| `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the three tabs (Qase1, FIN-365) |
+| `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the main tabs (Qase1, FIN-365) |
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
 | `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains confirmations; repeated confirm_phone keeps both checked and input enabled (Qase57, FIN-365, FIN-375) |
 | `auth/phone_consent_recovery` | document offline → explicit refresh → confirmations → Start offline → retry with the existing intent (Qase58, FIN-365) |
-| `auth/phone_validation` | short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
+| `auth/phone_validation` | locked phone and age-unlock hint (FIN-394); short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
 | `auth/call_expired` | `call_ttl_ms=15000`: the wait ends either by the stream's `expired` or by the device timer (their order is not fixed); both lead to «Время на звонок вышло» with no number; «Позвонить ещё раз» brings the number and a new deadline back — FIN-166 |
 | `auth/call_stream_rate_limited` | live 429 marker before negative checks; `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: one actual refusal, number stays, no ErrorMessage (`ds.error.info/warning/error`) or offline message; exact count across control-link resume, remove future refusals, retained wait → passcode → feed (Qase44, FIN-170, FIN-376, FIN-380) |
 | `auth/registration_closed` | `auth.registration=false`: new number → «Регистрация пока закрыта»; existing account still signs in |
@@ -653,12 +654,22 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `operations/days_in_profile_zone` | `profile_timezone=Asia/Vladivostok`: after the profile is read, the feed groups days in the profile zone, not the device's — an evening operation in Moscow moves to the next day — FIN-92 |
 | `operations/statement_stale` | on the preloaded statement the caption under the summary says «Данные по 1 октября» (the statement's end, not the last operation on 30 September); then the preloaded statement deleted, `stale.ofx` uploaded: «Операции» and «Аналитика» show «Данные в приложении по 20 сентября — с тех пор прошло больше двух недель», dated by the statement's end (`state.data_to`), not the last operation (15 September) — FIN-125 |
 | `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
-| `analytics/overview` (smoke) | blocks, previous month, month/quarter/year, «Без переводов», category → operations |
+| `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast with the history explanation; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; authored, not executed |
+| `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month (Qase73, FIN-391); authored, not executed |
+| `analytics/rolling_periods` (mock-only) | rolling year/quarter anchored to statement coverage, exact ranges, no forecast, failed singleton switch and explicit exact retry, transfer-mode preservation, clipped edge point → full calendar month, independent remembered calendar selection; Qase76 (FIN-411); authored, not executed |
+| `analytics/chart_month_selection` (mock-only) | whole-column selection including zero expenses, exact month/year, selected state and retained transfer mode/scroll; failed switch and explicit retry (Qase74, FIN-398); authored, not executed |
+| `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state (Qase75, FIN-400); authored, not executed |
+| `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
+| `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
 | `analytics/search_scope_own_transfers` | September «Расходы» tile → search «как на Аналитике»; without «Только расходы» and with the amount 6 000 ₽ nothing is found — the single «Себе в другой банк» of 27 September is out, as in the Analytics figure; without the scope chip it is found — FIN-164 |
-| `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card and profile) |
+| `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card, profile and bottom tab) |
+| `assistant/late_enable` | layer starts false → explicit Analytics entry after true → admitted Chat remains through false, orientation recreation and Consent/Back → admitted tab is visible/selected while flag remains false, without sending automatically (Qase68, FIN-397); authored, not executed |
+| `assistant/tab_consent_in_profile` | denied draft in retained tab → consent through Profile → server read enables explicit send without submitting on resume (Qase65, FIN-397) |
+| `AiConsentSpacingTest#keepsTwentyFourDpAfterConsentContentWhenScrolledAtLargeFont` | native geometry assertion: scroll to submit in 640 dp viewport / 150% text, verify ≥24 dp after full checkbox/error block with and without formError (Qase64, FIN-394/397); authored, compile only |
+| `assistant/tab_and_consent_recovery` | bottom tab keeps draft/history across Operations, Analytics and Profile; consent Back → Give consent → grant preserves draft without automatic send, explicit send creates one question (Qase61, FIN-397, FIN-394) |
 | `assistant/ask_question` (smoke) | disclosure of question/history, account-phone/file exclusion and masking limits → consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search (Qase12, FIN-366) |
 | `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
 | `assistant/off_topic` | a question not about finances (`weather`): the server's OFF_TOPIC text, no «Повторить» (`retryable: false`), still 5 of 5; the next question is answered, 4 of 5 — FIN-160 |
@@ -676,7 +687,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
-| `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
+| `statements/upload_and_history` (smoke) | new operations without a duplicate period row; saved Analytics tab income changes from 0 to +1200 after import, and refreshes after deletion with remaining data and last deletion (FIN-394); duplicate file → «История загрузок» |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
 | `statements/upload_restored_key` | A seeded unknown-age UUID does not send the file or silently change key; the upload count remains 1 (preloaded statement). Only «Загрузить заново» starts a new action and changes the count to 2 (Qase51) — FIN-223 |
 | `assistant/retry_after_consent` | A model failure, consent revocation and denied RetryAnswer lead to consent correction; the same operation resumes and history contains one question with the successful replacement (Qase52) — FIN-223 |
@@ -689,15 +700,35 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `availability/maintenance` | The check button is disabled during `Retry-After`; the first automatic probe is refused, then a guarded manual check after the fresh wait opens the app; a new maintenance episode has its own one-shot automatic check — FIN-22, FIN-223 |
 | `availability/maintenance_on_sign_in` | `maintenance=unknown` before sign-in: «Продолжить» on the phone screen gets the maintenance screen over sign-in, without an end time — FIN-22 |
 | `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
-| `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
+| `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; existing «Повторить» after recovery (Qase19, FIN-396) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
-| native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
+| native `VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion` | actual ChatScreen/VoiceInput requests RECORD_AUDIO → real system denial through UiAutomation → clear permission notice → close → original draft, quota=5 and Ask=0 (Qase72, FIN-404); authored, compiled only; no speech service needed |
+| native `PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport` | wrong PIN: full error/dots, keypad and recovery action at 360×640 dp (FIN-389, [Qase77](https://app.qase.io/case/PLAINFIN-77)); native geometry complements Maestro cases 5/18 |
+| native `PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont` | setup NEW/REPEAT, change OLD/NEW/REPEAT, unlock/confirm without error at 360×640 dp / font2 / insets48+48: automatic dots visibility, first digit/delete/back/footer; user scroll survives unchanged-range recomposition ([Qase78](https://app.qase.io/case/PLAINFIN-78), FIN-389) |
+| native `PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag` | real held down/move gesture spans error recomposition; later range/error still auto-reveal after UserInput cancellation, with drag/range/no-clamping preconditions ([Qase79](https://app.qase.io/case/PLAINFIN-79), FIN-389) |
+| native `ConnectionFailureHintTest` | fake local reader → VPN text; change observation and explicit retry → internet hint without VPN text, for full-screen state and ErrorMessage (Qase62, FIN-396); Compose dependency injection cannot be driven by Maestro without adding an app hook |
+| native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
+| native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
+| native `StatementPickerTest` | login button opens exactly `https://tbank-online.com/login` in an intercepted ACTION_VIEW (FIN-395; Qase16), then upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
 
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
 
-Not covered yet: voice input (needs a speech recognizer on the emulator), biometrics (needs an enrolled
+Not covered yet: voice input ([PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69), manual, FIN-404: the CI emulator has no controlled Russian speech/audio or deterministic recognition-service fixture;
+Maestro cannot produce recognizer callbacks). The preparation → actual `onReadyForSpeech`
+→ listening/level → recognition/error panel, finish/cancel/back/background and on-device-to-system
+retry need a device with that service. Permission refusal is separately covered by native `VoicePermissionTest`
+([PLAINFIN-72](https://app.qase.io/case/PLAINFIN-72)) using the real system dialog and actual ChatScreen/VoiceInput without starting a recognizer; it preserves the draft,
+keeps the quota and asserts no Ask. Service-unavailable cannot be asserted solely from an absent ru-RU model:
+`isRecognitionAvailable` may still find another installed system provider, so provider availability remains a device check. Cancellation and errors retain the original draft; successful final text is
+appended and requires manual sending. `VoiceSessionTest` covers callback order, cancellation/late callbacks,
+repeated actions, silence/errors and sound levels; `VoiceRecognitionErrorsTest` covers Android error-code/exception mapping
+and on-device-only fallback policy. `VoiceInputRememberTest` runs the actual composable with Robolectric's
+recognizer shadow: forced recomposition preserves the handle and commands, and a final result calls the latest
+onResult. This checks wiring without real audio or a service. `ChatViewModelBehaviourTest` covers append/length bounds and
+absence of an automatic Ask; `ChatDesignCheckTest` renders all panel states and dark listening.
+Biometrics (needs an enrolled
 fingerprint), custom date ranges in search,
 links inside a sentence — the registration terms and privacy policy, «Как мы защищаем данные», «разобрать» and
 «Подробнее» on the import result, «Подробнее» on «Аналитика» (a link inside a text node has no own view or
@@ -855,3 +886,196 @@ checks its rate-limit message while keeping draft, daily quota, history and retr
 Existing case IDs and `scripts/qase-cases.json` mappings are retained. The failed run is documented in
 [FIN-375](https://finassist.youtrack.cloud/issue/FIN-375); these corrections are authored without a new
 UI, Maestro, instrumented or DesignCheck run.
+
+
+Stage integration (FIN-385): the existing `mockE2e` harness replaces HTTP with `:mock:backend` and therefore
+cannot prove the installed `stage` flavor's real HTTPS/SSE path, server-side persistence or provider configuration.
+No stage e2e hooks are shipped. CI assembles both stage variants, checks identity/HTTPS/SDK separation and runtime
+classpaths; the existing HTTP/SSE unit suites cover the transport. The Android → public stage flow
+(synthetic auth → OFX → progress → operations/analytics → assistant) remains a separate device acceptance run;
+it was not executed for this build-environment change. This is not a new screen or a claim of stage UI coverage.
+
+FIN-394: `AnalyticsViewModelTest` covers tab resume after import/deletion, invalidating previous totals while
+refreshing, failed refresh after deletion, and server retry restrictions. `AnalyticsUpdating*` and
+`AnalyticsPreparingWithoutData` capture the preparation states. The reported SmartApe limitation for non-Russian source IP addresses is
+infrastructure-specific; it cannot be reproduced by the in-process mock (VPN guidance is FIN-396).
+
+FIN-394 delayed-projection regression uses the mock-only `analytics_pending_responses=0..100`
+control-link fixture. It makes the next valid analytics GETs return `has_data:false`, without changing
+imported operations or seeding the local import token. `analytics/import_preparation_retry` / Qase63
+performs real UI imports and checks preparation → data and timeout → explicit Retry. This models a delayed
+projection response, not the real inter-service transport. The corresponding unit tests cover countdown,
+authentication/validation, user isolation, generations, retry refusal and failed recalculation polling.
+
+### FIN-397 and FIN-394 assistant navigation and consent
+
+The main bar orders Operations, Analytics, Assistant and Profile; `assistant=false` also hides the assistant tab.
+The tab uses the existing saved back stacks, retaining the chat ViewModel, history and draft between switches.
+A denied Ask exposes «Дать согласие» after Back; consent correction returns to the draft with Send enabled,
+without submitting it. The next explicit send retains a still-valid operation key; uncertain/expired keys
+retain their existing explicit recovery flow. Corrective RetryAnswer remains the same existing operation.
+`assistant/tab_and_consent_recovery` / Qase61 covers the new navigation and recovery; Qase12 and the
+existing assistant flows now explicitly send the first draft after granting consent. The consent layout uses
+a fixed 24 dp gap after all checkbox/error content so scroll overflow cannot collapse it.
+Design-check fixtures include the active assistant tab and light/dark consent recovery. These authored
+flows and fixtures were not executed: no UI/Maestro/instrumented/DesignCheck run was authorized.
+
+Layout-only consent spacing is represented by the authored `AiConsentLargeText` design-check fixture:
+640 dp viewport, 150% text, checkbox error and form error; the fixed gap remains in the scrollable content.
+### FIN-396 connection failure hints
+
+Qase19/20/21/43/44/58 and their existing flows retain their mappings. `offline/no_network` asserts
+the common connection title, internet hint and recovery action. `AndroidConnectionEnvironmentReaderTest` checks VPN detection, transport
+changes between reads, no active network, absent capabilities and denied/unavailable system service.
+Pure tests distinguish all four observations and verify that HTTP errors do not become VPN failures.
+`ProfileOfflineVpn`, `ProfileOfflineVpnDark`, `ProfileOffline`, `DeleteAccountOfflineVpn`,
+`ChatOfflineVpn` and `ImportGuideOfflineVpn` are authored DesignCheck fixtures. Existing
+`DeleteAccountOffline` now uses the actual Offline.presentation. Chat/import fixtures inject UNKNOWN
+for deterministic internet hints; these copy changes follow FIN-396 and differ from older Figma artboards;
+no UI/Maestro/DesignCheck run is claimed. Native `ConnectionFailureHintTest#vpnHintUpdatesAfterRetry`
+(Qase62) asserts the actual reader-to-UI wiring for the full-screen state and ErrorMessage, then switches
+the fake observation before clicking the existing retry action and asserts the internet hint and absence
+of VPN text and any «Нет сети» diagnosis, while retaining the actual ProfileTexts.CONSENT_NOT_REVOKED
+feature outcome. It needs no real tunnel. This uses native Compose dependency injection because Maestro
+cannot replace a CompositionLocal; no production or e2e application hook was added. The native test is
+authored and compiled only, not executed under the current instruction.
+
+Not covered yet: a real system VPN route and switching its tunnel during a failed request. The in-process
+mock does not traverse a VPN; Maestro cannot create a configured VPN tunnel/provider on its own.
+The Android system reader has Robolectric coverage and the presentation dependency has fake-reader
+fixtures; neither is proof of a particular VPN's route or FIN-394's network cause.
+
+FIN-397 review regressions: `assistant/tab_and_consent_recovery` also checks that mode-specific chats pushed
+by Analytics/Profile cards have Back navigation to their parent and do not impersonate the saved Assistant tab.
+A flag update while the main layer is open leaves its tab bar intact; the disabled-at-entry variant remains
+`analytics/blocks_switched_off`. Native `AiConsentSpacingTest` checks measured geometry after scrolling,
+including the form-error variant, instead of treating an unchecked snapshot as a spacing assertion.
+The native test is in `app/src/androidTestMock`, with its Qase mapping, and is compiled without execution.
+
+FIN-397 history refresh retains loaded earlier pages only when a shared message id proves a contiguous
+boundary. A non-overlapping latest page starts pagination again from its own server boundary, so new
+messages cannot hide a middle gap behind a cached `hasOlder=false`. Reads started before an accepted
+RetryAnswer are invalidated by its replacement revision; stale pages cannot restore the failed answer or
+move its replacement after later questions. Unit tests cover delayed latest/init reads, replacement
+position and an older-page request crossing a refreshed pagination boundary.
+
+FIN-397 — Not covered yet: restoring a Chat/Consent navigation entry after actual process death with
+`assistant=false` is not represented by a mock Maestro flow: the server and authentication state of the
+in-process backend also disappear on death. Both route entries guard the boundary before screen/ViewModel
+creation and redirect disabled entries to Feed; a live composed entry keeps its snapshot. This branch is
+compiled and inspected, without a claim of process-death UI execution.
+FIN-396 screen transitions use native state/reader injection to assert the real ProfileContent and
+HistoryContent fallback and Retry branches without introducing a production/e2e state hook. The lower unit
+layer drives the real ViewModel failure/retry chains; these native cases are authored and compiled only.
+A confirmed DELETE removes its source from the client list immediately; a later failed read keeps an
+available read retry and cannot redisplay the deleted row. The success notice says analytics is updating,
+rather than claiming its asynchronous projection has already completed.
+
+`UploadHistoryDeleted` also differs from the existing Figma artboard: the success text is now
+«Загрузка удалена, обновляем аналитику» instead of «Загрузка удалена, аналитика пересчитана».
+The DELETE confirms removal of the source; publication of its analytics projection can finish later.
+Proposed artboard sync: update the `UploadHistoryDeleted` success notice to the new text. This copy
+clarification is tracked in FIN-396 alongside PR #232; it does not claim visual acceptance.
+
+FIN-397 shared-policy and history regressions: Qase61 keeps `assistant=false` throughout Consent/Back,
+consent correction and tab save/restore, then resets it only at the end. The bar and all route guards use
+the one composition-root snapshot. Unit tests separate locally accepted Ask ids from GET pagination,
+retain valid older pages across an overlapping refresh, preserve endpoint Retry-After while original refusals remain scoped to their
+before_id after a stale-page presentation is discarded, and repeat invalidated latest reads with the original stream skip id.
+A failed stream's authoritative status can therefore finish preparation instead of stranding the composer.
+
+FIN-397 configuration stability: Qase61 now rotates LANDSCAPE_LEFT → PORTRAIT after live false and asserts
+that the saved draft and zero questions survive Activity recreation. Qase68 starts with false before
+sign-in, enables before first Analytics entry, then disables again and rotates before entering Consent.
+Policy unit tests retain the same policy through a new owner backed by the layer ViewModelStore and
+verify that a genuinely new false policy denies entry. The authored orientation flows were not executed.
+
+FIN-397 retry context: all history mutations reconcile the first-message boundary. A new `before_id`
+clears only the old original-request refusal/presentation and retains the exact captured endpoint wait.
+Stale page replies contribute only conservative endpoint waits; stale latest-read failures cannot mutate
+the newer request gate. Unit regressions cover both completion orders of overlapping latest reads,
+new boundary after false, false plus wait, and first-answer replacement changing the boundary.
+
+
+FIN-401/402: actual expenses remain one of four fact tiles; a fresh current period may append a fifth forecast tile.
+The unpaired forecast spans the row, so the global calendar-history explanation is readable. No-data periods return
+an empty tile group rather than zero. `ForecastHistoryTest` covers the rolling year, union of multiple OFX periods,
+non-adjacent full months and gaps, including a long missing interval compressed to a range. `AnalyticsForecastHistory*` design checks are authored with the rolling-year
+JSON response; both new history states passed locally on Robolectric. A full repeat of the 22 AnalyticsDesignCheck
+states reached its 300-second process timeout.
+The new Maestro flow was not executed locally. Qase case 71 was created after explicit approval.
+
+FIN-401/402 review regressions extend the same Qase71 flow with the saved September context after selective
+statement deletion, explicit month selection after restoring the previously selected month (FIN-391), and scoped-search assertions.
+The `no_data` golden is composed from real synthetic mock state with another month still present (`has_data=true`),
+not the account-wide empty state. `AnalyticsNoData`, `AnalyticsNoDataDark` and `AnalyticsNoDataTilesHidden` design
+checks cover the server explanation and the local fallback when the tile block is disabled. Caption unit tests
+also cover absent, unsupported-version and missing/blank server text. A supported visible server message replaces
+the local caption to avoid duplication; hidden/unsupported blocks retain it. The extended Maestro flow remains
+authored without a UI/device run. All three new Robolectric captures passed locally (48-second build), and their
+images were inspected for the single explanation and absence of monetary tiles. No approved Figma artboards exist
+for these no-data states yet. The targeted unit pass (37 tests: mock texts/history/golden plus caption fallback)
+passed; malformed or absent forecast history retains the calendar-month rule without guessing any month list.
+
+
+FIN-399: screens backed by GET requests use `PfRefreshContainer`; its bounded non-consuming scroll target also
+accepts pulls on empty/error states. Refresh keeps the current query, period, filters, shown data and draft; each
+read has a pending-request guard and retains its `RequestRetryGate`. The import-result screen is an immutable
+receipt and is not refreshed; upload/delete/send/retry-answer actions are never replayed by a gesture. The
+Maestro flow is authored, not run locally (no device/UI-test authorization). ViewModel tests check deduplication,
+failed refresh retention and Retry-After separately from rendering.
+Qase70 also covers a failed Month→Year switch followed by failed and successful pulls of the shown Month.
+The current-read `analytics.retry` disappears when that read starts, so the flow then waits for the real
+`ds.refresh.indicator` tag to disappear before asserting the selected September and separate
+`analytics.period.retry` notice. That tag exists on the real indicator only while reads are pending; the flow
+does not require seeing a possibly brief spinner. A second offline pull makes the current-read Retry available,
+and its online completion must still keep the failed target. Only the separate period Retry opens Year. Qase70 is updated;
+this regression was checked statically without executing Maestro, a device test or the UI workflow.
+FIN-391: the strengthened Qase10 flow above is authored, not executed in this change. Unit regressions
+cover independent dates even across years, first Year→Month/Quarter and Quarter→Month visits,
+inclusive partial coverage and exclusive complete range ends in the profile zone, and failed selections.
+The mock boundary rejects coarse date keys before consuming publication-delay fixtures. No stage
+HTTP responses are substituted; FIN-386 owns the shared mock/stage suite wiring.
+
+FIN-391 failure path: Qase73 is mock-only transport recovery; resume does not submit a failed switch.
+Unit tests cover exact target retry, request_retryable=false, captured Retry-After, expiry without an
+automatic request, new intents and duplicate taps. AnalyticsPeriodChangeFailed/…Dark and
+AnalyticsPeriodChangeRetryBlocked are proposed artboards, authored/compiled without snapshot execution.
+
+FIN-391 review regressions: Qase73 also makes «Не подписка» fail while the period notice is visible;
+both messages keep their meaning and the period action retries only its saved target. The proposed
+AnalyticsPeriodAndDismissalErrors artboard and a VM test cover the combined state. The same segment
+cannot bypass the period gate during Retry-After or an original-request refusal.
+
+FIN-411 adds the separate «Последние 12 месяцев» / «Последние 3 месяца» choices. Mock ranges use the union of completed upload coverage, including empty statements; `rolling_year`/`rolling_quarter` remain singleton keys, with exact edge facts and missing coverage kept distinct from zero. The calendar month action uses the full YYYY-MM key even when a point is clipped. Qase76 and rolling_periods are authored without UI execution. Canonical contract: fin-assist/contracts d827664 (FIN-413); the complete calculation and OpenAPI corpus is synchronized to that immutable revision after FIN-398/400/403 (PR239) integration; no test exclusions were added.
+
+### Small passcode viewport (FIN-389)
+
+`PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport` ([PLAINFIN-77](https://app.qase.io/case/PLAINFIN-77))
+checks all three error modes at heights 640/720/760 dp, font scales 1/1.5/2 and system insets 24/24 or 48/48 dp
+(54 combinations), including the longest last-attempt text. Error appearance and remeasurement with the same
+error must reveal it automatically, without a test-driven scroll. Maestro can find a clipped text node,
+so the native test additionally verifies text layout overflow and compares full/visible bounds of the error, dots,
+keys and footer; it also clicks digit/delete/forgot actions. Existing Maestro cases 5 and 18 cover the real wrong-PIN
+transitions and recovery. The body measures space left by the actual header and system bars; compact keys fit both the 56 dp minimum
+and the scaled digit line height. The 390×844 design-check layout keeps its original sizes. At larger text
+sizes, only the introductory area scrolls; its measured range automatically reveals the dots/error while the
+keypad stays fixed. The test compares keypad geometry before/after error and checks every digit/delete/footer.
+
+`PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont` ([Qase78](https://app.qase.io/case/PLAINFIN-78))
+checks all seven error-free setup/change/unlock/confirmation states at the supported portrait boundary
+360×640 dp, font scale 2 and 48/48 dp bars. The range observer reveals dots even without an error.
+After automatic visibility/action checks, a separate manual scroll-up assertion verifies that a digit-only
+recomposition with an unchanged range respects the user’s position. The regression scope is portrait
+640–760 dp, font scales 1–2 and system insets 24–48 dp; the regular 390×844 dp design checks remain the baseline.
+
+The range observer uses `collectLatest`: a Default-priority scroll may yield to UserInput while collection
+must survive. `PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag` ([Qase79](https://app.qase.io/case/PLAINFIN-79))
+covers this with real `down` and `moveBy` events without `up`, then recomposes the screen during the held gesture.
+The positive initial range/end position and reduced value before any state change acknowledge an active drag;
+a changed measured range while the pointer is down makes the automatic scroll yield. A stationary event-time
+sample and `up` avoid a fling. The next range must reveal the end again, with an explicit guard against clamping
+masquerading as recovery; the next error also passes the strict geometry helper. The plain-`collect` df2a1da8
+baseline failed on that later range (expected 52 px, actual 0), while `collectLatest` passed. No production hook,
+private mutex access, synthetic cancellation or wall-clock sleep is involved. The previous Not-covered claim
+was disproved by this real gesture experiment and removed.

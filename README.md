@@ -25,13 +25,14 @@ kotlinx.serialization, OkHttp SSE, DataStore, Tink (refresh-токен под An
 ```
 ./gradlew assembleMockDebug     # сборка без сервера и без ключей SDK
 ./gradlew assembleLocalDebug    # HTTP-клиент к bank-bff на машине разработчика (ниже, «Flavor local»)
+./gradlew assembleStageDebug   # HTTPS-клиент к stage.plainfin.ru, отдельное приложение, ключи необязательны
 ./gradlew assembleProdDebug     # настоящий HTTP-клиент (stage 8: ключи SDK в sdk-keys.properties)
 ./gradlew test lintMockDebug    # то же, что в CI
 ```
 
 ### Flavor `mock`
 
-Серверной части пока нет, поэтому flavor `mock` содержит in-process фейковый бэкенд (`:mock:backend`),
+Flavor `mock` содержит in-process фейковый бэкенд (`:mock:backend`),
 который реализует тот же контракт `:core:api` на данных реальной выписки: разбор OFX, дедупликация,
 пары переводов между своими счетами, возвраты, помесячные агрегаты, пороги полноты данных, потоки
 прогресса и ответа помощника, лимит 5 вопросов в сутки, идемпотентность.
@@ -49,8 +50,8 @@ mock/backend/src/main/assets/statements/fixture.ofx   # обезличенная
 Вход в `mock`: единственный «существующий» номер — из `mock/backend` (`MockConfig.existingPhone`);
 любой другой номер — новый пользователь (регистрация, если флаг `auth.registration` включён).
 
-Flavor-ы — одно измерение `env` (FIN-120): `mock`, `local`, `prod`; измерения не перемножаются. Стенд появится
-отдельным flavor-ом `stage` по образцу `prod`.
+Flavor-ы — одно измерение `env` (FIN-120): `mock`, `local`, `stage`, `prod`; измерения не перемножаются.
+`stage` подключён к готовому серверному стенду (FIN-385, оставшийся пункт FIN-149).
 
 ### Flavor `local`
 
@@ -64,6 +65,46 @@ HTTP без TLS разрешён только в `localDebug` и только к
 `network_security_config`); в `prod` и в любой release-сборке — запрещён. Флаги — локальные (код по умолчанию, свой
 `app/src/local/assets/flags.json` по желанию, в git не попадает; docs/flags.md), события — в logcat, Tracer, RuStore
 Remote Config и MyTracker выключены: локальные прогоны не попадают в продовые консоли.
+
+### Flavor `stage`
+
+Готовый HTTPS-стенд: **https://stage.plainfin.ru/**. Адрес зафиксирован в сборке; `pf.apiBaseUrl` меняет только
+`local`. Приложение — `ru.finassist.pf.stage`, «Понятные финансы stage»: ставится рядом с mock/local/prod, имеет
+отдельные данные и токены. Использует настоящий HTTP/SSE-клиент и те же SDK-провайдеры, что prod; mock-кода,
+управляющих e2e-ссылок и закреплённой даты в нём нет. Cleartext запрещён в debug и release.
+
+```bash
+./gradlew :app:assembleStageDebug      # app/build/outputs/apk/stage/debug/app-stage-debug.apk
+./gradlew :app:installStageDebug       # установить на подключённое устройство / эмулятор
+```
+
+В CI APK доступен как артефакт **app-stage-debug** в workflow CI. Release-вариант тоже проверяется, но CI не
+подписывает его для распространения. UI-автотесты остаются на `mockE2e`: зелёный CI сборки не доказывает
+сквозной прогон Android → публичный stage.
+
+На серверном stage работают реальные Go-сервисы и fake-phone/fake-LLM. Для входа используй только отдельный
+синтетический номер `+7000000xxxx` (четыре цифры), например `+70000003850`; реального звонка для fake-подтверждения
+не требуется. Документы согласий на этом стенде — synthetic fixtures. Загружай синтетический OFX; затем проверь
+прогресс, операции, аналитику и помощника. Для детерминированного сценария fake-LLM можно использовать вопрос
+`#FIN362_TOOLS Покажи доходы и расходы по моим данным.`. Это проверка интеграции с фейковыми внешними провайдерами.
+
+SDK выключены без stage-ключей; флаги тогда берутся из дефолтов `Flag`. Production-свойства не используются
+как запасные. Если нужны отдельные stage-консоли, задай **их** ключи в `~/.gradle/gradle.properties` либо env:
+
+| Свойство | Переменная окружения |
+|---|---|
+| `pf.stageRustoreRemoteConfigAppId` | `PF_STAGE_RUSTORE_REMOTE_CONFIG_APP_ID` |
+| `pf.stageMytrackerSdkKey` | `PF_STAGE_MYTRACKER_SDK_KEY` |
+| `pf.stageTracerAppToken` | `PF_STAGE_TRACER_APP_TOKEN` |
+| `pf.stageTracerPluginToken` | `PF_STAGE_TRACER_PLUGIN_TOKEN` |
+
+Не подставляй ключи production-консолей в эти свойства. Без Tracer app token отключены и runtime SDK, и загрузка
+маппингов. Stage не требует переноса серверных ключей или IAM-токенов в приложение.
+
+TLS проверяется системными CA Android; отключать проверку сертификата не нужно. Опциональный pinning задаётся
+**отдельно** парой `pf.stageApiPins` / `pf.stageApiPinsExpiration` (`PF_STAGE_API_PINS` /
+`PF_STAGE_API_PINS_EXPIRATION`). Формат, минимум два ключа и срок — как у prod ниже; production-пины stage не наследует.
+Реальные пины в git не кладутся. Пины stage пока не настроены: без них работает обычная CA-проверка.
 
 ### Закрепление сертификата в `prod`
 

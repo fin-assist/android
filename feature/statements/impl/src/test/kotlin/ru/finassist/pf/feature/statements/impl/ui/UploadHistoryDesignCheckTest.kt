@@ -57,7 +57,7 @@ class UploadHistoryDesignCheckTest {
 
     @Test fun uploadHistoryDeleted() = capture(
         "UploadHistoryDeleted",
-        state.copy(list = StatementsList(summary.copy(uploadCount = 2), listOf(all, aug)), snackbar = "Загрузка удалена, аналитика пересчитана"),
+        state.copy(list = StatementsList(summary.copy(uploadCount = 2), listOf(all, aug)), snackbar = "Загрузка удалена, обновляем аналитику"),
     )
 
     @Test fun uploadHistoryResolved() {
@@ -81,5 +81,8 @@ class UploadHistoryDesignCheckTest {
     @Test fun uploadHistoryEmpty() = capture("UploadHistoryEmpty", HistoryUiState(loading = false, list = StatementsList(null, emptyList())))
     // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
     @Test fun serverWarning() = capture("UploadHistoryServerWarning", state.copy(errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
+
+    @Test fun refreshing() = capture("UploadHistoryRefreshing", state.copy(refreshing = true))
+    @Test fun refreshingDark() = capture("UploadHistoryRefreshingDark", state.copy(refreshing = true), dark = true)
 
 }

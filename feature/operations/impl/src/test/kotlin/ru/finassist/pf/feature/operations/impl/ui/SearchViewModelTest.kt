@@ -544,4 +544,113 @@ class SearchViewModelTest {
         assertEquals(1, api.queries.size)
     }
 
+    @Test fun `pull refresh retains results filters and window and deduplicates pending reads`() {
+        api.lists += found("old")
+        val vm = vm(OperationsFilter(q = "магазин"))
+        val shown = vm.state.value.result
+        val filter = vm.state.value.filter
+        api.gate = kotlinx.coroutines.CompletableDeferred()
+        api.lists.clear()
+        api.lists += found("new")
+        vm.refresh()
+        vm.refresh()
+        vm.retry()
+        assertEquals(2, api.queries.size)
+        assertEquals(shown, vm.state.value.result)
+        assertEquals(filter, api.queries.last().filter)
+        assertTrue(vm.state.value.refreshing)
+        api.gate!!.complete(Unit)
+        assertFalse(vm.state.value.refreshing)
+        assertEquals("new", (vm.state.value.result as SearchResult.Found).items.single().id)
+    }
+
+    @Test fun `refresh connection failure keeps search data and shows retry explanation`() {
+        api.lists += found("old")
+        val vm = vm(OperationsFilter(q = "магазин"))
+        val shown = vm.state.value.result
+        api.lists.clear()
+        api.lists += AppError.Offline()
+        vm.refresh()
+        assertEquals(shown, vm.state.value.result)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertFalse(vm.state.value.refreshing)
+        api.lists.clear()
+        api.lists += found("new")
+        vm.retry()
+        assertEquals("new", (vm.state.value.result as SearchResult.Found).items.single().id)
+    }
+
+    @Test fun `refresh cannot bypass search retry after and blank search asks nothing`() {
+        val blank = vm()
+        blank.refresh()
+        assertTrue(api.queries.isEmpty())
+        api.lists += found("old")
+        val vm = vm(OperationsFilter(q = "магазин"))
+        api.lists.clear()
+        api.lists += AppError.RateLimited(null, retryAfterSeconds = 60)
+        vm.refresh()
+        val calls = api.queries.size
+        vm.refresh()
+        assertEquals(calls, api.queries.size)
+        scheduler.advanceTimeBy(60_000)
+        scheduler.runCurrent()
+        vm.refresh()
+        assertEquals(calls + 1, api.queries.size)
+    }
+
+    @Test fun `resetting the only query during refresh clears the spinner and ignores its old response`() {
+        api.lists += found("old")
+        val vm = vm(OperationsFilter(q = "query"))
+        val pending = kotlinx.coroutines.CompletableDeferred<Unit>()
+        api.gate = pending
+        vm.refresh()
+        assertTrue(vm.state.value.refreshing)
+        vm.reset()
+        assertEquals(SearchResult.Initial, vm.state.value.result)
+        assertFalse(vm.state.value.refreshing)
+        pending.complete(Unit)
+        assertEquals(SearchResult.Initial, vm.state.value.result)
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `quiet refresh removes a vanished selection and retains rows only while the corrected query is pending`() {
+        api.lists += found("old")
+        val vm = vm(OperationsFilter(q = "coffee", selection = "gone", selectionName = "Taxi"))
+        val shown = vm.state.value.result
+        val pending = kotlinx.coroutines.CompletableDeferred<Unit>()
+        api.listReply = { query ->
+            if (query.filter.selection != null) throw AppError.Api(ErrorCodes.SELECTION_NOT_FOUND, 422)
+            pending.await()
+            found("new")
+        }
+        vm.refresh()
+        assertNull(vm.state.value.filter.selection)
+        assertNull(vm.state.value.filter.selectionName)
+        assertEquals("coffee", vm.state.value.filter.q)
+        assertTrue(vm.state.value.selectionDropped)
+        assertTrue(vm.state.value.refreshing)
+        assertEquals(shown, vm.state.value.result)
+        assertEquals(3, api.queries.size)
+        vm.refresh()
+        vm.retry()
+        assertEquals(3, api.queries.size)
+        pending.complete(Unit)
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(listOf("new"), (vm.state.value.result as SearchResult.Found).items.map { it.id })
+    }
+
+    @Test fun `a corrected selection query failure does not leave another selections stale rows`() {
+        api.lists += found("old")
+        val vm = vm(OperationsFilter(q = "coffee", selection = "gone"))
+        api.listReply = { query ->
+            if (query.filter.selection != null) throw AppError.Api(ErrorCodes.SELECTION_NOT_FOUND, 422)
+            throw AppError.Offline()
+        }
+        vm.retry()
+        assertNull(vm.state.value.filter.selection)
+        assertTrue(vm.state.value.selectionDropped)
+        assertEquals(SearchResult.Offline, vm.state.value.result)
+        assertFalse(vm.state.value.refreshing)
+    }
+
 }

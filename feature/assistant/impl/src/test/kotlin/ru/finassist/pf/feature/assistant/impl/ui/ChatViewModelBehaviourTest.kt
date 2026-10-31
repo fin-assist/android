@@ -5,6 +5,7 @@ import ru.finassist.pf.core.common.error.ErrorResponseInfo
 import ru.finassist.pf.core.common.error.ErrorSeverity
 import ru.finassist.pf.core.common.error.UserMessage
 import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.time.ResponseTiming
 import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -75,6 +76,7 @@ class ChatViewModelBehaviourTest {
     }
     private val dispatcher = UnconfinedTestDispatcher()
     private val limit = AssistantLimit(remaining = 4, dailyMax = 5, resetsAt = now.plusHours(12))
+    private val profileApi = ConsentProfileFake()
 
     private fun question(id: String, text: String = "Вопрос $id") =
         Message(id = id, role = MessageRole.USER, text = text, createdAt = now)
@@ -101,6 +103,7 @@ class ChatViewModelBehaviourTest {
         /** Pages by `beforeId` (null — the latest page). */
         val pages = HashMap<String?, MessagesList>().apply { put(null, MessagesList(emptyList(), hasOlder = false)) }
         var listFailure: AppError? = null
+        var listGate: CompletableDeferred<Unit>? = null
         val listCalls = mutableListOf<String?>()
 
         /** Each `ask` takes the next outcome: an [AskResponse] or an [AppError] to throw. */
@@ -118,11 +121,15 @@ class ChatViewModelBehaviourTest {
         val streamOpens = mutableListOf<String>()
 
         var limitResult: AssistantLimit? = null
+        var limitReply: (suspend () -> AssistantLimit)? = null
 
         override suspend fun listMessages(limit: Int?, beforeId: String?): MessagesList {
             listCalls += beforeId
-            listFailure?.let { throw it }
-            return pages.getValue(beforeId)
+            val failure = listFailure
+            val response = if (failure == null) pages.getValue(beforeId) else null
+            listGate?.await()
+            failure?.let { throw it }
+            return checkNotNull(response)
         }
 
         override suspend fun ask(key: IdempotencyKey, request: AskRequest): AskResponse {
@@ -148,7 +155,7 @@ class ChatViewModelBehaviourTest {
             }
         }
 
-        override suspend fun getLimit(): AssistantLimit = limitResult ?: throw AppError.Offline()
+        override suspend fun getLimit(): AssistantLimit = limitReply?.invoke() ?: limitResult ?: throw AppError.Offline()
 
         fun script(answerId: String, vararg flows: Flow<AnswerEvent>) {
             streams.getOrPut(answerId) { ArrayDeque() }.addAll(flows)
@@ -171,7 +178,7 @@ class ChatViewModelBehaviourTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private fun newVm(savedState: SavedStateHandle = SavedStateHandle()) = ChatViewModel(savedState, api, tracker, clock, ElapsedClock { dispatcher.scheduler.currentTime })
+    private fun newVm(savedState: SavedStateHandle = SavedStateHandle()) = ChatViewModel(savedState, api, tracker, clock, ElapsedClock { dispatcher.scheduler.currentTime }, profileApi)
 
     private fun advance(ms: Long) {
         dispatcher.scheduler.advanceTimeBy(ms)
@@ -573,8 +580,9 @@ class ChatViewModelBehaviourTest {
 
     // ---- send failures ----
 
-    @Test fun `no consent opens the consent screen and the question is re-sent with its key after it`() {
-        api.askOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403)
+    @Test fun `denied consent can be reopened and grant preserves draft until explicit send`() {
+        api.askOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
         api.askOutcomes += askResponse("a1")
         val vm = newVm()
         sendQuestion(vm)
@@ -583,12 +591,433 @@ class ChatViewModelBehaviourTest {
         assertEquals("Сколько я трачу на такси?", vm.state.value.draft)
         vm.consumeEvent()
         assertNull(vm.state.value.event)
+        assertTrue(vm.state.value.consentRequired)
+        vm.send()
+        assertEquals(1, api.asks.size)
+        vm.openConsent()
+        assertEquals(ChatEvent.OPEN_CONSENT, vm.state.value.event)
+        vm.consumeEvent()
 
         vm.onConsentGranted()
+        assertEquals(1, api.asks.size, "consent must not send a question automatically")
+        assertEquals("Сколько я трачу на такси?", vm.state.value.draft)
+        assertFalse(vm.state.value.consentRequired)
+        assertFalse(vm.state.value.askBlocked)
+        vm.send()
         assertEquals(2, api.asks.size)
         assertEquals(api.asks[0].key, api.asks[1].key)
         assertEquals(listOf("q-a1", "a1"), vm.state.value.items.map { it.id })
         assertTrue(Events.ASSISTANT_CONSENT_GRANTED in tracker.names())
+    }
+
+    @Test fun `editing denied draft retains consent action and cannot bypass it`() {
+        api.askOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        val vm = newVm()
+        sendQuestion(vm)
+        vm.consumeEvent()
+        vm.setDraft("Новый вопрос")
+        vm.send()
+        assertEquals(1, api.asks.size)
+        assertTrue(vm.state.value.consentRequired)
+        vm.openConsent()
+        assertEquals(ChatEvent.OPEN_CONSENT, vm.state.value.event)
+        vm.onConsentGranted()
+        assertFalse(vm.state.value.consentRequired)
+        assertEquals("Новый вопрос", vm.state.value.draft)
+        assertEquals(1, api.asks.size)
+    }
+
+    @Test fun `opening consent without a denied operation does nothing`() {
+        val vm = newVm()
+        vm.openConsent()
+        assertNull(vm.state.value.event)
+        assertTrue(api.asks.isEmpty())
+    }
+
+    @Test fun `returning to a saved chat tab refreshes history without losing draft or sending`() {
+        val vm = newVm()
+        vm.onResumed()
+        vm.setDraft("Следующий вопрос")
+        vm.pauseStreams()
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.COMPLETE)), hasOlder = false)
+        vm.onResumed()
+        assertEquals(listOf("q1", "a1"), vm.state.value.items.map { it.id })
+        assertEquals("Следующий вопрос", vm.state.value.draft)
+        assertTrue(api.asks.isEmpty(), "tab changes must only read history, never send a question")
+    }
+
+    @Test fun `returning after older pages were loaded retains them and their pagination boundary`() {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        api.pages["q2"] = MessagesList(listOf(question("q1"), answer("a1")), hasOlder = false)
+        val vm = newVm()
+        vm.onResumed()
+        vm.loadOlder()
+        assertEquals(listOf("q1", "a1", "q2", "a2"), vm.state.value.items.map { it.id })
+        vm.pauseStreams()
+        vm.onResumed()
+        assertEquals(listOf("q1", "a1", "q2", "a2"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.hasOlder)
+    }
+
+    @Test fun `resume during Ask never starts a history read that can erase its accepted answer`() {
+        val vm = newVm()
+        vm.onResumed()
+        api.askOutcomes += askResponse("a1")
+        api.askGate = CompletableDeferred()
+        sendQuestion(vm)
+        val reads = api.listCalls.size
+        vm.onResumed()
+        assertEquals(reads, api.listCalls.size)
+        api.askGate!!.complete(Unit)
+        assertEquals(listOf("q-a1", "a1"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `a delayed history snapshot cannot erase Ask accepted after that read began`() {
+        val vm = newVm()
+        api.listGate = CompletableDeferred()
+        vm.load()
+        api.askOutcomes += askResponse("a1")
+        sendQuestion(vm)
+        api.listGate!!.complete(Unit)
+        assertEquals(listOf("q-a1", "a1"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `a delayed resume snapshot cannot resurrect the failed answer replaced by RetryAnswer`() {
+        val vm = vmWithFailedAnswer()
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED,
+            AnswerErrorCode.MODEL_ERROR, retryable = true), question("q2"), answer("a3")), hasOlder = false)
+        vm.load()
+        vm.onResumed()
+        api.listGate = CompletableDeferred()
+        vm.onResumed()
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        vm.retry("a1")
+        assertEquals(listOf("q1", "a2", "q2", "a3"), vm.state.value.items.map { it.id })
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a2", AnswerStatus.GENERATING),
+            question("q2"), answer("a3")), hasOlder = false)
+        val reads = api.listCalls.size
+        api.listGate!!.complete(Unit)
+        assertEquals(listOf("q1", "a2", "q2", "a3"), vm.state.value.items.map { it.id })
+        assertTrue(vm.state.value.items.none { it.id == "a1" }, "the stale retryable failure must stay removed")
+        assertEquals(AnswerStatus.GENERATING, vm.answerItem("a2").status)
+        assertEquals(1, api.retries.size)
+        assertEquals(reads + 1, api.listCalls.size, "the invalidated snapshot must be refreshed")
+    }
+
+    @Test fun `an older init read that started before the failed answer was shown cannot restore its replacement`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED,
+            AnswerErrorCode.MODEL_ERROR, retryable = true)), hasOlder = false)
+        val initialRead = CompletableDeferred<Unit>()
+        api.listGate = initialRead
+        val vm = newVm()
+        api.listGate = null
+        vm.load()
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        vm.retry("a1")
+        initialRead.complete(Unit)
+        assertEquals(listOf("q1", "a2"), vm.state.value.items.map { it.id })
+        assertEquals(AnswerStatus.GENERATING, vm.answerItem("a2").status)
+    }
+
+    @Test fun `a non overlapping latest page resets the pagination boundary instead of creating a hidden gap`() {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        api.pages["q2"] = MessagesList(listOf(question("q1"), answer("a1")), hasOlder = false)
+        val vm = newVm()
+        vm.onResumed()
+        vm.loadOlder()
+        assertFalse(vm.state.value.hasOlder)
+        api.pages[null] = MessagesList(listOf(question("q8"), answer("a8")), hasOlder = true)
+        api.pages["q8"] = MessagesList(listOf(question("q7"), answer("a7")), hasOlder = true)
+        vm.onResumed()
+        assertEquals(listOf("q8", "a8"), vm.state.value.items.map { it.id })
+        assertTrue(vm.state.value.hasOlder)
+        vm.loadOlder()
+        assertEquals("q8", api.listCalls.last())
+        assertEquals(listOf("q7", "a7", "q8", "a8"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `an older page pending across a fresh pagination boundary cannot prepend a disconnected prefix`() {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        api.pages["q2"] = MessagesList(listOf(question("q1"), answer("a1")), hasOlder = false)
+        val vm = newVm()
+        val olderRead = CompletableDeferred<Unit>()
+        api.listGate = olderRead
+        vm.loadOlder()
+        api.listGate = null
+        api.pages[null] = MessagesList(listOf(question("q8"), answer("a8")), hasOlder = true)
+        vm.load()
+        olderRead.complete(Unit)
+        assertEquals(listOf("q8", "a8"), vm.state.value.items.map { it.id })
+        assertTrue(vm.state.value.hasOlder)
+        assertFalse(vm.state.value.loadingOlder)
+    }
+
+    @Test fun `an older page remains valid across an overlapping resume refresh`() {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        api.pages["q2"] = MessagesList(listOf(question("q1"), answer("a1")), hasOlder = false)
+        val vm = newVm()
+        vm.onResumed()
+        val olderRead = CompletableDeferred<Unit>()
+        api.listGate = olderRead
+        vm.loadOlder()
+        api.listGate = null
+        vm.onResumed()
+        olderRead.complete(Unit)
+        assertEquals(listOf("q1", "a1", "q2", "a2"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.hasOlder)
+    }
+
+    @Test fun `pagination completing during a non overlapping latest read is never treated as an accepted Ask`() {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        api.pages["q2"] = MessagesList(listOf(question("q1"), answer("a1")), hasOlder = false)
+        val vm = newVm()
+        api.pages[null] = MessagesList(listOf(question("q8"), answer("a8")), hasOlder = true)
+        val latestRead = CompletableDeferred<Unit>()
+        api.listGate = latestRead
+        vm.load()
+        api.listGate = null
+        vm.loadOlder()
+        assertEquals(listOf("q1", "a1", "q2", "a2"), vm.state.value.items.map { it.id })
+        latestRead.complete(Unit)
+        assertEquals(listOf("q8", "a8"), vm.state.value.items.map { it.id })
+        assertTrue(vm.state.value.hasOlder)
+    }
+
+    private fun failOlderReadAcrossChangedBoundary(error: AppError): ChatViewModel {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        val vm = newVm()
+        val olderRead = CompletableDeferred<Unit>()
+        api.listGate = olderRead
+        api.listFailure = error
+        vm.loadOlder()
+        api.listGate = null
+        api.listFailure = null
+        api.pages[null] = MessagesList(listOf(question("q8"), answer("a8")), hasOlder = true)
+        api.pages["q8"] = MessagesList(listOf(question("q7"), answer("a7")), hasOlder = false)
+        vm.load()
+        olderRead.complete(Unit)
+        assertNull(vm.state.value.olderErrorPresentation, "the obsolete page error is not presented")
+        return vm
+    }
+
+    @Test fun `a stale older page failure retains its Retry After restriction across a boundary change`() {
+        val vm = failOlderReadAcrossChangedBoundary(AppError.RateLimited(null, 3))
+        val reads = api.listCalls.size
+        vm.loadOlder()
+        assertEquals(reads, api.listCalls.size)
+        advance(2_999)
+        vm.loadOlder()
+        assertEquals(reads, api.listCalls.size)
+        advance(1)
+        vm.loadOlder()
+        assertEquals(reads + 1, api.listCalls.size)
+        assertEquals("q8", api.listCalls.last())
+    }
+
+    @Test fun `a stale older refusal belongs to its old cursor but its captured wait still applies`() {
+        val vm = failOlderReadAcrossChangedBoundary(AppError.RateLimited(null, 3,
+            ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false, retryAfterSeconds = 3,
+                timing = ResponseTiming(receivedElapsedMillis = 0))))
+        val reads = api.listCalls.size
+        assertNull(vm.state.value.olderRetryable)
+        advance(2999)
+        vm.loadOlder()
+        assertEquals(reads, api.listCalls.size)
+        advance(1)
+        vm.loadOlder()
+        assertEquals("q8", api.listCalls.last())
+        assertEquals(reads + 1, api.listCalls.size)
+    }
+
+    @Test fun `a shown older refusal clears only when the actual cursor changes and keeps its deadline`() {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        val vm = newVm()
+        api.listFailure = AppError.RateLimited(null, 3, ErrorResponseInfo("RATE_LIMITED", 429,
+            requestRetryable = false, retryAfterSeconds = 3, timing = ResponseTiming(receivedElapsedMillis = 0)))
+        vm.loadOlder()
+        assertEquals(false, vm.state.value.olderRetryable)
+        api.listFailure = null
+        // This refresh overlaps: the same before_id retains its original refusal and presentation.
+        api.pages[null] = MessagesList(listOf(answer("a2")), hasOlder = true)
+        vm.load()
+        assertEquals("q2", vm.state.value.items.first().id)
+        assertEquals(false, vm.state.value.olderRetryable)
+        advance(1000)
+        api.pages[null] = MessagesList(listOf(question("q8"), answer("a8")), hasOlder = true)
+        api.pages["q8"] = MessagesList(listOf(question("q7")), hasOlder = false)
+        vm.load()
+        assertNull(vm.state.value.olderRetryable)
+        assertNull(vm.state.value.olderErrorPresentation)
+        val reads = api.listCalls.size
+        advance(1999); vm.loadOlder()
+        assertEquals(reads, api.listCalls.size)
+        advance(1); vm.loadOlder()
+        assertEquals(reads + 1, api.listCalls.size)
+        assertEquals("q8", api.listCalls.last())
+    }
+
+    @Test fun `replacing the first answer also retires its original pagination refusal`() {
+        api.pages[null] = MessagesList(listOf(answer("a1", AnswerStatus.FAILED,
+            AnswerErrorCode.MODEL_ERROR, retryable = true)), hasOlder = true)
+        val vm = newVm()
+        api.listFailure = AppError.Api(ErrorCodes.VALIDATION_ERROR, 400,
+            response = ErrorResponseInfo(ErrorCodes.VALIDATION_ERROR, 400, requestRetryable = false))
+        vm.loadOlder()
+        assertEquals(false, vm.state.value.olderRetryable)
+        api.listFailure = null
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        api.pages["a2"] = MessagesList(listOf(question("q1")), hasOlder = false)
+        vm.retry("a1")
+        assertEquals("a2", vm.state.value.items.first().id)
+        assertNull(vm.state.value.olderErrorPresentation)
+        assertNull(vm.state.value.olderRetryable)
+        vm.loadOlder()
+        assertEquals("a2", api.listCalls.last())
+        assertEquals("q1", vm.state.value.items.first().id)
+    }
+
+    @Test fun `a stale offline latest read cannot clear the newer rate limit in either completion order`() {
+        for (oldFinishesFirst in listOf(false, true)) {
+            api.listFailure = null
+            api.listGate = null
+            val vm = newVm()
+            vm.onResumed()
+            val oldRead = CompletableDeferred<Unit>()
+            val newRead = CompletableDeferred<Unit>()
+            api.listGate = oldRead
+            api.listFailure = AppError.Offline()
+            vm.load()
+            api.listGate = newRead
+            api.listFailure = AppError.RateLimited(null, 3)
+            vm.onResumed()
+            if (oldFinishesFirst) { oldRead.complete(Unit); newRead.complete(Unit) }
+            else { newRead.complete(Unit); oldRead.complete(Unit) }
+            assertFalse(vm.state.value.loadRetryReady)
+            api.listGate = null
+            api.listFailure = null
+            val reads = api.listCalls.size
+            advance(1000); vm.onResumed()
+            assertEquals(reads, api.listCalls.size)
+            advance(1999); vm.onResumed()
+            assertEquals(reads, api.listCalls.size)
+            advance(1); vm.onResumed()
+            assertEquals(reads + 1, api.listCalls.size)
+        }
+    }
+
+    @Test fun `a stale explicit refusal cannot block a newer successful resume in either completion order`() {
+        for (oldFinishesFirst in listOf(false, true)) {
+            api.listFailure = null
+            api.listGate = null
+            api.pages[null] = MessagesList(emptyList(), hasOlder = false)
+            val vm = newVm()
+            vm.onResumed()
+            val oldRead = CompletableDeferred<Unit>()
+            val newRead = CompletableDeferred<Unit>()
+            api.listGate = oldRead
+            api.listFailure = AppError.Api(ErrorCodes.VALIDATION_ERROR, 400,
+                response = ErrorResponseInfo(ErrorCodes.VALIDATION_ERROR, 400, requestRetryable = false))
+            vm.load()
+            api.listGate = newRead
+            api.listFailure = null
+            api.pages[null] = MessagesList(listOf(question("q8")), hasOlder = false)
+            vm.onResumed()
+            if (oldFinishesFirst) { oldRead.complete(Unit); newRead.complete(Unit) }
+            else { newRead.complete(Unit); oldRead.complete(Unit) }
+            assertTrue(vm.state.value.loadRetryReady)
+            assertNull(vm.state.value.loadErrorPresentation)
+            assertEquals(listOf("q8"), vm.state.value.items.map { it.id })
+            api.listGate = null
+            val reads = api.listCalls.size
+            api.pages[null] = MessagesList(listOf(question("q9")), hasOlder = false)
+            vm.onResumed()
+            assertEquals(reads + 1, api.listCalls.size)
+            assertEquals(listOf("q9"), vm.state.value.items.map { it.id })
+        }
+    }
+
+    @Test fun `a replacement during failed stream recovery rereads the authoritative history and keeps its skip id`() {
+        val streamFailed = CompletableDeferred<Unit>()
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED,
+            AnswerErrorCode.MODEL_ERROR, retryable = true), question("q2"), answer("x", AnswerStatus.GENERATING)), hasOlder = false)
+        api.script("x", flow { streamFailed.await(); throw AppError.Api(ErrorCodes.NOT_FOUND, 404) })
+        val vm = newVm()
+        val recoveryRead = CompletableDeferred<Unit>()
+        api.listGate = recoveryRead
+        streamFailed.complete(Unit)
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        vm.retry("a1")
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a2", AnswerStatus.COMPLETE),
+            question("q2"), answer("x", AnswerStatus.FAILED)), hasOlder = false)
+        val reads = api.listCalls.size
+        recoveryRead.complete(Unit)
+        assertEquals(reads + 1, api.listCalls.size)
+        assertEquals(AnswerStatus.FAILED, vm.answerItem("x").status)
+        assertEquals(AnswerStatus.COMPLETE, vm.answerItem("a2").status)
+        assertFalse(vm.state.value.generating, "a discarded recovery read must not strand the composer")
+        assertEquals(1, api.streamOpens.count { it == "x" })
+    }
+
+    @Test fun `consent accepted through Profile unlocks retained draft without automatically sending`() {
+        val vm = newVm()
+        vm.onResumed()
+        api.askOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        sendQuestion(vm)
+        vm.consumeEvent()
+        profileApi.profile = profileApi.profile.copy(consents = listOf(
+            ru.finassist.pf.core.api.model.Consent(ru.finassist.pf.core.api.model.ConsentType.ASSISTANT, true, "1", "1")))
+        vm.onResumed()
+        assertFalse(vm.state.value.consentRequired)
+        assertFalse(vm.state.value.askBlocked)
+        assertTrue(vm.state.value.askRetryReady)
+        assertEquals(1, api.asks.size)
+        assertEquals("Сколько я трачу на такси?", vm.state.value.draft)
+        api.askOutcomes += askResponse("a1")
+        vm.send()
+        assertEquals(2, api.asks.size)
+        assertEquals(api.asks.first().key, api.asks.last().key)
+    }
+
+    @Test fun `missing outdated or unreadable Profile consent never clears a retained refusal`() {
+        val vm = newVm()
+        vm.onResumed()
+        api.askOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        sendQuestion(vm)
+        vm.consumeEvent()
+        vm.onResumed()
+        assertTrue(vm.state.value.consentRequired)
+        profileApi.profile = profileApi.profile.copy(consents = listOf(
+            ru.finassist.pf.core.api.model.Consent(ru.finassist.pf.core.api.model.ConsentType.ASSISTANT, true, "1", "2")))
+        vm.onResumed()
+        assertTrue(vm.state.value.consentRequired)
+        profileApi.failure = AppError.Offline()
+        vm.onResumed()
+        assertTrue(vm.state.value.consentRequired)
+        vm.send()
+        assertEquals(1, api.asks.size)
+    }
+
+    @Test fun `Profile correction enables explicit RetryAnswer without starting it on resume`() {
+        val vm = vmWithFailedAnswer()
+        vm.onResumed()
+        api.retryOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        vm.retry("a1")
+        vm.consumeEvent()
+        profileApi.profile = profileApi.profile.copy(consents = listOf(
+            ru.finassist.pf.core.api.model.Consent(ru.finassist.pf.core.api.model.ConsentType.ASSISTANT, true, "1", "1")))
+        vm.onResumed()
+        assertFalse(vm.state.value.consentRequired)
+        assertNull(vm.state.value.blockedRetryAnswerId)
+        assertEquals(1, api.retries.size)
+        api.retryOutcomes += RetryResponse("a2", 2)
+        vm.retry("a1")
+        assertEquals(2, api.retries.size)
+        assertEquals(api.retries.first().first, api.retries.last().first)
+        assertTrue(api.asks.isEmpty())
     }
 
     @Test fun `restored Ask after consent requires explicit new intent before generating a fresh key`() {
@@ -1224,27 +1653,29 @@ class ChatViewModelBehaviourTest {
     }
 
 
-    @Test fun `another voice question changes the refused Ask context before its gate is checked`() {
-        api.askOutcomes += voiceAskRefusal(false)
+    @Test fun `another edited question changes the refused Ask context before its gate is checked`() {
+        api.askOutcomes += askRefusal(false)
         api.askOutcomes += askResponse()
         val vm = newVm()
         sendQuestion(vm, "Сколько потрачено на такси?")
         val original = api.asks.single().key
-        vm.send(voiceText = "Сколько потрачено на продукты?")
+        vm.setDraft("Сколько потрачено на продукты?")
+        vm.send()
         assertEquals(2, api.asks.size)
         assertEquals("Сколько потрачено на продукты?", api.asks.last().request.text)
         assertTrue(original != api.asks.last().key)
     }
 
-    @Test fun `the same trimmed voice question preserves false denial and its pending key`() {
-        api.askOutcomes += voiceAskRefusal(false)
+    @Test fun `the same trimmed edited question preserves false denial and its pending key`() {
+        api.askOutcomes += askRefusal(false)
         val saved = SavedStateHandle()
         val vm = newVm(saved)
         val question = "Сколько потрачено на такси?"
         sendQuestion(vm, question)
         val original = api.asks.single().key
         val pendingBefore = saved.get<String>("chat.pending.key")
-        vm.send(voiceText = "  $question ")
+        vm.setDraft("  $question ")
+        vm.send()
         advance(60_000)
         assertEquals(1, api.asks.size)
         assertEquals("  $question ", vm.state.value.draft)
@@ -1254,45 +1685,50 @@ class ChatViewModelBehaviourTest {
         assertEquals(original.value, pendingBefore)
     }
 
-    @Test fun `a new voice question does not inherit the previous question wait`() {
-        api.askOutcomes += voiceAskRefusal(true)
+    @Test fun `a new edited question does not inherit the previous question wait`() {
+        api.askOutcomes += askRefusal(true)
         api.askOutcomes += askResponse()
         val vm = newVm()
         sendQuestion(vm, "Сколько потрачено на такси?")
         assertFalse(vm.state.value.askRetryReady)
         val original = api.asks.single().key
-        vm.send(voiceText = "Сколько потрачено на продукты?")
+        vm.setDraft("Сколько потрачено на продукты?")
+        vm.send()
         assertEquals(2, api.asks.size, "a different request is not a resend of the rate-limited request")
         assertTrue(original != api.asks.last().key)
     }
 
-    @Test fun `same voice preserves the original wait deadline and replays its exact key`() {
-        api.askOutcomes += voiceAskRefusal(true)
+    @Test fun `same draft preserves the original wait deadline and replays its exact key`() {
+        api.askOutcomes += askRefusal(true)
         api.askOutcomes += askResponse()
         val vm = newVm()
         val question = "Сколько потрачено на такси?"
         sendQuestion(vm, question)
         val original = api.asks.single().key
         advance(2_000)
-        vm.send(voiceText = " $question  ")
+        vm.setDraft(" $question  ")
+        vm.send()
         assertEquals(1, api.asks.size)
         advance(999)
-        vm.send(voiceText = question)
+        vm.setDraft(question)
+        vm.send()
         assertEquals(1, api.asks.size)
         advance(1)
-        vm.send(voiceText = " $question ")
+        vm.setDraft(" $question ")
+        vm.send()
         assertEquals(2, api.asks.size)
         assertEquals(original, api.asks.last().key)
         assertEquals(question, api.asks.last().request.text)
     }
 
-    @Test fun `a voice result while an Ask is busy stays in the draft after the old Ask fails`() {
+    @Test fun `an edited draft while an Ask is busy stays in the draft after the old Ask fails`() {
         val pending = CompletableDeferred<Unit>()
         api.askGate = pending
-        api.askOutcomes += voiceAskRefusal(false)
+        api.askOutcomes += askRefusal(false)
         val vm = newVm()
         sendQuestion(vm, "Сколько потрачено на такси?")
-        vm.send(voiceText = "Сколько потрачено на продукты?")
+        vm.setDraft("Сколько потрачено на продукты?")
+        vm.send()
         assertEquals(1, api.asks.size)
         assertEquals("Сколько потрачено на продукты?", vm.state.value.draft)
         pending.complete(Unit)
@@ -1308,14 +1744,15 @@ class ChatViewModelBehaviourTest {
         assertTrue(api.asks.first().key != api.asks.last().key)
     }
 
-    @Test fun `a voice result while an Ask is busy survives old success with the usual length bound`() {
+    @Test fun `an edited draft while an Ask is busy survives old success with the usual length bound`() {
         val pending = CompletableDeferred<Unit>()
         api.askGate = pending
         api.askOutcomes += askResponse()
         val vm = newVm()
         sendQuestion(vm, "Сколько потрачено на такси?")
         val recognized = "б".repeat(2_100)
-        vm.send(voiceText = recognized)
+        vm.setDraft(recognized)
+        vm.send()
         assertEquals("б".repeat(2_000), vm.state.value.draft)
         assertEquals(1, api.asks.size)
         pending.complete(Unit)
@@ -1325,8 +1762,165 @@ class ChatViewModelBehaviourTest {
         assertFalse(vm.state.value.sending)
     }
 
-    private fun voiceAskRefusal(retryable: Boolean) = AppError.RateLimited(null, 3,
+    @Test fun `dictation appends to the draft without sending or spending a question`() {
+        val vm = newVm()
+        vm.setDraft("  Мои расходы")
+        vm.appendVoiceText(" на такси ")
+        assertEquals("  Мои расходы на такси", vm.state.value.draft)
+        assertTrue(api.asks.isEmpty())
+        assertFalse(vm.state.value.sending)
+    }
+
+    @Test fun `dictation respects existing whitespace empty input and the draft length bound`() {
+        val vm = newVm()
+        vm.appendVoiceText("  ")
+        assertEquals("", vm.state.value.draft)
+        vm.appendVoiceText("такси")
+        assertEquals("такси", vm.state.value.draft)
+        vm.setDraft("такси ")
+        vm.appendVoiceText("за месяц")
+        assertEquals("такси за месяц", vm.state.value.draft)
+        vm.setDraft("а".repeat(1998))
+        vm.appendVoiceText("такси")
+        assertEquals("а".repeat(1998) + " т", vm.state.value.draft)
+        assertTrue(api.asks.isEmpty())
+    }
+
+    private fun askRefusal(retryable: Boolean) = AppError.RateLimited(null, 3,
         ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = retryable,
             timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0)))
+
+    @Test fun `a quota GET begun before Ask cannot restore its spent remaining count`() {
+        val vm = newVm()
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { oldQuota.await() }
+        vm.refresh()
+        api.askOutcomes += askResponse(remaining = 0)
+        sendQuestion(vm)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        oldQuota.complete(limit)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+    }
+
+    @Test fun `a quota GET begun before Retry cannot restore its spent remaining count`() {
+        api.pages[null] = MessagesList(listOf(answer("old", AnswerStatus.FAILED, retryable = true)), hasOlder = false)
+        val vm = newVm()
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { oldQuota.await() }
+        vm.refresh()
+        api.retryOutcomes += RetryResponse("new", remainingLimit = 0)
+        vm.retry("old")
+        oldQuota.complete(limit)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+    }
+
+    @Test fun `a quota GET begun before terminal SSE cannot overwrite its remaining count`() {
+        api.pages[null] = MessagesList(listOf(answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val events = kotlinx.coroutines.flow.MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
+        api.script("a1", events)
+        val vm = newVm()
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { oldQuota.await() }
+        vm.refresh()
+        events.tryEmit(done(remaining = 0))
+        assertEquals(0, vm.state.value.limit?.remaining)
+        oldQuota.complete(limit)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+    }
+
+    @Test fun `Ask before first quota metadata spends its known remainder and reconciles metadata once`() {
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        val freshQuota = CompletableDeferred<AssistantLimit>()
+        var reads = 0
+        api.limitReply = { if (++reads == 1) oldQuota.await() else freshQuota.await() }
+        val vm = newVm()
+        assertNull(vm.state.value.limit)
+        api.askOutcomes += askResponse(remaining = 0)
+        sendQuestion(vm)
+        assertTrue(vm.state.value.limitExhausted)
+        assertEquals(0, vm.state.value.knownRemaining)
+        oldQuota.complete(limit)
+        assertEquals(2, reads)
+        assertNull(vm.state.value.limit, "stale reset metadata must not be installed")
+        assertTrue(vm.state.value.limitExhausted)
+        freshQuota.complete(limit.copy(remaining = 0))
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+        assertEquals(2, reads)
+    }
+
+    @Test fun `terminal Error refund while quota GET is pending remains authoritative`() {
+        api.pages[null] = MessagesList(listOf(answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val events = kotlinx.coroutines.flow.MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
+        api.script("a1", events)
+        val vm = newVm()
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { oldQuota.await() }
+        vm.refresh()
+        events.tryEmit(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "model", remainingLimit = 5)))
+        assertEquals(5, vm.state.value.knownRemaining)
+        oldQuota.complete(limit)
+        assertEquals(5, vm.state.value.limit?.remaining)
+        assertEquals(5, vm.state.value.knownRemaining)
+    }
+
+    @Test fun `retry-not-allowed reconciles history while a manual quota read is still pending`() {
+        api.pages[null] = MessagesList(listOf(answer("old", AnswerStatus.FAILED, retryable = true)), hasOlder = false)
+        val vm = newVm()
+        val pendingQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { pendingQuota.await() }
+        vm.refresh()
+        assertTrue(vm.state.value.refreshing)
+        api.pages[null] = MessagesList(listOf(answer("replacement")), hasOlder = false)
+        api.retryOutcomes += AppError.Api(ErrorCodes.RETRY_NOT_ALLOWED, 409)
+        vm.retry("old")
+        assertEquals(3, api.listCalls.size)
+        assertEquals(listOf("replacement"), vm.state.value.items.map { it.id })
+        pendingQuota.complete(limit)
+        assertEquals(listOf("replacement"), vm.state.value.items.map { it.id })
+        assertTrue(api.asks.isEmpty())
+    }
+
+    @Test fun `metadata reconciliation stops after the second stale quota read until explicit refresh`() {
+        val firstQuota = CompletableDeferred<AssistantLimit>()
+        val secondQuota = CompletableDeferred<AssistantLimit>()
+        val explicitQuota = CompletableDeferred<AssistantLimit>()
+        var reads = 0
+        api.limitReply = {
+            when (++reads) {
+                1 -> firstQuota.await()
+                2 -> secondQuota.await()
+                else -> explicitQuota.await()
+            }
+        }
+        val events = kotlinx.coroutines.flow.MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
+        api.script("a1", events)
+        val vm = newVm()
+        api.askOutcomes += askResponse(remaining = 3)
+        sendQuestion(vm)
+        firstQuota.complete(limit)
+        assertEquals(2, reads)
+        assertEquals(3, vm.state.value.knownRemaining)
+
+        assertTrue(events.tryEmit(done(remaining = 2)))
+        secondQuota.complete(limit.copy(remaining = 3))
+        assertEquals(2, reads, "a second stale reply must not trigger a third automatic GET")
+        assertNull(vm.state.value.limit)
+        assertEquals(2, vm.state.value.knownRemaining)
+        assertEquals(1, api.asks.size)
+
+        vm.refresh()
+        assertEquals(3, reads, "an explicit refresh can request metadata after reconciliation stopped")
+        assertEquals(2, vm.state.value.knownRemaining)
+        explicitQuota.complete(limit.copy(remaining = 2))
+        assertEquals(2, vm.state.value.limit?.remaining)
+        assertEquals(2, vm.state.value.knownRemaining)
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(3, reads)
+        assertEquals(1, api.asks.size)
+    }
 
 }

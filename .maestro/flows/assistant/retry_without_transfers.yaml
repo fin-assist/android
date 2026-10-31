@@ -50,6 +50,15 @@ tags:
       id: "assistant.consent.submit"
 - tapOn:
     id: "assistant.consent.submit"
+# FIN-394: consent returns to the draft; sending is a separate explicit action.
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertNotVisible:
+    id: "assistant.question"
+- tapOn:
+    id: "ds.chat.send"
 
 # The model fails: the question is not spent, «Повторить» is offered.
 - extendedWaitUntil:

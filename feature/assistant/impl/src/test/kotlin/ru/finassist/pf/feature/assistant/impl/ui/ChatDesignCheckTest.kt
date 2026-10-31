@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
+import ru.finassist.pf.core.common.error.ConnectionEnvironment
+import ru.finassist.pf.core.common.error.ConnectionEnvironmentReader
+import ru.finassist.pf.core.designsystem.components.LocalConnectionEnvironmentReader
 import ru.finassist.pf.core.common.error.ErrorPresentation
 import ru.finassist.pf.core.common.error.ErrorSeverity
 import ru.finassist.pf.core.common.error.UserMessage
@@ -139,19 +143,37 @@ class ChatDesignCheckTest {
         onSend = {}, onVoice = {}, onOpenSearch = {}, onOpenAnalytics = {},
     )
 
-    private fun capture(name: String, state: ChatUiState, dark: Boolean = false, heightDp: Int = 844) =
+    private fun capture(name: String, state: ChatUiState, dark: Boolean = false, heightDp: Int = 844, environment: ConnectionEnvironment = ConnectionEnvironment.UNKNOWN, voice: VoiceState = VoiceState()) =
         // The thread is a viewport over a scrolling list, as on the artboard: no full-height growth.
-        DesignCheck.capture(name, dark = dark, heightDp = heightDp, fullHeight = false) {
-            // Opened at the end of the thread, as the app scrolls it once the history has loaded.
-            val list = rememberLazyListState(initialFirstVisibleItemIndex = Int.MAX_VALUE)
-            ChatContent(state, zone = zone, today = today, voiceListening = false, actions = actions, listState = list)
+        DesignCheck.capture(name, dark = dark, heightDp = heightDp, fullHeight = false, tab = 2) {
+            CompositionLocalProvider(LocalConnectionEnvironmentReader provides ConnectionEnvironmentReader { environment }) {
+                // Opened at the end of the thread, as the app scrolls it once the history has loaded.
+                val list = rememberLazyListState(initialFirstVisibleItemIndex = Int.MAX_VALUE)
+                ChatContent(state, zone = zone, today = today, voiceState = voice, actions = actions, listState = list)
+            }
+
         }
+
+    @Test fun voicePreparing() = capture("ChatVoicePreparing", answered.copy(draft = "Мои расходы"), voice = VoiceState(VoicePhase.PREPARING))
+    @Test fun voiceListening() = capture("ChatVoiceListening", answered, voice = VoiceState(VoicePhase.LISTENING, level = 0.6f))
+    @Test fun voiceListeningDark() = capture("ChatVoiceListeningDark", answered, dark = true, voice = VoiceState(VoicePhase.LISTENING, level = 0.6f))
+    @Test fun voiceRecognizing() = capture("ChatVoiceRecognizing", answered, voice = VoiceState(VoicePhase.RECOGNIZING))
+    @Test fun voicePermission() = capture("ChatVoicePermission", answered.copy(draft = "Мои расходы"), voice = VoiceState(VoicePhase.ERROR, failure = VoiceFailure.PERMISSION))
+    @Test fun voiceNoSpeech() = capture("ChatVoiceNoSpeech", answered, voice = VoiceState(VoicePhase.ERROR, failure = VoiceFailure.NO_SPEECH))
+    @Test fun voiceUnavailable() = capture("ChatVoiceUnavailable", answered, voice = VoiceState(VoicePhase.ERROR, failure = VoiceFailure.UNAVAILABLE))
+    @Test fun voiceError() = capture("ChatVoiceError", answered, voice = VoiceState(VoicePhase.ERROR, failure = VoiceFailure.RECOGNITION))
 
     @Test fun chat() = capture("Chat", answered)
 
     @Test fun chatDark() = capture("ChatDark", answered, dark = true)
 
     @Test fun chatEmpty() = capture("ChatEmpty", ChatUiState(loading = false, limit = limit(5)))
+
+    @Test fun consentRecovery() = capture("ChatConsentRecovery", ChatUiState(loading = false,
+        draft = "Сколько я трачу на такси?", consentRequired = true, askBlocked = true, limit = limit(5)))
+
+    @Test fun consentRecoveryDark() = capture("ChatConsentRecoveryDark", ChatUiState(loading = false,
+        draft = "Сколько я трачу на такси?", consentRequired = true, askBlocked = true, limit = limit(5)), dark = true)
 
     @Test fun chatBusy() = capture(
         "ChatBusy",
@@ -212,6 +234,8 @@ class ChatDesignCheckTest {
 
     @Test fun chatOffline() = capture("ChatOffline", answered.copy(offline = true), heightDp = 853)
 
+    @Test fun chatOfflineVpn() = capture("ChatOfflineVpn", answered.copy(offline = true), heightDp = 853, environment = ConnectionEnvironment.VPN)
+
     @Test fun chatLimit() = capture("ChatLimit", answered.copy(limit = limit(0)))
     // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
     @Test fun serverRefusal() = capture("ChatServerRefusal", answered.copy(draft = "Вопрос о расходах", errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING), requestRetryable = false, askRetryReady = false, askBlocked = true))
@@ -224,4 +248,7 @@ class ChatDesignCheckTest {
     @Test fun retryRecovery() = capture("ChatRetryRecovery", answered.copy(
         items = listOf(ChatItem.Answer("a1", calculated, AnswerStatus.FAILED, retryable = true)),
         recovery = ChatRecovery(ChatRecoveryTarget.RETRY_ANSWER, "a1", historyChecked = true)))
+    @Test fun refreshing() = capture("ChatRefreshing", answered.copy(refreshing = true))
+    @Test fun refreshingDark() = capture("ChatRefreshingDark", answered.copy(refreshing = true), dark = true)
+
 }

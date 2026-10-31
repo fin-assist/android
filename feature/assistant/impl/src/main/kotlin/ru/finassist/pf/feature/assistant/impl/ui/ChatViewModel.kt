@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.AssistantApi
+import ru.finassist.pf.core.api.ProfileApi
 import ru.finassist.pf.core.api.SseReopenState
 import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.model.AnswerEvent
@@ -80,6 +81,7 @@ data class ChatRecovery(val target: ChatRecoveryTarget, val answerId: String? = 
 
 data class ChatUiState(
     val loading: Boolean = true,
+    val refreshing: Boolean = false,
     val loadFailed: Boolean = false,
     val items: List<ChatItem> = emptyList(),
     val hasOlder: Boolean = false,
@@ -87,6 +89,8 @@ data class ChatUiState(
     val draft: String = "",
     val sending: Boolean = false,
     val limit: AssistantLimit? = null,
+    /** Latest authoritative remainder, even before GET supplies reset and daily-maximum metadata. */
+    val knownRemaining: Int? = null,
     val offline: Boolean = false,
     /** Last send/retry failed for a reason other than the network (shown with «Повторить»). */
     val sendFailed: Boolean = false,
@@ -97,6 +101,7 @@ data class ChatUiState(
     val askBlocked: Boolean = false,
     val askRetryReady: Boolean = true,
     val loadRetryReady: Boolean = true,
+    val limitRetryReady: Boolean = true,
     val olderRetryReady: Boolean = true,
     val blockedRetryAnswerId: String? = null,
     val retryReadyByAnswer: Map<String, Boolean> = emptyMap(),
@@ -108,9 +113,10 @@ data class ChatUiState(
     val streamErrorPresentation: ErrorPresentation? = null,
     val streamRetryable: Boolean? = null,
     val recovery: ChatRecovery? = null,
+    val consentRequired: Boolean = false,
 ) {
     val generating: Boolean get() = items.any { it is ChatItem.Answer && it.status == AnswerStatus.GENERATING }
-    val limitExhausted: Boolean get() = limit?.let { it.remaining <= 0 } == true
+    val limitExhausted: Boolean get() = (knownRemaining ?: limit?.remaining)?.let { it <= 0 } == true
 }
 
 /**
@@ -125,6 +131,7 @@ class ChatViewModel @Inject constructor(
     private val tracker: Tracker,
     private val clock: Clock,
     private val elapsedClock: ElapsedClock,
+    private val profileApi: ProfileApi,
 ) : ViewModel() {
     private val transferMode: TransferMode =
         TransferMode.entries.firstOrNull { it.code == savedState.toRoute<AssistantRoutes.Chat>().transferMode } ?: TransferMode.WITH
@@ -134,9 +141,13 @@ class ChatViewModel @Inject constructor(
     private val askGate = RequestRetryGate(elapsedClock)
     private val loadGate = RequestRetryGate(elapsedClock)
     private val olderGate = RequestRetryGate(elapsedClock)
+    private val consentReadGate = RequestRetryGate(elapsedClock)
+    private var consentReadJob: Job? = null
+    private var consentRevision = 0L
     private val retryGates = mutableMapOf<String, RequestRetryGate>()
     init {
         viewModelScope.launch { askGate.readiness.collect { ready -> _state.update { it.copy(askRetryReady = ready) } } }
+        viewModelScope.launch { limitRetryGate.readiness.collect { ready -> _state.update { it.copy(limitRetryReady = ready) } } }
         viewModelScope.launch { loadGate.readiness.collect { ready -> _state.update { it.copy(loadRetryReady = ready) } } }
         viewModelScope.launch { olderGate.readiness.collect { ready -> _state.update { it.copy(olderRetryReady = ready) } } }
     }
@@ -145,7 +156,17 @@ class ChatViewModel @Inject constructor(
     private val reopenStates = HashMap<String, SseReopenState>()
 
     private val streams = HashMap<String, Job>()
+    private var wasPresented = false
     private val retryKeys = HashMap<String, IdempotencyKey>()
+    private var historyReadRevision = 0L
+    private var historyReadPending = false
+    private var limitReadPending = false
+    private var limitRevision = 0L
+    /** A successful RetryAnswer invalidates snapshots begun before its in-place replacement. */
+    private var replacementRevision = 0L
+    /** Only locally accepted Ask messages enter this registry; GET pagination never does. */
+    private var acceptanceRevision = 0L
+    private val acceptedMessageRevisions = HashMap<String, Long>()
     /** Failed answers whose «Повторить» is in flight: a second tap must not send the same key again (FIN-75). */
     private val retrying = HashSet<String>()
 
@@ -182,21 +203,73 @@ class ChatViewModel @Inject constructor(
         load()
     }
 
-    fun load() { if (loadGate.isReady()) reload(skipStream = null) }
+    fun load() { if (!_state.value.refreshing && loadGate.isReady()) reload(skipStream = null) }
+
+    /** Re-reads history and quota without creating or retrying any question. */
+    fun refresh() {
+        if (historyReadPending || _state.value.refreshing) return
+        if (loadGate.isReady()) {
+            _state.update { it.copy(refreshing = true) }
+            reload(skipStream = null, quiet = true)
+        } else if (!limitReadPending && limitRetryGate.isReady()) {
+            _state.update { it.copy(refreshing = true) }
+            viewModelScope.launch {
+                try { refreshLimit(reportOffline = true) }
+                finally { _state.update { it.copy(refreshing = false) } }
+            }
+        }
+    }
+
+    /** Every history mutation reconciles pagination permission with the actual next before_id. */
+    private fun updateHistoryState(transform: (ChatUiState) -> ChatUiState) {
+        val boundary = _state.value.items.firstOrNull()?.id
+        _state.update(transform)
+        if (boundary != _state.value.items.firstOrNull()?.id) {
+            olderGate.clearOriginalRefusal()
+            _state.update { it.copy(olderErrorPresentation = null, olderRetryable = null) }
+        }
+    }
 
     /**
      * Reads the latest page of the thread; on failure a shown thread stays as it is. [skipStream] is an answer
      * whose stream has just failed for good: it is not re-opened from here even if the history still says it is
      * generating, or a server that keeps answering the stream with 404 would loop (the next resume tries again).
      */
-    private fun reload(skipStream: String?) {
+    private fun reload(skipStream: String?, quiet: Boolean = false) {
         if (!loadGate.isReady()) return
+        historyReadPending = true
+        val readRevision = ++historyReadRevision
         viewModelScope.launch {
-            _state.update { it.copy(loading = it.items.isEmpty(), loadFailed = false, loadErrorPresentation = null, loadRetryable = null) }
+            _state.update { it.copy(loading = !quiet && it.items.isEmpty(), loadFailed = false, loadErrorPresentation = null, loadRetryable = null) }
+            val mutationRevision = replacementRevision
+            val acceptedBeforeRead = acceptanceRevision
             try {
+                val beforeRead = _state.value.items
                 val list = api.listMessages(limit = PAGE)
+                if (readRevision != historyReadRevision) return@launch
+                if (mutationRevision != replacementRevision) {
+                    _state.update { it.copy(loading = false) }
+                    reload(skipStream, quiet)
+                    return@launch
+                }
                 val items = list.messages.mapNotNull(::toItem).distinctById()
-                _state.update { current ->
+                updateHistoryState { current ->
+                    val priorById = beforeRead.associateBy { it.id }
+                    val currentById = current.items.associateBy { it.id }
+                    val firstFresh = items.firstOrNull()
+                    val overlap = firstFresh?.let { first -> current.items.indexOfFirst { it.id == first.id } } ?: -1
+                    // Without a shared id the pages cannot prove a contiguous prefix. Start pagination at
+                    // the server's fresh boundary instead of hiding a gap behind a cached hasOlder=false.
+                    val older = if (overlap >= 0) current.items.take(overlap)
+                    else if (firstFresh != null) emptyList()
+                    else current.items
+                    // A POST or SSE event accepted after this GET started is newer than its snapshot.
+                    val fresh = items.map { item -> currentById[item.id]?.takeIf { it != priorById[item.id] } ?: item }
+                    val acceptedDuringRead = current.items.filter {
+                        (acceptedMessageRevisions[it.id] ?: 0L) > acceptedBeforeRead &&
+                            it.id !in priorById && items.none { freshItem -> freshItem.id == it.id }
+                    }
+                    val merged = (older + fresh + acceptedDuringRead).distinctById()
                     val recovery = current.recovery?.let { candidate ->
                         if (candidate.target == ChatRecoveryTarget.ASK) candidate
                         else candidate.copy(historyChecked = true).takeIf {
@@ -205,13 +278,30 @@ class ChatViewModel @Inject constructor(
                             }
                         }
                     }
-                    current.copy(loading = false, items = items, hasOlder = list.hasOlder, offline = false, recovery = recovery)
+                    current.copy(loading = false, items = merged, hasOlder = if (older.isNotEmpty()) current.hasOlder else list.hasOlder,
+                        offline = false, recovery = recovery)
                 }
-                refreshLimit()
+                if (!quiet) refreshLimit()
                 watchGenerating(skip = skipStream)
             } catch (e: AppError) {
+                if (readRevision != historyReadRevision) return@launch
                 loadGate.record(e)
-                _state.update { it.copy(loading = false, loadFailed = it.items.isEmpty(), offline = e is AppError.Offline, loadErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, loadRetryable = e.requestRetryable) }
+                if (mutationRevision != replacementRevision && loadGate.isReady()) {
+                    _state.update { it.copy(loading = false) }
+                    reload(skipStream, quiet)
+                    return@launch
+                }
+                _state.update { it.copy(loading = false, loadFailed = it.items.isEmpty(), offline = if (quiet) it.offline else e is AppError.Offline,
+                    loadErrorPresentation = e.presentation.takeUnless { e is AppError.Offline && !quiet }, loadRetryable = e.requestRetryable) }
+            } finally {
+                if (readRevision == historyReadRevision) {
+                    // A quota read is independent of a failed history read and never repeats a POST.
+                    if (quiet) refreshLimit(reportOffline = true)
+                    if (readRevision == historyReadRevision) {
+                        historyReadPending = false
+                        _state.update { it.copy(refreshing = false) }
+                    }
+                }
             }
         }
     }
@@ -225,24 +315,83 @@ class ChatViewModel @Inject constructor(
             _state.update { it.copy(loadingOlder = true, olderErrorPresentation = null, olderRetryable = null) }
             try {
                 val list = api.listMessages(limit = PAGE, beforeId = first.id)
-                _state.update { st -> st.copy(loadingOlder = false, items = (list.messages.mapNotNull(::toItem) + st.items).distinctById(), hasOlder = list.hasOlder) }
+                if (_state.value.items.firstOrNull()?.id != first.id) {
+                    _state.update { it.copy(loadingOlder = false) }
+                    return@launch
+                }
+                updateHistoryState { st -> st.copy(loadingOlder = false,
+                    items = (list.messages.mapNotNull(::toItem) + st.items).distinctById(), hasOlder = list.hasOlder) }
             } catch (e: AppError) {
+                if (_state.value.items.firstOrNull()?.id != first.id) {
+                    olderGate.recordEndpointWait(e)
+                    _state.update { it.copy(loadingOlder = false) }
+                    return@launch
+                }
                 olderGate.record(e)
-                _state.update { it.copy(loadingOlder = false, olderErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, olderRetryable = e.requestRetryable) }
+                _state.update { it.copy(loadingOlder = false, olderErrorPresentation = e.presentation, olderRetryable = e.requestRetryable) }
             }
         }
     }
 
-    private suspend fun refreshLimit() {
-        if (!limitRetryGate.isReady()) return
-        runCatching { api.getLimit() }.onSuccess { l -> _state.update { it.copy(limit = l, limitErrorPresentation = null) } }
-            .onFailure { failure -> if (failure is AppError) {
-                limitRetryGate.record(failure)
-                if (failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
-            } }
+    private suspend fun refreshLimit(reportOffline: Boolean = false, reconcileUnknown: Boolean = true) {
+        if (limitReadPending || !limitRetryGate.isReady()) return
+        limitReadPending = true
+        val revision = limitRevision
+        var needsMetadata = false
+        try {
+            val limit = api.getLimit()
+            if (revision == limitRevision) {
+                _state.update { it.copy(limit = limit, knownRemaining = limit.remaining, limitErrorPresentation = null) }
+            } else {
+                needsMetadata = _state.value.limit == null && _state.value.knownRemaining != null
+            }
+        } catch (failure: AppError) {
+            if (revision != limitRevision) {
+                limitRetryGate.recordEndpointWait(failure)
+                return
+            }
+            limitRetryGate.record(failure)
+            if (reportOffline || failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
+        } finally {
+            limitReadPending = false
+        }
+        // An accepted Ask/SSE may arrive before the first quota metadata. Keep its remainder immediately,
+        // then obtain metadata with at most one new read; a second stale read waits for a later user refresh.
+        if (needsMetadata && reconcileUnknown) refreshLimit(reportOffline, reconcileUnknown = false)
     }
 
-    /** Called on resume: re-open streams of answers still generating. */
+    /** A saved tab keeps its draft; re-reading on later visits updates history and changed-since markers. */
+    fun onResumed() {
+        if (wasPresented && !_state.value.sending) load() else wasPresented = true
+        refreshConsentIfRequired()
+        resumeStreams()
+    }
+
+    /** A consent accepted in Profile can correct this retained tab; a failed read never lifts a refusal. */
+    private fun refreshConsentIfRequired() {
+        if (!_state.value.consentRequired || consentReadJob?.isActive == true || !consentReadGate.isReady()) return
+        val revision = consentRevision
+        consentReadJob = viewModelScope.launch {
+            try {
+                val consent = profileApi.getProfile().assistantConsent
+                if (consent == null || consent.needsRenewal || revision != consentRevision || !_state.value.consentRequired) return@launch
+                when (val operation = pendingConsentRequest) {
+                    PendingConsentRequest.Ask -> enableConsentedDraft()
+                    is PendingConsentRequest.Retry -> {
+                        retryGates[operation.answerId]?.clear()
+                        _state.update { it.copy(blockedRetryAnswerId = null, errorPresentation = null, requestRetryable = null) }
+                    }
+                    null -> Unit
+                }
+                pendingConsentRequest = null
+                _state.update { it.copy(consentRequired = false) }
+            } catch (error: AppError) {
+                consentReadGate.record(error)
+            }
+        }
+    }
+
+    /** Re-open streams of answers still generating. */
     fun resumeStreams() = watchGenerating(skip = null)
 
     private fun watchGenerating(skip: String?) {
@@ -268,11 +417,18 @@ class ChatViewModel @Inject constructor(
         _state.update { it.copy(draft = text.take(MAX_LENGTH), errorPresentation = null, requestRetryable = null, askBlocked = false, sendFailed = false, recovery = null) }
     }
 
-    /** Sends the draft (or [voiceText] right away — voice input is sent immediately, api.md / mvp-scope). */
-    fun send(voiceText: String? = null) {
-        voiceText?.let(::setDraft) // voice is the same bounded, normalized user-input context as typing
+    /** Dictation only edits the draft; sending remains a separate user action. */
+    fun appendVoiceText(text: String) {
+        val recognized = text.trim()
+        if (recognized.isEmpty()) return
+        val draft = _state.value.draft
+        val separator = if (draft.isEmpty() || draft.last().isWhitespace()) "" else " "
+        setDraft(draft + separator + recognized)
+    }
+
+    fun send() {
         val text = _state.value.draft.trim()
-        if (!askGate.isReady() || text.isEmpty() || _state.value.sending || _state.value.generating || blockedAskText == text) return
+        if (!askGate.isReady() || _state.value.consentRequired || text.isEmpty() || _state.value.sending || _state.value.generating || blockedAskText == text) return
         val key = pending?.takeIf { it.first == text }?.second ?: IdempotencyKey.random(elapsedClock)
         pending = text to key
         if (key.replayWindow?.isOpen(elapsedClock) != true) {
@@ -289,12 +445,16 @@ class ChatViewModel @Inject constructor(
                 tracker.track(Events.ASSISTANT_QUESTION_SENT)
                 val question = ChatItem.Question(r.question.id, r.question.createdAt, r.question.text ?: text)
                 val answer = ChatItem.Answer(r.answerId, r.question.createdAt, AnswerStatus.GENERATING)
-                _state.update {
+                val accepted = ++acceptanceRevision
+                acceptedMessageRevisions[question.id] = accepted
+                acceptedMessageRevisions[answer.id] = accepted
+                limitRevision++
+                updateHistoryState {
                     it.copy(
                         sending = false, draft = if (it.draft.trim() == text) "" else it.draft, offline = false,
                         // A replayed 201 carries ids the reloaded history may already hold: keep those.
                         items = (it.items + question + answer).distinctById(),
-                        limit = it.limit?.copy(remaining = r.remainingLimit),
+                        limit = it.limit?.copy(remaining = r.remainingLimit), knownRemaining = r.remainingLimit,
                     )
                 }
                 watch(r.answerId)
@@ -308,13 +468,15 @@ class ChatViewModel @Inject constructor(
                 _state.update { it.copy(sending = false, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable, askBlocked = e.requestRetryable == false) }
                 when {
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_REQUIRED -> {
+                        consentRevision++
                         pendingConsentRequest = PendingConsentRequest.Ask
-                        _state.update { it.copy(event = ChatEvent.OPEN_CONSENT) }
+                        _state.update { it.copy(event = ChatEvent.OPEN_CONSENT, consentRequired = true, askBlocked = true) }
                     }
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.LIMIT_EXCEEDED -> {
                         // Not stored by the server (api.md 7.1): tomorrow the same key would pass, but it is a new day.
                         pending = null
-                        _state.update { it.copy(limit = it.limit?.copy(remaining = 0) ?: AssistantLimit(0, 5, e.resetsAt ?: clock.now())) }
+                        limitRevision++
+                        _state.update { it.copy(limit = it.limit?.copy(remaining = 0) ?: AssistantLimit(0, 5, e.resetsAt ?: clock.now()), knownRemaining = 0) }
                     }
                     e is AppError.Offline -> _state.update { it.copy(offline = true) }
                     else -> _state.update { it.copy(sendFailed = true) }
@@ -349,13 +511,19 @@ class ChatViewModel @Inject constructor(
         _state.update { it.copy(offline = false, sendFailed = false) }
         if (_state.value.items.isEmpty() && !_state.value.loading) load()
         resumeStreams()
-        pending?.first?.let { send(it) }
+        pending?.first?.let { setDraft(it); send() }
     }
 
-    /** Corrected consent resumes the actual waiting operation with the same proven key, never an automatic new key. */
+    /** Reopens the corrective screen without sending a denied request again. */
+    fun openConsent() {
+        if (_state.value.consentRequired) _state.update { it.copy(event = ChatEvent.OPEN_CONSENT) }
+    }
+
+    /** Corrected Ask consent enables the draft; sending still requires an explicit user action. */
     fun onConsentGranted() {
         val operation = pendingConsentRequest
         pendingConsentRequest = null
+        _state.update { it.copy(consentRequired = false) }
         if (operation is PendingConsentRequest.Retry) {
             val id = operation.answerId
             val key = retryKeys[id]
@@ -369,18 +537,22 @@ class ChatViewModel @Inject constructor(
             retry(id)
             return
         }
-        val waiting = pending ?: return
-        tracker.track(Events.ASSISTANT_CONSENT_GRANTED)
+        val waiting = pending
+        if (operation == PendingConsentRequest.Ask) {
+            tracker.track(Events.ASSISTANT_CONSENT_GRANTED)
+            enableConsentedDraft()
+        }
+        if (waiting == null) return
         if (waiting.second.replayWindow?.isOpen(elapsedClock) != true) {
             requireRecovery(ChatRecovery(ChatRecoveryTarget.ASK))
             return
         }
-        // Only the known consent corrective flow lifts an original request's restriction.
-        if (operation != PendingConsentRequest.Ask) return
+    }
+
+    private fun enableConsentedDraft() {
         blockedAskText = null
         askGate.clear()
         _state.update { it.copy(requestRetryable = null, errorPresentation = null, askBlocked = false) }
-        send(waiting.first)
     }
 
     private fun requireRecovery(recovery: ChatRecovery) {
@@ -402,7 +574,8 @@ class ChatViewModel @Inject constructor(
                 blockedAskText = null
                 askGate.clear()
                 _state.update { it.copy(recovery = null, askBlocked = false, sendFailed = false, offline = false, errorPresentation = null) }
-                send(text)
+                setDraft(text)
+                send()
             }
             ChatRecoveryTarget.RETRY_ANSWER -> {
                 val id = recovery.answerId ?: return
@@ -444,12 +617,14 @@ class ChatViewModel @Inject constructor(
             try {
                 val r = whileInProgress(key) { api.retry(key, answerId) }
                 retryKeys.remove(answerId)
-                _state.update { s ->
+                replacementRevision++
+                limitRevision++
+                updateHistoryState { s ->
                     s.copy(
                         items = s.items.map { item ->
                             if (item.id == answerId && item is ChatItem.Answer) ChatItem.Answer(r.answerId, item.createdAt, AnswerStatus.GENERATING) else item
                         }.distinctById(),
-                        limit = s.limit?.copy(remaining = r.remainingLimit),
+                        limit = s.limit?.copy(remaining = r.remainingLimit), knownRemaining = r.remainingLimit,
                     )
                 }
                 watch(r.answerId)
@@ -457,15 +632,20 @@ class ChatViewModel @Inject constructor(
                 retryGate.record(e)
                 _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable, blockedRetryAnswerId = answerId.takeIf { e.requestRetryable == false }, failedRetryAnswerId = answerId) }
                 when {
-                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.LIMIT_EXCEEDED -> _state.update { it.copy(limit = it.limit?.copy(remaining = 0)) }
+                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.LIMIT_EXCEEDED -> {
+                        limitRevision++
+                        _state.update { it.copy(limit = it.limit?.copy(remaining = 0), knownRemaining = 0) }
+                    }
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_REQUIRED -> {
+                        consentRevision++
                         pendingConsentRequest = PendingConsentRequest.Retry(answerId)
-                        _state.update { it.copy(event = ChatEvent.OPEN_CONSENT) }
+                        _state.update { it.copy(event = ChatEvent.OPEN_CONSENT, consentRequired = true) }
                     }
                     // Already replaced (e.g. the first 201 was lost after all): the history has the truth.
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.RETRY_NOT_ALLOWED -> {
                         retryKeys.remove(answerId)
-                        load()
+                        // A confirmed server replacement must reconcile even while a gesture's quota read waits.
+                        reload(skipStream = null)
                     }
                     e is AppError.Offline -> _state.update { it.copy(offline = true) }
                     else -> _state.update { it.copy(sendFailed = true) }
@@ -511,7 +691,9 @@ class ChatViewModel @Inject constructor(
         else -> false
     }
 
-    private fun applyEvent(answerId: String, event: AnswerEvent) = _state.update { s ->
+    private fun applyEvent(answerId: String, event: AnswerEvent) {
+        if (event is AnswerEvent.Done || event is AnswerEvent.Error) limitRevision++
+        updateHistoryState { s ->
         val items = s.items.map { item ->
             if (item !is ChatItem.Answer || item.id != answerId) return@map item
             when (event) {
@@ -536,7 +718,12 @@ class ChatViewModel @Inject constructor(
         }
         if (event is AnswerEvent.Done) tracker.track(Events.ASSISTANT_ANSWER_DONE, mapOf("charged" to event.event.charged.toString()))
         if (event is AnswerEvent.Error) tracker.track(Events.ASSISTANT_ANSWER_FAILED, mapOf("code" to event.event.code.code))
-        s.copy(items = items, limit = limit)
+        s.copy(items = items, limit = limit, knownRemaining = when (event) {
+            is AnswerEvent.Done -> event.event.remainingLimit
+            is AnswerEvent.Error -> event.event.remainingLimit
+            else -> s.knownRemaining
+        })
+        }
     }
 
     private fun toItem(m: Message): ChatItem? = when (m.role) {

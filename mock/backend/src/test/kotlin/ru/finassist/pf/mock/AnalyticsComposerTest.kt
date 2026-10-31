@@ -43,8 +43,8 @@ class AnalyticsComposerTest {
     }
 
     @Test fun `only blocks the client supports are sent`() {
-        val supports = AnalyticsComposer.parseSupports("tile_group@1,chart@1,ranked_list@0")
-        assertEquals(mapOf("tile_group" to 1, "chart" to 1, "ranked_list" to 0), supports)
+        val supports = AnalyticsComposer.parseSupports("tile_group@1,chart@1")
+        assertEquals(mapOf("tile_group" to 1, "chart" to 1), supports)
         assertEquals(listOf("tiles", "monthly_chart", "balance"), ids(f.september(), supports = supports))
         assertEquals(mapOf("analytics_order" to "b"), AnalyticsComposer.parseExperiments("analytics_order:b,broken"))
     }
@@ -62,9 +62,9 @@ class AnalyticsComposerTest {
     @Test fun `texts and actions come from the server`() {
         val a = AnalyticsComposer.compose(f.september())
         val tiles = assertNotNull(a.blocks.first { it.id == "tiles" }.decode(TileGroupData.serializer())).tiles
-        assertEquals(listOf("balance", "forecast", "daily_expense", "income"), tiles.map { it.id })
+        assertEquals(listOf("balance", "expense", "daily_expense", "income", "forecast"), tiles.map { it.id })
         assertEquals("46% дохода · по выписке", tiles[0].caption)
-        assertTrue(tiles[1].approx)
+        assertTrue(tiles[4].approx)
         assertTrue(tiles[3].showPlus)
         assertEquals(ActionType.OPEN_OPERATIONS, tiles[3].action?.type)
         val income = assertNotNull(a.blocks.first { it.id == "income_categories" }.decode(RankedListData.serializer()))

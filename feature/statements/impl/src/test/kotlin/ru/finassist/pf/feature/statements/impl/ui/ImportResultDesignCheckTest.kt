@@ -210,4 +210,11 @@ class ImportResultDesignCheckTest {
             errorPresentation = ru.finassist.pf.core.common.error.ErrorPresentation(ru.finassist.pf.core.common.error.UserMessage.from("Чтение строк временно недоступно"), ru.finassist.pf.core.common.error.ErrorSeverity.WARNING)),
             copied = false, onBack = {}, onRetry = {}, onReport = {})
     }
+    @Test fun unreadRefreshing() = DesignCheck.capture("UnreadLinesRefreshing", heightDp = 844) {
+        UnreadLinesContent(unreadState().copy(refreshing = true), copied = false, onBack = {}, onRetry = {}, onReport = {})
+    }
+    @Test fun unreadRefreshingDark() = DesignCheck.capture("UnreadLinesRefreshingDark", dark = true, heightDp = 844) {
+        UnreadLinesContent(unreadState().copy(refreshing = true), copied = false, onBack = {}, onRetry = {}, onReport = {})
+    }
+
 }

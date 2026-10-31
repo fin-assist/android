@@ -13,6 +13,16 @@ interface StatementsRepository {
     /** Hot stream: the feed and analytics reload on every event. */
     val events: Flow<StatementsEvent>
 
+    /**
+     * Opaque local token of a completed non-empty import whose analytics has not been observed yet.
+     * Scoped to the current user; survives creation of a new Analytics view model in this process.
+     * A successful import can precede publication of its analytics projection.
+     */
+    suspend fun pendingAnalyticsImport(): Long?
+
+    /** Acknowledge only the observed token; a newer import must remain pending. */
+    suspend fun analyticsImportReady(revision: Long)
+
     /** Result of an import finished in this process, for the result screen; `null` after process death. */
     fun lastResult(uploadId: String): ImportResult?
 

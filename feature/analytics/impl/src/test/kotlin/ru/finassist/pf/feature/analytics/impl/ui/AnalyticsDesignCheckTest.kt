@@ -60,6 +60,7 @@ class AnalyticsDesignCheckTest {
 
     private class Handlers(private val mode: TransferMode) : AnalyticsHandlers {
         override fun load(quiet: Boolean) = Unit
+        override fun retryPeriodChange() = Unit
         override fun consumeSnackbar() = Unit
         override fun setPeriodType(type: PeriodTypeCode) = Unit
         override fun goTo(key: PeriodKey) = Unit
@@ -85,6 +86,45 @@ class AnalyticsDesignCheckTest {
             }
         }
 
+    // FIN-394: proposed states; authored without running UI/DesignCheck.
+    @Test fun analyticsRecalculating() = capture("AnalyticsRecalculating", ui(september().copy(state = analyticsState.copy(recalculating = true))), heightDp = 2848)
+    @Test fun analyticsRecalculationPaused() = capture("AnalyticsRecalculationPaused", ui(september().copy(state = analyticsState.copy(recalculating = true))).copy(recalculationPaused = true), heightDp = 2848)
+    @Test fun analyticsUpdating() = capture("AnalyticsUpdating", AnalyticsUiState(blocks = blocks), heightDp = 844)
+    @Test fun analyticsPreparationTimeout() = capture("AnalyticsPreparationTimeout", AnalyticsUiState(loading = false, blocks = blocks, preparationTimedOut = true), heightDp = 844)
+    @Test fun analyticsPreparationTimeoutDark() = capture("AnalyticsPreparationTimeoutDark", AnalyticsUiState(loading = false, blocks = blocks, preparationTimedOut = true), heightDp = 844, dark = true)
+    @Test fun analyticsUpdatingDark() = capture("AnalyticsUpdatingDark", AnalyticsUiState(blocks = blocks), heightDp = 844, dark = true)
+    @Test fun analyticsPreparingWithoutData() = capture("AnalyticsPreparingWithoutData", ui(september().copy(hasData = false,
+        state = analyticsState.copy(recalculating = true))), heightDp = 844)
+
+    private fun noData() = golden("no_data").also { response ->
+        kotlin.test.assertTrue(response.hasData, "another period still has financial data")
+        kotlin.test.assertEquals(ru.finassist.pf.core.api.model.Coverage.NO_DATA, response.period?.coverage)
+        val tiles = response.blocks.single { it.id == "tiles" }
+        kotlin.test.assertEquals(ru.finassist.pf.core.api.model.BlockStatus.NONE, tiles.status)
+        kotlin.test.assertEquals("За этот период данных нет", tiles.emptyText)
+        kotlin.test.assertEquals(2, tiles.v)
+        kotlin.test.assertTrue(tiles.decode(ru.finassist.pf.core.api.model.TileGroupDataV2.serializer())!!.groups.isEmpty())
+    }
+
+    @Test fun analyticsNoData() = capture("AnalyticsNoData", ui(noData()), heightDp = 844)
+    @Test fun analyticsNoDataDark() = capture("AnalyticsNoDataDark", ui(noData()), heightDp = 844, dark = true)
+    @Test fun analyticsNoDataTilesHidden() = capture("AnalyticsNoDataTilesHidden", ui(noData()).copy(blocks = blocks.copy(hidden = setOf("tiles"))), heightDp = 844)
+
+    @Test fun analyticsForecastHistory() = capture("AnalyticsForecastHistory", ui(golden("rolling_year")), heightDp = 1600)
+    @Test fun analyticsForecastHistoryDark() = capture("AnalyticsForecastHistoryDark", ui(golden("rolling_year")), heightDp = 1600, dark = true)
+
+    // FIN-391: proposed artboards, authored and compiled only; no UI/DesignCheck execution.
+    @Test fun analyticsPeriodChangeFailed() = capture("AnalyticsPeriodChangeFailed", ui(september()).copy(
+        periodChangeErrorPresentation = ErrorPresentation()), heightDp = 2960)
+    @Test fun analyticsPeriodChangeFailedDark() = capture("AnalyticsPeriodChangeFailedDark", ui(september()).copy(
+        periodChangeErrorPresentation = ErrorPresentation()), heightDp = 2960, dark = true)
+    @Test fun analyticsPeriodChangeRetryBlocked() = capture("AnalyticsPeriodChangeRetryBlocked", ui(september()).copy(
+        periodChangeRetryReady = false, periodChangeErrorPresentation = ErrorPresentation()), heightDp = 2960)
+
+    @Test fun analyticsPeriodAndDismissalErrors() = capture("AnalyticsPeriodAndDismissalErrors", ui(september()).copy(
+        periodChangeErrorPresentation = ErrorPresentation(), errorPresentation = ErrorPresentation(),
+        snackbar = "Не получилось убрать"), heightDp = 3080)
+
     @Test fun analytics() = capture("Analytics", ui(september()), heightDp = 2848)
 
     @Test fun analyticsDark() = capture("AnalyticsDark", ui(september()), heightDp = 2848, dark = true)
@@ -102,6 +142,12 @@ class AnalyticsDesignCheckTest {
     @Test fun analyticsLimit() =
         capture("AnalyticsLimit", ui(september()).copy(limit = AssistantLimit(remaining = 0, dailyMax = 5, resetsAt = day(9, 27))), heightDp = 2872)
 
+    // FIN-411 proposed artboards; authored/compiled only, no screenshot execution.
+    @Test fun analyticsRollingYear() = capture("AnalyticsRollingYear", ui(golden("rolling_year_actual")), heightDp = 1900)
+    @Test fun analyticsRollingYearDark() = capture("AnalyticsRollingYearDark", ui(golden("rolling_year_actual")), heightDp = 1900, dark = true)
+    @Test fun analyticsRollingQuarter() = capture("AnalyticsRollingQuarter", ui(golden("rolling_quarter_actual")), heightDp = 1900)
+    @Test fun analyticsRollingPartial() = capture("AnalyticsRollingPartial", ui(golden("rolling_partial_actual")), heightDp = 1900)
+
     @Test fun analyticsYear() = capture("AnalyticsYear", ui(year2026), heightDp = 1700)
 
     @Test fun analyticsEmpty() = capture("AnalyticsEmpty", ui(Analytics(hasData = false)).copy(limit = null), heightDp = 844)
@@ -114,5 +160,11 @@ class AnalyticsDesignCheckTest {
         capture("AnalyticsPartial", ui(september().copy(state = analyticsState.copy(unreadLinesCount = 5))), heightDp = 2900)
     // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
     @Test fun serverWarning() = capture("AnalyticsServerWarning", ui(september()).copy(errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)), heightDp = 2960)
+
+    @Test fun refreshing() = capture("AnalyticsRefreshing", ui(september()).copy(refreshing = true), heightDp = 844)
+    @Test fun refreshingDark() = capture("AnalyticsRefreshingDark", ui(september()).copy(refreshing = true), heightDp = 844, dark = true)
+    // FIN-400: proposed all-time artboards; no approved Figma frames yet.
+    @Test fun analyticsAllTime() = capture("AnalyticsAllTime", ui(golden("all_time")), heightDp = 1700)
+    @Test fun analyticsAllTimeDark() = capture("AnalyticsAllTimeDark", ui(golden("all_time")), heightDp = 1700, dark = true)
 
 }

@@ -18,7 +18,9 @@ import java.time.OffsetDateTime
 import java.time.YearMonth
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Texts of the Analytics blocks, built by the server since FIN-4 (moved from the client with [AnalyticsTexts]). */
 class AnalyticsServerTextsTest {
@@ -50,6 +52,29 @@ class AnalyticsServerTextsTest {
     }
 
     @Test
+    fun `inconsistent forecast history keeps the rule without inventing month lists`() {
+        val complete = (1..4).map { point(it, 100) }
+        val lock = MetricLock(LockReason.NEED_FULL_MONTHS, required = 12, available = 5)
+        val incomplete = point(5, 100, coverage = Coverage.PARTIAL, dataFrom = "2026-05-01T00:00:00+03:00", dataTo = "2026-05-11T00:00:00+03:00")
+        val variants = listOf(
+            state to null,
+            state to complete,
+            state to (complete + point(5, 100) + incomplete.copy(dataFrom = null)),
+            state to (complete + point(5, 100) + incomplete.copy(dataTo = null)),
+            null to (complete + point(5, 100)),
+        )
+        for ((snapshotState, history) in variants) {
+            val text = AnalyticsTexts.forecastLock(lock, snapshotState, history).plain()
+            assertTrue(text.startsWith("Нужно 12 полных месяцев, есть 5"), text)
+            assertTrue(text.contains("независимо от выбранного года"), text)
+            assertTrue(text.contains("Полный месяц — завершённый календарный месяц с данными за каждый день."), text)
+            assertFalse(text.contains("Учтены полные месяцы"), text)
+            assertFalse(text.contains("Неполные месяцы:"), text)
+            assertFalse(text.contains("Месяцы без данных:"), text)
+        }
+    }
+
+    @Test
     fun comparison() {
         val prev = Metric(
             status = MetricStatus.READY, value = Money(7_200_000),
@@ -73,6 +98,13 @@ class AnalyticsServerTextsTest {
         assertEquals("в августе — 2 890 ₽", AnalyticsTexts.dailyComparison(Metric(MetricStatus.READY, value = Money(289_000), range = aug))!!.plain())
         val basis = MetricBasis(DateRange(t("2026-04-01T00:00:00+03:00"), t("2026-09-01T00:00:00+03:00")), 5)
         assertEquals("Среднее за апрель — август — 88 900 ₽", AnalyticsTexts.typical(Metric(MetricStatus.READY, basis = basis, value = Money(8_890_000)))!!.plain())
+    }
+
+    @Test fun `daily average basis is explicit even without a comparison`() {
+        val basis = "По дням с данными не позже сегодня; пропуски не учитываются"
+        assertEquals(basis, AnalyticsTexts.dailyBasis(null))
+        assertEquals(basis, AnalyticsTexts.dailyBasis("  "))
+        assertEquals("$basis\nв августе — 2 890 ₽", AnalyticsTexts.dailyBasis("в августе — 2 890 ₽"))
     }
 
     @Test

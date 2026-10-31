@@ -25,8 +25,8 @@ orientation map: read it first, then open only the files the task touches.
   (https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv, link also in `design-check/README.md`).
 - Version 0.2 (API, mockups, docs) is crystallized; every change goes through a YouTrack issue (`FIN-<n>`,
   finassist.youtrack.cloud) and is referenced in the PR. Release notes live in Confluence.
-- There is no deployed backend yet: the `mock` flavor is the working product, `local` talks to a bank-bff on the
-  developer's machine, `prod` is the HTTP client for later.
+- The deployed backend stage is `https://stage.plainfin.ru/` (FIN-149/385): `stage` talks to its real Go services
+  with fake-phone/fake-LLM. `mock` stays in-process; `local` targets a developer backend; `prod` has a placeholder URL.
 - Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) +
   the latest decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
 - API extensibility (decision of 13.10.2026): the contract grows by addition and keeps `deprecated` for
@@ -39,9 +39,9 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 
 | What | Where |
 |---|---|
-| Composition root, NavHost (auth graph → main tabs), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt`, `app/src/local/…/LocalModule.kt` |
+| Composition root, NavHost (auth graph → Operations / Analytics / Assistant / Profile tabs; layer-owned assistant policy survives configuration changes and guards restored entries before VM creation), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt`, `app/src/local/…/LocalModule.kt`, `app/src/stage/…/StageModule.kt` |
 | API contract (service interfaces + DTOs) | `core/api/…/Services.kt`, `core/api/…/model/*.kt` |
-| Universal error presentation, request retry restrictions and server deadlines (FIN-223) | `docs/errors.md`; `core/common/…/error/`, `time/ServerDeadline.kt`; `core/designsystem/…/ErrorMessage.kt` |
+| Universal error presentation, local VPN-aware connection hints (FIN-396), request retry restrictions and server deadlines (FIN-223) | `docs/errors.md`; `core/common/…/error/`, `time/ServerDeadline.kt`; `core/designsystem/…/ErrorMessage.kt` |
 | SSE streams: transport and the one re-open loop of all three streams (pauses with jitter, 429, FIN-170) | `core/network/…/Sse.kt`; `core/api/…/SseReopen.kt` (`reopeningStream`, used by the view models; the fake backend's drops — `MockConfig.streamDrops`) |
 | Client version, update and maintenance (FIN-22): `X-Client-Version`, `CLIENT_VERSION_UNSUPPORTED` / `MAINTENANCE` → `ServiceGate` → screens over the app | `core/common/…/availability/` (`ClientVersion`, `ServiceGate`), `core/network/…/Interceptors.kt`, `core/toggles/…/MinVersionCheck.kt` (`app.min_version`), `feature/availability`; version and build number — `app/build.gradle.kts` |
 | Fake backend (mock flavor): OFX parsing, ledger, analytics, assistant | `mock/backend/…/mock/` — `MockBackend.kt`, `domain/*`, `MockConfig.kt` (existing phone, delays, `offline`) |
@@ -49,6 +49,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Fake backend against `openapi.yaml` and the error registry of contracts (contract tests, known mismatches) | `mock/backend/src/test/…/mock/contract/` (`Exclusions.kt`), `mock/backend/src/test/resources/contracts/` (copy of the same commit); rules — `docs/testing.md`, «Contract tests» |
 | Feature routes and public interfaces | `feature/<name>/api/…/*Routes.kt` (or `AuthApi.kt`, `AppLock.kt`) |
 | Screen registration | `FeatureEntry` / `Navigator` in `core/navigation/…/Navigation.kt`; each `:impl` binds its entry in `di/` |
+| Read-only pull-to-refresh (FIN-399), including empty/error states | `core/designsystem/…/components/PfRefreshContainer.kt`; screen ViewModels keep read-request gates, draft and selected context; import receipts and mutations are not replayed |
 | Design system: theme, tokens, components, icons | `core/designsystem/…/theme`, `components`, `icons` |
 | Server-composed blocks (Analytics, assistant): catalog models, renderers, registry, `supports` | `core/api/…/model/Blocks.kt`; `core/blocks` (`CatalogV1`, `BlockRegistry`, `BlocksColumn`); composer of the fake server `mock/backend/…/domain/AnalyticsComposer.kt` |
 | Feature flags | `core/toggles/…/Flag.kt` (registry + defaults), `docs/flags.md` (meaning); mock overrides `app/src/mock/assets/flags.json` |
@@ -57,6 +58,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Silent background profile-zone sync (FIN-345) | `feature/profile/impl/…/data/TimeZoneChecker.kt`, `ZoneSyncStateStore.kt`, `BootCounter.kt`; independent durable GET/PATCH advice and boot-bound waits — `docs/errors.md` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md` (mockups: Figma, exported by `design-check/export.py`), `*DesignCheckTest.kt` in feature `:impl` modules |
 | UI tests: Maestro flows, e2e build hooks (sign-in without the screens — `E2eSignIn`), native gaps, shards in CI, Qase; default SDK package cache + fresh cold AVD, opt-in snapshot (`avd_cache`), SDK-only experiment (`sdk_benchmark`) | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/e2e-shards.py`, `scripts/qase-*`; `scripts/e2e-sdk-cache.py`, `scripts/e2e-cache.py`, `scripts/sdk-preparation-benchmark.py` |
+| Bounded local adb/Maestro transport comparison on an owned disposable AVD (FIN-390) | `docs/adb-transport.md`; `scripts/adb-transport.py` (fixed diagnostic repetitions, explicit serial/AVD, private evidence; no product-result retries or server mutations) |
 | Read-only live SSE 429 marker, mockE2e only (FIN-380) | `app/src/mockE2e/…/E2eStreamProbe.kt`; wait for `e2e.stream.rate_limited=1` before opening a control link or checking absence of errors; `docs/e2e.md` |
 | Multiplatform readiness of `:core:api` and `:mock:backend`: rule, JVM-only inventory, check | `docs/kmp-readiness.md`; `scripts/check-kmp-ready.py`, `scripts/kmp-baseline.json` |
 | Test layers, unit test coverage (Kover), coverage of changed lines | `docs/testing.md`; root `build.gradle.kts`, `build-logic/…/buildlogic/Coverage.kt`, `scripts/coverage-diff.py` |
@@ -69,17 +71,20 @@ multiplied:
 |---|---|---|---|
 | `mock` | in-process fake (`:mock:backend`) | `toggles-local` (`app/src/mock/assets/flags.json`) / logcat / Tracer with a token | `.mock` |
 | `local` | bank-bff on the developer's machine: `pf.apiBaseUrl` (Gradle property or `PF_API_BASE_URL`), default `http://10.0.2.2:8080/` (emulator → host; `LocalBackend` in build-logic) | `toggles-local` (optional, gitignored `app/src/local/assets/flags.json`) / logcat / off — nothing reaches production consoles | `.local`, «Понятные финансы local» |
+| `stage` | `https://stage.plainfin.ru/`, real HTTP/SSE client | RuStore Remote Config / MyTracker / Tracer, only with separate `pf.stage…` keys; otherwise code defaults / SDKs off | `.stage`, «Понятные финансы stage» |
 | `prod` | `API_BASE_URL` (placeholder until there is a server); certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | RuStore Remote Config / MyTracker / Tracer with a token | no suffix |
 
-A stand will be one more flavor `stage`, built like `prod`. Plain HTTP only in `localDebug`: its network security config
+`stage` follows `prod`, with isolated SDK properties and optional `pf.stageApiPins` / `pf.stageApiPinsExpiration`.
+Production keys and pins never serve as a fallback for stage. Plain HTTP only in `localDebug`: its network security config
 is generated from `pf.apiBaseUrl` (one host, no subdomains); every other variant has `usesCleartextTraffic="false"`
-and no config — except `prod` with API pins (Gradle properties or `PF_API_PINS` / `PF_API_PINS_EXPIRATION`; at least
+and no config — except `prod`/`stage` with their own API pins (prod `pf.apiPins` / `pf.apiPinsExpiration`, stage `pf.stageApiPins` /
+`pf.stageApiPinsExpiration`; at least
 two distinct `sha256/` pins and an expiration within a year, or the configuration fails): a generated config with a
 `pin-set` for the `API_BASE_URL` host, no cleartext, no trust anchors of its own. Real pins are never committed; a
 refused certificate is the usual offline error plus a `network.tls` non-fatal (`core/network/…/TlsFailures.kt`).
 Decision and rotation: «Архитектура» → «Вход трафика» in Confluence PF. CI checks it on the merged manifests
 (`scripts/check-build-separation.py`, `pinned-release` with test pins) and keeps `:mock:*` off the
-`local` and `prod` classpaths (`:app:checkNoMockCode`). Build type `e2e` (mock only): debug + UI-test hooks, pinned
+`local`, `stage` and `prod` classpaths (`:app:checkNoMockCode`). Build type `e2e` (mock only): debug + UI-test hooks, pinned
 date, JaCoCo probes; the native tests run on it (docs/e2e.md).
 
 ### Stack
@@ -110,7 +115,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:core:api` | `pf.jvm.library` | unit |
 | `:core:blocks` | `pf.android.library.compose` | unit |
 | `:core:common` | `pf.jvm.library` | unit |
-| `:core:designsystem` | `pf.android.library.compose` | - |
+| `:core:designsystem` | `pf.android.library.compose` | unit |
 | `:core:navigation` | `pf.android.library.compose` | - |
 | `:core:network` | `pf.android.library`, `pf.hilt` | unit |
 | `:core:screenshot-testing` | `pf.android.library.compose` | - |
@@ -178,18 +183,21 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   (every module, `build-logic/…/buildlogic/Coverage.kt`) runs the unit tests of the coverage variant only: `test`
   of JVM modules, `testDebugUnitTest` of Android libraries, `testMockDebugUnitTest` of `:app`.
 - CI (`.github/workflows/ci.yml`, FIN-176) runs the Gradle checks as parallel jobs: unit tests with coverage
-  (`unitTest :build-logic:convention:test` on a PR; `test`, the unit tests of every variant, on pushes to `main`,
-  `release/**` and `stage-*/**`), `lintMockDebug`, and the build of `assembleMockDebug assembleLocalDebug
-  assembleProdRelease` (release unsigned) with `:app:checkNoMockCode`, the Tracer check and the manifest checks
+  (`unitTest :build-logic:convention:test` plus analytics release and stage app unit tests on a PR; `test`, the unit
+  tests of every variant, on pushes to `main`, `release/**` and `stage-*/**`), `lintMockDebug lintStageDebug`, and the build of `assembleMockDebug assembleLocalDebug
+  assembleStageDebug assembleStageRelease assembleProdRelease` (release unsigned) with `:app:checkNoMockCode`, the Tracer check and the manifest checks
   (`scripts/check-build-separation.py`, pinning included). A test that fails only in a release, `local`, `prod` or
-  `e2e` variant is caught after the merge, not on the PR; run `./gradlew test` locally when a change is variant-specific.
-- FIN-185: the assemble job resolves `mockE2eRuntimeClasspath` and `prodReleaseRuntimeClasspath` using
+  `e2e` variant is generally caught after the merge (analytics release and stage app tests also run on PRs);
+  run `./gradlew test` locally when a change is variant-specific. Compose's test host is a `testImplementation`
+  dependency for every variant; release manifests reject its `ComponentActivity` (FIN-414, docs/testing.md).
+- FIN-185: the assemble job resolves `mockE2eRuntimeClasspath`, both stage runtime classpaths and `prodReleaseRuntimeClasspath` using
   `scripts/compose-classpath.init.gradle` (`:app:composeClasspathReport --no-configuration-cache`), then validates
   the JSON with `scripts/check-compose-classpath.py`: Compose UI/foundation and lifecycle-runtime must match the
   isolated BOM/navigation/catalog lifecycle baseline. Commands and failure diagnostics: docs/testing.md.
 - FIN-377: `scripts/check-app-version.py` checks `appVersionName` against release branches on pushes and either
-  side of a PR. The assemble job also checks generated manifest/BuildConfig versions for mockDebug, localDebug
-  and prodRelease. Release preparation and the independent monotonic build number: `docs/releasing.md`.
+  side of a PR. The assemble job also checks generated manifest/BuildConfig versions for mockDebug, localDebug, both stage variants
+  and prodRelease. The assemble job publishes `app-stage-debug` for installation; default stage identity/HTTPS/SDK
+  isolation is checked with production sentinel properties, and stage/prod pinning is checked independently. Release preparation and the independent monotonic build number: `docs/releasing.md`.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally (all flows and the native
   tests; `--shard i/n` runs one CI shard), the `UI tests` workflow in CI (after a merge to `main`, or started by hand
   for a branch; PRs never run them by themselves). CI splits the flows between four emulators
@@ -275,7 +283,7 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
 - When the server sends a ready text for a code (`*_name`, `text`, lock texts), the UI shows that text for a code it does
   not know instead of building one itself or skipping it (FIN-83: import features and notices, `changed_since_text`).
 - Upload history uses inclusive profile calendar days `period_from` / `period_to`, without device-zone conversion
-  (FIN-198); old `uploads[].first_operation_at` / `last_operation_at` are removed. Import result 3.3 is unchanged.
+  (FIN-198); old `uploads[].first_operation_at` / `last_operation_at` are removed. Import result 3.3 keeps its field semantics; FIN-394 removes the redundant all-operations period row from its UI.
 - Operation details 4.2 and category change 4.3 require `occurred_at` from the selected record, including offset
   and fractional seconds (FIN-203); use the latest returned timestamp for retries and reopening the record.
 - A new block type or code value changes both `:core:api` and the fake backend `:mock:backend` in the same PR.
@@ -285,10 +293,46 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   `android.*`, `androidx.*`, Dagger / Hilt, JVM-only libraries or JVM-only stdlib (`synchronized`, `String.format`).
   An API already in `scripts/kmp-baseline.json` may be reused; an exception is justified in the PR and added there.
   `scripts/check-kmp-ready.py` (CI) fails on anything beyond the baseline; rule, inventory — `docs/kmp-readiness.md`.
+- Analytics offers Month/Quarter/Year/«За всё время» in one horizontally scrollable segmented row (FIN-400),
+  with full single-line labels, at least 48 dp touch targets and automatic reveal of the selected option.
+  Spare width is shared equally by the natural-width options; overflow keeps their natural widths and enables
+  horizontal scrolling. Manual scrolling remains available. The all_time marker has no fabricated calendar bounds;
+  the displayed range comes from the response. It retains transfer mode, calendar selections and import/deletion
+  refresh semantics. Assistant chips remain calendar-only; unknown/mismatched analytics chip params are hidden individually.
+- Analytics Month/Quarter/Year each retain their own successful selection (FIN-391); switching another
+  type never resets it. A first finer selection uses the last covered instant of the displayed period
+  (`period.data_to` is inclusive; a complete `range.to` is exclusive), in the current profile zone.
+  A failed period type or key change retains its exact request behind an explicit, separately gated Retry.
+  Resume does not replace that notice or submit the target. Repeating the segment, picker/navigation key or
+  chart target uses the same gate; payment action errors keep a separate presentation.
+  A changed context retires the failed period request.
+  Same/finer request keys remain valid; the mock rejects coarse-to-fine keys with canonical validation errors.
+- Analytics monthly chart points select the exact server-provided month key (FIN-398); the whole column,
+  including a covered zero, is a target. The successful response commits the period atomically and preserves
+  transfer mode and vertical scroll. `select_analytics_period` is usable only through the Analytics chart
+  capability; generic blocks and assistant rendering never expose it as a button. Unselected interactive
+  year/all-time charts initially reveal the latest covered point (including zero), without selecting it;
+  manual scroll stays available.
+- Analytics refreshes on resume as well as statement/category events (FIN-394); after a data mutation old
+  totals are cleared until a fresh response arrives. Loading and an empty recalculating response are
+  preparation states rather than requests to upload another statement. With data, recalculation retains
+  the screen and a notice; a stopped poll labels the previous values and offers an allowed explicit retry. A user-scoped local import token in
+  `StatementsRepository` survives absent Analytics subscribers: a completed non-empty import followed by
+  `has_data:false` is polled every 3 seconds, up to 10 responses, then offers an explicit refresh. The token
+  is acknowledged only for the observed generation once data is present and not recalculating.
+- Voice dictation (FIN-404): `VoiceInput` adapts Android recognition, `VoiceSession` rejects stale callbacks,
+  and `VoicePanel` shows preparation, actual readiness, sound level and recognition/errors at the composer.
+  Lifecycle stop/background/navigation cancels the active session; final text appends to the draft and never sends a question.
+  Assistant consent gates sending, not typing or dictating a draft; microphone retry follows the same availability as its composer button.
+  On-device models are preferred; the system speech service is the fallback and decides whether it stays offline.
+- Disabled `PfTextField` states use muted tokens and a lock icon; the caller explains how to enable input.
 - The Analytics screen is composed by the server (FIN-4): blocks of the catalog (api.md «Блоки») drawn by the renderers of
   `core/blocks`; texts of blocks come from the server (in `mock` — `AnalyticsServerTexts`). A new primitive is a renderer in
   `CatalogV1` (it goes into `supports` by itself) plus the composer of the fake server. Design-check fixtures of the screen
   are golden responses the composer writes (`AnalyticsDesignFixturesTest`, `UPDATE_GOLDEN=1`).
+- `tile_group@2` (FIN-403) negotiates ordered primary and supplementary groups; its renderer also accepts
+  legacy v1 tiles. The server supplies headings and daily-average basis text. Missing/empty `supports` keeps
+  v1 responses; design-check fixtures explicitly advertise the current registry's supported versions.
 - A PR that adds or changes a user scenario covers it with a UI test in the same PR (docs/e2e.md, «When a change
   needs a UI test»). A scenario is what the user does and sees: a new screen or state, a step between screens, an
   error, empty or offline path they can reach, a flag that changes behaviour, a user-visible bug fix (the flow
@@ -488,3 +532,5 @@ Also check:
 ## Renovate automation
 
 FIN-211: dependency-only Renovate PRs may be merged/closed by the reviewed `renovate-policy.yml` controller, after exact-head required CI and bot-only commit checks. Ordinary PRs and release-to-main PRs still require the owner. Do not enable native automerge or bypass protections. Preserve base policy in `renovate-base.json` (schedules, groups, allowed versions and manual Go upgrades); generated target/version approvals live on the separate `renovate-policy` branch. Failed exact values are isolated for explicit Dashboard approval; new values keep their original groups. AndroidX/Compose and mixed groups never auto-merge. See `docs/renovate-policy.md` for credentials, safeguards, bootstrap and verification.
+
+FIN-411 adds rolling_year/rolling_quarter selectors in Analytics and a coverage-anchored mock calculation. The client renders server ranges and totals; only mock/backend calculates facts. Edge chart actions keep exact calendar month keys; a failed selection retains the previous screen and original retry request. See docs/e2e.md for authored Qase76 coverage.

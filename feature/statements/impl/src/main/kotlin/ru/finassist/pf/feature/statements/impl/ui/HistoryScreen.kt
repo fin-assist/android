@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.PfRefreshContainer
+import ru.finassist.pf.core.designsystem.components.ConnectionFailureState
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.RequestRetryGate
 import ru.finassist.pf.core.common.time.ElapsedClock
@@ -73,8 +75,11 @@ import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.statements.impl.data.StatementsRepositoryImpl
 import javax.inject.Inject
 
+enum class HistoryErrorOrigin { READ, WATCH, DELETE }
+
 data class HistoryUiState(
     val loading: Boolean = true,
+    val refreshing: Boolean = false,
     val offline: Boolean = false,
     val list: StatementsList? = null,
     val confirmDelete: Upload? = null,
@@ -82,10 +87,24 @@ data class HistoryUiState(
     val snackbar: String? = null,
     val uploadEnabled: Boolean = true,
     val errorPresentation: ErrorPresentation? = null,
+    val errorOrigin: HistoryErrorOrigin? = null,
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
     val resultErrorPresentation: ErrorPresentation? = null,
 )
+
+/** Keep a failure outcome attached to its own presentation, preserving ordinary success notifications. */
+internal fun HistoryUiState.clearRequestError(): HistoryUiState = copy(
+    errorPresentation = null,
+    errorOrigin = null,
+    snackbar = snackbar.takeIf { errorOrigin == null },
+)
+
+private fun HistoryUiState.showRequestError(
+    origin: HistoryErrorOrigin,
+    presentation: ErrorPresentation?,
+    outcome: String? = null,
+): HistoryUiState = copy(errorOrigin = origin, errorPresentation = presentation, snackbar = outcome)
 
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
@@ -100,20 +119,26 @@ class HistoryViewModel @Inject constructor(
     init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<HistoryUiState> = _state
     private var loadGeneration = 0L
+    private var readPending = false
 
     /** Only an observed data change ends the previous list-request context; ordinary retry/resume does not. */
     private fun listDataChanged() {
+        readPending = false
         loadGeneration++ // invalidate pending old reads before any local event delivery or another suspension
         retryGate.clear()
-        _state.update { it.copy(errorPresentation = null, requestRetryable = null, retryReady = true) }
+        _state.update { it.clearRequestError().copy(requestRetryable = null, retryReady = true) }
     }
 
+    fun refresh() { load() }
+
     fun load() {
-        if (!retryGate.isReady()) return
+        if (readPending || !retryGate.isReady()) return
+        readPending = true
+        _state.update { it.copy(refreshing = true) }
         val generation = ++loadGeneration
         viewModelScope.launch {
             if (generation != loadGeneration) return@launch
-            _state.update { it.copy(loading = it.list == null, offline = false, errorPresentation = null, requestRetryable = null) }
+            _state.update { it.clearRequestError().copy(loading = it.list == null, offline = false, requestRetryable = null) }
             try {
                 val list = api.listStatements()
                 if (generation != loadGeneration) return@launch
@@ -124,7 +149,12 @@ class HistoryViewModel @Inject constructor(
             } catch (e: AppError) {
                 if (generation != loadGeneration) return@launch
                 retryGate.record(e)
-                _state.update { it.copy(loading = false, offline = it.list == null, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                _state.update { it.showRequestError(HistoryErrorOrigin.READ, if (e is AppError.Offline && it.list == null) null else e.presentation).copy(loading = false, offline = it.list == null, requestRetryable = e.requestRetryable) }
+            } finally {
+                if (generation == loadGeneration) {
+                    readPending = false
+                    _state.update { it.copy(refreshing = false) }
+                }
             }
         }
     }
@@ -163,7 +193,7 @@ class HistoryViewModel @Inject constructor(
                         is ImportEvent.Progress -> Unit
                     } }
             } catch (e: AppError) {
-                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }) }
+                _state.update { it.showRequestError(HistoryErrorOrigin.WATCH, e.presentation.takeUnless { e is AppError.Offline }) }
                 return@launch
             }
             watching.remove(uploadId)
@@ -183,24 +213,34 @@ class HistoryViewModel @Inject constructor(
         val deleteGate = deleteGates.getOrPut(upload.uploadId) { RequestRetryGate(elapsedClock) }
         if (!deleteGate.isReady()) return
         viewModelScope.launch {
-            _state.update { it.copy(deleting = true, errorPresentation = null) }
+            _state.update { it.clearRequestError().copy(deleting = true) }
             try {
                 api.deleteStatement(upload.uploadId)
                 listDataChanged()
+                // The DELETE response is authoritative even when the following list refresh fails.
+                _state.update { state ->
+                    state.clearRequestError().copy(
+                        deleting = false,
+                        confirmDelete = null,
+                        list = state.list?.let { list ->
+                            list.copy(summary = null, uploads = list.uploads.filterNot { it.uploadId == upload.uploadId })
+                        },
+                        snackbar = "Загрузка удалена, обновляем аналитику",
+                    )
+                }
                 repository.uploadDeleted(upload.uploadId)
                 tracker.track(Events.STATEMENTS_UPLOAD_DELETED)
-                _state.update { it.copy(deleting = false, confirmDelete = null, snackbar = "Загрузка удалена, аналитика пересчитана") }
                 load()
             } catch (e: AppError) {
                 deleteGate.record(e)
                 _state.update {
-                    it.copy(deleting = false, confirmDelete = null, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, snackbar = if (e is AppError.Offline) "Нет сети — загрузка не удалена" else "Не получилось удалить. Попробуйте ещё раз")
+                    it.showRequestError(HistoryErrorOrigin.DELETE, e.presentation, if (e is AppError.Offline) "Загрузка не удалена" else "Не получилось удалить. Попробуйте ещё раз").copy(deleting = false, confirmDelete = null)
                 }
             }
         }
     }
 
-    fun consumeSnackbar() = _state.update { it.copy(snackbar = null, errorPresentation = null) }
+    fun consumeSnackbar() = _state.update { it.clearRequestError().copy(snackbar = null) }
 }
 
 /** Profile → «История загрузок» (api.md 3.4, 3.5). */
@@ -221,7 +261,7 @@ fun HistoryScreen(
         onBack = onBack,
         onUpload = onUpload,
         onOpenUnread = onOpenUnread,
-        onRetry = vm::load,
+        onRetry = vm::load, onRefresh = vm::refresh,
         onAskDelete = vm::askDelete,
         onDelete = vm::delete,
         onSnackbarShown = vm::consumeSnackbar,
@@ -233,7 +273,7 @@ fun HistoryScreen(
  * uploads in one card, what deleting does, «Загрузить новую выписку» at the bottom.
  */
 @Composable
-internal fun HistoryContent(
+fun HistoryContent(
     state: HistoryUiState,
     onBack: () -> Unit,
     onUpload: () -> Unit,
@@ -242,79 +282,82 @@ internal fun HistoryContent(
     onAskDelete: (Upload?) -> Unit,
     onDelete: () -> Unit,
     onSnackbarShown: () -> Unit,
+    onRefresh: () -> Unit = onRetry,
 ) {
     val d = PfTheme.dimens
     val c = PfTheme.colors
-    Box(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(StatementsTags.HISTORY)) {
-        Column(Modifier.fillMaxSize()) {
-            PfPageHeader("История загрузок", onBack = onBack)
-            val list = state.list
-            state.resultErrorPresentation?.let {
-                ErrorMessage(it, "Не получилось обработать загрузку. Можно выбрать файл снова",
-                    modifier = Modifier.padding(d.space4))
-            }
-            state.errorPresentation?.let { presentation ->
-                ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить историю. Попробуйте ещё раз",
-                    modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else onRetry)
-            }
-            when {
-                state.loading -> Unit
-                state.errorPresentation != null && list == null -> Unit
-                state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
-                    PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
+    PfRefreshContainer(refreshing = state.refreshing, onRefresh = onRefresh, enabled = state.retryReady && !state.loading, modifier = Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(StatementsTags.HISTORY)) {
+            Column(Modifier.fillMaxSize()) {
+                PfPageHeader("История загрузок", onBack = onBack)
+                val list = state.list
+                state.resultErrorPresentation?.let {
+                    ErrorMessage(it, "Не получилось обработать загрузку. Можно выбрать файл снова",
+                        modifier = Modifier.padding(d.space4))
                 }
-                list == null || list.uploads.isEmpty() -> Column(
-                    Modifier.weight(1f).fillMaxWidth().padding(start = d.space5, end = d.space5, top = d.space4, bottom = d.space4).testTag(StatementsTags.HISTORY_EMPTY),
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    PfEmptyState(PfIcons.FILE_TEXT, "Загрузок пока нет", "Загрузите выписку Т-Банка — разберём операции и посчитаем аналитику")
-                    if (state.uploadEnabled) {
-                        PfButton("Загрузить выписку", onClick = onUpload, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(StatementsTags.HISTORY_UPLOAD))
+                state.errorPresentation?.let { presentation ->
+                    ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить историю",
+                        modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else onRetry)
+                }
+                when {
+                    state.loading -> Unit
+                    state.errorPresentation != null && list == null -> Unit
+                    state.offline -> ConnectionFailureState() {
+                        PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
                     }
-                }
-                else -> BoxWithConstraints(Modifier.weight(1f)) {
-                    val viewport = maxHeight
-                    Column(
-                        Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .heightIn(min = viewport)
-                            .padding(start = d.space5, end = d.space5, top = d.space4, bottom = d.space4),
+                    list == null || list.uploads.isEmpty() -> Column(
+                        Modifier.weight(1f).fillMaxWidth().padding(start = d.space5, end = d.space5, top = d.space4, bottom = d.space4).testTag(StatementsTags.HISTORY_EMPTY),
+                        verticalArrangement = Arrangement.Center,
                     ) {
-                        list.summary?.gaps?.firstOrNull()?.let { g ->
-                            PfNotice(
-                                "Нет данных за ${RussianDates.dayRange(g.from.toLocalDate(), RussianDates.lastDayOf(g))} — загрузите выписку за эти дни",
-                                tone = NoticeTone.WARNING,
-                            )
-                            Spacer(Modifier.height(d.space3))
+                        PfEmptyState(PfIcons.FILE_TEXT, "Загрузок пока нет", "Загрузите выписку Т-Банка — разберём операции и посчитаем аналитику")
+                        if (state.uploadEnabled) {
+                            PfButton("Загрузить выписку", onClick = onUpload, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(StatementsTags.HISTORY_UPLOAD))
                         }
-                        PfCard(flush = true) {
-                            list.uploads.forEachIndexed { i, u ->
-                                UploadRow(u, divider = i < list.uploads.lastIndex, onDelete = { onAskDelete(u) }, onOpenUnread = { onOpenUnread(u.uploadId, u.operationCount > 0) })
+                    }
+                    else -> BoxWithConstraints(Modifier.weight(1f)) {
+                        val viewport = maxHeight
+                        Column(
+                            Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .heightIn(min = viewport)
+                                .padding(start = d.space5, end = d.space5, top = d.space4, bottom = d.space4),
+                        ) {
+                            list.summary?.gaps?.firstOrNull()?.let { g ->
+                                PfNotice(
+                                    "Нет данных за ${RussianDates.dayRange(g.from.toLocalDate(), RussianDates.lastDayOf(g))} — загрузите выписку за эти дни",
+                                    tone = NoticeTone.WARNING,
+                                )
+                                Spacer(Modifier.height(d.space3))
+                            }
+                            PfCard(flush = true) {
+                                list.uploads.forEachIndexed { i, u ->
+                                    UploadRow(u, divider = i < list.uploads.lastIndex, onDelete = { onAskDelete(u) }, onOpenUnread = { onOpenUnread(u.uploadId, u.operationCount > 0) })
+                                }
+                            }
+                            Text(
+                                "Удаление загрузки убирает только операции, которых нет в других загрузках",
+                                style = PfTheme.type.hint, color = c.textMuted, modifier = Modifier.padding(top = d.space2),
+                            )
+                            if (state.uploadEnabled) {
+                                Spacer(Modifier.weight(1f).heightIn(min = d.space6))
+                                PfButton("Загрузить новую выписку", onClick = onUpload, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(StatementsTags.HISTORY_UPLOAD))
                             }
                         }
-                        Text(
-                            "Удаление загрузки убирает только операции, которых нет в других загрузках",
-                            style = PfTheme.type.hint, color = c.textMuted, modifier = Modifier.padding(top = d.space2),
-                        )
-                        if (state.uploadEnabled) {
-                            Spacer(Modifier.weight(1f).heightIn(min = d.space6))
-                            PfButton("Загрузить новую выписку", onClick = onUpload, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(StatementsTags.HISTORY_UPLOAD))
-                        }
                     }
                 }
             }
-        }
-        state.snackbar?.takeIf { state.errorPresentation == null }?.let { text ->
-            androidx.compose.runtime.LaunchedEffect(text) {
-                kotlinx.coroutines.delay(3000)
-                onSnackbarShown()
+            state.snackbar?.takeIf { state.errorPresentation == null }?.let { text ->
+                androidx.compose.runtime.LaunchedEffect(text) {
+                    kotlinx.coroutines.delay(3000)
+                    onSnackbarShown()
+                }
+                // Over the bottom button, 8 dp above it (mockup `UploadHistoryDeleted`).
+                PfSnackbar(
+                    text,
+                    Modifier.align(Alignment.BottomCenter).padding(start = d.space5, end = d.space5, bottom = d.space4 + d.control + d.space2),
+                )
             }
-            // Over the bottom button, 8 dp above it (mockup `UploadHistoryDeleted`).
-            PfSnackbar(
-                text,
-                Modifier.align(Alignment.BottomCenter).padding(start = d.space5, end = d.space5, bottom = d.space4 + d.control + d.space2),
-            )
         }
     }
     state.confirmDelete?.let { u ->

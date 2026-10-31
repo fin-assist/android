@@ -22,6 +22,24 @@ What a change needs:
 
 A test asserts behaviour. A test that only runs lines to raise the number is not a test.
 
+## Compose host for local unit tests
+
+`configureCompose` adds `ui-test-manifest` as `testImplementation` so AGP merges its `ComponentActivity`
+into the Robolectric unit-test manifest for every build type, including release (FIN-414). The separate
+`debugImplementation` remains for device tests against debug builds. Never add this dependency to
+`implementation` or `releaseImplementation`: the host must stay out of distributable release APKs.
+`scripts/check-build-separation.py release` (also used by `pinned-release`) rejects that test Activity.
+
+CI runs `:feature:analytics:impl:testReleaseUnitTest` on PRs alongside `unitTest`, so the Compose rule tests
+(`AnalyticsPeriodControlTest`, `AnalyticsRetryCallbackTest`, `GroupedTilesLayoutTest`) exercise the shared
+convention in both debug and release before merge. Pushes still run `test` for every variant. To check locally:
+
+```bash
+./gradlew :feature:analytics:impl:testDebugUnitTest :feature:analytics:impl:testReleaseUnitTest
+```
+
+These are host JVM tests; they do not start an emulator or the Maestro/design-check suites.
+
 ## Calculation fixtures
 
 `CalcFixturesTest` (`mock/backend/src/test/…/mock/calc/`, FIN-108) runs the calculation fixtures of
@@ -242,8 +260,10 @@ python3 scripts/ui-coverage.py summary            # Markdown to stdout; --summar
 - A **screen** is a tag's first two segments (`statements.upload.fallback` → `statements.upload`); the tags come
   from the `*Tags` objects (constants and `fun` builders with a `$` suffix count as a prefix) and `testTag("…")`
   literals in the sources, the ids from `id: "…"` in `.maestro/flows/`. `e2e.*` ids are the control links, not
-  tags. A tag that reaches `testTag` through a parameter (the analytics tiles' `chartId`) is invisible to the
-  script: declare it in the feature's `*Tags` object.
+  tags. Dynamic month-point tags combine concrete ids returned by `*Tags.chart` builders with the actual
+  `testTag("$chartId…${p.key}")` template in the chart component. Only exact `YYYY-MM` suffixes match; renaming
+  either source leaves stale flow ids unknown. Other parameter-based tags (the analytics tiles' `chartId`)
+  must be declared in the feature's `*Tags` object.
 - Covered: a screen with at least one tag a flow refers to; a tag a flow refers to (a prefix tag when any id
   starts with it). The table lists per feature the missing tags; an id no source declares is reported — a renamed
   tag shows up there, and `scripts/test_ui_coverage.py` fails on it.
@@ -251,7 +271,7 @@ python3 scripts/ui-coverage.py summary            # Markdown to stdout; --summar
 
 ## Compose runtime dependency guard (FIN-185)
 
-The assemble CI job resolves `mockE2eRuntimeClasspath` and `prodReleaseRuntimeClasspath` before compilation:
+The assemble CI job resolves `mockE2eRuntimeClasspath`, `stageDebugRuntimeClasspath`, `stageReleaseRuntimeClasspath` and `prodReleaseRuntimeClasspath` before compilation:
 
 ```sh
 ./gradlew -I scripts/compose-classpath.init.gradle :app:composeClasspathReport --no-configuration-cache
@@ -268,3 +288,17 @@ closed. Errors include the configuration, coordinate, actual and expected versio
 The generated JSON lives under `app/build/reports/`. The one-off metadata task requires `--no-configuration-cache`;
 it does not compile the app or run tests. The Python guard's positive, negative and FIN-184 regression cases run
 with the other script tests in CI. This guard does not authorize Compose/AndroidX automerge or UI-test execution.
+
+
+### Stage build checks (FIN-385)
+
+CI assembles stageDebug and stageRelease, publishes `app-stage-debug`, validates stage version suffix/identity,
+fixed HTTPS endpoint and default-off SDKs, and tests stage/prod pin isolation on generated manifests/resources.
+Both stage debug and release guards are also run with production SDK sentinel properties and a different local backend URL;
+those must not enter the stage BuildConfig or enable Tracer. `:app:checkNoMockCode` checks both stage runtime
+classpaths. These are build/configuration checks, not a public-stage UI acceptance run (docs/e2e.md).
+
+
+FIN-399: DesignCheck provides `LocalInspectionMode` while rendering previews. The indeterminate refresh
+indicator keeps its loading semantics but uses a static arc, so Robolectric can drain the main looper without
+an infinite frame loop. The real UI animates the indicator unless the device requests reduced motion.

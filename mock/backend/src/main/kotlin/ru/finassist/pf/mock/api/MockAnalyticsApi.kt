@@ -15,6 +15,7 @@ import ru.finassist.pf.core.api.model.FieldErrorCodes
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.time.PeriodType
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.apiError
@@ -24,14 +25,41 @@ import ru.finassist.pf.mock.domain.AnalyticsComposer
 class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
 
     override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?, supports: String?, exp: String?): Analytics {
+        val supported = try {
+            AnalyticsComposer.parseSupports(supports)
+        } catch (e: IllegalArgumentException) {
+            throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+                details = listOf(AppError.FieldError("supports", FieldErrorCodes.INVALID_FORMAT, "supports must contain type@positive_int32")))
+        }
         backend.simulateNetwork()
         backend.requireSession()
         if (period == PeriodTypeCode.UNKNOWN || transferMode == TransferMode.UNKNOWN) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
-        if (date != null && !PeriodKey.isValid(date.value)) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
+        if (date != null && !PeriodKey.isValid(date.value)) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+            details = if (period?.isRolling == true) listOf(AppError.FieldError("date", FieldErrorCodes.INVALID_FORMAT, "date must match the singleton period")) else emptyList())
+        val selectedPeriod = period ?: PeriodTypeCode.MONTH
+        val singleton = selectedPeriod.takeIf { it.isRolling || it == PeriodTypeCode.ALL_TIME }?.code
+        val wrongSingleton = date != null && if (singleton != null) date.value != singleton else !date.isCalendar
+        if (wrongSingleton) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+            details = listOf(AppError.FieldError("date", FieldErrorCodes.INVALID_FORMAT, "date must match the singleton period")))
+        val coarserDate = date != null && singleton == null && (when (selectedPeriod) {
+            PeriodTypeCode.MONTH -> date.type != PeriodType.MONTH
+            PeriodTypeCode.QUARTER -> date.type == PeriodType.YEAR
+            else -> false
+        })
+        if (coarserDate) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+            details = listOf(AppError.FieldError("date", FieldErrorCodes.INVALID_FORMAT, "date must be exact or finer than period")))
+        val pending = backend.mutex.withLock {
+            val remaining = backend.config.analyticsPendingResponses
+            if (remaining <= 0) false else {
+                backend.config = backend.config.copy(analyticsPendingResponses = remaining - 1)
+                true
+            }
+        }
+        if (pending) return Analytics(hasData = false)
         val snapshot = backend.mutex.withLock { backend.analytics.analytics(period, date, transferMode ?: TransferMode.WITH) }
         val composed = AnalyticsComposer.compose(
             snapshot,
-            supports = AnalyticsComposer.parseSupports(supports),
+            supports = supported,
             experiments = AnalyticsComposer.parseExperiments(exp),
             failing = backend.config.failingBlocks,
         )
@@ -57,6 +85,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
     override suspend fun listPeriods(period: PeriodTypeCode?): AnalyticsPeriodsList {
         backend.simulateNetwork()
         backend.requireSession()
+        if (period == PeriodTypeCode.UNKNOWN) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
         return backend.mutex.withLock { backend.analytics.periods(period ?: PeriodTypeCode.MONTH) }
     }
 

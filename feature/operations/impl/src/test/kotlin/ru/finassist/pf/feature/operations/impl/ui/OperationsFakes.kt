@@ -103,6 +103,8 @@ internal class FakeCategoriesApi(var list: List<Category>) : CategoriesApi {
 }
 
 internal class FakeStatements : StatementsRepository {
+        override suspend fun pendingAnalyticsImport(): Long? = error("unused")
+        override suspend fun analyticsImportReady(revision: Long): Unit = error("unused")
     override val events = MutableSharedFlow<StatementsEvent>(extraBufferCapacity = 4)
     override fun lastResult(uploadId: String): ImportResult? = null
     override suspend fun consumeFirstImportHints(): Boolean = false

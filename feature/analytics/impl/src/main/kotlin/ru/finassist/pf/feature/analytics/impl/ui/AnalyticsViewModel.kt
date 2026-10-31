@@ -29,6 +29,9 @@ import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.blocks.CatalogV1
+import ru.finassist.pf.core.blocks.AnalyticsPeriodTargets
+import ru.finassist.pf.core.common.time.PeriodType
+import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.core.toggles.Experiment
@@ -58,6 +61,7 @@ enum class AnalyticsHint { CATEGORIES, ASK }
 
 data class AnalyticsUiState(
     val loading: Boolean = true,
+    val refreshing: Boolean = false,
     val offline: Boolean = false,
     val data: Analytics? = null,
     val blocks: AnalyticsBlocks,
@@ -78,7 +82,14 @@ data class AnalyticsUiState(
     val limitErrorPresentation: ErrorPresentation? = null,
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
-)
+    val limitRetryReady: Boolean = true,
+    val periodChangeErrorPresentation: ErrorPresentation? = null,
+    val periodChangeRetryReady: Boolean = true,
+    val preparationTimedOut: Boolean = false,
+    val recalculationPaused: Boolean = false,
+) {
+    val periodChangeFailed: Boolean get() = periodChangeErrorPresentation != null
+}
 
 /**
  * Analytics (api.md 6.1–6.3). Parameters live here: period type, period key and transfer mode; every change
@@ -98,13 +109,23 @@ class AnalyticsViewModel @Inject constructor(
 ) : ViewModel(), AnalyticsHandlers {
     private var period: PeriodTypeCode = PeriodTypeCode.MONTH
     private var date: PeriodKey? = null
+    /** Successful selections belong to their own segment, independent of all other segments. */
+    private val selectedDates = mutableMapOf<PeriodTypeCode, PeriodKey>()
     private var transferMode: TransferMode = TransferMode.WITH
     private var loadJob: Job? = null
+    private var initialized = false
+    private var importPolls = 0
+    private var importPollRevision: Long? = null
 
     private val limitRetryGate = RequestRetryGate(elapsedClock)
+    private var limitReadPending = false
     private val _state = MutableStateFlow(AnalyticsUiState(blocks = readBlocks(flags)))
     private val retryGate = RequestRetryGate(elapsedClock)
+    private val periodChangeRetryGate = RequestRetryGate(elapsedClock)
+    private var failedPeriodRequest: Triple<PeriodTypeCode, PeriodKey?, TransferMode>? = null
+    init { viewModelScope.launch { periodChangeRetryGate.readiness.collect { ready -> _state.update { it.copy(periodChangeRetryReady = ready) } } } }
     init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
+    init { viewModelScope.launch { limitRetryGate.readiness.collect { ready -> _state.update { it.copy(limitRetryReady = ready) } } } }
     val state: StateFlow<AnalyticsUiState> = _state
     private var periodsJob: Job? = null
     private var periodsGeneration = 0L
@@ -133,8 +154,9 @@ class AnalyticsViewModel @Inject constructor(
 
     /** Set by the `Period` route (assistant chip); the tab root starts with the server's default period. */
     fun init(params: AnalyticsParams?) {
-        if (_state.value.data != null || loadJob != null) return
-        if (params != null) {
+        if (initialized) return
+        initialized = true
+        if (params?.isValidSelection == true) {
             period = params.period
             date = params.date
             transferMode = allowedMode(params.transferMode)
@@ -144,7 +166,10 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     init {
-        viewModelScope.launch { merge(statements.events, operations.categoryChanges).collect { reloadChangedData() } }
+        viewModelScope.launch {
+            merge(statements.events.map { true }, operations.categoryChanges.map { false })
+                .collect { invalidate -> reloadChangedData(invalidate = invalidate) }
+        }
         viewModelScope.launch {
             reportZone.profile.map { reportZone.current }.distinctUntilChanged().drop(1).collect { if (loadJob != null) reloadChangedData() }
         }
@@ -168,16 +193,45 @@ class AnalyticsViewModel @Inject constructor(
         }
     }
 
+    /** Returning to a saved tab also refreshes changes whose event arrived while its view model was absent. */
+    fun onResume(params: AnalyticsParams?) {
+        if (!initialized) init(params)
+        else if (!_state.value.preparationTimedOut && failedPeriodRequest == null && loadJob?.isActive != true) load(quiet = true)
+    }
+
     /** Actual data/zone changes invalidate the old request context, including the period directory. */
-    private fun reloadChangedData() {
+    private fun reloadChangedData(invalidate: Boolean = false, clearSnackbar: Boolean = true) {
+        if (!initialized) return
         clearRestriction(periodsChanged = true)
-        load(quiet = true)
+        importPolls = 0
+        // An import or deletion invalidates the old totals. Other edits keep the screen and its scroll position.
+        if (invalidate) _state.update { it.copy(data = null, loading = true, offline = false,
+            snackbar = if (clearSnackbar) null else it.snackbar, preparationTimedOut = false) }
+        load(quiet = !invalidate)
     }
 
     private fun clearRestriction(periodsChanged: Boolean = false) {
+        clearPeriodChangeFailure()
         if (periodsChanged) resetPeriodsContext()
         retryGate.clear()
         _state.update { it.copy(requestRetryable = null, errorPresentation = null) }
+    }
+
+    private fun clearPeriodChangeFailure() {
+        failedPeriodRequest = null
+        periodChangeRetryGate.clear()
+        _state.update { it.copy(periodChangeErrorPresentation = null) }
+    }
+
+    /** Explicit retry owns the failed target; a plain refresh still belongs to the period on screen. */
+    override fun retryPeriodChange() {
+        val request = failedPeriodRequest ?: return
+        if (!periodChangeRetryGate.isReady()) return
+        period = request.first
+        date = request.second
+        transferMode = request.third
+        clearRestriction(periodsChanged = true)
+        load()
     }
 
     private fun resetPeriodsContext() {
@@ -187,35 +241,87 @@ class AnalyticsViewModel @Inject constructor(
         if (_state.value.sheet == AnalyticsSheet.PERIODS) requestPeriods()
     }
 
-    override fun load(quiet: Boolean) {
+    override fun refresh() {
+        if (_state.value.refreshing) return
+        val readAnalytics = loadJob?.isActive != true && retryGate.isReady()
+        val readLimit = _state.value.blocks.assistant && !limitReadPending && limitRetryGate.isReady()
+        if (!readAnalytics && !readLimit) return
+        _state.update {
+            if (readAnalytics) it.copy(refreshing = true, errorPresentation = null, snackbar = null, requestRetryable = null)
+            else it.copy(refreshing = true)
+        }
+        viewModelScope.launch {
+            val quotaJob = if (readLimit) launch { refreshLimit(reportOffline = true) } else null
+            val analyticsJob = if (readAnalytics) {
+                startLoad(quiet = true, updateLimit = false, preservePeriodChangeFailure = true)
+                loadJob
+            } else null
+            try {
+                analyticsJob?.join()
+                quotaJob?.join()
+            } finally {
+                _state.update { it.copy(refreshing = false) }
+            }
+        }
+    }
+
+    override fun load(quiet: Boolean) = startLoad(quiet, updateLimit = true)
+
+    private fun startLoad(quiet: Boolean, updateLimit: Boolean, preservePeriodChangeFailure: Boolean = false) {
         if (!retryGate.isReady()) return
+        if (_state.value.preparationTimedOut) importPolls = 0
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             if (!quiet) _state.update { it.copy(loading = it.data == null, offline = false, errorPresentation = null, requestRetryable = null) }
+            _state.update { it.copy(recalculationPaused = false) }
             val requested = Triple(period, date, transferMode)
             try {
+                val pendingImport = statements.pendingAnalyticsImport()
+                if (pendingImport != importPollRevision) {
+                    importPollRevision = pendingImport
+                    importPolls = 0
+                }
                 val exp = experiments
                 val a = api.getAnalytics(requested.first, requested.second, requested.third, supports = supports, exp = exp)
+                // `complete` confirms the ledger commit, while the analytics projection can still be absent.
+                // Never turn that known non-empty import into an instruction to upload the same file again.
+                if (pendingImport != null && !a.hasData) {
+                    importPolls++
+                    val expired = importPolls >= MAX_IMPORT_POLLS
+                    _state.update { it.copy(data = null, loading = !expired, offline = false,
+                        preparationTimedOut = expired, errorPresentation = null, requestRetryable = null) }
+                    if (!expired) {
+                        delay(RECALC_POLL_MS)
+                        startLoad(quiet = true, updateLimit = updateLimit, preservePeriodChangeFailure = preservePeriodChangeFailure)
+                    }
+                    return@launch
+                }
+                if (pendingImport != null && a.state?.recalculating != true) statements.analyticsImportReady(pendingImport)
+                importPolls = 0
+                // A pull refresh reads the shown period; its result cannot retire another target's refusal.
+                if (!preservePeriodChangeFailure) clearPeriodChangeFailure()
                 exposed.clear()
                 shownExperiments = exp
                 a.params?.let { p ->
                     val periodsChanged = period != p.period
                     period = p.period
                     date = p.date
+                    selectedDates[p.period] = p.date
                     transferMode = allowedMode(p.transferMode)
                     if (periodsChanged) resetPeriodsContext()
                 }
-                _state.update { it.copy(loading = false, offline = false, errorPresentation = null, requestRetryable = null, data = a, response = it.response + 1) }
+                _state.update { it.copy(loading = false, offline = false, errorPresentation = null, requestRetryable = null, preparationTimedOut = false, data = a, response = it.response + 1) }
                 if (a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
                     _state.update { it.copy(hint = AnalyticsHint.CATEGORIES) }
                 }
-                if (_state.value.blocks.assistant) refreshLimit()
+                if (updateLimit && _state.value.blocks.assistant) refreshLimit()
                 // The server is still recalculating after an edit: ask again shortly (api.md 6.1 `recalculating`).
                 if (a.state?.recalculating == true) {
                     delay(RECALC_POLL_MS)
-                    load(quiet = true)
+                    startLoad(quiet = true, updateLimit = updateLimit, preservePeriodChangeFailure = preservePeriodChangeFailure)
                 }
             } catch (e: AppError) {
+                importPolls = 0
                 retryGate.record(e)
                 // The screen keeps showing the previous data: return the parameters to what it shows, or the
                 // segment, the chip and the transfers sheet would describe a request that never succeeded.
@@ -229,39 +335,83 @@ class AnalyticsViewModel @Inject constructor(
                 // The refusal belongs to the failed params, not the different period restored on screen.
                 // Keep its explanation until the user requests that restored context; never retry automatically.
                 if (requested != Triple(period, date, transferMode)) retryGate.clear()
+                val failedSwitch = _state.value.data != null && (requested.first != period || requested.second != date)
+                if (failedSwitch) {
+                    failedPeriodRequest = requested
+                    periodChangeRetryGate.record(e)
+                } else if (!preservePeriodChangeFailure) clearPeriodChangeFailure()
                 _state.update {
                     it.copy(
                         loading = false,
-                        errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable,
+                        periodChangeErrorPresentation = when {
+                            failedSwitch -> e.presentation
+                            preservePeriodChangeFailure -> it.periodChangeErrorPresentation
+                            else -> null
+                        },
+                        recalculationPaused = it.data?.state?.recalculating == true,
+                        errorPresentation = if (failedSwitch || (e is AppError.Offline && it.data == null)) null else e.presentation,
+                        requestRetryable = e.requestRetryable,
                         offline = it.data == null,
-                        snackbar = if (quiet || it.data == null) it.snackbar
-                        else if (e is AppError.Offline) "Нет сети — показываем прежний период" else "Не получилось обновить. Попробуйте ещё раз",
+                        snackbar = if (failedSwitch) null else if (quiet || it.data == null) it.snackbar
+                        else if (e is AppError.Offline) "Прежний период сохранён" else "Не получилось обновить. Попробуйте ещё раз",
                     )
                 }
             }
         }
     }
 
-    private suspend fun refreshLimit() {
-        if (!limitRetryGate.isReady()) return
-        runCatching { assistantApi.getLimit() }.onSuccess { l -> _state.update { it.copy(limit = l, limitErrorPresentation = null) } }
-            .onFailure { failure -> if (failure is AppError) {
-                limitRetryGate.record(failure)
-                if (failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
-            } }
+    private suspend fun refreshLimit(reportOffline: Boolean = false) {
+        if (limitReadPending || !limitRetryGate.isReady()) return
+        limitReadPending = true
+        try {
+            val limit = assistantApi.getLimit()
+            _state.update { it.copy(limit = limit, limitErrorPresentation = null) }
+        } catch (failure: AppError) {
+            limitRetryGate.record(failure)
+            if (reportOffline || failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
+        } finally {
+            limitReadPending = false
+        }
     }
 
-    /** Segmented control: keeps the current date so «Месяц → Квартал» opens the quarter containing it. */
+    /** Restore this segment's choice; only a first visit derives a key from the displayed period. */
     override fun setPeriodType(type: PeriodTypeCode) {
-        if (type == period) return
+        if (type == PeriodTypeCode.UNKNOWN || type == period) return
+        val targetDate = dateForType(type)
+        // The segment is another entry point to the same failed request, including its wait/refusal.
+        if (failedPeriodRequest == Triple(type, targetDate, transferMode)) {
+            retryPeriodChange()
+            return
+        }
+        date = targetDate
         period = type
         clearRestriction(periodsChanged = true)
         tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to type.code))
         load()
     }
 
+    private fun dateForType(type: PeriodTypeCode): PeriodKey? {
+        if (type.isRolling) return PeriodKey(type.code)
+        if (type == PeriodTypeCode.ALL_TIME) return PeriodKey.ALL_TIME
+        selectedDates[type]?.let { return it }
+        val target = PeriodType.fromCode(type.code) ?: return null
+        val shown = _state.value.data
+        val key = shown?.params?.date ?: date ?: return null
+        // The API accepts exact or finer keys. Coarsening preserves the existing calendar anchor.
+        if (key.isCalendar && key.type.ordinal <= target.ordinal) return key
+        val info = shown?.period ?: return null
+        // dataTo is an inclusive covered instant; only the calendar range has an exclusive end.
+        val last = if (key.isCalendar && info.coverage == Coverage.COMPLETE) info.range.to.minusNanos(1) else info.dataTo
+        if (last == null || last !in info.range) return null
+        return PeriodKey.of(target, last.atZoneSameInstant(reportZone.current).toLocalDate())
+    }
+
     override fun goTo(key: PeriodKey) {
         _state.update { it.copy(sheet = null) }
+        if (failedPeriodRequest == Triple(period, key, transferMode)) {
+            retryPeriodChange()
+            return
+        }
         if (key == date) return
         clearRestriction()
         date = key
@@ -324,7 +474,7 @@ class AnalyticsViewModel @Inject constructor(
             } catch (e: AppError) {
                 if (!periodsContextIsCurrent(generation, type, zone)) return@launch
                 periodsRetryGate.record(e)
-                _state.update { it.copy(periodsFailed = true, periodsErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, periodsRetryable = e.requestRetryable) }
+                _state.update { it.copy(periodsFailed = true, periodsErrorPresentation = e.presentation, periodsRetryable = e.requestRetryable) }
             }
         }
     }
@@ -342,8 +492,28 @@ class AnalyticsViewModel @Inject constructor(
                 navigate(action)
             }
             ActionType.OPEN_ASSISTANT -> navigate(action)
+            ActionType.SELECT_ANALYTICS_PERIOD -> selectChartMonth(block, action)
             ActionType.UNKNOWN -> Unit
         }
+    }
+
+    /** A chart action changes the type and exact key in one request, with the current transfer mode. */
+    private fun selectChartMonth(block: Block, action: BlockAction) {
+        if (block.id != "monthly_chart" || block.type != ru.finassist.pf.core.api.model.BlockType.CHART || block.v != 1 || !block.status.hasData) return
+        val target = AnalyticsPeriodTargets.of(action.period, action.date)?.takeIf { it.period == PeriodTypeCode.MONTH } ?: return
+        val request = Triple(target.period, target.date, transferMode)
+        if (request == Triple(period, date, transferMode)) return
+        if (failedPeriodRequest == request) {
+            retryPeriodChange()
+            return
+        }
+        val changedType = period != target.period
+        period = target.period
+        date = target.date
+        _state.update { it.copy(sheet = null) }
+        clearRestriction(periodsChanged = changedType)
+        tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to target.period.code))
+        load()
     }
 
     /** Exposure (FIN-9): the block was drawn — once per block id and response. */
@@ -363,10 +533,10 @@ class AnalyticsViewModel @Inject constructor(
                 api.dismissRegularPayment(id)
                 tracker.track(Events.ANALYTICS_REGULAR_DISMISSED)
                 _state.update { it.copy(snackbar = "Убрали из регулярных платежей") }
-                reloadChangedData()
+                reloadChangedData(clearSnackbar = false)
             } catch (e: AppError) {
                 gate.record(e)
-                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, snackbar = if (e is AppError.Offline) "Нет сети — не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
+                _state.update { it.copy(errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
             }
         }
     }
@@ -375,6 +545,7 @@ class AnalyticsViewModel @Inject constructor(
 
     private companion object {
         const val RECALC_POLL_MS = 3_000L
+        const val MAX_IMPORT_POLLS = 10
         const val BLOCK_FLAG_PREFIX = "analytics.block."
         const val TILES_ID = "tiles"
 

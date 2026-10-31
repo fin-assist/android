@@ -65,6 +65,7 @@ class UnreadLinesViewModelTest {
         api.unreadResult = AppError.Offline()
         val vm = newVm("uploadId" to "u1")
         assertTrue(vm.state.value.error)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertFalse(vm.state.value.loading)
 
         api.unreadResult = UnreadLinesList(listOf(line))
@@ -72,6 +73,13 @@ class UnreadLinesViewModelTest {
         assertFalse(vm.state.value.error)
         assertEquals(listOf(line), vm.state.value.lines)
     }
+    @Test fun `a failed unread-lines server response does not claim a local connection failure`() {
+        api.unreadResult = AppError.Server(503)
+        val state = newVm("uploadId" to "u1").state.value
+        assertTrue(state.error)
+        assertEquals(false, state.errorPresentation?.connectionFailure)
+    }
+
     @Test fun `equal physical line and reason occurrences remain separate list entries`() {
         val duplicate = line.copy()
         api.unreadResult = UnreadLinesList(listOf(line, duplicate))
@@ -83,6 +91,48 @@ class UnreadLinesViewModelTest {
         assertEquals(state.lines[0].lineNumber, state.lines[1].lineNumber)
         assertEquals(state.lines[0].reason, state.lines[1].reason)
         assertEquals(state.lines[0].reasonName, state.lines[1].reasonName)
+    }
+
+    @Test fun `refresh keeps unread lines on failure and respects retry after`() {
+        api.unreadResult = UnreadLinesList(listOf(line))
+        val vm = newVm("uploadId" to "u1")
+        api.unreadResult = AppError.Offline()
+        vm.refresh()
+        assertEquals(listOf(line), vm.state.value.lines)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertFalse(vm.state.value.loading)
+        assertFalse(vm.state.value.refreshing)
+        api.unreadResult = AppError.RateLimited(null, retryAfterSeconds = 60)
+        vm.refresh()
+        val calls = api.unreadCalls.size
+        vm.refresh()
+        assertEquals(calls, api.unreadCalls.size)
+        assertEquals(listOf(line), vm.state.value.lines)
+    }
+
+    @Test fun `pending unread refresh uses same route deduplicates and handles empty success`() {
+        val wait = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val delayed = object : ru.finassist.pf.core.api.StatementsApi by api {
+            override suspend fun listUnreadLines(uploadId: String): UnreadLinesList {
+                calls++
+                if (calls > 1) wait.await()
+                return api.listUnreadLines(uploadId)
+            }
+        }
+        api.unreadResult = UnreadLinesList(listOf(line))
+        val vm = UnreadLinesViewModel(SavedStateHandle(mapOf("uploadId" to "u1")), delayed, FakeTokens("user-1"), ru.finassist.pf.core.common.time.ElapsedClock { 0L })
+        api.unreadResult = UnreadLinesList(emptyList())
+        vm.refresh()
+        vm.refresh()
+        vm.load()
+        assertEquals(2, calls)
+        assertEquals(listOf(line), vm.state.value.lines)
+        assertTrue(vm.state.value.refreshing)
+        wait.complete(Unit)
+        assertFalse(vm.state.value.refreshing)
+        assertTrue(vm.state.value.lines.isEmpty())
+        assertEquals(listOf<Any>("u1", "u1"), api.unreadCalls)
     }
 
 }

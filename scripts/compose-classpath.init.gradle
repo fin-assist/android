@@ -7,7 +7,7 @@ gradle.projectsEvaluated {
     def app = gradle.rootProject.findProject(':app')
     if (app == null) return // The init script also runs in the included build-logic build.
     def libs = app.extensions.getByType(org.gradle.api.artifacts.VersionCatalogsExtension).named('libs')
-    def configurations = ['mockE2eRuntimeClasspath', 'prodReleaseRuntimeClasspath']
+    def configurations = ['mockE2eRuntimeClasspath', 'stageDebugRuntimeClasspath', 'stageReleaseRuntimeClasspath', 'prodReleaseRuntimeClasspath']
     def baselines = [:]
     configurations.each { name ->
         def runtime = app.configurations.getByName(name)

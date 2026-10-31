@@ -25,6 +25,16 @@ tags:
 - extendedWaitUntil:
     visible: "Неверный код"
     timeout: 5000
+# FIN-389: the error must coexist with the dots, keypad and recovery action.
+- assertVisible:
+    id: "ds.passcode.dots"
+- assertVisible:
+    id: "ds.numpad.0"
+- assertVisible:
+    id: "ds.numpad.delete"
+- assertVisible:
+    id: "applock.confirm.forgot"
+- takeScreenshot: FIN389_delete_error
 - runFlow:
     file: ../../subflows/enter_code.yaml
     env:

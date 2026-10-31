@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.analytics.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.PfRefreshContainer
+import ru.finassist.pf.core.designsystem.components.ConnectionFailureState
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import androidx.compose.runtime.getValue
 import ru.finassist.pf.core.api.model.ActionType
@@ -10,6 +12,10 @@ import ru.finassist.pf.core.blocks.BlockContext
 import ru.finassist.pf.core.blocks.BlockLayout
 import ru.finassist.pf.core.blocks.BlockTags
 import ru.finassist.pf.core.blocks.BlocksColumn
+import ru.finassist.pf.core.blocks.PreparedBlock
+import ru.finassist.pf.core.blocks.GroupedTileRenderer
+import ru.finassist.pf.core.api.model.AnalyticsPeriodInfo
+import ru.finassist.pf.core.api.model.BlockStatus
 import ru.finassist.pf.core.blocks.CatalogV1
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +41,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import kotlinx.coroutines.delay
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.AnalyticsParams
@@ -66,6 +73,7 @@ import ru.finassist.pf.core.designsystem.components.PfSnackbar
 import ru.finassist.pf.core.designsystem.components.PfStatTile
 import ru.finassist.pf.core.designsystem.components.PfTabHeader
 import ru.finassist.pf.core.designsystem.icons.PfIcons
+import java.time.ZoneId
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.analytics.impl.domain.AnalyticsTexts
@@ -79,11 +87,15 @@ class AnalyticsActions(
     val back: (() -> Unit)?,
 )
 
-private val PERIOD_TYPES = listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.YEAR)
+private val PERIOD_TYPES = listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.YEAR, PeriodTypeCode.ALL_TIME)
+private val ROLLING_TYPES = listOf(PeriodTypeCode.ROLLING_YEAR, PeriodTypeCode.ROLLING_QUARTER)
 
 @Composable
 fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: AnalyticsViewModel = hiltViewModel()) {
-    LaunchedEffect(params) { vm.init(params) }
+    LifecycleResumeEffect(params) {
+        vm.onResume(params)
+        onPauseOrDispose {}
+    }
     val state by vm.state.collectAsStateWithLifecycle()
     AnalyticsContent(state, actions, vm)
 }
@@ -94,6 +106,8 @@ fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: Ana
  */
 interface AnalyticsHandlers {
     fun load(quiet: Boolean = false)
+    fun retryPeriodChange()
+    fun refresh() { load(quiet = true) }
     fun consumeSnackbar()
     fun setPeriodType(type: PeriodTypeCode)
     fun goTo(key: PeriodKey)
@@ -109,50 +123,73 @@ interface AnalyticsHandlers {
 @Composable
 internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions, vm: AnalyticsHandlers) {
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize().testTag(AnalyticsTags.SCREEN)) {
-        if (actions.back != null) PfPageHeader("Аналитика", onBack = actions.back) else PfTabHeader("Аналитика")
-        val a = state.data
-        state.limitErrorPresentation?.let {
-            ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4))
-        }
-        state.errorPresentation?.let { presentation ->
-            ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику. Попробуйте ещё раз",
-                modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.load() }))
-        }
-        when {
-            state.loading -> Unit
-            state.errorPresentation != null && a == null -> Unit
-            state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(AnalyticsTags.OFFLINE)) {
-                PfButton("Повторить", onClick = { vm.load() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+    PfRefreshContainer(refreshing = state.refreshing, onRefresh = vm::refresh, enabled = (state.retryReady || (state.blocks.assistant && state.limitRetryReady)) && !state.loading, modifier = Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().testTag(AnalyticsTags.SCREEN)) {
+            if (actions.back != null) PfPageHeader("Аналитика", onBack = actions.back) else PfTabHeader("Аналитика")
+            val a = state.data
+            val quotaVisible = state.blocks.assistant && !state.loading && !state.offline &&
+                !state.preparationTimedOut && a?.hasData == true
+            state.limitErrorPresentation?.takeIf { quotaVisible }?.let {
+                ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4),
+                    onRetry = ({ vm.refresh() }).takeIf { state.limitRetryReady })
             }
-            a == null || !a.hasData -> Column(
-                Modifier.weight(1f).fillMaxWidth().padding(start = d.space5, end = d.space5, bottom = d.space6).testTag(AnalyticsTags.EMPTY),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                PfEmptyState(
-                    PfIcons.BAR_CHART,
-                    "Аналитики пока нет",
-                    if (state.blocks.upload) {
-                        "Загрузите выписку — покажем расходы по категориям, доходы и разницу между ними, и помощник сможет ответить на вопросы о ваших деньгах"
-                    } else {
-                        null
-                    },
-                    padding = PaddingValues(start = d.space8, top = d.space8, end = d.space8, bottom = d.space6),
-                )
-                if (state.blocks.upload) PfButton("Загрузить выписку", onClick = actions.openUpload, variant = ButtonVariant.PRIMARY, block = true)
+            state.periodChangeErrorPresentation?.let { presentation ->
+                ErrorMessage(presentation, "Не удалось сменить период", modifier = Modifier.padding(d.space4),
+                    onRetry = if (state.periodChangeRetryReady) ({ vm.retryPeriodChange() }) else null,
+                    retryModifier = Modifier.testTag(AnalyticsTags.PERIOD_RETRY))
             }
-            else -> Column(
-                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(top = d.space2, bottom = d.space6),
-            ) {
-                Content(a, state, vm, actions)
+            state.errorPresentation?.let { presentation ->
+                ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику",
+                    modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.refresh() }),
+                    retryModifier = Modifier.testTag(AnalyticsTags.RETRY))
             }
-        }
-        state.snackbar?.takeIf { state.errorPresentation == null }?.let { text ->
-            LaunchedEffect(text) {
-                delay(3000)
-                vm.consumeSnackbar()
+            when {
+                state.loading || (a?.hasData == false && a.state?.recalculating == true) -> Column(
+                    Modifier.weight(1f).fillMaxWidth().padding(d.space5).testTag(AnalyticsTags.UPDATING),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    PfEmptyState(PfIcons.BAR_CHART, "Обновляем аналитику", "Подготавливаем показатели по вашим выпискам")
+                }
+                state.errorPresentation != null && a == null -> Unit
+                state.offline -> ConnectionFailureState(modifier = Modifier.testTag(AnalyticsTags.OFFLINE)) {
+                    PfButton("Повторить", onClick = { vm.refresh() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+                }
+                state.preparationTimedOut -> PfEmptyState(
+                    PfIcons.BAR_CHART, "Аналитика ещё готовится", "Выписка загружена. Попробуйте обновить показатели чуть позже",
+                    modifier = Modifier.testTag(AnalyticsTags.PREPARATION_TIMEOUT),
+                ) {
+                    PfButton("Повторить", onClick = { vm.refresh() }, enabled = state.retryReady,
+                        variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+                }
+                a == null || !a.hasData -> Column(
+                    Modifier.weight(1f).fillMaxWidth().padding(start = d.space5, end = d.space5, bottom = d.space6).testTag(AnalyticsTags.EMPTY),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    PfEmptyState(
+                        PfIcons.BAR_CHART,
+                        "Аналитики пока нет",
+                        if (state.blocks.upload) {
+                            "Загрузите выписку — покажем расходы по категориям, доходы и разницу между ними, и помощник сможет ответить на вопросы о ваших деньгах"
+                        } else {
+                            null
+                        },
+                        padding = PaddingValues(start = d.space8, top = d.space8, end = d.space8, bottom = d.space6),
+                    )
+                    if (state.blocks.upload) PfButton("Загрузить выписку", onClick = actions.openUpload, variant = ButtonVariant.PRIMARY, block = true)
+                }
+                else -> Column(
+                    Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(top = d.space2, bottom = d.space6),
+                ) {
+                    Content(a, state, vm, actions)
+                }
             }
-            PfSnackbar(text, Modifier.padding(d.space4))
+            state.snackbar?.takeIf { state.errorPresentation == null }?.let { text ->
+                LaunchedEffect(text) {
+                    delay(3000)
+                    vm.consumeSnackbar()
+                }
+                PfSnackbar(text, Modifier.padding(d.space4))
+            }
         }
     }
     Sheets(state, vm)
@@ -167,6 +204,7 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
     val params = a.params ?: return
     val period = a.period ?: return
     val blocks = state.blocks
+    val prepared = remember(a.blocks, blocks.hidden) { prepareAnalyticsBlocks(a.blocks, blocks.hidden) }
     val d = PfTheme.dimens
 
     if (blocks.assistant) {
@@ -207,10 +245,23 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         )
         Gap(d.space2)
         PfSegmentedControl(
-            options = listOf("Месяц", "Квартал", "Год"),
-            selected = PERIOD_TYPES.indexOf(params.period).coerceAtLeast(0),
+            options = listOf("Месяц", "Квартал", "Год", "За всё время"),
+            selected = PERIOD_TYPES.indexOf(params.period),
             onSelect = { vm.setPeriodType(PERIOD_TYPES[it]) },
+            scrollable = true,
+            modifier = Modifier.testTag(AnalyticsTags.PERIOD_TYPES),
+            optionTag = { if (it == PERIOD_TYPES.lastIndex) AnalyticsTags.ALL_TIME else "ds.segment.$it" },
         )
+        Gap(d.space2)
+        Column(verticalArrangement = Arrangement.spacedBy(d.space2)) {
+            ROLLING_TYPES.forEach { type ->
+                PfChip(
+                    if (type == PeriodTypeCode.ROLLING_YEAR) "Последние 12 месяцев" else "Последние 3 месяца",
+                    onClick = { vm.setPeriodType(type) }, selected = params.period == type,
+                    modifier = Modifier.testTag(AnalyticsTags.rolling(type.code)),
+                )
+            }
+        }
         if (blocks.transfersFilter) {
             Gap(d.space3)
             Row {
@@ -238,22 +289,46 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         }
         if (s.recalculating) {
             Gap(d.space3)
-            PfNotice("Пересчитываем после изменений — цифры обновятся через несколько секунд", tone = NoticeTone.INFO)
+            PfNotice(
+                if (state.recalculationPaused) "Не удалось обновить показатели. Показаны данные до изменений"
+                else "Пересчитываем после изменений — цифры обновятся через несколько секунд",
+                tone = NoticeTone.INFO,
+                action = if (state.recalculationPaused && state.retryReady) ({
+                    PfNoticeLink("Повторить", onClick = { vm.refresh() }, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+                }) else null,
+            )
         }
     }
     // A past month or an incomplete quarter/year says which part of it the numbers cover; the tiles follow 8 dp
     // under it (mockup `AnalyticsYear`: `margin-bottom: space-2 − space-4`).
-    val coverageCaption = AnalyticsTexts.partialPeriod(period, params.period) ?: AnalyticsTexts.coverage(period).takeIf { !period.isCurrent }
+    val coverageCaption = analyticsCoverageCaption(period, params.period, prepared, LocalPfClock.current.zone)
     coverageCaption?.let {
         Gap(d.space4)
-        Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
+        Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+            modifier = if (params.period == PeriodTypeCode.ALL_TIME) Modifier.testTag(AnalyticsTags.ALL_TIME_RANGE) else Modifier)
     }
 
-    Blocks(a, state, vm, actions, afterCaption = coverageCaption != null)
+    Blocks(a, state, vm, actions, prepared, afterCaption = coverageCaption != null)
 }
 
 /** Registry of the renderers (FIN-7): the catalog version this client draws. */
 private val registry = CatalogV1.registry()
+
+internal fun prepareAnalyticsBlocks(blocks: List<Block>, hidden: Set<String>): List<PreparedBlock> =
+    BlockLayout.visible(registry.prepareAll(blocks), { it.block }) { it.block.id != null && it.block.id in hidden }
+
+/** The server's visible message replaces the local no-data caption; hidden or unsupported blocks need a fallback. */
+internal fun analyticsCoverageCaption(period: AnalyticsPeriodInfo, type: PeriodTypeCode, prepared: List<PreparedBlock>, zone: ZoneId): String? {
+    if (period.coverage.effective == Coverage.NO_DATA) {
+        val serverMessage = prepared.any {
+            val block = it.block
+            block.id == "tiles" && block.type == BlockType.TILE_GROUP && block.v <= GroupedTileRenderer.version &&
+                block.status.effective == BlockStatus.NONE && !block.emptyText.isNullOrBlank()
+        }
+        return if (serverMessage) null else AnalyticsTexts.coverage(period)
+    }
+    return AnalyticsTexts.partialPeriod(period, type, zone) ?: AnalyticsTexts.coverage(period).takeIf { !period.isCurrent }
+}
 
 /** Test tags of the blocks — the ones the UI tests have used since before FIN-4. */
 private object AnalyticsBlockTags : BlockTags("analytics") {
@@ -278,13 +353,8 @@ private object AnalyticsBlockTags : BlockTags("analytics") {
  * drawn by the registry; a block it cannot draw is skipped. Spacing follows the mockups by the kind of block.
  */
 @Composable
-private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers, actions: AnalyticsActions, afterCaption: Boolean) {
+private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers, actions: AnalyticsActions, prepared: List<PreparedBlock>, afterCaption: Boolean) {
     val d = PfTheme.dimens
-    val hidden = state.blocks.hidden
-    val prepared = remember(a.blocks, hidden) {
-        // Prepared first: a heading over blocks that did not decode goes as well.
-        BlockLayout.visible(registry.prepareAll(a.blocks), { it.block }) { p -> p.block.id != null && p.block.id in hidden }
-    }
     val navigate: (BlockAction) -> Unit = { action ->
         when (action.type) {
             ActionType.OPEN_OPERATIONS -> action.filter?.let(actions.openSearch)
@@ -296,6 +366,7 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
         currency = a.currency,
         tags = AnalyticsBlockTags,
         onAction = { block, action -> vm.onAction(block, action, navigate) },
+        onSelectAnalyticsPeriod = { block, action -> vm.onAction(block, action, navigate) },
         expanded = state.expanded,
         onToggleExpanded = vm::toggleExpanded,
         decorate = { block, content ->
@@ -409,12 +480,15 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
 
 /** Test tags of the analytics screen (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object AnalyticsTags {
+    const val UPDATING = "analytics.updating"
+    const val PREPARATION_TIMEOUT = "analytics.preparation_timeout"
     /** A block of the screen by its id (`analytics.block.tiles`): the ids are the server's (FIN-4). */
     fun block(id: String) = "analytics.block.$id"
     const val SCREEN = "analytics.screen"
     const val EMPTY = "analytics.empty"
     const val OFFLINE = "analytics.offline"
     const val RETRY = "analytics.retry"
+    const val PERIOD_RETRY = "analytics.period.retry"
     const val ASK = "analytics.ask"
     const val UNREAD = "analytics.unread"
     /** The stale statement banner: «Данные в приложении по … — с тех пор прошло больше двух недель». */
@@ -423,6 +497,12 @@ internal object AnalyticsTags {
     const val TRANSFERS_WITH = "analytics.transfers.with"
     const val TRANSFERS_WITHOUT = "analytics.transfers.without"
     const val PERIOD_OPTION = "analytics.period.option"
+    fun rolling(code: String) = "analytics.period.$code"
+    // PfBarChart emits these stable keys for the shared chart primitive.
+    fun monthlyPoint(month: String) = "analytics.expense.monthly.point.$month"
+    const val PERIOD_TYPES = "analytics.period.types"
+    const val ALL_TIME = "analytics.period.all_time"
+    const val ALL_TIME_RANGE = "analytics.period.all_time.range"
     const val EXPENSE_CATEGORY = "analytics.expense_category"
     const val INCOME_CATEGORY = "analytics.income_category"
     const val ALL_CATEGORIES = "analytics.all_categories"

@@ -217,13 +217,8 @@ private fun ColumnScope.Summary(
     }
     UnreadNotice(r, onOpenUnread)
     r.totals?.let { t ->
-        val scope = when (t.scope) {
-            ImportTotalsScope.ALL -> "Все операции"
-            ImportTotalsScope.NEW -> "Новые операции"
-            ImportTotalsScope.UNKNOWN -> null
-        }
-        listOfNotNull(scope, ResultTexts.period(r)).joinToString(" · ").takeIf { it.isNotEmpty() }?.let {
-            Text(it, style = PfTheme.type.hint, color = c.textMuted, modifier = Modifier.padding(top = d.space5))
+        if (t.scope == ImportTotalsScope.NEW) {
+            Text("Новые операции", style = PfTheme.type.hint, color = c.textMuted, modifier = Modifier.padding(top = d.space5))
         }
         Row(Modifier.padding(top = d.space2).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(d.space4)) {
             TotalTile("Расходы", (Money.ZERO - t.expense).format(r.currency), positive = false, Modifier.weight(1f).fillMaxHeight())

@@ -4,6 +4,8 @@ import ru.finassist.pf.core.api.model.ChartPoint
 import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.api.model.ValueKind
 import ru.finassist.pf.core.common.money.Money
+import ru.finassist.pf.core.common.time.RussianDates
+import java.time.YearMonth
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -39,6 +41,12 @@ object BlockFormat {
     fun percent(share: Double): String {
         val pct = (share * 100).roundToInt()
         return if (pct < 0) "${Money.MINUS}${abs(pct)}%" else "$pct%"
+    }
+
+    /** Axis label; a multi-year chart keeps the year on a separate line. */
+    fun chartMonthLabel(point: ChartPoint, showYear: Boolean): String {
+        val month = YearMonth.from(point.range.from)
+        return RussianDates.monthShort(month.month) + if (showYear) "\n${month.year}" else ""
     }
 
     /**

@@ -1,0 +1,331 @@
+{
+    "has_data": true,
+    "params": {
+        "period": "year",
+        "date": "2026",
+        "transfer_mode": "with"
+    },
+    "period": {
+        "range": {
+            "from": "2026-01-01T00:00:00+03:00",
+            "to": "2027-01-01T00:00:00+03:00"
+        },
+        "is_current": true,
+        "coverage": "partial",
+        "data_from": "2026-01-01T00:00:00+03:00",
+        "data_to": "2026-10-30T23:59:59+03:00",
+        "gaps": []
+    },
+    "navigation": {
+        "previous": "2025"
+    },
+    "blocks": [
+        {
+            "id": "tiles",
+            "type": "tile_group",
+            "v": 2,
+            "alt_text": "Расходы за период 1 000 ₽, Доходы за период 0 ₽, Доходы минус расходы −1 000 ₽, Средние расходы в день 3,30 ₽, Прогноз на год — Нужно 12 полных месяцев, есть 11. База прогноза — вся загруженная история, независимо от выбранного года. Полный месяц — завершённый календарный месяц с данными за каждый день. Учтены полные месяцы: ноябрь 2025 — сентябрь 2026. Неполные месяцы: октябрь 2025 (данные за 30–31 октября), октябрь 2026 (данные за 1–30 октября; месяц ещё не закончился).",
+            "data": {
+                "groups": [
+                    {
+                        "tiles": [
+                            {
+                                "id": "expense",
+                                "title": "Расходы за период",
+                                "value": 100000.0,
+                                "value_kind": "amount",
+                                "caption": "1 января — 30 октября",
+                                "action": {
+                                    "type": "open_operations",
+                                    "filter": {
+                                        "from": "2026-01-01T00:00:00+03:00",
+                                        "to": "2027-01-01T00:00:00+03:00",
+                                        "kind": "expense",
+                                        "transfer_mode": "with"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "income",
+                                "title": "Доходы за период",
+                                "value": 0.0,
+                                "value_kind": "amount",
+                                "show_plus": true,
+                                "action": {
+                                    "type": "open_operations",
+                                    "filter": {
+                                        "from": "2026-01-01T00:00:00+03:00",
+                                        "to": "2027-01-01T00:00:00+03:00",
+                                        "kind": "income",
+                                        "transfer_mode": "with"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "balance",
+                                "title": "Доходы минус расходы",
+                                "value": -100000.0,
+                                "value_kind": "amount",
+                                "caption": "Доходов за период нет"
+                            }
+                        ]
+                    },
+                    {
+                        "tiles": [
+                            {
+                                "id": "daily_expense",
+                                "title": "Средние расходы в день",
+                                "value": 330.0,
+                                "value_kind": "amount",
+                                "caption": "По дням с данными не позже сегодня; пропуски не учитываются\nв среднем за январь — октябрь"
+                            },
+                            {
+                                "id": "forecast",
+                                "title": "Прогноз на год",
+                                "status": "locked",
+                                "lock": {
+                                    "reason": "need_full_months",
+                                    "text": "Нужно 12 полных месяцев, есть 11. База прогноза — вся загруженная история, независимо от выбранного года. Полный месяц — завершённый календарный месяц с данными за каждый день. Учтены полные месяцы: ноябрь 2025 — сентябрь 2026. Неполные месяцы: октябрь 2025 (данные за 30–31 октября), октябрь 2026 (данные за 1–30 октября; месяц ещё не закончился).",
+                                    "required": 12,
+                                    "available": 11
+                                }
+                            }
+                        ],
+                        "title": "Дополнительные показатели"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "monthly_chart",
+            "type": "chart",
+            "title": "Расходы по месяцам",
+            "alt_text": "Расходы по месяцам: январь 0 ₽, февраль 0 ₽, март 0 ₽, апрель 0 ₽, май 0 ₽, июнь 0 ₽, июль 0 ₽, август 1 000 ₽, сентябрь 0 ₽, октябрь 0 ₽, ноябрь нет данных, декабрь нет данных",
+            "data": {
+                "kind": "bar",
+                "value_kind": "amount",
+                "points": [
+                    {
+                        "range": {
+                            "from": "2026-01-01T00:00:00+03:00",
+                            "to": "2026-02-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-01"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-02-01T00:00:00+03:00",
+                            "to": "2026-03-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-02"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-03-01T00:00:00+03:00",
+                            "to": "2026-04-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-03"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-04-01T00:00:00+03:00",
+                            "to": "2026-05-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-04"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-05-01T00:00:00+03:00",
+                            "to": "2026-06-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-05"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-06-01T00:00:00+03:00",
+                            "to": "2026-07-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-06"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-07-01T00:00:00+03:00",
+                            "to": "2026-08-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-07"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-08-01T00:00:00+03:00",
+                            "to": "2026-09-01T00:00:00+03:00"
+                        },
+                        "value": 100000.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-08"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-09-01T00:00:00+03:00",
+                            "to": "2026-10-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-09"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-10-01T00:00:00+03:00",
+                            "to": "2026-11-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "partial",
+                        "data_from": "2026-10-01T00:00:00+03:00",
+                        "data_to": "2026-10-30T23:59:59+03:00",
+                        "note": "по 30-е",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-10"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-11-01T00:00:00+03:00",
+                            "to": "2026-12-01T00:00:00+03:00"
+                        },
+                        "coverage": "no_data"
+                    },
+                    {
+                        "range": {
+                            "from": "2026-12-01T00:00:00+03:00",
+                            "to": "2027-01-01T00:00:00+03:00"
+                        },
+                        "coverage": "no_data"
+                    }
+                ],
+                "notes": [
+                    {
+                        "text": "Больше всего — в августе: 1 000 ₽",
+                        "tone": "primary"
+                    },
+                    {
+                        "text": "Октябрь — по 30-е",
+                        "tone": "muted"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "expense_categories",
+            "type": "ranked_list",
+            "title": "Расходы по категориям",
+            "alt_text": "Расходы по категориям: Супермаркеты 1 000 ₽",
+            "data": {
+                "total": {
+                    "label": "Всего · январь — октябрь",
+                    "value": 100000.0,
+                    "value_kind": "amount",
+                    "action": {
+                        "type": "open_operations",
+                        "filter": {
+                            "from": "2026-01-01T00:00:00+03:00",
+                            "to": "2027-01-01T00:00:00+03:00",
+                            "kind": "expense",
+                            "transfer_mode": "with"
+                        }
+                    }
+                },
+                "items": [
+                    {
+                        "id": "cat_supermarkets",
+                        "icon": "cart",
+                        "title": "Супермаркеты",
+                        "value": 100000.0,
+                        "value_kind": "amount",
+                        "share": 1.0,
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {
+                                "from": "2026-01-01T00:00:00+03:00",
+                                "to": "2027-01-01T00:00:00+03:00",
+                                "category_id": "cat_supermarkets",
+                                "kind": "expense",
+                                "transfer_mode": "with"
+                            }
+                        }
+                    }
+                ],
+                "visible_count": 4,
+                "more_label": "Все категории"
+            }
+        },
+        {
+            "id": "income_categories",
+            "type": "ranked_list",
+            "status": "none",
+            "title": "Доходы · январь — октябрь",
+            "alt_text": "Доходов нет",
+            "empty_text": "Доходов за 1 января — 30 октября нет"
+        }
+    ],
+    "state": {
+        "stale": false,
+        "last_operation_at": "2026-08-15T12:00:00+03:00",
+        "data_from": "2025-10-30T00:00:00+03:00",
+        "data_to": "2026-10-31T00:00:00+03:00",
+        "full_months": 11,
+        "unread_lines_count": 0,
+        "calculated_at": "2026-10-31T12:00:00+03:00",
+        "recalculating": false
+    }
+}

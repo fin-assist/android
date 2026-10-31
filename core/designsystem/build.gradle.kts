@@ -7,4 +7,5 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     api(libs.androidx.compose.material3)
     implementation(libs.androidx.activity.compose)
+    testImplementation(libs.robolectric)
 }

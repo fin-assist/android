@@ -65,13 +65,13 @@ class DeleteAccountViewModel @Inject constructor(
                 session.clearLocal(reason = AuthRoutes.Phone.REASON_DELETED)
             } catch (e: AppError) {
                 retryGate.record(e)
-                _state.update { it.copy(deleting = false, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable, error = if (e is AppError.Offline) OFFLINE else FAILED) }
+                _state.update { it.copy(deleting = false, errorPresentation = e.presentation, requestRetryable = e.requestRetryable, error = if (e is AppError.Offline) OFFLINE else FAILED) }
             }
         }
     }
 
     internal companion object {
-        const val OFFLINE = "Нет сети — удалить аккаунт не получилось. Проверьте интернет и повторите"
+        const val OFFLINE = "Аккаунт не удалён"
         const val FAILED = "Не получилось удалить аккаунт. Попробуйте ещё раз"
     }
 }

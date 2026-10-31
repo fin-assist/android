@@ -6,6 +6,20 @@ tags:
 ---
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/fast_login.yaml
+# Open Analytics before mutating statements: the saved tab must refresh without a cold start.
+# October is covered by the fixture but has no operations until this import.
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.income"
+- assertVisible:
+    id: "analytics.tile.income"
+    text: "^Доходы, 0[ \u00a0\u202f]₽(?:,.*)?$"
 - tapOn:
     id: "ds.tab.profile"
 - extendedWaitUntil:
@@ -38,10 +52,32 @@ tags:
     timeout: 20000
 - assertVisible:
     id: "statements.result.new"
+- assertNotVisible: "Все операции.*"
+
+# Finish to Operations, then use the bottom tab: this restores the Analytics entry opened before import.
+- tapOn:
+    id: "statements.result.done"
+- extendedWaitUntil:
+    visible:
+      id: "ds.tab.analytics"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.analytics"
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.income"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.tile.income"
+      text: "^Доходы, [+]1[ \u00a0\u202f]200[ \u00a0\u202f]₽(?:,.*)?$"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.empty"
+# The income node changed from 0 to +1200 for the saved October context.
 
 # The same October file again: nothing new.
 - tapOn:
-    id: "statements.result.done"
+    id: "ds.tab.profile"
 - extendedWaitUntil:
     notVisible:
       id: "statements.result"
@@ -101,3 +137,53 @@ tags:
       id: "statements.history.row"
       index: 2
     timeout: 15000
+
+# Delete the other October source: the original year still supplies analytics.
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    notVisible:
+      id: "statements.history.row"
+      index: 1
+    timeout: 15000
+- back
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.empty"
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 15000
+# Delete the last source: no old numbers survive on the saved Analytics tab.
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    notVisible:
+      id: "statements.history.row"
+    timeout: 15000
+- back
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.empty"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.block.tiles"
+- assertNotVisible:
+    id: "analytics.updating"

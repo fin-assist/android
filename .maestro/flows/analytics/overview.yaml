@@ -48,7 +48,8 @@ tags:
     timeout: 5000
 - assertVisible: "Сентябрь 2026"
 
-# Previous month, then quarter / year / month again.
+# Each period type remembers its own choice (FIN-391). A successful switch must change
+# the exact title and selected segment, rather than merely retain the old tiles after an error.
 - tapOn:
     id: "ds.period.prev"
 - extendedWaitUntil:
@@ -58,30 +59,139 @@ tags:
     id: "ds.segment.1"
 - extendedWaitUntil:
     visible:
-      id: "analytics.block.tiles"
+      text: "III квартал 2026"
+      id: "ds.period.pick"
     timeout: 10000
+- assertVisible:
+    id: "ds.segment.1"
+    checked: true
+- assertNotVisible:
+    id: "ds.error.info"
+- assertNotVisible:
+    id: "ds.error.warning"
+- assertNotVisible:
+    id: "ds.error.error"
+- assertNotVisible:
+    id: "ds.snackbar"
+- assertNotVisible: "Не получилось обновить. Попробуйте ещё раз"
+- assertNotVisible: "Не получилось загрузить аналитику"
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible:
+      text: "II квартал 2026"
+      id: "ds.period.pick"
+    timeout: 10000
+- assertNotVisible:
+    id: "ds.error.info"
+- assertNotVisible:
+    id: "ds.error.warning"
+- assertNotVisible:
+    id: "ds.error.error"
+- assertNotVisible:
+    id: "ds.snackbar"
+- assertNotVisible: "Не получилось обновить. Попробуйте ещё раз"
+- assertNotVisible: "Не получилось загрузить аналитику"
 - tapOn:
     id: "ds.segment.2"
 - extendedWaitUntil:
     visible:
-      id: "analytics.block.tiles"
+      text: "2026"
+      id: "ds.period.pick"
     timeout: 10000
+- assertVisible:
+    id: "ds.segment.2"
+    checked: true
+- assertNotVisible:
+    id: "ds.error.info"
+- assertNotVisible:
+    id: "ds.error.warning"
+- assertNotVisible:
+    id: "ds.error.error"
+- assertNotVisible:
+    id: "ds.snackbar"
+- assertNotVisible: "Не получилось обновить. Попробуйте ещё раз"
+- assertNotVisible: "Не получилось загрузить аналитику"
 - tapOn:
     id: "ds.segment.0"
 - extendedWaitUntil:
     visible:
-      id: "analytics.block.tiles"
+      text: "Август 2026"
+      id: "ds.period.pick"
     timeout: 10000
-# Back to a month: if the latest (empty) one opened, step to September, which has categories.
-- runFlow:
-    when:
-      visible: "Октябрь 2026"
-    commands:
-      - tapOn:
-          id: "ds.period.prev"
-      - extendedWaitUntil:
-          visible: "Сентябрь 2026"
-          timeout: 10000
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertNotVisible:
+    id: "ds.error.info"
+- assertNotVisible:
+    id: "ds.error.warning"
+- assertNotVisible:
+    id: "ds.error.error"
+- assertNotVisible:
+    id: "ds.snackbar"
+- assertNotVisible: "Не получилось обновить. Попробуйте ещё раз"
+- assertNotVisible: "Не получилось загрузить аналитику"
+- tapOn:
+    id: "ds.segment.1"
+- extendedWaitUntil:
+    visible:
+      text: "II квартал 2026"
+      id: "ds.period.pick"
+    timeout: 10000
+- assertVisible:
+    id: "ds.segment.1"
+    checked: true
+- assertNotVisible:
+    id: "ds.error.info"
+- assertNotVisible:
+    id: "ds.error.warning"
+- assertNotVisible:
+    id: "ds.error.error"
+- assertNotVisible:
+    id: "ds.snackbar"
+- assertNotVisible: "Не получилось обновить. Попробуйте ещё раз"
+- assertNotVisible: "Не получилось загрузить аналитику"
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
+      text: "2026"
+      id: "ds.period.pick"
+    timeout: 10000
+- assertVisible:
+    id: "ds.segment.2"
+    checked: true
+- assertNotVisible:
+    id: "ds.error.info"
+- assertNotVisible:
+    id: "ds.error.warning"
+- assertNotVisible:
+    id: "ds.error.error"
+- assertNotVisible:
+    id: "ds.snackbar"
+- assertNotVisible: "Не получилось обновить. Попробуйте ещё раз"
+- assertNotVisible: "Не получилось загрузить аналитику"
+- tapOn:
+    id: "ds.segment.0"
+- extendedWaitUntil:
+    visible:
+      text: "Август 2026"
+      id: "ds.period.pick"
+    timeout: 10000
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertNotVisible:
+    id: "ds.error.info"
+- assertNotVisible:
+    id: "ds.error.warning"
+- assertNotVisible:
+    id: "ds.error.error"
+- assertNotVisible:
+    id: "ds.snackbar"
+- assertNotVisible: "Не получилось обновить. Попробуйте ещё раз"
+- assertNotVisible: "Не получилось загрузить аналитику"
 
 # «С переводами» → «Без переводов».
 - tapOn:
