@@ -108,6 +108,7 @@ data class ChatUiState(
     val streamErrorPresentation: ErrorPresentation? = null,
     val streamRetryable: Boolean? = null,
     val recovery: ChatRecovery? = null,
+    val consentRequired: Boolean = false,
 ) {
     val generating: Boolean get() = items.any { it is ChatItem.Answer && it.status == AnswerStatus.GENERATING }
     val limitExhausted: Boolean get() = limit?.let { it.remaining <= 0 } == true
@@ -145,6 +146,7 @@ class ChatViewModel @Inject constructor(
     private val reopenStates = HashMap<String, SseReopenState>()
 
     private val streams = HashMap<String, Job>()
+    private var wasPresented = false
     private val retryKeys = HashMap<String, IdempotencyKey>()
     /** Failed answers whose «Повторить» is in flight: a second tap must not send the same key again (FIN-75). */
     private val retrying = HashSet<String>()
@@ -228,7 +230,7 @@ class ChatViewModel @Inject constructor(
                 _state.update { st -> st.copy(loadingOlder = false, items = (list.messages.mapNotNull(::toItem) + st.items).distinctById(), hasOlder = list.hasOlder) }
             } catch (e: AppError) {
                 olderGate.record(e)
-                _state.update { it.copy(loadingOlder = false, olderErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, olderRetryable = e.requestRetryable) }
+                _state.update { it.copy(loadingOlder = false, olderErrorPresentation = e.presentation, olderRetryable = e.requestRetryable) }
             }
         }
     }
@@ -242,7 +244,13 @@ class ChatViewModel @Inject constructor(
             } }
     }
 
-    /** Called on resume: re-open streams of answers still generating. */
+    /** A saved tab keeps its draft; re-reading on later visits updates history and changed-since markers. */
+    fun onResumed() {
+        if (wasPresented) load() else wasPresented = true
+        resumeStreams()
+    }
+
+    /** Re-open streams of answers still generating. */
     fun resumeStreams() = watchGenerating(skip = null)
 
     private fun watchGenerating(skip: String?) {
@@ -272,7 +280,7 @@ class ChatViewModel @Inject constructor(
     fun send(voiceText: String? = null) {
         voiceText?.let(::setDraft) // voice is the same bounded, normalized user-input context as typing
         val text = _state.value.draft.trim()
-        if (!askGate.isReady() || text.isEmpty() || _state.value.sending || _state.value.generating || blockedAskText == text) return
+        if (!askGate.isReady() || _state.value.consentRequired || text.isEmpty() || _state.value.sending || _state.value.generating || blockedAskText == text) return
         val key = pending?.takeIf { it.first == text }?.second ?: IdempotencyKey.random(elapsedClock)
         pending = text to key
         if (key.replayWindow?.isOpen(elapsedClock) != true) {
@@ -309,7 +317,7 @@ class ChatViewModel @Inject constructor(
                 when {
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_REQUIRED -> {
                         pendingConsentRequest = PendingConsentRequest.Ask
-                        _state.update { it.copy(event = ChatEvent.OPEN_CONSENT) }
+                        _state.update { it.copy(event = ChatEvent.OPEN_CONSENT, consentRequired = true, askBlocked = true) }
                     }
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.LIMIT_EXCEEDED -> {
                         // Not stored by the server (api.md 7.1): tomorrow the same key would pass, but it is a new day.
@@ -352,10 +360,16 @@ class ChatViewModel @Inject constructor(
         pending?.first?.let { send(it) }
     }
 
-    /** Corrected consent resumes the actual waiting operation with the same proven key, never an automatic new key. */
+    /** Reopens the corrective screen without sending a denied request again. */
+    fun openConsent() {
+        if (_state.value.consentRequired) _state.update { it.copy(event = ChatEvent.OPEN_CONSENT) }
+    }
+
+    /** Corrected Ask consent enables the draft; sending still requires an explicit user action. */
     fun onConsentGranted() {
         val operation = pendingConsentRequest
         pendingConsentRequest = null
+        _state.update { it.copy(consentRequired = false) }
         if (operation is PendingConsentRequest.Retry) {
             val id = operation.answerId
             val key = retryKeys[id]
@@ -369,18 +383,18 @@ class ChatViewModel @Inject constructor(
             retry(id)
             return
         }
-        val waiting = pending ?: return
-        tracker.track(Events.ASSISTANT_CONSENT_GRANTED)
+        val waiting = pending
+        if (operation == PendingConsentRequest.Ask) {
+            tracker.track(Events.ASSISTANT_CONSENT_GRANTED)
+            blockedAskText = null
+            askGate.clear()
+            _state.update { it.copy(requestRetryable = null, errorPresentation = null, askBlocked = false) }
+        }
+        if (waiting == null) return
         if (waiting.second.replayWindow?.isOpen(elapsedClock) != true) {
             requireRecovery(ChatRecovery(ChatRecoveryTarget.ASK))
             return
         }
-        // Only the known consent corrective flow lifts an original request's restriction.
-        if (operation != PendingConsentRequest.Ask) return
-        blockedAskText = null
-        askGate.clear()
-        _state.update { it.copy(requestRetryable = null, errorPresentation = null, askBlocked = false) }
-        send(waiting.first)
     }
 
     private fun requireRecovery(recovery: ChatRecovery) {
@@ -460,7 +474,7 @@ class ChatViewModel @Inject constructor(
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.LIMIT_EXCEEDED -> _state.update { it.copy(limit = it.limit?.copy(remaining = 0)) }
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_REQUIRED -> {
                         pendingConsentRequest = PendingConsentRequest.Retry(answerId)
-                        _state.update { it.copy(event = ChatEvent.OPEN_CONSENT) }
+                        _state.update { it.copy(event = ChatEvent.OPEN_CONSENT, consentRequired = true) }
                     }
                     // Already replaced (e.g. the first 201 was lost after all): the history has the truth.
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.RETRY_NOT_ALLOWED -> {

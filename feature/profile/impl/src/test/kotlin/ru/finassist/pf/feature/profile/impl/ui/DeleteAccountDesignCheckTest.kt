@@ -13,7 +13,7 @@ import ru.finassist.pf.core.screenshot.DesignCheck
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class DeleteAccountDesignCheckTest {
-    private fun capture(name: String, state: DeleteUiState) = DesignCheck.capture(name, popups = true, tab = 2) {
+    private fun capture(name: String, state: DeleteUiState) = DesignCheck.capture(name, popups = true, tab = 3) {
         ProfileContent(
             ProfileDesignFixtures.state, ProfileDesignFixtures.actions, onRetry = {}, onRevokeConsent = {}, onThemeSheet = {},
             onTheme = {}, onSupport = {}, onAskLogout = {}, onLogout = {}, onSnackbarShown = {}, versionName = "0.1.0",

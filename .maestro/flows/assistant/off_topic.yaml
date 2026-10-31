@@ -24,7 +24,7 @@ tags:
 - inputText: "What is the weather today?"
 - tapOn:
     id: "ds.chat.send"
-# The first question asks for consent; after it the question goes out by itself.
+# The first question asks for consent; after it the draft waits for an explicit send.
 - extendedWaitUntil:
     visible:
       id: "assistant.consent"
@@ -39,6 +39,15 @@ tags:
       id: "assistant.consent.submit"
 - tapOn:
     id: "assistant.consent.submit"
+# FIN-394: consent returns to the draft; sending is a separate explicit action.
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertNotVisible:
+    id: "assistant.question"
+- tapOn:
+    id: "ds.chat.send"
 - extendedWaitUntil:
     visible:
       id: "assistant.answer.failed"

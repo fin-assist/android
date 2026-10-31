@@ -637,7 +637,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | Flow | Checks |
 |---|---|
 | `auth/register_new_user` (smoke) | independent 14+/PD before phone → new number → create account without another consent → passcode → first upload → result → feed (Qase2, FIN-365) |
-| `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the three tabs (Qase1, FIN-365) |
+| `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the main tabs (Qase1, FIN-365) |
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
 | `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains confirmations; repeated confirm_phone keeps both checked and input enabled (Qase57, FIN-365, FIN-375) |
 | `auth/phone_consent_recovery` | document offline → explicit refresh → confirmations → Start offline → retry with the existing intent (Qase58, FIN-365) |
@@ -658,7 +658,8 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
 | `analytics/search_scope_own_transfers` | September «Расходы» tile → search «как на Аналитике»; without «Только расходы» and with the amount 6 000 ₽ nothing is found — the single «Себе в другой банк» of 27 September is out, as in the Analytics figure; without the scope chip it is found — FIN-164 |
-| `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card and profile) |
+| `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card, profile and bottom tab) |
+| `assistant/tab_and_consent_recovery` | bottom tab keeps draft/history across Operations, Analytics and Profile; consent Back → Give consent → grant preserves draft without automatic send, explicit send creates one question (Qase61, FIN-397, FIN-394) |
 | `assistant/ask_question` (smoke) | disclosure of question/history, account-phone/file exclusion and masking limits → consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search (Qase12, FIN-366) |
 | `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
 | `assistant/off_topic` | a question not about finances (`weather`): the server's OFF_TOPIC text, no «Повторить» (`retryable: false`), still 5 of 5; the next question is answered, 4 of 5 — FIN-160 |
@@ -863,3 +864,19 @@ No stage e2e hooks are shipped. CI assembles both stage variants, checks identit
 classpaths; the existing HTTP/SSE unit suites cover the transport. The Android → public stage flow
 (synthetic auth → OFX → progress → operations/analytics → assistant) remains a separate device acceptance run;
 it was not executed for this build-environment change. This is not a new screen or a claim of stage UI coverage.
+
+### FIN-397 and FIN-394 assistant navigation and consent
+
+The main bar orders Operations, Analytics, Assistant and Profile; `assistant=false` also hides the assistant tab.
+The tab uses the existing saved back stacks, retaining the chat ViewModel, history and draft between switches.
+A denied Ask exposes «Дать согласие» after Back; consent correction returns to the draft with Send enabled,
+without submitting it. The next explicit send retains a still-valid operation key; uncertain/expired keys
+retain their existing explicit recovery flow. Corrective RetryAnswer remains the same existing operation.
+`assistant/tab_and_consent_recovery` / Qase61 covers the new navigation and recovery; Qase12 and the
+existing assistant flows now explicitly send the first draft after granting consent. The consent layout uses
+a fixed 24 dp gap after all checkbox/error content so scroll overflow cannot collapse it.
+Design-check fixtures include the active assistant tab and light/dark consent recovery. These authored
+flows and fixtures were not executed: no UI/Maestro/instrumented/DesignCheck run was authorized.
+
+Layout-only consent spacing is represented by the authored `AiConsentLargeText` design-check fixture:
+640 dp viewport, 150% text, checkbox error and form error; the fixed gap remains in the scrollable content.

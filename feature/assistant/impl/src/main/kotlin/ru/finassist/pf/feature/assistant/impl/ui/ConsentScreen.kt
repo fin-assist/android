@@ -145,7 +145,7 @@ class AiConsentViewModel @Inject constructor(
             if (generation == documentGeneration) {
                 documentFailure = error
                 documentGate.record(error)
-                _state.update { it.copy(errorPresentation = error.presentation.takeUnless { error is AppError.Offline },
+                _state.update { it.copy(errorPresentation = error.presentation,
                     formError = "Не получилось загрузить документ согласия") }
             }
             throw error
@@ -189,7 +189,7 @@ class AiConsentViewModel @Inject constructor(
                     loadDocument()
                 } else {
                     val text = if (e is AppError.Offline) "Нет сети — проверьте интернет и повторите" else "Не получилось сохранить. Попробуйте ещё раз"
-                    _state.update { it.copy(busy = false, formError = text, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                    _state.update { it.copy(busy = false, formError = text, errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
                 }
             }
         }
@@ -279,7 +279,10 @@ internal fun AiConsentContent(
                     val presentation = state.errorPresentation
                     if (presentation != null) ErrorMessage(presentation, it) else PfNotice(it, tone = NoticeTone.WARNING, alert = true)
                 }
-                Spacer(Modifier.weight(1f).heightIn(min = d.space6))
+                // Weighted children can collapse inside verticalScroll's unbounded height. The fixed gap
+                // remains measurable even when disclosure, checkbox or errors overflow the viewport.
+                Spacer(Modifier.height(d.space6))
+                Spacer(Modifier.weight(1f))
                 PfButton(
                     if (state.documentRefreshRequired) "Обновить документ" else "Продолжить",
                     enabled = if (state.documentRefreshRequired) state.documentRefreshReady else state.retryReady,

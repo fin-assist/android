@@ -33,7 +33,7 @@ Naming: `<feature>.<object>[.<detail>]`, lowercase, dot-separated. Same prefix i
 | `analytics.block.bank_fees` | `true` | Hides "Комиссии и проценты банку" |
 | `analytics.block.small_frequent` | `true` | Hides "Мелкие частые траты" |
 | `analytics.filter.transfers` | `true` | Hides the "С переводами / Без переводов" chip; requests always use `with` |
-| `assistant` | `true` | Hides the assistant screen and every link to it: card on Analytics, profile row, consent switch, answer chips. Limit endpoint is not called. |
+| `assistant` | `true` | Hides the assistant screen and every link to it: bottom tab, card on Analytics, profile row, consent switch, answer chips. Limit endpoint is not called. |
 | `search.filter.period` | `true` | Hides the period chip and sheet in Search |
 | `search.filter.category` | `true` | Hides the category chip in Search |
 | `search.filter.amount` | `true` | Hides the amount chip in Search |

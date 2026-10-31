@@ -573,8 +573,9 @@ class ChatViewModelBehaviourTest {
 
     // ---- send failures ----
 
-    @Test fun `no consent opens the consent screen and the question is re-sent with its key after it`() {
-        api.askOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403)
+    @Test fun `denied consent can be reopened and grant preserves draft until explicit send`() {
+        api.askOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
         api.askOutcomes += askResponse("a1")
         val vm = newVm()
         sendQuestion(vm)
@@ -583,12 +584,60 @@ class ChatViewModelBehaviourTest {
         assertEquals("Сколько я трачу на такси?", vm.state.value.draft)
         vm.consumeEvent()
         assertNull(vm.state.value.event)
+        assertTrue(vm.state.value.consentRequired)
+        vm.send()
+        assertEquals(1, api.asks.size)
+        vm.openConsent()
+        assertEquals(ChatEvent.OPEN_CONSENT, vm.state.value.event)
+        vm.consumeEvent()
 
         vm.onConsentGranted()
+        assertEquals(1, api.asks.size, "consent must not send a question automatically")
+        assertEquals("Сколько я трачу на такси?", vm.state.value.draft)
+        assertFalse(vm.state.value.consentRequired)
+        assertFalse(vm.state.value.askBlocked)
+        vm.send()
         assertEquals(2, api.asks.size)
         assertEquals(api.asks[0].key, api.asks[1].key)
         assertEquals(listOf("q-a1", "a1"), vm.state.value.items.map { it.id })
         assertTrue(Events.ASSISTANT_CONSENT_GRANTED in tracker.names())
+    }
+
+    @Test fun `editing denied draft retains consent action and cannot bypass it`() {
+        api.askOutcomes += AppError.Api(ErrorCodes.CONSENT_REQUIRED, 403,
+            response = ErrorResponseInfo(ErrorCodes.CONSENT_REQUIRED, 403, requestRetryable = false))
+        val vm = newVm()
+        sendQuestion(vm)
+        vm.consumeEvent()
+        vm.setDraft("Новый вопрос")
+        vm.send()
+        assertEquals(1, api.asks.size)
+        assertTrue(vm.state.value.consentRequired)
+        vm.openConsent()
+        assertEquals(ChatEvent.OPEN_CONSENT, vm.state.value.event)
+        vm.onConsentGranted()
+        assertFalse(vm.state.value.consentRequired)
+        assertEquals("Новый вопрос", vm.state.value.draft)
+        assertEquals(1, api.asks.size)
+    }
+
+    @Test fun `opening consent without a denied operation does nothing`() {
+        val vm = newVm()
+        vm.openConsent()
+        assertNull(vm.state.value.event)
+        assertTrue(api.asks.isEmpty())
+    }
+
+    @Test fun `returning to a saved chat tab refreshes history without losing draft or sending`() {
+        val vm = newVm()
+        vm.onResumed()
+        vm.setDraft("Следующий вопрос")
+        vm.pauseStreams()
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.COMPLETE)), hasOlder = false)
+        vm.onResumed()
+        assertEquals(listOf("q1", "a1"), vm.state.value.items.map { it.id })
+        assertEquals("Следующий вопрос", vm.state.value.draft)
+        assertTrue(api.asks.isEmpty(), "tab changes must only read history, never send a question")
     }
 
     @Test fun `restored Ask after consent requires explicit new intent before generating a fresh key`() {

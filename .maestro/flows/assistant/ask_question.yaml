@@ -22,7 +22,7 @@ tags:
 - assertVisible: ".*[Оо]сталось 5 из 5.*"
 
 # A merchant from the fixture. The first question asks for consent (off by default, the server answers
-# CONSENT_REQUIRED); after it the same question goes out by itself.
+# CONSENT_REQUIRED); after it the draft waits for an explicit send.
 - tapOn:
     id: "ds.chat.input"
 - inputText: "Krabsbir"
@@ -65,6 +65,15 @@ tags:
       id: "assistant.consent.submit"
 - tapOn:
     id: "assistant.consent.submit"
+# FIN-394: consent returns to the draft; sending is a separate explicit action.
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertNotVisible:
+    id: "assistant.question"
+- tapOn:
+    id: "ds.chat.send"
 - extendedWaitUntil:
     visible:
       id: "assistant.chat"

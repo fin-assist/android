@@ -1,0 +1,96 @@
+appId: ru.finassist.pf.mock.e2e
+name: Вкладка помощника — черновик, возврат с согласия и явная отправка
+tags:
+  - assistant
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertNotVisible:
+    id: "assistant.consent"
+- assertVisible:
+    id: "ds.tab.assistant"
+    selected: true
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Kaspersky"
+- hideKeyboard
+- tapOn:
+    id: "ds.tab.analytics"
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "ds.tab.assistant"
+- assertVisible: "Kaspersky"
+- assertVisible:
+    id: "ds.tab.assistant"
+    selected: true
+- assertNotVisible:
+    id: "assistant.question"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- tapOn:
+    id: "ds.back"
+- assertVisible: "Kaspersky"
+- assertVisible:
+    id: "assistant.consent.reopen"
+- assertNotVisible:
+    id: "assistant.question"
+- tapOn:
+    id: "assistant.consent.reopen"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertVisible: "Kaspersky"
+- assertVisible:
+    id: "ds.chat.send"
+    enabled: true
+- assertNotVisible:
+    id: "assistant.question"
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.answer"
+    timeout: 20000
+- tapOn:
+    id: "ds.tab.operations"
+- tapOn:
+    id: "ds.tab.assistant"
+- assertVisible:
+    id: "ds.tab.assistant"
+    selected: true
+- assertVisible:
+    id: "assistant.question"
+    index: 0
+- assertNotVisible:
+    id: "assistant.question"
+    index: 1
+- assertVisible:
+    id: "assistant.answer"
+- assertVisible: ".*[Оо]сталось 4 из 5.*"
