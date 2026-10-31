@@ -25,7 +25,7 @@ fun ErrorMessage(
 ) {
     Box(modifier) {
         PfNotice(
-            text = presentation.textOrFallback(fallback, legacySafeText),
+            text = if (presentation.connectionFailure) connectionFailureTexts().message else presentation.textOrFallback(fallback, legacySafeText),
             modifier = Modifier.testTag(when (presentation.severity) {
                 ErrorSeverity.INFO -> ErrorMessageTags.INFO
                 ErrorSeverity.WARNING -> ErrorMessageTags.WARNING

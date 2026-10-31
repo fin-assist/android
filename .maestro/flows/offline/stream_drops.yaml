@@ -42,7 +42,7 @@ tags:
     timeout: 10000
 - assertVisible:
     id: "auth.call.dial"
-- assertNotVisible: "Нет сети — не можем дождаться звонка. Проверьте интернет"
+- assertNotVisible: "Не удаётся подключиться к серверу.*"
 # The re-opened stream brings `verified`: sign-in goes on to the passcode.
 - runFlow: ../../subflows/set_passcode.yaml
 - extendedWaitUntil:

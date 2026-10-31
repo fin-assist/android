@@ -47,7 +47,7 @@ tags:
 - tapOn:
     id: "auth.phone.submit"
 - extendedWaitUntil:
-    visible: "Нет сети — проверьте интернет и повторите"
+    visible: "Не удаётся подключиться к серверу. Проверьте интернет и попробуйте ещё раз"
     timeout: 10000
 - runFlow:
     file: ../../subflows/config.yaml

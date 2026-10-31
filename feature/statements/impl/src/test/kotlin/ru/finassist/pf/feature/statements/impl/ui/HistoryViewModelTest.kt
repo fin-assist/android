@@ -406,6 +406,7 @@ class HistoryViewModelTest {
         vm.askDelete(upload("u1"))
         vm.delete()
         assertEquals("Нет сети — загрузка не удалена", vm.state.value.snackbar)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertNull(vm.state.value.confirmDelete)
         assertFalse(vm.state.value.deleting)
         assertEquals(1, api.listCalls)

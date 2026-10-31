@@ -23,6 +23,19 @@ feature's endpoint/scenario adapter. `ErrorContext.REQUEST`, `GENERIC_EVENT` and
 prevent an identically named result code from activating a REST auth/maintenance/quota flow.
 Assistant terminal results and history preserve their separate new-attempt permission.
 
+## Connection failures (FIN-396)
+
+`AppError.Offline` marks a local transport failure in `ErrorPresentation.connectionFailure`; this flag
+is never decoded from server text. `ConnectionFailureState`, `ErrorMessage` and the chat offline notice
+read `ConnectivityManager` locally while presenting that failure. When the active network reports
+`TRANSPORT_VPN`, the hint suggests trying without VPN. Other networks, no active network, missing
+capabilities or a denied system observation use the ordinary internet hint. This observation proves
+neither the server route nor the cause of a failure; a per-app VPN says nothing about a browser.
+No request is prevented, sent or retried by this reader. Each new attempt/error presentation checks
+the current environment; feature callbacks retain their original idempotency and retry gates.
+`LocalConnectionEnvironmentReader` supplies deterministic presentation fixtures without changing a
+network request or storing network identifiers.
+
 ## Repeating a request
 
 REST `retryable` describes the original request only. Explicit `false` prevents direct retries and

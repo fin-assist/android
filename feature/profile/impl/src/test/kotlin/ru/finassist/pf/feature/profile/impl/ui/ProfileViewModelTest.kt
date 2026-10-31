@@ -483,6 +483,18 @@ class ProfileViewModelTest {
         assertEquals(3, profileApi.gets)
     }
 
+    @Test fun `offline refresh exposes a connection hint without hiding the cached profile`() {
+        val vm = loaded()
+        profileApi.getFailure = AppError.Offline()
+        vm.load()
+        assertFalse(vm.state.value.offline)
+        assertEquals(profileApi.profile, vm.state.value.profile)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        profileApi.getFailure = null
+        vm.load()
+        assertNull(vm.state.value.errorPresentation)
+    }
+
     @Test fun `a failed refresh on resume keeps the shown profile`() {
         val vm = loaded()
         profileApi.getFailure = AppError.Server(500)

@@ -689,7 +689,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `availability/maintenance` | The check button is disabled during `Retry-After`; the first automatic probe is refused, then a guarded manual check after the fresh wait opens the app; a new maintenance episode has its own one-shot automatic check — FIN-22, FIN-223 |
 | `availability/maintenance_on_sign_in` | `maintenance=unknown` before sign-in: «Продолжить» on the phone screen gets the maintenance screen over sign-in, without an end time — FIN-22 |
 | `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
-| `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
+| `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; existing «Повторить» after recovery (Qase19, FIN-396) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
 
@@ -863,3 +863,17 @@ No stage e2e hooks are shipped. CI assembles both stage variants, checks identit
 classpaths; the existing HTTP/SSE unit suites cover the transport. The Android → public stage flow
 (synthetic auth → OFX → progress → operations/analytics → assistant) remains a separate device acceptance run;
 it was not executed for this build-environment change. This is not a new screen or a claim of stage UI coverage.
+
+### FIN-396 connection failure hints
+
+Qase19/20/21/43/44/58 and their existing flows retain their mappings. `offline/no_network` asserts
+the common connection title, internet hint and recovery action. `AndroidConnectionEnvironmentReaderTest` checks VPN detection, transport
+changes between reads, no active network, absent capabilities and denied/unavailable system service.
+Pure tests distinguish all four observations and verify that HTTP errors do not become VPN failures.
+`ProfileOfflineVpn`, `ProfileOfflineVpnDark` and `ProfileOffline` are authored DesignCheck fixtures;
+no UI/Maestro/DesignCheck run is claimed.
+
+Not covered yet: a real system VPN route and switching its tunnel during a failed request. The in-process
+mock does not traverse a VPN; Maestro cannot create a configured VPN tunnel/provider on its own.
+The Android system reader has Robolectric coverage and the presentation dependency has fake-reader
+fixtures; neither is proof of a particular VPN's route or FIN-394's network cause.

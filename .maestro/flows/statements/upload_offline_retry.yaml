@@ -56,7 +56,7 @@ tags:
     visible:
       id: "statements.upload.send_offline"
     timeout: 15000
-- assertVisible: "Нет связи с интернетом — файл не загружен"
+- assertVisible: "Не удаётся подключиться к серверу. Проверьте интернет и попробуйте ещё раз"
 
 # Back online, «Повторить» sends the same file and the result opens.
 - runFlow:

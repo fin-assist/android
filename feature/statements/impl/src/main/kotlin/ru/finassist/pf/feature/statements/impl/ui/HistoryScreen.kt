@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.ConnectionFailureState
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.RequestRetryGate
 import ru.finassist.pf.core.common.time.ElapsedClock
@@ -124,7 +125,7 @@ class HistoryViewModel @Inject constructor(
             } catch (e: AppError) {
                 if (generation != loadGeneration) return@launch
                 retryGate.record(e)
-                _state.update { it.copy(loading = false, offline = it.list == null, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(loading = false, offline = it.list == null, errorPresentation = if (e is AppError.Offline && it.list == null) null else e.presentation, requestRetryable = e.requestRetryable) }
             }
         }
     }
@@ -163,7 +164,7 @@ class HistoryViewModel @Inject constructor(
                         is ImportEvent.Progress -> Unit
                     } }
             } catch (e: AppError) {
-                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }) }
+                _state.update { it.copy(errorPresentation = e.presentation) }
                 return@launch
             }
             watching.remove(uploadId)
@@ -194,7 +195,7 @@ class HistoryViewModel @Inject constructor(
             } catch (e: AppError) {
                 deleteGate.record(e)
                 _state.update {
-                    it.copy(deleting = false, confirmDelete = null, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, snackbar = if (e is AppError.Offline) "Нет сети — загрузка не удалена" else "Не получилось удалить. Попробуйте ещё раз")
+                    it.copy(deleting = false, confirmDelete = null, errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Нет сети — загрузка не удалена" else "Не получилось удалить. Попробуйте ещё раз")
                 }
             }
         }
@@ -260,7 +261,7 @@ internal fun HistoryContent(
             when {
                 state.loading -> Unit
                 state.errorPresentation != null && list == null -> Unit
-                state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
+                state.offline -> ConnectionFailureState() {
                     PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
                 }
                 list == null || list.uploads.isEmpty() -> Column(

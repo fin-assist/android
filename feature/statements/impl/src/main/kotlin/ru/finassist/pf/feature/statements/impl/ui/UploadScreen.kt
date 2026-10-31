@@ -1,5 +1,7 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.connectionFailureTexts
+import ru.finassist.pf.core.designsystem.components.ConnectionFailureState
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.content.Intent
@@ -171,7 +173,7 @@ internal fun UploadContent(
                 UploadPhase.Disabled -> PfEmptyState(PfIcons.FILE_TEXT, "Загрузка выписки временно недоступна", "Попробуйте позже — операции и аналитика работают как обычно") {
                     if (firstRun) PfButton("Продолжить", onClick = onLater, variant = ButtonVariant.PRIMARY)
                 }
-                UploadPhase.Offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(StatementsTags.UPLOAD_OFFLINE)) {
+                UploadPhase.Offline -> ConnectionFailureState(modifier = Modifier.testTag(StatementsTags.UPLOAD_OFFLINE)) {
                     PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(StatementsTags.UPLOAD_RETRY))
                     if (firstRun) PfLink("Загружу позже", onClick = onLater, modifier = Modifier.testTag(StatementsTags.UPLOAD_LATER))
                 }
@@ -277,7 +279,7 @@ private fun ColumnScope.Guide(
     if (offline) {
         Spacer(Modifier.height(d.space4))
         PfNotice(
-            "Нет связи с интернетом — файл не загружен",
+            connectionFailureTexts().message,
             tone = NoticeTone.WARNING,
             alert = true,
             modifier = Modifier.testTag(StatementsTags.UPLOAD_SEND_OFFLINE),

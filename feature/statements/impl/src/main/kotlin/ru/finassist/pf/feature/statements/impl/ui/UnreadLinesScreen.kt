@@ -102,7 +102,7 @@ class UnreadLinesViewModel @Inject constructor(
                 _state.update { it.copy(loading = false, lines = list.lines, userId = tokenStore.current()?.userId) }
             } catch (e: AppError) {
                 retryGate.record(e)
-                _state.update { it.copy(loading = false, error = true, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(loading = false, error = true, errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
             }
         }
     }

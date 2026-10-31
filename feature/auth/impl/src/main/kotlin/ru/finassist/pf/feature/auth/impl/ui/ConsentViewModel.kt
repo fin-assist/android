@@ -92,7 +92,7 @@ class ConsentViewModel @Inject constructor(
                 _registered.value = true
             } catch (e: AppError) {
                 retryGate.record(e)
-                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
                 when {
                     e is AppError.Unauthorized || (e is AppError.Api && (e.httpStatus == 401 || e.code == ErrorCodes.CONSENT_OUTDATED || e.code == ErrorCodes.CONSENT_REQUIRED)) ->
                         expire()

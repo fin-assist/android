@@ -121,7 +121,7 @@ class ProfileViewModel @Inject constructor(
                 } catch (e: AppError) {
                     if (generation != profileGeneration) return@launch
                     retryGate.record(e)
-                    _state.update { it.copy(loading = false, offline = it.profile == null, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                    _state.update { it.copy(loading = false, offline = it.profile == null, errorPresentation = if (e is AppError.Offline && it.profile == null) null else e.presentation, requestRetryable = e.requestRetryable) }
                 }
             }
         }
@@ -193,7 +193,7 @@ class ProfileViewModel @Inject constructor(
             }.onFailure { failure ->
                 if (generation == themeGeneration && failure is AppError) {
                     themeRetryGate.record(failure)
-                    _state.update { it.copy(errorPresentation = failure.presentation.takeUnless { failure is AppError.Offline }, snackbar = "Не получилось сохранить тему. Попробуйте ещё раз") }
+                    _state.update { it.copy(errorPresentation = failure.presentation, snackbar = "Не получилось сохранить тему. Попробуйте ещё раз") }
                 }
             }
         }
@@ -212,7 +212,7 @@ class ProfileViewModel @Inject constructor(
                 _state.update { s -> s.copy(consentBusy = false, profile = s.profile?.let { p -> p.assistantConsent?.let { c -> p.withConsent(c.copy(granted = false)) } ?: p }) }
             } catch (e: AppError) {
                 consentRetryGate.record(e)
-                _state.update { it.copy(consentBusy = false, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, snackbar = if (e is AppError.Offline) "Нет сети — согласие не отозвано" else "Не получилось. Попробуйте ещё раз") }
+                _state.update { it.copy(consentBusy = false, errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Нет сети — согласие не отозвано" else "Не получилось. Попробуйте ещё раз") }
             }
         }
     }

@@ -97,7 +97,7 @@ class DetailViewModel @Inject constructor(
             } catch (e: AppError) {
                 retryGate.record(e)
                 val notFound = e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.NOT_FOUND
-                _state.update { it.copy(loading = false, error = !notFound, notFound = notFound, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(loading = false, error = !notFound, notFound = notFound, errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
             }
         }
     }
@@ -151,7 +151,7 @@ class DetailViewModel @Inject constructor(
                     e is AppError.Offline -> "Нет сети — категория не изменилась"
                     else -> "Не получилось сохранить. Попробуйте ещё раз"
                 }
-                _state.update { it.copy(saving = false, pickerError = text, pickerErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, pickerRequestRetryable = e.requestRetryable) }
+                _state.update { it.copy(saving = false, pickerError = text, pickerErrorPresentation = e.presentation, pickerRequestRetryable = e.requestRetryable) }
             }
         }
     }

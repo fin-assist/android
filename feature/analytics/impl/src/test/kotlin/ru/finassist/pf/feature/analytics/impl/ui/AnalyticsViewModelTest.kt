@@ -298,6 +298,7 @@ class AnalyticsViewModelTest {
         vm.setPeriodType(PeriodTypeCode.YEAR)
         assertEquals(PeriodTypeCode.YEAR, api.requests.last().period)
         assertEquals("Нет сети — показываем прежний период", vm.state.value.snackbar)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertFalse(vm.state.value.offline)
         assertEquals("2026-09", vm.state.value.data?.params?.date?.value)
 

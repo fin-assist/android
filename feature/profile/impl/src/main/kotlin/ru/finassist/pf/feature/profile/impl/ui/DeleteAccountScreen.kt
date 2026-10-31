@@ -65,7 +65,7 @@ class DeleteAccountViewModel @Inject constructor(
                 session.clearLocal(reason = AuthRoutes.Phone.REASON_DELETED)
             } catch (e: AppError) {
                 retryGate.record(e)
-                _state.update { it.copy(deleting = false, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable, error = if (e is AppError.Offline) OFFLINE else FAILED) }
+                _state.update { it.copy(deleting = false, errorPresentation = e.presentation, requestRetryable = e.requestRetryable, error = if (e is AppError.Offline) OFFLINE else FAILED) }
             }
         }
     }
