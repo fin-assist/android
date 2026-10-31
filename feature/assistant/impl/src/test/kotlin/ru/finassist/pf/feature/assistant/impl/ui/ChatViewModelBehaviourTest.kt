@@ -1852,4 +1852,43 @@ class ChatViewModelBehaviourTest {
         assertTrue(api.asks.isEmpty())
     }
 
+    @Test fun `metadata reconciliation stops after the second stale quota read until explicit refresh`() {
+        val firstQuota = CompletableDeferred<AssistantLimit>()
+        val secondQuota = CompletableDeferred<AssistantLimit>()
+        val explicitQuota = CompletableDeferred<AssistantLimit>()
+        var reads = 0
+        api.limitReply = {
+            when (++reads) {
+                1 -> firstQuota.await()
+                2 -> secondQuota.await()
+                else -> explicitQuota.await()
+            }
+        }
+        val events = kotlinx.coroutines.flow.MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
+        api.script("a1", events)
+        val vm = newVm()
+        api.askOutcomes += askResponse(remaining = 3)
+        sendQuestion(vm)
+        firstQuota.complete(limit)
+        assertEquals(2, reads)
+        assertEquals(3, vm.state.value.knownRemaining)
+
+        assertTrue(events.tryEmit(done(remaining = 2)))
+        secondQuota.complete(limit.copy(remaining = 3))
+        assertEquals(2, reads, "a second stale reply must not trigger a third automatic GET")
+        assertNull(vm.state.value.limit)
+        assertEquals(2, vm.state.value.knownRemaining)
+        assertEquals(1, api.asks.size)
+
+        vm.refresh()
+        assertEquals(3, reads, "an explicit refresh can request metadata after reconciliation stopped")
+        assertEquals(2, vm.state.value.knownRemaining)
+        explicitQuota.complete(limit.copy(remaining = 2))
+        assertEquals(2, vm.state.value.limit?.remaining)
+        assertEquals(2, vm.state.value.knownRemaining)
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(3, reads)
+        assertEquals(1, api.asks.size)
+    }
+
 }
