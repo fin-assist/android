@@ -91,7 +91,7 @@ class AnalyticsEngine(
         val navIndex = available.indexOf(key)
         val navigation = AnalyticsNavigation(
             previous = available.getOrNull(navIndex - 1).takeIf { navIndex > 0 },
-            next = available.getOrNull(navIndex + 1),
+            next = available.getOrNull(navIndex + 1).takeIf { navIndex >= 0 },
         )
 
         return AnalyticsSnapshot(
@@ -106,6 +106,17 @@ class AnalyticsEngine(
                 gaps = cov.gapsWithin(from, toExcl),
             ),
             navigation = navigation,
+            forecastHistory = generateSequence(YearMonth.from(cov.firstDay!!)) { it.plusMonths(1) }
+                .takeWhile { !it.isAfter(YearMonth.from(cov.lastDay!!)) }.map { month ->
+                val start = month.atDay(1)
+                val end = month.plusMonths(1).atDay(1)
+                MonthlyPoint(
+                    month = month.toString(), range = range(start, end),
+                    coverage = apiCoverage(cov.coverageOf(start, end)),
+                    dataFrom = cov.dataBounds(start, end)?.first?.at(), dataTo = dataEnd(start, end, cov),
+                    gaps = cov.gapsWithin(start, end),
+                )
+            }.toList(),
             tiles = tiles(type, key, mode, visible, ops, expense, income, isCurrent, stale, bounds, cov),
             expenseCategories = expenseBreakdown(ops, expense, periodRange, mode),
             incomeCategories = incomeBreakdown(ops, income, periodRange, mode),

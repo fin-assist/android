@@ -1,0 +1,138 @@
+{
+    "has_data": true,
+    "params": {
+        "period": "month",
+        "date": "2026-09",
+        "transfer_mode": "with"
+    },
+    "period": {
+        "range": {
+            "from": "2026-09-01T00:00:00+03:00",
+            "to": "2026-10-01T00:00:00+03:00"
+        },
+        "is_current": false,
+        "coverage": "no_data",
+        "gaps": []
+    },
+    "navigation": {},
+    "blocks": [
+        {
+            "id": "tiles",
+            "type": "tile_group",
+            "status": "none",
+            "alt_text": "За этот период данных нет",
+            "empty_text": "За этот период данных нет",
+            "data": {
+                "tiles": []
+            }
+        },
+        {
+            "id": "expense_categories",
+            "type": "ranked_list",
+            "status": "none",
+            "title": "Расходы по категориям",
+            "alt_text": "Расходов нет",
+            "empty_text": "Расходов за 1–30 сентября нет"
+        },
+        {
+            "id": "income_categories",
+            "type": "ranked_list",
+            "status": "none",
+            "title": "Доходы",
+            "alt_text": "Доходов нет",
+            "empty_text": "Доходов за 1–30 сентября нет"
+        },
+        {
+            "type": "heading",
+            "data": {
+                "text": "Регулярные платежи и заметные траты"
+            }
+        },
+        {
+            "id": "regular_payments",
+            "type": "insight_card",
+            "status": "locked",
+            "lock": {
+                "reason": "need_full_months",
+                "text": "Нужно 2 полных месяца — пока есть только 1–7 октября",
+                "required": 2,
+                "available": 0
+            },
+            "alt_text": "Подписки и регулярные платежи: Регулярных платежей не нашли",
+            "data": {
+                "icon": "repeat",
+                "title": "Подписки и регулярные платежи"
+            }
+        },
+        {
+            "id": "notable_spending",
+            "type": "insight_card",
+            "status": "locked",
+            "lock": {
+                "reason": "need_full_months",
+                "text": "Нужно 3 полных месяца — пока есть только 1–7 октября",
+                "required": 3,
+                "available": 0
+            },
+            "alt_text": "Заметные траты: Заметных трат не нашли — расходы по категориям в пределах обычного",
+            "data": {
+                "icon": "bar-chart",
+                "title": "Заметные траты"
+            }
+        },
+        {
+            "id": "bank_fees",
+            "type": "insight_card",
+            "status": "none",
+            "alt_text": "Комиссии и проценты банку: Комиссий за сентябрь нет",
+            "empty_text": "Комиссий за сентябрь нет",
+            "data": {
+                "icon": "percent",
+                "title": "Комиссии и проценты банку"
+            }
+        },
+        {
+            "id": "small_frequent",
+            "type": "insight_card",
+            "status": "locked",
+            "lock": {
+                "reason": "need_full_months",
+                "text": "Нужно 1 полный месяц — пока есть только 1–7 октября",
+                "required": 1,
+                "available": 0
+            },
+            "alt_text": "Мелкие частые траты: Мелких частых трат не нашли",
+            "data": {
+                "icon": "coffee",
+                "title": "Мелкие частые траты"
+            }
+        },
+        {
+            "id": "balance",
+            "type": "chart",
+            "title": "Доходы минус расходы",
+            "alt_text": "Доходы минус расходы: 0 ₽",
+            "data": {
+                "kind": "bar",
+                "value_kind": "percent",
+                "points": [],
+                "show_values": true,
+                "summary": {
+                    "value": 0.0,
+                    "value_kind": "amount"
+                },
+                "caption": "Доходов за период нет"
+            }
+        }
+    ],
+    "state": {
+        "stale": false,
+        "last_operation_at": "2026-10-05T12:00:00+03:00",
+        "data_from": "2026-10-01T00:00:00+03:00",
+        "data_to": "2026-10-08T00:00:00+03:00",
+        "full_months": 0,
+        "unread_lines_count": 0,
+        "calculated_at": "2026-10-08T12:00:00+03:00",
+        "recalculating": false
+    }
+}
