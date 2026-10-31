@@ -81,7 +81,7 @@ internal fun Modifier.dashedBorder(
 /**
  * Metric tile for the 2×2 grid on Analytics (mockup `.pf-stat`): label, `amount-md` value, note; as tall as its
  * content. [locked] shows a dashed frame, a lock icon and [lockedText] instead of a value. One TalkBack node per
- * tile.
+ * tile. [minAmountFontSize] lets a compact grid retain long amounts without changing other callers' minimum.
  */
 @Composable
 fun PfStatTile(
@@ -94,6 +94,7 @@ fun PfStatTile(
     lockedText: String? = null,
     chartId: String? = null,
     onClick: (() -> Unit)? = null,
+    minAmountFontSize: TextUnit = 14.sp,
 ) {
     val c = PfTheme.colors
     val shape = RoundedCornerShape(PfTheme.dimens.radiusXl)
@@ -121,7 +122,7 @@ fun PfStatTile(
             }
         } else {
             Spacer(Modifier.height(PfTheme.dimens.space1))
-            PfAmountText(value ?: "—", style = PfTheme.type.amountMd, color = c.text)
+            PfAmountText(value ?: "—", style = PfTheme.type.amountMd, color = c.text, minFontSize = minAmountFontSize)
             if (note != null) {
                 Spacer(Modifier.height(PfTheme.dimens.space1))
                 Text(note, style = PfTheme.type.hint, color = c.textMuted)

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.sp
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockStatus
 import ru.finassist.pf.core.api.model.BlockType
@@ -43,7 +44,9 @@ private fun GroupedTiles(block: Block, groups: List<TileGroupSection>, ctx: Bloc
                 group.title?.takeIf { it.isNotBlank() }?.let { PfSectionTitle(it) }
                 group.tiles.chunked(2).forEach { pair ->
                     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(d.space4)) {
-                        pair.forEach { tile -> BlockTile(block, tile, ctx, Modifier.weight(1f).fillMaxHeight()) }
+                        pair.forEach { tile ->
+                            BlockTile(block, tile, ctx, Modifier.weight(1f).fillMaxHeight(), minAmountFontSize = 10.sp)
+                        }
                     }
                 }
             }
