@@ -72,7 +72,7 @@ tags:
     visible:
       id: "ds.chat.offline"
     timeout: 15000
-- assertVisible: "Нет сети — помощнику нужен интернет. Операции и аналитика доступны"
+- assertVisible: "Не удаётся подключиться к серверу. Проверьте интернет и попробуйте ещё раз"
 - assertNotVisible:
     id: "ds.chat.input"
 

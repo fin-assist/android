@@ -149,7 +149,7 @@ class FeedViewModel @Inject constructor(
         } catch (e: AppError) {
             if (requestGeneration != generation) return
             retryGate.record(e)
-            _state.update { it.copy(loading = false, refreshing = false, offline = it.items.isEmpty(), errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+            _state.update { it.copy(loading = false, refreshing = false, offline = it.items.isEmpty(), errorPresentation = if (e is AppError.Offline && it.items.isEmpty()) null else e.presentation, requestRetryable = e.requestRetryable) }
         }
         firstPagePending = false
         if (pendingLoadMore) {
@@ -191,7 +191,7 @@ class FeedViewModel @Inject constructor(
                 if (requestGeneration != generation) return@launch
                 pageGate.record(e)
                 pendingLoadMore = false
-                _state.update { it.copy(loadingMore = false, moreFailed = true, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(loadingMore = false, moreFailed = true, errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
             }
         }
     }

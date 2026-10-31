@@ -41,7 +41,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 |---|---|
 | Composition root, NavHost (auth graph → Operations / Analytics / Assistant / Profile tabs; layer-owned assistant policy survives configuration changes and guards restored entries before VM creation), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt`, `app/src/local/…/LocalModule.kt`, `app/src/stage/…/StageModule.kt` |
 | API contract (service interfaces + DTOs) | `core/api/…/Services.kt`, `core/api/…/model/*.kt` |
-| Universal error presentation, request retry restrictions and server deadlines (FIN-223) | `docs/errors.md`; `core/common/…/error/`, `time/ServerDeadline.kt`; `core/designsystem/…/ErrorMessage.kt` |
+| Universal error presentation, local VPN-aware connection hints (FIN-396), request retry restrictions and server deadlines (FIN-223) | `docs/errors.md`; `core/common/…/error/`, `time/ServerDeadline.kt`; `core/designsystem/…/ErrorMessage.kt` |
 | SSE streams: transport and the one re-open loop of all three streams (pauses with jitter, 429, FIN-170) | `core/network/…/Sse.kt`; `core/api/…/SseReopen.kt` (`reopeningStream`, used by the view models; the fake backend's drops — `MockConfig.streamDrops`) |
 | Client version, update and maintenance (FIN-22): `X-Client-Version`, `CLIENT_VERSION_UNSUPPORTED` / `MAINTENANCE` → `ServiceGate` → screens over the app | `core/common/…/availability/` (`ClientVersion`, `ServiceGate`), `core/network/…/Interceptors.kt`, `core/toggles/…/MinVersionCheck.kt` (`app.min_version`), `feature/availability`; version and build number — `app/build.gradle.kts` |
 | Fake backend (mock flavor): OFX parsing, ledger, analytics, assistant | `mock/backend/…/mock/` — `MockBackend.kt`, `domain/*`, `MockConfig.kt` (existing phone, delays, `offline`) |
@@ -113,7 +113,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:core:api` | `pf.jvm.library` | unit |
 | `:core:blocks` | `pf.android.library.compose` | unit |
 | `:core:common` | `pf.jvm.library` | unit |
-| `:core:designsystem` | `pf.android.library.compose` | - |
+| `:core:designsystem` | `pf.android.library.compose` | unit |
 | `:core:navigation` | `pf.android.library.compose` | - |
 | `:core:network` | `pf.android.library`, `pf.hilt` | unit |
 | `:core:screenshot-testing` | `pf.android.library.compose` | - |

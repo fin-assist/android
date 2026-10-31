@@ -166,8 +166,8 @@ enum class ComposerState { IDLE, BUSY, OFFLINE, LIMIT }
  * Input panel (mockup `.pf-composer`) on `nav` with a top `border`: mic (48, `text`), round field (48, 16 sp),
  * send (48, `accent`), 8 dp apart; padding 8 / 20 / 8 / 8 (the send button ends 20 dp from the edge).
  * - busy: the field is inactive (`bg`, `border`), mic and send are grey;
- * - offline: an info notice replaces the panel; [onRetry] adds «Повторить» inside it — the app has no network
- *   monitor, so this is how the user brings the panel back (owner's decision on FIN-40);
+ * - offline: an info notice replaces the panel; its local connection hint may suggest trying without VPN.
+ *   [onRetry] keeps the feature's existing recovery callback (owner's decision on FIN-40);
  * - limit: a limit notice replaces the panel.
  * The disclaimer under the panel is always there; notices sit on a 20 dp margin.
  */
@@ -180,7 +180,7 @@ fun PfChatComposer(
     modifier: Modifier = Modifier,
     state: ComposerState = ComposerState.IDLE,
     placeholder: String = "Например: траты на такси",
-    offlineText: String = "Нет сети — помощнику нужен интернет. Операции и аналитика доступны",
+    offlineText: String? = null,
     limitText: String = "Вопросы на сегодня закончились. Новые — в 00:00 по Москве",
     onRetry: (() -> Unit)? = null,
     sendEnabled: Boolean = true,
@@ -193,7 +193,7 @@ fun PfChatComposer(
         Column(Modifier.padding(start = if (notice) d.space5 else d.space2, end = d.space5, top = d.space2, bottom = d.space2)) {
             when (state) {
                 ComposerState.OFFLINE -> PfNotice(
-                    offlineText, tone = NoticeTone.INFO, modifier = Modifier.testTag(PfTestTags.CHAT_OFFLINE),
+                    offlineText ?: connectionFailureTexts().message, tone = NoticeTone.INFO, modifier = Modifier.testTag(PfTestTags.CHAT_OFFLINE),
                     action = onRetry?.let { retry ->
                         {
                             Box(Modifier.offset(x = -d.space4)) {

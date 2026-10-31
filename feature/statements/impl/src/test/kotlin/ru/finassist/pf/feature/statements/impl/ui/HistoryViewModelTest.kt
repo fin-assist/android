@@ -389,13 +389,44 @@ class HistoryViewModelTest {
         val s = vm.state.value
         assertNull(s.confirmDelete)
         assertFalse(s.deleting)
-        assertEquals("Загрузка удалена, аналитика пересчитана", s.snackbar)
+        assertEquals("Загрузка удалена, обновляем аналитику", s.snackbar)
         assertEquals(StatementsList(uploads = emptyList()), s.list)
         assertEquals(listOf<StatementsEvent>(StatementsEvent.UploadDeleted("u1")), repoEvents)
         assertTrue(Events.STATEMENTS_UPLOAD_DELETED in tracker.names())
 
         vm.consumeSnackbar()
         assertNull(vm.state.value.snackbar)
+    }
+
+    @Test fun `a confirmed delete stays visible when the following list read fails`() {
+        val deleted = upload("u1")
+        for (remaining in listOf(emptyList(), listOf(upload("u2")))) {
+            for (failure in listOf(AppError.Offline(), AppError.Server(503))) {
+                val source = FakeStatementsApi()
+                source.listOutcomes += StatementsList(
+                    summary = ru.finassist.pf.core.api.model.StatementsSummary(1 + remaining.size,
+                        10 * (1 + remaining.size), deleted.uploadedAt, deleted.uploadedAt, emptyList()),
+                    uploads = listOf(deleted) + remaining,
+                )
+                source.listOutcomes += failure
+                val vm = newVm(source = source)
+                vm.load()
+                vm.askDelete(deleted); vm.delete()
+                assertEquals(listOf("u1"), source.deleted)
+                assertEquals(remaining, vm.state.value.list?.uploads,
+                    "the failed GET must not resurrect a source removed by a confirmed DELETE")
+                assertNull(vm.state.value.list?.summary, "old aggregate coverage is no longer authoritative")
+                assertEquals(HistoryErrorOrigin.READ, vm.state.value.errorOrigin)
+                assertEquals(failure is AppError.Offline, vm.state.value.errorPresentation?.connectionFailure)
+                assertNull(vm.state.value.snackbar, "the read failure uses its own fallback and retry")
+                assertTrue(vm.state.value.retryReady)
+                source.listOutcomes.clear(); source.listOutcomes += StatementsList(uploads = remaining)
+                vm.load()
+                assertNull(vm.state.value.errorOrigin)
+                assertNull(vm.state.value.errorPresentation)
+                assertEquals(remaining, vm.state.value.list?.uploads)
+            }
+        }
     }
 
     @Test fun `deleting offline keeps the upload and says why`() {
@@ -405,11 +436,70 @@ class HistoryViewModelTest {
         vm.load()
         vm.askDelete(upload("u1"))
         vm.delete()
-        assertEquals("Нет сети — загрузка не удалена", vm.state.value.snackbar)
+        assertEquals("Загрузка не удалена", vm.state.value.snackbar)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertNull(vm.state.value.confirmDelete)
         assertFalse(vm.state.value.deleting)
         assertEquals(1, api.listCalls)
         assertTrue(repoEvents.isEmpty())
+    }
+
+    @Test fun `a failed delete outcome cannot replace a later list failure and its retry`() {
+        api.listOutcomes += done
+        api.deleteFailure = AppError.Offline()
+        val vm = newVm()
+        vm.load()
+        vm.askDelete(upload("u1")); vm.delete()
+        assertEquals(HistoryErrorOrigin.DELETE, vm.state.value.errorOrigin)
+        assertEquals("Загрузка не удалена", vm.state.value.snackbar)
+        api.listOutcomes.clear(); api.listOutcomes += AppError.Offline()
+        vm.load()
+        assertEquals(HistoryErrorOrigin.READ, vm.state.value.errorOrigin)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertNull(vm.state.value.snackbar, "the read error retains its own retry action")
+        api.deleteFailure = null
+        api.listOutcomes.clear(); api.listOutcomes += StatementsList(uploads = emptyList())
+        vm.askDelete(upload("u1")); vm.delete()
+        assertNull(vm.state.value.errorOrigin)
+        assertNull(vm.state.value.errorPresentation)
+        assertEquals("Загрузка удалена, обновляем аналитику", vm.state.value.snackbar)
+        vm.load()
+        assertEquals("Загрузка удалена, обновляем аналитику", vm.state.value.snackbar,
+            "ordinary successful notifications survive a later successful refresh")
+    }
+
+    @Test fun `clearing every history error removes its outcome without deleting success notices`() {
+        val notification = HistoryUiState(snackbar = "Загрузка удалена")
+        assertEquals(notification, notification.clearRequestError())
+        for (origin in HistoryErrorOrigin.entries) {
+            val cleared = notification.copy(errorOrigin = origin, errorPresentation = AppError.Offline().presentation,
+                snackbar = "Старый исход ошибки").clearRequestError()
+            assertNull(cleared.errorOrigin)
+            assertNull(cleared.errorPresentation)
+            assertNull(cleared.snackbar)
+        }
+    }
+
+    @Test fun `retrying a deletion clears its old failed outcome while pending`() {
+        api.listOutcomes += done
+        api.deleteFailure = AppError.Offline()
+        val vm = newVm()
+        vm.load()
+        vm.askDelete(upload("u1")); vm.delete()
+        assertEquals("Загрузка не удалена", vm.state.value.snackbar)
+        val pending = CompletableDeferred<Unit>()
+        api.deleteFailure = null
+        api.deleteGate = pending
+        vm.askDelete(upload("u1")); vm.delete()
+        assertTrue(vm.state.value.deleting)
+        assertNull(vm.state.value.snackbar)
+        assertNull(vm.state.value.errorPresentation)
+        api.listOutcomes.clear()
+        api.listOutcomes += StatementsList(uploads = emptyList())
+        pending.complete(Unit)
+        assertFalse(vm.state.value.deleting)
+        assertEquals("Загрузка удалена, обновляем аналитику", vm.state.value.snackbar)
+        assertEquals(emptyList(), vm.state.value.list?.uploads)
     }
 
     @Test fun `a failed delete offers to try again`() {

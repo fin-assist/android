@@ -89,6 +89,15 @@ class DetailViewModelTest {
         assertEquals("op_1", vm.state.value.operation?.id)
     }
 
+    @Test fun `a failed operation read distinguishes connection failure from server failure`() {
+        for (failure in listOf(AppError.Offline(), AppError.Server(500))) {
+            api.getFailure = failure
+            val vm = vm()
+            assertEquals(failure is AppError.Offline, vm.state.value.errorPresentation?.connectionFailure)
+            assertTrue(vm.state.value.error)
+        }
+    }
+
     @Test fun `the picker offers the categories the operation accepts`() {
         assertEquals(setOf(CategoryKind.EXPENSE), DetailUiState(operation = details("a", OperationKind.EXPENSE)).pickerKinds)
         assertEquals(setOf(CategoryKind.INCOME), DetailUiState(operation = details("a", OperationKind.INCOME)).pickerKinds)
@@ -202,7 +211,7 @@ class DetailViewModelTest {
     }
 
     @Test fun `no network keeps the picker open with the offline reason`() {
-        assertSaveError(AppError.Offline(), "Нет сети — категория не изменилась")
+        assertSaveError(AppError.Offline(), "Категория не изменилась")
     }
 
     @Test fun `any other failure keeps the picker open with a retry hint`() {
@@ -215,6 +224,7 @@ class DetailViewModelTest {
         vm.save()
         val s = vm.state.value
         assertEquals(text, s.pickerError)
+        assertEquals(error is AppError.Offline, s.pickerErrorPresentation?.connectionFailure)
         assertTrue(s.picker)
         assertFalse(s.saving)
         assertEquals("cat_restaurants", s.draftCategoryId)

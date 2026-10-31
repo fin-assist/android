@@ -50,7 +50,7 @@ tags:
     id: "ds.error.warning"
 - assertNotVisible:
     id: "ds.error.error"
-- assertNotVisible: "Нет сети — не можем дождаться звонка. Проверьте интернет"
+- assertNotVisible: "Не удаётся подключиться к серверу.*"
 # The link is now safe: a 429 has already happened, and its original wait must survive the pause/resume.
 - runFlow:
     file: ../../subflows/config.yaml

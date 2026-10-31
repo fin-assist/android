@@ -1,5 +1,5 @@
 appId: ru.finassist.pf.mock.e2e
-name: Нет сети — экран ошибки и «Повторить»
+name: Ошибка соединения — подсказка и «Повторить»
 tags:
   - offline
 ---
@@ -16,13 +16,17 @@ tags:
     visible:
       id: "analytics.offline"
     timeout: 15000
-- assertVisible: "Нет сети"
+- assertVisible: "Не удаётся подключиться к серверу"
+- assertVisible: "Проверьте интернет и попробуйте ещё раз"
+- assertNotVisible: "Попробуйте отключить VPN и повторить подключение"
 - tapOn:
     id: "ds.tab.profile"
 - extendedWaitUntil:
     visible:
       id: "profile.offline"
     timeout: 15000
+- assertVisible: "Не удаётся подключиться к серверу"
+- assertVisible: "Проверьте интернет и попробуйте ещё раз"
 
 - runFlow:
     file: ../../subflows/config.yaml

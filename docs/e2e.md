@@ -693,8 +693,11 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `availability/maintenance` | The check button is disabled during `Retry-After`; the first automatic probe is refused, then a guarded manual check after the fresh wait opens the app; a new maintenance episode has its own one-shot automatic check — FIN-22, FIN-223 |
 | `availability/maintenance_on_sign_in` | `maintenance=unknown` before sign-in: «Продолжить» on the phone screen gets the maintenance screen over sign-in, without an end time — FIN-22 |
 | `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
-| `offline/no_network` | «Нет сети» on analytics and profile, «Повторить» after the network is back |
+| `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; existing «Повторить» after recovery (Qase19, FIN-396) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
+| native `ConnectionFailureHintTest` | fake local reader → VPN text; change observation and explicit retry → internet hint without VPN text, for full-screen state and ErrorMessage (Qase62, FIN-396); Compose dependency injection cannot be driven by Maestro without adding an app hook |
+| native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
+| native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
 | native `StatementPickerTest` | login button opens exactly `https://tbank-online.com/login` in an intercepted ACTION_VIEW (FIN-395; Qase16), then upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
 
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
@@ -867,6 +870,42 @@ No stage e2e hooks are shipped. CI assembles both stage variants, checks identit
 classpaths; the existing HTTP/SSE unit suites cover the transport. The Android → public stage flow
 (synthetic auth → OFX → progress → operations/analytics → assistant) remains a separate device acceptance run;
 it was not executed for this build-environment change. This is not a new screen or a claim of stage UI coverage.
+
+### FIN-396 connection failure hints
+
+Qase19/20/21/43/44/58 and their existing flows retain their mappings. `offline/no_network` asserts
+the common connection title, internet hint and recovery action. `AndroidConnectionEnvironmentReaderTest` checks VPN detection, transport
+changes between reads, no active network, absent capabilities and denied/unavailable system service.
+Pure tests distinguish all four observations and verify that HTTP errors do not become VPN failures.
+`ProfileOfflineVpn`, `ProfileOfflineVpnDark`, `ProfileOffline`, `DeleteAccountOfflineVpn`,
+`ChatOfflineVpn` and `ImportGuideOfflineVpn` are authored DesignCheck fixtures. Existing
+`DeleteAccountOffline` now uses the actual Offline.presentation. Chat/import fixtures inject UNKNOWN
+for deterministic internet hints; these copy changes follow FIN-396 and differ from older Figma artboards;
+no UI/Maestro/DesignCheck run is claimed. Native `ConnectionFailureHintTest#vpnHintUpdatesAfterRetry`
+(Qase62) asserts the actual reader-to-UI wiring for the full-screen state and ErrorMessage, then switches
+the fake observation before clicking the existing retry action and asserts the internet hint and absence
+of VPN text and any «Нет сети» diagnosis, while retaining the actual ProfileTexts.CONSENT_NOT_REVOKED
+feature outcome. It needs no real tunnel. This uses native Compose dependency injection because Maestro
+cannot replace a CompositionLocal; no production or e2e application hook was added. The native test is
+authored and compiled only, not executed under the current instruction.
+
+Not covered yet: a real system VPN route and switching its tunnel during a failed request. The in-process
+mock does not traverse a VPN; Maestro cannot create a configured VPN tunnel/provider on its own.
+The Android system reader has Robolectric coverage and the presentation dependency has fake-reader
+fixtures; neither is proof of a particular VPN's route or FIN-394's network cause.
+
+FIN-396 screen transitions use native state/reader injection to assert the real ProfileContent and
+HistoryContent fallback and Retry branches without introducing a production/e2e state hook. The lower unit
+layer drives the real ViewModel failure/retry chains; these native cases are authored and compiled only.
+A confirmed DELETE removes its source from the client list immediately; a later failed read keeps an
+available read retry and cannot redisplay the deleted row. The success notice says analytics is updating,
+rather than claiming its asynchronous projection has already completed.
+
+`UploadHistoryDeleted` also differs from the existing Figma artboard: the success text is now
+«Загрузка удалена, обновляем аналитику» instead of «Загрузка удалена, аналитика пересчитана».
+The DELETE confirms removal of the source; publication of its analytics projection can finish later.
+Proposed artboard sync: update the `UploadHistoryDeleted` success notice to the new text. This copy
+clarification is tracked in FIN-396 alongside PR #232; it does not claim visual acceptance.
 
 ### FIN-397 and FIN-394 assistant navigation and consent
 

@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.analytics.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.ConnectionFailureState
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import androidx.compose.runtime.getValue
 import ru.finassist.pf.core.api.model.ActionType
@@ -116,13 +117,13 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
             ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4))
         }
         state.errorPresentation?.let { presentation ->
-            ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику. Попробуйте ещё раз",
+            ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику",
                 modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.load() }))
         }
         when {
             state.loading -> Unit
             state.errorPresentation != null && a == null -> Unit
-            state.offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(AnalyticsTags.OFFLINE)) {
+            state.offline -> ConnectionFailureState(modifier = Modifier.testTag(AnalyticsTags.OFFLINE)) {
                 PfButton("Повторить", onClick = { vm.load() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
             }
             a == null || !a.hasData -> Column(

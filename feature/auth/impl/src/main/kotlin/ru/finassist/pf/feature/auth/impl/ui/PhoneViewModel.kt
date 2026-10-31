@@ -153,7 +153,7 @@ class PhoneViewModel @Inject constructor(
                 val retryAt = (e as? AppError.RateLimited)?.retryAt ?: e.response?.retryAt
                 _state.update { it.copy(
                     documentError = if (e is AppError.RateLimited) rateLimitText(retryAt) else "Не получилось загрузить документ согласия",
-                    documentErrorPresentation = e.presentation.takeUnless { e is AppError.Offline },
+                    documentErrorPresentation = e.presentation,
                     // A safe server user_message replaces the fallback, so show the captured retry time separately.
                     documentRetryText = retryAt?.takeIf { e is AppError.RateLimited && e.presentation.userMessage is ru.finassist.pf.core.common.error.UserMessage.Safe }
                         ?.let(::retryTimeText),
@@ -233,7 +233,7 @@ class PhoneViewModel @Inject constructor(
             } catch (e: AppError) {
                 if (generation != inputGeneration) return@launch
                 retryGate.record(e)
-                _state.update { it.copy(error = errorText(e), errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(error = errorText(e), errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
                 if (e is AppError.Api && e.code == ErrorCodes.CONSENT_OUTDATED) {
                     rejectedVersion = request.pdConsentVersion
                     _state.update { it.copy(pdConsentAccepted = false, documentError = "Текст согласия обновился — прочитайте его и подтвердите заново") }
@@ -257,7 +257,7 @@ class PhoneViewModel @Inject constructor(
         "Слишком много попыток" + (retryAt?.let { ". ${retryTimeText(it)}" } ?: "")
 
     private fun errorText(e: AppError): String = when (e) {
-        is AppError.Offline -> "Нет сети — проверьте интернет и повторите"
+        is AppError.Offline -> "Не получилось отправить номер"
         is AppError.RateLimited -> rateLimitText(e.retryAt)
         // The server checks the format too (api.md 1.1): a violation at `phone`, whatever its code, is the field's error.
         is AppError.Api -> if (e.code == ErrorCodes.VALIDATION_ERROR && e.details.any { it.field == "phone" }) {
