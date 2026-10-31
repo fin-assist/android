@@ -1,0 +1,88 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — повтор неудавшейся смены периода
+# Mock-only: transport failure is controlled locally, never injected into stage HTTP.
+tags:
+  - analytics
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible: "Октябрь 2026"
+    timeout: 15000
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible: "Сентябрь 2026"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.retry"
+    timeout: 15000
+- assertVisible: "(?s).*Не удалось сменить период.*"
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible:
+    id: "analytics.period.retry"
+# The saved month remains interactive. A second, unrelated failure must keep its own message.
+- scrollUntilVisible:
+    element: "Не подписка"
+    direction: DOWN
+- tapOn:
+    text: "Не подписка"
+    index: 0
+- extendedWaitUntil:
+    visible: "(?s).*Не получилось убрать.*"
+    timeout: 10000
+- assertVisible: "(?s).*Не удалось сменить период.*"
+- assertVisible:
+    id: "analytics.period.retry"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+# Resume is not consent to retry the failed target, nor to replace its notice with a refresh of the old month.
+# The content retained its scroll at regular payments. Bring the complete period controls back into view.
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
+- scrollUntilVisible:
+    element:
+      id: "analytics.ask"
+    direction: UP
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "analytics.period.retry"
+- tapOn:
+    id: "analytics.period.retry"
+- extendedWaitUntil:
+    visible:
+      text: "2026"
+      id: "ds.period.pick"
+    timeout: 15000
+- assertVisible:
+    id: "ds.segment.2"
+    checked: true
+- assertNotVisible:
+    id: "analytics.period.retry"
+- assertNotVisible:
+    id: "ds.error.error"
+- tapOn:
+    id: "ds.segment.0"
+- extendedWaitUntil:
+    visible: "Сентябрь 2026"
+    timeout: 10000
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
