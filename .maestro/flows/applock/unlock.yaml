@@ -22,6 +22,17 @@ tags:
       id: "ds.passcode.error"
     timeout: 5000
 - assertVisible: "Неверный код.*"
+# FIN-389: the error must coexist with the dots, keypad and recovery action.
+- assertVisible:
+    id: "ds.passcode.dots"
+- assertVisible:
+    id: "ds.numpad.0"
+- assertVisible:
+    id: "ds.numpad.delete"
+- assertVisible:
+    id: "applock.unlock.forgot"
+- takeScreenshot: FIN389_unlock_error
+
 - runFlow:
     file: ../../subflows/enter_code.yaml
     env:
