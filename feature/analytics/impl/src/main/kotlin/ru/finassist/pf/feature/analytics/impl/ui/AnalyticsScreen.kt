@@ -13,7 +13,7 @@ import ru.finassist.pf.core.blocks.BlockLayout
 import ru.finassist.pf.core.blocks.BlockTags
 import ru.finassist.pf.core.blocks.BlocksColumn
 import ru.finassist.pf.core.blocks.PreparedBlock
-import ru.finassist.pf.core.blocks.TileGroupRenderer
+import ru.finassist.pf.core.blocks.GroupedTileRenderer
 import ru.finassist.pf.core.api.model.AnalyticsPeriodInfo
 import ru.finassist.pf.core.api.model.BlockStatus
 import ru.finassist.pf.core.blocks.CatalogV1
@@ -313,7 +313,7 @@ internal fun analyticsCoverageCaption(period: AnalyticsPeriodInfo, type: PeriodT
     if (period.coverage.effective == Coverage.NO_DATA) {
         val serverMessage = prepared.any {
             val block = it.block
-            block.id == "tiles" && block.type == BlockType.TILE_GROUP && block.v <= TileGroupRenderer.version &&
+            block.id == "tiles" && block.type == BlockType.TILE_GROUP && block.v <= GroupedTileRenderer.version &&
                 block.status.effective == BlockStatus.NONE && !block.emptyText.isNullOrBlank()
         }
         return if (serverMessage) null else AnalyticsTexts.coverage(period)
