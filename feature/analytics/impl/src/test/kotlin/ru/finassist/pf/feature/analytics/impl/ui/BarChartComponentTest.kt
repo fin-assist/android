@@ -6,6 +6,8 @@ import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -23,10 +25,29 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import ru.finassist.pf.core.api.ApiJson
+import ru.finassist.pf.core.api.model.Analytics
+import ru.finassist.pf.core.api.model.TransferMode
+import ru.finassist.pf.core.api.model.ActionType
+import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.BlockAction
+import ru.finassist.pf.core.api.model.BlockType
+import ru.finassist.pf.core.api.model.ChartData
+import ru.finassist.pf.core.api.model.ChartKind
+import ru.finassist.pf.core.api.model.ChartPoint
+import ru.finassist.pf.core.api.model.Coverage
+import ru.finassist.pf.core.api.model.PeriodTypeCode
+import ru.finassist.pf.core.api.model.ValueKind
+import ru.finassist.pf.core.blocks.BlockContext
+import ru.finassist.pf.core.blocks.BlockTags
+import ru.finassist.pf.core.blocks.CatalogV1
+import ru.finassist.pf.core.common.time.DateRange
+import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.designsystem.components.BarPoint
 import ru.finassist.pf.core.designsystem.components.PfBarChart
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import java.time.Duration
+import java.time.OffsetDateTime
 import kotlin.math.roundToInt
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -108,6 +129,93 @@ class BarChartComponentTest {
         }
     }
 
+    @Test fun `real chart renderer dispatches a covered zero point only from Analytics`() {
+        val from = OffsetDateTime.parse("2026-09-01T00:00:00+03:00")
+        val action = BlockAction(ActionType.SELECT_ANALYTICS_PERIOD, period = PeriodTypeCode.MONTH, date = PeriodKey("2026-09"))
+        val data = ChartData(ChartKind.BAR, ValueKind.AMOUNT, listOf(ChartPoint(DateRange(from, from.plusMonths(1)),
+            value = 0.0, coverage = Coverage.COMPLETE, action = action)))
+        val block = Block.of(BlockType.CHART, ChartData.serializer(), data).copy(id = "monthly_chart")
+        val registry = CatalogV1.registry()
+        val selected = mutableListOf<Pair<Block, BlockAction>>()
+        val select: (Block, BlockAction) -> Unit = { source, target -> selected += source to target }
+        renderContent(check = { root, _, _ ->
+            val target = root.tagged("analytics.chart.monthly_chart.point.2026-09")
+            assertTrue(assertNotNull(target.config.getOrNull(SemanticsActions.OnClick)?.action).invoke())
+            assertEquals(listOf(block to action), selected)
+            assertEquals(1, root.descendants().count { it.config.getOrNull(SemanticsActions.OnClick) != null },
+                "assistant and balance charts must not expose the selection action")
+        }) {
+            Column {
+                assertNotNull(registry.prepare(block)).draw(BlockContext("RUB", BlockTags("analytics"),
+                    onAction = { _, _ -> error("selection uses its narrow capability") }, onSelectAnalyticsPeriod = select))
+                assertNotNull(registry.prepare(block)).draw(BlockContext("RUB", BlockTags("assistant"), onAction = { _, _ -> error("inert") }))
+                assertNotNull(registry.prepare(block.copy(id = "balance"))).draw(BlockContext("RUB", BlockTags("analytics.balance"),
+                    onAction = { _, _ -> error("inert") }, onSelectAnalyticsPeriod = select))
+            }
+        }
+    }
+
+    @Test fun `Analytics screen keeps vertical scroll when a chart selection replaces its response`() {
+        val raw = ApiJson.decodeFromString(Analytics.serializer(), javaClass.getResource("/analytics/september.json")!!.readText())
+        val august = OffsetDateTime.parse("2026-08-01T00:00:00+03:00")
+        val months = (0..1).map { offset ->
+            val start = august.plusMonths(offset.toLong())
+            ChartPoint(DateRange(start, start.plusMonths(1)), value = 0.0, coverage = Coverage.COMPLETE,
+                action = BlockAction(ActionType.SELECT_ANALYTICS_PERIOD, period = PeriodTypeCode.MONTH,
+                    date = PeriodKey(start.toString().take(7))))
+        }
+        fun chart(highlight: Int) = Block.of(BlockType.CHART, ChartData.serializer(),
+            ChartData(ChartKind.BAR, ValueKind.AMOUNT, months, highlightIndex = highlight)).copy(id = "monthly_chart")
+        val before = (1..20).map { Block.text("Before $it").copy(id = "before_$it") }
+        val after = (1..20).map { Block.text("After $it").copy(id = "after_$it") }
+        val initial = raw.copy(blocks = before + chart(1) + after)
+        val updated = raw.copy(params = raw.params!!.copy(date = PeriodKey("2026-08")), blocks = before + chart(0) + after,
+            period = raw.period!!.copy(range = DateRange(august, august.plusMonths(1)), isCurrent = false,
+                coverage = Coverage.COMPLETE, dataFrom = august, dataTo = august.plusMonths(1).minusNanos(1), gaps = emptyList()))
+        val state = mutableStateOf(AnalyticsUiState(loading = false, data = initial, blocks = AnalyticsBlocks()))
+        val handlers = object : AnalyticsHandlers {
+            override fun load(quiet: Boolean) = Unit
+            override fun retryPeriodChange() = Unit
+            override fun consumeSnackbar() = Unit
+            override fun setPeriodType(type: PeriodTypeCode) = Unit
+            override fun goTo(key: PeriodKey) = Unit
+            override fun openSheet(sheet: AnalyticsSheet?) = Unit
+            override fun nextHint(stop: Boolean) = Unit
+            override fun setTransferMode(mode: TransferMode) = Unit
+            override fun currentTransferMode() = TransferMode.WITH
+            override fun toggleExpanded(id: String) = Unit
+            override fun onBlockShown(block: Block) = Unit
+            override fun onAction(block: Block, action: BlockAction, navigate: (BlockAction) -> Unit) {
+                assertEquals("monthly_chart", block.id)
+                assertEquals(PeriodKey("2026-08"), action.date)
+                state.value = state.value.copy(data = updated, response = state.value.response + 1)
+            }
+        }
+        val actions = AnalyticsActions(openSearch = {}, openChat = {}, openUpload = {}, openUnreadLines = { _, _ -> }, back = null)
+        renderContent(check = { root, _, settle ->
+            fun scrolling() = assertNotNull(root.descendants().firstOrNull {
+                it.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange) != null
+            })
+            val target = root.tagged("analytics.expense.monthly.point.2026-08")
+            val delta = (target.positionInRoot.y - 200f).coerceAtLeast(0f)
+            assertTrue(assertNotNull(scrolling().config.getOrNull(SemanticsActions.ScrollBy)?.action).invoke(0f, delta))
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+            settle()
+            val previous = assertNotNull(scrolling().config.getOrNull(SemanticsProperties.VerticalScrollAxisRange)).value()
+            assertTrue(previous > 0f, "the screen must actually be scrolled before the selection")
+            val visible = root.tagged("analytics.expense.monthly.point.2026-08")
+            assertTrue(visible.boundsInRoot.height > 0f)
+            assertTrue(assertNotNull(visible.config.getOrNull(SemanticsActions.OnClick)?.action).invoke())
+            settle()
+            val current = assertNotNull(scrolling().config.getOrNull(SemanticsProperties.VerticalScrollAxisRange)).value()
+            assertEquals(previous, current, "a new period response must retain vertical scroll")
+            assertEquals(PeriodKey("2026-08"), state.value.data?.params?.date)
+            assertTrue(root.tagged("analytics.expense.monthly.point.2026-08").boundsInRoot.height > 0f)
+        }) {
+            AnalyticsContent(state.value, actions, handlers)
+        }
+    }
+
     private fun point(key: String, value: Float?, selectable: Boolean = true) = BarPoint(
         key = key, label = key.replace('-', '\n'), spokenLabel = "Месяц $key", value = value,
         display = value?.toString() ?: "нет данных", selectable = selectable,
@@ -122,6 +230,18 @@ class BarChartComponentTest {
         clicks: MutableList<String>?,
         check: (SemanticsNode, Float, () -> Unit) -> Unit,
     ) {
+        renderContent(densityQualifier, check) {
+            PfBarChart("test.chart", livePoints(), Modifier.width(320.dp), highlight = selected(),
+                onPointClick = clicks?.let { list -> { key -> list += key } })
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    private fun renderContent(
+        densityQualifier: String = "mdpi",
+        check: (SemanticsNode, Float, () -> Unit) -> Unit,
+        content: @Composable () -> Unit,
+    ) {
         RuntimeEnvironment.setQualifiers("w320dp-h640dp-$densityQualifier")
         val controller = Robolectric.buildActivity(ComponentActivity::class.java)
         controller.get().setTheme(android.R.style.Theme_Material_NoActionBar)
@@ -129,8 +249,7 @@ class BarChartComponentTest {
         try {
             activity.setContent {
                 PfTheme {
-                    PfBarChart("test.chart", livePoints(), Modifier.width(320.dp), highlight = selected(),
-                        onPointClick = clicks?.let { list -> { key -> list += key } })
+                    content()
                 }
             }
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))

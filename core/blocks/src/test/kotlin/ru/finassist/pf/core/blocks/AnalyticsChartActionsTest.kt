@@ -48,7 +48,7 @@ class AnalyticsChartActionsTest {
             original.copy(period = PeriodTypeCode.QUARTER, date = PeriodKey("2026-Q3"))).forEach { action ->
             assertNull(AnalyticsChartActions.selection(block, p.copy(action = action)))
         }
-        assertNotNull(BlockLayout.usable(p.action))
+        assertNull(BlockLayout.usable(p.action), "a generic button must remain inert")
         assertNull(BlockLayout.tapAction(p.action), "a generic tile or row must remain inert")
     }
 

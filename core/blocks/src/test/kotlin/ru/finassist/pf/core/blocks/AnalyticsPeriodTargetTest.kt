@@ -13,6 +13,7 @@ class AnalyticsPeriodTargetTest {
             PeriodTypeCode.MONTH to "2026-09",
             PeriodTypeCode.QUARTER to "2026-Q3",
             PeriodTypeCode.YEAR to "2026",
+            PeriodTypeCode.ALL_TIME to "all_time",
         ).forEach { (period, date) ->
             assertEquals(AnalyticsPeriodTarget(period, PeriodKey(date)), AnalyticsPeriodTargets.of(period, PeriodKey(date)))
         }
@@ -20,6 +21,8 @@ class AnalyticsPeriodTargetTest {
         assertNull(AnalyticsPeriodTargets.of(PeriodTypeCode.MONTH, PeriodKey("2026-Q3")))
         assertNull(AnalyticsPeriodTargets.of(PeriodTypeCode.QUARTER, PeriodKey("2026-09")))
         assertNull(AnalyticsPeriodTargets.of(PeriodTypeCode.YEAR, PeriodKey("2026-Q3")))
+        assertNull(AnalyticsPeriodTargets.of(PeriodTypeCode.ALL_TIME, PeriodKey("2026")))
+        assertNull(AnalyticsPeriodTargets.of(PeriodTypeCode.MONTH, PeriodKey.ALL_TIME))
     }
 
     @Test fun `unknown missing and malformed fields leave the action inert`() {

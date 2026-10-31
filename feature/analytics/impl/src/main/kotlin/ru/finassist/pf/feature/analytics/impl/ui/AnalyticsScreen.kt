@@ -357,6 +357,7 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
         currency = a.currency,
         tags = AnalyticsBlockTags,
         onAction = { block, action -> vm.onAction(block, action, navigate) },
+        onSelectAnalyticsPeriod = { block, action -> vm.onAction(block, action, navigate) },
         expanded = state.expanded,
         onToggleExpanded = vm::toggleExpanded,
         decorate = { block, content ->

@@ -21,23 +21,23 @@ tags:
     timeout: 10000
 - scrollUntilVisible:
     element:
-      id: "analytics.chart.monthly_chart.point.2026-09"
+      id: "analytics.expense.monthly.point.2026-09"
     centerElement: true
 - tapOn:
-    id: "analytics.chart.monthly_chart.point.2026-09"
+    id: "analytics.expense.monthly.point.2026-09"
     point: "50%,90%"
 - extendedWaitUntil:
     visible:
-      id: "analytics.chart.monthly_chart.point.2026-09"
+      id: "analytics.expense.monthly.point.2026-09"
       checked: true
     timeout: 10000
 # A response keeps the chart in the viewport instead of returning to the first card.
 - assertNotVisible:
     id: "analytics.ask"
 - tapOn:
-    id: "analytics.chart.monthly_chart.point.2026-09"
+    id: "analytics.expense.monthly.point.2026-09"
 - assertVisible:
-    id: "analytics.chart.monthly_chart.point.2026-09"
+    id: "analytics.expense.monthly.point.2026-09"
     checked: true
 - assertNotVisible:
     id: "analytics.period.retry"
@@ -72,14 +72,14 @@ tags:
             id: "analytics.block.monthly_chart"
           direction: LEFT
 - assertVisible:
-    id: "analytics.chart.monthly_chart.point.2026-10"
+    id: "analytics.expense.monthly.point.2026-10"
 - assertNotVisible:
-    id: "analytics.chart.monthly_chart.point.2026-11"
+    id: "analytics.expense.monthly.point.2026-11"
 - tapOn:
-    id: "analytics.chart.monthly_chart.point.2026-10"
+    id: "analytics.expense.monthly.point.2026-10"
 - extendedWaitUntil:
     visible:
-      id: "analytics.chart.monthly_chart.point.2026-10"
+      id: "analytics.expense.monthly.point.2026-10"
       checked: true
     timeout: 10000
 - assertNotVisible:
@@ -90,13 +90,13 @@ tags:
     env:
       LINK: "pfe2e://config?offline=true"
 - tapOn:
-    id: "analytics.chart.monthly_chart.point.2026-09"
+    id: "analytics.expense.monthly.point.2026-09"
 - extendedWaitUntil:
     visible:
       id: "analytics.period.retry"
     timeout: 15000
 - assertVisible:
-    id: "analytics.chart.monthly_chart.point.2026-10"
+    id: "analytics.expense.monthly.point.2026-10"
     checked: true
 - assertVisible: "(?s).*Не удалось сменить период.*"
 - runFlow:
@@ -104,7 +104,7 @@ tags:
     env:
       LINK: "pfe2e://config?offline=false"
 - assertVisible:
-    id: "analytics.chart.monthly_chart.point.2026-10"
+    id: "analytics.expense.monthly.point.2026-10"
     checked: true
 - assertVisible:
     id: "analytics.period.retry"
@@ -112,7 +112,7 @@ tags:
     id: "analytics.period.retry"
 - extendedWaitUntil:
     visible:
-      id: "analytics.chart.monthly_chart.point.2026-09"
+      id: "analytics.expense.monthly.point.2026-09"
       checked: true
     timeout: 10000
 - assertNotVisible:

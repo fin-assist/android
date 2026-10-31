@@ -29,6 +29,7 @@ import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.blocks.CatalogV1
+import ru.finassist.pf.core.blocks.AnalyticsPeriodTargets
 import ru.finassist.pf.core.common.time.PeriodType
 import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.common.time.PeriodKey
@@ -334,7 +335,7 @@ class AnalyticsViewModel @Inject constructor(
                 // The refusal belongs to the failed params, not the different period restored on screen.
                 // Keep its explanation until the user requests that restored context; never retry automatically.
                 if (requested != Triple(period, date, transferMode)) retryGate.clear()
-                val failedSwitch = _state.value.data != null && requested.first != period
+                val failedSwitch = _state.value.data != null && (requested.first != period || requested.second != date)
                 if (failedSwitch) {
                     failedPeriodRequest = requested
                     periodChangeRetryGate.record(e)
@@ -486,8 +487,28 @@ class AnalyticsViewModel @Inject constructor(
                 navigate(action)
             }
             ActionType.OPEN_ASSISTANT -> navigate(action)
+            ActionType.SELECT_ANALYTICS_PERIOD -> selectChartMonth(block, action)
             ActionType.UNKNOWN -> Unit
         }
+    }
+
+    /** A chart action changes the type and exact key in one request, with the current transfer mode. */
+    private fun selectChartMonth(block: Block, action: BlockAction) {
+        if (block.id != "monthly_chart" || block.type != ru.finassist.pf.core.api.model.BlockType.CHART || block.v != 1 || !block.status.hasData) return
+        val target = AnalyticsPeriodTargets.of(action.period, action.date)?.takeIf { it.period == PeriodTypeCode.MONTH } ?: return
+        val request = Triple(target.period, target.date, transferMode)
+        if (request == Triple(period, date, transferMode)) return
+        if (failedPeriodRequest == request) {
+            retryPeriodChange()
+            return
+        }
+        val changedType = period != target.period
+        period = target.period
+        date = target.date
+        _state.update { it.copy(sheet = null) }
+        clearRestriction(periodsChanged = changedType)
+        tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to target.period.code))
+        load()
     }
 
     /** Exposure (FIN-9): the block was drawn — once per block id and response. */
