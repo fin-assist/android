@@ -42,7 +42,7 @@ class ConnectionFailureHintTest {
                     key(attempt) {
                         val retry: () -> Unit = { retries++; attempt++ }
                         if (notice) {
-                            ErrorMessage(AppError.Offline().presentation, "unused fallback", onRetry = retry)
+                            ErrorMessage(AppError.Offline().presentation, OUTCOME, onRetry = retry)
                         } else {
                             ConnectionFailureState { PfButton("Повторить", onClick = retry) }
                         }
@@ -57,12 +57,13 @@ class ConnectionFailureHintTest {
                 notice = showNotice
                 attempt++
             }
-            val vpnText = if (showNotice) "$TITLE. $VPN_HINT" else VPN_HINT
+            compose.onNodeWithText(TITLE, useUnmergedTree = true).assertIsDisplayed()
+            val vpnText = if (showNotice) "$OUTCOME\n$VPN_HINT" else VPN_HINT
             compose.onNodeWithText(vpnText, useUnmergedTree = true).assertIsDisplayed()
             compose.onNodeWithText(INTERNET_HINT, substring = true, useUnmergedTree = true).assertDoesNotExist()
             compose.runOnIdle { environment = ConnectionEnvironment.OTHER_NETWORK }
             compose.onNodeWithText("Повторить", useUnmergedTree = true).performClick()
-            val internetText = if (showNotice) "$TITLE. $INTERNET_HINT" else INTERNET_HINT
+            val internetText = if (showNotice) "$OUTCOME\n$INTERNET_HINT" else INTERNET_HINT
             compose.onNodeWithText(internetText, useUnmergedTree = true).assertIsDisplayed()
             compose.onNodeWithText(VPN_HINT, substring = true, useUnmergedTree = true).assertDoesNotExist()
         }
@@ -70,6 +71,7 @@ class ConnectionFailureHintTest {
     }
 
     private companion object {
+        const val OUTCOME = "Согласие не отозвано"
         const val TITLE = "Не удаётся подключиться к серверу"
         const val VPN_HINT = "Попробуйте отключить VPN и повторить подключение"
         const val INTERNET_HINT = "Проверьте интернет и попробуйте ещё раз"

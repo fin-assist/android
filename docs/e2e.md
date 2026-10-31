@@ -871,11 +871,14 @@ Qase19/20/21/43/44/58 and their existing flows retain their mappings. `offline/n
 the common connection title, internet hint and recovery action. `AndroidConnectionEnvironmentReaderTest` checks VPN detection, transport
 changes between reads, no active network, absent capabilities and denied/unavailable system service.
 Pure tests distinguish all four observations and verify that HTTP errors do not become VPN failures.
-`ProfileOfflineVpn`, `ProfileOfflineVpnDark` and `ProfileOffline` are authored DesignCheck fixtures;
+`ProfileOfflineVpn`, `ProfileOfflineVpnDark`, `ProfileOffline`, `DeleteAccountOfflineVpn`,
+`ChatOfflineVpn` and `ImportGuideOfflineVpn` are authored DesignCheck fixtures. Existing
+`DeleteAccountOffline` now uses the actual Offline.presentation. Chat/import fixtures inject UNKNOWN
+for deterministic internet hints; these copy changes follow FIN-396 and differ from older Figma artboards;
 no UI/Maestro/DesignCheck run is claimed. Native `ConnectionFailureHintTest#vpnHintUpdatesAfterRetry`
 (Qase62) asserts the actual reader-to-UI wiring for the full-screen state and ErrorMessage, then switches
 the fake observation before clicking the existing retry action and asserts the internet hint and absence
-of VPN text. It needs no real tunnel. This uses native Compose dependency injection because Maestro
+of VPN text, while retaining the feature outcome that consent was not revoked. It needs no real tunnel. This uses native Compose dependency injection because Maestro
 cannot replace a CompositionLocal; no production or e2e application hook was added. The native test is
 authored and compiled only, not executed under the current instruction.
 

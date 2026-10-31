@@ -31,6 +31,13 @@ read `ConnectivityManager` locally while presenting that failure. When the activ
 `TRANSPORT_VPN`, the hint suggests trying without VPN. Other networks, no active network, missing
 capabilities or a denied system observation use the ordinary internet hint. This observation proves
 neither the server route nor the cause of a failure; a per-app VPN says nothing about a browser.
+Connection notices preserve the feature's controlled outcome text (for example, consent not revoked,
+account not deleted, category unchanged) below the common connection title and next to the local hint.
+Full-screen states have no mutation outcome. Profile theme retries clear only an error whose typed origin
+is THEME; unrelated read, limit, statement or consent errors keep their presentation and retry context.
+Assistant consent document/PUT errors use this same presentation. Chat send/stream failures keep their
+existing offline composer panel, which uses the common local hint; history SSE drops retain automatic
+reopening and do not produce a terminal offline notice.
 No request is prevented, sent or retried by this reader. Each new attempt/error presentation checks
 the current environment; feature callbacks retain their original idempotency and retry gates.
 `LocalConnectionEnvironmentReader` supplies deterministic presentation fixtures without changing a

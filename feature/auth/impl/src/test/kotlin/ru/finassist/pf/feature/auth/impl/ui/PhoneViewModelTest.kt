@@ -148,6 +148,7 @@ class PhoneViewModelTest {
         auth.failure = AppError.Offline()
         val vm = submitted()
         assertEquals("Нет сети — проверьте интернет и повторите", vm.state.value.error)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertFalse(vm.state.value.busy)
         assertTrue(tracked.isEmpty(), "a failed request is not tracked")
 
@@ -198,7 +199,9 @@ class PhoneViewModelTest {
 
     @Test fun `a server error is the generic error`() {
         auth.failure = AppError.Server(503)
-        assertEquals("Не получилось отправить номер. Попробуйте ещё раз", submitted().state.value.error)
+        val state = submitted().state.value
+        assertEquals("Не получилось отправить номер. Попробуйте ещё раз", state.error)
+        assertEquals(false, state.errorPresentation?.connectionFailure)
     }
 
     @Test fun `the number typed before is restored with the cursor at the end`() {
@@ -341,6 +344,7 @@ class PhoneViewModelTest {
         val vm = PhoneViewModel(auth, flow, tracker, clock, ElapsedClock { 0L })
         vm.setAgeConfirmed(true); vm.onInput(TextFieldValue("9161234567")); vm.setConsentAccepted(true); vm.submit()
         assertTrue(auth.requests.isEmpty()); assertNull(vm.state.value.document)
+        assertTrue(vm.state.value.documentErrorPresentation?.connectionFailure == true)
         auth.documentFailure = null; vm.refreshDocument(); vm.setConsentAccepted(true); vm.submit()
         assertEquals(1, auth.requests.size)
     }

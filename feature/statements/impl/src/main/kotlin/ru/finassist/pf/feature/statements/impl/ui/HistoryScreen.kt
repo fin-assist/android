@@ -164,7 +164,7 @@ class HistoryViewModel @Inject constructor(
                         is ImportEvent.Progress -> Unit
                     } }
             } catch (e: AppError) {
-                _state.update { it.copy(errorPresentation = e.presentation) }
+                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }) }
                 return@launch
             }
             watching.remove(uploadId)

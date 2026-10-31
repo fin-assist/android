@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.statements.impl.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
+import ru.finassist.pf.core.common.error.ConnectionEnvironment
+import ru.finassist.pf.core.common.error.ConnectionEnvironmentReader
+import ru.finassist.pf.core.designsystem.components.LocalConnectionEnvironmentReader
 import ru.finassist.pf.core.common.error.ErrorPresentation
 import ru.finassist.pf.core.common.error.ErrorSeverity
 import ru.finassist.pf.core.common.error.UserMessage
@@ -39,11 +43,14 @@ class UploadDesignCheckTest {
         dark: Boolean = false,
         heightDp: Int = 844,
         popups: Boolean = false,
+        environment: ConnectionEnvironment = ConnectionEnvironment.UNKNOWN,
     ) = DesignCheck.capture(name, dark = dark, heightDp = heightDp, popups = popups) {
-        UploadContent(
-            state, firstRun = false, onBack = {}, onLater = {}, onRetry = {}, onShowFallback = {}, onOpenUrl = {},
-            onPick = {}, onPickAnother = {}, onBackToGuide = {}, onAskCancel = {}, onCancelImport = {}, onRetryUpload = {}, onSupport = {},
-        )
+        CompositionLocalProvider(LocalConnectionEnvironmentReader provides ConnectionEnvironmentReader { environment }) {
+            UploadContent(
+                state, firstRun = false, onBack = {}, onLater = {}, onRetry = {}, onShowFallback = {}, onOpenUrl = {},
+                onPick = {}, onPickAnother = {}, onBackToGuide = {}, onAskCancel = {}, onCancelImport = {}, onRetryUpload = {}, onSupport = {},
+            )
+        }
     }
 
     private val guide = UploadUiState(phase = UploadPhase.Guide(config), config = config)
@@ -68,6 +75,8 @@ class UploadDesignCheckTest {
 
     /** The file did not go out for lack of network: the guide with a notice and «Повторить». */
     @Test fun importGuideOffline() = capture("ImportGuideOffline", more.copy(uploadOffline = true), heightDp = 1040)
+
+    @Test fun importGuideOfflineVpn() = capture("ImportGuideOfflineVpn", more.copy(uploadOffline = true), heightDp = 1040, environment = ConnectionEnvironment.VPN)
 
     @Test fun importError() = capture("ImportError", error(ErrorCodes.WRONG_FORMAT, "statement_09_2026.pdf"))
 

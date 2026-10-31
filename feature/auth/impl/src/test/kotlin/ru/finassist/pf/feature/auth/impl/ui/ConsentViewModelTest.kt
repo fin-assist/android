@@ -65,12 +65,20 @@ class ConsentViewModelTest {
         try {
             val vm = vm(); vm.send()
             assertEquals("Нет сети — проверьте интернет и повторите", vm.state.value.formError)
+            assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
             TimeZone.setDefault(TimeZone.getTimeZone("Pacific/Honolulu"))
             vm.send()
             assertEquals(requests[0], requests[1])
             assertTrue(vm.registered.value)
         } finally { TimeZone.setDefault(zone) }
     }
+    @Test fun `a registration server error is not presented as a connection failure`() {
+        failures += AppError.Server(503)
+        val vm = vm(); vm.send()
+        assertEquals(false, vm.state.value.errorPresentation?.connectionFailure)
+        assertFalse(vm.registered.value)
+    }
+
     @Test fun `missing token or original Start evidence requires a new phone verification`() {
         h.flow.registrationToken = null
         val missingToken = vm(); missingToken.submit()

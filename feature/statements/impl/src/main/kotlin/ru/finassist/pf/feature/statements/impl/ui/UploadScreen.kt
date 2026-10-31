@@ -277,9 +277,11 @@ private fun ColumnScope.Guide(
         PfLink("Не скачивается?", onClick = onShowFallback, modifier = Modifier.testTag(StatementsTags.UPLOAD_FALLBACK))
     }
     if (offline) {
+        val connectionTexts = connectionFailureTexts()
         Spacer(Modifier.height(d.space4))
         PfNotice(
-            connectionFailureTexts().message,
+            title = connectionTexts.title,
+            text = "Файл не загружен. ${connectionTexts.hint}",
             tone = NoticeTone.WARNING,
             alert = true,
             modifier = Modifier.testTag(StatementsTags.UPLOAD_SEND_OFFLINE),

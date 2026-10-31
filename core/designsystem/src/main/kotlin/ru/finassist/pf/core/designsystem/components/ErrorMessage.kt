@@ -23,9 +23,11 @@ fun ErrorMessage(
     onRetry: (() -> Unit)? = null,
     retryModifier: Modifier = Modifier,
 ) {
+    val connectionTexts = if (presentation.connectionFailure) connectionFailureTexts() else null
     Box(modifier) {
         PfNotice(
-            text = if (presentation.connectionFailure) connectionFailureTexts().message else presentation.textOrFallback(fallback, legacySafeText),
+            title = connectionTexts?.title,
+            text = if (connectionTexts != null) "$fallback\n${connectionTexts.hint}" else presentation.textOrFallback(fallback, legacySafeText),
             modifier = Modifier.testTag(when (presentation.severity) {
                 ErrorSeverity.INFO -> ErrorMessageTags.INFO
                 ErrorSeverity.WARNING -> ErrorMessageTags.WARNING

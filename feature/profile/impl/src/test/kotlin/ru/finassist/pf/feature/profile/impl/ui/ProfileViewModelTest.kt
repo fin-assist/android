@@ -550,11 +550,28 @@ class ProfileViewModelTest {
         assertEquals(ZoneId.of("Asia/Vladivostok"), reportZone.current)
     }
 
+    @Test fun `changing theme preserves a failed profile read and its retry banner`() {
+        for (failure in listOf(AppError.Offline(), AppError.Server(503))) {
+            profileApi.getFailure = null
+            val vm = loaded()
+            profileApi.getFailure = failure
+            vm.load()
+            val presentation = vm.state.value.errorPresentation
+            assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+            assertTrue(presentation != null)
+            vm.setTheme(Theme.DARK)
+            assertEquals(presentation, vm.state.value.errorPresentation)
+            assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+            assertNull(vm.state.value.snackbar)
+        }
+    }
+
     @Test fun `a new theme attempt removes the old offline hint before and after success`() {
         val vm = loaded()
         profileApi.updateFailure = AppError.Offline()
         vm.setTheme(Theme.DARK)
         assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertEquals(ProfileErrorOrigin.THEME, vm.state.value.errorOrigin)
         assertTrue(vm.state.value.snackbar != null)
         val pending = CompletableDeferred<Profile>()
         profileApi.updateFailure = null
@@ -619,12 +636,15 @@ class ProfileViewModelTest {
         profileApi.revokeFailure = AppError.Offline()
         vm.revokeConsent()
         assertEquals("Нет сети — согласие не отозвано", vm.state.value.snackbar)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertEquals(ProfileErrorOrigin.CONSENT, vm.state.value.errorOrigin)
         assertEquals(true, vm.state.value.profile?.assistantConsent?.granted)
         assertFalse(vm.state.value.consentBusy)
 
         profileApi.revokeFailure = AppError.Server(500)
         vm.revokeConsent()
         assertEquals("Не получилось. Попробуйте ещё раз", vm.state.value.snackbar)
+        assertEquals(false, vm.state.value.errorPresentation?.connectionFailure)
         assertTrue(tracker.events.none { it.first == Events.ASSISTANT_CONSENT_REVOKED })
 
         vm.consumeSnackbar()
