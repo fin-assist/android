@@ -183,7 +183,7 @@ class ProfileViewModel @Inject constructor(
         val generation = ++themeGeneration
         if (blockedTheme != theme) themeRetryGate.clear()
         blockedTheme = theme
-        _state.update { it.copy(themeSheet = false) }
+        _state.update { it.copy(themeSheet = false, errorPresentation = null, snackbar = null) }
         viewModelScope.launch {
             preferences.setTheme(theme.name.lowercase())
             tracker.track(Events.PROFILE_THEME_CHANGED, mapOf("theme" to theme.name.lowercase()))

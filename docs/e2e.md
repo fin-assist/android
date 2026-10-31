@@ -691,6 +691,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
 | `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; existing «Повторить» after recovery (Qase19, FIN-396) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
+| native `ConnectionFailureHintTest` | fake local reader → VPN text; change observation and explicit retry → internet hint without VPN text, for full-screen state and ErrorMessage (Qase62, FIN-396); Compose dependency injection cannot be driven by Maestro without adding an app hook |
 | native `StatementPickerTest` | upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
 
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
@@ -871,7 +872,12 @@ the common connection title, internet hint and recovery action. `AndroidConnecti
 changes between reads, no active network, absent capabilities and denied/unavailable system service.
 Pure tests distinguish all four observations and verify that HTTP errors do not become VPN failures.
 `ProfileOfflineVpn`, `ProfileOfflineVpnDark` and `ProfileOffline` are authored DesignCheck fixtures;
-no UI/Maestro/DesignCheck run is claimed.
+no UI/Maestro/DesignCheck run is claimed. Native `ConnectionFailureHintTest#vpnHintUpdatesAfterRetry`
+(Qase62) asserts the actual reader-to-UI wiring for the full-screen state and ErrorMessage, then switches
+the fake observation before clicking the existing retry action and asserts the internet hint and absence
+of VPN text. It needs no real tunnel. This uses native Compose dependency injection because Maestro
+cannot replace a CompositionLocal; no production or e2e application hook was added. The native test is
+authored and compiled only, not executed under the current instruction.
 
 Not covered yet: a real system VPN route and switching its tunnel during a failed request. The in-process
 mock does not traverse a VPN; Maestro cannot create a configured VPN tunnel/provider on its own.

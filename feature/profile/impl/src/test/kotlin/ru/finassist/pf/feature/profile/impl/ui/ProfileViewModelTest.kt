@@ -550,6 +550,24 @@ class ProfileViewModelTest {
         assertEquals(ZoneId.of("Asia/Vladivostok"), reportZone.current)
     }
 
+    @Test fun `a new theme attempt removes the old offline hint before and after success`() {
+        val vm = loaded()
+        profileApi.updateFailure = AppError.Offline()
+        vm.setTheme(Theme.DARK)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertTrue(vm.state.value.snackbar != null)
+        val pending = CompletableDeferred<Profile>()
+        profileApi.updateFailure = null
+        profileApi.updateReply = { pending.await() }
+        vm.setTheme(Theme.LIGHT)
+        assertNull(vm.state.value.errorPresentation)
+        assertNull(vm.state.value.snackbar)
+        pending.complete(profile(theme = Theme.LIGHT))
+        assertNull(vm.state.value.errorPresentation)
+        assertNull(vm.state.value.snackbar)
+        assertEquals("light", localTheme())
+    }
+
     @Test fun `a chosen theme closes the sheet, is saved locally and on the server`() {
         val vm = vm()
         vm.openThemeSheet(true)
