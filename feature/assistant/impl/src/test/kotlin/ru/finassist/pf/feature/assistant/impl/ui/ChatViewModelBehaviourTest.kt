@@ -1652,27 +1652,29 @@ class ChatViewModelBehaviourTest {
     }
 
 
-    @Test fun `another voice question changes the refused Ask context before its gate is checked`() {
-        api.askOutcomes += voiceAskRefusal(false)
+    @Test fun `another edited question changes the refused Ask context before its gate is checked`() {
+        api.askOutcomes += askRefusal(false)
         api.askOutcomes += askResponse()
         val vm = newVm()
         sendQuestion(vm, "Сколько потрачено на такси?")
         val original = api.asks.single().key
-        vm.send(voiceText = "Сколько потрачено на продукты?")
+        vm.setDraft("Сколько потрачено на продукты?")
+        vm.send()
         assertEquals(2, api.asks.size)
         assertEquals("Сколько потрачено на продукты?", api.asks.last().request.text)
         assertTrue(original != api.asks.last().key)
     }
 
-    @Test fun `the same trimmed voice question preserves false denial and its pending key`() {
-        api.askOutcomes += voiceAskRefusal(false)
+    @Test fun `the same trimmed edited question preserves false denial and its pending key`() {
+        api.askOutcomes += askRefusal(false)
         val saved = SavedStateHandle()
         val vm = newVm(saved)
         val question = "Сколько потрачено на такси?"
         sendQuestion(vm, question)
         val original = api.asks.single().key
         val pendingBefore = saved.get<String>("chat.pending.key")
-        vm.send(voiceText = "  $question ")
+        vm.setDraft("  $question ")
+        vm.send()
         advance(60_000)
         assertEquals(1, api.asks.size)
         assertEquals("  $question ", vm.state.value.draft)
@@ -1682,45 +1684,50 @@ class ChatViewModelBehaviourTest {
         assertEquals(original.value, pendingBefore)
     }
 
-    @Test fun `a new voice question does not inherit the previous question wait`() {
-        api.askOutcomes += voiceAskRefusal(true)
+    @Test fun `a new edited question does not inherit the previous question wait`() {
+        api.askOutcomes += askRefusal(true)
         api.askOutcomes += askResponse()
         val vm = newVm()
         sendQuestion(vm, "Сколько потрачено на такси?")
         assertFalse(vm.state.value.askRetryReady)
         val original = api.asks.single().key
-        vm.send(voiceText = "Сколько потрачено на продукты?")
+        vm.setDraft("Сколько потрачено на продукты?")
+        vm.send()
         assertEquals(2, api.asks.size, "a different request is not a resend of the rate-limited request")
         assertTrue(original != api.asks.last().key)
     }
 
-    @Test fun `same voice preserves the original wait deadline and replays its exact key`() {
-        api.askOutcomes += voiceAskRefusal(true)
+    @Test fun `same draft preserves the original wait deadline and replays its exact key`() {
+        api.askOutcomes += askRefusal(true)
         api.askOutcomes += askResponse()
         val vm = newVm()
         val question = "Сколько потрачено на такси?"
         sendQuestion(vm, question)
         val original = api.asks.single().key
         advance(2_000)
-        vm.send(voiceText = " $question  ")
+        vm.setDraft(" $question  ")
+        vm.send()
         assertEquals(1, api.asks.size)
         advance(999)
-        vm.send(voiceText = question)
+        vm.setDraft(question)
+        vm.send()
         assertEquals(1, api.asks.size)
         advance(1)
-        vm.send(voiceText = " $question ")
+        vm.setDraft(" $question ")
+        vm.send()
         assertEquals(2, api.asks.size)
         assertEquals(original, api.asks.last().key)
         assertEquals(question, api.asks.last().request.text)
     }
 
-    @Test fun `a voice result while an Ask is busy stays in the draft after the old Ask fails`() {
+    @Test fun `an edited draft while an Ask is busy stays in the draft after the old Ask fails`() {
         val pending = CompletableDeferred<Unit>()
         api.askGate = pending
-        api.askOutcomes += voiceAskRefusal(false)
+        api.askOutcomes += askRefusal(false)
         val vm = newVm()
         sendQuestion(vm, "Сколько потрачено на такси?")
-        vm.send(voiceText = "Сколько потрачено на продукты?")
+        vm.setDraft("Сколько потрачено на продукты?")
+        vm.send()
         assertEquals(1, api.asks.size)
         assertEquals("Сколько потрачено на продукты?", vm.state.value.draft)
         pending.complete(Unit)
@@ -1736,14 +1743,15 @@ class ChatViewModelBehaviourTest {
         assertTrue(api.asks.first().key != api.asks.last().key)
     }
 
-    @Test fun `a voice result while an Ask is busy survives old success with the usual length bound`() {
+    @Test fun `an edited draft while an Ask is busy survives old success with the usual length bound`() {
         val pending = CompletableDeferred<Unit>()
         api.askGate = pending
         api.askOutcomes += askResponse()
         val vm = newVm()
         sendQuestion(vm, "Сколько потрачено на такси?")
         val recognized = "б".repeat(2_100)
-        vm.send(voiceText = recognized)
+        vm.setDraft(recognized)
+        vm.send()
         assertEquals("б".repeat(2_000), vm.state.value.draft)
         assertEquals(1, api.asks.size)
         pending.complete(Unit)
@@ -1753,7 +1761,31 @@ class ChatViewModelBehaviourTest {
         assertFalse(vm.state.value.sending)
     }
 
-    private fun voiceAskRefusal(retryable: Boolean) = AppError.RateLimited(null, 3,
+    @Test fun `dictation appends to the draft without sending or spending a question`() {
+        val vm = newVm()
+        vm.setDraft("  Мои расходы")
+        vm.appendVoiceText(" на такси ")
+        assertEquals("  Мои расходы на такси", vm.state.value.draft)
+        assertTrue(api.asks.isEmpty())
+        assertFalse(vm.state.value.sending)
+    }
+
+    @Test fun `dictation respects existing whitespace empty input and the draft length bound`() {
+        val vm = newVm()
+        vm.appendVoiceText("  ")
+        assertEquals("", vm.state.value.draft)
+        vm.appendVoiceText("такси")
+        assertEquals("такси", vm.state.value.draft)
+        vm.setDraft("такси ")
+        vm.appendVoiceText("за месяц")
+        assertEquals("такси за месяц", vm.state.value.draft)
+        vm.setDraft("а".repeat(1998))
+        vm.appendVoiceText("такси")
+        assertEquals("а".repeat(1998) + " т", vm.state.value.draft)
+        assertTrue(api.asks.isEmpty())
+    }
+
+    private fun askRefusal(retryable: Boolean) = AppError.RateLimited(null, 3,
         ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = retryable,
             timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0)))
 

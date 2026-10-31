@@ -365,9 +365,16 @@ class ChatViewModel @Inject constructor(
         _state.update { it.copy(draft = text.take(MAX_LENGTH), errorPresentation = null, requestRetryable = null, askBlocked = false, sendFailed = false, recovery = null) }
     }
 
-    /** Sends the draft (or [voiceText] right away — voice input is sent immediately, api.md / mvp-scope). */
-    fun send(voiceText: String? = null) {
-        voiceText?.let(::setDraft) // voice is the same bounded, normalized user-input context as typing
+    /** Dictation only edits the draft; sending remains a separate user action. */
+    fun appendVoiceText(text: String) {
+        val recognized = text.trim()
+        if (recognized.isEmpty()) return
+        val draft = _state.value.draft
+        val separator = if (draft.isEmpty() || draft.last().isWhitespace()) "" else " "
+        setDraft(draft + separator + recognized)
+    }
+
+    fun send() {
         val text = _state.value.draft.trim()
         if (!askGate.isReady() || _state.value.consentRequired || text.isEmpty() || _state.value.sending || _state.value.generating || blockedAskText == text) return
         val key = pending?.takeIf { it.first == text }?.second ?: IdempotencyKey.random(elapsedClock)
@@ -450,7 +457,7 @@ class ChatViewModel @Inject constructor(
         _state.update { it.copy(offline = false, sendFailed = false) }
         if (_state.value.items.isEmpty() && !_state.value.loading) load()
         resumeStreams()
-        pending?.first?.let { send(it) }
+        pending?.first?.let { setDraft(it); send() }
     }
 
     /** Reopens the corrective screen without sending a denied request again. */
@@ -513,7 +520,8 @@ class ChatViewModel @Inject constructor(
                 blockedAskText = null
                 askGate.clear()
                 _state.update { it.copy(recovery = null, askBlocked = false, sendFailed = false, offline = false, errorPresentation = null) }
-                send(text)
+                setDraft(text)
+                send()
             }
             ChatRecoveryTarget.RETRY_ANSWER -> {
                 val id = recovery.answerId ?: return

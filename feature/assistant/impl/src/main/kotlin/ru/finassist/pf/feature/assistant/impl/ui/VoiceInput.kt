@@ -1,7 +1,6 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -10,100 +9,150 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.flow.StateFlow
 
-/** Voice input handle: [start] begins listening, [listening] drives the «Слушаю…» status. */
-class VoiceInput(val start: () -> Unit, private val listeningState: MutableState<Boolean>) {
-    val listening: Boolean get() = listeningState.value
-}
+internal class VoiceInput(
+    val state: StateFlow<VoiceState>,
+    val start: () -> Unit,
+    val finish: () -> Unit,
+    val cancel: () -> Unit,
+)
 
 /**
- * Speech to text on the device (mvp-scope: recognition on device, the result is sent at once).
- *
- * Android 13+ with an on-device model: `SpeechRecognizer.createOnDeviceSpeechRecognizer` — audio never leaves
- * the phone (needs RECORD_AUDIO). Otherwise the system recognizer activity with `EXTRA_PREFER_OFFLINE`: the
- * best available; whether it stays offline is up to the device's recognizer.
- *
- * `isOnDeviceRecognitionAvailable` only says the service exists, not that a ru-RU model is installed: when the
- * on-device recognizer fails for such a reason, this attempt and the following ones go to the system activity.
+ * Prefer an on-device model; otherwise use the system recognition service with EXTRA_PREFER_OFFLINE.
+ * The system service decides whether its recognition stays offline. Only its final text enters the draft.
  */
 @Composable
-fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
+internal fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
     val context = LocalContext.current
+    val view = LocalView.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val result by rememberUpdatedState(onResult)
-    val listening = remember { mutableStateOf(false) }
+    val session = remember { VoiceSession() }
+    val recognizer = remember { mutableStateOf<SpeechRecognizer?>(null) }
+    val activeId = remember { mutableStateOf<Int?>(null) }
+    val permissionId = remember { mutableStateOf<Int?>(null) }
     val onDeviceFailed = remember { mutableStateOf(false) }
-    fun intent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-        .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-    val systemActivity = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
-        if (r.resultCode == Activity.RESULT_OK) {
-            r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.takeIf { it.isNotBlank() }?.let(result)
-        }
+
+    fun release() {
+        recognizer.value?.destroy()
+        recognizer.value = null
     }
-    val recognizer = remember(context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
-            SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-        } else {
-            null
-        }
+    fun cancel() {
+        session.cancel()
+        activeId.value = null
+        release()
     }
-    DisposableEffect(recognizer) {
-        recognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onResults(results: Bundle?) {
-                listening.value = false
-                results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.takeIf { it.isNotBlank() }?.let(result)
-            }
-            override fun onError(error: Int) {
-                listening.value = false
-                // Silence or an unrecognised phrase is the user's turn to retry; anything else is the recognizer.
-                if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT &&
-                    error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS
-                ) {
-                    onDeviceFailed.value = true
-                    runCatching { systemActivity.launch(intent()) }
+    fun listen(id: Int) {
+        if (!session.accepts(id)) return
+        val onDevice = !onDeviceFailed.value && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+        try {
+            val speech = if (onDevice) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+                else if (SpeechRecognizer.isRecognitionAvailable(context)) SpeechRecognizer.createSpeechRecognizer(context)
+                else {
+                    session.fail(id, VoiceFailure.UNAVAILABLE)
+                    return
                 }
-            }
-            override fun onReadyForSpeech(params: Bundle?) = Unit
-            override fun onBeginningOfSpeech() = Unit
-            override fun onRmsChanged(rmsdB: Float) = Unit
-            override fun onBufferReceived(buffer: ByteArray?) = Unit
-            override fun onEndOfSpeech() = Unit
-            override fun onPartialResults(partialResults: Bundle?) = Unit
-            override fun onEvent(eventType: Int, params: Bundle?) = Unit
-        })
-        onDispose { recognizer?.destroy() }
-    }
-    fun listenOnDevice() {
-        listening.value = true
-        recognizer?.startListening(intent())
+            recognizer.value = speech
+            speech.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    if (session.ready(id)) view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                }
+                override fun onRmsChanged(rmsdB: Float) = session.level(id, rmsdB)
+                override fun onEndOfSpeech() { session.finish(id) }
+                override fun onResults(results: Bundle?) {
+                    if (!session.accepts(id)) return
+                    val text = session.result(id, results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull())
+                    release()
+                    text?.let(result)
+                }
+                override fun onError(error: Int) {
+                    if (!session.accepts(id)) return
+                    val failure = when (error) {
+                        SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> VoiceFailure.NO_SPEECH
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> VoiceFailure.PERMISSION
+                        else -> VoiceFailure.RECOGNITION
+                    }
+                    // A service may exist without a Russian model. Offer the system provider on the next attempt.
+                    if (onDevice && failure == VoiceFailure.RECOGNITION) onDeviceFailed.value = true
+                    session.fail(id, failure)
+                    release()
+                }
+                override fun onBeginningOfSpeech() = Unit
+                override fun onBufferReceived(buffer: ByteArray?) = Unit
+                override fun onPartialResults(partialResults: Bundle?) = Unit
+                override fun onEvent(eventType: Int, params: Bundle?) = Unit
+            })
+            speech.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+                .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true))
+        } catch (_: SecurityException) {
+            session.fail(id, VoiceFailure.PERMISSION)
+            release()
+        } catch (_: RuntimeException) {
+            if (onDevice) onDeviceFailed.value = true
+            session.fail(id, VoiceFailure.UNAVAILABLE)
+            release()
+        }
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) listenOnDevice()
+        val id = permissionId.value
+        permissionId.value = null
+        if (id != null && session.accepts(id)) {
+            if (granted) listen(id) else session.fail(id, VoiceFailure.PERMISSION)
+        }
     }
-    return remember(recognizer) {
-        VoiceInput(
-            start = {
-                when {
-                    recognizer == null || onDeviceFailed.value -> runCatching { systemActivity.launch(intent()) }
-                    hasMic(context) -> listenOnDevice()
-                    else -> permission.launch(Manifest.permission.RECORD_AUDIO)
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) cancel() }
+        lifecycle.addObserver(observer)
+        onDispose {
+            lifecycle.removeObserver(observer)
+            cancel()
+        }
+    }
+    return VoiceInput(
+        state = session.state,
+        start = {
+            // Wait for the previous permission dialog even when its session was cancelled.
+            if (permissionId.value == null) {
+                session.begin()?.let { id ->
+                    activeId.value = id
+                    if (hasMic(context)) listen(id) else {
+                        permissionId.value = id
+                        permission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
                 }
-            },
-            listeningState = listening,
-        )
-    }
+            }
+        },
+        finish = {
+            activeId.value?.let { id ->
+                if (session.finish(id)) {
+                    try { recognizer.value?.stopListening() } catch (_: RuntimeException) {
+                        session.fail(id, VoiceFailure.RECOGNITION)
+                        release()
+                    }
+                }
+            }
+        },
+        cancel = ::cancel,
+    )
 }
 
 private fun hasMic(context: Context) =

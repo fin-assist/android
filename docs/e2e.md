@@ -705,7 +705,14 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
 
-Not covered yet: voice input (needs a speech recognizer on the emulator), biometrics (needs an enrolled
+Not covered yet: voice input ([PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69), manual, FIN-404: the CI emulator has no installed Russian speech-recognition service/model;
+Maestro cannot produce microphone audio or recognizer callbacks). The preparation → actual `onReadyForSpeech`
+→ listening/level → recognition/error panel, finish/cancel/back/background, denied permission and on-device-to-system
+retry need a device with that service. Cancellation and errors retain the original draft; successful final text is
+appended and requires manual sending. `VoiceSessionTest` covers callback order, cancellation/late callbacks,
+repeated actions, silence/errors and sound levels; `ChatViewModelBehaviourTest` covers append/length bounds and
+absence of an automatic Ask; `ChatDesignCheckTest` renders all panel states and dark listening.
+Biometrics (needs an enrolled
 fingerprint), custom date ranges in search,
 links inside a sentence — the registration terms and privacy policy, «Как мы защищаем данные», «разобрать» and
 «Подробнее» on the import result, «Подробнее» on «Аналитика» (a link inside a text node has no own view or
