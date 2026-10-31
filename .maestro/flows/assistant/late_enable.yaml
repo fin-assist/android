@@ -81,6 +81,8 @@ tags:
       id: "ds.tab.assistant"
       selected: true
     timeout: 10000
+- assertVisible:
+    id: "assistant.chat"
 - assertNotVisible:
     id: "assistant.question"
 - runFlow:
