@@ -705,6 +705,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | native `VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion` | actual ChatScreen/VoiceInput requests RECORD_AUDIO → real system denial through UiAutomation → clear permission notice → close → original draft, quota=5 and Ask=0 (Qase72, FIN-404); authored, compiled only; no speech service needed |
 | native `PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport` | wrong PIN: full error/dots, keypad and recovery action at 360×640 dp (FIN-389, [Qase77](https://app.qase.io/case/PLAINFIN-77)); native geometry complements Maestro cases 5/18 |
 | native `PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont` | setup NEW/REPEAT, change OLD/NEW/REPEAT, unlock/confirm without error at 360×640 dp / font2 / insets48+48: automatic dots visibility, first digit/delete/back/footer; user scroll survives unchanged-range recomposition ([Qase78](https://app.qase.io/case/PLAINFIN-78), FIN-389) |
+| native `PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag` | real held down/move gesture spans error recomposition; later range/error still auto-reveal after UserInput cancellation, with drag/range/no-clamping preconditions ([Qase79](https://app.qase.io/case/PLAINFIN-79), FIN-389) |
 | native `ConnectionFailureHintTest` | fake local reader → VPN text; change observation and explicit retry → internet hint without VPN text, for full-screen state and ErrorMessage (Qase62, FIN-396); Compose dependency injection cannot be driven by Maestro without adding an app hook |
 | native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
 | native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
@@ -713,11 +714,6 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
-
-Not covered yet (FIN-389): deterministic overlap of UserInput ownership of the private scroll mutex
-and a measurement-triggered automatic scroll. The native suite observes semantics and completed scroll
-actions, not mutex ownership; cancellation behavior was verified in the resolved library implementations.
-See [the passcode verification limits](#small-passcode-viewport-fin-389). No production synchronization hook was added.
 
 Not covered yet: voice input ([PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69), manual, FIN-404: the CI emulator has no controlled Russian speech/audio or deterministic recognition-service fixture;
 Maestro cannot produce recognizer callbacks). The preparation → actual `onReadyForSpeech`
@@ -1073,11 +1069,13 @@ After automatic visibility/action checks, a separate manual scroll-up assertion 
 recomposition with an unchanged range respects the user’s position. The regression scope is portrait
 640–760 dp, font scales 1–2 and system insets 24–48 dp; the regular 390×844 dp design checks remain the baseline.
 
-The range observer uses `collectLatest`: Compose `foundation-android:1.7.8` cancels a Default-priority
-scroll when UserInput owns its internal `MutatorMutex`. Each scroll action runs in a child coroutine, so
-its cancellation does not finish collection of subsequent ranges (`kotlinx-coroutines-core-jvm:1.11.0`).
-The native tests above cover geometry and manual scroll preservation; they do not deterministically
-assert this concurrency overlap. Their completed semantic `ScrollBy` action neither holds nor exposes
-the internal UserInput mutex, and gesture injection provides no ownership acknowledgement for the
-measurement-triggered scroll. This lifecycle check is grounded in the resolved library implementations;
-no production synchronization hook was introduced solely to force the race.
+The range observer uses `collectLatest`: a Default-priority scroll may yield to UserInput while collection
+must survive. `PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag` ([Qase79](https://app.qase.io/case/PLAINFIN-79))
+covers this with real `down` and `moveBy` events without `up`, then recomposes the screen during the held gesture.
+The positive initial range/end position and reduced value before any state change acknowledge an active drag;
+a changed measured range while the pointer is down makes the automatic scroll yield. A stationary event-time
+sample and `up` avoid a fling. The next range must reveal the end again, with an explicit guard against clamping
+masquerading as recovery; the next error also passes the strict geometry helper. The plain-`collect` df2a1da8
+baseline failed on that later range (expected 52 px, actual 0), while `collectLatest` passed. No production hook,
+private mutex access, synthetic cancellation or wall-clock sleep is involved. The previous Not-covered claim
+was disproved by this real gesture experiment and removed.

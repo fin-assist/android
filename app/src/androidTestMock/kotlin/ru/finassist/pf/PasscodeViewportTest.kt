@@ -7,6 +7,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -196,6 +198,78 @@ class PasscodeViewportTest {
         compose.runOnIdle { assertEquals(0f, range.value(), 0.01f); entered.value = "1" }
         compose.waitForIdle()
         compose.runOnIdle { assertEquals("Do not override a user's scroll without a new range", 0f, range.value(), 0.01f) }
+    }
+
+    @Test fun rangeObserverSurvivesHeldUserDrag() {
+        val error = mutableStateOf<String?>(null)
+        var density = 1f
+        compose.setContent {
+            density = LocalDensity.current.density
+            CompositionLocalProvider(
+                LocalDensity provides Density(density, 2f),
+                LocalPfSystemBars provides PfSystemBars(
+                    statusBars = WindowInsets(top = 48.dp), navigationBars = WindowInsets(bottom = 48.dp),
+                ),
+            ) {
+                PfTheme(darkTheme = false) {
+                    Box(Modifier.requiredSize(360.dp, 640.dp).testTag("test.viewport")) {
+                        ConfirmPasscodeContent(
+                            ConfirmUiState(entered = "1111", error = error.value),
+                            onBack = {}, onDigit = {}, onDelete = {}, onBiometric = {}, onAskForgot = {}, onForgot = {},
+                        )
+                    }
+                }
+            }
+        }
+        assertGeometry(density, "before held drag", 48, "ds.passcode.dots", listOf("ds.back", "applock.confirm.forgot"))
+        val introduction = compose.onNode(hasScrollAction())
+        val range = introduction.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+        var initialMaximum = 0f
+        compose.runOnIdle {
+            initialMaximum = range.maxValue()
+            assertTrue("The fixture must overflow before the gesture", initialMaximum > 0f)
+            assertEquals("The observer initially reveals the end", initialMaximum, range.value(), 0.5f)
+        }
+        var fingerDown = false
+        try {
+            introduction.performTouchInput {
+                down(center)
+                fingerDown = true
+                moveBy(Offset(0f, 40f * density), delayMillis = 32)
+                moveBy(Offset(0f, 40f * density), delayMillis = 32)
+            }
+            compose.runOnIdle {
+                // Changed scroll value acknowledges an active drag; the pointer remains down across recomposition.
+                assertTrue("The real UserInput drag must change scroll value before any state change", range.value() < initialMaximum)
+                error.value = WRONG
+            }
+            compose.waitForIdle()
+            compose.runOnIdle {
+                assertTrue("The error must publish a new measured range while the finger stays down", range.maxValue() > initialMaximum)
+                assertTrue("The Default auto-scroll must yield to the held UserInput gesture", range.value() < initialMaximum)
+            }
+            introduction.performTouchInput {
+                // A stationary sample avoids a fling after release; no wall-clock sleep or internal mutex hook.
+                moveBy(Offset.Zero, delayMillis = 200)
+                up()
+                fingerDown = false
+            }
+            compose.waitForIdle()
+            compose.runOnIdle {
+                // This rules out automatic clamping masquerading as a recovered observer on the next range.
+                assertTrue("The released scroll position must remain below the next target", range.value() < initialMaximum)
+                error.value = null
+            }
+            compose.waitForIdle()
+            compose.runOnIdle {
+                assertEquals("Removing the error restores the initial range", initialMaximum, range.maxValue(), 0.5f)
+                assertEquals("A later range must still be collected after UserInput cancellation", range.maxValue(), range.value(), 0.5f)
+                error.value = WRONG
+            }
+            assertFullyVisible(2, density, "next verification after held drag", 48)
+        } finally {
+            if (fingerDown) introduction.performTouchInput { cancel() }
+        }
     }
 
     private fun assertFullyVisible(mode: Int, density: Float, context: String, inset: Int) {
