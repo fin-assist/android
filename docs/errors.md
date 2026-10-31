@@ -154,3 +154,8 @@ design-check execution is needed for this silent logic.
 FIN-365 phone restart: «Начать вход заново» abandons a terminal/unknown-age local key, resets 14+/PD choices and
 reloads the document. It performs no POST. A captured phone-429 wait survives restart; accepting the new choices
 cannot enable submission before that server wait ends. The backend independently enforces its phone fence.
+
+FIN-397: a different history `before_id` is a new request input. `RequestRetryGate.clearOriginalRefusal()`
+ends the old input's explicit refusal without changing the captured endpoint deadline, including an
+unresolved absolute wait. `recordEndpointWait` accepts only the wait from a stale-input reply and never
+shortens an existing one. An obsolete latest-read generation does not record into the newer read's gate.

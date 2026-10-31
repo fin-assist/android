@@ -1,0 +1,91 @@
+appId: ru.finassist.pf.mock.e2e
+name: Позднее включение помощника сохраняет доступ через отключение и смену конфигурации
+tags:
+  - assistant
+  - flags
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?flag.assistant=false"
+- runFlow: ../../subflows/fast_login.yaml
+- assertNotVisible:
+    id: "ds.tab.assistant"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?flag.assistant=true"
+# Analytics is first created after the remote enable and offers a real assistant link.
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 15000
+- tapOn:
+    id: "analytics.ask"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Kaspersky"
+- hideKeyboard
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?flag.assistant=false"
+- setOrientation: LANDSCAPE_LEFT
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertVisible: "Kaspersky"
+- assertNotVisible:
+    id: "assistant.question"
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertVisible: "Kaspersky"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- tapOn:
+    id: "ds.back"
+- assertVisible:
+    id: "assistant.chat"
+- assertVisible: "Kaspersky"
+- assertNotVisible:
+    id: "assistant.question"
+# Return from the nested chat before resetting the flag: the admitted tab must now exist under false.
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "ds.tab.analytics"
+      selected: true
+    timeout: 10000
+- assertVisible:
+    id: "ds.tab.assistant"
+- tapOn:
+    id: "ds.tab.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "ds.tab.assistant"
+      selected: true
+    timeout: 10000
+- assertVisible:
+    id: "assistant.chat"
+- assertNotVisible:
+    id: "assistant.question"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?flag.assistant=true"
