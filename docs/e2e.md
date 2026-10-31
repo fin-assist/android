@@ -703,6 +703,9 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; existing «Повторить» after recovery (Qase19, FIN-396) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion` | actual ChatScreen/VoiceInput requests RECORD_AUDIO → real system denial through UiAutomation → clear permission notice → close → original draft, quota=5 and Ask=0 (Qase72, FIN-404); authored, compiled only; no speech service needed |
+| native `PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport` | wrong PIN: full error/dots, keypad and recovery action at 360×640 dp (FIN-389, [Qase77](https://app.qase.io/case/PLAINFIN-77)); native geometry complements Maestro cases 5/18 |
+| native `PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont` | setup NEW/REPEAT, change OLD/NEW/REPEAT, unlock/confirm without error at 360×640 dp / font2 / insets48+48: automatic dots visibility, first digit/delete/back/footer; user scroll survives unchanged-range recomposition ([Qase78](https://app.qase.io/case/PLAINFIN-78), FIN-389) |
+| native `PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag` | real held down/move gesture spans error recomposition; later range/error still auto-reveal after UserInput cancellation, with drag/range/no-clamping preconditions ([Qase79](https://app.qase.io/case/PLAINFIN-79), FIN-389) |
 | native `ConnectionFailureHintTest` | fake local reader → VPN text; change observation and explicit retry → internet hint without VPN text, for full-screen state and ErrorMessage (Qase62, FIN-396); Compose dependency injection cannot be driven by Maestro without adding an app hook |
 | native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
 | native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
@@ -1045,3 +1048,34 @@ AnalyticsPeriodAndDismissalErrors artboard and a VM test cover the combined stat
 cannot bypass the period gate during Retry-After or an original-request refusal.
 
 FIN-411 adds the separate «Последние 12 месяцев» / «Последние 3 месяца» choices. Mock ranges use the union of completed upload coverage, including empty statements; `rolling_year`/`rolling_quarter` remain singleton keys, with exact edge facts and missing coverage kept distinct from zero. The calendar month action uses the full YYYY-MM key even when a point is clipped. Qase76 and rolling_periods are authored without UI execution. Canonical contract: fin-assist/contracts d827664 (FIN-413); the complete calculation and OpenAPI corpus is synchronized to that immutable revision after FIN-398/400/403 (PR239) integration; no test exclusions were added.
+
+### Small passcode viewport (FIN-389)
+
+`PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport` ([PLAINFIN-77](https://app.qase.io/case/PLAINFIN-77))
+checks all three error modes at heights 640/720/760 dp, font scales 1/1.5/2 and system insets 24/24 or 48/48 dp
+(54 combinations), including the longest last-attempt text. Error appearance and remeasurement with the same
+error must reveal it automatically, without a test-driven scroll. Maestro can find a clipped text node,
+so the native test additionally verifies text layout overflow and compares full/visible bounds of the error, dots,
+keys and footer; it also clicks digit/delete/forgot actions. Existing Maestro cases 5 and 18 cover the real wrong-PIN
+transitions and recovery. The body measures space left by the actual header and system bars; compact keys fit both the 56 dp minimum
+and the scaled digit line height. The 390×844 design-check layout keeps its original sizes. At larger text
+sizes, only the introductory area scrolls; its measured range automatically reveals the dots/error while the
+keypad stays fixed. The test compares keypad geometry before/after error and checks every digit/delete/footer.
+
+`PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont` ([Qase78](https://app.qase.io/case/PLAINFIN-78))
+checks all seven error-free setup/change/unlock/confirmation states at the supported portrait boundary
+360×640 dp, font scale 2 and 48/48 dp bars. The range observer reveals dots even without an error.
+After automatic visibility/action checks, a separate manual scroll-up assertion verifies that a digit-only
+recomposition with an unchanged range respects the user’s position. The regression scope is portrait
+640–760 dp, font scales 1–2 and system insets 24–48 dp; the regular 390×844 dp design checks remain the baseline.
+
+The range observer uses `collectLatest`: a Default-priority scroll may yield to UserInput while collection
+must survive. `PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag` ([Qase79](https://app.qase.io/case/PLAINFIN-79))
+covers this with real `down` and `moveBy` events without `up`, then recomposes the screen during the held gesture.
+The positive initial range/end position and reduced value before any state change acknowledge an active drag;
+a changed measured range while the pointer is down makes the automatic scroll yield. A stationary event-time
+sample and `up` avoid a fling. The next range must reveal the end again, with an explicit guard against clamping
+masquerading as recovery; the next error also passes the strict geometry helper. The plain-`collect` df2a1da8
+baseline failed on that later range (expected 52 px, actual 0), while `collectLatest` passed. No production hook,
+private mutex access, synthetic cancellation or wall-clock sleep is involved. The previous Not-covered claim
+was disproved by this real gesture experiment and removed.
