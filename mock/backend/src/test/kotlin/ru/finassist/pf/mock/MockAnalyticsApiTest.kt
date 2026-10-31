@@ -94,6 +94,34 @@ class MockAnalyticsApiTest {
     }
 
     @Test
+    fun `a coarser date is rejected before publication reads are consumed`() = runBlocking<Unit> {
+        backend.config = backend.config.copy(analyticsPendingResponses = 2)
+        for ((type, key) in listOf(
+            PeriodTypeCode.MONTH to "2026", PeriodTypeCode.QUARTER to "2026",
+            PeriodTypeCode.MONTH to "2026-Q3",
+        )) {
+            val error = assertFailsWith<AppError.Api> { api.getAnalytics(type, PeriodKey(key), null) }
+            assertEquals(ErrorCodes.VALIDATION_ERROR to 400, error.code to error.httpStatus)
+            assertEquals("date", error.details.single().field)
+        }
+        assertEquals(2, backend.config.analyticsPendingResponses)
+    }
+
+    @Test
+    fun `same and finer dates normalize to the requested period`() = runBlocking<Unit> {
+        for ((type, key, expected) in listOf(
+            Triple(PeriodTypeCode.MONTH, "2026-08", "2026-08"),
+            Triple(PeriodTypeCode.QUARTER, "2026-08", "2026-Q3"),
+            Triple(PeriodTypeCode.QUARTER, "2026-Q3", "2026-Q3"),
+            Triple(PeriodTypeCode.YEAR, "2026-08", "2026"),
+            Triple(PeriodTypeCode.YEAR, "2026-Q3", "2026"),
+            Triple(PeriodTypeCode.YEAR, "2026", "2026"),
+        )) {
+            assertEquals(PeriodKey(expected), api.getAnalytics(type, PeriodKey(key), null).params?.date)
+        }
+    }
+
+    @Test
     fun `periods with data are listed newest first with their coverage`() = runBlocking<Unit> {
         val months = api.listPeriods(null).periods
         assertEquals(listOf("2026-09", "2026-08", "2026-07", "2026-06"), months.map { it.key.value })

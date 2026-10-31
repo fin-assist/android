@@ -597,6 +597,116 @@ class AnalyticsViewModelTest {
         assertEquals(Events.ANALYTICS_PERIOD_CHANGED to mapOf("period" to "quarter"), tracker.events.last())
     }
 
+    private fun periodData(type: PeriodTypeCode, key: String, lastCovered: String? = null): Analytics {
+        val range = PeriodKey(key).toRange(reportZone.current)
+        return data(type, key).copy(period = ru.finassist.pf.core.api.model.AnalyticsPeriodInfo(
+            range = range, isCurrent = false,
+            coverage = if (lastCovered == null) Coverage.COMPLETE else Coverage.PARTIAL,
+            dataTo = lastCovered?.let(OffsetDateTime::parse), gaps = emptyList(),
+        ))
+    }
+
+    private fun normalizeRequests() {
+        api.reply = {
+            val request = api.requests.last()
+            val type = request.period!!
+            val key = request.date ?: PeriodKey("2026-09")
+            val calendarType = ru.finassist.pf.core.common.time.PeriodType.fromCode(type.code)!!
+            periodData(type, PeriodKey.of(calendarType, key.start()).value)
+        }
+    }
+
+    @Test fun `month quarter and year retain independent choices even outside the other tabs`() {
+        normalizeRequests()
+        val vm = opened(AnalyticsParams(PeriodTypeCode.MONTH, PeriodKey("2025-09"), TransferMode.WITH))
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        assertEquals(PeriodKey("2025-Q3"), vm.state.value.data?.params?.date)
+        vm.goTo(PeriodKey("2026-Q2"))
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        vm.goTo(PeriodKey("2024"))
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2025-09"), TransferMode.WITH), api.requests.last())
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        assertEquals(PeriodKey("2026-Q2"), api.requests.last().date)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(PeriodKey("2024"), api.requests.last().date)
+        assertNull(vm.state.value.errorPresentation)
+    }
+
+    @Test fun `a first month visit uses the last covered month of the opened year`() {
+        api.answers += periodData(PeriodTypeCode.YEAR, "2025", "2025-08-31T23:59:59+03:00")
+        api.answers += periodData(PeriodTypeCode.MONTH, "2025-08")
+        val vm = opened(AnalyticsParams(PeriodTypeCode.YEAR, PeriodKey("2025"), TransferMode.WITH))
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(PeriodKey("2025-08"), api.requests.last().date)
+        assertNull(vm.state.value.errorPresentation)
+    }
+
+    @Test fun `a first quarter visit uses coverage of the opened year and then remembers it`() {
+        api.answers += periodData(PeriodTypeCode.YEAR, "2025", "2025-07-01T00:00:00+03:00")
+        api.answers += periodData(PeriodTypeCode.QUARTER, "2025-Q3")
+        val vm = opened(AnalyticsParams(PeriodTypeCode.YEAR, PeriodKey("2025"), TransferMode.WITH))
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        assertEquals(PeriodKey("2025-Q3"), api.requests.last().date)
+    }
+
+    @Test fun `a first month visit to a complete quarter respects its exclusive end`() {
+        api.answers += periodData(PeriodTypeCode.QUARTER, "2025-Q4")
+        api.answers += periodData(PeriodTypeCode.MONTH, "2025-12")
+        val vm = opened(AnalyticsParams(PeriodTypeCode.QUARTER, PeriodKey("2025-Q4"), TransferMode.WITH))
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(PeriodKey("2025-12"), api.requests.last().date)
+    }
+
+    @Test fun `the initial finer key uses the profile zone and keeps the inclusive covered day`() {
+        api.answers += periodData(PeriodTypeCode.YEAR, "2025", "2025-08-31T23:30:00Z")
+        api.answers += periodData(PeriodTypeCode.MONTH, "2025-09")
+        val vm = opened(AnalyticsParams(PeriodTypeCode.YEAR, PeriodKey("2025"), TransferMode.WITH))
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(PeriodKey("2025-09"), api.requests.last().date)
+    }
+
+    @Test fun `a failed selection does not replace another tabs remembered period`() {
+        normalizeRequests()
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        api.reply = null
+        api.answers += AppError.Offline()
+        vm.goTo(PeriodKey("2026-Q2"))
+        assertEquals(PeriodKey("2026-Q3"), vm.state.value.data?.params?.date)
+        normalizeRequests()
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        assertEquals(PeriodKey("2026-Q3"), api.requests.last().date)
+    }
+
+    @Test fun `rapid first visits derive from the displayed year and cancel the obsolete request`() {
+        api.answers += periodData(PeriodTypeCode.YEAR, "2025", "2025-08-31T23:59:59+03:00")
+        val vm = opened(AnalyticsParams(PeriodTypeCode.YEAR, PeriodKey("2025"), TransferMode.WITH))
+        val gate = CompletableDeferred<Unit>()
+        api.reply = {
+            if (api.requests.last().period == PeriodTypeCode.QUARTER) {
+                gate.await()
+                periodData(PeriodTypeCode.QUARTER, "2025-Q3")
+            } else periodData(PeriodTypeCode.MONTH, "2025-08")
+        }
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(PeriodKey("2025-08"), api.requests.last().date)
+        gate.complete(Unit)
+        scheduler.runCurrent()
+        assertEquals(PeriodKey("2025-08"), vm.state.value.data?.params?.date)
+        assertNull(vm.state.value.errorPresentation)
+    }
+
+    @Test fun `missing coverage never sends a coarser key to a finer request`() {
+        api.answers += data(PeriodTypeCode.YEAR, "2025")
+        api.answers += periodData(PeriodTypeCode.MONTH, "2026-09")
+        val vm = opened(AnalyticsParams(PeriodTypeCode.YEAR, PeriodKey("2025"), TransferMode.WITH))
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertNull(api.requests.last().date)
+    }
+
     @Test fun `a period from the list closes the sheet and is requested`() {
         api.answers += data()
         val vm = opened()

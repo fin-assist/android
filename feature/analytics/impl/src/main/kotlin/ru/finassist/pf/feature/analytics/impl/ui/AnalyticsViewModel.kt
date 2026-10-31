@@ -29,6 +29,8 @@ import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.blocks.CatalogV1
+import ru.finassist.pf.core.common.time.PeriodType
+import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.core.toggles.Experiment
@@ -100,6 +102,8 @@ class AnalyticsViewModel @Inject constructor(
 ) : ViewModel(), AnalyticsHandlers {
     private var period: PeriodTypeCode = PeriodTypeCode.MONTH
     private var date: PeriodKey? = null
+    /** Successful selections belong to their own segment, independent of all other segments. */
+    private val selectedDates = mutableMapOf<PeriodTypeCode, PeriodKey>()
     private var transferMode: TransferMode = TransferMode.WITH
     private var loadJob: Job? = null
     private var initialized = false
@@ -244,6 +248,7 @@ class AnalyticsViewModel @Inject constructor(
                     val periodsChanged = period != p.period
                     period = p.period
                     date = p.date
+                    selectedDates[p.period] = p.date
                     transferMode = allowedMode(p.transferMode)
                     if (periodsChanged) resetPeriodsContext()
                 }
@@ -296,13 +301,28 @@ class AnalyticsViewModel @Inject constructor(
             } }
     }
 
-    /** Segmented control: keeps the current date so «Месяц → Квартал» opens the quarter containing it. */
+    /** Restore this segment's choice; only a first visit derives a key from the displayed period. */
     override fun setPeriodType(type: PeriodTypeCode) {
         if (type == period) return
+        date = dateForType(type)
         period = type
         clearRestriction(periodsChanged = true)
         tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to type.code))
         load()
+    }
+
+    private fun dateForType(type: PeriodTypeCode): PeriodKey? {
+        selectedDates[type]?.let { return it }
+        val target = PeriodType.fromCode(type.code) ?: return null
+        val shown = _state.value.data
+        val key = shown?.params?.date ?: date ?: return null
+        // The API accepts exact or finer keys. Coarsening preserves the existing calendar anchor.
+        if (key.type.ordinal <= target.ordinal) return key
+        val info = shown?.period ?: return null
+        // dataTo is an inclusive covered instant; only the calendar range has an exclusive end.
+        val last = if (info.coverage == Coverage.COMPLETE) info.range.to.minusNanos(1) else info.dataTo
+        if (last == null || last !in info.range) return null
+        return PeriodKey.of(target, last.atZoneSameInstant(reportZone.current).toLocalDate())
     }
 
     override fun goTo(key: PeriodKey) {
