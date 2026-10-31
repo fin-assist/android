@@ -15,6 +15,7 @@ import ru.finassist.pf.core.api.model.FieldErrorCodes
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.time.PeriodType
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.apiError
@@ -28,6 +29,13 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
         backend.requireSession()
         if (period == PeriodTypeCode.UNKNOWN || transferMode == TransferMode.UNKNOWN) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
         if (date != null && !PeriodKey.isValid(date.value)) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
+        val coarserDate = date != null && when (period ?: PeriodTypeCode.MONTH) {
+            PeriodTypeCode.MONTH -> date.type != PeriodType.MONTH
+            PeriodTypeCode.QUARTER -> date.type == PeriodType.YEAR
+            else -> false
+        }
+        if (coarserDate) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+            details = listOf(AppError.FieldError("date", FieldErrorCodes.INVALID_FORMAT, "date must be exact or finer than period")))
         val pending = backend.mutex.withLock {
             val remaining = backend.config.analyticsPendingResponses
             if (remaining <= 0) false else {

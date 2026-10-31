@@ -123,9 +123,9 @@ tags:
 - tapOn:
     id: "ds.segment.0"
 - extendedWaitUntil:
-    visible: "Январь 2026"
+    visible: "Октябрь 2026"
     timeout: 10000
-# YEAR -> MONTH preserves the year start. Choose September explicitly instead of relying on today's month.
+# FIN-391 restores the previously selected October. Choose September explicitly through the picker.
 - tapOn:
     id: "ds.period.pick"
 - scrollUntilVisible:
