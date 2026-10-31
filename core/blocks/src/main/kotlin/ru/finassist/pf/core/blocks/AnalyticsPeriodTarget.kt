@@ -12,7 +12,7 @@ object AnalyticsPeriodTargets {
     fun of(period: PeriodTypeCode?, date: PeriodKey?): AnalyticsPeriodTarget? {
         val knownPeriod = period ?: return null
         val type = PeriodType.fromCode(knownPeriod.code) ?: return null
-        if (date == null || !date.isCalendar || date.type != type) return null
+        if (date == null || !PeriodKey.isValid(date.value) || date.isRolling || date.type != type) return null
         return AnalyticsPeriodTarget(knownPeriod, date)
     }
 }

@@ -100,6 +100,13 @@ class AnalyticsServerTextsTest {
         assertEquals("Среднее за апрель — август — 88 900 ₽", AnalyticsTexts.typical(Metric(MetricStatus.READY, basis = basis, value = Money(8_890_000)))!!.plain())
     }
 
+    @Test fun `daily average basis is explicit even without a comparison`() {
+        val basis = "По дням с данными не позже сегодня; пропуски не учитываются"
+        assertEquals(basis, AnalyticsTexts.dailyBasis(null))
+        assertEquals(basis, AnalyticsTexts.dailyBasis("  "))
+        assertEquals("$basis\nв августе — 2 890 ₽", AnalyticsTexts.dailyBasis("в августе — 2 890 ₽"))
+    }
+
     @Test
     fun `insight descriptions`() {
         val basis = DateRange(t("2026-04-01T00:00:00+03:00"), t("2026-09-01T00:00:00+03:00"))

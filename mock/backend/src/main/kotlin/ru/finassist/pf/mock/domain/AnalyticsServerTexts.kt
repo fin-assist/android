@@ -26,6 +26,7 @@ object AnalyticsServerTexts {
     fun periodTitle(key: PeriodKey): String {
         val v = key.value
         return when {
+            key == PeriodKey.ALL_TIME -> "За всё время"
             Regex("""^\d{4}-Q[1-4]$""").matches(v) -> "${QUARTERS[v.last().digitToInt() - 1]} квартал ${v.take(4)}"
             Regex("""^\d{4}-\d{2}$""").matches(v) -> RussianDates.monthTitle(YearMonth.parse(v))
             else -> v
@@ -35,6 +36,7 @@ object AnalyticsServerTexts {
     fun unitName(period: PeriodTypeCode): String = when (period) {
         PeriodTypeCode.QUARTER -> "квартал"
         PeriodTypeCode.YEAR -> "год"
+        PeriodTypeCode.ALL_TIME -> "период"
         else -> "месяц"
     }
 
@@ -146,6 +148,7 @@ object AnalyticsServerTexts {
         PeriodTypeCode.QUARTER -> "прошлый квартал"
         PeriodTypeCode.YEAR -> "прошлый год"
         PeriodTypeCode.ROLLING_YEAR, PeriodTypeCode.ROLLING_QUARTER -> "прошлый период"
+        PeriodTypeCode.ALL_TIME -> "прошлый период"
     }
 
     /** «Среднее за апрель — август — 88 900 ₽». */
@@ -170,18 +173,34 @@ object AnalyticsServerTexts {
         return "в среднем за ${RussianDates.monthRange(YearMonth.from(from), YearMonth.from(to.minusSeconds(1)))}"
     }
 
+    /** The average always names its covered-day basis; a comparison supplements it without replacing it. */
+    fun dailyBasis(comparison: String?): String {
+        val basis = "По дням с данными не позже сегодня; пропуски не учитываются"
+        return comparison?.takeIf { it.isNotBlank() }?.let { "$basis\n$it" } ?: basis
+    }
+
     /** Note of the forecast tile, label is always «Прогноз расходов»: «на сентябрь», «на III квартал», «на 2026 год». */
     fun forecastNote(key: PeriodKey): String {
         val v = key.value
         return when {
+            key == PeriodKey.ALL_TIME -> "За всё время"
             Regex("""^\d{4}-Q[1-4]$""").matches(v) -> "на ${QUARTERS[v.last().digitToInt() - 1]} квартал"
             Regex("""^\d{4}-\d{2}$""").matches(v) -> "на ${RussianDates.monthNominative(YearMonth.parse(v).month)}"
             else -> "на $v год"
         }
     }
 
+    /** The factual covered-day envelope, with every year and internal gaps explained. */
+    fun allTimeRange(p: AnalyticsPeriodInfo): String {
+        val from = p.range.from.toLocalDate()
+        val to = RussianDates.lastDayOf(p.range)
+        val gap = if (p.gaps.isEmpty()) "" else " · есть пропуски в данных"
+        return RussianDates.dayRange(from, to, withYear = true) + gap
+    }
+
     /** Caption above the tiles of an incomplete quarter or year: «Апрель — сентябрь 2026 · год неполный». */
     fun partialPeriod(p: AnalyticsPeriodInfo, period: PeriodTypeCode): String? {
+        if (period == PeriodTypeCode.ALL_TIME) return allTimeRange(p)
         if (period == PeriodTypeCode.MONTH || p.coverage.effective == Coverage.COMPLETE) return null
         if (p.coverage.effective == Coverage.NO_DATA) return "За этот период данных нет"
         val from = p.dataFrom?.let(YearMonth::from) ?: return null

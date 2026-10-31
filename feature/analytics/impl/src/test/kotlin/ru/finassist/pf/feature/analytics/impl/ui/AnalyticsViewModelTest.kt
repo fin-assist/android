@@ -470,7 +470,7 @@ class AnalyticsViewModelTest {
         api.answers += data()
         api.answers += AppError.Server(500)
         val vm = opened()
-        vm.goTo(PeriodKey("2026-08"))
+        vm.load()
         assertEquals("Не получилось обновить. Попробуйте ещё раз", vm.state.value.snackbar)
         vm.consumeSnackbar()
         assertNull(vm.state.value.snackbar)
@@ -1197,7 +1197,7 @@ class AnalyticsViewModelTest {
         opened()
         val (supports, exp) = api.extras.single()
         assertEquals(CatalogV1.registry().supports, supports)
-        assertTrue(supports!!.contains("tile_group@1") && supports.contains("insight_card@1"))
+        assertTrue(supports!!.contains("tile_group@2") && supports.contains("insight_card@1"))
         assertEquals("analytics_order:a", exp)
 
         val b = AnalyticsViewModel(api, assistant, statements, operations, FakeFlags(variants = mutableMapOf(Experiment.ANALYTICS_ORDER to "b")), tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
@@ -1771,6 +1771,318 @@ class AnalyticsViewModelTest {
         assertEquals(true, vm.state.value.data?.hasData)
         assertTrue(vm.state.value.limitErrorPresentation?.connectionFailure == true)
         assertFalse(vm.state.value.refreshing)
+    }
+
+    private fun allTimeData(mode: TransferMode = TransferMode.WITH) = data(PeriodTypeCode.ALL_TIME, "all_time", mode).copy(
+        period = ru.finassist.pf.core.api.model.AnalyticsPeriodInfo(
+            range = DateRange(OffsetDateTime.parse("2025-10-30T00:00:00+03:00"), OffsetDateTime.parse("2026-10-31T00:00:00+03:00")),
+            isCurrent = false, coverage = Coverage.PARTIAL,
+            dataFrom = OffsetDateTime.parse("2025-10-30T00:00:00+03:00"),
+            dataTo = OffsetDateTime.parse("2026-10-30T23:59:59+03:00"), gaps = emptyList(),
+        ),
+    )
+
+    @Test fun `all-time sends its marker and preserves transfers and the successful calendar selections`() {
+        api.answers += data(date = "2026-07", mode = TransferMode.WITHOUT)
+        api.answers += allTimeData(TransferMode.WITHOUT)
+        api.answers += data(date = "2026-07", mode = TransferMode.WITHOUT)
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.ALL_TIME)
+        assertEquals(Request(PeriodTypeCode.ALL_TIME, PeriodKey.ALL_TIME, TransferMode.WITHOUT), api.requests.last())
+        assertEquals(PeriodTypeCode.ALL_TIME, vm.state.value.data?.params?.period)
+        vm.setPeriodType(PeriodTypeCode.ALL_TIME)
+        assertEquals(2, api.requests.size)
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-07"), TransferMode.WITHOUT), api.requests.last())
+    }
+
+    @Test fun `a first calendar selection from all-time uses the last covered profile instant`() {
+        reportZone.set("Asia/Vladivostok")
+        api.answers += allTimeData().let { it.copy(period = it.period!!.copy(
+            coverage = Coverage.COMPLETE,
+            dataTo = OffsetDateTime.parse("2026-12-31T16:30:00Z"),
+            range = DateRange(OffsetDateTime.parse("2025-01-01T00:00:00+10:00"), OffsetDateTime.parse("2027-01-02T00:00:00+10:00")),
+        )) }
+        api.answers += data(PeriodTypeCode.QUARTER, "2027-Q1")
+        val vm = opened(AnalyticsParams(PeriodTypeCode.ALL_TIME, PeriodKey.ALL_TIME, TransferMode.WITH))
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        assertEquals(Request(PeriodTypeCode.QUARTER, PeriodKey("2027-Q1"), TransferMode.WITH), api.requests.last())
+    }
+
+    @Test fun `failed all-time switch retains the old screen and retries the exact marker only explicitly`() {
+        api.answers += data(date = "2026-09", mode = TransferMode.WITHOUT)
+        api.answers += AppError.Offline()
+        api.answers += allTimeData(TransferMode.WITHOUT)
+        val vm = opened()
+        val previous = vm.state.value.data
+        vm.setPeriodType(PeriodTypeCode.ALL_TIME)
+        assertEquals(previous, vm.state.value.data)
+        assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.onResume(null)
+        assertEquals(2, api.requests.size)
+        vm.retryPeriodChange()
+        assertEquals(Request(PeriodTypeCode.ALL_TIME, PeriodKey.ALL_TIME, TransferMode.WITHOUT), api.requests.last())
+        assertEquals(PeriodTypeCode.ALL_TIME, vm.state.value.data?.params?.period)
+        assertNull(vm.state.value.periodChangeErrorPresentation)
+    }
+
+    @Test fun `a deleted source reloads all-time instead of reverting to a calendar default`() {
+        api.answers += allTimeData(TransferMode.WITHOUT)
+        api.answers += Analytics(hasData = false)
+        val vm = opened(AnalyticsParams(PeriodTypeCode.ALL_TIME, PeriodKey.ALL_TIME, TransferMode.WITHOUT))
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("source"))
+        assertEquals(Request(PeriodTypeCode.ALL_TIME, PeriodKey.ALL_TIME, TransferMode.WITHOUT), api.requests.last())
+        assertEquals(false, vm.state.value.data?.hasData)
+        assertFalse(vm.state.value.loading)
+    }
+
+    @Test fun `unsupported route params fall back to the default known request`() {
+        api.answers += data()
+        val vm = opened(AnalyticsParams(PeriodTypeCode.UNKNOWN, PeriodKey("2026-W40"), TransferMode.WITHOUT))
+        assertEquals(Request(PeriodTypeCode.MONTH, null, TransferMode.WITH), api.requests.single())
+        vm.setPeriodType(PeriodTypeCode.UNKNOWN)
+        assertEquals(1, api.requests.size)
+    }
+
+
+    private val monthlyBlock = Block(id = "monthly_chart", type = BlockType.CHART)
+    private fun monthAction(key: String) = BlockAction(ActionType.SELECT_ANALYTICS_PERIOD,
+        period = PeriodTypeCode.MONTH, date = PeriodKey(key))
+    private fun AnalyticsViewModel.selectMonth(key: String, source: Block = monthlyBlock) =
+        onAction(source, monthAction(key)) { error("month selection must not navigate outside Analytics") }
+
+    @Test fun `a chart action changes type and exact year month atomically and deduplicates an in-flight target`() {
+        val original = data(PeriodTypeCode.YEAR, "2026", TransferMode.WITHOUT)
+        api.answers += original
+        val vm = opened(original.params)
+        val pending = CompletableDeferred<Analytics>()
+        api.reply = { pending.await() }
+        vm.selectMonth("2025-09")
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2025-09"), TransferMode.WITHOUT), api.requests.last())
+        assertEquals(original, vm.state.value.data, "shown type, date and amounts stay together until success")
+        vm.selectMonth("2025-09")
+        assertEquals(2, api.requests.size)
+        val selected = data(PeriodTypeCode.MONTH, "2025-09", TransferMode.WITHOUT)
+        pending.complete(selected)
+        assertEquals(selected, vm.state.value.data)
+        assertEquals(TransferMode.WITHOUT, vm.currentTransferMode())
+        vm.selectMonth("2025-09")
+        assertEquals(2, api.requests.size, "the currently shown month is a no-op")
+        assertEquals(1, names().count { it == Events.ANALYTICS_PERIOD_CHANGED.name })
+    }
+
+    @Test fun `quarter year and all-time chart actions each submit one month request with the selected mode`() {
+        for ((type, key) in listOf(PeriodTypeCode.QUARTER to "2026-Q3", PeriodTypeCode.YEAR to "2026", PeriodTypeCode.ALL_TIME to "all_time")) {
+            val localApi = FakeApi()
+            localApi.answers += data(type, key, TransferMode.WITHOUT)
+            localApi.answers += data(PeriodTypeCode.MONTH, "2025-09", TransferMode.WITHOUT)
+            val vm = AnalyticsViewModel(localApi, assistant, statements, operations, flags, tracker, reportZone,
+                ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime }).apply { init(null) }
+            vm.selectMonth("2025-09")
+            assertEquals(2, localApi.requests.size, type.code)
+            assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2025-09"), TransferMode.WITHOUT), localApi.requests.last())
+            assertEquals(PeriodKey("2025-09"), vm.state.value.data?.params?.date)
+        }
+    }
+
+    @Test fun `invalid targets and non-monthly contexts never submit chart selection`() {
+        api.answers += data()
+        val vm = opened()
+        val action = monthAction("2026-08")
+        listOf(action.copy(period = null), action.copy(date = null), action.copy(period = PeriodTypeCode.UNKNOWN),
+            action.copy(date = PeriodKey("2026-13")), action.copy(date = PeriodKey("2026")),
+            action.copy(period = PeriodTypeCode.ALL_TIME, date = PeriodKey.ALL_TIME)).forEach { target ->
+            vm.onAction(monthlyBlock, target) { error("must stay inert") }
+        }
+        listOf(monthlyBlock.copy(id = "balance"), monthlyBlock.copy(id = null), monthlyBlock.copy(type = BlockType.ROWS),
+            monthlyBlock.copy(v = 2), monthlyBlock.copy(status = ru.finassist.pf.core.api.model.BlockStatus.LOCKED)).forEach { source ->
+            vm.selectMonth("2026-08", source)
+        }
+        assertEquals(1, api.requests.size)
+        assertEquals(PeriodKey("2026-09"), vm.state.value.data?.params?.date)
+    }
+
+    @Test fun `a failed goTo key change keeps prior data and retries its exact target only explicitly`() {
+        val original = data(mode = TransferMode.WITHOUT)
+        api.answers += original
+        api.answers += AppError.Offline()
+        api.answers += data(date = "2026-08", mode = TransferMode.WITHOUT)
+        val vm = opened(original.params)
+        vm.goTo(PeriodKey("2026-08"))
+        assertEquals(original, vm.state.value.data)
+        assertTrue(vm.state.value.periodChangeFailed)
+        assertTrue(vm.state.value.periodChangeRetryReady)
+        assertNull(vm.state.value.errorPresentation)
+        assertNull(vm.state.value.snackbar)
+        vm.onResume(null)
+        assertEquals(2, api.requests.size, "resume cannot replace the notice or submit either period")
+        vm.retryPeriodChange()
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITHOUT), api.requests.last())
+        assertEquals(PeriodKey("2026-08"), vm.state.value.data?.params?.date)
+        assertFalse(vm.state.value.periodChangeFailed)
+        vm.retryPeriodChange()
+        assertEquals(3, api.requests.size)
+    }
+
+    @Test fun `repeated goTo cannot bypass a failed target original request refusal`() {
+        val original = data()
+        api.answers += original
+        api.answers += refused()
+        api.answers += data(date = "2026-07")
+        val vm = opened()
+        vm.goTo(PeriodKey("2026-08"))
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.goTo(PeriodKey("2026-08"))
+        vm.retryPeriodChange()
+        vm.onResume(null)
+        assertEquals(2, api.requests.size)
+        assertEquals(original, vm.state.value.data)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.goTo(PeriodKey("2026-07"))
+        assertEquals(3, api.requests.size, "a different key retires the previous request context")
+        assertEquals(PeriodKey("2026-07"), vm.state.value.data?.params?.date)
+    }
+
+    @Test fun `repeated goTo preserves the failed target Retry-After boundary and never resumes it`() {
+        val original = data()
+        api.answers += original
+        api.answers += AppError.RateLimited(null, 3, ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "RATE_LIMITED", 429, requestRetryable = true,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = scheduler.currentTime)))
+        api.answers += data(date = "2026-08")
+        val vm = opened()
+        vm.goTo(PeriodKey("2026-08"))
+        scheduler.advanceTimeBy(2_999)
+        scheduler.runCurrent()
+        vm.goTo(PeriodKey("2026-08"))
+        vm.retryPeriodChange()
+        vm.onResume(null)
+        assertEquals(2, api.requests.size)
+        assertEquals(original, vm.state.value.data)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.periodChangeRetryReady)
+        vm.onResume(null)
+        assertEquals(2, api.requests.size, "deadline expiry does not submit the failed key")
+        vm.goTo(PeriodKey("2026-08"))
+        assertEquals(3, api.requests.size)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITH), api.requests.last())
+        assertFalse(vm.state.value.periodChangeFailed)
+    }
+
+    @Test fun `a failed month-to-month chart action keeps the shown data and retries the exact target explicitly`() {
+        val original = data(mode = TransferMode.WITHOUT)
+        api.answers += original
+        api.answers += AppError.Server(500)
+        api.answers += data(date = "2026-08", mode = TransferMode.WITHOUT)
+        val vm = opened(original.params)
+        vm.selectMonth("2026-08")
+        assertEquals(original, vm.state.value.data)
+        assertTrue(vm.state.value.periodChangeFailed)
+        assertNull(vm.state.value.errorPresentation)
+        assertNull(vm.state.value.snackbar)
+        vm.onResume(null)
+        assertEquals(2, api.requests.size, "resume does not replace or retry the failed target")
+        vm.retryPeriodChange()
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITHOUT), api.requests.last())
+        assertEquals(PeriodKey("2026-08"), vm.state.value.data?.params?.date)
+        assertFalse(vm.state.value.periodChangeFailed)
+    }
+
+    @Test fun `a repeated failed chart target cannot lift its direct retry refusal`() {
+        api.answers += data()
+        api.answers += refused()
+        api.answers += data(date = "2026-07")
+        val vm = opened()
+        vm.selectMonth("2026-08")
+        assertTrue(vm.state.value.periodChangeFailed)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.selectMonth("2026-08")
+        vm.retryPeriodChange()
+        vm.onResume(null)
+        assertEquals(2, api.requests.size)
+        vm.selectMonth("2026-07")
+        assertEquals(3, api.requests.size, "a different target retires the original refusal")
+        assertEquals(PeriodKey("2026-07"), vm.state.value.data?.params?.date)
+        assertFalse(vm.state.value.periodChangeFailed)
+    }
+
+    @Test fun `a repeated chart target preserves the captured Retry-After deadline`() {
+        api.answers += data()
+        api.answers += AppError.RateLimited(null, 3, ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "RATE_LIMITED", 429, requestRetryable = true,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = scheduler.currentTime)))
+        api.answers += data(date = "2026-08")
+        val vm = opened()
+        vm.selectMonth("2026-08")
+        scheduler.advanceTimeBy(1_000)
+        scheduler.runCurrent()
+        vm.selectMonth("2026-08")
+        vm.retryPeriodChange()
+        assertEquals(2, api.requests.size)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        scheduler.advanceTimeBy(1_999)
+        scheduler.runCurrent()
+        vm.selectMonth("2026-08")
+        assertEquals(2, api.requests.size)
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        vm.selectMonth("2026-08")
+        assertEquals(3, api.requests.size)
+        assertEquals(PeriodKey("2026-08"), vm.state.value.data?.params?.date)
+    }
+
+    @Test fun `a failed chart target does not replace a segment's last successful month`() {
+        api.answers += data()
+        api.answers += data(PeriodTypeCode.YEAR, "2026")
+        api.answers += AppError.Server(500)
+        api.answers += data()
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        vm.selectMonth("2026-05")
+        assertEquals(PeriodTypeCode.YEAR, vm.state.value.data?.params?.period)
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH), api.requests.last())
+        assertFalse(vm.state.value.periodChangeFailed)
+    }
+
+    @Test fun `the selected chart month becomes the successful month segment memory`() {
+        api.answers += data(PeriodTypeCode.YEAR, "2026")
+        api.answers += data(date = "2025-09")
+        api.answers += data(PeriodTypeCode.YEAR, "2026")
+        api.answers += data(date = "2025-09")
+        val vm = opened()
+        vm.selectMonth("2025-09")
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2025-09"), TransferMode.WITH), api.requests.last())
+    }
+
+    @Test fun `a changed transfer mode retires a failed chart target`() {
+        api.answers += data()
+        api.answers += AppError.Server(500)
+        api.answers += data(mode = TransferMode.WITHOUT)
+        val vm = opened()
+        vm.selectMonth("2026-08")
+        vm.setTransferMode(TransferMode.WITHOUT)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITHOUT), api.requests.last())
+        assertFalse(vm.state.value.periodChangeFailed)
+        vm.retryPeriodChange()
+        assertEquals(3, api.requests.size)
+    }
+
+    @Test fun `the current chart month cannot clear a direct refresh refusal`() {
+        api.answers += data()
+        api.answers += refused()
+        val vm = opened()
+        vm.load()
+        val explanation = vm.state.value.errorPresentation
+        vm.selectMonth("2026-09")
+        assertEquals(2, api.requests.size)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(explanation, vm.state.value.errorPresentation)
     }
 
 }

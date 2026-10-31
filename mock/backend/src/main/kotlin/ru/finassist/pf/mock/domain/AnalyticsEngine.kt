@@ -57,6 +57,12 @@ class AnalyticsEngine(
             val dates = rollingRange(type, cov) ?: return AnalyticsPeriodsList(emptyList())
             return AnalyticsPeriodsList(listOf(AnalyticsPeriodItem(PeriodKey(type.code), range(dates.first, dates.second), rollingCoverage(dates.first, dates.second, cov))))
         }
+        if (type == PeriodTypeCode.ALL_TIME) {
+            val from = cov.firstDay ?: return AnalyticsPeriodsList(emptyList())
+            val to = cov.lastDay!!.plusDays(1)
+            return AnalyticsPeriodsList(listOf(AnalyticsPeriodItem(PeriodKey.ALL_TIME, range(from, to),
+                if (cov.gapsWithin(from, to).isEmpty()) ApiCoverage.COMPLETE else ApiCoverage.PARTIAL)))
+        }
         val keys = cov.monthsWithData.map { PeriodKey.of(type.toCommon(), it.atDay(1)) }.distinct().reversed()
         return AnalyticsPeriodsList(
             keys.map { key ->
@@ -74,6 +80,7 @@ class AnalyticsEngine(
         val cov = coverage()
         if (cov.isEmpty || ledger.all.isEmpty()) return AnalyticsSnapshot(hasData = false)
         if (period?.isRolling == true) return rollingAnalytics(period, mode, cov)
+        if (period == PeriodTypeCode.ALL_TIME) return allTime(mode, cov)
         val type = (period ?: PeriodTypeCode.MONTH).toCommon()
         val available = periodsWithData(type)
         val key = when {
@@ -88,7 +95,6 @@ class AnalyticsEngine(
         val ops = scope.inRange(visible, periodRange.from, periodRange.to)
         val bounds = cov.dataBounds(from, toExcl)
         val stale = cov.lastDay?.let { ChronoUnit.DAYS.between(it, today()) > STALE_DAYS } ?: true
-        val fullMonthsAll = cov.fullMonths
 
         val expense = scope.expenseTotal(ops)
         val income = scope.incomeTotal(ops)
@@ -127,16 +133,46 @@ class AnalyticsEngine(
             incomeCategories = incomeBreakdown(ops, income, periodRange, mode),
             monthlyChart = monthlyChart(type, key, visible, cov),
             insights = if (type == PeriodType.MONTH) insights(key, mode, visible, ops, periodRange, cov) else null,
-            state = AnalyticsState(
-                stale = stale,
-                lastOperationAt = ledger.all.maxOfOrNull { it.occurredAt },
-                dataFrom = cov.firstDay!!.at(),
-                dataTo = cov.lastDay!!.plusDays(1).at(),
-                fullMonths = fullMonthsAll.size,
-                unreadLinesCount = unreadLinesIn(periodRange.from, periodRange.to),
-                calculatedAt = now(),
-                recalculating = false,
+            state = state(cov, periodRange, stale),
+        )
+    }
+
+    private fun state(cov: Coverage, periodRange: DateRange, stale: Boolean) = AnalyticsState(
+        stale = stale, lastOperationAt = ledger.all.maxOfOrNull { it.occurredAt },
+        dataFrom = cov.firstDay!!.at(), dataTo = cov.lastDay!!.plusDays(1).at(), fullMonths = cov.fullMonths.size,
+        unreadLinesCount = unreadLinesIn(periodRange.from, periodRange.to), calculatedAt = now(), recalculating = false,
+    )
+
+    /** All-time facts use the same ledger and union of covered days, without a fabricated calendar key. */
+    private fun allTime(mode: TransferMode, cov: Coverage): AnalyticsSnapshot {
+        val from = cov.firstDay!!
+        val to = cov.lastDay!!.plusDays(1)
+        val periodRange = range(from, to)
+        val visible = scope.visible(mode)
+        val ops = scope.inRange(visible, periodRange.from, periodRange.to)
+        val expense = scope.expenseTotal(ops)
+        val income = scope.incomeTotal(ops)
+        val expenseFilter = OperationsFilter(from = periodRange.from, to = periodRange.to, kind = expenseKind(), transferMode = mode)
+        val days = cov.countDays(from, minOf(to, today().plusDays(1))).coerceAtLeast(1)
+        val gaps = cov.gapsWithin(from, to)
+        val stale = ChronoUnit.DAYS.between(cov.lastDay, today()) > STALE_DAYS
+        return AnalyticsSnapshot(
+            hasData = true, params = AnalyticsParams(PeriodTypeCode.ALL_TIME, PeriodKey.ALL_TIME, mode),
+            period = AnalyticsPeriodInfo(periodRange, isCurrent = false,
+                coverage = if (gaps.isEmpty()) ApiCoverage.COMPLETE else ApiCoverage.PARTIAL,
+                dataFrom = from.at(), dataTo = dataEnd(from, to, cov), gaps = gaps),
+            navigation = AnalyticsNavigation(),
+            tiles = AnalyticsTiles(
+                expense = Metric(MetricStatus.READY, value = Money(expense), filters = expenseFilter),
+                income = Metric(MetricStatus.READY, value = Money(income), filters = expenseFilter.copy(kind = OperationKindFilter.INCOME)),
+                balance = Metric(MetricStatus.READY, value = Money(income - expense),
+                    shareOfIncome = if (income > 0) (income - expense).toDouble() / income else null),
+                dailyExpense = Metric(MetricStatus.READY, value = Money(expense / days)),
             ),
+            expenseCategories = expenseBreakdown(ops, expense, periodRange, mode),
+            incomeCategories = incomeBreakdown(ops, income, periodRange, mode),
+            monthlyChart = monthlyChart(PeriodType.ALL_TIME, PeriodKey.ALL_TIME, visible, cov),
+            state = state(cov, periodRange, stale),
         )
     }
 
@@ -325,7 +361,7 @@ class AnalyticsEngine(
             .takeWhile { it.atDay(1).isBefore(key.endExclusive()) }
             .all { cov.isFullMonth(it) }
 
-    private fun monthsIn(key: PeriodKey) = when (key.type) { PeriodType.MONTH -> 1; PeriodType.QUARTER -> 3; PeriodType.YEAR -> 12 }
+    private fun monthsIn(key: PeriodKey) = when (key.type) { PeriodType.MONTH -> 1; PeriodType.QUARTER -> 3; PeriodType.YEAR -> 12; PeriodType.ALL_TIME -> error("all_time has no fixed month count") }
 
     private fun locked(reason: LockReason, required: Int? = null, available: Int? = null, availableFrom: OffsetDateTime? = null) =
         Metric(status = MetricStatus.LOCKED, lock = MetricLock(reason, required, available, availableFrom))
@@ -384,9 +420,11 @@ class AnalyticsEngine(
             PeriodType.MONTH -> (5 downTo 0).map { YearMonth.from(key.start()).minusMonths(it.toLong()) }
             PeriodType.QUARTER -> (0..2).map { YearMonth.from(key.start()).plusMonths(it.toLong()) }
             PeriodType.YEAR -> (0..11).map { YearMonth.from(key.start()).plusMonths(it.toLong()) }
+            PeriodType.ALL_TIME -> generateSequence(YearMonth.from(cov.firstDay)) { it.plusMonths(1) }
+                .takeWhile { it <= YearMonth.from(cov.lastDay) }.toList()
         }
         val withData = cov.monthsWithData.size
-        if (withData < CHART_MIN_MONTHS) {
+        if (type != PeriodType.ALL_TIME && withData < CHART_MIN_MONTHS) {
             return MonthlyChart(status = MetricStatus.LOCKED, lock = MetricLock(LockReason.NEED_MONTHS_WITH_DATA, CHART_MIN_MONTHS, withData))
         }
         return MonthlyChart(status = MetricStatus.READY, points = months.map { m -> monthlyPoint(m, visible, cov) })
@@ -647,6 +685,7 @@ class AnalyticsEngine(
     private fun PeriodTypeCode.toCommon() = when (this) {
         PeriodTypeCode.QUARTER -> PeriodType.QUARTER
         PeriodTypeCode.YEAR -> PeriodType.YEAR
+        PeriodTypeCode.ALL_TIME -> PeriodType.ALL_TIME
         else -> PeriodType.MONTH
     }
 

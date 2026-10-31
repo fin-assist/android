@@ -128,6 +128,7 @@ internal class CalcScenario(private val root: File) {
                 period = query["period"]?.let { code -> PeriodTypeCode.entries.first { it.code == code } },
                 date = query["date"]?.let(::PeriodKey),
                 transferMode = query["transfer_mode"]?.let { code -> TransferMode.entries.first { it.code == code } },
+                supports = query["supports"], exp = query["exp"],
             ),
         )
         "/v1/analytics/periods" -> encode(

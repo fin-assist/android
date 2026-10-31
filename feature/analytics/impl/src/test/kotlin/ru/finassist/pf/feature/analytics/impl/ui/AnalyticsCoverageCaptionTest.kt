@@ -22,8 +22,10 @@ class AnalyticsCoverageCaptionTest {
     @Test
     fun `visible supported empty tiles provide the one no data explanation`() {
         for (current in listOf(false, true)) {
-            for (type in listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.YEAR)) {
-                assertNull(analyticsCoverageCaption(period.copy(isCurrent = current), type, prepareAnalyticsBlocks(listOf(tiles), emptySet())))
+            for (type in listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.YEAR, PeriodTypeCode.ALL_TIME)) {
+                for (version in listOf(1, 2)) {
+                    assertNull(analyticsCoverageCaption(period.copy(isCurrent = current), type, prepareAnalyticsBlocks(listOf(tiles.copy(v = version)), emptySet())))
+                }
             }
         }
     }

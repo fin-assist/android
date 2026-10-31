@@ -43,6 +43,7 @@ object BlockFormat {
         return if (pct < 0) "${Money.MINUS}${abs(pct)}%" else "$pct%"
     }
 
+    /** Axis label; a multi-year chart keeps the year on a separate line. */
     fun chartMonthLabel(point: ChartPoint, showYear: Boolean): String {
         val month = YearMonth.from(point.range.from)
         return RussianDates.monthShort(month.month) + if (showYear) "\n${month.year}" else ""

@@ -22,6 +22,7 @@ object AnalyticsTexts {
         return when {
             key == PeriodKey.ROLLING_YEAR -> "Последние 12 месяцев"
             key == PeriodKey.ROLLING_QUARTER -> "Последние 3 месяца"
+            key == PeriodKey.ALL_TIME -> "За всё время"
             Regex("""^\d{4}-Q[1-4]$""").matches(v) -> "${QUARTERS[v.last().digitToInt() - 1]} квартал ${v.take(4)}"
             Regex("""^\d{4}-\d{2}$""").matches(v) -> RussianDates.monthTitle(YearMonth.parse(v))
             else -> v
@@ -32,6 +33,7 @@ object AnalyticsTexts {
         PeriodTypeCode.QUARTER -> "квартал"
         PeriodTypeCode.YEAR -> "год"
         PeriodTypeCode.ROLLING_YEAR, PeriodTypeCode.ROLLING_QUARTER -> "период"
+        PeriodTypeCode.ALL_TIME -> "период"
         else -> "месяц"
     }
 
@@ -49,10 +51,19 @@ object AnalyticsTexts {
         }
     }
 
+    /** The factual covered-day envelope, with every year and internal gaps explained. */
+    fun allTimeRange(p: AnalyticsPeriodInfo): String {
+        val from = p.range.from.toLocalDate()
+        val to = RussianDates.lastDayOf(p.range)
+        val gap = if (p.gaps.isEmpty()) "" else " · есть пропуски в данных"
+        return RussianDates.dayRange(from, to, withYear = true) + gap
+    }
+
     /** Caption above the tiles of an incomplete quarter or year: «Апрель — сентябрь 2026 · год неполный». */
     fun partialPeriod(p: AnalyticsPeriodInfo, period: PeriodTypeCode): String? {
         if (period.isRolling) return rollingRange(p) +
             (coverage(p)?.let { " · $it" } ?: "")
+        if (period == PeriodTypeCode.ALL_TIME) return allTimeRange(p)
         if (period == PeriodTypeCode.MONTH || p.coverage.effective == Coverage.COMPLETE) return null
         if (p.coverage.effective == Coverage.NO_DATA) return "За этот период данных нет"
         val from = p.dataFrom?.let(YearMonth::from) ?: return null

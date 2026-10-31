@@ -17,7 +17,7 @@ data class DateRange(
 
 /** Period type of the Analytics screen. Open set in the API; the client only ever requests known values. */
 enum class PeriodType(val code: String) {
-    MONTH("month"), QUARTER("quarter"), YEAR("year");
+    MONTH("month"), QUARTER("quarter"), YEAR("year"), ALL_TIME("all_time");
 
     companion object {
         fun fromCode(code: String?): PeriodType? = entries.firstOrNull { it.code == code }
@@ -25,8 +25,8 @@ enum class PeriodType(val code: String) {
 }
 
 /**
- * Period selector: calendar `2026-09`, `2026-Q3`, `2026`, or coverage-anchored `rolling_year` / `rolling_quarter`.
- * Rolling selectors have no local calendar boundaries: render the server response range.
+ * Period selector: calendar `2026-09`, `2026-Q3`, `2026`, `all_time`, or coverage-anchored `rolling_year` / `rolling_quarter`.
+ * Coverage-anchored selectors have no local calendar boundaries: render the server response range.
  * Parsed on the client for labels and period navigation, and for neighbouring keys in the mock backend.
  * A finer initial navigation key may be derived from the server-provided period coverage (FIN-391).
  */
@@ -38,6 +38,7 @@ value class PeriodKey(val value: String) {
 
     val type: PeriodType
         get() {
+            if (this == ALL_TIME) return PeriodType.ALL_TIME
             require(isCalendar) { "A coverage-anchored period has no calendar type" }
             return when {
                 QUARTER.matches(value) -> PeriodType.QUARTER
@@ -56,7 +57,7 @@ value class PeriodKey(val value: String) {
     val index: Int? get() = when (type) {
         PeriodType.MONTH -> value.substring(5, 7).toInt()
         PeriodType.QUARTER -> value.substring(6, 7).toInt()
-        PeriodType.YEAR -> null
+        PeriodType.YEAR, PeriodType.ALL_TIME -> null
     }
 
     /** First day of the period. */
@@ -64,6 +65,7 @@ value class PeriodKey(val value: String) {
         PeriodType.MONTH -> LocalDate.of(year, index!!, 1)
         PeriodType.QUARTER -> LocalDate.of(year, (index!! - 1) * 3 + 1, 1)
         PeriodType.YEAR -> LocalDate.of(year, 1, 1)
+        PeriodType.ALL_TIME -> error("all_time boundaries come from the response")
     }
 
     /** First day after the period (exclusive end). */
@@ -71,6 +73,7 @@ value class PeriodKey(val value: String) {
         PeriodType.MONTH -> start().plusMonths(1)
         PeriodType.QUARTER -> start().plusMonths(3)
         PeriodType.YEAR -> start().plusYears(1)
+        PeriodType.ALL_TIME -> error("all_time boundaries come from the response")
     }
 
     fun toRange(zone: ZoneId): DateRange = DateRange(
@@ -88,15 +91,17 @@ value class PeriodKey(val value: String) {
         private val QUARTER = Regex("""^\d{4}-Q[1-4]$""")
         private val ANY = Regex("""^\d{4}(-(0[1-9]|1[0-2])|-Q[1-4])?$""")
 
+        val ALL_TIME = PeriodKey("all_time")
         val ROLLING_YEAR = PeriodKey("rolling_year")
         val ROLLING_QUARTER = PeriodKey("rolling_quarter")
 
-        fun isValid(value: String) = ANY.matches(value) || value == ROLLING_YEAR.value || value == ROLLING_QUARTER.value
+        fun isValid(value: String) = ANY.matches(value) || value == ALL_TIME.value || value == ROLLING_YEAR.value || value == ROLLING_QUARTER.value
 
         fun of(type: PeriodType, date: LocalDate): PeriodKey = when (type) {
             PeriodType.MONTH -> PeriodKey("%04d-%02d".format(date.year, date.monthValue))
             PeriodType.QUARTER -> PeriodKey("%04d-Q%d".format(date.year, (date.monthValue - 1) / 3 + 1))
             PeriodType.YEAR -> PeriodKey("%04d".format(date.year))
+            PeriodType.ALL_TIME -> ALL_TIME
         }
 
         fun ofMonth(month: YearMonth) = PeriodKey("%04d-%02d".format(month.year, month.monthValue))

@@ -107,4 +107,16 @@ class AnalyticsTextsTest {
         )
         assertEquals("Данные за 1–31 июля, без 11–19 июля · период неполный", AnalyticsTexts.coverage(july)!!.plain())
     }
+    @Test fun `all-time is named exactly and its actual date range includes both years and gaps`() {
+        val p = AnalyticsPeriodInfo(
+            DateRange(t("2025-10-30T00:00:00+03:00"), t("2026-10-31T00:00:00+03:00")), false, Coverage.PARTIAL,
+            dataFrom = t("2025-10-30T00:00:00+03:00"), dataTo = t("2026-10-30T23:59:59+03:00"),
+            gaps = listOf(DateRange(t("2026-01-01T00:00:00+03:00"), t("2026-02-01T00:00:00+03:00"))),
+        )
+        assertEquals("За всё время", AnalyticsTexts.periodTitle(PeriodKey.ALL_TIME))
+        assertEquals("За всё время", AnalyticsTexts.periodLabel(PeriodKey.ALL_TIME, p, PeriodTypeCode.ALL_TIME, false))
+        assertEquals("30 октября 2025 — 30 октября 2026 · есть пропуски в данных", AnalyticsTexts.partialPeriod(p, PeriodTypeCode.ALL_TIME)!!.plain())
+        assertEquals("30 октября 2025 — 30 октября 2026", AnalyticsTexts.partialPeriod(p.copy(coverage = Coverage.COMPLETE, gaps = emptyList()), PeriodTypeCode.ALL_TIME)!!.plain())
+    }
+
 }

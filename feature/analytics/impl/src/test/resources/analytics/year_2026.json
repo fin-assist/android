@@ -21,65 +21,75 @@
         {
             "id": "tiles",
             "type": "tile_group",
-            "alt_text": "Доходы минус расходы 392 580 ₽, Расходы 528 820 ₽, Расходы в день 2 970 ₽, Доходы 921 400 ₽, Прогноз на год — Нужно 12 полных месяцев, есть 5. База прогноза — вся загруженная история, независимо от выбранного года. Полный месяц — завершённый календарный месяц с данными за каждый день.",
+            "v": 2,
+            "alt_text": "Расходы за период 528 820 ₽, Доходы за период 921 400 ₽, Доходы минус расходы 392 580 ₽, Средние расходы в день 2 970 ₽, Прогноз на год — Нужно 12 полных месяцев, есть 5. База прогноза — вся загруженная история, независимо от выбранного года. Полный месяц — завершённый календарный месяц с данными за каждый день.",
             "data": {
-                "tiles": [
+                "groups": [
                     {
-                        "id": "balance",
-                        "title": "Доходы минус расходы",
-                        "value": 3.9258E7,
-                        "value_kind": "amount",
-                        "caption": "43% дохода · по выписке"
-                    },
-                    {
-                        "id": "expense",
-                        "title": "Расходы",
-                        "value": 5.2882E7,
-                        "value_kind": "amount",
-                        "caption": "1 апреля — 25 сентября",
-                        "action": {
-                            "type": "open_operations",
-                            "filter": {
-                                "from": "2026-01-01T00:00:00+03:00",
-                                "to": "2027-01-01T00:00:00+03:00",
-                                "kind": "expense",
-                                "transfer_mode": "with"
+                        "tiles": [
+                            {
+                                "id": "expense",
+                                "title": "Расходы за период",
+                                "value": 5.2882E7,
+                                "value_kind": "amount",
+                                "caption": "1 апреля — 25 сентября",
+                                "action": {
+                                    "type": "open_operations",
+                                    "filter": {
+                                        "from": "2026-01-01T00:00:00+03:00",
+                                        "to": "2027-01-01T00:00:00+03:00",
+                                        "kind": "expense",
+                                        "transfer_mode": "with"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "income",
+                                "title": "Доходы за период",
+                                "value": 9.214E7,
+                                "value_kind": "amount",
+                                "show_plus": true,
+                                "action": {
+                                    "type": "open_operations",
+                                    "filter": {
+                                        "from": "2026-01-01T00:00:00+03:00",
+                                        "to": "2027-01-01T00:00:00+03:00",
+                                        "kind": "income",
+                                        "transfer_mode": "with"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "balance",
+                                "title": "Доходы минус расходы",
+                                "value": 3.9258E7,
+                                "value_kind": "amount",
+                                "caption": "43% дохода · по выписке"
                             }
-                        }
+                        ]
                     },
                     {
-                        "id": "daily_expense",
-                        "title": "Расходы в день",
-                        "value": 297000.0,
-                        "value_kind": "amount",
-                        "caption": "в среднем за апрель — сентябрь"
-                    },
-                    {
-                        "id": "income",
-                        "title": "Доходы",
-                        "value": 9.214E7,
-                        "value_kind": "amount",
-                        "show_plus": true,
-                        "action": {
-                            "type": "open_operations",
-                            "filter": {
-                                "from": "2026-01-01T00:00:00+03:00",
-                                "to": "2027-01-01T00:00:00+03:00",
-                                "kind": "income",
-                                "transfer_mode": "with"
+                        "tiles": [
+                            {
+                                "id": "daily_expense",
+                                "title": "Средние расходы в день",
+                                "value": 297000.0,
+                                "value_kind": "amount",
+                                "caption": "По дням с данными не позже сегодня; пропуски не учитываются\nв среднем за апрель — сентябрь"
+                            },
+                            {
+                                "id": "forecast",
+                                "title": "Прогноз на год",
+                                "status": "locked",
+                                "lock": {
+                                    "reason": "need_full_months",
+                                    "text": "Нужно 12 полных месяцев, есть 5. База прогноза — вся загруженная история, независимо от выбранного года. Полный месяц — завершённый календарный месяц с данными за каждый день.",
+                                    "required": 12,
+                                    "available": 5
+                                }
                             }
-                        }
-                    },
-                    {
-                        "id": "forecast",
-                        "title": "Прогноз на год",
-                        "status": "locked",
-                        "lock": {
-                            "reason": "need_full_months",
-                            "text": "Нужно 12 полных месяцев, есть 5. База прогноза — вся загруженная история, независимо от выбранного года. Полный месяц — завершённый календарный месяц с данными за каждый день.",
-                            "required": 12,
-                            "available": 5
-                        }
+                        ],
+                        "title": "Дополнительные показатели"
                     }
                 ]
             }
@@ -120,7 +130,12 @@
                             "to": "2026-05-01T00:00:00+03:00"
                         },
                         "value": 9120000.0,
-                        "coverage": "complete"
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-04"
+                        }
                     },
                     {
                         "range": {
@@ -128,7 +143,12 @@
                             "to": "2026-06-01T00:00:00+03:00"
                         },
                         "value": 7840000.0,
-                        "coverage": "complete"
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-05"
+                        }
                     },
                     {
                         "range": {
@@ -136,7 +156,12 @@
                             "to": "2026-07-01T00:00:00+03:00"
                         },
                         "value": 8890000.0,
-                        "coverage": "complete"
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-06"
+                        }
                     },
                     {
                         "range": {
@@ -144,7 +169,12 @@
                             "to": "2026-08-01T00:00:00+03:00"
                         },
                         "value": 9630000.0,
-                        "coverage": "complete"
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-07"
+                        }
                     },
                     {
                         "range": {
@@ -152,7 +182,12 @@
                             "to": "2026-09-01T00:00:00+03:00"
                         },
                         "value": 8970000.0,
-                        "coverage": "complete"
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-08"
+                        }
                     },
                     {
                         "range": {
@@ -162,7 +197,12 @@
                         "value": 8432000.0,
                         "coverage": "partial",
                         "data_to": "2026-09-25T00:00:00+03:00",
-                        "note": "по 25-е"
+                        "note": "по 25-е",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-09"
+                        }
                     },
                     {
                         "range": {

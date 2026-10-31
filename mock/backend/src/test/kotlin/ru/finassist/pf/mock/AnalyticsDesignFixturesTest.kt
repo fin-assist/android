@@ -22,6 +22,8 @@ import kotlin.test.assertTrue
 class AnalyticsDesignFixturesTest {
     private val dir = File("../../feature/analytics/impl/src/test/resources/analytics")
     private val json = kotlinx.serialization.json.Json(ApiJson) { prettyPrint = true }
+    // AnalyticsGoldenCapabilitiesTest binds this request to the real client's CatalogV1 registry.
+    private val supports = requireNotNull(AnalyticsComposer.parseSupports(File(dir, "supports.txt").readText().trim()))
 
     private val f = AnalyticsDesignFixtures
     private val golden = mapOf(
@@ -35,6 +37,7 @@ class AnalyticsDesignFixturesTest {
         "no_data" to f.noData,
         "early" to f.early,
         "stale" to f.stale,
+        "all_time" to f.allTime,
     )
 
     /**
@@ -56,7 +59,7 @@ class AnalyticsDesignFixturesTest {
                     else -> Unit
                 }
             }
-            val response = json.encodeToJsonElement(Analytics.serializer(), AnalyticsComposer.compose(snapshot)) as JsonObject
+            val response = json.encodeToJsonElement(Analytics.serializer(), AnalyticsComposer.compose(snapshot, supports)) as JsonObject
             walk(response)
             if (name == "no_data") {
                 assertTrue(snapshot.hasData, "no_data must retain data in another period")
@@ -81,7 +84,7 @@ class AnalyticsDesignFixturesTest {
     fun `golden responses of the design check are up to date`() {
         val update = System.getenv("UPDATE_GOLDEN") == "1"
         golden.forEach { (name, snapshot) ->
-            val text = json.encodeToString(Analytics.serializer(), AnalyticsComposer.compose(snapshot)) + "\n"
+            val text = json.encodeToString(Analytics.serializer(), AnalyticsComposer.compose(snapshot, supports)) + "\n"
             val file = File(dir, "$name.json")
             if (update) {
                 dir.mkdirs()
