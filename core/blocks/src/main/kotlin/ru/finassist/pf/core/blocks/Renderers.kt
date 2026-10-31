@@ -225,7 +225,7 @@ object TileGroupRenderer : BlockRenderer {
     }
 }
 
-/** Tiles two to a row (mockup `Analytics`: 2×2), each row as tall as its tallest tile. */
+/** Two columns for paired tiles; an unpaired tile fills its row. Each row fits its tallest tile. */
 @Composable
 private fun Tiles(block: Block, data: TileGroupData, ctx: BlockContext) {
     val d = PfTheme.dimens
@@ -233,7 +233,6 @@ private fun Tiles(block: Block, data: TileGroupData, ctx: BlockContext) {
         data.tiles.chunked(2).forEach { pair ->
             Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(d.space4)) {
                 pair.forEach { tile -> TileView(block, tile, ctx, Modifier.weight(1f).fillMaxHeight()) }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }

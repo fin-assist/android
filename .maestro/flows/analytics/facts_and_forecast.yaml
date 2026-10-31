@@ -1,0 +1,252 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — факт отдельно от прогноза и база всей истории
+tags:
+  - analytics
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+# Replace the full preloaded year through the public UI. This rolling year covers 11 complete months;
+# the only operation is in August, so calendar completeness cannot depend on edge transactions.
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.empty"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- scrollUntilVisible:
+    element:
+      id: "e2e.picker.forecast_history.ofx"
+- tapOn:
+    id: "e2e.picker.forecast_history.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "statements.result.analytics"
+- tapOn:
+    id: "statements.result.analytics"
+- extendedWaitUntil:
+    visible: "Октябрь 2026"
+    timeout: 15000
+- assertVisible:
+    id: "analytics.tile.expense"
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.forecast"
+- assertVisible:
+    id: "analytics.tile.forecast"
+    text: ".*Посчитаем с 10.октября.*"
+# Restore the controls at the top before changing the period type.
+- scrollUntilVisible:
+    element:
+      id: "ds.segment.2"
+    direction: UP
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 65%"
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible: "2026"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.expense"
+- assertVisible:
+    id: "analytics.tile.expense"
+    text: "Расходы, 1[ \\u00a0\\u202f]?000.*"
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.forecast"
+- assertVisible:
+    id: "analytics.tile.forecast"
+    text: ".*есть 11.*независимо от выбранного года.*ноябрь 2025.*сентябрь 2026.*Неполные месяцы.*октябрь 2025.*октябрь 2026.*"
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.expense"
+    direction: UP
+- tapOn:
+    id: "analytics.tile.expense"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search"
+    timeout: 10000
+- assertVisible:
+    id: "operations.row"
+- assertVisible:
+    id: "operations.search.chip.period"
+    text: "1[ \\u00a0\\u202f]января.*31[ \\u00a0\\u202f]декабря"
+- assertVisible: "Магазин"
+- assertVisible: ".*1[ \\u00a0\\u202f]?000.*"
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
+- assertVisible:
+    id: "operations.search.chip.kind"
+    text: "Только расходы"
+    checked: true
+- tapOn:
+    id: "ds.back"
+- scrollUntilVisible:
+    element:
+      id: "ds.segment.0"
+    direction: UP
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 65%"
+- assertVisible: "2026"
+- tapOn:
+    id: "ds.segment.0"
+- extendedWaitUntil:
+    visible: "Октябрь 2026"
+    timeout: 10000
+# FIN-391 restores the previously selected October. Choose September explicitly through the picker.
+- tapOn:
+    id: "ds.period.pick"
+- scrollUntilVisible:
+    element:
+      text: "Сентябрь 2026.*"
+      childOf:
+        id: "analytics.period.option"
+- tapOn:
+    text: "Сентябрь 2026.*"
+    childOf:
+      id: "analytics.period.option"
+- extendedWaitUntil:
+    visible: "Сентябрь 2026"
+    timeout: 10000
+- assertVisible:
+    id: "analytics.tile.expense"
+# The forecast is below the first fact row when present. Inspect the full tile area before the next block.
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.income"
+- assertNotVisible:
+    id: "analytics.tile.forecast"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.expense_categories"
+- assertNotVisible:
+    id: "analytics.tile.forecast"
+
+# Keep September selected, add a different month, then remove only the statement covering September.
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    notVisible:
+      id: "analytics.screen"
+    timeout: 10000
+- runFlow:
+    when:
+      notVisible:
+        id: "statements.history"
+    commands:
+      - tapOn:
+          id: "profile.statements"
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "statements.result.done"
+- tapOn:
+    id: "statements.result.done"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.screen"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "analytics.tile.expense"
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    notVisible:
+      id: "analytics.screen"
+    timeout: 10000
+- runFlow:
+    when:
+      notVisible:
+        id: "statements.history"
+    commands:
+      - tapOn:
+          id: "profile.statements"
+- extendedWaitUntil:
+    visible: "forecast_history.ofx"
+    timeout: 10000
+- tapOn: "Удалить загрузку forecast_history.ofx"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    notVisible: "forecast_history.ofx"
+    timeout: 10000
+- assertVisible: "october.ofx"
+- assertNotVisible:
+    id: "statements.history.empty"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible: "За этот период данных нет"
+    timeout: 15000
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "analytics.block.tiles"
+- assertNotVisible:
+    text: "За этот период данных нет"
+    index: 1
+- assertNotVisible:
+    id: "analytics.empty"
+- assertNotVisible:
+    id: "analytics.tile.expense"
+- assertNotVisible:
+    id: "analytics.tile.balance"
+- assertNotVisible:
+    id: "analytics.tile.daily"
+- assertNotVisible:
+    id: "analytics.tile.income"
+- assertNotVisible:
+    id: "analytics.tile.forecast"

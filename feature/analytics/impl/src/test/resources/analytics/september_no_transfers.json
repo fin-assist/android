@@ -23,7 +23,7 @@
         {
             "id": "tiles",
             "type": "tile_group",
-            "alt_text": "Доходы минус расходы 64 670 ₽, Прогноз расходов 94 500 ₽, Расходы в день 3 150 ₽, Доходы 143 390 ₽",
+            "alt_text": "Доходы минус расходы 64 670 ₽, Расходы 78 720 ₽, Расходы в день 3 150 ₽, Доходы 143 390 ₽, Прогноз расходов 94 500 ₽",
             "data": {
                 "tiles": [
                     {
@@ -34,12 +34,20 @@
                         "caption": "45% дохода · по выписке"
                     },
                     {
-                        "id": "forecast",
-                        "title": "Прогноз расходов",
-                        "value": 9450000.0,
+                        "id": "expense",
+                        "title": "Расходы",
+                        "value": 7872000.0,
                         "value_kind": "amount",
-                        "approx": true,
-                        "caption": "на сентябрь"
+                        "caption": "1–25 сентября",
+                        "action": {
+                            "type": "open_operations",
+                            "filter": {
+                                "from": "2026-09-01T00:00:00+03:00",
+                                "to": "2026-10-01T00:00:00+03:00",
+                                "kind": "expense",
+                                "transfer_mode": "without"
+                            }
+                        }
                     },
                     {
                         "id": "daily_expense",
@@ -63,6 +71,14 @@
                                 "transfer_mode": "without"
                             }
                         }
+                    },
+                    {
+                        "id": "forecast",
+                        "title": "Прогноз расходов",
+                        "value": 9450000.0,
+                        "value_kind": "amount",
+                        "approx": true,
+                        "caption": "на сентябрь"
                     }
                 ]
             }
