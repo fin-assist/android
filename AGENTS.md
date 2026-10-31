@@ -39,7 +39,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 
 | What | Where |
 |---|---|
-| Composition root, NavHost (auth graph → Operations / Analytics / Assistant / Profile tabs; shared assistant snapshot hides its tab and guards restored entries before VM creation), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt`, `app/src/local/…/LocalModule.kt`, `app/src/stage/…/StageModule.kt` |
+| Composition root, NavHost (auth graph → Operations / Analytics / Assistant / Profile tabs; layer-owned assistant policy survives configuration changes and guards restored entries before VM creation), app-lock gate | `app/src/main/kotlin/ru/finassist/pf/ui/PfApp.kt`, `di/AppModule.kt`; `app/src/prod/…/ProdModule.kt`, `app/src/local/…/LocalModule.kt`, `app/src/stage/…/StageModule.kt` |
 | API contract (service interfaces + DTOs) | `core/api/…/Services.kt`, `core/api/…/model/*.kt` |
 | Universal error presentation, request retry restrictions and server deadlines (FIN-223) | `docs/errors.md`; `core/common/…/error/`, `time/ServerDeadline.kt`; `core/designsystem/…/ErrorMessage.kt` |
 | SSE streams: transport and the one re-open loop of all three streams (pauses with jitter, 429, FIN-170) | `core/network/…/Sse.kt`; `core/api/…/SseReopen.kt` (`reopeningStream`, used by the view models; the fake backend's drops — `MockConfig.streamDrops`) |

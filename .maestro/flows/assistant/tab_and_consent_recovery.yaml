@@ -75,6 +75,22 @@ tags:
 - assertVisible:
     id: "ds.tab.assistant"
     selected: true
+- setOrientation: LANDSCAPE_LEFT
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertVisible: "Kaspersky"
+- assertNotVisible:
+    id: "assistant.question"
+- setOrientation: PORTRAIT
+- extendedWaitUntil:
+    visible:
+      id: "ds.tab.assistant"
+    timeout: 10000
+- assertVisible: "Kaspersky"
+- assertNotVisible:
+    id: "assistant.question"
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:

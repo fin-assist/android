@@ -659,6 +659,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
 | `analytics/search_scope_own_transfers` | September «Расходы» tile → search «как на Аналитике»; without «Только расходы» and with the amount 6 000 ₽ nothing is found — the single «Себе в другой банк» of 27 September is out, as in the Analytics figure; without the scope chip it is found — FIN-164 |
 | `analytics/blocks_switched_off` | flags hide tiles, categories, transfers chip, assistant (card, profile and bottom tab) |
+| `assistant/late_enable` | layer starts false → explicit Analytics entry after true → admitted Chat remains through false, orientation recreation and Consent/Back, without sending automatically (Qase68, FIN-397); authored, not executed |
 | `assistant/tab_consent_in_profile` | denied draft in retained tab → consent through Profile → server read enables explicit send without submitting on resume (Qase65, FIN-397) |
 | `AiConsentSpacingTest#keepsTwentyFourDpAfterConsentContentWhenScrolledAtLargeFont` | native geometry assertion: scroll to submit in 640 dp viewport / 150% text, verify ≥24 dp after full checkbox/error block with and without formError (Qase64, FIN-394/397); authored, compile only |
 | `assistant/tab_and_consent_recovery` | bottom tab keeps draft/history across Operations, Analytics and Profile; consent Back → Give consent → grant preserves draft without automatic send, explicit send creates one question (Qase61, FIN-397, FIN-394) |
@@ -909,3 +910,9 @@ the one composition-root snapshot. Unit tests separate locally accepted Ask ids 
 retain valid older pages across an overlapping refresh, preserve Retry-After/explicit refusals after a
 stale-page presentation is discarded, and repeat invalidated latest reads with the original stream skip id.
 A failed stream's authoritative status can therefore finish preparation instead of stranding the composer.
+
+FIN-397 configuration stability: Qase61 now rotates LANDSCAPE_LEFT → PORTRAIT after live false and asserts
+that the saved draft and zero questions survive Activity recreation. Qase68 starts with false before
+sign-in, enables before first Analytics entry, then disables again and rotates before entering Consent.
+Policy unit tests retain the same policy through a new owner backed by the layer ViewModelStore and
+verify that a genuinely new false policy denies entry. The authored orientation flows were not executed.

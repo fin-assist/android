@@ -40,7 +40,9 @@ import ru.finassist.pf.core.navigation.NavControllerNavigator
 import ru.finassist.pf.core.storage.AppPreferences
 import ru.finassist.pf.feature.analytics.api.AnalyticsRoutes
 import ru.finassist.pf.feature.assistant.api.AssistantRoutes
-import ru.finassist.pf.feature.assistant.impl.ui.LocalAssistantEnabled
+import ru.finassist.pf.feature.assistant.impl.ui.LocalAssistantAvailability
+import ru.finassist.pf.feature.assistant.impl.ui.AssistantAvailabilityPolicy
+import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.finassist.pf.feature.applock.api.AppLock
 import ru.finassist.pf.feature.applock.api.LockState
 import ru.finassist.pf.feature.applock.impl.ui.AppLockScreens
@@ -230,7 +232,10 @@ private fun MainLayer(
     }
     val backStack by controller.currentBackStackEntryAsState()
     val destination = backStack?.destination
-    val assistantEnabled = remember(flags) { flags.isEnabled(Flag.ASSISTANT) }
+    val assistantPolicy: AssistantAvailabilityPolicy = viewModel {
+        AssistantAvailabilityPolicy(flags.isEnabled(Flag.ASSISTANT))
+    }
+    val assistantEnabled by assistantPolicy.enabled.collectAsStateWithLifecycle()
     val tabs = PfMainTabs.filter { assistantEnabled || it.id != "assistant" }
     val routes = tabRoutes.filterIndexed { index, _ -> assistantEnabled || index != 2 }
     val activeTab = when {
@@ -245,7 +250,7 @@ private fun MainLayer(
         else -> -1
     }
     Column(modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalAssistantEnabled provides assistantEnabled) {
+        CompositionLocalProvider(LocalAssistantAvailability provides assistantPolicy) {
             NavHost(controller, startDestination = OperationsRoutes.Feed, modifier = Modifier.weight(1f)) {
                 entries.forEach { entry -> with(entry) { install(navigator) } }
             }

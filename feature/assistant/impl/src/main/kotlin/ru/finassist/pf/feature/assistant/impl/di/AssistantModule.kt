@@ -2,6 +2,7 @@ package ru.finassist.pf.feature.assistant.impl.di
 
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import dagger.Binds
@@ -11,19 +12,21 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import ru.finassist.pf.core.navigation.FeatureEntry
 import ru.finassist.pf.core.navigation.Navigator
+import ru.finassist.pf.core.toggles.FeatureFlags
+import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.feature.analytics.api.AnalyticsRoutes
 import ru.finassist.pf.feature.assistant.api.AssistantRoutes
 import ru.finassist.pf.feature.assistant.impl.ui.AiConsentScreen
 import ru.finassist.pf.feature.assistant.impl.ui.ChatScreen
-import ru.finassist.pf.feature.assistant.impl.ui.LocalAssistantEnabled
+import ru.finassist.pf.feature.assistant.impl.ui.LocalAssistantAvailability
 import ru.finassist.pf.feature.operations.api.OperationsRoutes
 import javax.inject.Inject
 
-class AssistantEntry @Inject constructor() : FeatureEntry {
+class AssistantEntry @Inject constructor(private val flags: FeatureFlags) : FeatureEntry {
     override fun NavGraphBuilder.install(navigator: Navigator) {
         composable<AssistantRoutes.Chat> { entry ->
-            // The tab and all restored/new child entries share one main-layer snapshot before VM creation.
-            val enabled = LocalAssistantEnabled.current
+            val policy = LocalAssistantAvailability.current
+            val enabled = remember(entry, policy) { policy?.enter(flags.isEnabled(Flag.ASSISTANT)) == true }
             if (!enabled) {
                 LaunchedEffect(entry) { navigator.finishTo(OperationsRoutes.Feed) }
             } else {
@@ -41,7 +44,8 @@ class AssistantEntry @Inject constructor() : FeatureEntry {
             }
         }
         composable<AssistantRoutes.Consent> { entry ->
-            val enabled = LocalAssistantEnabled.current
+            val policy = LocalAssistantAvailability.current
+            val enabled = remember(entry, policy) { policy?.enter(flags.isEnabled(Flag.ASSISTANT)) == true }
             if (!enabled) {
                 LaunchedEffect(entry) { navigator.finishTo(OperationsRoutes.Feed) }
             } else {

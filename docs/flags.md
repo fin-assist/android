@@ -90,8 +90,10 @@ experiment, switch the client to `UpdateBehaviour.Actual` (every request goes to
 uses code defaults until the first answer).
 
 
-FIN-397: MainLayer snapshots `assistant` once and provides that same value through `LocalAssistantEnabled`
-to every Chat/Consent guard. Navigating away, opening consent and restoring a saved tab do not re-read a
-live flag update independently from the bar. A new main layer reads the new flag value; disabled restored
-entries redirect to Operations before screen/ViewModel creation, without assistant API calls. The local
-default is false, and ownership stays in the app composition root; no mutable singleton is used.
+FIN-397: MainLayer owns `AssistantAvailabilityPolicy` in its ViewModelStore. Its initial flag value survives
+configuration recreation and is shared by the bar and every Chat/Consent guard through
+`LocalAssistantAvailability`. An explicit entry after a live false→true update admits the assistant for
+the remaining authenticated layer session; later false updates do not remove the admitted tab or break
+consent navigation. This is a monotonic session policy, not persisted state: a new process/authenticated
+layer starts from the current flag. Disabled cold-restored entries redirect to Operations before an
+assistant screen/ViewModel or API call. A missing policy is denied; no singleton or SavedState persists it.
