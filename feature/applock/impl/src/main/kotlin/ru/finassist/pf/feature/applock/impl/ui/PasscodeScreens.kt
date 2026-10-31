@@ -21,15 +21,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.collect
 import ru.finassist.pf.core.designsystem.components.BiometricKind
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.HeroTone
@@ -54,8 +57,9 @@ import ru.finassist.pf.feature.applock.api.PASSCODE_LENGTH
 /**
  * Common layout of all passcode screens (mockups `Passcode*`, `PasscodeLogin*`, `DeleteAccount*`): optional
  * header, then from the top — the app mark (unlock) or the lock hero (first run), title, subtitle 4 dp below, dots
- * 32 dp below; the keypad at the bottom with an optional footer link under it. Short viewports use smaller
- * gaps and 56 dp keys. Only the introduction can scroll at larger font scales; the keypad stays put.
+ * 32 dp below; the keypad at the bottom with an optional footer link under it. Short bodies use smaller
+ * gaps and keys of at least 56 dp, also fitting the digit line height. The introduction automatically reveals
+ * the dots and error after layout changes; the keypad stays put.
  *
  * [alignStart] puts the texts at the start (first run, change), otherwise they are centred.
  */
@@ -78,56 +82,68 @@ private fun PasscodePad(
     footer: (@Composable () -> Unit)? = null,
 ) {
     val d = PfTheme.dimens
-    BoxWithConstraints(modifier.fillMaxSize()) {
-        val compact = maxHeight < 720.dp
-        Column(
-            Modifier
-                .fillMaxSize()
-                .background(PfTheme.colors.bg)
-                .then(if (header == null) Modifier.windowInsetsPadding(PfInsets.statusBars) else Modifier)
-                .windowInsetsPadding(PfInsets.navigationBars),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            // PfPageHeader pads the status bar itself.
-            header?.invoke()
-            Spacer(Modifier.height(if (compact) d.space2 else d.space6))
-            Column(
-                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = d.space5),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                if (mark) {
-                    PfMark(size = d.mark)
-                    Spacer(Modifier.height(if (compact) d.space2 else d.space5))
-                }
-                val textAlign = if (alignStart) TextAlign.Start else TextAlign.Center
+    val introductionScroll = rememberScrollState()
+    val digitLineHeight = with(LocalDensity.current) { PfTheme.type.title1.lineHeight.toDp() }
+    LaunchedEffect(error, introductionScroll) {
+        if (error != null) {
+            // Measurement publishes the range after error, font or viewport changes; observe that range.
+            snapshotFlow { introductionScroll.maxValue }.collect { maximum ->
+                if (maximum != Int.MAX_VALUE) introductionScroll.scrollTo(maximum)
+            }
+        }
+    }
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(PfTheme.colors.bg)
+            .then(if (header == null) Modifier.windowInsetsPadding(PfInsets.statusBars) else Modifier)
+            .windowInsetsPadding(PfInsets.navigationBars),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // PfPageHeader pads the status bar itself; the body measures what the header and bars actually leave.
+        header?.invoke()
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            // 720 dp minus the standard 24 dp bars; actual insets/header are already excluded here.
+            val compact = maxHeight < 672.dp
+            Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Spacer(Modifier.height(if (compact) d.space2 else d.space6))
                 Column(
-                    Modifier.fillMaxWidth(),
-                    horizontalAlignment = if (alignStart) Alignment.Start else Alignment.CenterHorizontally,
+                    Modifier.weight(1f).fillMaxWidth().verticalScroll(introductionScroll).padding(horizontal = d.space5),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    if (hero) {
-                        PfStatusHero(tone = HeroTone.INFO, icon = PfIcons.LOCK, centered = false)
-                        Spacer(Modifier.height(d.space4))
+                    if (mark) {
+                        PfMark(size = d.mark)
+                        Spacer(Modifier.height(if (compact) d.space2 else d.space5))
                     }
-                    Text(title, style = titleStyle, color = PfTheme.colors.text, textAlign = textAlign)
-                    if (subtitle != null) {
-                        Spacer(Modifier.height(d.space1))
-                        Text(subtitle, style = PfTheme.type.lead, color = PfTheme.colors.textMuted, textAlign = textAlign)
+                    val textAlign = if (alignStart) TextAlign.Start else TextAlign.Center
+                    Column(
+                        Modifier.fillMaxWidth(),
+                        horizontalAlignment = if (alignStart) Alignment.Start else Alignment.CenterHorizontally,
+                    ) {
+                        if (hero) {
+                            PfStatusHero(tone = HeroTone.INFO, icon = PfIcons.LOCK, centered = false)
+                            Spacer(Modifier.height(d.space4))
+                        }
+                        Text(title, style = titleStyle, color = PfTheme.colors.text, textAlign = textAlign)
+                        if (subtitle != null) {
+                            Spacer(Modifier.height(d.space1))
+                            Text(subtitle, style = PfTheme.type.lead, color = PfTheme.colors.textMuted, textAlign = textAlign)
+                        }
                     }
+                    Spacer(Modifier.height(if (compact) d.space4 else d.space8))
+                    PfPasscodeDots(filled = entered, length = PASSCODE_LENGTH, error = error)
                 }
-                Spacer(Modifier.height(if (compact) d.space4 else d.space8))
-                PfPasscodeDots(filled = entered, length = PASSCODE_LENGTH, error = error)
-            }
-            PfNumPad(
-                onDigit = onDigit, onDelete = onDelete, biometric = biometric, onBiometric = onBiometric,
-                keySize = if (compact) 56.dp else 72.dp,
-                verticalSpacing = if (compact) d.space2 else d.space4,
-            )
-            if (footer != null) {
-                // Mockup: the link 16 dp under the keypad (48 dp touch height), 16 dp to the bottom edge.
+                PfNumPad(
+                    onDigit = onDigit, onDelete = onDelete, biometric = biometric, onBiometric = onBiometric,
+                    keySize = maxOf(if (compact) 56.dp else 72.dp, digitLineHeight),
+                    verticalSpacing = if (compact) d.space1 else d.space4,
+                )
+                if (footer != null) {
+                    Spacer(Modifier.height(if (compact) d.space2 else d.space4))
+                    Box(Modifier.defaultMinSize(minHeight = d.touch), contentAlignment = Alignment.Center) { footer() }
+                }
                 Spacer(Modifier.height(if (compact) d.space2 else d.space4))
-                Box(Modifier.defaultMinSize(minHeight = d.touch), contentAlignment = Alignment.Center) { footer() }
             }
-            Spacer(Modifier.height(if (compact) d.space2 else d.space4))
         }
     }
 }

@@ -1050,8 +1050,12 @@ FIN-411 adds the separate «Последние 12 месяцев» / «Посл�
 ### Small passcode viewport (FIN-389)
 
 `PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport` ([PLAINFIN-77](https://app.qase.io/case/PLAINFIN-77))
-checks the unlock and deletion error at 360×640 dp, including system insets. Maestro can find a clipped text node,
+checks all three error modes at heights 640/720/760 dp, font scales 1/1.5/2 and system insets 24/24 or 48/48 dp
+(54 combinations), including the longest last-attempt text. Error appearance and remeasurement with the same
+error must reveal it automatically, without a test-driven scroll. Maestro can find a clipped text node,
 so the native test additionally verifies text layout overflow and compares full/visible bounds of the error, dots,
 keys and footer; it also clicks digit/delete/forgot actions. Existing Maestro cases 5 and 18 cover the real wrong-PIN
-transitions and recovery. Short passcode screens use 56 dp keys and smaller gaps; the 390×844 design-check layout
-keeps its original sizes. At larger text sizes, only the introductory area can scroll; the keypad stays fixed.
+transitions and recovery. The body measures space left by the actual header and system bars; compact keys fit both the 56 dp minimum
+and the scaled digit line height. The 390×844 design-check layout keeps its original sizes. At larger text
+sizes, only the introductory area scrolls; its measured range automatically reveals the dots/error while the
+keypad stays fixed. The test compares keypad geometry before/after error and checks every digit/delete/footer.
