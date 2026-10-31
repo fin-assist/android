@@ -195,3 +195,7 @@ The Retry link and another tap of the same target segment share that gate; neith
 original refusal or captured Retry-After. Resume and expiry never submit the target. A different
 selection or data context retires it. Errors of regular-payment dismissal keep their own presentation:
 showing or consuming that action's snackbar cannot relabel or consume the pending period notice.
+
+FIN-399/391 integration: pull-to-refresh and its current-read Retry keep any independent failed period
+switch and its captured refusal/wait. They read only the displayed period; neither success, failure nor
+recalculation polling resubmits or releases the saved target. The period notice still owns its explicit Retry.

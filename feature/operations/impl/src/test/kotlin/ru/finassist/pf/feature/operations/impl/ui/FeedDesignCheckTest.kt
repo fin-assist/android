@@ -83,4 +83,7 @@ class FeedDesignCheckTest {
     @Test fun serverWarning() = capture("MainServerWarning", state = state.copy(errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
     @Test fun serverWarningDark() = capture("MainServerWarningDark", dark = true, state = state.copy(errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
 
+    @Test fun refreshing() = capture("MainRefreshing", state = state.copy(refreshing = true))
+    @Test fun refreshingDark() = capture("MainRefreshingDark", dark = true, state = state.copy(refreshing = true))
+
 }

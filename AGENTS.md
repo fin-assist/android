@@ -49,6 +49,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Fake backend against `openapi.yaml` and the error registry of contracts (contract tests, known mismatches) | `mock/backend/src/test/…/mock/contract/` (`Exclusions.kt`), `mock/backend/src/test/resources/contracts/` (copy of the same commit); rules — `docs/testing.md`, «Contract tests» |
 | Feature routes and public interfaces | `feature/<name>/api/…/*Routes.kt` (or `AuthApi.kt`, `AppLock.kt`) |
 | Screen registration | `FeatureEntry` / `Navigator` in `core/navigation/…/Navigation.kt`; each `:impl` binds its entry in `di/` |
+| Read-only pull-to-refresh (FIN-399), including empty/error states | `core/designsystem/…/components/PfRefreshContainer.kt`; screen ViewModels keep read-request gates, draft and selected context; import receipts and mutations are not replayed |
 | Design system: theme, tokens, components, icons | `core/designsystem/…/theme`, `components`, `icons` |
 | Server-composed blocks (Analytics, assistant): catalog models, renderers, registry, `supports` | `core/api/…/model/Blocks.kt`; `core/blocks` (`CatalogV1`, `BlockRegistry`, `BlocksColumn`); composer of the fake server `mock/backend/…/domain/AnalyticsComposer.kt` |
 | Feature flags | `core/toggles/…/Flag.kt` (registry + defaults), `docs/flags.md` (meaning); mock overrides `app/src/mock/assets/flags.json` |

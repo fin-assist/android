@@ -154,4 +154,7 @@ class AnalyticsDesignCheckTest {
     // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
     @Test fun serverWarning() = capture("AnalyticsServerWarning", ui(september()).copy(errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)), heightDp = 2960)
 
+    @Test fun refreshing() = capture("AnalyticsRefreshing", ui(september()).copy(refreshing = true), heightDp = 844)
+    @Test fun refreshingDark() = capture("AnalyticsRefreshingDark", ui(september()).copy(refreshing = true), heightDp = 844, dark = true)
+
 }

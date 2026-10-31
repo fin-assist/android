@@ -60,6 +60,7 @@ enum class AnalyticsHint { CATEGORIES, ASK }
 
 data class AnalyticsUiState(
     val loading: Boolean = true,
+    val refreshing: Boolean = false,
     val offline: Boolean = false,
     val data: Analytics? = null,
     val blocks: AnalyticsBlocks,
@@ -80,6 +81,7 @@ data class AnalyticsUiState(
     val limitErrorPresentation: ErrorPresentation? = null,
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
+    val limitRetryReady: Boolean = true,
     val periodChangeErrorPresentation: ErrorPresentation? = null,
     val periodChangeRetryReady: Boolean = true,
     val preparationTimedOut: Boolean = false,
@@ -115,12 +117,14 @@ class AnalyticsViewModel @Inject constructor(
     private var importPollRevision: Long? = null
 
     private val limitRetryGate = RequestRetryGate(elapsedClock)
+    private var limitReadPending = false
     private val _state = MutableStateFlow(AnalyticsUiState(blocks = readBlocks(flags)))
     private val retryGate = RequestRetryGate(elapsedClock)
     private val periodChangeRetryGate = RequestRetryGate(elapsedClock)
     private var failedPeriodRequest: Triple<PeriodTypeCode, PeriodKey?, TransferMode>? = null
     init { viewModelScope.launch { periodChangeRetryGate.readiness.collect { ready -> _state.update { it.copy(periodChangeRetryReady = ready) } } } }
     init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
+    init { viewModelScope.launch { limitRetryGate.readiness.collect { ready -> _state.update { it.copy(limitRetryReady = ready) } } } }
     val state: StateFlow<AnalyticsUiState> = _state
     private var periodsJob: Job? = null
     private var periodsGeneration = 0L
@@ -236,7 +240,33 @@ class AnalyticsViewModel @Inject constructor(
         if (_state.value.sheet == AnalyticsSheet.PERIODS) requestPeriods()
     }
 
-    override fun load(quiet: Boolean) {
+    override fun refresh() {
+        if (_state.value.refreshing) return
+        val readAnalytics = loadJob?.isActive != true && retryGate.isReady()
+        val readLimit = _state.value.blocks.assistant && !limitReadPending && limitRetryGate.isReady()
+        if (!readAnalytics && !readLimit) return
+        _state.update {
+            if (readAnalytics) it.copy(refreshing = true, errorPresentation = null, snackbar = null, requestRetryable = null)
+            else it.copy(refreshing = true)
+        }
+        viewModelScope.launch {
+            val quotaJob = if (readLimit) launch { refreshLimit(reportOffline = true) } else null
+            val analyticsJob = if (readAnalytics) {
+                startLoad(quiet = true, updateLimit = false, preservePeriodChangeFailure = true)
+                loadJob
+            } else null
+            try {
+                analyticsJob?.join()
+                quotaJob?.join()
+            } finally {
+                _state.update { it.copy(refreshing = false) }
+            }
+        }
+    }
+
+    override fun load(quiet: Boolean) = startLoad(quiet, updateLimit = true)
+
+    private fun startLoad(quiet: Boolean, updateLimit: Boolean, preservePeriodChangeFailure: Boolean = false) {
         if (!retryGate.isReady()) return
         if (_state.value.preparationTimedOut) importPolls = 0
         loadJob?.cancel()
@@ -261,13 +291,14 @@ class AnalyticsViewModel @Inject constructor(
                         preparationTimedOut = expired, errorPresentation = null, requestRetryable = null) }
                     if (!expired) {
                         delay(RECALC_POLL_MS)
-                        load(quiet = true)
+                        startLoad(quiet = true, updateLimit = updateLimit, preservePeriodChangeFailure = preservePeriodChangeFailure)
                     }
                     return@launch
                 }
                 if (pendingImport != null && a.state?.recalculating != true) statements.analyticsImportReady(pendingImport)
                 importPolls = 0
-                clearPeriodChangeFailure()
+                // A pull refresh reads the shown period; its result cannot retire another target's refusal.
+                if (!preservePeriodChangeFailure) clearPeriodChangeFailure()
                 exposed.clear()
                 shownExperiments = exp
                 a.params?.let { p ->
@@ -282,11 +313,11 @@ class AnalyticsViewModel @Inject constructor(
                 if (a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
                     _state.update { it.copy(hint = AnalyticsHint.CATEGORIES) }
                 }
-                if (_state.value.blocks.assistant) refreshLimit()
+                if (updateLimit && _state.value.blocks.assistant) refreshLimit()
                 // The server is still recalculating after an edit: ask again shortly (api.md 6.1 `recalculating`).
                 if (a.state?.recalculating == true) {
                     delay(RECALC_POLL_MS)
-                    load(quiet = true)
+                    startLoad(quiet = true, updateLimit = updateLimit, preservePeriodChangeFailure = preservePeriodChangeFailure)
                 }
             } catch (e: AppError) {
                 importPolls = 0
@@ -307,11 +338,15 @@ class AnalyticsViewModel @Inject constructor(
                 if (failedSwitch) {
                     failedPeriodRequest = requested
                     periodChangeRetryGate.record(e)
-                } else clearPeriodChangeFailure()
+                } else if (!preservePeriodChangeFailure) clearPeriodChangeFailure()
                 _state.update {
                     it.copy(
                         loading = false,
-                        periodChangeErrorPresentation = if (failedSwitch) e.presentation else null,
+                        periodChangeErrorPresentation = when {
+                            failedSwitch -> e.presentation
+                            preservePeriodChangeFailure -> it.periodChangeErrorPresentation
+                            else -> null
+                        },
                         recalculationPaused = it.data?.state?.recalculating == true,
                         errorPresentation = if (failedSwitch || (e is AppError.Offline && it.data == null)) null else e.presentation,
                         requestRetryable = e.requestRetryable,
@@ -324,13 +359,18 @@ class AnalyticsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshLimit() {
-        if (!limitRetryGate.isReady()) return
-        runCatching { assistantApi.getLimit() }.onSuccess { l -> _state.update { it.copy(limit = l, limitErrorPresentation = null) } }
-            .onFailure { failure -> if (failure is AppError) {
-                limitRetryGate.record(failure)
-                if (failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
-            } }
+    private suspend fun refreshLimit(reportOffline: Boolean = false) {
+        if (limitReadPending || !limitRetryGate.isReady()) return
+        limitReadPending = true
+        try {
+            val limit = assistantApi.getLimit()
+            _state.update { it.copy(limit = limit, limitErrorPresentation = null) }
+        } catch (failure: AppError) {
+            limitRetryGate.record(failure)
+            if (reportOffline || failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
+        } finally {
+            limitReadPending = false
+        }
     }
 
     /** Restore this segment's choice; only a first visit derives a key from the displayed period. */

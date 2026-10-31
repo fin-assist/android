@@ -66,6 +66,7 @@
     "ru.finassist.pf.ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries": 66,
     "ru.finassist.pf.ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries": 67,
     ".maestro/flows/assistant/late_enable.yaml": 68,
-    ".maestro/flows/analytics/facts_and_forecast.yaml": 71
+    ".maestro/flows/analytics/facts_and_forecast.yaml": 71,
+    ".maestro/flows/refresh/server_data.yaml": 70
   }
 }
