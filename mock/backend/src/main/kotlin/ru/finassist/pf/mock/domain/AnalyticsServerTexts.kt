@@ -80,6 +80,45 @@ object AnalyticsServerTexts {
         }
     }
 
+    /** Calendar coverage of all uploads, kept separate from the selected calendar year. */
+    fun forecastLock(lock: MetricLock?, state: AnalyticsState?, history: List<MonthlyPoint>?): String {
+        val base = lock(lock, state)
+        val scope = ". База прогноза — вся загруженная история, независимо от выбранного года."
+        val fallback = scope + " Полный месяц — завершённый календарный месяц с данными за каждый день."
+        if (state == null || history == null || history.count { it.coverage == Coverage.COMPLETE } != lock?.available ||
+            history.any { it.coverage == Coverage.PARTIAL && (it.dataFrom == null || it.dataTo == null) }
+        ) return base + fallback
+        fun name(point: MonthlyPoint): String {
+            val month = YearMonth.parse(point.month)
+            return "${RussianDates.monthNominative(month.month)} ${month.year}"
+        }
+        val full = history.filter { it.coverage == Coverage.COMPLETE }.map { YearMonth.parse(it.month) }
+        val missing = history.filter { it.coverage == Coverage.NO_DATA }.map { YearMonth.parse(it.month) }
+        val incomplete = history.filter { it.coverage == Coverage.PARTIAL }.map { point ->
+            val reasons = mutableListOf("данные за ${RussianDates.dayRange(point.dataFrom!!.toLocalDate(), point.dataTo!!.toLocalDate())}")
+            if (point.range.to.isAfter(state.calculatedAt)) reasons += "месяц ещё не закончился"
+            reasons += point.gaps.map { "нет данных за ${RussianDates.dayRange(it.from.toLocalDate(), RussianDates.lastDayOf(it))}" }
+            "${name(point)} (${reasons.joinToString("; ")})"
+        }
+        val fullText = full.takeIf { it.isNotEmpty() }?.let(::monthRanges) ?: "нет"
+        return base + fallback + " Учтены полные месяцы: $fullText." +
+            incomplete.takeIf { it.isNotEmpty() }?.let { " Неполные месяцы: ${it.joinToString(", ")}." }.orEmpty() +
+            missing.takeIf { it.isNotEmpty() }?.let { " Месяцы без данных: ${monthRanges(it)}." }.orEmpty()
+    }
+
+    private fun monthRanges(months: List<YearMonth>): String {
+        fun title(month: YearMonth) = "${RussianDates.monthNominative(month.month)} ${month.year}"
+        val groups = mutableListOf<String>()
+        var first = 0
+        while (first < months.size) {
+            var last = first
+            while (last + 1 < months.size && months[last].plusMonths(1) == months[last + 1]) last++
+            groups += title(months[first]) + if (last > first) " — ${title(months[last])}" else ""
+            first = last + 1
+        }
+        return groups.joinToString(", ")
+    }
+
     /**
      * Line under the expense chart. Month: «Сентябрь к 25-му — 84 320 ₽, на 17% больше, чем август к этому дню»;
      * quarter and year keep the short form «На 17% больше, чем прошлый год к этому дню».

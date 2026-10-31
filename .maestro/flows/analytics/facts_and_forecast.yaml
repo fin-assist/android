@@ -1,0 +1,123 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — факт отдельно от прогноза и база всей истории
+tags:
+  - analytics
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+# Replace the full preloaded year through the public UI. This rolling year covers 11 complete months;
+# the only operation is in August, so calendar completeness cannot depend on edge transactions.
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.empty"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- scrollUntilVisible:
+    element:
+      id: "e2e.picker.forecast_history.ofx"
+- tapOn:
+    id: "e2e.picker.forecast_history.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "statements.result.analytics"
+- tapOn:
+    id: "statements.result.analytics"
+- extendedWaitUntil:
+    visible: "Октябрь 2026"
+    timeout: 15000
+- assertVisible:
+    id: "analytics.tile.expense"
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.forecast"
+- assertVisible:
+    id: "analytics.tile.forecast"
+    text: ".*Посчитаем с 10.октября.*"
+# Restore the controls at the top before changing the period type.
+- scrollUntilVisible:
+    element:
+      id: "ds.segment.2"
+    direction: UP
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 65%"
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible: "2026"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.expense"
+- assertVisible:
+    id: "analytics.tile.expense"
+    text: "Расходы, 1[ \\u00a0\\u202f]?000.*"
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.forecast"
+- assertVisible:
+    id: "analytics.tile.forecast"
+    text: ".*есть 11.*независимо от выбранного года.*ноябрь 2025.*сентябрь 2026.*Неполные месяцы.*октябрь 2025.*октябрь 2026.*"
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.expense"
+    direction: UP
+- tapOn:
+    id: "analytics.tile.expense"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search"
+    timeout: 10000
+- assertVisible:
+    id: "operations.row"
+- tapOn:
+    id: "ds.back"
+- scrollUntilVisible:
+    element:
+      id: "ds.segment.0"
+    direction: UP
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 65%"
+- assertVisible: "2026"
+- tapOn:
+    id: "ds.segment.0"
+- extendedWaitUntil:
+    visible: "Октябрь 2026"
+    timeout: 10000
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible: "Сентябрь 2026"
+    timeout: 10000
+- assertVisible:
+    id: "analytics.tile.expense"
+- assertNotVisible:
+    id: "analytics.tile.forecast"

@@ -28,6 +28,7 @@ class AnalyticsDesignFixturesTest {
         "september" to f.september(),
         "september_no_transfers" to f.september(noTransfers = true),
         "year_2026" to f.year2026,
+        "rolling_year" to f.rollingYear,
         "early" to f.early,
         "stale" to f.stale,
     )

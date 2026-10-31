@@ -69,8 +69,8 @@ object AnalyticsComposer {
         val params = s.params!!
         val period = s.period!!
         val type = params.period
-        // Early state (docs/calc.md, section 4): the only month with data, and it is incomplete — no chart at all.
-        val early = type == PeriodTypeCode.MONTH && period.coverage.effective == ru.finassist.pf.core.api.model.Coverage.PARTIAL &&
+        // Early state (docs/calc.md, section 4): one incomplete covered month in all history — no monthly chart.
+        val early = s.state?.fullMonths == 0 &&
             s.monthlyChart?.lock?.let { it.reason == LockReason.NEED_MONTHS_WITH_DATA && it.available == 1 } == true
 
         fun guarded(id: String, build: () -> List<Block>): List<Block> =
@@ -173,7 +173,11 @@ object AnalyticsComposer {
         id: String, title: String, m: Metric, s: AnalyticsSnapshot, caption: String? = null,
         approx: Boolean = false, showPlus: Boolean = false, action: BlockAction? = null,
     ): Tile = if (!m.isReady) {
-        Tile(id, title, status = BlockStatus.LOCKED, lock = lock(m, s.state))
+        Tile(id, title, status = BlockStatus.LOCKED, lock = lock(m, s.state)?.let { value ->
+            if (id == "forecast" && m.lock?.reason == LockReason.NEED_FULL_MONTHS) {
+                value.copy(text = AnalyticsServerTexts.forecastLock(m.lock, s.state, s.forecastHistory))
+            } else value
+        })
     } else {
         Tile(
             id, title, status = status(m), value = amount(m.value), valueKind = ValueKind.AMOUNT, approx = approx,
@@ -182,6 +186,9 @@ object AnalyticsComposer {
     }
 
     private fun tiles(t: AnalyticsTiles, s: AnalyticsSnapshot, period: AnalyticsPeriodInfo): Block {
+        if (period.coverage == Coverage.NO_DATA) return Block.of(
+            BlockType.TILE_GROUP, TileGroupData.serializer(), TileGroupData(emptyList()),
+        ).copy(id = "tiles", status = BlockStatus.NONE, emptyText = "За этот период данных нет", altText = "За этот период данных нет")
         val params = s.params!!
         val share = AnalyticsServerTexts.share(t.balance)
         val balance = tile(
@@ -189,15 +196,9 @@ object AnalyticsComposer {
             caption = if (t.balance.shareOfIncome != null && share.endsWith("дохода")) "$share · по выписке" else share,
         )
         val expense = tile("expense", "Расходы", t.expense, s, caption = periodCaption(period), action = open(t.expense.filters))
-        val second = t.forecast?.let { f ->
-            // With stale data the forecast is replaced by the fact of the period (api.md 6.1).
-            val staleFact = f.status.effective == MetricStatus.LOCKED && f.lock?.reason == ru.finassist.pf.core.api.model.LockReason.STALE_DATA
-            if (staleFact) {
-                expense
-            } else {
-                tile("forecast", AnalyticsServerTexts.forecastLabel(params.period), f, s, caption = AnalyticsServerTexts.forecastNote(params.date), approx = true)
-            }
-        } ?: expense
+        val forecast = t.forecast?.takeUnless { it.lock?.reason == LockReason.STALE_DATA }?.let { f ->
+            tile("forecast", AnalyticsServerTexts.forecastLabel(params.period), f, s, caption = AnalyticsServerTexts.forecastNote(params.date), approx = true)
+        }
         val dailyCaption = if (params.period == PeriodTypeCode.MONTH) {
             AnalyticsServerTexts.dailyComparison(t.dailyExpense.comparison)
         } else {
@@ -205,7 +206,7 @@ object AnalyticsComposer {
         }
         val daily = tile("daily_expense", "Расходы в день", t.dailyExpense, s, caption = dailyCaption)
         val income = tile("income", "Доходы", t.income, s, showPlus = true, action = open(t.income.filters))
-        val all = listOf(balance, second, daily, income)
+        val all = listOf(balance, expense, daily, income) + listOfNotNull(forecast)
         return Block.of(BlockType.TILE_GROUP, TileGroupData.serializer(), TileGroupData(all)).copy(
             id = "tiles",
             altText = all.joinToString(", ") { tl -> tl.title + (tl.value?.let { " " + Money(it.toLong()).format() } ?: " — " + (tl.lock?.text ?: "")) },

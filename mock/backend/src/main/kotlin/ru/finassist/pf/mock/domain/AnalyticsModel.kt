@@ -200,4 +200,5 @@ data class AnalyticsSnapshot(
     val monthlyChart: MonthlyChart? = null,
     val insights: Insights? = null,
     val state: AnalyticsState? = null,
+    val forecastHistory: List<MonthlyPoint>? = null,
 )

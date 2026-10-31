@@ -95,6 +95,9 @@ class AnalyticsDesignCheckTest {
     @Test fun analyticsPreparingWithoutData() = capture("AnalyticsPreparingWithoutData", ui(september().copy(hasData = false,
         state = analyticsState.copy(recalculating = true))), heightDp = 844)
 
+    @Test fun analyticsForecastHistory() = capture("AnalyticsForecastHistory", ui(golden("rolling_year")), heightDp = 1600)
+    @Test fun analyticsForecastHistoryDark() = capture("AnalyticsForecastHistoryDark", ui(golden("rolling_year")), heightDp = 1600, dark = true)
+
     @Test fun analytics() = capture("Analytics", ui(september()), heightDp = 2848)
 
     @Test fun analyticsDark() = capture("AnalyticsDark", ui(september()), heightDp = 2848, dark = true)

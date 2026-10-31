@@ -42,6 +42,11 @@ import java.time.ZoneOffset
  * 2026 by the 25th): the composer turns it into the golden responses the client's design check renders (FIN-4).
  */
 object AnalyticsDesignFixtures {
+    val rollingYear: AnalyticsSnapshot
+        get() = testBackend(TestClock(OffsetDateTime.parse("2026-10-31T12:00:00+03:00"))).apply {
+            load(statement("2025-10-30", "2026-10-30", trn("forecast-history", "2026-08-15T12:00", 1000, "Магазин", "Супермаркеты")))
+        }.analytics.analytics(PeriodTypeCode.YEAR, PeriodKey("2026"), TransferMode.WITH)
+
     fun day(m: Int, d: Int) = OffsetDateTime.of(2026, m, d, 0, 0, 0, 0, ZoneOffset.ofHours(3))
     fun month(m: Int) = DateRange(day(m, 1), if (m == 12) OffsetDateTime.of(2027, 1, 1, 0, 0, 0, 0, ZoneOffset.ofHours(3)) else day(m + 1, 1))
     fun rub(v: Long) = Money(v * 100)
