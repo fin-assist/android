@@ -28,6 +28,14 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
         backend.requireSession()
         if (period == PeriodTypeCode.UNKNOWN || transferMode == TransferMode.UNKNOWN) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
         if (date != null && !PeriodKey.isValid(date.value)) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
+        val pending = backend.mutex.withLock {
+            val remaining = backend.config.analyticsPendingResponses
+            if (remaining <= 0) false else {
+                backend.config = backend.config.copy(analyticsPendingResponses = remaining - 1)
+                true
+            }
+        }
+        if (pending) return Analytics(hasData = false)
         val snapshot = backend.mutex.withLock { backend.analytics.analytics(period, date, transferMode ?: TransferMode.WITH) }
         val composed = AnalyticsComposer.compose(
             snapshot,

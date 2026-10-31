@@ -66,6 +66,7 @@ class AnalyticsViewModelTest {
         /** Answers in order; the last one repeats. An [AppError] in the list is thrown. */
         val answers = ArrayDeque<Any>()
         val periodRequests = mutableListOf<PeriodTypeCode?>()
+        var reply: (suspend () -> Analytics)? = null
         var periodsFailure: AppError? = null
         var periodsGate: CompletableDeferred<Unit>? = null
         var periodsReply: (suspend (PeriodTypeCode?) -> AnalyticsPeriodsList)? = null
@@ -78,6 +79,7 @@ class AnalyticsViewModelTest {
         override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?, supports: String?, exp: String?): Analytics {
             requests += Request(period, date, transferMode)
             extras += supports to exp
+            reply?.let { return it() }
             val next = if (answers.size > 1) answers.removeFirst() else answers.first()
             if (next is AppError) throw next
             return next as Analytics
@@ -115,6 +117,13 @@ class AnalyticsViewModelTest {
 
     private class FakeStatements : StatementsRepository {
         var firstImportHints = false
+        var pendingImport: Long? = null
+        val acknowledged = mutableListOf<Long>()
+        override suspend fun pendingAnalyticsImport(): Long? = pendingImport
+        override suspend fun analyticsImportReady(revision: Long) {
+            acknowledged += revision
+            if (pendingImport == revision) pendingImport = null
+        }
         override val events = MutableSharedFlow<StatementsEvent>(extraBufferCapacity = 4)
         override fun lastResult(uploadId: String): ImportResult? = null
         override suspend fun consumeFirstImportHints(): Boolean = firstImportHints.also { firstImportHints = false }
@@ -317,14 +326,15 @@ class AnalyticsViewModelTest {
         assertNull(vm.state.value.snackbar)
     }
 
-    @Test fun `a background reload fails silently`() {
+    @Test fun `a failed refresh after deletion never presents deleted data as current`() {
         api.answers += data()
         api.answers += AppError.Offline()
         val vm = opened()
         statements.events.tryEmit(StatementsEvent.UploadDeleted("u1"))
         assertEquals(2, api.requests.size)
         assertNull(vm.state.value.snackbar)
-        assertFalse(vm.state.value.offline)
+        assertTrue(vm.state.value.offline)
+        assertNull(vm.state.value.data)
     }
 
     @Test fun `an import or a category change reloads the shown period`() {
@@ -334,6 +344,176 @@ class AnalyticsViewModelTest {
         operations.categoryChanges.tryEmit(Unit)
         assertEquals(3, api.requests.size)
         assertTrue(api.requests.all { it.date == PeriodKey("2026-08") })
+    }
+
+    @Test fun `resuming a saved tab refreshes its stale empty state without restarting the app`() {
+        api.answers += data(hasData = false)
+        api.answers += data()
+        val vm = vm()
+        vm.onResume(null)
+        assertEquals(false, vm.state.value.data?.hasData)
+        vm.onResume(null)
+        assertEquals(true, vm.state.value.data?.hasData)
+        assertEquals(2, api.requests.size)
+    }
+
+    @Test fun `resuming refreshes deletion of the last statement while preserving the selected period`() {
+        api.answers += data()
+        api.answers += data(hasData = false)
+        val vm = vm()
+        vm.onResume(null)
+        vm.onResume(null)
+        assertEquals(false, vm.state.value.data?.hasData)
+        assertEquals(PeriodKey("2026-09"), api.requests.last().date)
+    }
+
+    @Test fun `a data mutation immediately removes old numbers until the remaining statements are loaded`() {
+        api.answers += data()
+        val vm = opened()
+        val completion = CompletableDeferred<Analytics>()
+        api.reply = { completion.await() }
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("u1"))
+        assertTrue(vm.state.value.loading)
+        assertNull(vm.state.value.data)
+        completion.complete(data(date = "2026-08"))
+        assertFalse(vm.state.value.loading)
+        assertEquals(PeriodKey("2026-08"), vm.state.value.data?.params?.date)
+    }
+
+    @Test fun `resuming never bypasses a server retry refusal`() {
+        api.answers += refused()
+        val vm = vm()
+        vm.onResume(null)
+        vm.onResume(null)
+        assertEquals(1, api.requests.size)
+    }
+
+    @Test fun `a completed import with delayed projection never shows the empty state`() {
+        statements.pendingImport = 1L
+        api.answers += Analytics(hasData = false)
+        api.answers += data()
+        val vm = opened()
+        assertTrue(vm.state.value.loading)
+        assertNull(vm.state.value.data)
+        assertTrue(statements.acknowledged.isEmpty())
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertEquals(true, vm.state.value.data?.hasData)
+        assertEquals(listOf(1L), statements.acknowledged)
+        assertFalse(vm.state.value.loading)
+    }
+
+    @Test fun `an import completed before the analytics view model existed is still awaited`() {
+        statements.pendingImport = 2L
+        api.answers += Analytics(hasData = false)
+        api.answers += data(recalculating = true)
+        api.answers += data()
+        val vm = opened()
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertTrue(statements.acknowledged.isEmpty())
+        assertEquals(true, vm.state.value.data?.state?.recalculating)
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertEquals(listOf(2L), statements.acknowledged)
+    }
+
+    @Test fun `a projection that stays absent stops polling with an explicit retry instead of upload advice`() {
+        statements.pendingImport = 3L
+        api.answers += Analytics(hasData = false)
+        val vm = opened()
+        scheduler.advanceTimeBy(30_000)
+        scheduler.runCurrent()
+        assertEquals(10, api.requests.size)
+        assertTrue(vm.state.value.preparationTimedOut)
+        assertFalse(vm.state.value.loading)
+        assertNull(vm.state.value.data)
+        assertEquals(3L, statements.pendingImport)
+        api.answers.clear()
+        api.answers += data()
+        vm.load()
+        assertEquals(true, vm.state.value.data?.hasData)
+        assertFalse(vm.state.value.preparationTimedOut)
+    }
+
+    @Test fun `a refused read while waiting for import publication stops polling and blocks retry`() {
+        statements.pendingImport = 4L
+        api.answers += Analytics(hasData = false)
+        api.answers += refused()
+        val vm = opened()
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        scheduler.advanceTimeBy(30_000)
+        scheduler.runCurrent()
+        vm.load()
+        assertEquals(2, api.requests.size)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(4L, statements.pendingImport)
+    }
+
+    @Test fun `a failed recalculation poll keeps labelled previous data and offers recovery`() {
+        api.answers += data(recalculating = true)
+        api.answers += AppError.Offline()
+        val vm = opened()
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertFalse(vm.state.value.loading)
+        assertFalse(vm.state.value.offline)
+        assertNotNull(vm.state.value.data)
+        assertTrue(vm.state.value.recalculationPaused)
+        api.answers.clear()
+        api.answers += data()
+        vm.load()
+        assertEquals(true, vm.state.value.data?.hasData)
+        assertFalse(vm.state.value.offline)
+    }
+
+    @Test fun `a refused recalculation poll labels previous numbers and stops polling`() {
+        api.answers += data(recalculating = true)
+        api.answers += refused()
+        val vm = opened()
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertFalse(vm.state.value.loading)
+        assertNotNull(vm.state.value.data)
+        assertTrue(vm.state.value.recalculationPaused)
+        assertNotNull(vm.state.value.errorPresentation)
+        assertFalse(vm.state.value.retryReady)
+        vm.load()
+        assertEquals(2, api.requests.size)
+    }
+
+    @Test fun `a new import generation receives a fresh full polling allowance after timeout`() {
+        statements.pendingImport = 1L
+        api.answers += Analytics(hasData = false)
+        val vm = opened()
+        scheduler.advanceTimeBy(30_000)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.preparationTimedOut)
+        assertEquals(10, api.requests.size)
+        vm.onResume(null)
+        assertEquals(10, api.requests.size, "resume is not an implicit retry after timeout")
+        statements.pendingImport = 2L
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("previous-source"))
+        assertFalse(vm.state.value.preparationTimedOut)
+        assertTrue(vm.state.value.loading)
+        assertEquals(11, api.requests.size)
+        scheduler.advanceTimeBy(30_000)
+        scheduler.runCurrent()
+        assertEquals(20, api.requests.size)
+        assertTrue(vm.state.value.preparationTimedOut)
+    }
+
+    @Test fun `a regular payment edit keeps the previous screen when its background refresh fails`() {
+        api.answers += data()
+        api.answers += AppError.Offline()
+        val vm = opened()
+        val previous = vm.state.value.data
+        vm.dismissRegular("rp_1")
+        assertEquals(previous, vm.state.value.data)
+        assertFalse(vm.state.value.loading)
+        assertFalse(vm.state.value.offline)
+        assertEquals("Убрали из регулярных платежей", vm.state.value.snackbar)
     }
 
     @Test fun `while the server recalculates the screen asks again every 3 seconds`() {

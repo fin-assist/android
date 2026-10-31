@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import kotlinx.coroutines.delay
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.AnalyticsParams
@@ -84,7 +85,10 @@ private val PERIOD_TYPES = listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, 
 
 @Composable
 fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: AnalyticsViewModel = hiltViewModel()) {
-    LaunchedEffect(params) { vm.init(params) }
+    LifecycleResumeEffect(params) {
+        vm.onResume(params)
+        onPauseOrDispose {}
+    }
     val state by vm.state.collectAsStateWithLifecycle()
     AnalyticsContent(state, actions, vm)
 }
@@ -121,10 +125,22 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
                 modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.load() }))
         }
         when {
-            state.loading -> Unit
+            state.loading || (a?.hasData == false && a.state?.recalculating == true) -> Column(
+                Modifier.weight(1f).fillMaxWidth().padding(d.space5).testTag(AnalyticsTags.UPDATING),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                PfEmptyState(PfIcons.BAR_CHART, "Обновляем аналитику", "Подготавливаем показатели по вашим выпискам")
+            }
             state.errorPresentation != null && a == null -> Unit
             state.offline -> ConnectionFailureState(modifier = Modifier.testTag(AnalyticsTags.OFFLINE)) {
                 PfButton("Повторить", onClick = { vm.load() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+            }
+            state.preparationTimedOut -> PfEmptyState(
+                PfIcons.BAR_CHART, "Аналитика ещё готовится", "Выписка загружена. Попробуйте обновить показатели чуть позже",
+                modifier = Modifier.testTag(AnalyticsTags.PREPARATION_TIMEOUT),
+            ) {
+                PfButton("Повторить", onClick = { vm.load() }, enabled = state.retryReady,
+                    variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
             }
             a == null || !a.hasData -> Column(
                 Modifier.weight(1f).fillMaxWidth().padding(start = d.space5, end = d.space5, bottom = d.space6).testTag(AnalyticsTags.EMPTY),
@@ -239,7 +255,14 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         }
         if (s.recalculating) {
             Gap(d.space3)
-            PfNotice("Пересчитываем после изменений — цифры обновятся через несколько секунд", tone = NoticeTone.INFO)
+            PfNotice(
+                if (state.recalculationPaused) "Не удалось обновить показатели. Показаны данные до изменений"
+                else "Пересчитываем после изменений — цифры обновятся через несколько секунд",
+                tone = NoticeTone.INFO,
+                action = if (state.recalculationPaused && state.retryReady) ({
+                    PfNoticeLink("Повторить", onClick = { vm.load() }, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+                }) else null,
+            )
         }
     }
     // A past month or an incomplete quarter/year says which part of it the numbers cover; the tiles follow 8 dp
@@ -410,6 +433,8 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
 
 /** Test tags of the analytics screen (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object AnalyticsTags {
+    const val UPDATING = "analytics.updating"
+    const val PREPARATION_TIMEOUT = "analytics.preparation_timeout"
     /** A block of the screen by its id (`analytics.block.tiles`): the ids are the server's (FIN-4). */
     fun block(id: String) = "analytics.block.$id"
     const val SCREEN = "analytics.screen"

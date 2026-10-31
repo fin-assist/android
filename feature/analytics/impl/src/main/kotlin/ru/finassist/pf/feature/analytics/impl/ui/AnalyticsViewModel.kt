@@ -78,6 +78,8 @@ data class AnalyticsUiState(
     val limitErrorPresentation: ErrorPresentation? = null,
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
+    val preparationTimedOut: Boolean = false,
+    val recalculationPaused: Boolean = false,
 )
 
 /**
@@ -100,6 +102,9 @@ class AnalyticsViewModel @Inject constructor(
     private var date: PeriodKey? = null
     private var transferMode: TransferMode = TransferMode.WITH
     private var loadJob: Job? = null
+    private var initialized = false
+    private var importPolls = 0
+    private var importPollRevision: Long? = null
 
     private val limitRetryGate = RequestRetryGate(elapsedClock)
     private val _state = MutableStateFlow(AnalyticsUiState(blocks = readBlocks(flags)))
@@ -133,7 +138,8 @@ class AnalyticsViewModel @Inject constructor(
 
     /** Set by the `Period` route (assistant chip); the tab root starts with the server's default period. */
     fun init(params: AnalyticsParams?) {
-        if (_state.value.data != null || loadJob != null) return
+        if (initialized) return
+        initialized = true
         if (params != null) {
             period = params.period
             date = params.date
@@ -144,7 +150,10 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     init {
-        viewModelScope.launch { merge(statements.events, operations.categoryChanges).collect { reloadChangedData() } }
+        viewModelScope.launch {
+            merge(statements.events.map { true }, operations.categoryChanges.map { false })
+                .collect { invalidate -> reloadChangedData(invalidate = invalidate) }
+        }
         viewModelScope.launch {
             reportZone.profile.map { reportZone.current }.distinctUntilChanged().drop(1).collect { if (loadJob != null) reloadChangedData() }
         }
@@ -168,10 +177,21 @@ class AnalyticsViewModel @Inject constructor(
         }
     }
 
+    /** Returning to a saved tab also refreshes changes whose event arrived while its view model was absent. */
+    fun onResume(params: AnalyticsParams?) {
+        if (!initialized) init(params)
+        else if (!_state.value.preparationTimedOut && loadJob?.isActive != true) load(quiet = true)
+    }
+
     /** Actual data/zone changes invalidate the old request context, including the period directory. */
-    private fun reloadChangedData() {
+    private fun reloadChangedData(invalidate: Boolean = false, clearSnackbar: Boolean = true) {
+        if (!initialized) return
         clearRestriction(periodsChanged = true)
-        load(quiet = true)
+        importPolls = 0
+        // An import or deletion invalidates the old totals. Other edits keep the screen and its scroll position.
+        if (invalidate) _state.update { it.copy(data = null, loading = true, offline = false,
+            snackbar = if (clearSnackbar) null else it.snackbar, preparationTimedOut = false) }
+        load(quiet = !invalidate)
     }
 
     private fun clearRestriction(periodsChanged: Boolean = false) {
@@ -189,13 +209,35 @@ class AnalyticsViewModel @Inject constructor(
 
     override fun load(quiet: Boolean) {
         if (!retryGate.isReady()) return
+        if (_state.value.preparationTimedOut) importPolls = 0
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             if (!quiet) _state.update { it.copy(loading = it.data == null, offline = false, errorPresentation = null, requestRetryable = null) }
+            _state.update { it.copy(recalculationPaused = false) }
             val requested = Triple(period, date, transferMode)
             try {
+                val pendingImport = statements.pendingAnalyticsImport()
+                if (pendingImport != importPollRevision) {
+                    importPollRevision = pendingImport
+                    importPolls = 0
+                }
                 val exp = experiments
                 val a = api.getAnalytics(requested.first, requested.second, requested.third, supports = supports, exp = exp)
+                // `complete` confirms the ledger commit, while the analytics projection can still be absent.
+                // Never turn that known non-empty import into an instruction to upload the same file again.
+                if (pendingImport != null && !a.hasData) {
+                    importPolls++
+                    val expired = importPolls >= MAX_IMPORT_POLLS
+                    _state.update { it.copy(data = null, loading = !expired, offline = false,
+                        preparationTimedOut = expired, errorPresentation = null, requestRetryable = null) }
+                    if (!expired) {
+                        delay(RECALC_POLL_MS)
+                        load(quiet = true)
+                    }
+                    return@launch
+                }
+                if (pendingImport != null && a.state?.recalculating != true) statements.analyticsImportReady(pendingImport)
+                importPolls = 0
                 exposed.clear()
                 shownExperiments = exp
                 a.params?.let { p ->
@@ -205,7 +247,7 @@ class AnalyticsViewModel @Inject constructor(
                     transferMode = allowedMode(p.transferMode)
                     if (periodsChanged) resetPeriodsContext()
                 }
-                _state.update { it.copy(loading = false, offline = false, errorPresentation = null, requestRetryable = null, data = a, response = it.response + 1) }
+                _state.update { it.copy(loading = false, offline = false, errorPresentation = null, requestRetryable = null, preparationTimedOut = false, data = a, response = it.response + 1) }
                 if (a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
                     _state.update { it.copy(hint = AnalyticsHint.CATEGORIES) }
                 }
@@ -216,6 +258,7 @@ class AnalyticsViewModel @Inject constructor(
                     load(quiet = true)
                 }
             } catch (e: AppError) {
+                importPolls = 0
                 retryGate.record(e)
                 // The screen keeps showing the previous data: return the parameters to what it shows, or the
                 // segment, the chip and the transfers sheet would describe a request that never succeeded.
@@ -232,7 +275,9 @@ class AnalyticsViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         loading = false,
-                        errorPresentation = if (e is AppError.Offline && it.data == null) null else e.presentation, requestRetryable = e.requestRetryable,
+                        recalculationPaused = it.data?.state?.recalculating == true,
+                        errorPresentation = if (e is AppError.Offline && it.data == null) null else e.presentation,
+                        requestRetryable = e.requestRetryable,
                         offline = it.data == null,
                         snackbar = if (quiet || it.data == null) it.snackbar
                         else if (e is AppError.Offline) "Прежний период сохранён" else "Не получилось обновить. Попробуйте ещё раз",
@@ -363,7 +408,7 @@ class AnalyticsViewModel @Inject constructor(
                 api.dismissRegularPayment(id)
                 tracker.track(Events.ANALYTICS_REGULAR_DISMISSED)
                 _state.update { it.copy(snackbar = "Убрали из регулярных платежей") }
-                reloadChangedData()
+                reloadChangedData(clearSnackbar = false)
             } catch (e: AppError) {
                 gate.record(e)
                 _state.update { it.copy(errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
@@ -375,6 +420,7 @@ class AnalyticsViewModel @Inject constructor(
 
     private companion object {
         const val RECALC_POLL_MS = 3_000L
+        const val MAX_IMPORT_POLLS = 10
         const val BLOCK_FLAG_PREFIX = "analytics.block."
         const val TILES_ID = "tiles"
 

@@ -85,6 +85,16 @@ class AnalyticsDesignCheckTest {
             }
         }
 
+    // FIN-394: proposed states; authored without running UI/DesignCheck.
+    @Test fun analyticsRecalculating() = capture("AnalyticsRecalculating", ui(september().copy(state = analyticsState.copy(recalculating = true))), heightDp = 2848)
+    @Test fun analyticsRecalculationPaused() = capture("AnalyticsRecalculationPaused", ui(september().copy(state = analyticsState.copy(recalculating = true))).copy(recalculationPaused = true), heightDp = 2848)
+    @Test fun analyticsUpdating() = capture("AnalyticsUpdating", AnalyticsUiState(blocks = blocks), heightDp = 844)
+    @Test fun analyticsPreparationTimeout() = capture("AnalyticsPreparationTimeout", AnalyticsUiState(loading = false, blocks = blocks, preparationTimedOut = true), heightDp = 844)
+    @Test fun analyticsPreparationTimeoutDark() = capture("AnalyticsPreparationTimeoutDark", AnalyticsUiState(loading = false, blocks = blocks, preparationTimedOut = true), heightDp = 844, dark = true)
+    @Test fun analyticsUpdatingDark() = capture("AnalyticsUpdatingDark", AnalyticsUiState(blocks = blocks), heightDp = 844, dark = true)
+    @Test fun analyticsPreparingWithoutData() = capture("AnalyticsPreparingWithoutData", ui(september().copy(hasData = false,
+        state = analyticsState.copy(recalculating = true))), heightDp = 844)
+
     @Test fun analytics() = capture("Analytics", ui(september()), heightDp = 2848)
 
     @Test fun analyticsDark() = capture("AnalyticsDark", ui(september()), heightDp = 2848, dark = true)

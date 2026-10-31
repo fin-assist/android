@@ -132,7 +132,8 @@ internal fun PhoneContent(
                 label = "Номер телефона",
                 placeholder = "+7 900 000-00-00",
                 visualTransformation = PhoneMaskTransformation,
-                hint = "Для подтверждения позвоните нам с этого номера",
+                hint = if (state.ageConfirmed) "Для подтверждения позвоните нам с этого номера"
+                else "Чтобы ввести номер, подтвердите, что вам исполнилось 14 лет",
                 error = state.error.takeIf { state.errorPresentation == null },
                 keyboardType = KeyboardType.Phone,
                 imeAction = ImeAction.Done,

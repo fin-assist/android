@@ -641,7 +641,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
 | `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains confirmations; repeated confirm_phone keeps both checked and input enabled (Qase57, FIN-365, FIN-375) |
 | `auth/phone_consent_recovery` | document offline → explicit refresh → confirmations → Start offline → retry with the existing intent (Qase58, FIN-365) |
-| `auth/phone_validation` | short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
+| `auth/phone_validation` | locked phone and age-unlock hint (FIN-394); short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
 | `auth/call_expired` | `call_ttl_ms=15000`: the wait ends either by the stream's `expired` or by the device timer (their order is not fixed); both lead to «Время на звонок вышло» with no number; «Позвонить ещё раз» brings the number and a new deadline back — FIN-166 |
 | `auth/call_stream_rate_limited` | live 429 marker before negative checks; `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: one actual refusal, number stays, no ErrorMessage (`ds.error.info/warning/error`) or offline message; exact count across control-link resume, remove future refusals, retained wait → passcode → feed (Qase44, FIN-170, FIN-376, FIN-380) |
 | `auth/registration_closed` | `auth.registration=false`: new number → «Регистрация пока закрыта»; existing account still signs in |
@@ -654,6 +654,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `operations/statement_stale` | on the preloaded statement the caption under the summary says «Данные по 1 октября» (the statement's end, not the last operation on 30 September); then the preloaded statement deleted, `stale.ofx` uploaded: «Операции» and «Аналитика» show «Данные в приложении по 20 сентября — с тех пор прошло больше двух недель», dated by the statement's end (`state.data_to`), not the last operation (15 September) — FIN-125 |
 | `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
 | `analytics/overview` (smoke) | blocks, previous month, month/quarter/year, «Без переводов», category → operations |
+| `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
@@ -680,7 +681,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
-| `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
+| `statements/upload_and_history` (smoke) | new operations without a duplicate period row; saved Analytics tab income changes from 0 to +1200 after import, and refreshes after deletion with remaining data and last deletion (FIN-394); duplicate file → «История загрузок» |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
 | `statements/upload_restored_key` | A seeded unknown-age UUID does not send the file or silently change key; the upload count remains 1 (preloaded statement). Only «Загрузить заново» starts a new action and changes the count to 2 (Qase51) — FIN-223 |
 | `assistant/retry_after_consent` | A model failure, consent revocation and denied RetryAnswer lead to consent correction; the same operation resumes and history contains one question with the successful replacement (Qase52) — FIN-223 |
@@ -871,6 +872,33 @@ classpaths; the existing HTTP/SSE unit suites cover the transport. The Android �
 (synthetic auth → OFX → progress → operations/analytics → assistant) remains a separate device acceptance run;
 it was not executed for this build-environment change. This is not a new screen or a claim of stage UI coverage.
 
+FIN-394: `AnalyticsViewModelTest` covers tab resume after import/deletion, invalidating previous totals while
+refreshing, failed refresh after deletion, and server retry restrictions. `AnalyticsUpdating*` and
+`AnalyticsPreparingWithoutData` capture the preparation states. The reported SmartApe limitation for non-Russian source IP addresses is
+infrastructure-specific; it cannot be reproduced by the in-process mock (VPN guidance is FIN-396).
+
+FIN-394 delayed-projection regression uses the mock-only `analytics_pending_responses=0..100`
+control-link fixture. It makes the next valid analytics GETs return `has_data:false`, without changing
+imported operations or seeding the local import token. `analytics/import_preparation_retry` / Qase63
+performs real UI imports and checks preparation → data and timeout → explicit Retry. This models a delayed
+projection response, not the real inter-service transport. The corresponding unit tests cover countdown,
+authentication/validation, user isolation, generations, retry refusal and failed recalculation polling.
+
+### FIN-397 and FIN-394 assistant navigation and consent
+
+The main bar orders Operations, Analytics, Assistant and Profile; `assistant=false` also hides the assistant tab.
+The tab uses the existing saved back stacks, retaining the chat ViewModel, history and draft between switches.
+A denied Ask exposes «Дать согласие» after Back; consent correction returns to the draft with Send enabled,
+without submitting it. The next explicit send retains a still-valid operation key; uncertain/expired keys
+retain their existing explicit recovery flow. Corrective RetryAnswer remains the same existing operation.
+`assistant/tab_and_consent_recovery` / Qase61 covers the new navigation and recovery; Qase12 and the
+existing assistant flows now explicitly send the first draft after granting consent. The consent layout uses
+a fixed 24 dp gap after all checkbox/error content so scroll overflow cannot collapse it.
+Design-check fixtures include the active assistant tab and light/dark consent recovery. These authored
+flows and fixtures were not executed: no UI/Maestro/instrumented/DesignCheck run was authorized.
+
+Layout-only consent spacing is represented by the authored `AiConsentLargeText` design-check fixture:
+640 dp viewport, 150% text, checkbox error and form error; the fixed gap remains in the scrollable content.
 ### FIN-396 connection failure hints
 
 Qase19/20/21/43/44/58 and their existing flows retain their mappings. `offline/no_network` asserts
@@ -894,35 +922,6 @@ mock does not traverse a VPN; Maestro cannot create a configured VPN tunnel/prov
 The Android system reader has Robolectric coverage and the presentation dependency has fake-reader
 fixtures; neither is proof of a particular VPN's route or FIN-394's network cause.
 
-FIN-396 screen transitions use native state/reader injection to assert the real ProfileContent and
-HistoryContent fallback and Retry branches without introducing a production/e2e state hook. The lower unit
-layer drives the real ViewModel failure/retry chains; these native cases are authored and compiled only.
-A confirmed DELETE removes its source from the client list immediately; a later failed read keeps an
-available read retry and cannot redisplay the deleted row. The success notice says analytics is updating,
-rather than claiming its asynchronous projection has already completed.
-
-`UploadHistoryDeleted` also differs from the existing Figma artboard: the success text is now
-«Загрузка удалена, обновляем аналитику» instead of «Загрузка удалена, аналитика пересчитана».
-The DELETE confirms removal of the source; publication of its analytics projection can finish later.
-Proposed artboard sync: update the `UploadHistoryDeleted` success notice to the new text. This copy
-clarification is tracked in FIN-396 alongside PR #232; it does not claim visual acceptance.
-
-### FIN-397 and FIN-394 assistant navigation and consent
-
-The main bar orders Operations, Analytics, Assistant and Profile; `assistant=false` also hides the assistant tab.
-The tab uses the existing saved back stacks, retaining the chat ViewModel, history and draft between switches.
-A denied Ask exposes «Дать согласие» after Back; consent correction returns to the draft with Send enabled,
-without submitting it. The next explicit send retains a still-valid operation key; uncertain/expired keys
-retain their existing explicit recovery flow. Corrective RetryAnswer remains the same existing operation.
-`assistant/tab_and_consent_recovery` / Qase61 covers the new navigation and recovery; Qase12 and the
-existing assistant flows now explicitly send the first draft after granting consent. The consent layout uses
-a fixed 24 dp gap after all checkbox/error content so scroll overflow cannot collapse it.
-Design-check fixtures include the active assistant tab and light/dark consent recovery. These authored
-flows and fixtures were not executed: no UI/Maestro/instrumented/DesignCheck run was authorized.
-
-Layout-only consent spacing is represented by the authored `AiConsentLargeText` design-check fixture:
-640 dp viewport, 150% text, checkbox error and form error; the fixed gap remains in the scrollable content.
-
 FIN-397 review regressions: `assistant/tab_and_consent_recovery` also checks that mode-specific chats pushed
 by Analytics/Profile cards have Back navigation to their parent and do not impersonate the saved Assistant tab.
 A flag update while the main layer is open leaves its tab bar intact; the disabled-at-entry variant remains
@@ -942,6 +941,18 @@ FIN-397 — Not covered yet: restoring a Chat/Consent navigation entry after act
 in-process backend also disappear on death. Both route entries guard the boundary before screen/ViewModel
 creation and redirect disabled entries to Feed; a live composed entry keeps its snapshot. This branch is
 compiled and inspected, without a claim of process-death UI execution.
+FIN-396 screen transitions use native state/reader injection to assert the real ProfileContent and
+HistoryContent fallback and Retry branches without introducing a production/e2e state hook. The lower unit
+layer drives the real ViewModel failure/retry chains; these native cases are authored and compiled only.
+A confirmed DELETE removes its source from the client list immediately; a later failed read keeps an
+available read retry and cannot redisplay the deleted row. The success notice says analytics is updating,
+rather than claiming its asynchronous projection has already completed.
+
+`UploadHistoryDeleted` also differs from the existing Figma artboard: the success text is now
+«Загрузка удалена, обновляем аналитику» instead of «Загрузка удалена, аналитика пересчитана».
+The DELETE confirms removal of the source; publication of its analytics projection can finish later.
+Proposed artboard sync: update the `UploadHistoryDeleted` success notice to the new text. This copy
+clarification is tracked in FIN-396 alongside PR #232; it does not claim visual acceptance.
 
 FIN-397 shared-policy and history regressions: Qase61 keeps `assistant=false` throughout Consent/Back,
 consent correction and tab save/restore, then resets it only at the end. The bar and all route guards use

@@ -19,7 +19,13 @@ tags:
       id: "auth.phone"
     timeout: 10000
 
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- assertVisible: "Чтобы ввести номер, подтвердите, что вам исполнилось 14 лет"
+- assertVisible: "Поле недоступно"
 - runFlow: ../../subflows/confirm_phone.yaml
+- assertNotVisible: "Поле недоступно"
 # The call is paid at the subscriber's rate: nothing on the screens promises it is free (FIN-166).
 - assertVisible: "Для подтверждения позвоните нам с этого номера"
 - assertNotVisible: ".*бесплатн.*"
