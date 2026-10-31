@@ -289,6 +289,13 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   `android.*`, `androidx.*`, Dagger / Hilt, JVM-only libraries or JVM-only stdlib (`synchronized`, `String.format`).
   An API already in `scripts/kmp-baseline.json` may be reused; an exception is justified in the PR and added there.
   `scripts/check-kmp-ready.py` (CI) fails on anything beyond the baseline; rule, inventory — `docs/kmp-readiness.md`.
+- Analytics refreshes on resume as well as statement/category events (FIN-394); after a data mutation old
+  totals are cleared until a fresh response arrives. Loading/recalculating is a preparation state, including
+  an empty response, rather than a request to upload another statement. A user-scoped local import token in
+  `StatementsRepository` survives absent Analytics subscribers: a completed non-empty import followed by
+  `has_data:false` is polled every 3 seconds, up to 10 responses, then offers an explicit refresh. The token
+  is acknowledged only for the observed generation once data is present and not recalculating.
+- Disabled `PfTextField` states use muted tokens and a lock icon; the caller explains how to enable input.
 - The Analytics screen is composed by the server (FIN-4): blocks of the catalog (api.md «Блоки») drawn by the renderers of
   `core/blocks`; texts of blocks come from the server (in `mock` — `AnalyticsServerTexts`). A new primitive is a renderer in
   `CatalogV1` (it goes into `supports` by itself) plus the composer of the fake server. Design-check fixtures of the screen

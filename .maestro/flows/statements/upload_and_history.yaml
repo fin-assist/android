@@ -6,6 +6,13 @@ tags:
 ---
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/fast_login.yaml
+# Open Analytics before mutating statements: the saved tab must refresh without a cold start.
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
 - tapOn:
     id: "ds.tab.profile"
 - extendedWaitUntil:
@@ -38,10 +45,22 @@ tags:
     timeout: 20000
 - assertVisible:
     id: "statements.result.new"
+- assertNotVisible: "Все операции.*"
+
+# The result's analytics link refreshes the tab that was already opened.
+- tapOn:
+    id: "statements.result.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.empty"
+- assertVisible: "Октябрь 2026"
 
 # The same October file again: nothing new.
 - tapOn:
-    id: "statements.result.done"
+    id: "ds.tab.profile"
 - extendedWaitUntil:
     notVisible:
       id: "statements.result"
@@ -101,3 +120,53 @@ tags:
       id: "statements.history.row"
       index: 2
     timeout: 15000
+
+# Delete the other October source: the original year still supplies analytics.
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    notVisible:
+      id: "statements.history.row"
+      index: 1
+    timeout: 15000
+- back
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.empty"
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 15000
+# Delete the last source: no old numbers survive on the saved Analytics tab.
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    notVisible:
+      id: "statements.history.row"
+    timeout: 15000
+- back
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.empty"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.block.tiles"
+- assertNotVisible:
+    id: "analytics.updating"

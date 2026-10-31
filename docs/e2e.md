@@ -641,7 +641,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
 | `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains confirmations; repeated confirm_phone keeps both checked and input enabled (Qase57, FIN-365, FIN-375) |
 | `auth/phone_consent_recovery` | document offline → explicit refresh → confirmations → Start offline → retry with the existing intent (Qase58, FIN-365) |
-| `auth/phone_validation` | short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
+| `auth/phone_validation` | locked phone and age-unlock hint (FIN-394); short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
 | `auth/call_expired` | `call_ttl_ms=15000`: the wait ends either by the stream's `expired` or by the device timer (their order is not fixed); both lead to «Время на звонок вышло» with no number; «Позвонить ещё раз» brings the number and a new deadline back — FIN-166 |
 | `auth/call_stream_rate_limited` | live 429 marker before negative checks; `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: one actual refusal, number stays, no ErrorMessage (`ds.error.info/warning/error`) or offline message; exact count across control-link resume, remove future refusals, retained wait → passcode → feed (Qase44, FIN-170, FIN-376, FIN-380) |
 | `auth/registration_closed` | `auth.registration=false`: new number → «Регистрация пока закрыта»; existing account still signs in |
@@ -676,7 +676,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
-| `statements/upload_and_history` (smoke) | new operations; the same file again — nothing new → «История загрузок»; delete an upload |
+| `statements/upload_and_history` (smoke) | new operations without a duplicate period row; saved Analytics tab refreshes after import, deletion with remaining data and last deletion (FIN-394); duplicate file → «История загрузок» |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
 | `statements/upload_restored_key` | A seeded unknown-age UUID does not send the file or silently change key; the upload count remains 1 (preloaded statement). Only «Загрузить заново» starts a new action and changes the count to 2 (Qase51) — FIN-223 |
 | `assistant/retry_after_consent` | A model failure, consent revocation and denied RetryAnswer lead to consent correction; the same operation resumes and history contains one question with the successful replacement (Qase52) — FIN-223 |
@@ -863,3 +863,15 @@ No stage e2e hooks are shipped. CI assembles both stage variants, checks identit
 classpaths; the existing HTTP/SSE unit suites cover the transport. The Android → public stage flow
 (synthetic auth → OFX → progress → operations/analytics → assistant) remains a separate device acceptance run;
 it was not executed for this build-environment change. This is not a new screen or a claim of stage UI coverage.
+
+FIN-394: `AnalyticsViewModelTest` covers tab resume after import/deletion, invalidating previous totals while
+refreshing, failed refresh after deletion, and server retry restrictions. `AnalyticsUpdating*` and
+`AnalyticsPreparingWithoutData` capture the preparation states. These design checks and Maestro flows were
+authored but not executed locally. The reported SmartApe limitation for non-Russian source IP addresses is
+infrastructure-specific; it cannot be reproduced by the in-process mock (VPN guidance is FIN-396).
+
+FIN-394 delayed-projection regression: repository unit tests cover user isolation, an absent Analytics
+subscriber, concurrent import acknowledgement and deletion of pending uploads. Analytics unit tests cover
+`complete` → repeated `has_data:false` → data, recalculating, polling timeout with explicit retry and server
+refusal. The in-process mock publishes analytics synchronously, so that inter-service publication race is
+covered at the unit boundary rather than by a mock Maestro sleep or fake server response.

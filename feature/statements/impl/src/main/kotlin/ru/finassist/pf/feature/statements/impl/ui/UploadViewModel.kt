@@ -302,7 +302,7 @@ class UploadViewModel @Inject constructor(
         }
     }
 
-    private fun handle(uploadId: String, fileName: String, event: ImportEvent) {
+    private suspend fun handle(uploadId: String, fileName: String, event: ImportEvent) {
         when (event) {
             is ImportEvent.Progress -> _state.update { s ->
                 val b = s.phase as? UploadPhase.Busy ?: return@update s
@@ -324,7 +324,7 @@ class UploadViewModel @Inject constructor(
         }
     }
 
-    private fun finish(uploadId: String, event: ImportEvent.Complete) {
+    private suspend fun finish(uploadId: String, event: ImportEvent.Complete) {
         repository.importCompleted(uploadId, event.result)
         tracker.track(Events.STATEMENTS_UPLOAD_COMPLETED, mapOf("new_count" to event.result.newCount.toString()))
         _state.update { it.copy(doneUploadId = uploadId, askCancel = false) }
