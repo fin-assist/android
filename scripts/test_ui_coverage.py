@@ -67,6 +67,60 @@ class ScenarioCoverageTest(unittest.TestCase):
         self.assertIn("| `auth` | 1/2 | 1/2 | `auth.call` |", text)
         self.assertIn("`ghost`", text)
 
+    def chart_sources(self, root: Path, prefix="money.expense.timeline", suffix=".sample."):
+        source = root / "feature/analytics/impl/src/main/kotlin/Screen.kt"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text(f'''private object FinanceBlockTags : BlockTags("money") {{
+            override fun chart(blockId: String) = when (blockId) {{
+                "monthly_chart" -> "{prefix}"
+                else -> "money.insight.$blockId"
+            }}
+        }}''', encoding="utf-8")
+        component = root / "core/designsystem/src/main/kotlin/Charts.kt"
+        component.parent.mkdir(parents=True, exist_ok=True)
+        component.write_text('.testTag("$chartId' + suffix + '${p.key}")', encoding="utf-8")
+
+    def test_chart_points_derive_prefix_and_template_but_require_exact_month_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.chart_sources(root)
+            valid = {"money.expense.timeline.sample.2025-12", "money.expense.timeline.sample.2026-01"}
+            invalid = {
+                "money.expense.other.sample.2026-01", "money.expense.timeline.point.2026-01",
+                "money.expense.timeline.sample.2026", "money.expense.timeline.sample.2026-1",
+                "money.expense.timeline.sample.2026-00", "money.expense.timeline.sample.2026-13",
+                "money.expense.timeline.sample.2026-01.extra", "money.expense.timeline.sample.２０２６-01",
+            }
+            coverage = ui.scenario_coverage(ui.declared_tags(root), valid | invalid)
+            self.assertEqual(invalid, coverage.unknown_ids)
+            self.assertEqual(({"money.expense.timeline.sample.<YYYY-MM>"},
+                              {"money.expense.timeline.sample.<YYYY-MM>"}), coverage.tags["money"])
+
+    def test_renamed_chart_prefix_leaves_old_flow_ids_unknown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.chart_sources(root, prefix="money.renamed.timeline")
+            old = "money.expense.timeline.sample.2026-09"
+            new = "money.renamed.timeline.sample.2026-09"
+            self.assertEqual({old}, ui.scenario_coverage(ui.declared_tags(root), {old, new}).unknown_ids)
+
+    def test_renamed_point_tag_template_leaves_old_flow_ids_unknown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.chart_sources(root, suffix=".renamed.")
+            old = "money.expense.timeline.sample.2026-09"
+            new = "money.expense.timeline.renamed.2026-09"
+            self.assertEqual({old}, ui.scenario_coverage(ui.declared_tags(root), {old, new}).unknown_ids)
+
+    def test_animation_ids_without_declared_chart_builder_are_not_point_tags(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.chart_sources(root)
+            screen = root / "feature/analytics/impl/src/main/kotlin/Screen.kt"
+            screen.write_text('PfBarChart(chartId = "money.expense.timeline")', encoding="utf-8")
+            point = "money.expense.timeline.sample.2026-09"
+            self.assertEqual({point}, ui.scenario_coverage(ui.declared_tags(root), {point}).unknown_ids)
+
     def test_repository_tags_are_all_referenced_by_known_ids(self):
         """Every id a flow uses is a tag the app declares — a renamed tag would show up here."""
         c = ui.scenario_coverage(ui.declared_tags(ROOT), ui.flow_ids(ROOT))

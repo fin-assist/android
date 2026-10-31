@@ -242,8 +242,10 @@ python3 scripts/ui-coverage.py summary            # Markdown to stdout; --summar
 - A **screen** is a tag's first two segments (`statements.upload.fallback` → `statements.upload`); the tags come
   from the `*Tags` objects (constants and `fun` builders with a `$` suffix count as a prefix) and `testTag("…")`
   literals in the sources, the ids from `id: "…"` in `.maestro/flows/`. `e2e.*` ids are the control links, not
-  tags. A tag that reaches `testTag` through a parameter (the analytics tiles' `chartId`) is invisible to the
-  script: declare it in the feature's `*Tags` object.
+  tags. Dynamic month-point tags combine concrete ids returned by `*Tags.chart` builders with the actual
+  `testTag("$chartId…${p.key}")` template in the chart component. Only exact `YYYY-MM` suffixes match; renaming
+  either source leaves stale flow ids unknown. Other parameter-based tags (the analytics tiles' `chartId`)
+  must be declared in the feature's `*Tags` object.
 - Covered: a screen with at least one tag a flow refers to; a tag a flow refers to (a prefix tag when any id
   starts with it). The table lists per feature the missing tags; an id no source declares is reported — a renamed
   tag shows up there, and `scripts/test_ui_coverage.py` fails on it.

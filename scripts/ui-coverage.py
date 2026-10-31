@@ -38,7 +38,7 @@ TAG_SOURCES = ("feature", "core", "app/src/main")
 # Test hooks of the e2e build and Maestro's «sleep» id: not screens of the app.
 IGNORED_PREFIXES = ("e2e.",)
 
-TAGS_OBJECT = re.compile(r"\bobject\s+\w*Tags\s*\{")
+TAGS_OBJECT = re.compile(r"\bobject\s+\w*Tags(?:\s*:\s*[^{}]+)?\s*\{")
 CONST_TAG = re.compile(r'\bconst\s+val\s+\w+\s*=\s*"([^"$]+)"')
 # fun chip(screen: String) = "assistant.answer.chip.$screen"  →  prefix «assistant.answer.chip.»
 FUN_TAG = re.compile(r'\bfun\s+\w+\([^)]*\)\s*=\s*"([^"$]*)\$')
@@ -46,6 +46,11 @@ FUN_TAG = re.compile(r'\bfun\s+\w+\([^)]*\)\s*=\s*"([^"$]*)\$')
 # declare it in the feature's `…Tags` object (docs/testing.md).
 LITERAL_TAG = re.compile(r'\.testTag\("([a-z][a-z0-9_.]*)"\)')
 FLOW_ID = re.compile(r'^\s*(?:-\s*)?id:\s*"([^"]+)"', re.MULTILINE)
+# BlockTags.chart declares the concrete chart ids; Charts.kt supplies the actual point-tag suffix.
+CHART_BUILDER = re.compile(r'\bfun\s+chart\([^)]*\)\s*=\s*when\s*\([^)]*\)\s*\{')
+CHART_RETURN = re.compile(r'->\s*"([a-z][a-z0-9_.]*)"')
+POINT_TAG_TEMPLATE = re.compile(r'\.testTag\("\$chartId([a-z0-9_.]+)\$\{p\.key\}"\)')
+MONTH_POINT_KEY = r"[0-9]{4}-(?:0[1-9]|1[0-2])"
 
 
 # ---------- scenario coverage ----------
@@ -55,6 +60,8 @@ class Tags:
     exact: set[str] = field(default_factory=set)
     #: Tags built at run time (`ds.tab.<id>`): a flow id that starts with the prefix refers to them.
     prefixes: set[str] = field(default_factory=set)
+    #: Source-derived chart point templates, with exact year-month keys instead of arbitrary prefix suffixes.
+    patterns: dict[str, str] = field(default_factory=dict)
 
 
 def parse_tags(text: str) -> Tags:
@@ -83,14 +90,27 @@ def _block(text: str, open_brace: int) -> str:
 
 def declared_tags(root: Path) -> Tags:
     tags = Tags()
+    chart_ids: set[str] = set()
+    point_suffixes: set[str] = set()
     for source in TAG_SOURCES:
         for path in sorted((root / source).rglob("*.kt")):
             parts = path.relative_to(root).parts
             if "build" in parts or "src" not in parts or parts[parts.index("src") + 1] != "main":
                 continue
-            found = parse_tags(path.read_text(encoding="utf-8"))
+            text = path.read_text(encoding="utf-8")
+            found = parse_tags(text)
             tags.exact |= found.exact
             tags.prefixes |= found.prefixes
+            for match in TAGS_OBJECT.finditer(text):
+                body = _block(text, match.end() - 1)
+                for chart in CHART_BUILDER.finditer(body):
+                    chart_ids.update(CHART_RETURN.findall(_block(body, chart.end() - 1)))
+            point_suffixes.update(POINT_TAG_TEMPLATE.findall(text))
+    tags.patterns = {
+        chart_id + suffix + "<YYYY-MM>": re.escape(chart_id + suffix) + MONTH_POINT_KEY
+        for chart_id in chart_ids if not chart_id.startswith(IGNORED_PREFIXES)
+        for suffix in point_suffixes
+    }
     tags.exact = {t for t in tags.exact if not t.startswith(IGNORED_PREFIXES)}
     return tags
 
@@ -123,9 +143,11 @@ class ScenarioCoverage:
 
 
 def scenario_coverage(tags: Tags, ids: set[str]) -> ScenarioCoverage:
-    declared = set(tags.exact) | {p + "*" for p in tags.prefixes}
+    declared = set(tags.exact) | {p + "*" for p in tags.prefixes} | set(tags.patterns)
 
     def reached(tag: str) -> bool:
+        if tag in tags.patterns:
+            return any(re.fullmatch(tags.patterns[tag], i) for i in ids)
         return any(i.startswith(tag[:-1]) for i in ids) if tag.endswith("*") else tag in ids
 
     screens: dict[str, tuple[set[str], set[str]]] = {}
@@ -140,7 +162,11 @@ def scenario_coverage(tags: Tags, ids: set[str]) -> ScenarioCoverage:
         if reached(tag):
             s_reached.add(screen)
             t_reached.add(tag)
-    unknown = {i for i in ids if i not in tags.exact and not any(i.startswith(p) for p in tags.prefixes)}
+    unknown = {
+        i for i in ids if i not in tags.exact
+        and not any(i.startswith(p) for p in tags.prefixes)
+        and not any(re.fullmatch(pattern, i) for pattern in tags.patterns.values())
+    }
     return ScenarioCoverage(screens, by_feature, unknown)
 
 
