@@ -544,4 +544,58 @@ class SearchViewModelTest {
         assertEquals(1, api.queries.size)
     }
 
+    @Test fun `pull refresh retains results filters and window and deduplicates pending reads`() {
+        api.lists += found("old")
+        val vm = vm(OperationsFilter(q = "магазин"))
+        val shown = vm.state.value.result
+        val filter = vm.state.value.filter
+        api.gate = kotlinx.coroutines.CompletableDeferred()
+        api.lists.clear()
+        api.lists += found("new")
+        vm.refresh()
+        vm.refresh()
+        vm.retry()
+        assertEquals(2, api.queries.size)
+        assertEquals(shown, vm.state.value.result)
+        assertEquals(filter, api.queries.last().filter)
+        assertTrue(vm.state.value.refreshing)
+        api.gate!!.complete(Unit)
+        assertFalse(vm.state.value.refreshing)
+        assertEquals("new", (vm.state.value.result as SearchResult.Found).items.single().id)
+    }
+
+    @Test fun `refresh connection failure keeps search data and shows retry explanation`() {
+        api.lists += found("old")
+        val vm = vm(OperationsFilter(q = "магазин"))
+        val shown = vm.state.value.result
+        api.lists.clear()
+        api.lists += AppError.Offline()
+        vm.refresh()
+        assertEquals(shown, vm.state.value.result)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertFalse(vm.state.value.refreshing)
+        api.lists.clear()
+        api.lists += found("new")
+        vm.retry()
+        assertEquals("new", (vm.state.value.result as SearchResult.Found).items.single().id)
+    }
+
+    @Test fun `refresh cannot bypass search retry after and blank search asks nothing`() {
+        val blank = vm()
+        blank.refresh()
+        assertTrue(api.queries.isEmpty())
+        api.lists += found("old")
+        val vm = vm(OperationsFilter(q = "магазин"))
+        api.lists.clear()
+        api.lists += AppError.RateLimited(null, retryAfterSeconds = 60)
+        vm.refresh()
+        val calls = api.queries.size
+        vm.refresh()
+        assertEquals(calls, api.queries.size)
+        scheduler.advanceTimeBy(60_000)
+        scheduler.runCurrent()
+        vm.refresh()
+        assertEquals(calls + 1, api.queries.size)
+    }
+
 }

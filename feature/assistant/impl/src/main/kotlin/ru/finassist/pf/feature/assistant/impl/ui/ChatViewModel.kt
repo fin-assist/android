@@ -81,6 +81,7 @@ data class ChatRecovery(val target: ChatRecoveryTarget, val answerId: String? = 
 
 data class ChatUiState(
     val loading: Boolean = true,
+    val refreshing: Boolean = false,
     val loadFailed: Boolean = false,
     val items: List<ChatItem> = emptyList(),
     val hasOlder: Boolean = false,
@@ -98,6 +99,7 @@ data class ChatUiState(
     val askBlocked: Boolean = false,
     val askRetryReady: Boolean = true,
     val loadRetryReady: Boolean = true,
+    val limitRetryReady: Boolean = true,
     val olderRetryReady: Boolean = true,
     val blockedRetryAnswerId: String? = null,
     val retryReadyByAnswer: Map<String, Boolean> = emptyMap(),
@@ -143,6 +145,7 @@ class ChatViewModel @Inject constructor(
     private val retryGates = mutableMapOf<String, RequestRetryGate>()
     init {
         viewModelScope.launch { askGate.readiness.collect { ready -> _state.update { it.copy(askRetryReady = ready) } } }
+        viewModelScope.launch { limitRetryGate.readiness.collect { ready -> _state.update { it.copy(limitRetryReady = ready) } } }
         viewModelScope.launch { loadGate.readiness.collect { ready -> _state.update { it.copy(loadRetryReady = ready) } } }
         viewModelScope.launch { olderGate.readiness.collect { ready -> _state.update { it.copy(olderRetryReady = ready) } } }
     }
@@ -154,6 +157,8 @@ class ChatViewModel @Inject constructor(
     private var wasPresented = false
     private val retryKeys = HashMap<String, IdempotencyKey>()
     private var historyReadRevision = 0L
+    private var historyReadPending = false
+    private var limitReadPending = false
     /** A successful RetryAnswer invalidates snapshots begun before its in-place replacement. */
     private var replacementRevision = 0L
     /** Only locally accepted Ask messages enter this registry; GET pagination never does. */
@@ -195,7 +200,22 @@ class ChatViewModel @Inject constructor(
         load()
     }
 
-    fun load() { if (loadGate.isReady()) reload(skipStream = null) }
+    fun load() { if (!_state.value.refreshing && loadGate.isReady()) reload(skipStream = null) }
+
+    /** Re-reads history and quota without creating or retrying any question. */
+    fun refresh() {
+        if (historyReadPending || _state.value.refreshing) return
+        if (loadGate.isReady()) {
+            _state.update { it.copy(refreshing = true) }
+            reload(skipStream = null, quiet = true)
+        } else if (!limitReadPending && limitRetryGate.isReady()) {
+            _state.update { it.copy(refreshing = true) }
+            viewModelScope.launch {
+                try { refreshLimit(reportOffline = true) }
+                finally { _state.update { it.copy(refreshing = false) } }
+            }
+        }
+    }
 
     /** Every history mutation reconciles pagination permission with the actual next before_id. */
     private fun updateHistoryState(transform: (ChatUiState) -> ChatUiState) {
@@ -212,11 +232,12 @@ class ChatViewModel @Inject constructor(
      * whose stream has just failed for good: it is not re-opened from here even if the history still says it is
      * generating, or a server that keeps answering the stream with 404 would loop (the next resume tries again).
      */
-    private fun reload(skipStream: String?) {
+    private fun reload(skipStream: String?, quiet: Boolean = false) {
         if (!loadGate.isReady()) return
+        historyReadPending = true
         val readRevision = ++historyReadRevision
         viewModelScope.launch {
-            _state.update { it.copy(loading = it.items.isEmpty(), loadFailed = false, loadErrorPresentation = null, loadRetryable = null) }
+            _state.update { it.copy(loading = !quiet && it.items.isEmpty(), loadFailed = false, loadErrorPresentation = null, loadRetryable = null) }
             val mutationRevision = replacementRevision
             val acceptedBeforeRead = acceptanceRevision
             try {
@@ -225,7 +246,7 @@ class ChatViewModel @Inject constructor(
                 if (readRevision != historyReadRevision) return@launch
                 if (mutationRevision != replacementRevision) {
                     _state.update { it.copy(loading = false) }
-                    reload(skipStream)
+                    reload(skipStream, quiet)
                     return@launch
                 }
                 val items = list.messages.mapNotNull(::toItem).distinctById()
@@ -257,17 +278,27 @@ class ChatViewModel @Inject constructor(
                     current.copy(loading = false, items = merged, hasOlder = if (older.isNotEmpty()) current.hasOlder else list.hasOlder,
                         offline = false, recovery = recovery)
                 }
-                refreshLimit()
+                if (!quiet) refreshLimit()
                 watchGenerating(skip = skipStream)
             } catch (e: AppError) {
                 if (readRevision != historyReadRevision) return@launch
                 loadGate.record(e)
                 if (mutationRevision != replacementRevision && loadGate.isReady()) {
                     _state.update { it.copy(loading = false) }
-                    reload(skipStream)
+                    reload(skipStream, quiet)
                     return@launch
                 }
-                _state.update { it.copy(loading = false, loadFailed = it.items.isEmpty(), offline = e is AppError.Offline, loadErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, loadRetryable = e.requestRetryable) }
+                _state.update { it.copy(loading = false, loadFailed = it.items.isEmpty(), offline = if (quiet) it.offline else e is AppError.Offline,
+                    loadErrorPresentation = e.presentation.takeUnless { e is AppError.Offline && !quiet }, loadRetryable = e.requestRetryable) }
+            } finally {
+                if (readRevision == historyReadRevision) {
+                    // A quota read is independent of a failed history read and never repeats a POST.
+                    if (quiet) refreshLimit(reportOffline = true)
+                    if (readRevision == historyReadRevision) {
+                        historyReadPending = false
+                        _state.update { it.copy(refreshing = false) }
+                    }
+                }
             }
         }
     }
@@ -299,13 +330,18 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshLimit() {
-        if (!limitRetryGate.isReady()) return
-        runCatching { api.getLimit() }.onSuccess { l -> _state.update { it.copy(limit = l, limitErrorPresentation = null) } }
-            .onFailure { failure -> if (failure is AppError) {
-                limitRetryGate.record(failure)
-                if (failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
-            } }
+    private suspend fun refreshLimit(reportOffline: Boolean = false) {
+        if (limitReadPending || !limitRetryGate.isReady()) return
+        limitReadPending = true
+        try {
+            val limit = api.getLimit()
+            _state.update { it.copy(limit = limit, limitErrorPresentation = null) }
+        } catch (failure: AppError) {
+            limitRetryGate.record(failure)
+            if (reportOffline || failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
+        } finally {
+            limitReadPending = false
+        }
     }
 
     /** A saved tab keeps its draft; re-reading on later visits updates history and changed-since markers. */

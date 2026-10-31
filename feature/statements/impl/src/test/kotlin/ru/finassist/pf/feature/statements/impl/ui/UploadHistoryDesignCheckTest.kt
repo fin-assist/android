@@ -82,4 +82,7 @@ class UploadHistoryDesignCheckTest {
     // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.
     @Test fun serverWarning() = capture("UploadHistoryServerWarning", state.copy(errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
 
+    @Test fun refreshing() = capture("UploadHistoryRefreshing", state.copy(refreshing = true))
+    @Test fun refreshingDark() = capture("UploadHistoryRefreshingDark", state.copy(refreshing = true), dark = true)
+
 }

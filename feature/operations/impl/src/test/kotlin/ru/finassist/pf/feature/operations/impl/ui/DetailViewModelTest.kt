@@ -294,4 +294,55 @@ class DetailViewModelTest {
         assertEquals("2026-10-02T00:00:00.123456789+03:00", api.openedAt.last())
     }
 
+    @Test fun `refresh preserves operation and category draft and never writes category`() {
+        val vm = vm()
+        vm.openPicker()
+        vm.choose("cat_restaurants")
+        vm.refresh()
+        assertEquals(1, api.opened.size)
+        assertEquals("cat_restaurants", vm.state.value.draftCategoryId)
+        vm.closePicker()
+        val shown = vm.state.value.operation
+        api.getFailure = AppError.Offline()
+        vm.refresh()
+        assertEquals(shown, vm.state.value.operation)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertFalse(vm.state.value.refreshing)
+        assertTrue(api.changes.isEmpty())
+    }
+
+    @Test fun `pending refresh deduplicates detail reads and keeps content visible`() = runTest {
+        val wait = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val delayed = object : ru.finassist.pf.core.api.OperationsApi by api {
+            override suspend fun getOperation(id: String, occurredAt: String): ru.finassist.pf.core.api.model.OperationDetails {
+                calls++
+                if (calls > 1) wait.await()
+                return api.getOperation(id, occurredAt)
+            }
+        }
+        val vm = DetailViewModel(savedState, delayed, categories, operations, tracker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
+        val shown = vm.state.value.operation
+        vm.refresh()
+        vm.refresh()
+        vm.load()
+        assertEquals(2, calls)
+        assertEquals(shown, vm.state.value.operation)
+        assertTrue(vm.state.value.refreshing)
+        assertFalse(vm.state.value.loading)
+        wait.complete(Unit)
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `detail refresh preserves old data and respects retry after`() {
+        val vm = vm()
+        val shown = vm.state.value.operation
+        api.getFailure = AppError.RateLimited(null, retryAfterSeconds = 60)
+        vm.refresh()
+        vm.refresh()
+        assertEquals(2, api.opened.size)
+        assertEquals(shown, vm.state.value.operation)
+        assertFalse(vm.state.value.retryReady)
+    }
+
 }

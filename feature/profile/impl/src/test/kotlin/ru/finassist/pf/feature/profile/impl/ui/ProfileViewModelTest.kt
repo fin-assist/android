@@ -788,4 +788,43 @@ class ProfileViewModelTest {
             return AppPreferences(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") })
         }
     }
+    @Test fun `pull refresh deduplicates each pending read and keeps profile and summary`() {
+        val vm = loaded()
+        val previous = vm.state.value
+        val pendingProfile = CompletableDeferred<Profile>()
+        val pendingStatements = CompletableDeferred<StatementsList>()
+        profileApi.getReply = { pendingProfile.await() }
+        statementsApi.listReply = { pendingStatements.await() }
+        vm.refresh()
+        vm.refresh()
+        assertEquals(2, profileApi.gets)
+        assertEquals(2, statementsApi.calls)
+        assertTrue(vm.state.value.refreshing)
+        assertEquals(previous.profile, vm.state.value.profile)
+        assertEquals(previous.statements, vm.state.value.statements)
+        pendingProfile.completeExceptionally(AppError.Offline())
+        assertTrue(vm.state.value.refreshing)
+        pendingStatements.completeExceptionally(AppError.Offline())
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(previous.profile, vm.state.value.profile)
+        assertEquals(previous.statements, vm.state.value.statements)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertTrue(profileApi.updates.isEmpty())
+        assertEquals(0, profileApi.revokes)
+    }
+
+    @Test fun `successful summary refresh clears only its failure even when profile retry is refused`() {
+        val vm = loaded()
+        profileApi.getFailure = forbiddenProfileRequest()
+        statementsApi.failure = AppError.Offline()
+        vm.refresh()
+        assertEquals(ProfileErrorOrigin.STATEMENTS, vm.state.value.errorOrigin)
+        statementsApi.failure = null
+        vm.refresh()
+        assertNull(vm.state.value.errorPresentation)
+        assertNull(vm.state.value.errorOrigin)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(2, profileApi.gets)
+    }
+
 }

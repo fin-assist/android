@@ -93,4 +93,46 @@ class UnreadLinesViewModelTest {
         assertEquals(state.lines[0].reasonName, state.lines[1].reasonName)
     }
 
+    @Test fun `refresh keeps unread lines on failure and respects retry after`() {
+        api.unreadResult = UnreadLinesList(listOf(line))
+        val vm = newVm("uploadId" to "u1")
+        api.unreadResult = AppError.Offline()
+        vm.refresh()
+        assertEquals(listOf(line), vm.state.value.lines)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertFalse(vm.state.value.loading)
+        assertFalse(vm.state.value.refreshing)
+        api.unreadResult = AppError.RateLimited(null, retryAfterSeconds = 60)
+        vm.refresh()
+        val calls = api.unreadCalls.size
+        vm.refresh()
+        assertEquals(calls, api.unreadCalls.size)
+        assertEquals(listOf(line), vm.state.value.lines)
+    }
+
+    @Test fun `pending unread refresh uses same route deduplicates and handles empty success`() {
+        val wait = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val delayed = object : ru.finassist.pf.core.api.StatementsApi by api {
+            override suspend fun listUnreadLines(uploadId: String): UnreadLinesList {
+                calls++
+                if (calls > 1) wait.await()
+                return api.listUnreadLines(uploadId)
+            }
+        }
+        api.unreadResult = UnreadLinesList(listOf(line))
+        val vm = UnreadLinesViewModel(SavedStateHandle(mapOf("uploadId" to "u1")), delayed, FakeTokens("user-1"), ru.finassist.pf.core.common.time.ElapsedClock { 0L })
+        api.unreadResult = UnreadLinesList(emptyList())
+        vm.refresh()
+        vm.refresh()
+        vm.load()
+        assertEquals(2, calls)
+        assertEquals(listOf(line), vm.state.value.lines)
+        assertTrue(vm.state.value.refreshing)
+        wait.complete(Unit)
+        assertFalse(vm.state.value.refreshing)
+        assertTrue(vm.state.value.lines.isEmpty())
+        assertEquals(listOf<Any>("u1", "u1"), api.unreadCalls)
+    }
+
 }

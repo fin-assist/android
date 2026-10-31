@@ -31,6 +31,7 @@ import javax.inject.Inject
 
 data class DetailUiState(
     val loading: Boolean = true,
+    val refreshing: Boolean = false,
     val error: Boolean = false,
     val notFound: Boolean = false,
     val operation: OperationDetails? = null,
@@ -79,13 +80,24 @@ class DetailViewModel @Inject constructor(
     init { viewModelScope.launch { pickerRetryGate.readiness.collect { ready -> _state.update { it.copy(pickerRetryReady = ready) } } } }
     val state: StateFlow<DetailUiState> = _state
 
+    private var loading = false
+
     init {
         tracker.track(Events.OPERATIONS_DETAIL_OPENED)
         load()
     }
 
-    fun load() {
-        if (!retryGate.isReady()) return
+    fun refresh() {
+        if (_state.value.saving || _state.value.picker) return
+        load(refresh = true)
+    }
+
+    fun load() = load(refresh = false)
+
+    private fun load(refresh: Boolean) {
+        if (loading || !retryGate.isReady()) return
+        loading = true
+        _state.update { it.copy(refreshing = refresh) }
         viewModelScope.launch {
             _state.update { it.copy(loading = it.operation == null, error = false, notFound = false, errorPresentation = null, requestRetryable = null) }
             try {
@@ -96,8 +108,11 @@ class DetailViewModel @Inject constructor(
                 _state.update { it.copy(loading = false, operation = op, categories = cats) }
             } catch (e: AppError) {
                 retryGate.record(e)
-                val notFound = e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.NOT_FOUND
+                val notFound = _state.value.operation == null && e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.NOT_FOUND
                 _state.update { it.copy(loading = false, error = !notFound, notFound = notFound, errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
+            } finally {
+                loading = false
+                _state.update { it.copy(refreshing = false) }
             }
         }
     }

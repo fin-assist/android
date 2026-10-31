@@ -108,18 +108,19 @@ class FeedViewModel @Inject constructor(
     }
 
     fun load() {
-        if (!retryGate.isReady()) return
+        if (firstPagePending || !retryGate.isReady()) return
         val requestGeneration = ++generation
         pendingLoadMore = pendingLoadMore || _state.value.loadingMore
         firstPagePending = true
         viewModelScope.launch {
             if (requestGeneration != generation) return@launch
-            _state.update { it.copy(loading = it.items.isEmpty(), offline = false, loadingMore = false, moreFailed = false, errorPresentation = null, requestRetryable = null) }
+            _state.update { it.copy(loading = it.items.isEmpty(), refreshing = it.items.isNotEmpty(), offline = false, loadingMore = false, moreFailed = false, errorPresentation = null, requestRetryable = null) }
             fetchFirst(requestGeneration)
         }
     }
 
     fun refresh(changedContext: Boolean = false) {
+        if (firstPagePending && !changedContext) return
         if (changedContext) {
             retryGate.clear()
             pageRetryGates.values.forEach { it.clear() }

@@ -1176,4 +1176,41 @@ class AnalyticsViewModelTest {
         assertEquals(PeriodTypeCode.YEAR, vm.state.value.data?.params?.period)
     }
 
+    @Test fun `pull refresh preserves period transfer mode and expansion while deduplicating requests`() {
+        val initial = data(date = "2026-08", mode = TransferMode.WITHOUT)
+        api.answers += initial
+        val vm = opened(initial.params)
+        vm.toggleExpanded("expense_categories")
+        val pending = CompletableDeferred<Analytics>()
+        api.reply = { pending.await() }
+        vm.refresh()
+        vm.refresh()
+        assertEquals(2, api.requests.size)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITHOUT), api.requests.last())
+        assertTrue(vm.state.value.refreshing)
+        assertEquals(initial, vm.state.value.data)
+        assertTrue("expense_categories" in vm.state.value.expanded)
+        pending.completeExceptionally(AppError.Offline())
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(initial, vm.state.value.data)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+    }
+
+    @Test fun `pull refresh obeys retry after and retries only after the deadline`() {
+        api.answers += data()
+        val vm = opened()
+        api.answers.clear()
+        api.answers += AppError.RateLimited(null, 2)
+        vm.refresh()
+        assertFalse(vm.state.value.retryReady)
+        vm.refresh()
+        assertEquals(2, api.requests.size)
+        scheduler.advanceTimeBy(2000)
+        scheduler.runCurrent()
+        api.answers.clear()
+        api.answers += data()
+        vm.refresh()
+        assertEquals(3, api.requests.size)
+    }
+
 }

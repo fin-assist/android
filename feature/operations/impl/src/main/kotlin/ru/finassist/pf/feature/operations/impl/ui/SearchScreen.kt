@@ -1,6 +1,7 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
 import ru.finassist.pf.core.designsystem.components.ConnectionFailureState
+import ru.finassist.pf.core.designsystem.components.PfRefreshContainer
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
@@ -86,7 +87,7 @@ fun SearchScreen(onBack: () -> Unit, onOpenOperation: (OperationItem) -> Unit, v
                 setQuery = vm::setQuery, openSheet = vm::openSheet, toggleKind = vm::toggleKind,
                 clearAnalyticsScope = vm::clearAnalyticsScope, reset = vm::reset, retry = vm::retry,
                 searchAllTime = vm::searchAllTime, setPeriod = vm::setPeriod, setCategory = vm::setCategory,
-                setAmount = vm::setAmount,
+                setAmount = vm::setAmount, refresh = vm::refresh,
             )
         },
     )
@@ -105,6 +106,7 @@ internal class SearchActions(
     val setPeriod: (from: java.time.OffsetDateTime?, to: java.time.OffsetDateTime?, allTime: Boolean) -> Unit,
     val setCategory: (String?) -> Unit,
     val setAmount: (Money?, Money?) -> Unit,
+    val refresh: () -> Unit = retry,
 )
 
 /** Search drawn from a ready state: no ViewModel, so design-check snapshots render it with mockup data. */
@@ -120,122 +122,125 @@ internal fun SearchContent(
     val d = PfTheme.dimens
     val f = state.filter
 
-    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.statusBars).imePadding().testTag(OperationsTags.SEARCH)) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = d.space3, end = d.space5, top = d.space2),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(d.space1),
-        ) {
-            PfIconButton(PfIcons.ARROW_LEFT, contentDescription = "Назад", onClick = onBack, modifier = Modifier.testTag(PfTestTags.BACK))
-            PfSearchField(f.q.orEmpty(), actions.setQuery, placeholder = "Магазин, категория или сумма", modifier = Modifier.weight(1f), testTag = OperationsTags.SEARCH_INPUT)
-        }
-        PfChipRow(Modifier.padding(start = d.space5, end = d.space5, top = d.space3)) {
-            // A filter switched off by `search.filter.*` but preset by Analytics or a chip is shown as a fixed,
-            // non-editable chip (docs/flags.md); «Сбросить» still removes it.
-            val period = f.from != null || f.to != null || state.allTime
-            if (state.chips.period || period) {
-                PfChip(periodLabel(f, state.allTime), onClick = { actions.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period, modifier = Modifier.testTag(OperationsTags.CHIP_PERIOD))
+    PfRefreshContainer(state.refreshing, actions.refresh, Modifier.fillMaxSize(), enabled = state.hasFilters) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.statusBars).imePadding().testTag(OperationsTags.SEARCH)) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = d.space3, end = d.space5, top = d.space2),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(d.space1),
+            ) {
+                PfIconButton(PfIcons.ARROW_LEFT, contentDescription = "Назад", onClick = onBack, modifier = Modifier.testTag(PfTestTags.BACK))
+                PfSearchField(f.q.orEmpty(), actions.setQuery, placeholder = "Магазин, категория или сумма", modifier = Modifier.weight(1f), testTag = OperationsTags.SEARCH_INPUT)
             }
-            if (state.chips.category || f.categoryId != null) {
-                val name = state.categories.firstOrNull { it.id == f.categoryId }?.name
-                PfChip(name ?: "Категория", onClick = { actions.openSheet(SearchSheet.CATEGORY) }, selected = f.categoryId != null, dropdown = state.chips.category, enabled = state.chips.category, modifier = Modifier.testTag(OperationsTags.CHIP_CATEGORY))
-            }
-            val amount = f.amountFrom != null || f.amountTo != null
-            if (state.chips.amount || amount) {
-                PfChip(amountLabel(f), onClick = { actions.openSheet(SearchSheet.AMOUNT) }, selected = amount, dropdown = state.chips.amount, enabled = state.chips.amount, modifier = Modifier.testTag(OperationsTags.CHIP_AMOUNT))
-            }
-            val knownKind = f.kind?.takeIf { it.isKnown }
-            if (state.chips.kind || knownKind != null) {
-                PfChip(if (knownKind == OperationKindFilter.INCOME) "Только доходы" else "Только расходы", onClick = actions.toggleKind, selected = knownKind != null, enabled = state.chips.kind, modifier = Modifier.testTag(OperationsTags.CHIP_KIND))
-            }
-            // Filters without their own chip (api.md: one chip, removed by tap or «Сбросить»), a kind this client does
-            // not know included (FIN-82).
-            if (f.selection != null || f.transferMode != null || (f.kind != null && knownKind == null)) {
-                PfChip((f.selectionName ?: "Как на «Аналитике»") + "  ✕", onClick = actions.clearAnalyticsScope, selected = true, modifier = Modifier.testTag(OperationsTags.CHIP_SCOPE))
-            }
-            if (!state.onlyQuery) {
-                PfChip("Сбросить", onClick = actions.reset, modifier = Modifier.testTag(OperationsTags.CHIP_RESET))
-            }
-        }
-        if (state.selectionDropped) {
-            PfNotice("Выборка с «Аналитики» больше не действует — ищем без неё", tone = NoticeTone.INFO, modifier = Modifier.padding(horizontal = d.space5))
-        }
-        state.errorPresentation?.let { presentation ->
-            ErrorMessage(
-                presentation,
-                if (state.result == SearchResult.TooMany) "Слишком много операций. Выберите период покороче или добавьте фильтр" else "Не получилось найти. Попробуйте ещё раз",
-                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
-                onRetry = if (!state.retryReady || state.result == SearchResult.TooMany) null else actions.retry,
-            )
-        }
-        when (val r = state.result) {
-            // Nothing under the chips until the first search (mockup `SearchInitial`).
-            SearchResult.Initial -> Box(Modifier.weight(1f).fillMaxWidth().testTag(OperationsTags.SEARCH_INITIAL))
-            SearchResult.Loading -> Unit
-            SearchResult.TooMany -> if (state.errorPresentation == null) PfEmptyState(PfIcons.SLIDERS, "Слишком много операций", "Выберите период покороче или добавьте фильтр")
-            SearchResult.Offline -> ConnectionFailureState() {
-                PfButton("Повторить", onClick = actions.retry, variant = ButtonVariant.PRIMARY)
-            }
-            SearchResult.Failed -> if (state.errorPresentation == null) PfEmptyState(PfIcons.ALERT, "Не получилось найти", "Попробуйте ещё раз") {
-                PfButton("Повторить", onClick = actions.retry, variant = ButtonVariant.PRIMARY)
-            }
-            is SearchResult.Found -> if (r.totalCount == 0) {
-                // Mockup `SearchEmpty`: no count line — the empty state's title is the result, announced politely;
-                // the button drops the filters (the query stays, unless it is the only one — then it goes).
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(start = d.space5, end = d.space5, top = d.space6)
-                        .semantics { liveRegion = LiveRegionMode.Polite }
-                        .testTag(OperationsTags.SEARCH_COUNT),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    PfEmptyState(
-                        PfIcons.SEARCH, "По запросу ничего не найдено",
-                        padding = PaddingValues(start = d.space8, top = d.space8, end = d.space8, bottom = d.space6),
-                        modifier = Modifier.testTag(OperationsTags.SEARCH_EMPTY),
-                    )
-                    PfButton("Сбросить фильтры", onClick = actions.reset, variant = ButtonVariant.SECONDARY, modifier = Modifier.testTag(OperationsTags.SEARCH_RESET))
+            PfChipRow(Modifier.padding(start = d.space5, end = d.space5, top = d.space3)) {
+                // A filter switched off by `search.filter.*` but preset by Analytics or a chip is shown as a fixed,
+                // non-editable chip (docs/flags.md); «Сбросить» still removes it.
+                val period = f.from != null || f.to != null || state.allTime
+                if (state.chips.period || period) {
+                    PfChip(periodLabel(f, state.allTime), onClick = { actions.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period, modifier = Modifier.testTag(OperationsTags.CHIP_PERIOD))
                 }
-            } else {
-                val operationsById = remember(r.items) { r.items.associateBy { it.id } }
-                val months = remember(r.items, zone, today) { OperationFormat.searchGroups(r.items, zone, today) }
-                LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space4, bottom = d.space6)) {
-                    item(key = "count") {
-                        Text(
-                            searchSummary(r.totalCount),
-                            style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
-                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag(OperationsTags.SEARCH_COUNT),
+                if (state.chips.category || f.categoryId != null) {
+                    val name = state.categories.firstOrNull { it.id == f.categoryId }?.name
+                    PfChip(name ?: "Категория", onClick = { actions.openSheet(SearchSheet.CATEGORY) }, selected = f.categoryId != null, dropdown = state.chips.category, enabled = state.chips.category, modifier = Modifier.testTag(OperationsTags.CHIP_CATEGORY))
+                }
+                val amount = f.amountFrom != null || f.amountTo != null
+                if (state.chips.amount || amount) {
+                    PfChip(amountLabel(f), onClick = { actions.openSheet(SearchSheet.AMOUNT) }, selected = amount, dropdown = state.chips.amount, enabled = state.chips.amount, modifier = Modifier.testTag(OperationsTags.CHIP_AMOUNT))
+                }
+                val knownKind = f.kind?.takeIf { it.isKnown }
+                if (state.chips.kind || knownKind != null) {
+                    PfChip(if (knownKind == OperationKindFilter.INCOME) "Только доходы" else "Только расходы", onClick = actions.toggleKind, selected = knownKind != null, enabled = state.chips.kind, modifier = Modifier.testTag(OperationsTags.CHIP_KIND))
+                }
+                // Filters without their own chip (api.md: one chip, removed by tap or «Сбросить»), a kind this client does
+                // not know included (FIN-82).
+                if (f.selection != null || f.transferMode != null || (f.kind != null && knownKind == null)) {
+                    PfChip((f.selectionName ?: "Как на «Аналитике»") + "  ✕", onClick = actions.clearAnalyticsScope, selected = true, modifier = Modifier.testTag(OperationsTags.CHIP_SCOPE))
+                }
+                if (!state.onlyQuery) {
+                    PfChip("Сбросить", onClick = actions.reset, modifier = Modifier.testTag(OperationsTags.CHIP_RESET))
+                }
+            }
+            if (state.selectionDropped) {
+                PfNotice("Выборка с «Аналитики» больше не действует — ищем без неё", tone = NoticeTone.INFO, modifier = Modifier.padding(horizontal = d.space5))
+            }
+            state.errorPresentation?.let { presentation ->
+                ErrorMessage(
+                    presentation,
+                    if (state.result == SearchResult.TooMany) "Слишком много операций. Выберите период покороче или добавьте фильтр" else "Не получилось найти. Попробуйте ещё раз",
+                    modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
+                    onRetry = if (!state.retryReady || state.result == SearchResult.TooMany) null else actions.retry,
+                )
+            }
+            when (val r = state.result) {
+                // Nothing under the chips until the first search (mockup `SearchInitial`).
+                SearchResult.Initial -> Box(Modifier.weight(1f).fillMaxWidth().testTag(OperationsTags.SEARCH_INITIAL))
+                SearchResult.Loading -> Unit
+                SearchResult.TooMany -> if (state.errorPresentation == null) PfEmptyState(PfIcons.SLIDERS, "Слишком много операций", "Выберите период покороче или добавьте фильтр")
+                SearchResult.Offline -> ConnectionFailureState() {
+                    PfButton("Повторить", onClick = actions.retry, variant = ButtonVariant.PRIMARY)
+                }
+                SearchResult.Failed -> if (state.errorPresentation == null) PfEmptyState(PfIcons.ALERT, "Не получилось найти", "Попробуйте ещё раз") {
+                    PfButton("Повторить", onClick = actions.retry, variant = ButtonVariant.PRIMARY)
+                }
+                is SearchResult.Found -> if (r.totalCount == 0) {
+                    // Mockup `SearchEmpty`: no count line — the empty state's title is the result, announced politely;
+                    // the button drops the filters (the query stays, unless it is the only one — then it goes).
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = d.space5, end = d.space5, top = d.space6)
+                            .semantics { liveRegion = LiveRegionMode.Polite }
+                            .testTag(OperationsTags.SEARCH_COUNT),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        PfEmptyState(
+                            PfIcons.SEARCH, "По запросу ничего не найдено",
+                            padding = PaddingValues(start = d.space8, top = d.space8, end = d.space8, bottom = d.space6),
+                            modifier = Modifier.testTag(OperationsTags.SEARCH_EMPTY),
                         )
+                        PfButton("Сбросить фильтры", onClick = actions.reset, variant = ButtonVariant.SECONDARY, modifier = Modifier.testTag(OperationsTags.SEARCH_RESET))
                     }
-                    months.forEachIndexed { index, (label, rows) ->
-                        item(key = "m-$label") {
-                            PfTransactionGroup(label, first = index == 0, modifier = if (index == 0) Modifier.padding(top = d.space3) else Modifier) {
-                                rows.forEach { row ->
-                                    OperationRow(row, onClick = { operationsById[row.id]?.let(onOpenOperation) }, divider = row !== rows.last())
+                } else {
+                    val operationsById = remember(r.items) { r.items.associateBy { it.id } }
+                    val months = remember(r.items, zone, today) { OperationFormat.searchGroups(r.items, zone, today) }
+                    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space4, bottom = d.space6)) {
+                        item(key = "count") {
+                            Text(
+                                searchSummary(r.totalCount),
+                                style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag(OperationsTags.SEARCH_COUNT),
+                            )
+                        }
+                        months.forEachIndexed { index, (label, rows) ->
+                            item(key = "m-$label") {
+                                PfTransactionGroup(label, first = index == 0, modifier = if (index == 0) Modifier.padding(top = d.space3) else Modifier) {
+                                    rows.forEach { row ->
+                                        OperationRow(row, onClick = { operationsById[row.id]?.let(onOpenOperation) }, divider = row !== rows.last())
+                                    }
+                                }
+                            }
+                        }
+                        if (r.hasOlderData) {
+                            item(key = "older") {
+                                Column(
+                                    Modifier.fillMaxWidth().padding(top = d.space4),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(d.space1),
+                                ) {
+                                    val window = r.range?.let { " — " + OperationFormat.windowStart(it.from.toLocalDate()) }.orEmpty()
+                                    Text(
+                                        "Искали за последние 12 месяцев$window. Есть операции и раньше",
+                                        style = PfTheme.type.hint, color = PfTheme.colors.textMuted, textAlign = TextAlign.Center,
+                                    )
+                                    PfLink("Искать за всё время", onClick = actions.searchAllTime, modifier = Modifier.testTag(OperationsTags.SEARCH_ALL_TIME))
                                 }
                             }
                         }
                     }
-                    if (r.hasOlderData) {
-                        item(key = "older") {
-                            Column(
-                                Modifier.fillMaxWidth().padding(top = d.space4),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(d.space1),
-                            ) {
-                                val window = r.range?.let { " — " + OperationFormat.windowStart(it.from.toLocalDate()) }.orEmpty()
-                                Text(
-                                    "Искали за последние 12 месяцев$window. Есть операции и раньше",
-                                    style = PfTheme.type.hint, color = PfTheme.colors.textMuted, textAlign = TextAlign.Center,
-                                )
-                                PfLink("Искать за всё время", onClick = actions.searchAllTime, modifier = Modifier.testTag(OperationsTags.SEARCH_ALL_TIME))
-                            }
-                        }
-                    }
                 }
             }
         }
+
     }
 
     when (state.sheet) {

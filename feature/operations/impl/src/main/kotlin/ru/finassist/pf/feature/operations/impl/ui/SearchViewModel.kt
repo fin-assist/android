@@ -68,6 +68,7 @@ data class SearchUiState(
     val filter: OperationsFilter = OperationsFilter(),
     val allTime: Boolean = false,
     val result: SearchResult = SearchResult.Initial,
+    val refreshing: Boolean = false,
     val chips: SearchChips,
     val sheet: SearchSheet? = null,
     val categories: List<Category> = emptyList(),
@@ -215,7 +216,14 @@ class SearchViewModel @Inject constructor(
 
     fun openSheet(sheet: SearchSheet?) = _state.update { it.copy(sheet = sheet) }
 
-    fun retry() { if (retryGate.isReady()) search(debounce = false) }
+    fun retry() {
+        if (retryGate.isReady() && searchJob?.isActive != true) search(debounce = false, quiet = true)
+    }
+
+    fun refresh() {
+        if (searchJob?.isActive == true || !_state.value.hasFilters || !retryGate.isReady()) return
+        search(debounce = false, quiet = true)
+    }
 
     private fun updateFilter(debounce: Boolean = false, change: (OperationsFilter) -> OperationsFilter) {
         val changed = change(_state.value.filter)
@@ -241,6 +249,7 @@ class SearchViewModel @Inject constructor(
             _state.update { it.copy(result = SearchResult.Initial) }
             return
         }
+        _state.update { it.copy(refreshing = refresh) }
         searchJob = viewModelScope.launch {
             if (debounce) delay(350)
             if (generation != searchGeneration) return@launch
@@ -268,7 +277,7 @@ class SearchViewModel @Inject constructor(
             } catch (e: AppError) {
                 if (generation != searchGeneration) return@launch
                 retryGate.record(e)
-                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline && !keep }, requestRetryable = e.requestRetryable) }
                 when {
                     keep -> Unit
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.TOO_MANY_RESULTS -> _state.update { it.copy(result = SearchResult.TooMany) }
@@ -281,6 +290,8 @@ class SearchViewModel @Inject constructor(
                     e is AppError.Offline -> _state.update { it.copy(result = SearchResult.Offline) }
                     else -> _state.update { it.copy(result = SearchResult.Failed) }
                 }
+            } finally {
+                if (generation == searchGeneration) _state.update { it.copy(refreshing = false) }
             }
         }
     }

@@ -58,6 +58,7 @@ enum class AnalyticsHint { CATEGORIES, ASK }
 
 data class AnalyticsUiState(
     val loading: Boolean = true,
+    val refreshing: Boolean = false,
     val offline: Boolean = false,
     val data: Analytics? = null,
     val blocks: AnalyticsBlocks,
@@ -207,6 +208,12 @@ class AnalyticsViewModel @Inject constructor(
         if (_state.value.sheet == AnalyticsSheet.PERIODS) requestPeriods()
     }
 
+    override fun refresh() {
+        if (loadJob?.isActive == true || !retryGate.isReady()) return
+        _state.update { it.copy(refreshing = true, errorPresentation = null, snackbar = null, requestRetryable = null) }
+        load(quiet = true)
+    }
+
     override fun load(quiet: Boolean) {
         if (!retryGate.isReady()) return
         if (_state.value.preparationTimedOut) importPolls = 0
@@ -283,6 +290,8 @@ class AnalyticsViewModel @Inject constructor(
                         else if (e is AppError.Offline) "Прежний период сохранён" else "Не получилось обновить. Попробуйте ещё раз",
                     )
                 }
+            } finally {
+                _state.update { it.copy(refreshing = false) }
             }
         }
     }
