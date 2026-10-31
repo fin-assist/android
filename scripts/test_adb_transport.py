@@ -454,6 +454,80 @@ class TransportTests(unittest.TestCase):
     def test_sighup_to_runner_cleans_real_launcher_and_child(self):
         self._assert_real_runner_signal_cleanup(signal.SIGHUP)
 
+    def _reaped_short_command_factory(self, *, send_signal):
+        original_popen = subprocess.Popen
+        calls = []
+        processes = []
+
+        def start(*args, **kwargs):
+            process = original_popen(*args, **kwargs)
+            processes.append(process)
+            communicate = process.communicate
+            first = True
+
+            def reaped_then_interrupted(*args, **kwargs):
+                nonlocal first
+                calls.append(1)
+                if first:
+                    first = False
+                    # A real short process has exited and been reaped before cleanup starts,
+                    # exactly the boundary CPython's KeyboardInterrupt grace wait can expose.
+                    communicate(timeout=3)
+                    self.assertEqual(process.returncode, 0)
+                    with self.assertRaises(ProcessLookupError):
+                        os.killpg(process.pid, 0)
+                    if send_signal:
+                        os.kill(os.getpid(), signal.SIGTERM)
+                        self.fail("SIGTERM did not raise the scoped interruption")
+                    raise subprocess.TimeoutExpired(process.args, .1)
+                return communicate(*args, **kwargs)
+
+            process.communicate = reaped_then_interrupted
+            return process
+
+        return start, calls, processes
+
+    def test_signal_after_real_short_command_was_reaped_preserves_interruption(self):
+        start, calls, processes = self._reaped_short_command_factory(send_signal=True)
+        with transport.interruption_handlers(), patch.object(transport.subprocess, "Popen", side_effect=start):
+            with self.assertRaises(transport.ProbeInterrupted) as caught:
+                transport.run_bounded([sys.executable, "-c", "print('done')"], 3)
+        self.assertEqual(caught.exception.signum, signal.SIGTERM)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(processes[0].returncode, 0)
+
+    def test_timeout_cleanup_accepts_real_already_reaped_short_command(self):
+        start, calls, processes = self._reaped_short_command_factory(send_signal=False)
+        with patch.object(transport.subprocess, "Popen", side_effect=start):
+            code, output = transport.run_bounded([sys.executable, "-c", "print('done')"], 3)
+        self.assertEqual(code, 124)
+        self.assertEqual(output.strip(), "done")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(processes[0].returncode, 0)
+
+    def test_main_boot_signal_after_reaped_command_records_interrupted_exit(self):
+        start, calls, processes = self._reaped_short_command_factory(send_signal=True)
+
+        def boot(*args):
+            transport.run_bounded([sys.executable, "-c", "print('done')"], 3)
+
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory) / "out"
+            with contextlib.redirect_stdout(io.StringIO()), patch.object(transport, "wait_for_boot", side_effect=boot), \
+                    patch.object(transport.subprocess, "Popen", side_effect=start):
+                code = transport.main(["--serial", "emulator-5582", "--avd-name", "own", "--transport", "direct",
+                                       "--repetitions", "1", "--out", str(out)])
+            summary = json.loads((out / "summary.json").read_text())
+            self.assertEqual(code, 143)
+            self.assertFalse(summary["complete"])
+            self.assertFalse(summary["passed"])
+            self.assertEqual(summary["abort_reason"], "interrupted")
+            self.assertEqual(summary["interrupted_signal"], "SIGTERM")
+            self.assertNotIn("error", summary)
+            self.assertEqual(summary["recorded_repetitions"], 0)
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(processes[0].returncode, 0)
+
     def test_existing_output_cannot_be_overwritten(self):
         with tempfile.TemporaryDirectory() as directory:
             sentinel = Path(directory) / "summary.json"

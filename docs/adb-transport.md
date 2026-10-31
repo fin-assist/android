@@ -65,7 +65,9 @@ is killed after the timeout; this bounds the shell launcher, Java and its childr
 owned command, scoped SIGINT/SIGTERM/SIGHUP handlers translate termination into the same process-group
 cleanup and an incomplete summary with `abort_reason=interrupted`, the signal name and exit status `128 + signal`.
 Repeated termination signals are deferred during bounded cleanup and summary persistence; previous
-handlers are restored afterward. No signal handler is installed by the monitor thread. The tested
+handlers are restored afterward. Cleanup tolerates an already absent owned group: CPython can reap a
+short command during its KeyboardInterrupt grace wait. The original interruption is preserved and
+`communicate()` still completes/reaps the command. No signal handler is installed by the monitor thread. The tested
 termination boundary is a running launcher with a live descendant; this is not a universal guarantee
 for cancellation at every instant inside process creation, and SIGKILL cannot execute Python cleanup.
 

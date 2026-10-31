@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -87,11 +87,13 @@ def run_bounded(command, timeout, *, env=None, output=None):
         stdout, _ = process.communicate(timeout=timeout)
         return process.returncode, stdout or ""
     except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGKILL)
+        with suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
         stdout, _ = process.communicate()
         return 124, stdout or ""
     except BaseException:
-        os.killpg(process.pid, signal.SIGKILL)
+        with suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
         process.communicate()
         raise
 
