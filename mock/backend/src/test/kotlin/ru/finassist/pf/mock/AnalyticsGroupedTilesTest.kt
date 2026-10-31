@@ -120,8 +120,11 @@ class AnalyticsGroupedTilesTest {
         assertNull(AnalyticsComposer.parseSupports(""))
         assertEquals(mapOf("tile_group" to 2, "future" to 3), AnalyticsComposer.parseSupports("tile_group@2,future@3,tile_group@1"))
         assertEquals(mapOf("tile_group" to Int.MAX_VALUE), AnalyticsComposer.parseSupports("tile_group@2147483647"))
-        for (raw in listOf("tile_group", "@2", "tile_group@", "tile_group@0", "tile_group@-1", "tile_group@+2",
-            "tile_group@２", "tile_group@2147483648", "tile_group@2,", "tile_group@1@2")) {
+        assertEquals(mapOf("tile_group" to 2), AnalyticsComposer.parseSupports("tile_group@+2,tile_group@1"))
+        assertEquals(mapOf("tile_group" to Int.MAX_VALUE), AnalyticsComposer.parseSupports("tile_group@+2147483647"))
+        for (raw in listOf("tile_group", "@2", "tile_group@", "tile_group@0", "tile_group@-1", "tile_group@+0",
+            "tile_group@+", "tile_group@++2", "tile_group@+-2", "tile_group@ 2", "tile_group@2 ",
+            "tile_group@２", "tile_group@+２", "tile_group@2147483648", "tile_group@+2147483648", "tile_group@2,", "tile_group@1@2")) {
             assertFailsWith<IllegalArgumentException>(raw) { AnalyticsComposer.parseSupports(raw) }
         }
     }
@@ -149,7 +152,7 @@ class AnalyticsGroupedTilesTest {
     @Test fun `API passes negotiated versions and ignores unknown primitive names`() = runBlocking<Unit> {
         val api = MockAnalyticsApi(testBackend().apply { load(fixtureDoc()) })
         for ((raw, version) in listOf(null to 1, "" to 1, "tile_group@1" to 1,
-            "tile_group@2" to 2, "tile_group@2,tile_group@1" to 2)) {
+            "tile_group@2" to 2, "tile_group@2,tile_group@1" to 2, "tile_group@+2" to 2)) {
             val response = api.getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITHOUT, supports = raw)
             assertEquals(version, block(response).v)
             assertEquals(TransferMode.WITHOUT, response.params!!.transferMode)

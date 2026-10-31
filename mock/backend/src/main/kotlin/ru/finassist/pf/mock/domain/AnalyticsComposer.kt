@@ -52,8 +52,10 @@ object AnalyticsComposer {
         val versions = mutableMapOf<String, Int>()
         for (part in raw.split(',')) {
             val pair = part.split('@')
-            require(pair.size == 2 && pair[0].isNotEmpty() && pair[1].isNotEmpty() && pair[1].all { it in '0'..'9' })
-            val version = requireNotNull(pair[1].toIntOrNull())
+            require(pair.size == 2 && pair[0].isNotEmpty())
+            val digits = pair[1].removePrefix("+")
+            require(digits.isNotEmpty() && digits.all { it in '0'..'9' })
+            val version = requireNotNull(digits.toIntOrNull())
             require(version > 0)
             versions[pair[0]] = maxOf(versions[pair[0]] ?: 0, version)
         }
