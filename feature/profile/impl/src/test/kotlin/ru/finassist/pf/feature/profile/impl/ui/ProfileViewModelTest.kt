@@ -141,8 +141,10 @@ class ProfileViewModelTest {
         var calls = 0
         var limit = LIMIT
         var failure: AppError? = null
+        var reply: (suspend () -> AssistantLimit)? = null
         override suspend fun getLimit(): AssistantLimit {
             calls++
+            reply?.let { return it() }
             failure?.let { throw it }
             return limit
         }
@@ -861,6 +863,38 @@ class ProfileViewModelTest {
         pending.complete(profileApi.profile)
         assertEquals(ProfileErrorOrigin.STATEMENTS, vm.state.value.errorOrigin)
         assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+    }
+
+    @Test fun `late quota success cannot restore an auxiliary error over a failed theme change`() {
+        val vm = loaded()
+        val quota = CompletableDeferred<AssistantLimit>()
+        assistant.reply = { quota.await() }
+        statementsApi.failure = AppError.Offline()
+        vm.refresh()
+        profileApi.updateFailure = AppError.Offline()
+        vm.setTheme(Theme.DARK)
+        assertEquals(ProfileErrorOrigin.THEME, vm.state.value.errorOrigin)
+        val explanation = vm.state.value.errorPresentation
+        val outcome = vm.state.value.snackbar
+        quota.complete(LIMIT)
+        assertEquals(ProfileErrorOrigin.THEME, vm.state.value.errorOrigin)
+        assertEquals(explanation, vm.state.value.errorPresentation)
+        assertEquals(outcome, vm.state.value.snackbar)
+    }
+
+    @Test fun `late quota success cannot replace a failed consent revocation outcome`() {
+        val vm = loaded()
+        val quota = CompletableDeferred<AssistantLimit>()
+        assistant.reply = { quota.await() }
+        statementsApi.failure = AppError.Offline()
+        vm.refresh()
+        profileApi.revokeFailure = AppError.Offline()
+        vm.revokeConsent()
+        assertEquals(ProfileErrorOrigin.CONSENT, vm.state.value.errorOrigin)
+        val outcome = vm.state.value.snackbar
+        quota.complete(LIMIT)
+        assertEquals(ProfileErrorOrigin.CONSENT, vm.state.value.errorOrigin)
+        assertEquals(outcome, vm.state.value.snackbar)
     }
 
 }

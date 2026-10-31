@@ -613,4 +613,44 @@ class SearchViewModelTest {
         assertFalse(vm.state.value.refreshing)
     }
 
+    @Test fun `quiet refresh removes a vanished selection and retains rows only while the corrected query is pending`() {
+        api.lists += found("old")
+        val vm = vm(OperationsFilter(q = "coffee", selection = "gone", selectionName = "Taxi"))
+        val shown = vm.state.value.result
+        val pending = kotlinx.coroutines.CompletableDeferred<Unit>()
+        api.listReply = { query ->
+            if (query.filter.selection != null) throw AppError.Api(ErrorCodes.SELECTION_NOT_FOUND, 422)
+            pending.await()
+            found("new")
+        }
+        vm.refresh()
+        assertNull(vm.state.value.filter.selection)
+        assertNull(vm.state.value.filter.selectionName)
+        assertEquals("coffee", vm.state.value.filter.q)
+        assertTrue(vm.state.value.selectionDropped)
+        assertTrue(vm.state.value.refreshing)
+        assertEquals(shown, vm.state.value.result)
+        assertEquals(3, api.queries.size)
+        vm.refresh()
+        vm.retry()
+        assertEquals(3, api.queries.size)
+        pending.complete(Unit)
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(listOf("new"), (vm.state.value.result as SearchResult.Found).items.map { it.id })
+    }
+
+    @Test fun `a corrected selection query failure does not leave another selections stale rows`() {
+        api.lists += found("old")
+        val vm = vm(OperationsFilter(q = "coffee", selection = "gone"))
+        api.listReply = { query ->
+            if (query.filter.selection != null) throw AppError.Api(ErrorCodes.SELECTION_NOT_FOUND, 422)
+            throw AppError.Offline()
+        }
+        vm.retry()
+        assertNull(vm.state.value.filter.selection)
+        assertTrue(vm.state.value.selectionDropped)
+        assertEquals(SearchResult.Offline, vm.state.value.result)
+        assertFalse(vm.state.value.refreshing)
+    }
+
 }

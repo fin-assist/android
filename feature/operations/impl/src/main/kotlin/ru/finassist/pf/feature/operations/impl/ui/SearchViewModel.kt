@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -239,7 +240,7 @@ class SearchViewModel @Inject constructor(
      * While a search for a changed filter is still pending, the shown result is not that filter's: the refresh is an
      * ordinary search then.
      */
-    private fun search(debounce: Boolean, quiet: Boolean = false) {
+    private fun search(debounce: Boolean, quiet: Boolean = false, correctingSelection: SearchResult.Found? = null) {
         if (!retryGate.isReady()) return
         val refresh = quiet && searchJob?.isActive != true
         val generation = ++searchGeneration
@@ -249,13 +250,14 @@ class SearchViewModel @Inject constructor(
             _state.update { it.copy(result = SearchResult.Initial, refreshing = false) }
             return
         }
-        _state.update { it.copy(refreshing = refresh) }
-        searchJob = viewModelScope.launch {
+        _state.update { it.copy(refreshing = refresh || correctingSelection != null) }
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             if (debounce) delay(350)
             if (generation != searchGeneration) return@launch
             val keep = refresh && _state.value.result is SearchResult.Found
             _state.update { it.copy(errorPresentation = null, requestRetryable = null) }
-            if (!keep) _state.update { it.copy(result = SearchResult.Loading) }
+            // The old selection's result is visible only until the corrected query settles.
+            if (!keep && correctingSelection == null) _state.update { it.copy(result = SearchResult.Loading) }
             val filter = _state.value.filter
             try {
                 val allTime = _state.value.allTime
@@ -279,14 +281,15 @@ class SearchViewModel @Inject constructor(
                 retryGate.record(e)
                 _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline && !keep }, requestRetryable = e.requestRetryable) }
                 when {
-                    keep -> Unit
-                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.TOO_MANY_RESULTS -> _state.update { it.copy(result = SearchResult.TooMany) }
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.SELECTION_NOT_FOUND && filter.selection != null -> {
                         // Removing the stale selection changes the request context, including its retry restriction.
+                        val shown = _state.value.result as? SearchResult.Found
                         changedContext()
                         _state.update { it.copy(filter = it.filter.copy(selection = null, selectionName = null), selectionDropped = true) }
-                        search(debounce = false)
+                        search(debounce = false, correctingSelection = shown)
                     }
+                    keep -> Unit
+                    e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.TOO_MANY_RESULTS -> _state.update { it.copy(result = SearchResult.TooMany) }
                     e is AppError.Offline -> _state.update { it.copy(result = SearchResult.Offline) }
                     else -> _state.update { it.copy(result = SearchResult.Failed) }
                 }
@@ -294,5 +297,7 @@ class SearchViewModel @Inject constructor(
                 if (generation == searchGeneration) _state.update { it.copy(refreshing = false) }
             }
         }
+        searchJob = job
+        job.start()
     }
 }

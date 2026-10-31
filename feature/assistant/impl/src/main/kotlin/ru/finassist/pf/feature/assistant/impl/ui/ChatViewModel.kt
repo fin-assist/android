@@ -89,6 +89,8 @@ data class ChatUiState(
     val draft: String = "",
     val sending: Boolean = false,
     val limit: AssistantLimit? = null,
+    /** Latest authoritative remainder, even before GET supplies reset and daily-maximum metadata. */
+    val knownRemaining: Int? = null,
     val offline: Boolean = false,
     /** Last send/retry failed for a reason other than the network (shown with «Повторить»). */
     val sendFailed: Boolean = false,
@@ -114,7 +116,7 @@ data class ChatUiState(
     val consentRequired: Boolean = false,
 ) {
     val generating: Boolean get() = items.any { it is ChatItem.Answer && it.status == AnswerStatus.GENERATING }
-    val limitExhausted: Boolean get() = limit?.let { it.remaining <= 0 } == true
+    val limitExhausted: Boolean get() = (knownRemaining ?: limit?.remaining)?.let { it <= 0 } == true
 }
 
 /**
@@ -331,13 +333,18 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshLimit(reportOffline: Boolean = false) {
+    private suspend fun refreshLimit(reportOffline: Boolean = false, reconcileUnknown: Boolean = true) {
         if (limitReadPending || !limitRetryGate.isReady()) return
         limitReadPending = true
         val revision = limitRevision
+        var needsMetadata = false
         try {
             val limit = api.getLimit()
-            if (revision == limitRevision) _state.update { it.copy(limit = limit, limitErrorPresentation = null) }
+            if (revision == limitRevision) {
+                _state.update { it.copy(limit = limit, knownRemaining = limit.remaining, limitErrorPresentation = null) }
+            } else {
+                needsMetadata = _state.value.limit == null && _state.value.knownRemaining != null
+            }
         } catch (failure: AppError) {
             if (revision != limitRevision) {
                 limitRetryGate.recordEndpointWait(failure)
@@ -348,6 +355,9 @@ class ChatViewModel @Inject constructor(
         } finally {
             limitReadPending = false
         }
+        // An accepted Ask/SSE may arrive before the first quota metadata. Keep its remainder immediately,
+        // then obtain metadata with at most one new read; a second stale read waits for a later user refresh.
+        if (needsMetadata && reconcileUnknown) refreshLimit(reportOffline, reconcileUnknown = false)
     }
 
     /** A saved tab keeps its draft; re-reading on later visits updates history and changed-since markers. */
@@ -437,7 +447,7 @@ class ChatViewModel @Inject constructor(
                         sending = false, draft = if (it.draft.trim() == text) "" else it.draft, offline = false,
                         // A replayed 201 carries ids the reloaded history may already hold: keep those.
                         items = (it.items + question + answer).distinctById(),
-                        limit = it.limit?.copy(remaining = r.remainingLimit),
+                        limit = it.limit?.copy(remaining = r.remainingLimit), knownRemaining = r.remainingLimit,
                     )
                 }
                 watch(r.answerId)
@@ -459,7 +469,7 @@ class ChatViewModel @Inject constructor(
                         // Not stored by the server (api.md 7.1): tomorrow the same key would pass, but it is a new day.
                         pending = null
                         limitRevision++
-                        _state.update { it.copy(limit = it.limit?.copy(remaining = 0) ?: AssistantLimit(0, 5, e.resetsAt ?: clock.now())) }
+                        _state.update { it.copy(limit = it.limit?.copy(remaining = 0) ?: AssistantLimit(0, 5, e.resetsAt ?: clock.now()), knownRemaining = 0) }
                     }
                     e is AppError.Offline -> _state.update { it.copy(offline = true) }
                     else -> _state.update { it.copy(sendFailed = true) }
@@ -606,7 +616,7 @@ class ChatViewModel @Inject constructor(
                         items = s.items.map { item ->
                             if (item.id == answerId && item is ChatItem.Answer) ChatItem.Answer(r.answerId, item.createdAt, AnswerStatus.GENERATING) else item
                         }.distinctById(),
-                        limit = s.limit?.copy(remaining = r.remainingLimit),
+                        limit = s.limit?.copy(remaining = r.remainingLimit), knownRemaining = r.remainingLimit,
                     )
                 }
                 watch(r.answerId)
@@ -616,7 +626,7 @@ class ChatViewModel @Inject constructor(
                 when {
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.LIMIT_EXCEEDED -> {
                         limitRevision++
-                        _state.update { it.copy(limit = it.limit?.copy(remaining = 0)) }
+                        _state.update { it.copy(limit = it.limit?.copy(remaining = 0), knownRemaining = 0) }
                     }
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CONSENT_REQUIRED -> {
                         consentRevision++
@@ -626,7 +636,8 @@ class ChatViewModel @Inject constructor(
                     // Already replaced (e.g. the first 201 was lost after all): the history has the truth.
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.RETRY_NOT_ALLOWED -> {
                         retryKeys.remove(answerId)
-                        load()
+                        // A confirmed server replacement must reconcile even while a gesture's quota read waits.
+                        reload(skipStream = null)
                     }
                     e is AppError.Offline -> _state.update { it.copy(offline = true) }
                     else -> _state.update { it.copy(sendFailed = true) }
@@ -699,7 +710,11 @@ class ChatViewModel @Inject constructor(
         }
         if (event is AnswerEvent.Done) tracker.track(Events.ASSISTANT_ANSWER_DONE, mapOf("charged" to event.event.charged.toString()))
         if (event is AnswerEvent.Error) tracker.track(Events.ASSISTANT_ANSWER_FAILED, mapOf("code" to event.event.code.code))
-        s.copy(items = items, limit = limit)
+        s.copy(items = items, limit = limit, knownRemaining = when (event) {
+            is AnswerEvent.Done -> event.event.remainingLimit
+            is AnswerEvent.Error -> event.event.remainingLimit
+            else -> s.knownRemaining
+        })
         }
     }
 

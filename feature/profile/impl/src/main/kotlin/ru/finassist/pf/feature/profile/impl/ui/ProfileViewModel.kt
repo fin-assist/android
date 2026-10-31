@@ -103,7 +103,7 @@ class ProfileViewModel @Inject constructor(
     private val auxiliaryFailures = linkedMapOf<ProfileErrorOrigin, AuxiliaryFailure>()
 
     private fun ProfileUiState.withAuxiliaryFailure(): ProfileUiState {
-        if (profile == null || errorOrigin == ProfileErrorOrigin.PROFILE) return this
+        if (profile == null || errorOrigin in setOf(ProfileErrorOrigin.PROFILE, ProfileErrorOrigin.THEME, ProfileErrorOrigin.CONSENT)) return this
         val failure = auxiliaryFailures.entries.lastOrNull() ?: return this
         return showRequestError(failure.key, failure.value.presentation, failure.value.outcome)
     }

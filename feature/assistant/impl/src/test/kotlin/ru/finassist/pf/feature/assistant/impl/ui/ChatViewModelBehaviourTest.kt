@@ -1799,4 +1799,57 @@ class ChatViewModelBehaviourTest {
         assertTrue(vm.state.value.limitExhausted)
     }
 
+    @Test fun `Ask before first quota metadata spends its known remainder and reconciles metadata once`() {
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        val freshQuota = CompletableDeferred<AssistantLimit>()
+        var reads = 0
+        api.limitReply = { if (++reads == 1) oldQuota.await() else freshQuota.await() }
+        val vm = newVm()
+        assertNull(vm.state.value.limit)
+        api.askOutcomes += askResponse(remaining = 0)
+        sendQuestion(vm)
+        assertTrue(vm.state.value.limitExhausted)
+        assertEquals(0, vm.state.value.knownRemaining)
+        oldQuota.complete(limit)
+        assertEquals(2, reads)
+        assertNull(vm.state.value.limit, "stale reset metadata must not be installed")
+        assertTrue(vm.state.value.limitExhausted)
+        freshQuota.complete(limit.copy(remaining = 0))
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+        assertEquals(2, reads)
+    }
+
+    @Test fun `terminal Error refund while quota GET is pending remains authoritative`() {
+        api.pages[null] = MessagesList(listOf(answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val events = kotlinx.coroutines.flow.MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
+        api.script("a1", events)
+        val vm = newVm()
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { oldQuota.await() }
+        vm.refresh()
+        events.tryEmit(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "model", remainingLimit = 5)))
+        assertEquals(5, vm.state.value.knownRemaining)
+        oldQuota.complete(limit)
+        assertEquals(5, vm.state.value.limit?.remaining)
+        assertEquals(5, vm.state.value.knownRemaining)
+    }
+
+    @Test fun `retry-not-allowed reconciles history while a manual quota read is still pending`() {
+        api.pages[null] = MessagesList(listOf(answer("old", AnswerStatus.FAILED, retryable = true)), hasOlder = false)
+        val vm = newVm()
+        val pendingQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { pendingQuota.await() }
+        vm.refresh()
+        assertTrue(vm.state.value.refreshing)
+        api.pages[null] = MessagesList(listOf(answer("replacement")), hasOlder = false)
+        api.retryOutcomes += AppError.Api(ErrorCodes.RETRY_NOT_ALLOWED, 409)
+        vm.retry("old")
+        assertEquals(3, api.listCalls.size)
+        assertEquals(listOf("replacement"), vm.state.value.items.map { it.id })
+        pendingQuota.complete(limit)
+        assertEquals(listOf("replacement"), vm.state.value.items.map { it.id })
+        assertTrue(api.asks.isEmpty())
+    }
+
 }
