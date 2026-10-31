@@ -299,6 +299,15 @@ class AnalyticsViewModelTest {
         assertTrue(vm.state.value.data != null)
     }
 
+    @Test fun `a failed switch retains visible data without a transient snackbar`() {
+        api.answers += periodData(PeriodTypeCode.MONTH, "2026-09")
+        api.answers += AppError.Server(500)
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(PeriodKey("2026-09"), vm.state.value.data?.params?.date)
+        assertNull(vm.state.value.snackbar, "period failure needs a durable notice with an explicit retry")
+    }
+
     @Test fun `a failed period switch keeps the shown period and says so`() {
         api.answers += data(PeriodTypeCode.MONTH, "2026-09")
         api.answers += AppError.Offline()
@@ -306,7 +315,8 @@ class AnalyticsViewModelTest {
         val vm = opened()
         vm.setPeriodType(PeriodTypeCode.YEAR)
         assertEquals(PeriodTypeCode.YEAR, api.requests.last().period)
-        assertEquals("Прежний период сохранён", vm.state.value.snackbar)
+        assertNull(vm.state.value.snackbar)
+        assertTrue(vm.state.value.periodChangeFailed)
         assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertFalse(vm.state.value.offline)
         assertEquals("2026-09", vm.state.value.data?.params?.date?.value)
@@ -314,6 +324,77 @@ class AnalyticsViewModelTest {
         // The parameters went back to what the screen shows: a reload asks for the month again.
         vm.load()
         assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH), api.requests.last())
+    }
+
+    @Test fun `explicit period retry preserves the failed target and resume never retries it`() {
+        api.answers += periodData(PeriodTypeCode.MONTH, "2026-09")
+        api.answers += AppError.Offline()
+        api.answers += periodData(PeriodTypeCode.YEAR, "2026")
+        api.answers += periodData(PeriodTypeCode.MONTH, "2026-09")
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val failed = api.requests.last()
+        assertTrue(vm.state.value.periodChangeFailed)
+        assertTrue(vm.state.value.periodChangeRetryReady)
+        vm.onResume(null)
+        assertEquals(2, api.requests.size)
+        vm.retryPeriodChange()
+        assertEquals(failed, api.requests.last())
+        assertEquals(PeriodTypeCode.YEAR, vm.state.value.data?.params?.period)
+        assertFalse(vm.state.value.periodChangeFailed)
+        vm.retryPeriodChange()
+        assertEquals(3, api.requests.size, "a completed retry cannot be submitted twice")
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(PeriodKey("2026-09"), api.requests.last().date)
+    }
+
+    @Test fun `an original request refusal blocks period retry but not an explicit refresh of the shown month`() {
+        api.answers += data()
+        api.answers += refused()
+        api.answers += data()
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertTrue(vm.state.value.periodChangeFailed)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.retryPeriodChange()
+        assertEquals(2, api.requests.size)
+        vm.load()
+        assertEquals(PeriodTypeCode.MONTH, api.requests.last().period)
+        assertFalse(vm.state.value.periodChangeFailed)
+    }
+
+    @Test fun `a period retry obeys the captured server delay without automatic submission`() {
+        api.answers += data()
+        api.answers += AppError.RateLimited(null, retryAfterSeconds = 2)
+        api.answers += periodData(PeriodTypeCode.YEAR, "2026")
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val target = api.requests.last()
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.retryPeriodChange()
+        scheduler.advanceTimeBy(1999)
+        vm.onResume(null)
+        vm.retryPeriodChange()
+        assertEquals(2, api.requests.size)
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.periodChangeRetryReady)
+        assertEquals(2, api.requests.size, "expiry alone never submits a retry")
+        vm.retryPeriodChange()
+        assertEquals(target, api.requests.last())
+    }
+
+    @Test fun `a different selection retires a failed target and its retry action`() {
+        api.answers += data()
+        api.answers += AppError.Offline()
+        api.answers += periodData(PeriodTypeCode.QUARTER, "2026-Q3")
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        assertFalse(vm.state.value.periodChangeFailed)
+        vm.retryPeriodChange()
+        assertEquals(3, api.requests.size)
+        assertEquals(PeriodTypeCode.QUARTER, vm.state.value.data?.params?.period)
     }
 
     @Test fun `any other failure of a visible reload asks to try again`() {

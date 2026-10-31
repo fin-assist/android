@@ -292,6 +292,8 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
 - Analytics Month/Quarter/Year each retain their own successful selection (FIN-391); switching another
   type never resets it. A first finer selection uses the last covered instant of the displayed period
   (`period.data_to` is inclusive; a complete `range.to` is exclusive), in the current profile zone.
+  A failed type switch retains its exact request behind an explicit, separately gated Retry; resume does
+  not replace that notice or submit the target. A changed context retires it.
   Same/finer request keys remain valid; the mock rejects coarse-to-fine keys with canonical validation errors.
 - Analytics refreshes on resume as well as statement/category events (FIN-394); after a data mutation old
   totals are cleared until a fresh response arrives. Loading and an empty recalculating response are

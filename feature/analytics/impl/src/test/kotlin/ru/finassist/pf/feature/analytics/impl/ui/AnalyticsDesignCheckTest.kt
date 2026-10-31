@@ -60,6 +60,7 @@ class AnalyticsDesignCheckTest {
 
     private class Handlers(private val mode: TransferMode) : AnalyticsHandlers {
         override fun load(quiet: Boolean) = Unit
+        override fun retryPeriodChange() = Unit
         override fun consumeSnackbar() = Unit
         override fun setPeriodType(type: PeriodTypeCode) = Unit
         override fun goTo(key: PeriodKey) = Unit
@@ -94,6 +95,14 @@ class AnalyticsDesignCheckTest {
     @Test fun analyticsUpdatingDark() = capture("AnalyticsUpdatingDark", AnalyticsUiState(blocks = blocks), heightDp = 844, dark = true)
     @Test fun analyticsPreparingWithoutData() = capture("AnalyticsPreparingWithoutData", ui(september().copy(hasData = false,
         state = analyticsState.copy(recalculating = true))), heightDp = 844)
+
+    // FIN-391: proposed artboards, authored and compiled only; no UI/DesignCheck execution.
+    @Test fun analyticsPeriodChangeFailed() = capture("AnalyticsPeriodChangeFailed", ui(september()).copy(
+        periodChangeFailed = true, errorPresentation = ErrorPresentation()), heightDp = 2960)
+    @Test fun analyticsPeriodChangeFailedDark() = capture("AnalyticsPeriodChangeFailedDark", ui(september()).copy(
+        periodChangeFailed = true, errorPresentation = ErrorPresentation()), heightDp = 2960, dark = true)
+    @Test fun analyticsPeriodChangeRetryBlocked() = capture("AnalyticsPeriodChangeRetryBlocked", ui(september()).copy(
+        periodChangeFailed = true, periodChangeRetryReady = false, errorPresentation = ErrorPresentation()), heightDp = 2960)
 
     @Test fun analytics() = capture("Analytics", ui(september()), heightDp = 2848)
 

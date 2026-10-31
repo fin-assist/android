@@ -99,6 +99,7 @@ fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: Ana
  */
 interface AnalyticsHandlers {
     fun load(quiet: Boolean = false)
+    fun retryPeriodChange()
     fun consumeSnackbar()
     fun setPeriodType(type: PeriodTypeCode)
     fun goTo(key: PeriodKey)
@@ -121,8 +122,12 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
             ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4))
         }
         state.errorPresentation?.let { presentation ->
-            ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику",
-                modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.load() }))
+            val periodFailure = state.periodChangeFailed
+            val canRetry = if (periodFailure) state.periodChangeRetryReady else state.retryReady && state.snackbar == null
+            ErrorMessage(presentation, if (periodFailure) "Не удалось сменить период" else state.snackbar ?: "Не получилось загрузить аналитику",
+                modifier = Modifier.padding(d.space4),
+                onRetry = if (!canRetry) null else if (periodFailure) ({ vm.retryPeriodChange() }) else ({ vm.load() }),
+                retryModifier = if (periodFailure) Modifier.testTag(AnalyticsTags.PERIOD_RETRY) else Modifier)
         }
         when {
             state.loading || (a?.hasData == false && a.state?.recalculating == true) -> Column(
@@ -441,6 +446,7 @@ internal object AnalyticsTags {
     const val EMPTY = "analytics.empty"
     const val OFFLINE = "analytics.offline"
     const val RETRY = "analytics.retry"
+    const val PERIOD_RETRY = "analytics.period.retry"
     const val ASK = "analytics.ask"
     const val UNREAD = "analytics.unread"
     /** The stale statement banner: «Данные в приложении по … — с тех пор прошло больше двух недель». */

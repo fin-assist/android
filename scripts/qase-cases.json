@@ -16,6 +16,7 @@
     ".maestro/flows/operations/days_in_profile_zone.yaml": 27,
     ".maestro/flows/operations/statement_stale.yaml": 37,
     ".maestro/flows/analytics/overview.yaml": 10,
+    ".maestro/flows/analytics/period_change_retry.yaml": 73,
     ".maestro/flows/analytics/blocks_switched_off.yaml": 11,
     ".maestro/flows/analytics/block_unavailable.yaml": 30,
     ".maestro/flows/analytics/unknown_blocks.yaml": 31,

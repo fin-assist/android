@@ -80,6 +80,8 @@ data class AnalyticsUiState(
     val limitErrorPresentation: ErrorPresentation? = null,
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
+    val periodChangeFailed: Boolean = false,
+    val periodChangeRetryReady: Boolean = true,
     val preparationTimedOut: Boolean = false,
     val recalculationPaused: Boolean = false,
 )
@@ -113,6 +115,9 @@ class AnalyticsViewModel @Inject constructor(
     private val limitRetryGate = RequestRetryGate(elapsedClock)
     private val _state = MutableStateFlow(AnalyticsUiState(blocks = readBlocks(flags)))
     private val retryGate = RequestRetryGate(elapsedClock)
+    private val periodChangeRetryGate = RequestRetryGate(elapsedClock)
+    private var failedPeriodRequest: Triple<PeriodTypeCode, PeriodKey?, TransferMode>? = null
+    init { viewModelScope.launch { periodChangeRetryGate.readiness.collect { ready -> _state.update { it.copy(periodChangeRetryReady = ready) } } } }
     init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<AnalyticsUiState> = _state
     private var periodsJob: Job? = null
@@ -184,7 +189,7 @@ class AnalyticsViewModel @Inject constructor(
     /** Returning to a saved tab also refreshes changes whose event arrived while its view model was absent. */
     fun onResume(params: AnalyticsParams?) {
         if (!initialized) init(params)
-        else if (!_state.value.preparationTimedOut && loadJob?.isActive != true) load(quiet = true)
+        else if (!_state.value.preparationTimedOut && failedPeriodRequest == null && loadJob?.isActive != true) load(quiet = true)
     }
 
     /** Actual data/zone changes invalidate the old request context, including the period directory. */
@@ -199,9 +204,27 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     private fun clearRestriction(periodsChanged: Boolean = false) {
+        clearPeriodChangeFailure()
         if (periodsChanged) resetPeriodsContext()
         retryGate.clear()
         _state.update { it.copy(requestRetryable = null, errorPresentation = null) }
+    }
+
+    private fun clearPeriodChangeFailure() {
+        failedPeriodRequest = null
+        periodChangeRetryGate.clear()
+        _state.update { it.copy(periodChangeFailed = false) }
+    }
+
+    /** Explicit retry owns the failed target; a plain refresh still belongs to the period on screen. */
+    override fun retryPeriodChange() {
+        val request = failedPeriodRequest ?: return
+        if (!periodChangeRetryGate.isReady()) return
+        period = request.first
+        date = request.second
+        transferMode = request.third
+        clearRestriction(periodsChanged = true)
+        load()
     }
 
     private fun resetPeriodsContext() {
@@ -242,6 +265,7 @@ class AnalyticsViewModel @Inject constructor(
                 }
                 if (pendingImport != null && a.state?.recalculating != true) statements.analyticsImportReady(pendingImport)
                 importPolls = 0
+                clearPeriodChangeFailure()
                 exposed.clear()
                 shownExperiments = exp
                 a.params?.let { p ->
@@ -277,14 +301,20 @@ class AnalyticsViewModel @Inject constructor(
                 // The refusal belongs to the failed params, not the different period restored on screen.
                 // Keep its explanation until the user requests that restored context; never retry automatically.
                 if (requested != Triple(period, date, transferMode)) retryGate.clear()
+                val failedSwitch = _state.value.data != null && requested.first != period
+                if (failedSwitch) {
+                    failedPeriodRequest = requested
+                    periodChangeRetryGate.record(e)
+                } else clearPeriodChangeFailure()
                 _state.update {
                     it.copy(
                         loading = false,
+                        periodChangeFailed = failedSwitch,
                         recalculationPaused = it.data?.state?.recalculating == true,
                         errorPresentation = if (e is AppError.Offline && it.data == null) null else e.presentation,
                         requestRetryable = e.requestRetryable,
                         offline = it.data == null,
-                        snackbar = if (quiet || it.data == null) it.snackbar
+                        snackbar = if (failedSwitch) null else if (quiet || it.data == null) it.snackbar
                         else if (e is AppError.Offline) "Прежний период сохранён" else "Не получилось обновить. Попробуйте ещё раз",
                     )
                 }
