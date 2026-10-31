@@ -715,7 +715,9 @@ keeps the quota and asserts no Ask. Service-unavailable cannot be asserted solel
 `isRecognitionAvailable` may still find another installed system provider, so provider availability remains a device check. Cancellation and errors retain the original draft; successful final text is
 appended and requires manual sending. `VoiceSessionTest` covers callback order, cancellation/late callbacks,
 repeated actions, silence/errors and sound levels; `VoiceRecognitionErrorsTest` covers Android error-code/exception mapping
-and on-device-only fallback policy; `ChatViewModelBehaviourTest` covers append/length bounds and
+and on-device-only fallback policy. `VoiceInputRememberTest` runs the actual composable with Robolectric's
+recognizer shadow: forced recomposition preserves the handle and commands, and a final result calls the latest
+onResult. This checks wiring without real audio or a service. `ChatViewModelBehaviourTest` covers append/length bounds and
 absence of an automatic Ask; `ChatDesignCheckTest` renders all panel states and dark listening.
 Biometrics (needs an enrolled
 fingerprint), custom date ranges in search,
