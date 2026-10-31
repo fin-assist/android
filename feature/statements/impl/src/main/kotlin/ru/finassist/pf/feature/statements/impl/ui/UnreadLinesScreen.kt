@@ -3,6 +3,7 @@ package ru.finassist.pf.feature.statements.impl.ui
 import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.core.common.error.RequestRetryGate
 import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.designsystem.components.PfRefreshContainer
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.designsystem.theme.PfInsets
 import android.content.ClipData
@@ -62,6 +63,7 @@ import javax.inject.Inject
 
 data class UnreadUiState(
     val loading: Boolean = true,
+    val refreshing: Boolean = false,
     val error: Boolean = false,
     val lines: List<UnreadLine> = emptyList(),
     val userId: String? = null,
@@ -85,24 +87,37 @@ class UnreadLinesViewModel @Inject constructor(
     init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
     val state: StateFlow<UnreadUiState> = _state
 
+    private var loading = false
+    private var loaded = false
+
     init {
         load()
     }
 
-    fun load() {
-        if (!retryGate.isReady()) return
+    fun refresh() = load(refresh = true)
+
+    fun load() = load(refresh = false)
+
+    private fun load(refresh: Boolean) {
+        if (loading || !retryGate.isReady()) return
+        loading = true
+        _state.update { it.copy(refreshing = refresh) }
         viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = false, errorPresentation = null, requestRetryable = null) }
+            _state.update { it.copy(loading = !loaded, error = false, errorPresentation = null, requestRetryable = null) }
             try {
                 val list = if (route.uploadId != null) {
                     api.listUnreadLines(route.uploadId!!)
                 } else {
                     api.listUnreadLines(parseApiDateTime(route.from!!), parseApiDateTime(route.to!!))
                 }
+                loaded = true
                 _state.update { it.copy(loading = false, lines = list.lines, userId = tokenStore.current()?.userId) }
             } catch (e: AppError) {
                 retryGate.record(e)
                 _state.update { it.copy(loading = false, error = true, errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
+            } finally {
+                loading = false
+                _state.update { it.copy(refreshing = false) }
             }
         }
     }
@@ -122,6 +137,7 @@ fun UnreadLinesScreen(onBack: () -> Unit, vm: UnreadLinesViewModel = hiltViewMod
         copied = copied,
         onBack = onBack,
         onRetry = vm::load,
+        onRefresh = vm::refresh,
         onReport = { if (!sendReport(context, state)) copied = copyReport(context, state) },
     )
 }
@@ -134,69 +150,72 @@ internal fun UnreadLinesContent(
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onReport: () -> Unit,
+    onRefresh: () -> Unit = onRetry,
 ) {
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(StatementsTags.UNREAD)) {
-        PfPageHeader("Непрочитанные строки", onBack = onBack)
-        state.errorPresentation?.let {
-            ErrorMessage(it, "Не получилось загрузить", modifier = Modifier.padding(d.space4),
-                onRetry = if (!state.retryReady) null else onRetry)
-        }
-        when {
-            state.loading -> Unit
-            state.errorPresentation != null && state.lines.isEmpty() -> Unit
-            state.error && state.lines.isEmpty() -> PfEmptyState(PfIcons.ALERT, "Не получилось загрузить", "Проверьте интернет и попробуйте ещё раз") {
-                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
+    PfRefreshContainer(state.refreshing, onRefresh, Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(StatementsTags.UNREAD)) {
+            PfPageHeader("Непрочитанные строки", onBack = onBack)
+            state.errorPresentation?.let {
+                ErrorMessage(it, "Не получилось загрузить", modifier = Modifier.padding(d.space4),
+                    onRetry = if (!state.retryReady) null else onRetry)
             }
-            state.lines.isEmpty() -> PfEmptyState(PfIcons.CHECK_CIRCLE, "Все строки прочитаны")
-            else -> {
-                // Mockup `UnreadLines` (a screen since FIN-59): the intro, the lines as two-line rows
-                // without a card, «Сообщить нам» and what the letter holds.
-                val byUpload = state.lines.groupBy { it.uploadId }
-                LazyColumn(
-                    Modifier.weight(1f),
-                    contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space2, bottom = d.space4),
-                ) {
-                    item(key = "intro") {
-                        Text(
-                            UnreadTexts.intro(byUpload.values.map { it.first().fileName }, state.othersLoaded),
-                            style = PfTheme.type.body, color = PfTheme.colors.textMuted,
-                            modifier = Modifier.padding(top = d.space1, bottom = d.space2),
-                        )
-                    }
-                    // By upload, not by file name: T-Bank names every export the same way.
-                    byUpload.entries.forEachIndexed { index, (uploadId, lines) ->
-                        if (byUpload.size > 1) {
-                            item(key = "file-$uploadId") {
+            when {
+                state.loading -> Unit
+                state.errorPresentation != null && state.lines.isEmpty() -> Unit
+                state.error && state.lines.isEmpty() -> PfEmptyState(PfIcons.ALERT, "Не получилось загрузить", "Проверьте интернет и попробуйте ещё раз") {
+                    PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY)
+                }
+                state.lines.isEmpty() -> PfEmptyState(PfIcons.CHECK_CIRCLE, "Все строки прочитаны")
+                else -> {
+                    // Mockup `UnreadLines` (a screen since FIN-59): the intro, the lines as two-line rows
+                    // without a card, «Сообщить нам» and what the letter holds.
+                    val byUpload = state.lines.groupBy { it.uploadId }
+                    LazyColumn(
+                        Modifier.weight(1f),
+                        contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space2, bottom = d.space4),
+                    ) {
+                        item(key = "intro") {
+                            Text(
+                                UnreadTexts.intro(byUpload.values.map { it.first().fileName }, state.othersLoaded),
+                                style = PfTheme.type.body, color = PfTheme.colors.textMuted,
+                                modifier = Modifier.padding(top = d.space1, bottom = d.space2),
+                            )
+                        }
+                        // By upload, not by file name: T-Bank names every export the same way.
+                        byUpload.entries.forEachIndexed { index, (uploadId, lines) ->
+                            if (byUpload.size > 1) {
+                                item(key = "file-$uploadId") {
+                                    Text(
+                                        lines.first().fileName, style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+                                        modifier = Modifier.padding(top = if (index == 0) 0.dp else d.space4),
+                                    )
+                                }
+                            }
+                            // Compact OFX records can share both physical line and reason; their occurrence is local.
+                            lines.forEachIndexed { i, l ->
+                                item(key = "line:$uploadId:$i") {
+                                    UnreadLineRow(UnreadTexts.line(l.lineNumber, l.date?.toLocalDate()), l.reasonName, divider = i < lines.lastIndex)
+                                }
+                            }
+                        }
+                        item(key = "report") {
+                            Column(Modifier.padding(top = d.space3)) {
+                                PfButton(
+                                    if (copied) "Данные скопированы" else "Сообщить нам",
+                                    onClick = onReport,
+                                    variant = ButtonVariant.SECONDARY,
+                                    block = true,
+                                    icon = PfIcons.SEND,
+                                    modifier = Modifier.testTag(StatementsTags.UNREAD_REPORT),
+                                )
                                 Text(
-                                    lines.first().fileName, style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
-                                    modifier = Modifier.padding(top = if (index == 0) 0.dp else d.space4),
+                                    if (copied) "Почтового приложения нет. Отправьте скопированное на ${Support.EMAIL}"
+                                    else "Откроется письмо в поддержку — номер загрузки и этот список уже в нём. Ответим на вашу почту",
+                                    style = PfTheme.type.hint, color = PfTheme.colors.textMuted,
+                                    modifier = Modifier.padding(top = d.space2),
                                 )
                             }
-                        }
-                        // Compact OFX records can share both physical line and reason; their occurrence is local.
-                        lines.forEachIndexed { i, l ->
-                            item(key = "line:$uploadId:$i") {
-                                UnreadLineRow(UnreadTexts.line(l.lineNumber, l.date?.toLocalDate()), l.reasonName, divider = i < lines.lastIndex)
-                            }
-                        }
-                    }
-                    item(key = "report") {
-                        Column(Modifier.padding(top = d.space3)) {
-                            PfButton(
-                                if (copied) "Данные скопированы" else "Сообщить нам",
-                                onClick = onReport,
-                                variant = ButtonVariant.SECONDARY,
-                                block = true,
-                                icon = PfIcons.SEND,
-                                modifier = Modifier.testTag(StatementsTags.UNREAD_REPORT),
-                            )
-                            Text(
-                                if (copied) "Почтового приложения нет. Отправьте скопированное на ${Support.EMAIL}"
-                                else "Откроется письмо в поддержку — номер загрузки и этот список уже в нём. Ответим на вашу почту",
-                                style = PfTheme.type.hint, color = PfTheme.colors.textMuted,
-                                modifier = Modifier.padding(top = d.space2),
-                            )
                         }
                     }
                 }

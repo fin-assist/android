@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.analytics.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.PfRefreshContainer
 import ru.finassist.pf.core.designsystem.components.ConnectionFailureState
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import androidx.compose.runtime.getValue
@@ -100,6 +101,7 @@ fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: Ana
 interface AnalyticsHandlers {
     fun load(quiet: Boolean = false)
     fun retryPeriodChange()
+    fun refresh() { load(quiet = true) }
     fun consumeSnackbar()
     fun setPeriodType(type: PeriodTypeCode)
     fun goTo(key: PeriodKey)
@@ -115,67 +117,70 @@ interface AnalyticsHandlers {
 @Composable
 internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions, vm: AnalyticsHandlers) {
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize().testTag(AnalyticsTags.SCREEN)) {
-        if (actions.back != null) PfPageHeader("Аналитика", onBack = actions.back) else PfTabHeader("Аналитика")
-        val a = state.data
-        state.limitErrorPresentation?.let {
-            ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4))
-        }
-        state.periodChangeErrorPresentation?.let { presentation ->
-            ErrorMessage(presentation, "Не удалось сменить период", modifier = Modifier.padding(d.space4),
-                onRetry = if (state.periodChangeRetryReady) ({ vm.retryPeriodChange() }) else null,
-                retryModifier = Modifier.testTag(AnalyticsTags.PERIOD_RETRY))
-        }
-        state.errorPresentation?.let { presentation ->
-            ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику",
-                modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.load() }))
-        }
-        when {
-            state.loading || (a?.hasData == false && a.state?.recalculating == true) -> Column(
-                Modifier.weight(1f).fillMaxWidth().padding(d.space5).testTag(AnalyticsTags.UPDATING),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                PfEmptyState(PfIcons.BAR_CHART, "Обновляем аналитику", "Подготавливаем показатели по вашим выпискам")
+    PfRefreshContainer(refreshing = state.refreshing, onRefresh = vm::refresh, enabled = (state.retryReady || (state.blocks.assistant && state.limitRetryReady)) && !state.loading, modifier = Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().testTag(AnalyticsTags.SCREEN)) {
+            if (actions.back != null) PfPageHeader("Аналитика", onBack = actions.back) else PfTabHeader("Аналитика")
+            val a = state.data
+            state.limitErrorPresentation?.let {
+                ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4),
+                    onRetry = ({ vm.refresh() }).takeIf { state.limitRetryReady })
             }
-            state.errorPresentation != null && a == null -> Unit
-            state.offline -> ConnectionFailureState(modifier = Modifier.testTag(AnalyticsTags.OFFLINE)) {
-                PfButton("Повторить", onClick = { vm.load() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+            state.periodChangeErrorPresentation?.let { presentation ->
+                ErrorMessage(presentation, "Не удалось сменить период", modifier = Modifier.padding(d.space4),
+                    onRetry = if (state.periodChangeRetryReady) ({ vm.retryPeriodChange() }) else null,
+                    retryModifier = Modifier.testTag(AnalyticsTags.PERIOD_RETRY))
             }
-            state.preparationTimedOut -> PfEmptyState(
-                PfIcons.BAR_CHART, "Аналитика ещё готовится", "Выписка загружена. Попробуйте обновить показатели чуть позже",
-                modifier = Modifier.testTag(AnalyticsTags.PREPARATION_TIMEOUT),
-            ) {
-                PfButton("Повторить", onClick = { vm.load() }, enabled = state.retryReady,
-                    variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+            state.errorPresentation?.let { presentation ->
+                ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику",
+                    modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.refresh() }))
             }
-            a == null || !a.hasData -> Column(
-                Modifier.weight(1f).fillMaxWidth().padding(start = d.space5, end = d.space5, bottom = d.space6).testTag(AnalyticsTags.EMPTY),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                PfEmptyState(
-                    PfIcons.BAR_CHART,
-                    "Аналитики пока нет",
-                    if (state.blocks.upload) {
-                        "Загрузите выписку — покажем расходы по категориям, доходы и разницу между ними, и помощник сможет ответить на вопросы о ваших деньгах"
-                    } else {
-                        null
-                    },
-                    padding = PaddingValues(start = d.space8, top = d.space8, end = d.space8, bottom = d.space6),
-                )
-                if (state.blocks.upload) PfButton("Загрузить выписку", onClick = actions.openUpload, variant = ButtonVariant.PRIMARY, block = true)
+            when {
+                state.loading || (a?.hasData == false && a.state?.recalculating == true) -> Column(
+                    Modifier.weight(1f).fillMaxWidth().padding(d.space5).testTag(AnalyticsTags.UPDATING),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    PfEmptyState(PfIcons.BAR_CHART, "Обновляем аналитику", "Подготавливаем показатели по вашим выпискам")
+                }
+                state.errorPresentation != null && a == null -> Unit
+                state.offline -> ConnectionFailureState(modifier = Modifier.testTag(AnalyticsTags.OFFLINE)) {
+                    PfButton("Повторить", onClick = { vm.load() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+                }
+                state.preparationTimedOut -> PfEmptyState(
+                    PfIcons.BAR_CHART, "Аналитика ещё готовится", "Выписка загружена. Попробуйте обновить показатели чуть позже",
+                    modifier = Modifier.testTag(AnalyticsTags.PREPARATION_TIMEOUT),
+                ) {
+                    PfButton("Повторить", onClick = { vm.load() }, enabled = state.retryReady,
+                        variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+                }
+                a == null || !a.hasData -> Column(
+                    Modifier.weight(1f).fillMaxWidth().padding(start = d.space5, end = d.space5, bottom = d.space6).testTag(AnalyticsTags.EMPTY),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    PfEmptyState(
+                        PfIcons.BAR_CHART,
+                        "Аналитики пока нет",
+                        if (state.blocks.upload) {
+                            "Загрузите выписку — покажем расходы по категориям, доходы и разницу между ними, и помощник сможет ответить на вопросы о ваших деньгах"
+                        } else {
+                            null
+                        },
+                        padding = PaddingValues(start = d.space8, top = d.space8, end = d.space8, bottom = d.space6),
+                    )
+                    if (state.blocks.upload) PfButton("Загрузить выписку", onClick = actions.openUpload, variant = ButtonVariant.PRIMARY, block = true)
+                }
+                else -> Column(
+                    Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(top = d.space2, bottom = d.space6),
+                ) {
+                    Content(a, state, vm, actions)
+                }
             }
-            else -> Column(
-                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(top = d.space2, bottom = d.space6),
-            ) {
-                Content(a, state, vm, actions)
+            state.snackbar?.takeIf { state.errorPresentation == null }?.let { text ->
+                LaunchedEffect(text) {
+                    delay(3000)
+                    vm.consumeSnackbar()
+                }
+                PfSnackbar(text, Modifier.padding(d.space4))
             }
-        }
-        state.snackbar?.takeIf { state.errorPresentation == null }?.let { text ->
-            LaunchedEffect(text) {
-                delay(3000)
-                vm.consumeSnackbar()
-            }
-            PfSnackbar(text, Modifier.padding(d.space4))
         }
     }
     Sheets(state, vm)

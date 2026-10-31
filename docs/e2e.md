@@ -636,6 +636,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 
 | Flow | Checks |
 |---|---|
+| `refresh/server_data` | pull-to-refresh on the feed, operation details, empty search, selected analytics month, profile, upload history, unread lines and an assistant draft; offline retains data/query/period, online clears the failure; a history read never asks or retries a question (Qase70, FIN-399) |
 | `auth/register_new_user` (smoke) | independent 14+/PD before phone → new number → create account without another consent → passcode → first upload → result → feed (Qase2, FIN-365) |
 | `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the main tabs (Qase1, FIN-365) |
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
@@ -974,6 +975,13 @@ Stale page replies contribute only conservative endpoint waits; stale latest-rea
 the newer request gate. Unit regressions cover both completion orders of overlapping latest reads,
 new boundary after false, false plus wait, and first-answer replacement changing the boundary.
 
+
+FIN-399: screens backed by GET requests use `PfRefreshContainer`; its bounded non-consuming scroll target also
+accepts pulls on empty/error states. Refresh keeps the current query, period, filters, shown data and draft; each
+read has a pending-request guard and retains its `RequestRetryGate`. The import-result screen is an immutable
+receipt and is not refreshed; upload/delete/send/retry-answer actions are never replayed by a gesture. The
+Maestro flow is authored, not run locally (no device/UI-test authorization). ViewModel tests check deduplication,
+failed refresh retention and Retry-After separately from rendering.
 FIN-391: the strengthened Qase10 flow above is authored, not executed in this change. Unit regressions
 cover independent dates even across years, first Year→Month/Quarter and Quarter→Month visits,
 inclusive partial coverage and exclusive complete range ends in the profile zone, and failed selections.

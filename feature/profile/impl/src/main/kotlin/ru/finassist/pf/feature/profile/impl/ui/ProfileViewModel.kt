@@ -40,6 +40,7 @@ enum class ProfileErrorOrigin { PROFILE, LIMIT, STATEMENTS, THEME, CONSENT }
 
 data class ProfileUiState(
     val loading: Boolean = true,
+    val refreshing: Boolean = false,
     val offline: Boolean = false,
     val profile: Profile? = null,
     val statements: StatementsSummary? = null,
@@ -58,6 +59,8 @@ data class ProfileUiState(
     val errorOrigin: ProfileErrorOrigin? = null,
     val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
+    val statementsRetryReady: Boolean = true,
+    val limitRetryReady: Boolean = true,
 )
 
 /** An error's origin, presentation and outcome move together; ordinary success notices have no origin. */
@@ -96,6 +99,37 @@ class ProfileViewModel @Inject constructor(
     private var themeGeneration = 0L
     private var statementsGeneration = 0L
     private var profileGeneration = 0L
+    private data class AuxiliaryFailure(val presentation: ErrorPresentation?, val outcome: String)
+    private val auxiliaryFailures = linkedMapOf<ProfileErrorOrigin, AuxiliaryFailure>()
+
+    private fun ProfileUiState.withAuxiliaryFailure(): ProfileUiState {
+        if (profile == null || errorOrigin in setOf(ProfileErrorOrigin.PROFILE, ProfileErrorOrigin.THEME, ProfileErrorOrigin.CONSENT)) return this
+        val failure = auxiliaryFailures.entries.lastOrNull() ?: return this
+        return showRequestError(failure.key, failure.value.presentation, failure.value.outcome)
+    }
+
+    private fun auxiliaryFailed(origin: ProfileErrorOrigin, error: AppError, outcome: String) {
+        auxiliaryFailures[origin] = AuxiliaryFailure(error.presentation, outcome)
+        _state.update { it.withAuxiliaryFailure() }
+    }
+
+    private fun auxiliarySucceeded(origin: ProfileErrorOrigin) {
+        auxiliaryFailures.remove(origin)
+        _state.update {
+            val current = if (it.errorOrigin == origin) it.clearRequestError() else it
+            current.withAuxiliaryFailure()
+        }
+    }
+
+    private var profileReadPending = false
+    private var statementsReadPending = false
+    private var limitReadPending = false
+
+    private fun updateRefreshing() {
+        _state.update { it.copy(refreshing = profileReadPending || statementsReadPending || limitReadPending) }
+    }
+
+    fun refresh() { load() }
 
     private fun readFlags() = ProfileFlags(
         assistant = featureFlags.isEnabled(Flag.ASSISTANT),
@@ -104,6 +138,10 @@ class ProfileViewModel @Inject constructor(
     )
     private val retryGate = RequestRetryGate(elapsedClock)
     init { viewModelScope.launch { retryGate.readiness.collect { ready -> _state.update { it.copy(retryReady = ready) } } } }
+    init {
+        viewModelScope.launch { statementsRetryGate.readiness.collect { ready -> _state.update { it.copy(statementsRetryReady = ready) } } }
+        viewModelScope.launch { limitRetryGate.readiness.collect { ready -> _state.update { it.copy(limitRetryReady = ready) } } }
+    }
     val state: StateFlow<ProfileUiState> = _state
 
     init {
@@ -113,6 +151,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             statementsRepository.events.collect {
                 statementsGeneration++
+                statementsReadPending = false
                 statementsRetryGate.clear()
                 loadStatements()
             }
@@ -125,31 +164,54 @@ class ProfileViewModel @Inject constructor(
 
     /** Called on every resume: the consent switch and the limit may have changed on other screens. */
     fun load() {
-        if (retryGate.isReady()) {
+        if (!profileReadPending && retryGate.isReady()) {
+            profileReadPending = true
+            updateRefreshing()
             val generation = ++profileGeneration
             viewModelScope.launch {
-                _state.update { it.clearRequestError().copy(loading = it.profile == null, offline = false, requestRetryable = null) }
+                _state.update {
+                    val current = if (it.errorOrigin == ProfileErrorOrigin.STATEMENTS || it.errorOrigin == ProfileErrorOrigin.LIMIT) it else it.clearRequestError()
+                    current.copy(loading = it.profile == null, offline = false, requestRetryable = null)
+                }
                 try {
                     val origin = zoneChecker.captureObservation()
                     val p = profileApi.getProfile()
                     if (generation != profileGeneration) return@launch
-                    _state.update { it.copy(loading = false, profile = p) }
+                    _state.update { it.copy(loading = false, profile = p).withAuxiliaryFailure() }
                     syncFromServer(p, origin)
                 } catch (e: AppError) {
                     if (generation != profileGeneration) return@launch
                     retryGate.record(e)
                     _state.update { it.showRequestError(ProfileErrorOrigin.PROFILE, if (e is AppError.Offline && it.profile == null) null else e.presentation).copy(loading = false, offline = it.profile == null, requestRetryable = e.requestRetryable) }
+                } finally {
+                    if (generation == profileGeneration) {
+                        profileReadPending = false
+                        updateRefreshing()
+                    }
                 }
             }
         }
         loadStatements()
+        loadLimit()
+    }
+
+    private fun loadLimit() {
         // The limit is requested only when the assistant is on (plan, decision 5).
-        if (_state.value.flags.assistant && limitRetryGate.isReady()) {
-            viewModelScope.launch { runCatching { assistantApi.getLimit() }.onSuccess { l -> _state.update { it.copy(limit = l) } }
-                .onFailure { failure -> if (failure is AppError) {
-                    limitRetryGate.record(failure)
-                    if (failure !is AppError.Offline) _state.update { it.showRequestError(ProfileErrorOrigin.LIMIT, failure.presentation, "Не получилось обновить лимит вопросов") }
-                } } }
+        if (!_state.value.flags.assistant || limitReadPending || !limitRetryGate.isReady()) return
+        limitReadPending = true
+        updateRefreshing()
+        viewModelScope.launch {
+            try {
+                val limit = assistantApi.getLimit()
+                _state.update { it.copy(limit = limit) }
+                auxiliarySucceeded(ProfileErrorOrigin.LIMIT)
+            } catch (failure: AppError) {
+                limitRetryGate.record(failure)
+                auxiliaryFailed(ProfileErrorOrigin.LIMIT, failure, "Не получилось обновить лимит вопросов")
+            } finally {
+                limitReadPending = false
+                updateRefreshing()
+            }
         }
     }
 
@@ -163,20 +225,33 @@ class ProfileViewModel @Inject constructor(
 
     private fun changedProfileContext() {
         profileGeneration++
+        profileReadPending = false
+        updateRefreshing()
         retryGate.clear()
         _state.update { it.clearRequestError().copy(requestRetryable = null) }
     }
 
     private fun loadStatements() {
-        if (!statementsRetryGate.isReady()) return
+        if (statementsReadPending || !statementsRetryGate.isReady()) return
+        statementsReadPending = true
+        updateRefreshing()
         val generation = ++statementsGeneration
         viewModelScope.launch {
-            runCatching { statementsApi.listStatements() }.onSuccess { list ->
-                if (generation == statementsGeneration) _state.update { it.copy(statements = list.summary, statementsLoaded = true) }
-            }.onFailure { failure ->
-                if (generation == statementsGeneration && failure is AppError) {
+            try {
+                val list = statementsApi.listStatements()
+                if (generation == statementsGeneration) {
+                    _state.update { it.copy(statements = list.summary, statementsLoaded = true) }
+                    auxiliarySucceeded(ProfileErrorOrigin.STATEMENTS)
+                }
+            } catch (failure: AppError) {
+                if (generation == statementsGeneration) {
                     statementsRetryGate.record(failure)
-                    if (failure !is AppError.Offline) _state.update { it.showRequestError(ProfileErrorOrigin.STATEMENTS, failure.presentation, "Не получилось обновить историю загрузок") }
+                    auxiliaryFailed(ProfileErrorOrigin.STATEMENTS, failure, "Не получилось обновить историю загрузок")
+                }
+            } finally {
+                if (generation == statementsGeneration) {
+                    statementsReadPending = false
+                    updateRefreshing()
                 }
             }
         }
