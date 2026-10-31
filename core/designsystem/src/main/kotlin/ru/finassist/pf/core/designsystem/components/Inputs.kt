@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -57,6 +55,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.style.TextAlign
@@ -411,7 +411,7 @@ fun PfSegmentedControl(
     selected: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    /** Keep full single-line labels in a horizontally scrollable row with 48 dp targets; reveal selection changes. */
+    /** Keep full single-line labels and 48 dp targets; share spare width equally, otherwise scroll and reveal selection changes. */
     scrollable: Boolean = false,
     /** Stable tag of each option; the default preserves `ds.segment.<index>`. */
     optionTag: (Int) -> String = PfTestTags::segment,
@@ -433,44 +433,67 @@ fun PfSegmentedControl(
             scroll.scrollTo(position.coerceIn(0, maximum))
         }
     }
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(if (scrollable) PfTheme.dimens.touch + 8.dp else PfTheme.dimens.control)
-            .background(c.surface, outer)
-            .border(1.dp, c.border, outer)
-            .padding(4.dp)
-            .then(if (scrollable) Modifier.onSizeChanged { viewport.intValue = it.width }.horizontalScroll(scroll) else Modifier),
-        // `.pf-seg { gap: var(--space-1) }`; the frame is an inset outline, so it overlaps the 4 dp padding.
-        horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space1),
-    ) {
-        options.forEachIndexed { i, option ->
-            val isSelected = i == selected
-            Box(
-                modifier = Modifier
-                    .then(if (scrollable) Modifier.width(IntrinsicSize.Max).widthIn(min = PfTheme.dimens.touch)
-                        .onGloballyPositioned { coordinates ->
-                            val start = coordinates.positionInParent().x.roundToInt()
-                            bounds[i] = start to start + coordinates.size.width
-                        }
-                        else Modifier.weight(1f).fillMaxWidth())
-                    .height(if (scrollable) PfTheme.dimens.touch else 40.dp)
-                    .clip(RoundedCornerShape(PfTheme.dimens.radiusSm))
-                    .background(if (isSelected) c.accentSoft else Color.Transparent)
-                    .clickable(role = Role.Tab) { onSelect(i) }
-                    .semantics { this.contentDescription = option; if (isSelected) toggleableState = ToggleableState.On }
-                    .testTag(optionTag(i)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    option,
-                    style = if (isSelected) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.body,
-                    color = if (isSelected) c.accent else c.textMuted,
-                    maxLines = 1,
-                    textAlign = if (scrollable) TextAlign.Center else TextAlign.Unspecified,
-                    modifier = if (scrollable) Modifier.fillMaxWidth().padding(horizontal = PfTheme.dimens.space2) else Modifier,
-                )
+    val gap = PfTheme.dimens.space1
+    val touch = PfTheme.dimens.touch
+    val frame = modifier
+        .fillMaxWidth()
+        .height(if (scrollable) touch + 8.dp else PfTheme.dimens.control)
+        .background(c.surface, outer)
+        .border(1.dp, c.border, outer)
+        .padding(4.dp)
+        .then(if (scrollable) Modifier.onSizeChanged { viewport.intValue = it.width }.horizontalScroll(scroll) else Modifier)
+    val option: @Composable (Int, Modifier) -> Unit = { i, sizing ->
+        val isSelected = i == selected
+        Box(
+            modifier = sizing
+                .height(if (scrollable) touch else 40.dp)
+                .clip(RoundedCornerShape(PfTheme.dimens.radiusSm))
+                .background(if (isSelected) c.accentSoft else Color.Transparent)
+                .clickable(role = Role.Tab) { onSelect(i) }
+                .semantics { contentDescription = options[i]; if (isSelected) toggleableState = ToggleableState.On }
+                .testTag(optionTag(i)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                options[i],
+                style = if (isSelected) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.body,
+                color = if (isSelected) c.accent else c.textMuted,
+                maxLines = 1,
+                textAlign = if (scrollable) TextAlign.Center else TextAlign.Unspecified,
+                modifier = if (scrollable) Modifier.fillMaxWidth().padding(horizontal = PfTheme.dimens.space2) else Modifier,
+            )
+        }
+    }
+    if (scrollable) {
+        Layout(modifier = frame, content = {
+            options.indices.forEach { i ->
+                option(i, Modifier.onGloballyPositioned { coordinates ->
+                    val start = coordinates.positionInParent().x.roundToInt()
+                    bounds[i] = start to start + coordinates.size.width
+                })
             }
+        }) { measurables, constraints ->
+            val height = constraints.maxHeight
+            val spacing = gap.roundToPx()
+            val widths = measurables.map { it.maxIntrinsicWidth(height).coerceAtLeast(touch.roundToPx()) }
+            val naturalWidth = widths.sum() + spacing * (widths.size - 1).coerceAtLeast(0)
+            val extra = (viewport.intValue - naturalWidth).coerceAtLeast(0)
+            val count = widths.size.coerceAtLeast(1)
+            val children = measurables.mapIndexed { i, measurable ->
+                val width = widths[i] + extra / count + if (i < extra % count) 1 else 0
+                measurable.measure(Constraints.fixed(width, height))
+            }
+            layout(naturalWidth + extra, height) {
+                var x = 0
+                children.forEach { child ->
+                    child.placeRelative(x, 0)
+                    x += child.width + spacing
+                }
+            }
+        }
+    } else {
+        Row(modifier = frame, horizontalArrangement = Arrangement.spacedBy(gap)) {
+            options.indices.forEach { i -> option(i, Modifier.weight(1f).fillMaxWidth()) }
         }
     }
 }

@@ -101,6 +101,10 @@ class AnalyticsPeriodControlTest {
         if (widthDp == 390) {
             assertEquals(0f, axis.maxValue(), "all four labels fit a wide screen")
             tags.indices.forEach(::assertVisible)
+            val first = compose.onNodeWithTag(tags.first()).fetchSemanticsNode().boundsInRoot
+            val last = compose.onNodeWithTag(tags.last()).fetchSemanticsNode().boundsInRoot
+            assertTrue(abs(first.left - viewport.left - 4 * density) <= 1f)
+            assertTrue(abs(last.right - viewport.right + 4 * density) <= 1f, "fitting options must fill the frame inset without a right-hand void")
         } else {
             assertTrue(axis.value() > 0f && axis.maxValue() > 0f, "initial all-time selection must be revealed after layout")
             control.performSemanticsAction(SemanticsActions.ScrollBy) { assertTrue(it(-10_000f, 0f)) }

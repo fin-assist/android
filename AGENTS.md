@@ -292,7 +292,8 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   `scripts/check-kmp-ready.py` (CI) fails on anything beyond the baseline; rule, inventory — `docs/kmp-readiness.md`.
 - Analytics offers Month/Quarter/Year/«За всё время» in one horizontally scrollable segmented row (FIN-400),
   with full single-line labels, at least 48 dp touch targets and automatic reveal of the selected option.
-  Manual scrolling remains available. The all_time marker has no fabricated calendar bounds;
+  Spare width is shared equally by the natural-width options; overflow keeps their natural widths and enables
+  horizontal scrolling. Manual scrolling remains available. The all_time marker has no fabricated calendar bounds;
   the displayed range comes from the response. It retains transfer mode, calendar selections and import/deletion
   refresh semantics. Assistant chips remain calendar-only; unknown/mismatched analytics chip params are hidden individually.
 - Analytics Month/Quarter/Year each retain their own successful selection (FIN-391); switching another
