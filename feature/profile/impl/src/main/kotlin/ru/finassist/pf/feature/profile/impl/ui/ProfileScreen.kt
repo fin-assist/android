@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.profile.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.ConnectionFailureState
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import android.content.Context
 import android.content.Intent
@@ -104,7 +105,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 
 /** The profile drawn from a ready state (design-check snapshots render it without a ViewModel). */
 @Composable
-internal fun ProfileContent(
+fun ProfileContent(
     state: ProfileUiState,
     actions: ProfileActions,
     onRetry: () -> Unit,
@@ -125,13 +126,13 @@ internal fun ProfileContent(
         PfTabHeader("Профиль")
         val p = state.profile
         state.errorPresentation?.let { presentation ->
-            ErrorMessage(presentation, state.snackbar ?: "Не получилось обновить профиль. Попробуйте ещё раз",
+            ErrorMessage(presentation, state.snackbar ?: "Не получилось обновить профиль",
                 modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else onRetry)
         }
         when {
             state.loading -> Unit
             state.errorPresentation != null && p == null -> Unit
-            state.offline || p == null -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз", modifier = Modifier.testTag(ProfileTags.OFFLINE)) {
+            state.offline || p == null -> ConnectionFailureState(modifier = Modifier.testTag(ProfileTags.OFFLINE)) {
                 PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(ProfileTags.RETRY))
             }
             else -> Column(

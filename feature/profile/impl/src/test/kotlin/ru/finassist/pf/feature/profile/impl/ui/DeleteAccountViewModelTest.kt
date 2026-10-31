@@ -112,7 +112,8 @@ class DeleteAccountViewModelTest {
         vm.delete()
         assertTrue(vm.state.value.dialog)
         assertFalse(vm.state.value.deleting)
-        assertEquals("Нет сети — удалить аккаунт не получилось. Проверьте интернет и повторите", vm.state.value.error)
+        assertEquals("Аккаунт не удалён", vm.state.value.error)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertNull(session.clearedWith)
     }
 
@@ -122,6 +123,7 @@ class DeleteAccountViewModelTest {
         vm.onPasscodeConfirmed()
         vm.delete()
         assertEquals("Не получилось удалить аккаунт. Попробуйте ещё раз", vm.state.value.error)
+        assertEquals(false, vm.state.value.errorPresentation?.connectionFailure)
         api.failure = null
         vm.delete()
         assertEquals(AuthRoutes.Phone.REASON_DELETED, session.clearedWith)

@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.ConnectionFailureState
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.api.model.OperationItem
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
@@ -172,7 +173,7 @@ internal fun SearchContent(
             SearchResult.Initial -> Box(Modifier.weight(1f).fillMaxWidth().testTag(OperationsTags.SEARCH_INITIAL))
             SearchResult.Loading -> Unit
             SearchResult.TooMany -> if (state.errorPresentation == null) PfEmptyState(PfIcons.SLIDERS, "Слишком много операций", "Выберите период покороче или добавьте фильтр")
-            SearchResult.Offline -> PfEmptyState(PfIcons.ALERT, "Нет сети", "Проверьте интернет и попробуйте ещё раз") {
+            SearchResult.Offline -> ConnectionFailureState() {
                 PfButton("Повторить", onClick = actions.retry, variant = ButtonVariant.PRIMARY)
             }
             SearchResult.Failed -> if (state.errorPresentation == null) PfEmptyState(PfIcons.ALERT, "Не получилось найти", "Попробуйте ещё раз") {

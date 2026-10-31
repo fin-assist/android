@@ -1,7 +1,7 @@
 # Feature flags registry
 
 Source of truth for flag names. Code defaults live in `core/toggles` (`Flag` enum, `defaultValue`); the provider
-(RuStore Remote Config in `prod`, JSON asset in `mock` and `local`) may override them. Unknown or unreachable provider →
+(RuStore Remote Config in `prod`/`stage`, JSON asset in `mock` and `local`) may override them. Unknown or unreachable provider →
 code default. Values are read at the screen boundary (when a screen is entered), not mid-screen.
 
 Flags by flavor (FIN-120):
@@ -10,12 +10,13 @@ Flags by flavor (FIN-120):
   `app/src/mockE2e/assets/flags.json` and the control link).
 - `local` — `:providers:toggles-local`: code defaults; a developer may put their own `app/src/local/assets/flags.json`
   (gitignored, same format as in `mock`). No debug screen yet: the e2e control link is mock-only.
+- `stage` — `:providers:toggles-rustore`, only `pf.stageRustoreRemoteConfigAppId`; blank → code defaults.
+  Production Remote Config properties never supply stage configuration.
 - `prod` — `:providers:toggles-rustore`: RuStore Remote Config over code defaults.
 
 Why `local` has local flags and not RuStore: whoever runs a local bank-bff should not depend on the RuStore console
 or its keys, nor read flags meant for real users; and a `local` build stays out of production configs and cohorts
-(it has no RuStore app id). The cost: Remote Config itself is not exercised in `local` — that is for `prod` (and the
-future `stage`).
+(it has no RuStore app id). The cost: Remote Config itself is not exercised in `local` — that is for `prod` and `stage` (with its separate app id).
 
 Naming: `<feature>.<object>[.<detail>]`, lowercase, dot-separated. Same prefix is used for analytics events
 (`<feature>.<object>.<action>`), see `core/tracking`.
@@ -32,7 +33,7 @@ Naming: `<feature>.<object>[.<detail>]`, lowercase, dot-separated. Same prefix i
 | `analytics.block.bank_fees` | `true` | Hides "Комиссии и проценты банку" |
 | `analytics.block.small_frequent` | `true` | Hides "Мелкие частые траты" |
 | `analytics.filter.transfers` | `true` | Hides the "С переводами / Без переводов" chip; requests always use `with` |
-| `assistant` | `true` | Hides the assistant screen and every link to it: card on Analytics, profile row, consent switch, answer chips. Limit endpoint is not called. |
+| `assistant` | `true` | Hides the assistant screen and every link to it: bottom tab, card on Analytics, profile row, consent switch, answer chips. Limit endpoint is not called. |
 | `search.filter.period` | `true` | Hides the period chip and sheet in Search |
 | `search.filter.category` | `true` | Hides the category chip in Search |
 | `search.filter.amount` | `true` | Hides the amount chip in Search |
@@ -88,3 +89,11 @@ user cohort can therefore lag up to one sync interval after an account change. I
 experiment, switch the client to `UpdateBehaviour.Actual` (every request goes to the server; cold start then
 uses code defaults until the first answer).
 
+
+FIN-397: MainLayer owns `AssistantAvailabilityPolicy` in its ViewModelStore. Its initial flag value survives
+configuration recreation and is shared by the bar and every Chat/Consent guard through
+`LocalAssistantAvailability`. An explicit entry after a live false→true update admits the assistant for
+the remaining authenticated layer session; later false updates do not remove the admitted tab or break
+consent navigation. This is a monotonic session policy, not persisted state: a new process/authenticated
+layer starts from the current flag. Disabled cold-restored entries redirect to Operations before an
+assistant screen/ViewModel or API call. A missing policy is denied; no singleton or SavedState persists it.

@@ -498,6 +498,7 @@ class MockStatementsApiTest {
         val backend = testBackend(clock)
         val api = MockStatementsApi(backend)
         val empty = api.getImportConfig()
+        assertEquals("https://tbank-online.com/login", empty.loginUrl)
         assertNull(empty.loaded)
         assertEquals(dt("2025-10-06T00:00:00+03:00"), empty.suggestedPeriod.from)
         assertEquals(dt("2026-10-07T00:00:00+03:00"), empty.suggestedPeriod.to)
@@ -506,6 +507,7 @@ class MockStatementsApiTest {
 
         backend.load(statement("2026-08-01", "2026-09-30", trn("a", "2026-08-10T12:00", 100, "A", "Супермаркеты"), trn("b", "2026-09-20T12:00", 100, "B", "Супермаркеты")))
         val config = api.getImportConfig()
+        assertEquals("https://tbank-online.com/login", config.loginUrl)
         val loaded = assertNotNull(config.loaded)
         assertEquals(2, loaded.operationCount)
         assertEquals(dt("2026-08-10T12:00:00+03:00"), loaded.firstOperationAt)

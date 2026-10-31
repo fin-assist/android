@@ -39,6 +39,15 @@ tags:
       id: "assistant.consent.submit"
 - tapOn:
     id: "assistant.consent.submit"
+# FIN-394: consent returns to the draft; sending is a separate explicit action.
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertNotVisible:
+    id: "assistant.question"
+- tapOn:
+    id: "ds.chat.send"
 - extendedWaitUntil:
     visible:
       id: "assistant.answer"
@@ -63,7 +72,7 @@ tags:
     visible:
       id: "ds.chat.offline"
     timeout: 15000
-- assertVisible: "Нет сети — помощнику нужен интернет. Операции и аналитика доступны"
+- assertVisible: "Не удаётся подключиться к серверу. Проверьте интернет и попробуйте ещё раз"
 - assertNotVisible:
     id: "ds.chat.input"
 

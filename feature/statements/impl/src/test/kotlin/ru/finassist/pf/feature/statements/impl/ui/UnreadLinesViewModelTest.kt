@@ -65,6 +65,7 @@ class UnreadLinesViewModelTest {
         api.unreadResult = AppError.Offline()
         val vm = newVm("uploadId" to "u1")
         assertTrue(vm.state.value.error)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertFalse(vm.state.value.loading)
 
         api.unreadResult = UnreadLinesList(listOf(line))
@@ -72,6 +73,13 @@ class UnreadLinesViewModelTest {
         assertFalse(vm.state.value.error)
         assertEquals(listOf(line), vm.state.value.lines)
     }
+    @Test fun `a failed unread-lines server response does not claim a local connection failure`() {
+        api.unreadResult = AppError.Server(503)
+        val state = newVm("uploadId" to "u1").state.value
+        assertTrue(state.error)
+        assertEquals(false, state.errorPresentation?.connectionFailure)
+    }
+
     @Test fun `equal physical line and reason occurrences remain separate list entries`() {
         val duplicate = line.copy()
         api.unreadResult = UnreadLinesList(listOf(line, duplicate))

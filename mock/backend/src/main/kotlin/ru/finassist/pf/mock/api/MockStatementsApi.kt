@@ -88,7 +88,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         return ImportConfig(
             downloadUrl = "https://www.tbank-online.com/mybank/api/operations/timeline/public/legacy/v1/export_operations" +
                 "?appName=supreme&appVersion=0.0.1&origin=web%2Cib5%2Cplatform&start=${from.toInstant().toEpochMilli()}&end=${tomorrow.toInstant().toEpochMilli()}&format=ofx",
-            loginUrl = "https://www.tbank.ru/login/",
+            loginUrl = "https://tbank-online.com/login",
             maxFileSizeBytes = backend.config.maxFileSizeBytes,
             acceptedFormats = listOf("OFX"),
             suggestedPeriod = DateRange(from, tomorrow),

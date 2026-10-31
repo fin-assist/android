@@ -100,13 +100,13 @@ jobs:
           restore-keys: ${{ steps.robolectric.outputs.prefix }}
 
       # PR: `unitTest` of every module — the variant the coverage is measured on (jvm, debug of libraries, mockDebug
-      # of the app; build-logic Coverage.kt). Push (main, release/**, stage-*/**): `test`, the unit tests of every
+      # of the app; build-logic Coverage.kt). Stage-specific app tests also run on a PR. Push: `test` of every
       # variant — release, local, prod and e2e included — so a test failing only there is caught before a release.
       - name: Unit tests
         id: unit-tests
         env:
           TEST_TASK: ${{ github.event_name == 'pull_request' && 'unitTest' || 'test' }}
-        run: ./gradlew "$TEST_TASK" :build-logic:convention:test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew "$TEST_TASK" :app:testStageDebugUnitTest :app:testStageReleaseUnitTest :build-logic:convention:test --continue --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Saved from main and release branches only, like the Gradle cache: their caches are the ones every PR can read.
       # Only after green tests: then every jar a test needed has been fetched, and an entry, once saved, never changes.
@@ -197,6 +197,7 @@ jobs:
           gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" -f body="$(cat comment.md)" >/dev/null
 
   lint:
+    # Keep the existing check name for branch protection; stage lint runs in the same job.
     name: Lint (mock flavor)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -215,7 +216,7 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
 
       - name: Lint
-        run: ./gradlew lintMockDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew lintMockDebug lintStageDebug --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       - name: Report failure
         if: failure()
@@ -252,7 +253,7 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
 
-      # Resolve the actual e2e/prod graph before compiling, without changing dependency selection.
+      # Resolve the actual e2e/stage/prod graph before compiling, without changing dependency selection.
       # The init script uses Gradle's resolution model; its one-off metadata task is not configuration-cache compatible.
       - name: Compose runtime classpaths match the BOM and lifecycle baseline
         run: |
@@ -262,10 +263,10 @@ jobs:
           } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Environments (FIN-120, AGENTS.md «Flavors»): mock as the working product, localDebug for the local backend,
-      # prodRelease as what users get (unsigned: CI has no signing key). The localRelease manifest is checked below.
+      # stageDebug as an installable stage artifact and stageRelease/prodRelease unsigned (CI has no signing key).
       # Other variants (mockRelease, prodDebug, localRelease) are not built here.
       - name: Assemble
-        run: ./gradlew assembleMockDebug assembleLocalDebug assembleProdRelease processLocalReleaseManifest :app:checkNoMockCode --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew assembleMockDebug assembleLocalDebug assembleStageDebug assembleStageRelease assembleProdRelease processLocalReleaseManifest :app:checkNoMockCode --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Check AGP output too: Android keeps flavor suffixes, the version sent in X-Client-Version does not.
       - name: Manifest and client versions match the app version
@@ -278,6 +279,12 @@ jobs:
           python3 scripts/check-app-version.py --suffix=-local \
             --manifest "$m/localDebug/processLocalDebugManifest/AndroidManifest.xml" \
             --build-config "$b/local/debug/ru/finassist/pf/BuildConfig.java"
+          python3 scripts/check-app-version.py --suffix=-stage \
+            --manifest "$m/stageDebug/processStageDebugManifest/AndroidManifest.xml" \
+            --build-config "$b/stage/debug/ru/finassist/pf/BuildConfig.java"
+          python3 scripts/check-app-version.py --suffix=-stage \
+            --manifest "$m/stageRelease/processStageReleaseManifest/AndroidManifest.xml" \
+            --build-config "$b/stage/release/ru/finassist/pf/BuildConfig.java"
           python3 scripts/check-app-version.py \
             --manifest "$m/prodRelease/processProdReleaseManifest/AndroidManifest.xml" \
             --build-config "$b/prod/release/ru/finassist/pf/BuildConfig.java"
@@ -288,6 +295,8 @@ jobs:
           m=app/build/intermediates/merged_manifests
           python3 scripts/check-tracer-off.py $m/mockDebug/processMockDebugManifest/AndroidManifest.xml \
             $m/localDebug/processLocalDebugManifest/AndroidManifest.xml \
+            $m/stageDebug/processStageDebugManifest/AndroidManifest.xml \
+            $m/stageRelease/processStageReleaseManifest/AndroidManifest.xml \
             $m/prodRelease/processProdReleaseManifest/AndroidManifest.xml 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # No e2e/mock hooks and no cleartext in release builds; in localDebug cleartext only to the host of the compiled
@@ -299,11 +308,35 @@ jobs:
           {
             python3 scripts/check-build-separation.py release \
               $m/prodRelease/processProdReleaseManifest/AndroidManifest.xml \
+              $m/stageRelease/processStageReleaseManifest/AndroidManifest.xml \
               $m/localRelease/processLocalReleaseManifest/AndroidManifest.xml &&
             python3 scripts/check-build-separation.py local-debug \
               $m/localDebug/processLocalDebugManifest/AndroidManifest.xml \
               app/build/intermediates/packaged_res/localDebug/packageLocalDebugResources/xml/network_security_config.xml \
               app/build/generated/source/buildConfig/local/debug/ru/finassist/pf/BuildConfig.java
+          } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      # Non-secret production sentinels prove stage never falls back to production properties. No SDK is run.
+      - name: Stage identity, endpoint and SDK isolation
+        run: |
+          m=app/build/intermediates/merged_manifests
+          b=app/build/generated/source/buildConfig
+          {
+            ./gradlew generateStageDebugBuildConfig processStageDebugManifest \
+              generateStageReleaseBuildConfig processStageReleaseManifest --no-daemon \
+              -Ppf.apiBaseUrl=http://unrelated.invalid:8080/ \
+              -Ppf.rustoreRemoteConfigAppId=production-sentinel \
+              -Ppf.mytrackerSdkKey=production-sentinel \
+              -Ppf.tracerAppToken=production-sentinel \
+              -Ppf.tracerPluginToken=production-plugin-sentinel &&
+            python3 scripts/check-build-separation.py stage-default \
+              "$m/stageDebug/processStageDebugManifest/AndroidManifest.xml" \
+              "$b/stage/debug/ru/finassist/pf/BuildConfig.java" &&
+            python3 scripts/check-build-separation.py stage-default \
+              "$m/stageRelease/processStageReleaseManifest/AndroidManifest.xml" \
+              "$b/stage/release/ru/finassist/pf/BuildConfig.java" &&
+            python3 scripts/check-tracer-off.py "$m/stageDebug/processStageDebugManifest/AndroidManifest.xml" \
+              "$m/stageRelease/processStageReleaseManifest/AndroidManifest.xml"
           } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Certificate pinning of prod (FIN-121): CI has no real pins, so the generator is checked with test values (32
@@ -314,7 +347,7 @@ jobs:
         run: |
           m=app/build/intermediates/merged_manifests
           {
-            ./gradlew processProdReleaseManifest packageProdReleaseResources processLocalReleaseManifest \
+            ./gradlew processProdReleaseManifest packageProdReleaseResources processLocalReleaseManifest processStageReleaseManifest \
               processMockDebugManifest --no-daemon \
               -Ppf.apiPins="sha256/$(head -c 32 /dev/zero | tr '\0' '\1' | base64),sha256/$(head -c 32 /dev/zero | tr '\0' '\2' | base64)" \
               -Ppf.apiPinsExpiration="$(date -u -d '+180 days' +%F)" &&
@@ -323,10 +356,33 @@ jobs:
               app/build/intermediates/packaged_res/prodRelease/packageProdReleaseResources/xml/network_security_config.xml \
               app/build/generated/source/buildConfig/prod/release/ru/finassist/pf/BuildConfig.java &&
             python3 scripts/check-build-separation.py release $m/localRelease/processLocalReleaseManifest/AndroidManifest.xml &&
+            python3 scripts/check-build-separation.py release $m/stageRelease/processStageReleaseManifest/AndroidManifest.xml &&
             if grep -q networkSecurityConfig $m/mockDebug/processMockDebugManifest/AndroidManifest.xml; then
               echo "mockDebug got a network security config with the API pins"; false
             fi
           } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      - name: Stage pins stay on the stage host
+        run: |
+          m=app/build/intermediates/merged_manifests
+          {
+            ./gradlew processStageReleaseManifest packageStageReleaseResources processProdReleaseManifest --no-daemon \
+              -Ppf.stageApiPins="sha256/$(head -c 32 /dev/zero | tr '\0' '\1' | base64),sha256/$(head -c 32 /dev/zero | tr '\0' '\2' | base64)" \
+              -Ppf.stageApiPinsExpiration="$(date -u -d '+180 days' +%F)" &&
+            python3 scripts/check-build-separation.py pinned-release \
+              $m/stageRelease/processStageReleaseManifest/AndroidManifest.xml \
+              app/build/intermediates/packaged_res/stageRelease/packageStageReleaseResources/xml/network_security_config.xml \
+              app/build/generated/source/buildConfig/stage/release/ru/finassist/pf/BuildConfig.java &&
+            python3 scripts/check-build-separation.py release $m/prodRelease/processProdReleaseManifest/AndroidManifest.xml
+          } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+
+      - uses: actions/upload-artifact@v7
+        if: success()
+        with:
+          name: app-stage-debug
+          path: app/build/outputs/apk/stage/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
 
       - uses: actions/upload-artifact@v7
         if: success()

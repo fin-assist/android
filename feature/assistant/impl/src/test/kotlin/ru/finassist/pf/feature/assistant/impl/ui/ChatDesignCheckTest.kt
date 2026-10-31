@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
+import ru.finassist.pf.core.common.error.ConnectionEnvironment
+import ru.finassist.pf.core.common.error.ConnectionEnvironmentReader
+import ru.finassist.pf.core.designsystem.components.LocalConnectionEnvironmentReader
 import ru.finassist.pf.core.common.error.ErrorPresentation
 import ru.finassist.pf.core.common.error.ErrorSeverity
 import ru.finassist.pf.core.common.error.UserMessage
@@ -139,12 +143,15 @@ class ChatDesignCheckTest {
         onSend = {}, onVoice = {}, onOpenSearch = {}, onOpenAnalytics = {},
     )
 
-    private fun capture(name: String, state: ChatUiState, dark: Boolean = false, heightDp: Int = 844) =
+    private fun capture(name: String, state: ChatUiState, dark: Boolean = false, heightDp: Int = 844, environment: ConnectionEnvironment = ConnectionEnvironment.UNKNOWN) =
         // The thread is a viewport over a scrolling list, as on the artboard: no full-height growth.
-        DesignCheck.capture(name, dark = dark, heightDp = heightDp, fullHeight = false) {
-            // Opened at the end of the thread, as the app scrolls it once the history has loaded.
-            val list = rememberLazyListState(initialFirstVisibleItemIndex = Int.MAX_VALUE)
-            ChatContent(state, zone = zone, today = today, voiceListening = false, actions = actions, listState = list)
+        DesignCheck.capture(name, dark = dark, heightDp = heightDp, fullHeight = false, tab = 2) {
+            CompositionLocalProvider(LocalConnectionEnvironmentReader provides ConnectionEnvironmentReader { environment }) {
+                // Opened at the end of the thread, as the app scrolls it once the history has loaded.
+                val list = rememberLazyListState(initialFirstVisibleItemIndex = Int.MAX_VALUE)
+                ChatContent(state, zone = zone, today = today, voiceListening = false, actions = actions, listState = list)
+            }
+
         }
 
     @Test fun chat() = capture("Chat", answered)
@@ -152,6 +159,12 @@ class ChatDesignCheckTest {
     @Test fun chatDark() = capture("ChatDark", answered, dark = true)
 
     @Test fun chatEmpty() = capture("ChatEmpty", ChatUiState(loading = false, limit = limit(5)))
+
+    @Test fun consentRecovery() = capture("ChatConsentRecovery", ChatUiState(loading = false,
+        draft = "Сколько я трачу на такси?", consentRequired = true, askBlocked = true, limit = limit(5)))
+
+    @Test fun consentRecoveryDark() = capture("ChatConsentRecoveryDark", ChatUiState(loading = false,
+        draft = "Сколько я трачу на такси?", consentRequired = true, askBlocked = true, limit = limit(5)), dark = true)
 
     @Test fun chatBusy() = capture(
         "ChatBusy",
@@ -211,6 +224,8 @@ class ChatDesignCheckTest {
     )
 
     @Test fun chatOffline() = capture("ChatOffline", answered.copy(offline = true), heightDp = 853)
+
+    @Test fun chatOfflineVpn() = capture("ChatOfflineVpn", answered.copy(offline = true), heightDp = 853, environment = ConnectionEnvironment.VPN)
 
     @Test fun chatLimit() = capture("ChatLimit", answered.copy(limit = limit(0)))
     // FIN-223 fixture: proposed artboard; snapshots are not executed under the current instruction.

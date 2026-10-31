@@ -42,7 +42,7 @@ tags:
     timeout: 10000
 - assertVisible:
     id: "auth.call.dial"
-- assertNotVisible: "Нет сети — не можем дождаться звонка. Проверьте интернет"
+- assertNotVisible: "Не удаётся подключиться к серверу.*"
 # The re-opened stream brings `verified`: sign-in goes on to the passcode.
 - runFlow: ../../subflows/set_passcode.yaml
 - extendedWaitUntil:
@@ -133,6 +133,15 @@ tags:
       id: "assistant.consent.submit"
 - tapOn:
     id: "assistant.consent.submit"
+# FIN-394: consent returns to the draft; sending is a separate explicit action.
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertNotVisible:
+    id: "assistant.question"
+- tapOn:
+    id: "ds.chat.send"
 - extendedWaitUntil:
     visible:
       id: "assistant.answer"

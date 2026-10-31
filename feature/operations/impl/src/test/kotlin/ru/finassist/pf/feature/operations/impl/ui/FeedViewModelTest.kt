@@ -91,12 +91,27 @@ class FeedViewModelTest {
         api.lists += page("op_1")
         val vm = vm()
         assertTrue(vm.state.value.offline)
+        assertEquals(null, vm.state.value.errorPresentation) // the tagged full-screen connection state owns the hint
         assertFalse(vm.state.value.loading)
         assertFalse(vm.state.value.isEmpty) // offline is not «no operations»
 
         vm.load()
         assertFalse(vm.state.value.offline)
         assertEquals(listOf("op_1"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun `a disconnected refresh keeps rows and exposes the local hint until retry succeeds`() {
+        api.lists += page("op_1")
+        api.lists += AppError.Offline()
+        api.lists += page("op_1", "op_2")
+        val vm = vm()
+        vm.refresh()
+        assertEquals(listOf("op_1"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.offline)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        vm.load()
+        assertEquals(null, vm.state.value.errorPresentation)
+        assertEquals(listOf("op_1", "op_2"), vm.state.value.items.map { it.id })
     }
 
     @Test fun `a failed refresh keeps the list on screen`() {

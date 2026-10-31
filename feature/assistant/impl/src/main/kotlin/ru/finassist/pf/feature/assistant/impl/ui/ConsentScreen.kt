@@ -145,7 +145,7 @@ class AiConsentViewModel @Inject constructor(
             if (generation == documentGeneration) {
                 documentFailure = error
                 documentGate.record(error)
-                _state.update { it.copy(errorPresentation = error.presentation.takeUnless { error is AppError.Offline },
+                _state.update { it.copy(errorPresentation = error.presentation,
                     formError = "Не получилось загрузить документ согласия") }
             }
             throw error
@@ -188,8 +188,8 @@ class AiConsentViewModel @Inject constructor(
                     documentGate.clear() // the known changed-document scenario permits a fresh document read, not an old PUT
                     loadDocument()
                 } else {
-                    val text = if (e is AppError.Offline) "Нет сети — проверьте интернет и повторите" else "Не получилось сохранить. Попробуйте ещё раз"
-                    _state.update { it.copy(busy = false, formError = text, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                    val text = if (e is AppError.Offline) "Не получилось сохранить согласие" else "Не получилось сохранить. Попробуйте ещё раз"
+                    _state.update { it.copy(busy = false, formError = text, errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
                 }
             }
         }
@@ -220,7 +220,7 @@ internal const val CONSENT_REQUIRED = "Без согласия помощник 
  * of the viewport, «Не сейчас» under it. «Как помощник использует данные» opens the consent document.
  */
 @Composable
-internal fun AiConsentContent(
+fun AiConsentContent(
     state: AiConsentUiState,
     onBack: () -> Unit,
     onAccepted: (Boolean) -> Unit,
@@ -270,16 +270,21 @@ internal fun AiConsentContent(
                 Spacer(Modifier.height(d.space3))
                 PfNotice("5 вопросов в день. Новые — в 00:00 по Москве", tone = NoticeTone.INFO, icon = PfIcons.CLOCK)
                 Spacer(Modifier.height(d.space5))
-                PfCheckbox(
-                    state.accepted, onAccepted, label = "Даю согласие на передачу этих данных помощнику", error = state.error,
-                    modifier = Modifier.testTag(AssistantTags.CONSENT_CHECKBOX),
-                )
-                state.formError?.let {
-                    Spacer(Modifier.height(d.space3))
-                    val presentation = state.errorPresentation
-                    if (presentation != null) ErrorMessage(presentation, it) else PfNotice(it, tone = NoticeTone.WARNING, alert = true)
+                Column(Modifier.testTag(AssistantTags.CONSENT_BODY)) {
+                    PfCheckbox(
+                        state.accepted, onAccepted, label = "Даю согласие на передачу этих данных помощнику", error = state.error,
+                        modifier = Modifier.testTag(AssistantTags.CONSENT_CHECKBOX),
+                    )
+                    state.formError?.let {
+                        Spacer(Modifier.height(d.space3))
+                        val presentation = state.errorPresentation
+                        if (presentation != null) ErrorMessage(presentation, it) else PfNotice(it, tone = NoticeTone.WARNING, alert = true)
+                    }
                 }
-                Spacer(Modifier.weight(1f).heightIn(min = d.space6))
+                // Weighted children can collapse inside verticalScroll's unbounded height. The fixed gap
+                // remains measurable even when disclosure, checkbox or errors overflow the viewport.
+                Spacer(Modifier.height(d.space6))
+                Spacer(Modifier.weight(1f))
                 PfButton(
                     if (state.documentRefreshRequired) "Обновить документ" else "Продолжить",
                     enabled = if (state.documentRefreshRequired) state.documentRefreshReady else state.retryReady,

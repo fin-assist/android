@@ -102,7 +102,7 @@ class UnreadLinesViewModel @Inject constructor(
                 _state.update { it.copy(loading = false, lines = list.lines, userId = tokenStore.current()?.userId) }
             } catch (e: AppError) {
                 retryGate.record(e)
-                _state.update { it.copy(loading = false, error = true, errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(loading = false, error = true, errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
             }
         }
     }
@@ -139,7 +139,7 @@ internal fun UnreadLinesContent(
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(StatementsTags.UNREAD)) {
         PfPageHeader("Непрочитанные строки", onBack = onBack)
         state.errorPresentation?.let {
-            ErrorMessage(it, "Не получилось загрузить. Попробуйте ещё раз", modifier = Modifier.padding(d.space4),
+            ErrorMessage(it, "Не получилось загрузить", modifier = Modifier.padding(d.space4),
                 onRetry = if (!state.retryReady) null else onRetry)
         }
         when {

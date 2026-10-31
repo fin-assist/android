@@ -60,6 +60,7 @@ class AnalyticsDesignCheckTest {
 
     private class Handlers(private val mode: TransferMode) : AnalyticsHandlers {
         override fun load(quiet: Boolean) = Unit
+        override fun retryPeriodChange() = Unit
         override fun consumeSnackbar() = Unit
         override fun setPeriodType(type: PeriodTypeCode) = Unit
         override fun goTo(key: PeriodKey) = Unit
@@ -84,6 +85,28 @@ class AnalyticsDesignCheckTest {
                 AnalyticsContent(state, actions, Handlers(state.data?.params?.transferMode ?: TransferMode.WITH))
             }
         }
+
+    // FIN-394: proposed states; authored without running UI/DesignCheck.
+    @Test fun analyticsRecalculating() = capture("AnalyticsRecalculating", ui(september().copy(state = analyticsState.copy(recalculating = true))), heightDp = 2848)
+    @Test fun analyticsRecalculationPaused() = capture("AnalyticsRecalculationPaused", ui(september().copy(state = analyticsState.copy(recalculating = true))).copy(recalculationPaused = true), heightDp = 2848)
+    @Test fun analyticsUpdating() = capture("AnalyticsUpdating", AnalyticsUiState(blocks = blocks), heightDp = 844)
+    @Test fun analyticsPreparationTimeout() = capture("AnalyticsPreparationTimeout", AnalyticsUiState(loading = false, blocks = blocks, preparationTimedOut = true), heightDp = 844)
+    @Test fun analyticsPreparationTimeoutDark() = capture("AnalyticsPreparationTimeoutDark", AnalyticsUiState(loading = false, blocks = blocks, preparationTimedOut = true), heightDp = 844, dark = true)
+    @Test fun analyticsUpdatingDark() = capture("AnalyticsUpdatingDark", AnalyticsUiState(blocks = blocks), heightDp = 844, dark = true)
+    @Test fun analyticsPreparingWithoutData() = capture("AnalyticsPreparingWithoutData", ui(september().copy(hasData = false,
+        state = analyticsState.copy(recalculating = true))), heightDp = 844)
+
+    // FIN-391: proposed artboards, authored and compiled only; no UI/DesignCheck execution.
+    @Test fun analyticsPeriodChangeFailed() = capture("AnalyticsPeriodChangeFailed", ui(september()).copy(
+        periodChangeErrorPresentation = ErrorPresentation()), heightDp = 2960)
+    @Test fun analyticsPeriodChangeFailedDark() = capture("AnalyticsPeriodChangeFailedDark", ui(september()).copy(
+        periodChangeErrorPresentation = ErrorPresentation()), heightDp = 2960, dark = true)
+    @Test fun analyticsPeriodChangeRetryBlocked() = capture("AnalyticsPeriodChangeRetryBlocked", ui(september()).copy(
+        periodChangeRetryReady = false, periodChangeErrorPresentation = ErrorPresentation()), heightDp = 2960)
+
+    @Test fun analyticsPeriodAndDismissalErrors() = capture("AnalyticsPeriodAndDismissalErrors", ui(september()).copy(
+        periodChangeErrorPresentation = ErrorPresentation(), errorPresentation = ErrorPresentation(),
+        snackbar = "Не получилось убрать"), heightDp = 3080)
 
     @Test fun analytics() = capture("Analytics", ui(september()), heightDp = 2848)
 

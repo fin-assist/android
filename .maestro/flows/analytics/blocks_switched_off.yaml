@@ -36,3 +36,5 @@ tags:
     timeout: 10000
 - assertNotVisible:
     id: "profile.assistant"
+- assertNotVisible:
+    id: "ds.tab.assistant"

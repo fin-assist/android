@@ -31,7 +31,7 @@ sealed class AppError(
     cause: Throwable? = null,
     val response: ErrorResponseInfo? = null,
 ) : Exception(message, cause) {
-    val presentation: ErrorPresentation get() = response?.presentation ?: ErrorPresentation()
+    val presentation: ErrorPresentation get() = response?.presentation ?: ErrorPresentation(connectionFailure = this is Offline)
     val requestRetryable: Boolean? get() = response?.requestRetryable
     val rawCode: String? get() = response?.code ?: when (this) {
         is Api -> code
@@ -39,7 +39,7 @@ sealed class AppError(
         else -> null
     }
 
-    /** No network / timeout / connection reset — "Нет сети" states. */
+    /** No network / timeout / connection reset — connection-failure states with a local recovery hint. */
     class Offline(cause: Throwable? = null) : AppError("offline", cause)
 
     /** Session is gone (`INVALID_TOKEN`, `TOKEN_REVOKED` after a failed refresh): go to the sign-in screen. */

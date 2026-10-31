@@ -13,7 +13,7 @@ import java.util.Base64
 
 /**
  * Certificate pinning of the API (FIN-121; decision — Confluence PF, «Архитектура»): SPKI pins of our own keys for
- * the host of the environment's `API_BASE_URL`, in the network security config of `prod` (and of a future `stage`).
+ * the host of the environment's `API_BASE_URL`, in the network security config of `prod` and `stage`.
  *
  * Pins come from Gradle properties (`pf.apiPins` — `sha256/<base64>` separated by commas or spaces,
  * `pf.apiPinsExpiration` — `yyyy-MM-dd`) or the matching environment variables in CI. No pins — no pinning, the
@@ -47,27 +47,33 @@ object ApiPins {
      * `sha256/` pins of 32 bytes (44 base64 characters) that decode to different digests, and an expiration after
      * [today] and no later than [MAX_EXPIRATION_DAYS] from it. Any other value fails the configuration with the reason.
      */
-    fun parse(pinsRaw: String?, expirationRaw: String?, today: LocalDate): Pins? {
+    fun parse(
+        pinsRaw: String?,
+        expirationRaw: String?,
+        today: LocalDate,
+        pinsProperty: String = PINS_PROPERTY,
+        expirationProperty: String = EXPIRATION_PROPERTY,
+    ): Pins? {
         val pinsValue = pinsRaw?.trim().orEmpty()
         val expirationValue = expirationRaw?.trim().orEmpty()
         if (pinsValue.isEmpty() && expirationValue.isEmpty()) return null
-        if (pinsValue.isEmpty()) invalid("$EXPIRATION_PROPERTY is set without $PINS_PROPERTY")
+        if (pinsValue.isEmpty()) invalid("$expirationProperty is set without $pinsProperty")
         if (expirationValue.isEmpty()) {
-            invalid("$PINS_PROPERTY is set without $EXPIRATION_PROPERTY: a pin set without expiration can lock the app out for good")
+            invalid("$pinsProperty is set without $expirationProperty: a pin set without expiration can lock the app out for good")
         }
         val digests = pinsValue.split(',', ' ', '\n', '\t', ';').filter { it.isNotBlank() }.map(::digest)
         if (digests.size < MIN_PINS) {
-            invalid("$PINS_PROPERTY has ${digests.size} pin(s), at least $MIN_PINS are required (the current key and a backup)")
+            invalid("$pinsProperty has ${digests.size} pin(s), at least $MIN_PINS are required (the current key and a backup)")
         }
         // Compared as canonical encodings of the decoded bytes: two spellings of one digest (different unused bits
         // before `=`) are the same key, not a backup.
-        if (digests.toSet().size != digests.size) invalid("$PINS_PROPERTY repeats a pin: a backup must be a different key")
+        if (digests.toSet().size != digests.size) invalid("$pinsProperty repeats a pin: a backup must be a different key")
         val expiration = try {
             LocalDate.parse(expirationValue)
         } catch (e: DateTimeParseException) {
-            invalid("$EXPIRATION_PROPERTY \"$expirationValue\" is not a date like 2027-10-01")
+            invalid("$expirationProperty \"$expirationValue\" is not a date like 2027-10-01")
         }
-        requireActive(expiration, today)
+        requireActive(expiration, today, expirationProperty)
         return Pins(digests, expiration)
     }
 
@@ -76,12 +82,12 @@ object ApiPins {
      * again when the config is written ([GenerateNetworkSecurityConfig]): a reused configuration cache entry or an
      * up-to-date task must not put an expired pin set into a new APK.
      */
-    fun requireActive(expiration: LocalDate, today: LocalDate) {
+    fun requireActive(expiration: LocalDate, today: LocalDate, expirationProperty: String = EXPIRATION_PROPERTY) {
         if (!expiration.isAfter(today)) {
-            invalid("$EXPIRATION_PROPERTY $expiration is not after the build date $today: the pins would be ignored")
+            invalid("$expirationProperty $expiration is not after the build date $today: the pins would be ignored")
         }
         if (expiration.isAfter(today.plusDays(MAX_EXPIRATION_DAYS))) {
-            invalid("$EXPIRATION_PROPERTY $expiration is more than $MAX_EXPIRATION_DAYS days after the build date $today")
+            invalid("$expirationProperty $expiration is more than $MAX_EXPIRATION_DAYS days after the build date $today")
         }
     }
 
@@ -100,7 +106,7 @@ object ApiPins {
      */
     fun networkSecurityConfig(host: String, pins: Pins): String = buildString {
         appendLine("""<?xml version="1.0" encoding="utf-8"?>""")
-        appendLine("<!-- Generated from $PINS_PROPERTY and $EXPIRATION_PROPERTY (build-logic ApiPins, FIN-121). -->")
+        appendLine("<!-- Generated API pins (build-logic ApiPins, FIN-121/385). -->")
         appendLine("<network-security-config>")
         appendLine("""    <base-config cleartextTrafficPermitted="false" />""")
         appendLine("""    <domain-config cleartextTrafficPermitted="false">""")
