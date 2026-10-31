@@ -1,8 +1,9 @@
 # Local adb transport investigation (FIN-390)
 
-`adb device offline` is a local emulator/driver transport failure. It is independent of a server error,
-consent-document HTTP requests and the `common` / `mock-only` classification. Moving a flow between those
-sets cannot fix it. Historical Qase runs 34–38 and their original failed results remain unchanged.
+`adb device offline` was observed at the local emulator/driver transport boundary. The available evidence
+does not attribute it to a server error, consent-document HTTP requests or the `common` / `mock-only`
+classification. Reclassifying a flow is not expected to fix this symptom; its cause remains unestablished
+(see «Evidence and limits»). Historical Qase runs 34–38 and their original failed results remain unchanged.
 
 ## Bounded minimal comparison
 
@@ -60,8 +61,15 @@ python3 scripts/adb-transport.py --serial emulator-5582 --avd-name fin390_transp
 ```
 
 Every repetition has its own JUnit/material/debug directory and return code. Each Maestro **process group**
-is killed after the timeout; this bounds the shell launcher, Java and its children. After an ordinary flow failure, the runner continues
-the preselected diagnostic repetitions and preserves every result. A process timeout aborts the batch as
+is killed after the timeout; this bounds the shell launcher, Java and its children. For an already running
+owned command, scoped SIGINT/SIGTERM/SIGHUP handlers translate termination into the same process-group
+cleanup and an incomplete summary with `abort_reason=interrupted`, the signal name and exit status `128 + signal`.
+Repeated termination signals are deferred during bounded cleanup and summary persistence; previous
+handlers are restored afterward. No signal handler is installed by the monitor thread. The tested
+termination boundary is a running launcher with a live descendant; this is not a universal guarantee
+for cancellation at every instant inside process creation, and SIGKILL cannot execute Python cleanup.
+
+After an ordinary flow failure, the runner continues the preselected diagnostic repetitions and preserves every result. A process timeout aborts the batch as
 incomplete, including a timeout on the last or only repetition: a killed Maestro process can leave a
 driver session that would contaminate the next attempt. `recorded_repetitions` includes the timed-out
 attempt; `completed_repetitions` counts processes that exited before the deadline. Already recorded

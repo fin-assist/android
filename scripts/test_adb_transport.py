@@ -320,6 +320,140 @@ class TransportTests(unittest.TestCase):
             self.assertIn("series_aborted", phases)
             self.assertNotIn("setup_failed", phases)
 
+    def test_main_restores_signal_handlers_and_persists_interrupted_summary(self):
+        managed = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+        original_signal = signal.signal
+        for interrupted in (False, True):
+            with self.subTest(interrupted=interrupted), tempfile.TemporaryDirectory() as directory:
+                before = {sig: signal.getsignal(sig) for sig in managed}
+                calls = []
+                observed = threading.Event()
+                worker_threads = []
+                out = Path(directory) / "new"
+
+                def install(signum, handler):
+                    calls.append(threading.current_thread())
+                    return original_signal(signum, handler)
+
+                def probe(*args):
+                    worker_threads.append(threading.current_thread())
+                    observed.set()
+                    return {"returncode": 0, "state": "device", "offline": False}
+
+                def series(*args, results, **kwargs):
+                    self.assertTrue(observed.wait(timeout=2))
+                    results.append({"iteration": 1, "returncode": 1 if interrupted else 0, "seconds": 0})
+                    if interrupted:
+                        raise KeyboardInterrupt()
+                    return results
+
+                with contextlib.redirect_stdout(io.StringIO()), patch.object(transport, "wait_for_boot"), \
+                        patch.object(transport, "probe", side_effect=probe), \
+                        patch.object(transport, "run_series", side_effect=series), \
+                        patch.object(transport.signal, "signal", side_effect=install):
+                    code = transport.main(["--serial", "emulator-5582", "--avd-name", "own", "--transport", "direct",
+                                           "--repetitions", "1", "--out", str(out)])
+                summary = json.loads((out / "summary.json").read_text())
+                self.assertEqual({sig: signal.getsignal(sig) for sig in managed}, before)
+                self.assertTrue(calls)
+                self.assertTrue(all(thread is threading.main_thread() for thread in calls))
+                self.assertTrue(worker_threads)
+                self.assertTrue(all(thread is not threading.main_thread() for thread in worker_threads))
+                self.assertEqual(code, 130 if interrupted else 0)
+                self.assertEqual(summary["complete"], not interrupted)
+                if interrupted:
+                    self.assertEqual(summary["abort_reason"], "interrupted")
+                    self.assertEqual(summary["interrupted_signal"], "SIGINT")
+                    self.assertEqual(summary["results"][0]["returncode"], 1)
+                    self.assertEqual(summary["completed_repetitions"], 1)
+
+    def _assert_real_runner_signal_cleanup(self, signum):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pids_file = root / "pids.json"
+            cleaning = root / "cleaning"
+            release = root / "release"
+            out = root / "out"
+            launcher = ("import os,json,subprocess,sys,time;from pathlib import Path;"
+                        "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],"
+                        "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);"
+                        f"marker=Path({str(pids_file)!r});tmp=marker.with_suffix('.tmp');"
+                        "tmp.write_text(json.dumps([os.getpid(),child.pid]));tmp.replace(marker);time.sleep(60)")
+            wrapper = root / "runner.py"
+            wrapper.write_text(
+                "import contextlib,importlib.util,sys,time\nfrom pathlib import Path\n"
+                f"spec=importlib.util.spec_from_file_location('transport',{str(Path(transport.__file__).resolve())!r})\n"
+                "m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\n"
+                "m.wait_for_boot=lambda *args:None\n"
+                "m.probe=lambda *args:dict(returncode=0,state='device',offline=False)\n"
+                "original_scope=m.interruption_handlers\n"
+                "@contextlib.contextmanager\ndef scope():\n"
+                " with original_scope() as defer:\n"
+                "  def cleanup():\n   defer()\n"
+                f"   Path({str(cleaning)!r}).write_text('ready')\n"
+                "   deadline=time.monotonic()+5\n"
+                f"   while not Path({str(release)!r}).exists() and time.monotonic()<deadline:time.sleep(.01)\n"
+                "  yield cleanup\n"
+                "m.interruption_handlers=scope\n"
+                "def series(args,env,event,results):\n"
+                f" with Path({str(root / 'maestro.log')!r}).open('w') as output:\n"
+                f"  code,_=m.run_bounded([sys.executable,'-c',{launcher!r}],10,output=output)\n"
+                " results.append(dict(iteration=1,returncode=code,seconds=0))\n return results\n"
+                "m.run_series=series\n"
+                f"raise SystemExit(m.main(['--serial','emulator-5582','--avd-name','own','--transport','direct',"
+                f"'--repetitions','1','--out',{str(out)!r}]))\n")
+            process = None
+            owned = []
+
+            def wait_for(path):
+                deadline = time.monotonic() + 5
+                while not path.exists() and time.monotonic() < deadline:
+                    time.sleep(.01)
+                self.assertTrue(path.exists(), f"runner did not create {path.name}")
+
+            def alive(pid):
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    return False
+                status = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True,
+                                        text=True, timeout=1).stdout.strip()
+                return bool(status) and not status.startswith("Z")
+
+            try:
+                with (root / "runner.log").open("w") as output:
+                    process = subprocess.Popen([sys.executable, str(wrapper)], stdout=output,
+                                               stderr=subprocess.STDOUT, start_new_session=True)
+                    wait_for(pids_file)
+                    owned = json.loads(pids_file.read_text())
+                    os.kill(process.pid, signum)
+                    wait_for(cleaning)
+                    # A second request during cleanup must not skip summary persistence.
+                    os.kill(process.pid, signum)
+                    release.write_text("continue")
+                    self.assertEqual(process.wait(timeout=5), 128 + signum)
+                summary = json.loads((out / "summary.json").read_text())
+                self.assertFalse(summary["complete"])
+                self.assertFalse(summary["passed"])
+                self.assertEqual(summary["abort_reason"], "interrupted")
+                self.assertEqual(summary["interrupted_signal"], signal.Signals(signum).name)
+                for pid in owned:
+                    self.assertFalse(alive(pid), f"owned descendant {pid} survived runner signal")
+            finally:
+                for leader in ([process.pid] if process else []) + owned[:1]:
+                    try:
+                        os.killpg(leader, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                if process is not None:
+                    process.wait(timeout=2)
+
+    def test_sigterm_to_runner_cleans_real_launcher_and_child(self):
+        self._assert_real_runner_signal_cleanup(signal.SIGTERM)
+
+    def test_sighup_to_runner_cleans_real_launcher_and_child(self):
+        self._assert_real_runner_signal_cleanup(signal.SIGHUP)
+
     def test_existing_output_cannot_be_overwritten(self):
         with tempfile.TemporaryDirectory() as directory:
             sentinel = Path(directory) / "summary.json"

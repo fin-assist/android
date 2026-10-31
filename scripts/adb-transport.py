@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -23,6 +24,36 @@ class ProbeAbort(RuntimeError):
     def __init__(self, reason, message):
         super().__init__(message)
         self.reason = reason
+
+
+class ProbeInterrupted(KeyboardInterrupt):
+    def __init__(self, signum):
+        super().__init__(signal.Signals(signum).name)
+        self.signum = signum
+
+
+@contextmanager
+def interruption_handlers():
+    """Translate terminal termination into cleanup; handlers only live on the CLI main thread."""
+    previous = {}
+
+    def defer_signals():
+        for signum in previous:
+            signal.signal(signum, signal.SIG_IGN)
+
+    def interrupt(signum, _frame):
+        # A second termination request must not interrupt group cleanup or summary persistence.
+        defer_signals()
+        raise ProbeInterrupted(signum)
+
+    try:
+        for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            previous[signum] = signal.getsignal(signum)
+            signal.signal(signum, interrupt)
+        yield defer_signals
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
 
 
 def timestamp():
@@ -202,38 +233,43 @@ def main(argv=None):
             event("monitor_failed", {"error": type(error).__name__})
 
     thread = None
-    try:
-        wait_for_boot(args.adb, args.serial, args.avd_name, args.boot_timeout, event)
-        setup_complete = True
-        (args.out / "probe.yaml").write_text(content)
-        thread = threading.Thread(target=monitor, name="owned-adb-probe", daemon=True)
-        thread.start()
-        results = run_series(args, env, event, results=results)
-    except (RuntimeError, OSError) as error:
-        reason = error.reason if isinstance(error, ProbeAbort) else "command_error"
-        summary.update(error=type(error).__name__, abort_reason=reason)
-        event("series_aborted" if setup_complete else "setup_failed", {"reason": reason})
-    except KeyboardInterrupt:
-        summary["abort_reason"] = "interrupted"
-        event("series_aborted" if setup_complete else "setup_failed", {"reason": "interrupted"})
-        raise
-    finally:
-        stop.set()
-        if thread is not None:
-            thread.join(timeout=8)
-        if any(result["returncode"] == 124 for result in results):
-            summary["abort_reason"] = "process_timeout"
-        summary.update(results=results, recorded_repetitions=len(results),
-                       completed_repetitions=sum(result["returncode"] != 124 for result in results),
-                       complete=len(results) == args.repetitions and "abort_reason" not in summary,
-                       flows_passed=bool(results) and all(result["returncode"] == 0 for result in results))
-        summary.update(transport_clean=not probe_failures and not monitor_errors,
-                       probe_failure_count=len(probe_failures), monitor_errors=monitor_errors)
-        summary["passed"] = summary["complete"] and summary.get("flows_passed", False) and summary["transport_clean"]
-        summary["finished"] = timestamp()
-        (args.out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    interrupted_exit_code = 0
+    with interruption_handlers() as defer_signals:
+        try:
+            wait_for_boot(args.adb, args.serial, args.avd_name, args.boot_timeout, event)
+            setup_complete = True
+            (args.out / "probe.yaml").write_text(content)
+            thread = threading.Thread(target=monitor, name="owned-adb-probe", daemon=True)
+            thread.start()
+            results = run_series(args, env, event, results=results)
+        except (RuntimeError, OSError) as error:
+            reason = error.reason if isinstance(error, ProbeAbort) else "command_error"
+            summary.update(error=type(error).__name__, abort_reason=reason)
+            event("series_aborted" if setup_complete else "setup_failed", {"reason": reason})
+        except KeyboardInterrupt as error:
+            signum = error.signum if isinstance(error, ProbeInterrupted) else signal.SIGINT
+            interrupted_exit_code = 128 + signum
+            summary.update(abort_reason="interrupted", interrupted_signal=signal.Signals(signum).name)
+            event("series_aborted" if setup_complete else "setup_failed",
+                  {"reason": "interrupted", "signal": summary["interrupted_signal"]})
+        finally:
+            defer_signals()
+            stop.set()
+            if thread is not None:
+                thread.join(timeout=8)
+            if any(result["returncode"] == 124 for result in results):
+                summary["abort_reason"] = "process_timeout"
+            summary.update(results=results, recorded_repetitions=len(results),
+                           completed_repetitions=sum(result["returncode"] != 124 for result in results),
+                           complete=len(results) == args.repetitions and "abort_reason" not in summary,
+                           flows_passed=bool(results) and all(result["returncode"] == 0 for result in results))
+            summary.update(transport_clean=not probe_failures and not monitor_errors,
+                           probe_failure_count=len(probe_failures), monitor_errors=monitor_errors)
+            summary["passed"] = summary["complete"] and summary.get("flows_passed", False) and summary["transport_clean"]
+            summary["finished"] = timestamp()
+            (args.out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))
-    return 0 if summary["passed"] else 1
+    return interrupted_exit_code or (0 if summary["passed"] else 1)
 
 
 if __name__ == "__main__":

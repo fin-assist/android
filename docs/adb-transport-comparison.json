@@ -25,8 +25,8 @@
   },
   "product_source_sha": "b9e427efe27e0e891e6d0222bd52bf1ef85e413d",
   "probe_runner_sha256": "7c9bdd2189e944f062183e72ff911e640412c5edaeede8e1174caa6fc4d3f318",
-  "published_runner_sha256": "961771c0e94926f921b0d78d73e53d5cc0fa82c3d37e19fe55874ef44b3bd3ca",
-  "publication_hardening": "Recorded batches used one content-pinned runner. Published source additionally checks inventory before every server session, rejects unknown inventory entries/non-device get-state samples, retains partial results on abort, and keeps last-repeat timeouts incomplete. New unit tests cover these boundaries and real launcher/child timeout and interruption cleanup. Preserved timelines were recounted with the stricter state rule; no UI batch was repeated or reclassified.",
+  "published_runner_sha256": "3aafbd1848b07ac005021779c583080bdb3f97ab1270864b64717034af2fae0e",
+  "publication_hardening": "Recorded batches used one content-pinned runner. Published source additionally checks inventory before every server session, rejects unknown inventory entries/non-device get-state samples, retains partial results on abort, and keeps last-repeat timeouts incomplete. New unit tests cover these boundaries and real launcher/child timeout and interruption cleanup. Preserved timelines were recounted with the stricter state rule; no UI batch was repeated or reclassified. Scoped termination handlers now clean an already running owned command and persist interruption summaries, defer repeated signals during cleanup, and restore prior handlers; real SIGTERM/SIGHUP subprocess tests cover this boundary. This does not establish atomic cancellation during process creation or SIGKILL cleanup.",
   "runs": [
     {
       "serial": "emulator-5582",
