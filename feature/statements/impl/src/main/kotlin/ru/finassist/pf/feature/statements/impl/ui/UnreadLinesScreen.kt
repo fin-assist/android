@@ -139,7 +139,7 @@ internal fun UnreadLinesContent(
     Column(Modifier.fillMaxSize().windowInsetsPadding(PfInsets.navigationBars).testTag(StatementsTags.UNREAD)) {
         PfPageHeader("Непрочитанные строки", onBack = onBack)
         state.errorPresentation?.let {
-            ErrorMessage(it, "Не получилось загрузить. Попробуйте ещё раз", modifier = Modifier.padding(d.space4),
+            ErrorMessage(it, "Не получилось загрузить", modifier = Modifier.padding(d.space4),
                 onRetry = if (!state.retryReady) null else onRetry)
         }
         when {

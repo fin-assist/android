@@ -148,7 +148,7 @@ class DetailViewModel @Inject constructor(
                 pickerRetryGate.record(e)
                 val text = when {
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.CATEGORY_NOT_ASSIGNABLE -> "Эту категорию нельзя назначить этой операции"
-                    e is AppError.Offline -> "Нет сети — категория не изменилась"
+                    e is AppError.Offline -> "Категория не изменилась"
                     else -> "Не получилось сохранить. Попробуйте ещё раз"
                 }
                 _state.update { it.copy(saving = false, pickerError = text, pickerErrorPresentation = e.presentation, pickerRequestRetryable = e.requestRetryable) }

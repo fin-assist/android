@@ -71,7 +71,7 @@ class DeleteAccountViewModel @Inject constructor(
     }
 
     internal companion object {
-        const val OFFLINE = "Нет сети — удалить аккаунт не получилось. Проверьте интернет и повторите"
+        const val OFFLINE = "Аккаунт не удалён"
         const val FAILED = "Не получилось удалить аккаунт. Попробуйте ещё раз"
     }
 }

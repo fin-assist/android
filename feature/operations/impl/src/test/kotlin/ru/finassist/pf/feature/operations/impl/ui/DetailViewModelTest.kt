@@ -211,7 +211,7 @@ class DetailViewModelTest {
     }
 
     @Test fun `no network keeps the picker open with the offline reason`() {
-        assertSaveError(AppError.Offline(), "Нет сети — категория не изменилась")
+        assertSaveError(AppError.Offline(), "Категория не изменилась")
     }
 
     @Test fun `any other failure keeps the picker open with a retry hint`() {

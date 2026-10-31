@@ -878,7 +878,8 @@ for deterministic internet hints; these copy changes follow FIN-396 and differ f
 no UI/Maestro/DesignCheck run is claimed. Native `ConnectionFailureHintTest#vpnHintUpdatesAfterRetry`
 (Qase62) asserts the actual reader-to-UI wiring for the full-screen state and ErrorMessage, then switches
 the fake observation before clicking the existing retry action and asserts the internet hint and absence
-of VPN text, while retaining the feature outcome that consent was not revoked. It needs no real tunnel. This uses native Compose dependency injection because Maestro
+of VPN text and any «Нет сети» diagnosis, while retaining the actual ProfileTexts.CONSENT_NOT_REVOKED
+feature outcome. It needs no real tunnel. This uses native Compose dependency injection because Maestro
 cannot replace a CompositionLocal; no production or e2e application hook was added. The native test is
 authored and compiled only, not executed under the current instruction.
 

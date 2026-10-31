@@ -126,7 +126,7 @@ internal fun ProfileContent(
         PfTabHeader("Профиль")
         val p = state.profile
         state.errorPresentation?.let { presentation ->
-            ErrorMessage(presentation, state.snackbar ?: "Не получилось обновить профиль. Попробуйте ещё раз",
+            ErrorMessage(presentation, state.snackbar ?: "Не получилось обновить профиль",
                 modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else onRetry)
         }
         when {

@@ -64,7 +64,7 @@ class ConsentViewModelTest {
         val zone = TimeZone.getDefault()
         try {
             val vm = vm(); vm.send()
-            assertEquals("Нет сети — проверьте интернет и повторите", vm.state.value.formError)
+            assertEquals("Не получилось создать аккаунт", vm.state.value.formError)
             assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
             TimeZone.setDefault(TimeZone.getTimeZone("Pacific/Honolulu"))
             vm.send()

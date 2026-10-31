@@ -99,7 +99,7 @@ internal fun FeedContent(
         }
         state.errorPresentation?.let { presentation ->
             ErrorMessage(
-                presentation, "Не получилось загрузить операции. Попробуйте ещё раз",
+                presentation, "Не получилось загрузить операции",
                 modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
                 onRetry = if (state.moreFailed) onLoadMore.takeIf { state.moreRetryReady } else onRetry.takeIf { state.retryReady },
             )

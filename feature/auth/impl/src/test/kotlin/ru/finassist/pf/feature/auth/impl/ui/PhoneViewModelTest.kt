@@ -147,7 +147,7 @@ class PhoneViewModelTest {
     @Test fun `a retry of the same number reuses the key, a new number gets a new one`() {
         auth.failure = AppError.Offline()
         val vm = submitted()
-        assertEquals("Нет сети — проверьте интернет и повторите", vm.state.value.error)
+        assertEquals("Не получилось отправить номер", vm.state.value.error)
         assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertFalse(vm.state.value.busy)
         assertTrue(tracked.isEmpty(), "a failed request is not tracked")

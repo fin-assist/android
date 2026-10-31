@@ -91,7 +91,7 @@ internal fun DetailContent(
         state.errorPresentation?.let { presentation ->
             ErrorMessage(
                 presentation,
-                if (state.notFound) "Операции больше нет. Возможно, удалили загрузку, в которой она была" else "Не получилось загрузить. Попробуйте ещё раз",
+                if (state.notFound) "Операции больше нет. Возможно, удалили загрузку, в которой она была" else "Не получилось загрузить",
                 modifier = Modifier.padding(d.space4),
                 onRetry = if (state.notFound || !state.retryReady) null else onRetry,
             )

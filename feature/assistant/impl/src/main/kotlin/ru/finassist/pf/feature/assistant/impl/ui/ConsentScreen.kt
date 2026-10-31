@@ -188,7 +188,7 @@ class AiConsentViewModel @Inject constructor(
                     documentGate.clear() // the known changed-document scenario permits a fresh document read, not an old PUT
                     loadDocument()
                 } else {
-                    val text = if (e is AppError.Offline) "Нет сети — проверьте интернет и повторите" else "Не получилось сохранить. Попробуйте ещё раз"
+                    val text = if (e is AppError.Offline) "Не получилось сохранить согласие" else "Не получилось сохранить. Попробуйте ещё раз"
                     _state.update { it.copy(busy = false, formError = text, errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
                 }
             }

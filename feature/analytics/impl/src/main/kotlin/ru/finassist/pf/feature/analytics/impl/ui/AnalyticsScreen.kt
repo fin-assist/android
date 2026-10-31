@@ -117,7 +117,7 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
             ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4))
         }
         state.errorPresentation?.let { presentation ->
-            ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику. Попробуйте ещё раз",
+            ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику",
                 modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.load() }))
         }
         when {

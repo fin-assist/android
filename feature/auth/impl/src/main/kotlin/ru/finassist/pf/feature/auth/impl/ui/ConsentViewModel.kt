@@ -96,7 +96,7 @@ class ConsentViewModel @Inject constructor(
                 when {
                     e is AppError.Unauthorized || (e is AppError.Api && (e.httpStatus == 401 || e.code == ErrorCodes.CONSENT_OUTDATED || e.code == ErrorCodes.CONSENT_REQUIRED)) ->
                         expire()
-                    e is AppError.Offline -> _state.update { it.copy(formError = "Нет сети — проверьте интернет и повторите") }
+                    e is AppError.Offline -> _state.update { it.copy(formError = "Не получилось создать аккаунт") }
                     else -> _state.update { it.copy(formError = "Не получилось создать аккаунт. Попробуйте ещё раз") }
                 }
             } finally {

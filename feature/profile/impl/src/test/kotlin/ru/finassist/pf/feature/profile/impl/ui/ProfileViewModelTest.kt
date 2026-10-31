@@ -94,6 +94,7 @@ class ProfileViewModelTest {
         var updateFailure: AppError? = null
         var updateReply: (suspend (ProfileUpdate) -> Profile)? = null
         var revokeFailure: AppError? = null
+        var revokeGate: CompletableDeferred<Unit>? = null
         var revokes = 0
 
         override suspend fun getProfile(): Profile {
@@ -112,6 +113,7 @@ class ProfileViewModelTest {
         override suspend fun grantAssistantConsent(grant: AssistantConsentGrant): Profile = error("unused")
         override suspend fun revokeAssistantConsent() {
             revokes++
+            revokeGate?.await()
             revokeFailure?.let { throw it }
         }
     }
@@ -631,11 +633,31 @@ class ProfileViewModelTest {
         assertFalse(vm.state.value.consentBusy)
     }
 
+    @Test fun `retrying a failed revoke clears its stale outcome before success`() {
+        val vm = loaded()
+        profileApi.revokeFailure = AppError.Offline()
+        vm.revokeConsent()
+        assertEquals("Согласие не отозвано", vm.state.value.snackbar)
+        assertEquals(ProfileErrorOrigin.CONSENT, vm.state.value.errorOrigin)
+        val pending = CompletableDeferred<Unit>()
+        profileApi.revokeFailure = null
+        profileApi.revokeGate = pending
+        vm.revokeConsent()
+        assertTrue(vm.state.value.consentBusy)
+        assertNull(vm.state.value.snackbar)
+        assertNull(vm.state.value.errorPresentation)
+        pending.complete(Unit)
+        assertEquals(false, vm.state.value.profile?.assistantConsent?.granted)
+        assertFalse(vm.state.value.consentBusy)
+        assertNull(vm.state.value.snackbar)
+        assertNull(vm.state.value.errorPresentation)
+    }
+
     @Test fun `a failed revoke keeps the consent and says why`() {
         val vm = loaded()
         profileApi.revokeFailure = AppError.Offline()
         vm.revokeConsent()
-        assertEquals("Нет сети — согласие не отозвано", vm.state.value.snackbar)
+        assertEquals("Согласие не отозвано", vm.state.value.snackbar)
         assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertEquals(ProfileErrorOrigin.CONSENT, vm.state.value.errorOrigin)
         assertEquals(true, vm.state.value.profile?.assistantConsent?.granted)

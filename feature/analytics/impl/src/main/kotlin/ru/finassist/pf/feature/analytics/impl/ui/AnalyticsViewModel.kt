@@ -235,7 +235,7 @@ class AnalyticsViewModel @Inject constructor(
                         errorPresentation = if (e is AppError.Offline && it.data == null) null else e.presentation, requestRetryable = e.requestRetryable,
                         offline = it.data == null,
                         snackbar = if (quiet || it.data == null) it.snackbar
-                        else if (e is AppError.Offline) "Нет сети — показываем прежний период" else "Не получилось обновить. Попробуйте ещё раз",
+                        else if (e is AppError.Offline) "Прежний период сохранён" else "Не получилось обновить. Попробуйте ещё раз",
                     )
                 }
             }
@@ -366,7 +366,7 @@ class AnalyticsViewModel @Inject constructor(
                 reloadChangedData()
             } catch (e: AppError) {
                 gate.record(e)
-                _state.update { it.copy(errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Нет сети — не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
+                _state.update { it.copy(errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
             }
         }
     }

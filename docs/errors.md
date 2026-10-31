@@ -33,8 +33,12 @@ capabilities or a denied system observation use the ordinary internet hint. This
 neither the server route nor the cause of a failure; a per-app VPN says nothing about a browser.
 Connection notices preserve the feature's controlled outcome text (for example, consent not revoked,
 account not deleted, category unchanged) below the common connection title and next to the local hint.
-Full-screen states have no mutation outcome. Profile theme retries clear only an error whose typed origin
+Outcome strings name only the result, without a network diagnosis or recovery advice; the common local
+hint owns the advice. The native UI regression uses the actual profile outcome constant, not a test-only
+substitute. Full-screen states have no mutation outcome. Profile theme retries clear only an error whose typed origin
 is THEME; unrelated read, limit, statement or consent errors keep their presentation and retry context.
+A new consent-revoke attempt clears its own CONSENT outcome before dispatch, and a new statement-delete
+attempt clears the previous failed-delete snackbar. A successful mutation cannot retain an old failure outcome.
 Assistant consent document/PUT errors use this same presentation. Chat send/stream failures keep their
 existing offline composer panel, which uses the common local hint; history SSE drops retain automatic
 reopening and do not produce a terminal offline notice.

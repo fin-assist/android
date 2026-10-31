@@ -29,6 +29,7 @@ import ru.finassist.pf.feature.applock.api.AppLock
 import ru.finassist.pf.feature.applock.api.BiometricAvailability
 import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionRepository
+import ru.finassist.pf.feature.profile.impl.domain.ProfileTexts
 import ru.finassist.pf.feature.profile.impl.data.TimeZoneChecker
 import ru.finassist.pf.feature.statements.api.StatementsRepository
 import javax.inject.Inject
@@ -200,7 +201,7 @@ class ProfileViewModel @Inject constructor(
             }.onFailure { failure ->
                 if (generation == themeGeneration && failure is AppError) {
                     themeRetryGate.record(failure)
-                    _state.update { it.copy(errorPresentation = failure.presentation, errorOrigin = ProfileErrorOrigin.THEME, snackbar = "Не получилось сохранить тему. Попробуйте ещё раз") }
+                    _state.update { it.copy(errorPresentation = failure.presentation, errorOrigin = ProfileErrorOrigin.THEME, snackbar = "Не получилось сохранить тему") }
                 }
             }
         }
@@ -210,7 +211,11 @@ class ProfileViewModel @Inject constructor(
     fun revokeConsent() {
         if (!consentRetryGate.isReady()) return
         viewModelScope.launch {
-            _state.update { it.copy(consentBusy = true, errorPresentation = null, errorOrigin = null) }
+            _state.update {
+                if (it.errorOrigin == ProfileErrorOrigin.CONSENT) {
+                    it.copy(consentBusy = true, errorPresentation = null, errorOrigin = null, snackbar = null)
+                } else it.copy(consentBusy = true)
+            }
             try {
                 profileApi.revokeAssistantConsent()
                 changedProfileContext()
@@ -219,7 +224,7 @@ class ProfileViewModel @Inject constructor(
                 _state.update { s -> s.copy(consentBusy = false, profile = s.profile?.let { p -> p.assistantConsent?.let { c -> p.withConsent(c.copy(granted = false)) } ?: p }) }
             } catch (e: AppError) {
                 consentRetryGate.record(e)
-                _state.update { it.copy(consentBusy = false, errorPresentation = e.presentation, errorOrigin = ProfileErrorOrigin.CONSENT, snackbar = if (e is AppError.Offline) "Нет сети — согласие не отозвано" else "Не получилось. Попробуйте ещё раз") }
+                _state.update { it.copy(consentBusy = false, errorPresentation = e.presentation, errorOrigin = ProfileErrorOrigin.CONSENT, snackbar = if (e is AppError.Offline) ProfileTexts.CONSENT_NOT_REVOKED else "Не получилось. Попробуйте ещё раз") }
             }
         }
     }

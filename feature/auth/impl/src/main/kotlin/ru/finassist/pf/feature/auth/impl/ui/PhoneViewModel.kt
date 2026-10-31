@@ -257,7 +257,7 @@ class PhoneViewModel @Inject constructor(
         "Слишком много попыток" + (retryAt?.let { ". ${retryTimeText(it)}" } ?: "")
 
     private fun errorText(e: AppError): String = when (e) {
-        is AppError.Offline -> "Нет сети — проверьте интернет и повторите"
+        is AppError.Offline -> "Не получилось отправить номер"
         is AppError.RateLimited -> rateLimitText(e.retryAt)
         // The server checks the format too (api.md 1.1): a violation at `phone`, whatever its code, is the field's error.
         is AppError.Api -> if (e.code == ErrorCodes.VALIDATION_ERROR && e.details.any { it.field == "phone" }) {

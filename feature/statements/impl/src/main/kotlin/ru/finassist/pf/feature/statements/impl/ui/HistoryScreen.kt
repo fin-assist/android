@@ -184,7 +184,7 @@ class HistoryViewModel @Inject constructor(
         val deleteGate = deleteGates.getOrPut(upload.uploadId) { RequestRetryGate(elapsedClock) }
         if (!deleteGate.isReady()) return
         viewModelScope.launch {
-            _state.update { it.copy(deleting = true, errorPresentation = null) }
+            _state.update { it.copy(deleting = true, errorPresentation = null, snackbar = null) }
             try {
                 api.deleteStatement(upload.uploadId)
                 listDataChanged()
@@ -195,7 +195,7 @@ class HistoryViewModel @Inject constructor(
             } catch (e: AppError) {
                 deleteGate.record(e)
                 _state.update {
-                    it.copy(deleting = false, confirmDelete = null, errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Нет сети — загрузка не удалена" else "Не получилось удалить. Попробуйте ещё раз")
+                    it.copy(deleting = false, confirmDelete = null, errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Загрузка не удалена" else "Не получилось удалить. Попробуйте ещё раз")
                 }
             }
         }
@@ -255,7 +255,7 @@ internal fun HistoryContent(
                     modifier = Modifier.padding(d.space4))
             }
             state.errorPresentation?.let { presentation ->
-                ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить историю. Попробуйте ещё раз",
+                ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить историю",
                     modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else onRetry)
             }
             when {

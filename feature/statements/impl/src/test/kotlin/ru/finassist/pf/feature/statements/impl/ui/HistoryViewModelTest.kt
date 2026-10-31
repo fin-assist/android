@@ -405,12 +405,34 @@ class HistoryViewModelTest {
         vm.load()
         vm.askDelete(upload("u1"))
         vm.delete()
-        assertEquals("Нет сети — загрузка не удалена", vm.state.value.snackbar)
+        assertEquals("Загрузка не удалена", vm.state.value.snackbar)
         assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertNull(vm.state.value.confirmDelete)
         assertFalse(vm.state.value.deleting)
         assertEquals(1, api.listCalls)
         assertTrue(repoEvents.isEmpty())
+    }
+
+    @Test fun `retrying a deletion clears its old failed outcome while pending`() {
+        api.listOutcomes += done
+        api.deleteFailure = AppError.Offline()
+        val vm = newVm()
+        vm.load()
+        vm.askDelete(upload("u1")); vm.delete()
+        assertEquals("Загрузка не удалена", vm.state.value.snackbar)
+        val pending = CompletableDeferred<Unit>()
+        api.deleteFailure = null
+        api.deleteGate = pending
+        vm.askDelete(upload("u1")); vm.delete()
+        assertTrue(vm.state.value.deleting)
+        assertNull(vm.state.value.snackbar)
+        assertNull(vm.state.value.errorPresentation)
+        api.listOutcomes.clear()
+        api.listOutcomes += StatementsList(uploads = emptyList())
+        pending.complete(Unit)
+        assertFalse(vm.state.value.deleting)
+        assertEquals("Загрузка удалена, аналитика пересчитана", vm.state.value.snackbar)
+        assertEquals(emptyList(), vm.state.value.list?.uploads)
     }
 
     @Test fun `a failed delete offers to try again`() {

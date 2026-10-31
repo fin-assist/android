@@ -111,7 +111,7 @@ class AiConsentViewModelTest {
         val vm = AiConsentViewModel(auth, profile, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
         vm.setAccepted(true)
         vm.grant()
-        assertEquals("Нет сети — проверьте интернет и повторите", vm.state.value.formError)
+        assertEquals("Не получилось сохранить согласие", vm.state.value.formError)
         assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertFalse(vm.state.value.busy)
         assertFalse(vm.state.value.granted)
