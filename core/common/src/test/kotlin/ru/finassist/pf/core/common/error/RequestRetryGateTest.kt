@@ -82,4 +82,77 @@ class RequestRetryGateTest {
         assertFalse(gate.isReady()); assertTrue(gate.isExplicitlyForbidden())
     }
 
+    @Test fun `changed input drops refusal without restarting its captured wait`() = runTest {
+        val gate = RequestRetryGate(ElapsedClock { testScheduler.currentTime })
+        gate.record(AppError.RateLimited(null, 3, ErrorResponseInfo("RATE_LIMITED", 429,
+            requestRetryable = false, retryAfterSeconds = 3, timing = ResponseTiming(receivedElapsedMillis = 0))))
+        advanceTimeBy(1000)
+        gate.clearOriginalRefusal()
+        assertFalse(gate.isExplicitlyForbidden())
+        assertEquals(2000L, gate.remainingMillis())
+        val updates = async { gate.readiness.take(2).toList() }
+        runCurrent()
+        advanceTimeBy(1999)
+        gate.clearOriginalRefusal()
+        assertFalse(gate.isReady())
+        advanceTimeBy(1); runCurrent()
+        assertEquals(listOf(false, true), updates.await())
+    }
+
+    @Test fun `changed input preserves Date anchored and unanchored absolute waits`() {
+        var elapsed = 100L
+        val gate = RequestRetryGate(ElapsedClock { elapsed })
+        val target = OffsetDateTime.parse("2026-10-25T10:00:05Z")
+        gate.record(AppError.RateLimited(target, response = ErrorResponseInfo("RATE_LIMITED", 429,
+            requestRetryable = false, timing = ResponseTiming(Instant.parse("2026-10-25T10:00:00Z"), 100))))
+        elapsed = 1100
+        gate.clearOriginalRefusal()
+        assertEquals(4000L, gate.remainingMillis())
+        assertFalse(gate.isReady())
+        gate.record(AppError.RateLimited(target, response = ErrorResponseInfo("RATE_LIMITED", 429,
+            requestRetryable = false)))
+        gate.clearOriginalRefusal()
+        elapsed = 60000
+        assertFalse(gate.isExplicitlyForbidden())
+        assertFalse(gate.isReady(), "without Date the absolute wait remains unknown")
+    }
+
+    @Test fun `stale input adds only endpoint wait and cannot shorten a captured restriction`() {
+        var elapsed = 0L
+        val gate = RequestRetryGate(ElapsedClock { elapsed })
+        gate.record(AppError.RateLimited(null, 30, ErrorResponseInfo("RATE_LIMITED", 429,
+            requestRetryable = false, retryAfterSeconds = 30, timing = ResponseTiming(receivedElapsedMillis = 0))))
+        elapsed = 1000
+        gate.recordEndpointWait(AppError.RateLimited(null, 5))
+        assertTrue(gate.isExplicitlyForbidden(), "stale reply cannot clear the current input refusal")
+        assertEquals(29000L, gate.remainingMillis())
+        gate.clearOriginalRefusal()
+        gate.recordEndpointWait(AppError.Offline())
+        gate.recordEndpointWait(AppError.RateLimited(null, 0))
+        assertEquals(29000L, gate.remainingMillis())
+        gate.recordEndpointWait(AppError.RateLimited(null, 60, ErrorResponseInfo("RATE_LIMITED", 429,
+            requestRetryable = false, retryAfterSeconds = 60, timing = ResponseTiming(receivedElapsedMillis = 1000))))
+        assertFalse(gate.isExplicitlyForbidden(), "a different input's false does not transfer")
+        assertEquals(60000L, gate.remainingMillis())
+        elapsed = 60999
+        assertFalse(gate.isReady())
+        elapsed = 61000
+        assertTrue(gate.isReady())
+    }
+
+    @Test fun `unknown endpoint wait cannot be relaxed by a later anchored or nested reply`() {
+        var elapsed = 0L
+        val gate = RequestRetryGate(ElapsedClock { elapsed })
+        gate.recordEndpointWait(AppError.RateLimited(null, 3))
+        gate.recordEndpointWait(AppError.RateLimited(OffsetDateTime.parse("2026-10-25T10:00:05Z")))
+        gate.recordEndpointWait(AppError.RateLimited(null, 1))
+        gate.clearOriginalRefusal()
+        elapsed = 60000
+        assertFalse(gate.isReady())
+        gate.clear()
+        gate.recordEndpointWait(AppError.Api("MAINTENANCE", 503, response = ErrorResponseInfo("MAINTENANCE", 503,
+            requestRetryable = false, retryAfterSeconds = 30, context = ErrorContext.RESULT_EVENT)))
+        assertTrue(gate.isReady(), "nested result advice is not an endpoint request restriction")
+    }
+
 }

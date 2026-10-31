@@ -3,6 +3,9 @@ package ru.finassist.pf.feature.assistant.impl.ui
 import ru.finassist.pf.core.common.error.ErrorPresentation
 import ru.finassist.pf.core.common.error.ErrorSeverity
 import ru.finassist.pf.core.common.error.UserMessage
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -30,6 +33,15 @@ class AiConsentDesignCheckTest {
     @Test fun aiConsent() = capture("AiConsent")
 
     @Test fun aiConsentDark() = capture("AiConsentDark", dark = true)
+
+    /** Short viewport and larger text keep the checkbox/error and fixed action gap in scrollable content. */
+    @Test fun shortViewportLargeText() = DesignCheck.capture("AiConsentLargeText", heightDp = 640, fullHeight = false) {
+        val density = LocalDensity.current
+        CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.5f)) {
+            AiConsentContent(state.copy(error = CONSENT_REQUIRED, formError = "Не получилось сохранить согласие"),
+                onBack = {}, onAccepted = {}, onOpenDocument = {}, onGrant = {})
+        }
+    }
 
     /** «Продолжить» without the checkbox. */
     @Test fun aiConsentError() = capture(

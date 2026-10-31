@@ -29,13 +29,14 @@ class ProfileDesignCheckTest {
         state: ProfileUiState = this.state,
         popups: Boolean = false,
         environment: ConnectionEnvironment = ConnectionEnvironment.UNKNOWN,
-    ) = DesignCheck.capture(name, dark = dark, heightDp = 984, tab = 2, popups = popups) {
+    ) = DesignCheck.capture(name, dark = dark, heightDp = 984, tab = 3, popups = popups) {
         CompositionLocalProvider(LocalConnectionEnvironmentReader provides ConnectionEnvironmentReader { environment }) {
             ProfileContent(
                 state, actions, onRetry = {}, onRevokeConsent = {}, onThemeSheet = {}, onTheme = {}, onSupport = {},
                 onAskLogout = {}, onLogout = {}, onSnackbarShown = {}, versionName = "0.1.0",
             )
         }
+
     }
 
     @Test fun offlineVpn() = capture("ProfileOfflineVpn", state = state.copy(loading = false, profile = null, offline = true), environment = ConnectionEnvironment.VPN)

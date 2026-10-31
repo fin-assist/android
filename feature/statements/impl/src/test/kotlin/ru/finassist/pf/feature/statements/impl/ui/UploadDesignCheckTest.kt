@@ -25,8 +25,8 @@ class UploadDesignCheckTest {
     private fun t(s: String) = OffsetDateTime.parse(s)
 
     private val config = ImportConfig(
-        downloadUrl = "https://www.tbank.ru/login/",
-        loginUrl = "https://www.tbank.ru/login/",
+        downloadUrl = "https://tbank-online.com/login",
+        loginUrl = "https://tbank-online.com/login",
         maxFileSizeBytes = 10L * 1024 * 1024,
         acceptedFormats = listOf("OFX"),
         suggestedPeriod = DateRange(t("2025-09-26T00:00:00+03:00"), t("2026-09-26T00:00:00+03:00")),

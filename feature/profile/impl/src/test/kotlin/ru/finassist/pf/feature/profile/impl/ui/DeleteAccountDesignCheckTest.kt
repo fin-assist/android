@@ -17,7 +17,7 @@ import ru.finassist.pf.core.screenshot.DesignCheck
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class DeleteAccountDesignCheckTest {
-    private fun capture(name: String, state: DeleteUiState, environment: ConnectionEnvironment = ConnectionEnvironment.UNKNOWN) = DesignCheck.capture(name, popups = true, tab = 2) {
+    private fun capture(name: String, state: DeleteUiState, environment: ConnectionEnvironment = ConnectionEnvironment.UNKNOWN) = DesignCheck.capture(name, popups = true, tab = 3) {
         CompositionLocalProvider(LocalConnectionEnvironmentReader provides ConnectionEnvironmentReader { environment }) {
             ProfileContent(
                 ProfileDesignFixtures.state, ProfileDesignFixtures.actions, onRetry = {}, onRevokeConsent = {}, onThemeSheet = {},
@@ -25,6 +25,7 @@ class DeleteAccountDesignCheckTest {
                 deleteState = state,
             )
         }
+
     }
 
     @Test fun deleteAccountDialog() = capture("DeleteAccountDialog", DeleteUiState(dialog = true))

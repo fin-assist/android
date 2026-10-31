@@ -59,7 +59,7 @@ class ChatViewModelTest {
 
     @Test fun `the limit hit without resets_at resets at the app's now, not the device's`() {
         api.askFailure = AppError.Api(ErrorCodes.LIMIT_EXCEEDED, 429)
-        val vm = ChatViewModel(SavedStateHandle(), api, NoopTracker, clock, ElapsedClock { 0L })
+        val vm = ChatViewModel(SavedStateHandle(), api, NoopTracker, clock, ElapsedClock { 0L }, ConsentProfileFake())
         vm.setDraft("Сколько я трачу на такси?")
         vm.send()
         assertEquals(AssistantLimit(0, 5, now), vm.state.value.limit)
