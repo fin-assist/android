@@ -2,6 +2,7 @@ appId: ru.finassist.pf.mock.e2e
 name: Аналитика — последние 12 и 3 месяца по покрытию выписки
 tags:
   - analytics
+  - mock-only
 ---
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/fast_login.yaml
@@ -30,8 +31,33 @@ tags:
 - extendedWaitUntil:
     visible: "Без переводов"
     timeout: 10000
+# A failed singleton switch keeps the successful year selection and mode until explicit retry.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
 - tapOn:
     id: "analytics.period.rolling_quarter"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.retry"
+    timeout: 15000
+- assertVisible:
+    id: "analytics.period.rolling_year"
+    checked: true
+- assertVisible: "(?s).*2.октября.2025.*1.октября.2026.*"
+- assertVisible: "Без переводов"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- assertVisible:
+    id: "analytics.period.retry"
+- assertVisible:
+    id: "analytics.period.rolling_year"
+    checked: true
+- tapOn:
+    id: "analytics.period.retry"
 - extendedWaitUntil:
     visible: "(?s).*2.июля.*1.октября.2026.*"
     timeout: 15000

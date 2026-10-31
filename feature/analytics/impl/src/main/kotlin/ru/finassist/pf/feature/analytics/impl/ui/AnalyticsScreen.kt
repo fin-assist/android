@@ -367,7 +367,6 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
         onAction = { block, action -> vm.onAction(block, action, navigate) },
         onSelectAnalyticsPeriod = { block, action -> vm.onAction(block, action, navigate) },
         expanded = state.expanded,
-        onSelectAnalyticsPeriod = { block, action -> vm.onAction(block, action, navigate) },
         onToggleExpanded = vm::toggleExpanded,
         decorate = { block, content ->
             // The coachmark lies over the card (mockup `AnalyticsHintCategories`).

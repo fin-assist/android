@@ -21,54 +21,64 @@
         {
             "id": "tiles",
             "type": "tile_group",
-            "alt_text": "Доходы минус расходы 2 000 ₽, Расходы 1 000 ₽, Расходы в день 10,86 ₽, Доходы 3 000 ₽",
+            "v": 2,
+            "alt_text": "Расходы за период 1 000 ₽, Доходы за период 3 000 ₽, Доходы минус расходы 2 000 ₽, Средние расходы в день 10,86 ₽",
             "data": {
-                "tiles": [
+                "groups": [
                     {
-                        "id": "balance",
-                        "title": "Доходы минус расходы",
-                        "value": 200000.0,
-                        "value_kind": "amount",
-                        "caption": "67% дохода · по выписке"
-                    },
-                    {
-                        "id": "expense",
-                        "title": "Расходы",
-                        "value": 100000.0,
-                        "value_kind": "amount",
-                        "caption": "31 июля — 30 октября",
-                        "action": {
-                            "type": "open_operations",
-                            "filter": {
-                                "from": "2026-07-31T00:00:00+03:00",
-                                "to": "2026-10-31T00:00:00+03:00",
-                                "kind": "expense",
-                                "transfer_mode": "with"
+                        "tiles": [
+                            {
+                                "id": "expense",
+                                "title": "Расходы за период",
+                                "value": 100000.0,
+                                "value_kind": "amount",
+                                "caption": "31 июля — 30 октября",
+                                "action": {
+                                    "type": "open_operations",
+                                    "filter": {
+                                        "from": "2026-07-31T00:00:00+03:00",
+                                        "to": "2026-10-31T00:00:00+03:00",
+                                        "kind": "expense",
+                                        "transfer_mode": "with"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "income",
+                                "title": "Доходы за период",
+                                "value": 300000.0,
+                                "value_kind": "amount",
+                                "show_plus": true,
+                                "action": {
+                                    "type": "open_operations",
+                                    "filter": {
+                                        "from": "2026-07-31T00:00:00+03:00",
+                                        "to": "2026-10-31T00:00:00+03:00",
+                                        "kind": "income",
+                                        "transfer_mode": "with"
+                                    }
+                                }
+                            },
+                            {
+                                "id": "balance",
+                                "title": "Доходы минус расходы",
+                                "value": 200000.0,
+                                "value_kind": "amount",
+                                "caption": "67% дохода · по выписке"
                             }
-                        }
+                        ]
                     },
                     {
-                        "id": "daily_expense",
-                        "title": "Расходы в день",
-                        "value": 1086.0,
-                        "value_kind": "amount",
-                        "caption": "в среднем за июль — октябрь"
-                    },
-                    {
-                        "id": "income",
-                        "title": "Доходы",
-                        "value": 300000.0,
-                        "value_kind": "amount",
-                        "show_plus": true,
-                        "action": {
-                            "type": "open_operations",
-                            "filter": {
-                                "from": "2026-07-31T00:00:00+03:00",
-                                "to": "2026-10-31T00:00:00+03:00",
-                                "kind": "income",
-                                "transfer_mode": "with"
+                        "tiles": [
+                            {
+                                "id": "daily_expense",
+                                "title": "Средние расходы в день",
+                                "value": 1086.0,
+                                "value_kind": "amount",
+                                "caption": "По дням с данными не позже сегодня; пропуски не учитываются\nв среднем за июль — октябрь"
                             }
-                        }
+                        ],
+                        "title": "Дополнительные показатели"
                     }
                 ]
             }

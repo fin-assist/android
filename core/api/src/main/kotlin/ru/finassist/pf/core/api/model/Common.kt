@@ -114,10 +114,11 @@ data class AnalyticsParams(
 ) {
     /** Unknown types and mismatched keys cannot be submitted as a known analytics selection. */
     val isValidSelection: Boolean get() = PeriodKey.isValid(date.value) && when (period) {
-        PeriodTypeCode.MONTH -> date.type == ru.finassist.pf.core.common.time.PeriodType.MONTH
-        PeriodTypeCode.QUARTER -> date.type == ru.finassist.pf.core.common.time.PeriodType.QUARTER
-        PeriodTypeCode.YEAR -> date.type == ru.finassist.pf.core.common.time.PeriodType.YEAR
+        PeriodTypeCode.MONTH -> date.isCalendar && date.type == ru.finassist.pf.core.common.time.PeriodType.MONTH
+        PeriodTypeCode.QUARTER -> date.isCalendar && date.type == ru.finassist.pf.core.common.time.PeriodType.QUARTER
+        PeriodTypeCode.YEAR -> date.isCalendar && date.type == ru.finassist.pf.core.common.time.PeriodType.YEAR
         PeriodTypeCode.ALL_TIME -> date == PeriodKey.ALL_TIME
+        PeriodTypeCode.ROLLING_YEAR, PeriodTypeCode.ROLLING_QUARTER -> date.value == period.code
         PeriodTypeCode.UNKNOWN -> false
     }
 }
