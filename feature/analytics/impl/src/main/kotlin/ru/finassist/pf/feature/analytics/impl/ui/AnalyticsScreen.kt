@@ -144,13 +144,13 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
                 }
                 state.errorPresentation != null && a == null -> Unit
                 state.offline -> ConnectionFailureState(modifier = Modifier.testTag(AnalyticsTags.OFFLINE)) {
-                    PfButton("Повторить", onClick = { vm.load() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+                    PfButton("Повторить", onClick = { vm.refresh() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
                 }
                 state.preparationTimedOut -> PfEmptyState(
                     PfIcons.BAR_CHART, "Аналитика ещё готовится", "Выписка загружена. Попробуйте обновить показатели чуть позже",
                     modifier = Modifier.testTag(AnalyticsTags.PREPARATION_TIMEOUT),
                 ) {
-                    PfButton("Повторить", onClick = { vm.load() }, enabled = state.retryReady,
+                    PfButton("Повторить", onClick = { vm.refresh() }, enabled = state.retryReady,
                         variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
                 }
                 a == null || !a.hasData -> Column(

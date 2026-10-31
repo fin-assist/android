@@ -55,6 +55,33 @@ class AnalyticsRetryCallbackTest {
         }
     }
 
+    @Test fun `fullscreen offline retry refreshes the shown context`() = assertFullscreenRetry(
+        AnalyticsUiState(loading = false, offline = true, blocks = AnalyticsBlocks(),
+            periodChangeErrorPresentation = ErrorPresentation(), periodChangeRetryReady = false),
+    )
+
+    @Test fun `fullscreen preparation timeout retry refreshes the shown context`() = assertFullscreenRetry(
+        AnalyticsUiState(loading = false, preparationTimedOut = true, blocks = AnalyticsBlocks(),
+            periodChangeErrorPresentation = ErrorPresentation(), periodChangeRetryReady = false),
+    )
+
+    private fun assertFullscreenRetry(state: AnalyticsUiState) {
+        val handlers = Handlers()
+        compose.setContent {
+            CompositionLocalProvider(LocalInspectionMode provides true) {
+                PfTheme {
+                    AnalyticsContent(state, AnalyticsActions({}, {}, {}, { _, _ -> }, null), handlers)
+                }
+            }
+        }
+        compose.onNodeWithTag(AnalyticsTags.RETRY).performClick()
+        compose.runOnIdle {
+            assertEquals(1, handlers.refreshes)
+            assertEquals(0, handlers.loads)
+            assertEquals(0, handlers.periodRetries)
+        }
+    }
+
     @Test fun `refresh indicator tag follows the actual read lifecycle`() {
         val state = mutableStateOf(AnalyticsUiState(loading = false, refreshing = true, blocks = AnalyticsBlocks()))
         compose.setContent {
