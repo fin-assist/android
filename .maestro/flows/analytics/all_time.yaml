@@ -10,7 +10,10 @@ tags:
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
-    visible: "Октябрь 2026"
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 15000
 # Bounded horizontal reveal: on wide screens this clamps without moving the row.
 - swipe:
@@ -25,8 +28,9 @@ tags:
       checked: true
     timeout: 15000
 - assertVisible:
-    id: "ds.period.pick"
     text: "За всё время.*"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "analytics.period.all_time.range"
     text: ".*2025.*2026.*"
@@ -36,8 +40,9 @@ tags:
     text: "Без переводов.*"
 - extendedWaitUntil:
     visible:
-      id: "analytics.transfers"
       text: "Без переводов.*"
+      childOf:
+        id: "analytics.transfers"
     timeout: 10000
 # Calendar selection is restored; a failed all-time transition retains that exact screen.
 - swipe:
@@ -47,7 +52,10 @@ tags:
 - tapOn:
     id: "ds.segment.0"
 - extendedWaitUntil:
-    visible: "Октябрь 2026"
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - runFlow:
     file: ../../subflows/config.yaml
@@ -64,7 +72,10 @@ tags:
     visible:
       id: "analytics.period.retry"
     timeout: 15000
-- assertVisible: "Октябрь 2026"
+- assertVisible:
+    text: "Октябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - swipe:
     from:
       id: "analytics.period.types"
@@ -84,8 +95,9 @@ tags:
       checked: true
     timeout: 15000
 - assertVisible:
-    id: "analytics.transfers"
     text: "Без переводов.*"
+    childOf:
+      id: "analytics.transfers"
 - assertNotVisible:
     id: "analytics.period.retry"
 # An older source extends the existing all-time tab; it is not a rolling twelve-month view.
@@ -126,8 +138,9 @@ tags:
     id: "analytics.period.all_time"
     checked: true
 - assertVisible:
-    id: "analytics.transfers"
     text: "Без переводов.*"
+    childOf:
+      id: "analytics.transfers"
 - scrollUntilVisible:
     element:
       id: "analytics.tile.expense"
@@ -170,6 +183,10 @@ tags:
 - back
 - tapOn:
     id: "ds.tab.analytics"
+- scrollUntilVisible:
+    element:
+      id: "analytics.period.all_time.range"
+    direction: UP
 - extendedWaitUntil:
     visible:
       id: "analytics.period.all_time.range"

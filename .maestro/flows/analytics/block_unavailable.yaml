@@ -20,14 +20,22 @@ tags:
 - tapOn:
     id: "ds.period.prev"
 - extendedWaitUntil:
-    visible: "Сентябрь 2026"
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - scrollUntilVisible:
     element:
+      text: "Не получилось посчитать — обновите экран позже"
+      childOf:
+        id: "analytics.block.expense_categories"
+- assertVisible:
+    text: "Не получилось посчитать — обновите экран позже"
+    childOf:
       id: "analytics.block.expense_categories"
-- assertVisible: "Не получилось посчитать — обновите экран позже"
 - assertNotVisible:
     id: "analytics.expense_category"
 - scrollUntilVisible:
     element:
-      id: "analytics.block.income_categories"
+      id: "analytics.income_category"

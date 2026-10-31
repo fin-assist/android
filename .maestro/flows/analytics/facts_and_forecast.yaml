@@ -50,16 +50,22 @@ tags:
 - tapOn:
     id: "statements.result.analytics"
 - extendedWaitUntil:
-    visible: "Октябрь 2026"
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 15000
 - assertVisible:
     id: "analytics.tile.expense"
 - scrollUntilVisible:
     element:
-      id: "analytics.tile.forecast"
+      text: ".*Посчитаем с 10.октября.*"
+      childOf:
+        id: "analytics.tile.forecast"
 - assertVisible:
-    id: "analytics.tile.forecast"
     text: ".*Посчитаем с 10.октября.*"
+    childOf:
+      id: "analytics.tile.forecast"
 # Restore the controls at the top before changing the period type.
 - scrollUntilVisible:
     element:
@@ -71,24 +77,36 @@ tags:
 - tapOn:
     id: "ds.segment.2"
 - extendedWaitUntil:
-    visible: "2026"
+    visible:
+      text: "2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - scrollUntilVisible:
     element:
-      id: "analytics.tile.expense"
+      text: "^1[ \u00a0\u202f]000[ \u00a0\u202f]₽$"
+      childOf:
+        id: "analytics.tile.expense"
 - assertVisible:
-    id: "analytics.tile.expense"
-    text: "Расходы, 1[ \\u00a0\\u202f]?000.*"
+    text: "^1[ \u00a0\u202f]000[ \u00a0\u202f]₽$"
+    childOf:
+      id: "analytics.tile.expense"
 - scrollUntilVisible:
     element:
+      text: "(?s).*есть 11.*независимо от выбранного года.*ноябрь 2025.*сентябрь 2026.*Неполные месяцы.*октябрь 2025.*октябрь 2026.*"
+      childOf:
+        id: "analytics.tile.forecast"
+- assertVisible:
+    text: "(?s).*есть 11.*независимо от выбранного года.*ноябрь 2025.*сентябрь 2026.*Неполные месяцы.*октябрь 2025.*октябрь 2026.*"
+    childOf:
       id: "analytics.tile.forecast"
-- assertVisible:
-    id: "analytics.tile.forecast"
-    text: ".*есть 11.*независимо от выбранного года.*ноябрь 2025.*сентябрь 2026.*Неполные месяцы.*октябрь 2025.*октябрь 2026.*"
 - scrollUntilVisible:
     element:
-      id: "analytics.tile.expense"
+      text: "^1[ \u00a0\u202f]000[ \u00a0\u202f]₽$"
+      childOf:
+        id: "analytics.tile.expense"
     direction: UP
+    centerElement: true
 - tapOn:
     id: "analytics.tile.expense"
 - extendedWaitUntil:
@@ -98,7 +116,8 @@ tags:
 - assertVisible:
     id: "operations.row"
 - assertVisible:
-    id: "operations.search.chip.period"
+    childOf:
+      id: "operations.search.chip.period"
     text: "1[ \\u00a0\\u202f]января.*31[ \\u00a0\\u202f]декабря"
 - assertVisible: "Магазин"
 - assertVisible: ".*1[ \\u00a0\\u202f]?000.*"
@@ -108,8 +127,9 @@ tags:
     direction: LEFT
 - assertVisible:
     id: "operations.search.chip.kind"
-    text: "Только расходы"
     checked: true
+    containsDescendants:
+      - text: "Только расходы"
 - tapOn:
     id: "ds.back"
 - scrollUntilVisible:
@@ -119,11 +139,17 @@ tags:
 - swipe:
     start: "50%, 30%"
     end: "50%, 65%"
-- assertVisible: "2026"
+- assertVisible:
+    text: "2026"
+    childOf:
+      id: "ds.period.pick"
 - tapOn:
     id: "ds.segment.0"
 - extendedWaitUntil:
-    visible: "Октябрь 2026"
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 # FIN-391 restores the previously selected October. Choose September explicitly through the picker.
 - tapOn:
@@ -138,7 +164,10 @@ tags:
     childOf:
       id: "analytics.period.option"
 - extendedWaitUntil:
-    visible: "Сентябрь 2026"
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - assertVisible:
     id: "analytics.tile.expense"
@@ -199,7 +228,10 @@ tags:
     element:
       id: "ds.period.pick"
     direction: UP
-- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "analytics.tile.expense"
 - tapOn:
@@ -232,7 +264,10 @@ tags:
 - extendedWaitUntil:
     visible: "За этот период данных нет"
     timeout: 15000
-- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "analytics.block.tiles"
 - assertNotVisible:
