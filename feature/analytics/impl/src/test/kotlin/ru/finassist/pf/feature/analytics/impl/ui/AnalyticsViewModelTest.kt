@@ -450,6 +450,36 @@ class AnalyticsViewModelTest {
         assertEquals(4L, statements.pendingImport)
     }
 
+    @Test fun `a failed recalculation poll leaves preparation and offers offline recovery`() {
+        api.answers += data(recalculating = true)
+        api.answers += AppError.Offline()
+        val vm = opened()
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertFalse(vm.state.value.loading)
+        assertTrue(vm.state.value.offline)
+        assertNull(vm.state.value.data)
+        api.answers.clear()
+        api.answers += data()
+        vm.load()
+        assertEquals(true, vm.state.value.data?.hasData)
+        assertFalse(vm.state.value.offline)
+    }
+
+    @Test fun `a refused recalculation poll stops preparation without showing obsolete numbers`() {
+        api.answers += data(recalculating = true)
+        api.answers += refused()
+        val vm = opened()
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertFalse(vm.state.value.loading)
+        assertNull(vm.state.value.data)
+        assertNotNull(vm.state.value.errorPresentation)
+        assertFalse(vm.state.value.retryReady)
+        vm.load()
+        assertEquals(2, api.requests.size)
+    }
+
     @Test fun `while the server recalculates the screen asks again every 3 seconds`() {
         api.answers += data(recalculating = true)
         api.answers += data(recalculating = false)

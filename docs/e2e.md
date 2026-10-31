@@ -866,12 +866,11 @@ it was not executed for this build-environment change. This is not a new screen 
 
 FIN-394: `AnalyticsViewModelTest` covers tab resume after import/deletion, invalidating previous totals while
 refreshing, failed refresh after deletion, and server retry restrictions. `AnalyticsUpdating*` and
-`AnalyticsPreparingWithoutData` capture the preparation states. These design checks and Maestro flows were
-authored but not executed locally. The reported SmartApe limitation for non-Russian source IP addresses is
+`AnalyticsPreparingWithoutData` capture the preparation states. The reported SmartApe limitation for non-Russian source IP addresses is
 infrastructure-specific; it cannot be reproduced by the in-process mock (VPN guidance is FIN-396).
 
 FIN-394 delayed-projection regression: repository unit tests cover user isolation, an absent Analytics
 subscriber, concurrent import acknowledgement and deletion of pending uploads. Analytics unit tests cover
 `complete` → repeated `has_data:false` → data, recalculating, polling timeout with explicit retry and server
-refusal. The in-process mock publishes analytics synchronously, so that inter-service publication race is
+refusal, and failed/forbidden polling after a recalculating response. The in-process mock publishes analytics synchronously, so that inter-service publication race is
 covered at the unit boundary rather than by a mock Maestro sleep or fake server response.

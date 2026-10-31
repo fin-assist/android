@@ -262,8 +262,9 @@ class AnalyticsViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         loading = false,
+                        data = it.data.takeUnless { previous -> previous?.state?.recalculating == true },
                         errorPresentation = e.presentation.takeUnless { e is AppError.Offline }, requestRetryable = e.requestRetryable,
-                        offline = it.data == null,
+                        offline = it.data == null || it.data.state?.recalculating == true,
                         snackbar = if (quiet || it.data == null) it.snackbar
                         else if (e is AppError.Offline) "Нет сети — показываем прежний период" else "Не получилось обновить. Попробуйте ещё раз",
                     )
