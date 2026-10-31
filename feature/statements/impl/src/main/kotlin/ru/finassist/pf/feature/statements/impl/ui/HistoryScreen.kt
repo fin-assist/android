@@ -260,7 +260,7 @@ fun HistoryScreen(
  * uploads in one card, what deleting does, «Загрузить новую выписку» at the bottom.
  */
 @Composable
-internal fun HistoryContent(
+fun HistoryContent(
     state: HistoryUiState,
     onBack: () -> Unit,
     onUpload: () -> Unit,

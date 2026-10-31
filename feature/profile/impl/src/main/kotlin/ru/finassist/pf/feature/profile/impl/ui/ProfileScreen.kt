@@ -105,7 +105,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 
 /** The profile drawn from a ready state (design-check snapshots render it without a ViewModel). */
 @Composable
-internal fun ProfileContent(
+fun ProfileContent(
     state: ProfileUiState,
     actions: ProfileActions,
     onRetry: () -> Unit,
