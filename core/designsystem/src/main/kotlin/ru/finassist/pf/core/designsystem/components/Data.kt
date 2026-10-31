@@ -455,7 +455,7 @@ fun PfPasscodeDots(filled: Int, modifier: Modifier = Modifier, length: Int = 4, 
             Text(
                 error, style = PfTheme.type.caption.copy(fontWeight = FontWeight.SemiBold), color = c.warningText,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive }.testTag(PfTestTags.PASSCODE_ERROR),
+                modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Assertive }.testTag(PfTestTags.PASSCODE_ERROR),
             )
         }
     }
@@ -463,7 +463,7 @@ fun PfPasscodeDots(filled: Int, modifier: Modifier = Modifier, length: Int = 4, 
 
 enum class BiometricKind { NONE, FINGERPRINT, FACE }
 
-/** 3×4 numeric keypad for the passcode: 72 dp round keys, regular 26 sp digits, biometric key bottom-left. */
+/** 3×4 keypad: 72 dp keys by default; callers can use smaller keys (at least 48 dp) on short viewports. */
 @Composable
 fun PfNumPad(
     onDigit: (Int) -> Unit,
@@ -471,6 +471,8 @@ fun PfNumPad(
     modifier: Modifier = Modifier,
     biometric: BiometricKind = BiometricKind.NONE,
     onBiometric: () -> Unit = {},
+    keySize: Dp = 72.dp,
+    verticalSpacing: Dp = PfTheme.dimens.space4,
 ) {
     val c = PfTheme.colors
     val digitStyle = PfTheme.type.title1.copy(fontWeight = FontWeight.Normal)
@@ -479,7 +481,7 @@ fun PfNumPad(
     fun Key(content: @Composable () -> Unit, label: String, tag: String?, onClick: (() -> Unit)?) {
         Box(
             Modifier
-                .size(72.dp)
+                .size(keySize.coerceAtLeast(48.dp))
                 .clip(RoundedCornerShape(PfTheme.dimens.radiusFull))
                 .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label } else Modifier)
                 .then(if (tag != null) Modifier.testTag(tag) else Modifier),
@@ -487,7 +489,7 @@ fun PfNumPad(
         ) { content() }
     }
 
-    Column(modifier.semantics { contentDescription = "Цифровая клавиатура" }, verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier.semantics { contentDescription = "Цифровая клавиатура" }, verticalArrangement = Arrangement.spacedBy(verticalSpacing), horizontalAlignment = Alignment.CenterHorizontally) {
         listOf(listOf(1, 2, 3), listOf(4, 5, 6), listOf(7, 8, 9)).forEach { rowDigits ->
             Row(horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space8)) {
                 rowDigits.forEach { d -> Key({ Text("$d", style = digitStyle, color = c.text) }, "$d", PfTestTags.numpad(d)) { onDigit(d) } }

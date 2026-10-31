@@ -71,6 +71,7 @@
     ".maestro/flows/refresh/server_data.yaml": 70,
     ".maestro/flows/analytics/rolling_periods.yaml": 76,
     ".maestro/flows/analytics/chart_month_selection.yaml": 74,
-    ".maestro/flows/analytics/all_time.yaml": 75
+    ".maestro/flows/analytics/all_time.yaml": 75,
+    "ru.finassist.pf.PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport": 77
   }
 }

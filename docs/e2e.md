@@ -703,6 +703,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; existing «Повторить» after recovery (Qase19, FIN-396) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion` | actual ChatScreen/VoiceInput requests RECORD_AUDIO → real system denial through UiAutomation → clear permission notice → close → original draft, quota=5 and Ask=0 (Qase72, FIN-404); authored, compiled only; no speech service needed |
+| native `PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport` | wrong PIN: full error/dots, keypad and recovery action at 360×640 dp (FIN-389, [Qase77](https://app.qase.io/case/PLAINFIN-77)); native geometry complements Maestro cases 5/18 |
 | native `ConnectionFailureHintTest` | fake local reader → VPN text; change observation and explicit retry → internet hint without VPN text, for full-screen state and ErrorMessage (Qase62, FIN-396); Compose dependency injection cannot be driven by Maestro without adding an app hook |
 | native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
 | native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
@@ -1045,3 +1046,12 @@ AnalyticsPeriodAndDismissalErrors artboard and a VM test cover the combined stat
 cannot bypass the period gate during Retry-After or an original-request refusal.
 
 FIN-411 adds the separate «Последние 12 месяцев» / «Последние 3 месяца» choices. Mock ranges use the union of completed upload coverage, including empty statements; `rolling_year`/`rolling_quarter` remain singleton keys, with exact edge facts and missing coverage kept distinct from zero. The calendar month action uses the full YYYY-MM key even when a point is clipped. Qase76 and rolling_periods are authored without UI execution. Canonical contract: fin-assist/contracts d827664 (FIN-413); the complete calculation and OpenAPI corpus is synchronized to that immutable revision after FIN-398/400/403 (PR239) integration; no test exclusions were added.
+
+### Small passcode viewport (FIN-389)
+
+`PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport` ([PLAINFIN-77](https://app.qase.io/case/PLAINFIN-77))
+checks the unlock and deletion error at 360×640 dp, including system insets. Maestro can find a clipped text node,
+so the native test additionally verifies text layout overflow and compares full/visible bounds of the error, dots,
+keys and footer; it also clicks digit/delete/forgot actions. Existing Maestro cases 5 and 18 cover the real wrong-PIN
+transitions and recovery. Short passcode screens use 56 dp keys and smaller gaps; the 390×844 design-check layout
+keeps its original sizes. At larger text sizes, only the introductory area can scroll; the keypad stays fixed.

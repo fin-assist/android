@@ -3,8 +3,11 @@ package ru.finassist.pf.feature.applock.impl.ui
 import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.finassist.pf.core.designsystem.components.BiometricKind
@@ -50,8 +54,8 @@ import ru.finassist.pf.feature.applock.api.PASSCODE_LENGTH
 /**
  * Common layout of all passcode screens (mockups `Passcode*`, `PasscodeLogin*`, `DeleteAccount*`): optional
  * header, then from the top — the app mark (unlock) or the lock hero (first run), title, subtitle 4 dp below, dots
- * 32 dp below; the keypad at the bottom with an optional footer link under it. Fills the screen; no scrolling
- * (the keypad must stay put).
+ * 32 dp below; the keypad at the bottom with an optional footer link under it. Short viewports use smaller
+ * gaps and 56 dp keys. Only the introduction can scroll at larger font scales; the keypad stays put.
  *
  * [alignStart] puts the texts at the start (first run, change), otherwise they are centred.
  */
@@ -74,50 +78,57 @@ private fun PasscodePad(
     footer: (@Composable () -> Unit)? = null,
 ) {
     val d = PfTheme.dimens
-    Column(
-        modifier
-            .fillMaxSize()
-            .background(PfTheme.colors.bg)
-            .then(if (header == null) Modifier.windowInsetsPadding(PfInsets.statusBars) else Modifier)
-            .windowInsetsPadding(PfInsets.navigationBars),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        // PfPageHeader pads the status bar itself.
-        header?.invoke()
-        Spacer(Modifier.height(d.space6))
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val compact = maxHeight < 720.dp
         Column(
-            Modifier.weight(1f).fillMaxWidth().padding(horizontal = d.space5),
+            Modifier
+                .fillMaxSize()
+                .background(PfTheme.colors.bg)
+                .then(if (header == null) Modifier.windowInsetsPadding(PfInsets.statusBars) else Modifier)
+                .windowInsetsPadding(PfInsets.navigationBars),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (mark) {
-                PfMark(size = d.mark)
-                Spacer(Modifier.height(d.space5))
-            }
-            val textAlign = if (alignStart) TextAlign.Start else TextAlign.Center
+            // PfPageHeader pads the status bar itself.
+            header?.invoke()
+            Spacer(Modifier.height(if (compact) d.space2 else d.space6))
             Column(
-                Modifier.fillMaxWidth(),
-                horizontalAlignment = if (alignStart) Alignment.Start else Alignment.CenterHorizontally,
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = d.space5),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (hero) {
-                    PfStatusHero(tone = HeroTone.INFO, icon = PfIcons.LOCK, centered = false)
-                    Spacer(Modifier.height(d.space4))
+                if (mark) {
+                    PfMark(size = d.mark)
+                    Spacer(Modifier.height(if (compact) d.space2 else d.space5))
                 }
-                Text(title, style = titleStyle, color = PfTheme.colors.text, textAlign = textAlign)
-                if (subtitle != null) {
-                    Spacer(Modifier.height(d.space1))
-                    Text(subtitle, style = PfTheme.type.lead, color = PfTheme.colors.textMuted, textAlign = textAlign)
+                val textAlign = if (alignStart) TextAlign.Start else TextAlign.Center
+                Column(
+                    Modifier.fillMaxWidth(),
+                    horizontalAlignment = if (alignStart) Alignment.Start else Alignment.CenterHorizontally,
+                ) {
+                    if (hero) {
+                        PfStatusHero(tone = HeroTone.INFO, icon = PfIcons.LOCK, centered = false)
+                        Spacer(Modifier.height(d.space4))
+                    }
+                    Text(title, style = titleStyle, color = PfTheme.colors.text, textAlign = textAlign)
+                    if (subtitle != null) {
+                        Spacer(Modifier.height(d.space1))
+                        Text(subtitle, style = PfTheme.type.lead, color = PfTheme.colors.textMuted, textAlign = textAlign)
+                    }
                 }
+                Spacer(Modifier.height(if (compact) d.space4 else d.space8))
+                PfPasscodeDots(filled = entered, length = PASSCODE_LENGTH, error = error)
             }
-            Spacer(Modifier.height(d.space8))
-            PfPasscodeDots(filled = entered, length = PASSCODE_LENGTH, error = error)
+            PfNumPad(
+                onDigit = onDigit, onDelete = onDelete, biometric = biometric, onBiometric = onBiometric,
+                keySize = if (compact) 56.dp else 72.dp,
+                verticalSpacing = if (compact) d.space2 else d.space4,
+            )
+            if (footer != null) {
+                // Mockup: the link 16 dp under the keypad (48 dp touch height), 16 dp to the bottom edge.
+                Spacer(Modifier.height(if (compact) d.space2 else d.space4))
+                Box(Modifier.defaultMinSize(minHeight = d.touch), contentAlignment = Alignment.Center) { footer() }
+            }
+            Spacer(Modifier.height(if (compact) d.space2 else d.space4))
         }
-        PfNumPad(onDigit = onDigit, onDelete = onDelete, biometric = biometric, onBiometric = onBiometric)
-        if (footer != null) {
-            // Mockup: the link 16 dp under the keypad (48 dp touch height), 16 dp to the bottom edge.
-            Spacer(Modifier.height(d.space4))
-            Box(Modifier.defaultMinSize(minHeight = d.touch), contentAlignment = Alignment.Center) { footer() }
-        }
-        Spacer(Modifier.height(d.space4))
     }
 }
 
@@ -211,7 +222,7 @@ fun UnlockScreen(vm: UnlockViewModel = hiltViewModel()) {
 
 /** The unlock overlay drawn from a ready state (design-check snapshots render it without a ViewModel). */
 @Composable
-internal fun UnlockContent(
+fun UnlockContent(
     state: UnlockUiState,
     onDigit: (Int) -> Unit,
     onDelete: () -> Unit,
@@ -342,7 +353,7 @@ fun ConfirmPasscodeScreen(onBack: () -> Unit, onConfirmed: () -> Unit, vm: Confi
  * unlock screen. A wrong code keeps the four dots filled in the warning colour until the next digit.
  */
 @Composable
-internal fun ConfirmPasscodeContent(
+fun ConfirmPasscodeContent(
     state: ConfirmUiState,
     onBack: () -> Unit,
     onDigit: (Int) -> Unit,
