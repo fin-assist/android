@@ -1861,6 +1861,76 @@ class AnalyticsViewModelTest {
         assertEquals(PeriodKey("2026-09"), vm.state.value.data?.params?.date)
     }
 
+    @Test fun `a failed goTo key change keeps prior data and retries its exact target only explicitly`() {
+        val original = data(mode = TransferMode.WITHOUT)
+        api.answers += original
+        api.answers += AppError.Offline()
+        api.answers += data(date = "2026-08", mode = TransferMode.WITHOUT)
+        val vm = opened(original.params)
+        vm.goTo(PeriodKey("2026-08"))
+        assertEquals(original, vm.state.value.data)
+        assertTrue(vm.state.value.periodChangeFailed)
+        assertTrue(vm.state.value.periodChangeRetryReady)
+        assertNull(vm.state.value.errorPresentation)
+        assertNull(vm.state.value.snackbar)
+        vm.onResume(null)
+        assertEquals(2, api.requests.size, "resume cannot replace the notice or submit either period")
+        vm.retryPeriodChange()
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITHOUT), api.requests.last())
+        assertEquals(PeriodKey("2026-08"), vm.state.value.data?.params?.date)
+        assertFalse(vm.state.value.periodChangeFailed)
+        vm.retryPeriodChange()
+        assertEquals(3, api.requests.size)
+    }
+
+    @Test fun `repeated goTo cannot bypass a failed target original request refusal`() {
+        val original = data()
+        api.answers += original
+        api.answers += refused()
+        api.answers += data(date = "2026-07")
+        val vm = opened()
+        vm.goTo(PeriodKey("2026-08"))
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.goTo(PeriodKey("2026-08"))
+        vm.retryPeriodChange()
+        vm.onResume(null)
+        assertEquals(2, api.requests.size)
+        assertEquals(original, vm.state.value.data)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.goTo(PeriodKey("2026-07"))
+        assertEquals(3, api.requests.size, "a different key retires the previous request context")
+        assertEquals(PeriodKey("2026-07"), vm.state.value.data?.params?.date)
+    }
+
+    @Test fun `repeated goTo preserves the failed target Retry-After boundary and never resumes it`() {
+        val original = data()
+        api.answers += original
+        api.answers += AppError.RateLimited(null, 3, ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "RATE_LIMITED", 429, requestRetryable = true,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = scheduler.currentTime)))
+        api.answers += data(date = "2026-08")
+        val vm = opened()
+        vm.goTo(PeriodKey("2026-08"))
+        scheduler.advanceTimeBy(2_999)
+        scheduler.runCurrent()
+        vm.goTo(PeriodKey("2026-08"))
+        vm.retryPeriodChange()
+        vm.onResume(null)
+        assertEquals(2, api.requests.size)
+        assertEquals(original, vm.state.value.data)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.periodChangeRetryReady)
+        vm.onResume(null)
+        assertEquals(2, api.requests.size, "deadline expiry does not submit the failed key")
+        vm.goTo(PeriodKey("2026-08"))
+        assertEquals(3, api.requests.size)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITH), api.requests.last())
+        assertFalse(vm.state.value.periodChangeFailed)
+    }
+
     @Test fun `a failed month-to-month chart action keeps the shown data and retries the exact target explicitly`() {
         val original = data(mode = TransferMode.WITHOUT)
         api.answers += original

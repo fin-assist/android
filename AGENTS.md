@@ -296,14 +296,17 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
 - Analytics Month/Quarter/Year each retain their own successful selection (FIN-391); switching another
   type never resets it. A first finer selection uses the last covered instant of the displayed period
   (`period.data_to` is inclusive; a complete `range.to` is exclusive), in the current profile zone.
-  A failed type switch retains its exact request behind an explicit, separately gated Retry; resume does
-  not replace that notice or submit the target. The same segment uses the same gate; payment action
-  errors keep a separate presentation. A changed context retires the failed period request.
+  A failed period type or key change retains its exact request behind an explicit, separately gated Retry.
+  Resume does not replace that notice or submit the target. Repeating the segment, picker/navigation key or
+  chart target uses the same gate; payment action errors keep a separate presentation.
+  A changed context retires the failed period request.
   Same/finer request keys remain valid; the mock rejects coarse-to-fine keys with canonical validation errors.
 - Analytics monthly chart points select the exact server-provided month key (FIN-398); the whole column,
   including a covered zero, is a target. The successful response commits the period atomically and preserves
   transfer mode and vertical scroll. `select_analytics_period` is usable only through the Analytics chart
-  capability; generic blocks and assistant rendering never expose it as a button.
+  capability; generic blocks and assistant rendering never expose it as a button. Unselected interactive
+  year/all-time charts initially reveal the latest covered point (including zero), without selecting it;
+  manual scroll stays available.
 - Analytics refreshes on resume as well as statement/category events (FIN-394); after a data mutation old
   totals are cleared until a fresh response arrives. Loading and an empty recalculating response are
   preparation states rather than requests to upload another statement. With data, recalculation retains

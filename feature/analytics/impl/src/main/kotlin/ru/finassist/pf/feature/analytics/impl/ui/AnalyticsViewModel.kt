@@ -407,6 +407,10 @@ class AnalyticsViewModel @Inject constructor(
 
     override fun goTo(key: PeriodKey) {
         _state.update { it.copy(sheet = null) }
+        if (failedPeriodRequest == Triple(period, key, transferMode)) {
+            retryPeriodChange()
+            return
+        }
         if (key == date) return
         clearRestriction()
         date = key

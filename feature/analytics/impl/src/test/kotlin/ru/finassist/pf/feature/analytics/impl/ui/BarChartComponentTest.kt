@@ -129,6 +129,43 @@ class BarChartComponentTest {
         }
     }
 
+    @Test fun `an unselected year chart initially reveals its latest covered zero instead of future months`() {
+        assertLatestCoveredVisible(count = 12, latest = 7)
+    }
+
+    @Test fun `an unselected all-time chart initially reveals recent coverage and still permits manual scrolling`() {
+        assertLatestCoveredVisible(count = 30, latest = 20)
+    }
+
+    private fun assertLatestCoveredVisible(count: Int, latest: Int) {
+        val points = (0 until count).map { index ->
+            val key = java.time.YearMonth.of(2024, 1).plusMonths(index.toLong()).toString()
+            point(key, when {
+                index < latest -> 1f
+                index == latest -> 0f
+                else -> null
+            }, selectable = index <= latest)
+        }
+        val clicks = mutableListOf<String>()
+        render(points, selected = { -1 }, clicks = clicks) { root, density, settle ->
+            val recent = root.tagged("test.chart.point.${points[latest].key}")
+            assertTrue(recent.boundsInRoot.width >= 48 * density, "Latest covered zero must be visible: ${root.scrollDescription()}")
+            assertTrue(recent.boundsInRoot.left >= 0f && recent.boundsInRoot.right <= 320 * density + 1f)
+            assertFalse(root.descendants().any { it.config.getOrNull(SemanticsProperties.Selected) == true },
+                "Revealing coverage must not select a month")
+            assertTrue(clicks.isEmpty())
+            val scrolling = root.descendants().first { it.config.getOrNull(SemanticsProperties.HorizontalScrollAxisRange) != null }
+            val range = assertNotNull(scrolling.config.getOrNull(SemanticsProperties.HorizontalScrollAxisRange))
+            assertTrue(range.value() > 0f)
+            assertTrue(range.value() < range.maxValue(), "Empty future points must not become the scroll anchor")
+            assertTrue(assertNotNull(scrolling.config.getOrNull(SemanticsActions.ScrollBy)?.action).invoke(-10_000f, 0f))
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+            settle()
+            assertEquals(0f, range.value(), "Manual scrolling must stay where the user put it")
+            assertTrue(root.tagged("test.chart.point.${points.first().key}").boundsInRoot.width >= 48 * density)
+        }
+    }
+
     @Test fun `real chart renderer dispatches a covered zero point only from Analytics`() {
         val from = OffsetDateTime.parse("2026-09-01T00:00:00+03:00")
         val action = BlockAction(ActionType.SELECT_ANALYTICS_PERIOD, period = PeriodTypeCode.MONTH, date = PeriodKey("2026-09"))

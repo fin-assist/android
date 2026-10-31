@@ -64,13 +64,7 @@ tags:
     element:
       id: "analytics.block.monthly_chart"
     centerElement: true
-- repeat:
-    times: 2
-    commands:
-      - swipe:
-          from:
-            id: "analytics.block.monthly_chart"
-          direction: LEFT
+# An unselected year chart already reveals its latest covered month, including this zero.
 - assertVisible:
     id: "analytics.expense.monthly.point.2026-10"
 - assertNotVisible:

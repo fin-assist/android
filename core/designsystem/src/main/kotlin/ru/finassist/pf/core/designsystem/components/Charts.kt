@@ -152,13 +152,14 @@ fun PfBarChart(
         val contentPx = if (interactive) maxOf(viewportPx, pointWidthPx * points.size + gapPx * (points.size - 1).coerceAtLeast(0)) else viewportPx
         val chartWidth = with(density) { contentPx.toDp() }
         val columnPx = if (points.isEmpty()) 0f else (contentPx - gapPx * (points.size - 1)).toFloat() / points.size
-        val selectedKey = points.getOrNull(highlight)?.key
-        LaunchedEffect(interactive, selectedKey, viewportPx, chartWidth) {
-            if (interactive && selectedKey != null) {
+        val revealIndex = highlight.takeIf { it in points.indices } ?: points.indexOfLast { it.value != null }
+        val revealKey = points.getOrNull(revealIndex)?.key
+        LaunchedEffect(interactive, revealKey, viewportPx, chartWidth) {
+            if (interactive && revealKey != null) {
                 val maximum = snapshotFlow { scroll.maxValue }.first { it != Int.MAX_VALUE }
-                val centre = highlight * (columnPx + gapPx) + columnPx / 2
+                val centre = revealIndex * (columnPx + gapPx) + columnPx / 2
                 val target = (centre - viewportPx / 2).roundToInt().coerceIn(0, maximum)
-                // Selection changes keep the highlighted month visible, including after a period switch.
+                // Unselected year/all-time views reveal recent coverage; an explicit highlight takes priority.
                 scroll.scrollTo(target)
             }
         }
