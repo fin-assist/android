@@ -303,6 +303,11 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   `StatementsRepository` survives absent Analytics subscribers: a completed non-empty import followed by
   `has_data:false` is polled every 3 seconds, up to 10 responses, then offers an explicit refresh. The token
   is acknowledged only for the observed generation once data is present and not recalculating.
+- Voice dictation (FIN-404): `VoiceInput` adapts Android recognition, `VoiceSession` rejects stale callbacks,
+  and `VoicePanel` shows preparation, actual readiness, sound level and recognition/errors at the composer.
+  Lifecycle stop/background/navigation cancels the active session; final text appends to the draft and never sends a question.
+  Assistant consent gates sending, not typing or dictating a draft; microphone retry follows the same availability as its composer button.
+  On-device models are preferred; the system speech service is the fallback and decides whether it stays offline.
 - Disabled `PfTextField` states use muted tokens and a lock icon; the caller explains how to enable input.
 - The Analytics screen is composed by the server (FIN-4): blocks of the catalog (api.md «Блоки») drawn by the renderers of
   `core/blocks`; texts of blocks come from the server (in `mock` — `AnalyticsServerTexts`). A new primitive is a renderer in

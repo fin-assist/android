@@ -65,6 +65,7 @@
     ".maestro/flows/assistant/tab_consent_in_profile.yaml": 65,
     "ru.finassist.pf.ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries": 66,
     "ru.finassist.pf.ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries": 67,
-    ".maestro/flows/assistant/late_enable.yaml": 68
+    ".maestro/flows/assistant/late_enable.yaml": 68,
+    "ru.finassist.pf.VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion": 72
   }
 }

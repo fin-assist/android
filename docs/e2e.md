@@ -697,6 +697,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
 | `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; existing «Повторить» after recovery (Qase19, FIN-396) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
+| native `VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion` | actual ChatScreen/VoiceInput requests RECORD_AUDIO → real system denial through UiAutomation → clear permission notice → close → original draft, quota=5 and Ask=0 (Qase72, FIN-404); authored, compiled only; no speech service needed |
 | native `ConnectionFailureHintTest` | fake local reader → VPN text; change observation and explicit retry → internet hint without VPN text, for full-screen state and ErrorMessage (Qase62, FIN-396); Compose dependency injection cannot be driven by Maestro without adding an app hook |
 | native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
 | native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
@@ -706,7 +707,20 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
 
-Not covered yet: voice input (needs a speech recognizer on the emulator), biometrics (needs an enrolled
+Not covered yet: voice input ([PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69), manual, FIN-404: the CI emulator has no controlled Russian speech/audio or deterministic recognition-service fixture;
+Maestro cannot produce recognizer callbacks). The preparation → actual `onReadyForSpeech`
+→ listening/level → recognition/error panel, finish/cancel/back/background and on-device-to-system
+retry need a device with that service. Permission refusal is separately covered by native `VoicePermissionTest`
+([PLAINFIN-72](https://app.qase.io/case/PLAINFIN-72)) using the real system dialog and actual ChatScreen/VoiceInput without starting a recognizer; it preserves the draft,
+keeps the quota and asserts no Ask. Service-unavailable cannot be asserted solely from an absent ru-RU model:
+`isRecognitionAvailable` may still find another installed system provider, so provider availability remains a device check. Cancellation and errors retain the original draft; successful final text is
+appended and requires manual sending. `VoiceSessionTest` covers callback order, cancellation/late callbacks,
+repeated actions, silence/errors and sound levels; `VoiceRecognitionErrorsTest` covers Android error-code/exception mapping
+and on-device-only fallback policy. `VoiceInputRememberTest` runs the actual composable with Robolectric's
+recognizer shadow: forced recomposition preserves the handle and commands, and a final result calls the latest
+onResult. This checks wiring without real audio or a service. `ChatViewModelBehaviourTest` covers append/length bounds and
+absence of an automatic Ask; `ChatDesignCheckTest` renders all panel states and dark listening.
+Biometrics (needs an enrolled
 fingerprint), custom date ranges in search,
 links inside a sentence — the registration terms and privacy policy, «Как мы защищаем данные», «разобрать» and
 «Подробнее» on the import result, «Подробнее» on «Аналитика» (a link inside a text node has no own view or
