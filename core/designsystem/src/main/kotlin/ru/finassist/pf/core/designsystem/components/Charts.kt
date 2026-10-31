@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,14 +17,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -37,6 +43,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -45,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.ChartIntroRegistry
@@ -69,6 +77,8 @@ data class BarPoint(
     val partial: Boolean = false,
     val partialFill: Float = 0.5f,
     val note: String? = null,
+    /** Whether the caller has a valid selection action for this point, including a zero value. */
+    val selectable: Boolean = false,
 )
 
 /**
@@ -79,7 +89,11 @@ data class BarPoint(
  * the baseline left to right (500 ms each, 40 ms stagger, emphasized decelerate) once per process per
  * [chartId]; later value changes transition in 250 ms. With "Remove animations" bars are drawn at full height.
  *
+ * Selectable points expose one touch target covering the bar, its label and its note. Interactive charts
+ * scroll horizontally to keep every column at least 48 dp wide and reveal the selected point.
+ *
  * @param chartId stable id for [ChartIntroRegistry] (`"analytics.expense.monthly"`).
+ * @param onPointClick receives the stable [BarPoint.key]; points without [BarPoint.selectable] never call it.
  */
 @Composable
 fun PfBarChart(
@@ -90,6 +104,7 @@ fun PfBarChart(
     title: String? = null,
     height: Dp = 120.dp,
     showValues: Boolean = false,
+    onPointClick: ((String) -> Unit)? = null,
 ) {
     val c = PfTheme.colors
     val reduced = rememberReducedMotion()
@@ -125,76 +140,105 @@ fun PfBarChart(
         append(points.joinToString("; ") { p -> listOfNotNull(p.spokenLabel, p.note, if (p.value == null) "нет данных" else p.display).joinToString(", ") })
     }
 
-    Column(modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = description }) {
+    val interactive = onPointClick != null && points.any { it.selectable }
+    BoxWithConstraints(modifier.fillMaxWidth().semantics(mergeDescendants = !interactive) { contentDescription = description }) {
+        val scroll = rememberScrollState()
+        val gap = PfTheme.dimens.space2
+        val density = LocalDensity.current
+        val viewportPx = with(density) { maxWidth.roundToPx() }
+        val pointWidthPx = with(density) { PfTheme.dimens.touch.roundToPx() }
+        val gapPx = with(density) { gap.roundToPx() }
+        // Row rounds each gap separately; keep the same pixel budget so no touch target loses a pixel.
+        val contentPx = if (interactive) maxOf(viewportPx, pointWidthPx * points.size + gapPx * (points.size - 1).coerceAtLeast(0)) else viewportPx
+        val chartWidth = with(density) { contentPx.toDp() }
+        val columnPx = if (points.isEmpty()) 0f else (contentPx - gapPx * (points.size - 1)).toFloat() / points.size
+        val selectedKey = points.getOrNull(highlight)?.key
+        LaunchedEffect(interactive, selectedKey, viewportPx, chartWidth) {
+            if (interactive && selectedKey != null) {
+                val maximum = snapshotFlow { scroll.maxValue }.first { it != Int.MAX_VALUE }
+                val centre = highlight * (columnPx + gapPx) + columnPx / 2
+                val target = (centre - viewportPx / 2).roundToInt().coerceIn(0, maximum)
+                // Selection changes keep the highlighted month visible, including after a period switch.
+                scroll.scrollTo(target)
+            }
+        }
         val hasNegative = points.any { (it.value ?: 0f) < 0f }
         val baselineFraction = if (hasNegative) 0.5f else 1f
-        // `.pf-chart-col`: a bottom-aligned column with 4 dp gaps — with `showValues` the value (16 dp) sits 4 dp
-        // above its own bar, so the row is 20 dp taller than the tallest bar.
         val valueSpace = if (showValues) 20.dp else 0.dp
-        Row(Modifier.fillMaxWidth().height(height + valueSpace), horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2)) {
+        val anyNote = points.any { it.note != null }
+        Row(
+            Modifier.then(if (interactive) Modifier.horizontalScroll(scroll) else Modifier).width(chartWidth),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+        ) {
             points.forEachIndexed { i, p ->
                 val progress = anims.getOrNull(i)?.value ?: 0f
                 val color = if (i == highlight) c.accent else c.borderStrong
-                // Bar geometry in fractions of the chart height: top edge and height of the bar.
                 val barFraction = abs(progress) * (if (hasNegative) 0.5f else 1f)
                 val topFraction = if (progress >= 0f) baselineFraction - barFraction else baselineFraction
-                Box(Modifier.weight(1f).fillMaxWidth().height(height + valueSpace)) {
-                    if (showValues) {
-                        val labelAlpha = ((progress / (targets.getOrNull(i)?.takeIf { it != 0f } ?: 1f)) - 0.7f).coerceIn(0f, 0.3f) / 0.3f
-                        val on = i == highlight
-                        Text(
-                            if (p.value == null) "" else p.display,
-                            style = if (on) PfTheme.type.hint.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.hint,
-                            color = (if (on) c.accent else c.textMuted).copy(alpha = if (reduced) 1f else labelAlpha),
-                            maxLines = 1, softWrap = false, textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                // The text's 16 dp line ends 4 dp above the bar: its top is at the bar's top minus 20 dp,
-                                // which, with the 20 dp reserved above the chart, is the bar's top within the chart.
-                                .offset { IntOffset(0, (height.toPx() * topFraction).roundToInt()) }
-                                .wrapContentWidth(Alignment.CenterHorizontally, unbounded = true),
-                        )
-                    }
-                    Canvas(Modifier.fillMaxWidth().height(height).align(Alignment.BottomCenter)) {
-                        val barHeight = barFraction * size.height
-                        val top = topFraction * size.height
-                        val baselineY = size.height * baselineFraction
-                        // `.pf-chart-bar { border-radius: var(--space-2) }`
-                        val radius = CornerRadius(8.dp.toPx())
-                        // Empty column: nothing is drawn, the gap itself says «no data».
-                        if (p.value == null) return@Canvas
-                        if (p.partial) {
-                            val stroke = 2.dp.toPx()
-                            drawRoundRect(color, topLeft = Offset(stroke / 2, top + stroke / 2), size = Size(size.width - stroke, max(barHeight - stroke, 0f)), cornerRadius = radius, style = Stroke(stroke))
-                            val fill = p.partialFill.coerceIn(0.25f, 0.75f).let { (it * 4).roundToInt() / 4f }
-                            val fillHeight = barHeight * fill
-                            val fillTop = if (progress >= 0f) baselineY - fillHeight else baselineY
-                            // `.pf-chart-bar-partial`: a gradient inside the rounded outline — the fill's top edge is
-                            // flat, only the outline's corners are round.
-                            val outline = Path().apply { addRoundRect(RoundRect(Rect(Offset(0f, top), Size(size.width, barHeight)), radius)) }
-                            clipPath(outline) { drawRect(color, topLeft = Offset(0f, fillTop), size = Size(size.width, fillHeight)) }
-                        } else {
-                            drawRoundRect(color, topLeft = Offset(0f, top), size = Size(size.width, barHeight), cornerRadius = radius)
+                val click = onPointClick?.takeIf { p.selectable }
+                val pointModifier = Modifier.weight(1f).then(
+                    if (click != null) Modifier
+                        .testTag("$chartId.point.${p.key}")
+                        .clickable(role = Role.Button, onClick = { click(p.key) })
+                        .semantics(mergeDescendants = true) {
+                            selected = i == highlight
+                            contentDescription = listOfNotNull(p.spokenLabel, p.note, p.display).joinToString(", ")
+                        }
+                    else Modifier,
+                )
+                Column(pointModifier, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.fillMaxWidth().height(height + valueSpace)) {
+                        if (showValues) {
+                            val labelAlpha = ((progress / (targets.getOrNull(i)?.takeIf { it != 0f } ?: 1f)) - 0.7f).coerceIn(0f, 0.3f) / 0.3f
+                            val on = i == highlight
+                            Text(
+                                if (p.value == null) "" else p.display,
+                                style = if (on) PfTheme.type.hint.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.hint,
+                                color = (if (on) c.accent else c.textMuted).copy(alpha = if (reduced) 1f else labelAlpha),
+                                maxLines = 1, softWrap = false, textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    // The text's 16 dp line ends 4 dp above the bar: its top is at the bar's top minus 20 dp,
+                                    // which, with the 20 dp reserved above the chart, is the bar's top within the chart.
+                                    .offset { IntOffset(0, (height.toPx() * topFraction).roundToInt()) }
+                                    .wrapContentWidth(Alignment.CenterHorizontally, unbounded = true),
+                            )
+                        }
+                        Canvas(Modifier.fillMaxWidth().height(height).align(Alignment.BottomCenter)) {
+                            val barHeight = barFraction * size.height
+                            val top = topFraction * size.height
+                            val baselineY = size.height * baselineFraction
+                            // `.pf-chart-bar { border-radius: var(--space-2) }`
+                            val radius = CornerRadius(8.dp.toPx())
+                            // Empty column: nothing is drawn, the gap itself says «no data».
+                            if (p.value == null) return@Canvas
+                            if (p.partial) {
+                                val stroke = 2.dp.toPx()
+                                drawRoundRect(color, topLeft = Offset(stroke / 2, top + stroke / 2), size = Size(size.width - stroke, max(barHeight - stroke, 0f)), cornerRadius = radius, style = Stroke(stroke))
+                                val fill = p.partialFill.coerceIn(0.25f, 0.75f).let { (it * 4).roundToInt() / 4f }
+                                val fillHeight = barHeight * fill
+                                val fillTop = if (progress >= 0f) baselineY - fillHeight else baselineY
+                                // `.pf-chart-bar-partial`: a gradient inside the rounded outline — the fill's top edge is
+                                // flat, only the outline's corners are round.
+                                val outline = Path().apply { addRoundRect(RoundRect(Rect(Offset(0f, top), Size(size.width, barHeight)), radius)) }
+                                clipPath(outline) { drawRect(color, topLeft = Offset(0f, fillTop), size = Size(size.width, fillHeight)) }
+                            } else {
+                                drawRoundRect(color, topLeft = Offset(0f, top), size = Size(size.width, barHeight), cornerRadius = radius)
+                            }
                         }
                     }
-                }
-            }
-        }
-        Spacer(Modifier.height(PfTheme.dimens.space1))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2)) {
-            val anyNote = points.any { it.note != null }
-            points.forEachIndexed { i, p ->
-                val on = i == highlight
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space1)) {
+                    Spacer(Modifier.height(PfTheme.dimens.space1))
+                    val on = i == highlight
                     Text(
                         p.label,
                         style = if (on) PfTheme.type.hint.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.hint,
                         color = if (on) c.accent else c.textMuted,
-                        maxLines = 1, softWrap = false,
+                        maxLines = if (interactive) 2 else 1, softWrap = false,
                         modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally, unbounded = true),
+                        textAlign = TextAlign.Center,
                     )
-                    // As in the mockup, every column keeps the note line when any column has a note.
                     if (anyNote) {
+                        Spacer(Modifier.height(PfTheme.dimens.space1))
                         Text(
                             p.note ?: "",
                             style = PfTheme.type.hint, color = c.textMuted, maxLines = 1, softWrap = false,
