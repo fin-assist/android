@@ -1,0 +1,132 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — выбор месяца столбиком, нулевые расходы и повтор ошибки
+# Transport faults stay in mock; no real stage response is replaced.
+tags:
+  - analytics
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible: "Октябрь 2026"
+    timeout: 15000
+- tapOn:
+    id: "analytics.transfers"
+- tapOn:
+    id: "analytics.transfers.without"
+- extendedWaitUntil:
+    visible: "Без переводов"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "analytics.chart.monthly_chart.point.2026-09"
+    centerElement: true
+- tapOn:
+    id: "analytics.chart.monthly_chart.point.2026-09"
+    point: "50%,90%"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.chart.monthly_chart.point.2026-09"
+      checked: true
+    timeout: 10000
+# A response keeps the chart in the viewport instead of returning to the first card.
+- assertNotVisible:
+    id: "analytics.ask"
+- tapOn:
+    id: "analytics.chart.monthly_chart.point.2026-09"
+- assertVisible:
+    id: "analytics.chart.monthly_chart.point.2026-09"
+    checked: true
+- assertNotVisible:
+    id: "analytics.period.retry"
+- scrollUntilVisible:
+    element:
+      id: "analytics.ask"
+    direction: UP
+- assertVisible:
+    id: "ds.period.pick"
+    text: "Сентябрь 2026"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible: "Без переводов"
+# The fixture covers 1 October but has no October operations: its zero bar still opens the month.
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
+      id: "ds.period.pick"
+      text: "2026"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.monthly_chart"
+    centerElement: true
+- repeat:
+    times: 2
+    commands:
+      - swipe:
+          from:
+            id: "analytics.block.monthly_chart"
+          direction: LEFT
+- assertVisible:
+    id: "analytics.chart.monthly_chart.point.2026-10"
+- assertNotVisible:
+    id: "analytics.chart.monthly_chart.point.2026-11"
+- tapOn:
+    id: "analytics.chart.monthly_chart.point.2026-10"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.chart.monthly_chart.point.2026-10"
+      checked: true
+    timeout: 10000
+- assertNotVisible:
+    id: "analytics.ask"
+# A failed month-to-month request retains October and offers an explicit retry of September.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- tapOn:
+    id: "analytics.chart.monthly_chart.point.2026-09"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.retry"
+    timeout: 15000
+- assertVisible:
+    id: "analytics.chart.monthly_chart.point.2026-10"
+    checked: true
+- assertVisible: "(?s).*Не удалось сменить период.*"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- assertVisible:
+    id: "analytics.chart.monthly_chart.point.2026-10"
+    checked: true
+- assertVisible:
+    id: "analytics.period.retry"
+- tapOn:
+    id: "analytics.period.retry"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.chart.monthly_chart.point.2026-09"
+      checked: true
+    timeout: 10000
+- assertNotVisible:
+    id: "analytics.period.retry"
+- assertNotVisible:
+    id: "analytics.ask"
+- scrollUntilVisible:
+    element:
+      id: "analytics.ask"
+    direction: UP
+- assertVisible:
+    id: "ds.period.pick"
+    text: "Сентябрь 2026"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible: "Без переводов"
