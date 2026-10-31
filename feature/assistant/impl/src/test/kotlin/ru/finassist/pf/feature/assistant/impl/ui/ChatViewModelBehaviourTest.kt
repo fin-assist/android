@@ -121,6 +121,7 @@ class ChatViewModelBehaviourTest {
         val streamOpens = mutableListOf<String>()
 
         var limitResult: AssistantLimit? = null
+        var limitReply: (suspend () -> AssistantLimit)? = null
 
         override suspend fun listMessages(limit: Int?, beforeId: String?): MessagesList {
             listCalls += beforeId
@@ -154,7 +155,7 @@ class ChatViewModelBehaviourTest {
             }
         }
 
-        override suspend fun getLimit(): AssistantLimit = limitResult ?: throw AppError.Offline()
+        override suspend fun getLimit(): AssistantLimit = limitReply?.invoke() ?: limitResult ?: throw AppError.Offline()
 
         fun script(answerId: String, vararg flows: Flow<AnswerEvent>) {
             streams.getOrPut(answerId) { ArrayDeque() }.addAll(flows)
@@ -1788,5 +1789,138 @@ class ChatViewModelBehaviourTest {
     private fun askRefusal(retryable: Boolean) = AppError.RateLimited(null, 3,
         ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = retryable,
             timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = 0)))
+
+    @Test fun `a quota GET begun before Ask cannot restore its spent remaining count`() {
+        val vm = newVm()
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { oldQuota.await() }
+        vm.refresh()
+        api.askOutcomes += askResponse(remaining = 0)
+        sendQuestion(vm)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        oldQuota.complete(limit)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+    }
+
+    @Test fun `a quota GET begun before Retry cannot restore its spent remaining count`() {
+        api.pages[null] = MessagesList(listOf(answer("old", AnswerStatus.FAILED, retryable = true)), hasOlder = false)
+        val vm = newVm()
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { oldQuota.await() }
+        vm.refresh()
+        api.retryOutcomes += RetryResponse("new", remainingLimit = 0)
+        vm.retry("old")
+        oldQuota.complete(limit)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+    }
+
+    @Test fun `a quota GET begun before terminal SSE cannot overwrite its remaining count`() {
+        api.pages[null] = MessagesList(listOf(answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val events = kotlinx.coroutines.flow.MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
+        api.script("a1", events)
+        val vm = newVm()
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { oldQuota.await() }
+        vm.refresh()
+        events.tryEmit(done(remaining = 0))
+        assertEquals(0, vm.state.value.limit?.remaining)
+        oldQuota.complete(limit)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+    }
+
+    @Test fun `Ask before first quota metadata spends its known remainder and reconciles metadata once`() {
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        val freshQuota = CompletableDeferred<AssistantLimit>()
+        var reads = 0
+        api.limitReply = { if (++reads == 1) oldQuota.await() else freshQuota.await() }
+        val vm = newVm()
+        assertNull(vm.state.value.limit)
+        api.askOutcomes += askResponse(remaining = 0)
+        sendQuestion(vm)
+        assertTrue(vm.state.value.limitExhausted)
+        assertEquals(0, vm.state.value.knownRemaining)
+        oldQuota.complete(limit)
+        assertEquals(2, reads)
+        assertNull(vm.state.value.limit, "stale reset metadata must not be installed")
+        assertTrue(vm.state.value.limitExhausted)
+        freshQuota.complete(limit.copy(remaining = 0))
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+        assertEquals(2, reads)
+    }
+
+    @Test fun `terminal Error refund while quota GET is pending remains authoritative`() {
+        api.pages[null] = MessagesList(listOf(answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val events = kotlinx.coroutines.flow.MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
+        api.script("a1", events)
+        val vm = newVm()
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { oldQuota.await() }
+        vm.refresh()
+        events.tryEmit(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "model", remainingLimit = 5)))
+        assertEquals(5, vm.state.value.knownRemaining)
+        oldQuota.complete(limit)
+        assertEquals(5, vm.state.value.limit?.remaining)
+        assertEquals(5, vm.state.value.knownRemaining)
+    }
+
+    @Test fun `retry-not-allowed reconciles history while a manual quota read is still pending`() {
+        api.pages[null] = MessagesList(listOf(answer("old", AnswerStatus.FAILED, retryable = true)), hasOlder = false)
+        val vm = newVm()
+        val pendingQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { pendingQuota.await() }
+        vm.refresh()
+        assertTrue(vm.state.value.refreshing)
+        api.pages[null] = MessagesList(listOf(answer("replacement")), hasOlder = false)
+        api.retryOutcomes += AppError.Api(ErrorCodes.RETRY_NOT_ALLOWED, 409)
+        vm.retry("old")
+        assertEquals(3, api.listCalls.size)
+        assertEquals(listOf("replacement"), vm.state.value.items.map { it.id })
+        pendingQuota.complete(limit)
+        assertEquals(listOf("replacement"), vm.state.value.items.map { it.id })
+        assertTrue(api.asks.isEmpty())
+    }
+
+    @Test fun `metadata reconciliation stops after the second stale quota read until explicit refresh`() {
+        val firstQuota = CompletableDeferred<AssistantLimit>()
+        val secondQuota = CompletableDeferred<AssistantLimit>()
+        val explicitQuota = CompletableDeferred<AssistantLimit>()
+        var reads = 0
+        api.limitReply = {
+            when (++reads) {
+                1 -> firstQuota.await()
+                2 -> secondQuota.await()
+                else -> explicitQuota.await()
+            }
+        }
+        val events = kotlinx.coroutines.flow.MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
+        api.script("a1", events)
+        val vm = newVm()
+        api.askOutcomes += askResponse(remaining = 3)
+        sendQuestion(vm)
+        firstQuota.complete(limit)
+        assertEquals(2, reads)
+        assertEquals(3, vm.state.value.knownRemaining)
+
+        assertTrue(events.tryEmit(done(remaining = 2)))
+        secondQuota.complete(limit.copy(remaining = 3))
+        assertEquals(2, reads, "a second stale reply must not trigger a third automatic GET")
+        assertNull(vm.state.value.limit)
+        assertEquals(2, vm.state.value.knownRemaining)
+        assertEquals(1, api.asks.size)
+
+        vm.refresh()
+        assertEquals(3, reads, "an explicit refresh can request metadata after reconciliation stopped")
+        assertEquals(2, vm.state.value.knownRemaining)
+        explicitQuota.complete(limit.copy(remaining = 2))
+        assertEquals(2, vm.state.value.limit?.remaining)
+        assertEquals(2, vm.state.value.knownRemaining)
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(3, reads)
+        assertEquals(1, api.asks.size)
+    }
 
 }

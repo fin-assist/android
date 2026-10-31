@@ -104,10 +104,13 @@ class AnalyticsViewModelTest {
     private class FakeAssistant : AssistantApi {
         var limitCalls = 0
         var failure: AppError? = null
+        var reply: (suspend () -> AssistantLimit)? = null
+        var limit = AssistantLimit(3, 5, at(30))
         override suspend fun getLimit(): AssistantLimit {
             limitCalls++
+            reply?.let { return it() }
             failure?.let { throw it }
-            return AssistantLimit(3, 5, at(30))
+            return limit
         }
         override suspend fun listMessages(limit: Int?, beforeId: String?): MessagesList = error("unused")
         override suspend fun ask(key: IdempotencyKey, request: AskRequest): AskResponse = error("unused")
@@ -1390,6 +1393,343 @@ class AnalyticsViewModelTest {
         assertEquals(4, api.requests.size, "the newly selected year is an explicit changed intent")
         assertEquals(PeriodTypeCode.YEAR, api.requests.last().period)
         assertEquals(PeriodTypeCode.YEAR, vm.state.value.data?.params?.period)
+    }
+
+    @Test fun `pull refresh preserves period transfer mode and expansion while deduplicating requests`() {
+        val initial = data(date = "2026-08", mode = TransferMode.WITHOUT)
+        api.answers += initial
+        val vm = opened(initial.params)
+        vm.toggleExpanded("expense_categories")
+        val pending = CompletableDeferred<Analytics>()
+        api.reply = { pending.await() }
+        vm.refresh()
+        vm.refresh()
+        assertEquals(2, api.requests.size)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITHOUT), api.requests.last())
+        assertTrue(vm.state.value.refreshing)
+        assertEquals(initial, vm.state.value.data)
+        assertTrue("expense_categories" in vm.state.value.expanded)
+        pending.completeExceptionally(AppError.Offline())
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(initial, vm.state.value.data)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+    }
+
+    @Test fun `pull refresh obeys retry after and retries only after the deadline`() {
+        api.answers += data()
+        val vm = opened()
+        api.answers.clear()
+        api.answers += AppError.RateLimited(null, 2)
+        vm.refresh()
+        assertFalse(vm.state.value.retryReady)
+        vm.refresh()
+        assertEquals(2, api.requests.size)
+        scheduler.advanceTimeBy(2000)
+        scheduler.runCurrent()
+        api.answers.clear()
+        api.answers += data()
+        vm.refresh()
+        assertEquals(3, api.requests.size)
+    }
+
+    @Test fun `manual refresh updates quota even after analytics read is refused`() {
+        api.answers += data()
+        val vm = opened()
+        api.answers.clear()
+        api.answers += AppError.Api("FUTURE_REFUSAL", 429, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "FUTURE_REFUSAL", 429, requestRetryable = false))
+        assistant.limit = assistant.limit.copy(remaining = 1)
+        vm.refresh()
+        assertEquals(1, vm.state.value.limit?.remaining)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(2, assistant.limitCalls)
+        val failure = vm.state.value.errorPresentation
+        assistant.limit = assistant.limit.copy(remaining = 0)
+        vm.refresh()
+        assertEquals(2, api.requests.size)
+        assertEquals(3, assistant.limitCalls)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertEquals(failure, vm.state.value.errorPresentation)
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `quota only refresh respects its own retry after while analytics remains refused`() {
+        api.answers += data()
+        val vm = opened()
+        api.answers.clear()
+        api.answers += AppError.Api("FUTURE_REFUSAL", 429, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "FUTURE_REFUSAL", 429, requestRetryable = false))
+        assistant.failure = AppError.RateLimited(null, 2)
+        vm.refresh()
+        assertFalse(vm.state.value.limitRetryReady)
+        vm.refresh()
+        assertEquals(2, assistant.limitCalls)
+        scheduler.advanceTimeBy(2000)
+        scheduler.runCurrent()
+        assistant.failure = null
+        vm.refresh()
+        assertEquals(3, assistant.limitCalls)
+        assertEquals(2, api.requests.size)
+        assertTrue(vm.state.value.limitRetryReady)
+    }
+
+    @Test fun `manual refresh of the shown month preserves a refused year switch`() {
+        api.answers += data()
+        api.answers += refused()
+        api.answers += data()
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.refresh()
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH), api.requests.last())
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        vm.retryPeriodChange()
+        assertEquals(3, api.requests.size, "refreshing the shown month must not release the refused year target")
+    }
+
+    @Test fun `shown-period refresh preserves the failed target wait until explicit retry`() {
+        api.answers += data()
+        api.answers += AppError.RateLimited(null, 3)
+        api.answers += data()
+        api.answers += data(period = PeriodTypeCode.YEAR, date = "2026")
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val failedTarget = api.requests.last()
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.refresh()
+        assertEquals(PeriodTypeCode.MONTH, api.requests.last().period)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        vm.retryPeriodChange()
+        assertEquals(3, api.requests.size)
+        scheduler.advanceTimeBy(2999)
+        scheduler.runCurrent()
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.periodChangeRetryReady)
+        assertEquals(3, api.requests.size, "wait expiry never submits the saved target")
+        vm.retryPeriodChange()
+        assertEquals(failedTarget, api.requests.last())
+        assertEquals(4, api.requests.size)
+        assertEquals(PeriodTypeCode.YEAR, vm.state.value.data?.params?.period)
+    }
+
+    @Test fun `a failed shown-period refresh retains the independent refused target and its retry gate`() {
+        api.answers += data()
+        api.answers += refused()
+        api.answers += AppError.Offline()
+        api.answers += data()
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.refresh()
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        assertEquals(PeriodTypeCode.MONTH, vm.state.value.data?.params?.period)
+        vm.refresh()
+        assertNull(vm.state.value.errorPresentation)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(4, api.requests.size)
+        assertTrue(api.requests.drop(2).all { it.period == PeriodTypeCode.MONTH })
+    }
+
+    @Test fun `retrying paused recalculation through refresh retains a refused period target`() {
+        api.answers += data(recalculating = true)
+        api.answers += refused()
+        api.answers += data()
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertTrue(vm.state.value.recalculationPaused)
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.refresh()
+        assertEquals(PeriodTypeCode.MONTH, api.requests.last().period)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        assertFalse(vm.state.value.recalculationPaused)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(3, api.requests.size)
+    }
+
+    @Test fun `recalculation polling after manual refresh preserves a failed period target wait`() {
+        api.answers += data()
+        api.answers += AppError.RateLimited(null, 60)
+        api.answers += data(recalculating = true)
+        api.answers += data()
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.refresh()
+        assertTrue(vm.state.value.data?.state?.recalculating == true)
+        scheduler.advanceTimeBy(3000)
+        scheduler.runCurrent()
+        assertFalse(vm.state.value.data?.state?.recalculating == true)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(4, api.requests.size)
+        assertTrue(api.requests.drop(2).all { it.period == PeriodTypeCode.MONTH })
+    }
+
+    @Test fun `import publication polling after manual refresh preserves a refused period target`() {
+        statements.pendingImport = 42L
+        api.answers += data(recalculating = true)
+        api.answers += refused()
+        api.answers += Analytics(hasData = false)
+        api.answers += data()
+        val vm = opened()
+        assertTrue(statements.acknowledged.isEmpty())
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.refresh()
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.loading)
+        scheduler.advanceTimeBy(3000)
+        scheduler.runCurrent()
+        assertEquals(PeriodTypeCode.MONTH, vm.state.value.data?.params?.period)
+        assertEquals(listOf(42L), statements.acknowledged)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(4, api.requests.size)
+        assertTrue(api.requests.drop(2).all { it.period == PeriodTypeCode.MONTH })
+    }
+
+    @Test fun `no-data offline recovery preserves a refused period target`() {
+        statements.pendingImport = 42L
+        api.answers += data(recalculating = true)
+        api.answers += refused()
+        api.answers += Analytics(hasData = false)
+        api.answers += AppError.Offline()
+        api.answers += data()
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.refresh()
+        scheduler.advanceTimeBy(3000)
+        scheduler.runCurrent()
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.offline)
+        assertFalse(vm.state.value.loading)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(4, api.requests.size)
+        val recovery = CompletableDeferred<Analytics>()
+        api.reply = { recovery.await() }
+        vm.refresh()
+        assertTrue(vm.state.value.refreshing)
+        vm.refresh()
+        assertEquals(5, api.requests.size, "the fullscreen retry is deduplicated while pending")
+        recovery.complete(data())
+        assertFalse(vm.state.value.refreshing)
+        assertFalse(vm.state.value.offline)
+        assertEquals(PeriodTypeCode.MONTH, vm.state.value.data?.params?.period)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(5, api.requests.size)
+        assertTrue(api.requests.drop(2).all { it.period == PeriodTypeCode.MONTH })
+    }
+
+    @Test fun `publication timeout recovery preserves the original period wait until its expiry`() {
+        statements.pendingImport = 42L
+        api.answers += data(recalculating = true)
+        api.answers += AppError.RateLimited(null, 60)
+        api.answers += Analytics(hasData = false)
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val failedTarget = api.requests.last()
+        val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        vm.refresh()
+        scheduler.advanceTimeBy(30_000)
+        scheduler.runCurrent()
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.preparationTimedOut)
+        assertFalse(vm.state.value.loading)
+        assertEquals(12, api.requests.size)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(12, api.requests.size)
+        api.answers.clear()
+        api.answers += data()
+        api.answers += data(period = PeriodTypeCode.YEAR, date = "2026")
+        vm.refresh()
+        assertFalse(vm.state.value.preparationTimedOut)
+        assertEquals(PeriodTypeCode.MONTH, vm.state.value.data?.params?.period)
+        assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertEquals(13, api.requests.size)
+        scheduler.advanceTimeBy(29_999)
+        scheduler.runCurrent()
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.periodChangeRetryReady)
+        assertEquals(13, api.requests.size, "wait expiry must not submit Year automatically")
+        vm.retryPeriodChange()
+        assertEquals(14, api.requests.size)
+        assertEquals(failedTarget, api.requests.last())
+        assertEquals(PeriodTypeCode.YEAR, vm.state.value.data?.params?.period)
+    }
+
+    @Test fun `fullscreen offline retry retains quota failure without changing the current error context`() {
+        api.answers += AppError.Offline()
+        val vm = opened()
+        assertEquals(0, assistant.limitCalls)
+        assistant.failure = AppError.Offline()
+        vm.refresh()
+        assertEquals(2, api.requests.size)
+        assertEquals(1, assistant.limitCalls)
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.offline)
+        assertFalse(vm.state.value.loading)
+        assertFalse(vm.state.value.refreshing)
+        assertTrue(vm.state.value.limitErrorPresentation?.connectionFailure == true)
+        assertTrue(vm.state.value.limitRetryReady)
+    }
+
+    @Test fun `quota failure before a late analytics success is retained for the newly shown card`() {
+        api.answers += AppError.Offline()
+        val vm = opened()
+        val analytics = CompletableDeferred<Analytics>()
+        api.reply = { analytics.await() }
+        assistant.failure = AppError.Offline()
+        vm.refresh()
+        val quotaError = assertNotNull(vm.state.value.limitErrorPresentation)
+        assertTrue(quotaError.connectionFailure)
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.refreshing)
+        analytics.complete(data())
+        assertEquals(true, vm.state.value.data?.hasData)
+        assertEquals(quotaError, vm.state.value.limitErrorPresentation)
+        assertFalse(vm.state.value.offline)
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `late quota failure remains visible after analytics succeeds`() {
+        api.answers += AppError.Offline()
+        val vm = opened()
+        api.answers.clear()
+        api.answers += data()
+        val quota = CompletableDeferred<AssistantLimit>()
+        assistant.reply = { quota.await() }
+        vm.refresh()
+        assertEquals(true, vm.state.value.data?.hasData)
+        assertNull(vm.state.value.limitErrorPresentation)
+        assertTrue(vm.state.value.refreshing)
+        quota.completeExceptionally(AppError.Offline())
+        assertEquals(true, vm.state.value.data?.hasData)
+        assertTrue(vm.state.value.limitErrorPresentation?.connectionFailure == true)
+        assertFalse(vm.state.value.refreshing)
     }
 
 }

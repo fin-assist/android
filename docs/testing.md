@@ -277,3 +277,8 @@ fixed HTTPS endpoint and default-off SDKs, and tests stage/prod pin isolation on
 Both stage debug and release guards are also run with production SDK sentinel properties and a different local backend URL;
 those must not enter the stage BuildConfig or enable Tracer. `:app:checkNoMockCode` checks both stage runtime
 classpaths. These are build/configuration checks, not a public-stage UI acceptance run (docs/e2e.md).
+
+
+FIN-399: DesignCheck provides `LocalInspectionMode` while rendering previews. The indeterminate refresh
+indicator keeps its loading semantics but uses a static arc, so Robolectric can drain the main looper without
+an infinite frame loop. The real UI animates the indicator unless the device requests reduced motion.

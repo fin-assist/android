@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.operations.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.PfRefreshContainer
 import ru.finassist.pf.core.designsystem.components.ConnectionFailureState
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.api.model.OperationItem
@@ -72,7 +73,7 @@ fun FeedScreen(
     FeedContent(
         state = state, today = today, zone = zone, listState = listState,
         onOpenSearch = onOpenSearch, onOpenOperation = onOpenOperation, onUpload = onUpload,
-        onRetry = vm::load, onLoadMore = vm::loadMore,
+        onRetry = vm::load, onRefresh = { vm.refresh() }, onLoadMore = vm::loadMore,
     )
 }
 
@@ -88,104 +89,107 @@ internal fun FeedContent(
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     listState: LazyListState = rememberLazyListState(),
+    onRefresh: () -> Unit = onRetry,
 ) {
     val d = PfTheme.dimens
-    Column(Modifier.fillMaxSize().testTag(OperationsTags.FEED)) {
-        PfTabHeader("Операции") {
-            // Nothing to search in an empty feed (mockup `MainEmpty`: no header actions).
-            if (!state.isEmpty) {
-                PfIconButton(PfIcons.SEARCH, contentDescription = "Поиск операций", onClick = onOpenSearch, modifier = Modifier.testTag(OperationsTags.FEED_SEARCH))
-            }
-        }
-        state.errorPresentation?.let { presentation ->
-            ErrorMessage(
-                presentation, "Не получилось загрузить операции",
-                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
-                onRetry = if (state.moreFailed) onLoadMore.takeIf { state.moreRetryReady } else onRetry.takeIf { state.retryReady },
-            )
-        }
-        when {
-            state.loading -> Unit
-            state.errorPresentation != null && state.items.isEmpty() -> Unit
-            state.offline -> ConnectionFailureState(modifier = Modifier.testTag(OperationsTags.FEED_OFFLINE)) {
-                PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(OperationsTags.FEED_RETRY))
-            }
-            state.isEmpty -> Column(
-                Modifier.weight(1f).fillMaxWidth().padding(start = d.space5, end = d.space5, bottom = d.space6).testTag(OperationsTags.FEED_EMPTY),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                PfEmptyState(
-                    PfIcons.RECEIPT,
-                    "Пока нет операций",
-                    if (state.uploadEnabled) {
-                        "Загрузите выписку из Т-Банка за несколько месяцев — лучше за год. Разложим траты по категориям, сравним месяцы и найдём регулярные платежи"
-                    } else {
-                        null
-                    },
-                    padding = PaddingValues(start = d.space8, top = d.space8, end = d.space8, bottom = d.space6),
-                )
-                if (state.uploadEnabled) {
-                    PfButton("Загрузить выписку", onClick = onUpload, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD))
+    PfRefreshContainer(refreshing = state.refreshing, onRefresh = onRefresh, enabled = state.retryReady && !state.loading, modifier = Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().testTag(OperationsTags.FEED)) {
+            PfTabHeader("Операции") {
+                // Nothing to search in an empty feed (mockup `MainEmpty`: no header actions).
+                if (!state.isEmpty) {
+                    PfIconButton(PfIcons.SEARCH, contentDescription = "Поиск операций", onClick = onOpenSearch, modifier = Modifier.testTag(OperationsTags.FEED_SEARCH))
                 }
             }
-            else -> {
-                val groups = remember(state.items, zone, today) { OperationFormat.groupByDay(state.items, zone, today) }
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space2, bottom = d.space6),
+            state.errorPresentation?.let { presentation ->
+                ErrorMessage(
+                    presentation, "Не получилось загрузить операции",
+                    modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
+                    onRetry = if (state.moreFailed) onLoadMore.takeIf { state.moreRetryReady } else onRetry.takeIf { state.retryReady },
+                )
+            }
+            when {
+                state.loading -> Unit
+                state.errorPresentation != null && state.items.isEmpty() -> Unit
+                state.offline -> ConnectionFailureState(modifier = Modifier.testTag(OperationsTags.FEED_OFFLINE)) {
+                    PfButton("Повторить", onClick = onRetry, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(OperationsTags.FEED_RETRY))
+                }
+                state.isEmpty -> Column(
+                    Modifier.weight(1f).fillMaxWidth().padding(start = d.space5, end = d.space5, bottom = d.space6).testTag(OperationsTags.FEED_EMPTY),
+                    verticalArrangement = Arrangement.Center,
                 ) {
-                    val feedState = state.state
-                    // Where the statement data ends (`state.data_to`), or the last operation without it (FIN-125).
-                    val lastDataDay = feedState?.let { StaleData.lastDay(it.dataTo, it.lastOperationAt, zone) }
-                    // Stale: where the statement data ends (`state.data_to`), not the last operation (FIN-125).
-                    val staleText = feedState?.let { StaleData.banner(it.stale, it.dataTo, it.lastOperationAt, zone, today) }
-                    state.summary.firstOrNull()?.let { s -> item(key = "summary") { SummaryCard(s, today, zone) } }
-                    if (staleText != null) {
-                        item(key = "stale") {
-                            PfNotice(
-                                staleText,
-                                tone = NoticeTone.INFO,
-                                modifier = Modifier.padding(top = d.space3).testTag(OperationsTags.FEED_STALE),
-                                action = if (state.uploadEnabled) ({ PfNoticeLink("Загрузить новую выписку", onClick = onUpload, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD_NEW)) }) else null,
-                            )
-                        }
-                    } else if (lastDataDay != null) {
-                        // «Данные по 25 сентября · Загрузить новую выписку» under the summary (mockup `Main`).
-                        item(key = "fresh") {
-                            Row(Modifier.defaultMinSize(minHeight = d.touch), verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    "Данные по ${RussianDates.day(lastDataDay, today.year)}" + if (state.uploadEnabled) " · " else "",
-                                    style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+                    PfEmptyState(
+                        PfIcons.RECEIPT,
+                        "Пока нет операций",
+                        if (state.uploadEnabled) {
+                            "Загрузите выписку из Т-Банка за несколько месяцев — лучше за год. Разложим траты по категориям, сравним месяцы и найдём регулярные платежи"
+                        } else {
+                            null
+                        },
+                        padding = PaddingValues(start = d.space8, top = d.space8, end = d.space8, bottom = d.space6),
+                    )
+                    if (state.uploadEnabled) {
+                        PfButton("Загрузить выписку", onClick = onUpload, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD))
+                    }
+                }
+                else -> {
+                    val groups = remember(state.items, zone, today) { OperationFormat.groupByDay(state.items, zone, today) }
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(start = d.space5, end = d.space5, top = d.space2, bottom = d.space6),
+                    ) {
+                        val feedState = state.state
+                        // Where the statement data ends (`state.data_to`), or the last operation without it (FIN-125).
+                        val lastDataDay = feedState?.let { StaleData.lastDay(it.dataTo, it.lastOperationAt, zone) }
+                        // Stale: where the statement data ends (`state.data_to`), not the last operation (FIN-125).
+                        val staleText = feedState?.let { StaleData.banner(it.stale, it.dataTo, it.lastOperationAt, zone, today) }
+                        state.summary.firstOrNull()?.let { s -> item(key = "summary") { SummaryCard(s, today, zone) } }
+                        if (staleText != null) {
+                            item(key = "stale") {
+                                PfNotice(
+                                    staleText,
+                                    tone = NoticeTone.INFO,
+                                    modifier = Modifier.padding(top = d.space3).testTag(OperationsTags.FEED_STALE),
+                                    action = if (state.uploadEnabled) ({ PfNoticeLink("Загрузить новую выписку", onClick = onUpload, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD_NEW)) }) else null,
                                 )
-                                if (state.uploadEnabled) PfLink("Загрузить новую выписку", onClick = onUpload, inline = true, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD_NEW))
+                            }
+                        } else if (lastDataDay != null) {
+                            // «Данные по 25 сентября · Загрузить новую выписку» under the summary (mockup `Main`).
+                            item(key = "fresh") {
+                                Row(Modifier.defaultMinSize(minHeight = d.touch), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "Данные по ${RussianDates.day(lastDataDay, today.year)}" + if (state.uploadEnabled) " · " else "",
+                                        style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+                                    )
+                                    if (state.uploadEnabled) PfLink("Загрузить новую выписку", onClick = onUpload, inline = true, modifier = Modifier.testTag(OperationsTags.FEED_UPLOAD_NEW))
+                                }
                             }
                         }
-                    }
-                    groups.forEachIndexed { index, (label, ops) ->
-                        item(key = "day-$label-${ops.first().id}") {
-                            // The days start 8 dp under the summary block; no divider under a day's last row (mockup `Main`).
-                            PfTransactionGroup(label, first = index == 0, modifier = if (index == 0) Modifier.padding(top = d.space2) else Modifier) {
-                                ops.forEach { op -> OperationRow(op, onClick = { onOpenOperation(op) }, divider = op !== ops.last()) }
+                        groups.forEachIndexed { index, (label, ops) ->
+                            item(key = "day-$label-${ops.first().id}") {
+                                // The days start 8 dp under the summary block; no divider under a day's last row (mockup `Main`).
+                                PfTransactionGroup(label, first = index == 0, modifier = if (index == 0) Modifier.padding(top = d.space2) else Modifier) {
+                                    ops.forEach { op -> OperationRow(op, onClick = { onOpenOperation(op) }, divider = op !== ops.last()) }
+                                }
                             }
                         }
-                    }
-                    if (state.loadingMore) {
-                        item(key = "more") { Text("Загружаем…", style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(vertical = d.space4)) }
-                    } else if (state.moreFailed && state.errorPresentation == null) {
-                        item(key = "more-failed") {
-                            Box(Modifier.fillMaxWidth().padding(vertical = d.space3), contentAlignment = Alignment.Center) {
-                                if (state.moreRetryReady) PfLink("Не загрузилось — повторить", onClick = onLoadMore)
-                                else Text("Не загрузилось — повторить", style = PfTheme.type.body, color = PfTheme.colors.textMuted)
+                        if (state.loadingMore) {
+                            item(key = "more") { Text("Загружаем…", style = PfTheme.type.caption, color = PfTheme.colors.textMuted, modifier = Modifier.padding(vertical = d.space4)) }
+                        } else if (state.moreFailed && state.errorPresentation == null) {
+                            item(key = "more-failed") {
+                                Box(Modifier.fillMaxWidth().padding(vertical = d.space3), contentAlignment = Alignment.Center) {
+                                    if (state.moreRetryReady) PfLink("Не загрузилось — повторить", onClick = onLoadMore)
+                                    else Text("Не загрузилось — повторить", style = PfTheme.type.body, color = PfTheme.colors.textMuted)
+                                }
                             }
-                        }
-                    } else if (state.nextBefore == null && state.items.isNotEmpty()) {
-                        item(key = "end") {
-                            Text(
-                                "Раньше операций нет",
-                                style = PfTheme.type.caption, color = PfTheme.colors.textFaint,
-                                modifier = Modifier.padding(vertical = d.space4),
-                            )
+                        } else if (state.nextBefore == null && state.items.isNotEmpty()) {
+                            item(key = "end") {
+                                Text(
+                                    "Раньше операций нет",
+                                    style = PfTheme.type.caption, color = PfTheme.colors.textFaint,
+                                    modifier = Modifier.padding(vertical = d.space4),
+                                )
+                            }
                         }
                     }
                 }

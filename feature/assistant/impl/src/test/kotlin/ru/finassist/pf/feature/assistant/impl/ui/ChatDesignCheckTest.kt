@@ -248,4 +248,7 @@ class ChatDesignCheckTest {
     @Test fun retryRecovery() = capture("ChatRetryRecovery", answered.copy(
         items = listOf(ChatItem.Answer("a1", calculated, AnswerStatus.FAILED, retryable = true)),
         recovery = ChatRecovery(ChatRecoveryTarget.RETRY_ANSWER, "a1", historyChecked = true)))
+    @Test fun refreshing() = capture("ChatRefreshing", answered.copy(refreshing = true))
+    @Test fun refreshingDark() = capture("ChatRefreshingDark", answered.copy(refreshing = true), dark = true)
+
 }

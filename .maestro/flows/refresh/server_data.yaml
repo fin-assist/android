@@ -1,0 +1,306 @@
+appId: ru.finassist.pf.mock.e2e
+name: Обновление свайпом — данные, фильтры и черновик сохраняются
+# FIN-399: reads may fail, but a gesture must not replay any mutation.
+tags:
+  - refresh
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+# The feed has no onResume read: this failure is caused by the pull itself.
+- swipe:
+    start: "50%, 25%"
+    end: "50%, 80%"
+    duration: 700
+- extendedWaitUntil:
+    visible: "Не удаётся подключиться к серверу"
+    timeout: 10000
+- assertVisible:
+    id: "operations.row"
+- assertNotVisible:
+    id: "operations.feed.offline"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- swipe:
+    start: "50%, 25%"
+    end: "50%, 80%"
+    duration: 700
+- extendedWaitUntil:
+    notVisible: "Не удаётся подключиться к серверу"
+    timeout: 10000
+- tapOn:
+    id: "operations.row"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "operations.detail.title"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- swipe:
+    start: "50%, 25%"
+    end: "50%, 80%"
+    duration: 700
+- extendedWaitUntil:
+    visible: "Не удаётся подключиться к серверу"
+    timeout: 10000
+- assertVisible:
+    id: "operations.detail.title"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- tapOn:
+    id: "ds.back"
+- tapOn:
+    id: "operations.feed.search"
+- tapOn:
+    id: "operations.search.input"
+- inputText: "Zzqqxx"
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.empty"
+    timeout: 10000
+# Empty results remain an actionable scroll target, with the existing query untouched.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- swipe:
+    start: "50%, 35%"
+    end: "50%, 85%"
+    duration: 700
+- extendedWaitUntil:
+    visible: "Не удаётся подключиться к серверу"
+    timeout: 10000
+- assertVisible:
+    id: "operations.search.input"
+    text: "Zzqqxx"
+- assertVisible:
+    id: "operations.search.empty"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- tapOn:
+    id: "ds.back"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible: "Сентябрь 2026"
+    timeout: 10000
+# A failed Year switch owns a separate target. Current-period refresh/Retry must keep it intact.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.retry"
+    timeout: 10000
+- assertVisible: "(?s).*Не удалось сменить период.*"
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+# First pull fails while the failed Year notice is already present.
+- swipe:
+    start: "50%, 20%"
+    end: "50%, 75%"
+    duration: 700
+- extendedWaitUntil:
+    visible:
+      id: "analytics.retry"
+    timeout: 10000
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible: "(?s).*Не удалось сменить период.*"
+- assertVisible:
+    id: "analytics.period.retry"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+# Resume must retain both notices. Error dismissal starts the read; the real refreshing tag ending completes it.
+- assertVisible:
+    id: "analytics.retry"
+- swipe:
+    start: "50%, 20%"
+    end: "50%, 75%"
+    duration: 700
+- extendedWaitUntil:
+    notVisible:
+      id: "analytics.retry"
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible:
+      id: "ds.refresh.indicator"
+    timeout: 10000
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible: "(?s).*Не удалось сменить период.*"
+- assertVisible:
+    id: "analytics.period.retry"
+# Produce one more current-read failure so its explicit Retry is exercised independently of the gesture.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- swipe:
+    start: "50%, 20%"
+    end: "50%, 75%"
+    duration: 700
+- extendedWaitUntil:
+    visible:
+      id: "analytics.retry"
+    timeout: 10000
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "analytics.period.retry"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- assertVisible:
+    id: "analytics.retry"
+- tapOn:
+    id: "analytics.retry"
+- extendedWaitUntil:
+    notVisible:
+      id: "analytics.retry"
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible:
+      id: "ds.refresh.indicator"
+    timeout: 10000
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible: "(?s).*Не удалось сменить период.*"
+- assertVisible:
+    id: "analytics.period.retry"
+# Only the separate Year Retry is allowed to leave the shown month.
+- tapOn:
+    id: "analytics.period.retry"
+- extendedWaitUntil:
+    visible:
+      id: "ds.period.pick"
+      text: "2026"
+    timeout: 15000
+- assertVisible:
+    id: "ds.segment.2"
+    checked: true
+- assertNotVisible:
+    id: "analytics.period.retry"
+- assertNotVisible:
+    id: "analytics.retry"
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.phone"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- swipe:
+    start: "50%, 25%"
+    end: "50%, 80%"
+    duration: 700
+- assertVisible:
+    id: "profile.phone"
+- extendedWaitUntil:
+    visible: "Не удаётся подключиться к серверу"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- swipe:
+    start: "50%, 25%"
+    end: "50%, 80%"
+    duration: 700
+- assertVisible:
+    id: "statements.history.row"
+- extendedWaitUntil:
+    visible: "Не удаётся подключиться к серверу"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- tapOn:
+    id: "ds.back"
+- tapOn:
+    id: "ds.tab.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Draft stays here"
+- hideKeyboard
+- swipe:
+    start: "50%, 25%"
+    end: "50%, 70%"
+    duration: 700
+- assertVisible:
+    id: "ds.chat.input"
+    text: "Draft stays here"
+- assertNotVisible:
+    id: "assistant.question"
+- assertNotVisible:
+    id: "assistant.answer"
+# Exercise the separate read-only unread-lines screen after a real fixture import.
+- runFlow: ../statements/upload_unreadable.yaml
+- tapOn:
+    id: "statements.history.unread"
+- extendedWaitUntil:
+    visible:
+      id: "statements.unread"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- swipe:
+    start: "50%, 25%"
+    end: "50%, 80%"
+    duration: 700
+- assertVisible: "Строка 31 · дата не прочитана"
+- extendedWaitUntil:
+    visible: "Не удаётся подключиться к серверу"
+    timeout: 10000

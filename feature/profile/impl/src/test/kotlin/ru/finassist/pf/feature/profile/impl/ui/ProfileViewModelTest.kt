@@ -141,8 +141,10 @@ class ProfileViewModelTest {
         var calls = 0
         var limit = LIMIT
         var failure: AppError? = null
+        var reply: (suspend () -> AssistantLimit)? = null
         override suspend fun getLimit(): AssistantLimit {
             calls++
+            reply?.let { return it() }
             failure?.let { throw it }
             return limit
         }
@@ -788,4 +790,111 @@ class ProfileViewModelTest {
             return AppPreferences(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") })
         }
     }
+    @Test fun `pull refresh deduplicates each pending read and keeps profile and summary`() {
+        val vm = loaded()
+        val previous = vm.state.value
+        val pendingProfile = CompletableDeferred<Profile>()
+        val pendingStatements = CompletableDeferred<StatementsList>()
+        profileApi.getReply = { pendingProfile.await() }
+        statementsApi.listReply = { pendingStatements.await() }
+        vm.refresh()
+        vm.refresh()
+        assertEquals(2, profileApi.gets)
+        assertEquals(2, statementsApi.calls)
+        assertTrue(vm.state.value.refreshing)
+        assertEquals(previous.profile, vm.state.value.profile)
+        assertEquals(previous.statements, vm.state.value.statements)
+        pendingProfile.completeExceptionally(AppError.Offline())
+        assertTrue(vm.state.value.refreshing)
+        pendingStatements.completeExceptionally(AppError.Offline())
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(previous.profile, vm.state.value.profile)
+        assertEquals(previous.statements, vm.state.value.statements)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertTrue(profileApi.updates.isEmpty())
+        assertEquals(0, profileApi.revokes)
+    }
+
+    @Test fun `auxiliary failures and successful recovery preserve a profile refusal explanation`() {
+        val vm = loaded()
+        profileApi.getFailure = forbiddenProfileRequest()
+        statementsApi.failure = AppError.Offline()
+        vm.refresh()
+        assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+        val explanation = vm.state.value.errorPresentation
+        statementsApi.failure = null
+        vm.refresh()
+        assertEquals(explanation, vm.state.value.errorPresentation)
+        assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(2, profileApi.gets)
+    }
+
+    @Test fun `successful consent revocation ends an invalidated pending profile refresh`() {
+        val vm = loaded()
+        val oldRead = CompletableDeferred<Profile>()
+        profileApi.getReply = { oldRead.await() }
+        vm.refresh()
+        assertTrue(vm.state.value.refreshing)
+        vm.revokeConsent()
+        assertFalse(vm.state.value.refreshing)
+        oldRead.complete(profileApi.profile)
+        assertFalse(vm.state.value.refreshing)
+        assertFalse(vm.state.value.profile!!.assistantConsent!!.granted)
+    }
+
+    @Test fun `all three initial offline reads retain the full profile connection state`() {
+        profileApi.getFailure = AppError.Offline()
+        statementsApi.failure = AppError.Offline()
+        assistant.failure = AppError.Offline()
+        val vm = loaded()
+        assertTrue(vm.state.value.offline)
+        assertNull(vm.state.value.profile)
+        assertNull(vm.state.value.errorPresentation)
+        assertEquals(ProfileErrorOrigin.PROFILE, vm.state.value.errorOrigin)
+    }
+
+    @Test fun `auxiliary error arriving before initial profile remains visible after profile succeeds`() {
+        val pending = CompletableDeferred<Profile>()
+        profileApi.getReply = { pending.await() }
+        statementsApi.failure = AppError.Offline()
+        val vm = loaded()
+        assertNull(vm.state.value.errorPresentation)
+        pending.complete(profileApi.profile)
+        assertEquals(ProfileErrorOrigin.STATEMENTS, vm.state.value.errorOrigin)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+    }
+
+    @Test fun `late quota success cannot restore an auxiliary error over a failed theme change`() {
+        val vm = loaded()
+        val quota = CompletableDeferred<AssistantLimit>()
+        assistant.reply = { quota.await() }
+        statementsApi.failure = AppError.Offline()
+        vm.refresh()
+        profileApi.updateFailure = AppError.Offline()
+        vm.setTheme(Theme.DARK)
+        assertEquals(ProfileErrorOrigin.THEME, vm.state.value.errorOrigin)
+        val explanation = vm.state.value.errorPresentation
+        val outcome = vm.state.value.snackbar
+        quota.complete(LIMIT)
+        assertEquals(ProfileErrorOrigin.THEME, vm.state.value.errorOrigin)
+        assertEquals(explanation, vm.state.value.errorPresentation)
+        assertEquals(outcome, vm.state.value.snackbar)
+    }
+
+    @Test fun `late quota success cannot replace a failed consent revocation outcome`() {
+        val vm = loaded()
+        val quota = CompletableDeferred<AssistantLimit>()
+        assistant.reply = { quota.await() }
+        statementsApi.failure = AppError.Offline()
+        vm.refresh()
+        profileApi.revokeFailure = AppError.Offline()
+        vm.revokeConsent()
+        assertEquals(ProfileErrorOrigin.CONSENT, vm.state.value.errorOrigin)
+        val outcome = vm.state.value.snackbar
+        quota.complete(LIMIT)
+        assertEquals(ProfileErrorOrigin.CONSENT, vm.state.value.errorOrigin)
+        assertEquals(outcome, vm.state.value.snackbar)
+    }
+
 }

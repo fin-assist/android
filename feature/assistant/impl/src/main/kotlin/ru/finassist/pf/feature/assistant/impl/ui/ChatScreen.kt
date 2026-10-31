@@ -1,5 +1,6 @@
 package ru.finassist.pf.feature.assistant.impl.ui
 
+import ru.finassist.pf.core.designsystem.components.PfRefreshContainer
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.getValue
@@ -120,6 +121,7 @@ fun ChatScreen(
             ChatActions(
                 onBack = { voice.cancel(); onBack() },
                 onReload = vm::load,
+                onRefresh = vm::refresh,
                 onLoadOlder = vm::loadOlder,
                 onRetryAnswer = vm::retry,
                 onRetryAfterFailure = vm::retryAfterFailure,
@@ -152,6 +154,7 @@ internal class ChatActions(
     val onOpenAnalytics: (AnalyticsParams) -> Unit,
     val onStartNewRequest: () -> Unit = {},
     val onOpenConsent: () -> Unit = {},
+    val onRefresh: () -> Unit = onReload,
     val onVoiceFinish: () -> Unit = {},
     val onVoiceCancel: () -> Unit = {},
 )
@@ -172,135 +175,138 @@ internal fun ChatContent(
         if (state.items.isNotEmpty()) listState.animateScrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1)
     }
 
-    Column(Modifier.fillMaxSize().imePadding().testTag(AssistantTags.CHAT)) {
-        val limit = state.limit
-        // The remaining questions are in the meter above the composer (mockup `Chat`).
-        PfPageHeader("Помощник", onBack = actions.onBack, subtitle = "Отвечает по вашим операциям")
-        state.limitErrorPresentation?.let {
-            ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4))
-        }
-        state.loadErrorPresentation?.let { presentation ->
-            ErrorMessage(presentation, "Не получилось загрузить диалог. Попробуйте ещё раз", modifier = Modifier.padding(d.space4),
-                onRetry = if (!state.loadRetryReady) null else actions.onReload)
-        }
-        state.streamErrorPresentation?.let {
-            ErrorMessage(it, "Не получилось получить ответ. Попробуйте ещё раз",
-                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2),
-                onRetry = if (state.streamRetryable == false) null else actions.onRetryAfterFailure)
-        }
-        state.olderErrorPresentation?.let {
-            ErrorMessage(it, "Не получилось загрузить предыдущие сообщения", onRetry = if (!state.olderRetryReady) null else actions.onLoadOlder,
-                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2))
-        }
-        when {
-            state.loading -> Column(Modifier.weight(1f)) {}
-            state.loadFailed && state.loadErrorPresentation != null -> Column(Modifier.weight(1f)) {}
-            state.loadFailed -> Column(Modifier.weight(1f)) {
-                PfEmptyState(PfIcons.ALERT, "Не получилось загрузить диалог", "Проверьте интернет и попробуйте ещё раз") {
-                    PfLink("Повторить", onClick = actions.onReload)
-                }
+    PfRefreshContainer(state.refreshing, actions.onRefresh, Modifier.fillMaxSize(), enabled = (state.loadRetryReady || state.limitRetryReady) && !state.loading) {
+        Column(Modifier.fillMaxSize().imePadding().testTag(AssistantTags.CHAT)) {
+            val limit = state.limit
+            // The remaining questions are in the meter above the composer (mockup `Chat`).
+            PfPageHeader("Помощник", onBack = actions.onBack, subtitle = "Отвечает по вашим операциям")
+            state.limitErrorPresentation?.let {
+                ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4),
+                    onRetry = actions.onRefresh.takeIf { state.limitRetryReady })
             }
-            // An empty dialog: the empty state in the middle (mockup `ChatEmpty`).
-            state.items.isEmpty() && !state.hasOlder -> Column(
-                Modifier.weight(1f).fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                PfEmptyState(
-                    PfIcons.MESSAGE, "Спросите о своих тратах и доходах", "Помощник отвечает по вашим операциям. 5 вопросов в день",
-                    modifier = Modifier.testTag(AssistantTags.EMPTY),
-                )
+            state.loadErrorPresentation?.let { presentation ->
+                ErrorMessage(presentation, "Не получилось загрузить диалог. Попробуйте ещё раз", modifier = Modifier.padding(d.space4),
+                    onRetry = if (!state.loadRetryReady) null else actions.onReload)
             }
-            // The thread sits at the bottom, over the meter, while it is shorter than the screen (`justify-content: flex-end`).
-            else -> LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = d.space5, vertical = d.space4),
-                verticalArrangement = Arrangement.spacedBy(d.space4, Alignment.Bottom),
-            ) {
-                if (state.hasOlder && state.olderRetryReady) {
-                    item(key = "older") { PfLink(if (state.loadingOlder) "Загружаем…" else "Показать раньше", onClick = actions.onLoadOlder) }
-                }
-                var lastDay: LocalDate? = null
-                state.items.forEach { item ->
-                    val day = item.createdAt.atZoneSameInstant(zone).toLocalDate()
-                    if (day != lastDay) {
-                        lastDay = day
-                        item(key = "day-$day-${item.id}") { PfChatDay(dayLabel(day, today)) }
+            state.streamErrorPresentation?.let {
+                ErrorMessage(it, "Не получилось получить ответ. Попробуйте ещё раз",
+                    modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2),
+                    onRetry = if (state.streamRetryable == false) null else actions.onRetryAfterFailure)
+            }
+            state.olderErrorPresentation?.let {
+                ErrorMessage(it, "Не получилось загрузить предыдущие сообщения", onRetry = if (!state.olderRetryReady) null else actions.onLoadOlder,
+                    modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2))
+            }
+            when {
+                state.loading -> Column(Modifier.weight(1f)) {}
+                state.loadFailed && state.loadErrorPresentation != null -> Column(Modifier.weight(1f)) {}
+                state.loadFailed -> Column(Modifier.weight(1f)) {
+                    PfEmptyState(PfIcons.ALERT, "Не получилось загрузить диалог", "Проверьте интернет и попробуйте ещё раз") {
+                        PfLink("Повторить", onClick = actions.onReload)
                     }
-                    item(key = item.id) {
-                        when (item) {
-                            is ChatItem.Question -> PfUserMessage(item.text, Modifier.testTag(AssistantTags.QUESTION))
-                            is ChatItem.Answer -> Answer(item, zone, requestRetryBlocked = state.blockedRetryAnswerId == item.id || state.retryReadyByAnswer[item.id] == false, onRetry = { actions.onRetryAnswer(item.id) }, onOpenSearch = actions.onOpenSearch, onOpenAnalytics = actions.onOpenAnalytics)
+                }
+                // An empty dialog: the empty state in the middle (mockup `ChatEmpty`).
+                state.items.isEmpty() && !state.hasOlder -> Column(
+                    Modifier.weight(1f).fillMaxWidth().padding(horizontal = d.space5, vertical = d.space4),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    PfEmptyState(
+                        PfIcons.MESSAGE, "Спросите о своих тратах и доходах", "Помощник отвечает по вашим операциям. 5 вопросов в день",
+                        modifier = Modifier.testTag(AssistantTags.EMPTY),
+                    )
+                }
+                // The thread sits at the bottom, over the meter, while it is shorter than the screen (`justify-content: flex-end`).
+                else -> LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = d.space5, vertical = d.space4),
+                    verticalArrangement = Arrangement.spacedBy(d.space4, Alignment.Bottom),
+                ) {
+                    if (state.hasOlder && state.olderRetryReady) {
+                        item(key = "older") { PfLink(if (state.loadingOlder) "Загружаем…" else "Показать раньше", onClick = actions.onLoadOlder) }
+                    }
+                    var lastDay: LocalDate? = null
+                    state.items.forEach { item ->
+                        val day = item.createdAt.atZoneSameInstant(zone).toLocalDate()
+                        if (day != lastDay) {
+                            lastDay = day
+                            item(key = "day-$day-${item.id}") { PfChatDay(dayLabel(day, today)) }
+                        }
+                        item(key = item.id) {
+                            when (item) {
+                                is ChatItem.Question -> PfUserMessage(item.text, Modifier.testTag(AssistantTags.QUESTION))
+                                is ChatItem.Answer -> Answer(item, zone, requestRetryBlocked = state.blockedRetryAnswerId == item.id || state.retryReadyByAnswer[item.id] == false, onRetry = { actions.onRetryAnswer(item.id) }, onOpenSearch = actions.onOpenSearch, onOpenAnalytics = actions.onOpenAnalytics)
+                            }
                         }
                     }
                 }
             }
-        }
-        state.recovery?.let { recovery ->
-            Column(Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(AssistantTags.RECOVERY)) {
-                PfNotice(
-                    if (recovery.target == ChatRecoveryTarget.ASK)
-                        "Результат предыдущей отправки неизвестен: вопрос мог уже сохраниться. Проверьте историю. Новая отправка создаст отдельный вопрос."
-                    else "Результат предыдущей попытки неизвестен. Проверьте историю: новая попытка доступна, только если ответ всё ещё можно повторить.",
-                    tone = NoticeTone.WARNING,
-                )
-                val canStart = recovery.target == ChatRecoveryTarget.ASK || (recovery.historyChecked && state.items.filterIsInstance<ChatItem.Answer>().any {
-                    it.id == recovery.answerId && it.status == AnswerStatus.FAILED && it.retryable
-                })
-                PfButton(if (recovery.target == ChatRecoveryTarget.ASK) "Отправить заново" else "Начать новую попытку",
-                    onClick = actions.onStartNewRequest, enabled = canStart && !state.sending && !state.generating && !state.limitExhausted,
-                    modifier = Modifier.testTag(AssistantTags.NEW_INTENT))
-                if (state.loadRetryReady && !state.loading) PfLink("Проверить историю", onClick = actions.onReload)
+            state.recovery?.let { recovery ->
+                Column(Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(AssistantTags.RECOVERY)) {
+                    PfNotice(
+                        if (recovery.target == ChatRecoveryTarget.ASK)
+                            "Результат предыдущей отправки неизвестен: вопрос мог уже сохраниться. Проверьте историю. Новая отправка создаст отдельный вопрос."
+                        else "Результат предыдущей попытки неизвестен. Проверьте историю: новая попытка доступна, только если ответ всё ещё можно повторить.",
+                        tone = NoticeTone.WARNING,
+                    )
+                    val canStart = recovery.target == ChatRecoveryTarget.ASK || (recovery.historyChecked && state.items.filterIsInstance<ChatItem.Answer>().any {
+                        it.id == recovery.answerId && it.status == AnswerStatus.FAILED && it.retryable
+                    })
+                    PfButton(if (recovery.target == ChatRecoveryTarget.ASK) "Отправить заново" else "Начать новую попытку",
+                        onClick = actions.onStartNewRequest, enabled = canStart && !state.sending && !state.generating && !state.limitExhausted,
+                        modifier = Modifier.testTag(AssistantTags.NEW_INTENT))
+                    if (state.loadRetryReady && !state.loading) PfLink("Проверить историю", onClick = actions.onReload)
+                }
             }
-        }
-        if (state.consentRequired) {
-            PfNotice(
-                "Чтобы продолжить, нужно согласие",
-                tone = NoticeTone.WARNING,
-                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2),
-                action = { PfNoticeLink("Дать согласие", onClick = actions.onOpenConsent,
-                    modifier = Modifier.testTag(AssistantTags.CONSENT_REOPEN)) },
+            if (state.consentRequired) {
+                PfNotice(
+                    "Чтобы продолжить, нужно согласие",
+                    tone = NoticeTone.WARNING,
+                    modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2),
+                    action = { PfNoticeLink("Дать согласие", onClick = actions.onOpenConsent,
+                        modifier = Modifier.testTag(AssistantTags.CONSENT_REOPEN)) },
+                )
+            } else if (state.errorPresentation != null && !state.offline) {
+                ErrorMessage(state.errorPresentation, "Не получилось отправить вопрос",
+                    modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(AssistantTags.SEND_FAILED),
+                    onRetry = state.failedRetryAnswerId?.let { id ->
+                        if (state.retryReadyByAnswer[id] == false) null else ({ actions.onRetryAnswer(id) })
+                    } ?: if (state.failedRetryAnswerId != null || !state.askRetryReady) null else actions.onRetryAfterFailure)
+            } else if (state.sendFailed && !state.offline) {
+                PfNotice(
+                    "Не получилось отправить вопрос",
+                    tone = NoticeTone.WARNING,
+                    modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(AssistantTags.SEND_FAILED),
+                    action = if (state.askBlocked || state.failedRetryAnswerId != null) null else ({ PfNoticeLink("Повторить", onClick = actions.onRetryAfterFailure) }),
+                )
+            }
+            // «Осталось 3 из 5 вопросов на сегодня» above the composer; with the limit spent the composer says it itself.
+            if (limit != null && !state.limitExhausted) {
+                PfLimitMeter(
+                    used = (limit.dailyMax - limit.remaining).coerceAtLeast(0), total = limit.dailyMax,
+                    modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(PfTestTags.LIMIT_METER),
+                )
+            }
+            VoicePanel(voiceState, actions.onVoiceFinish, actions.onVoiceCancel, actions.onVoice,
+                retryEnabled = !state.sending && !state.generating && !state.limitExhausted && !state.offline)
+            if (!voiceState.active) PfChatComposer(
+                value = state.draft,
+                onValueChange = actions.onDraft,
+                onSend = actions.onSend,
+                onVoice = actions.onVoice,
+                sendEnabled = state.askRetryReady && !state.askBlocked && !state.consentRequired,
+                // Offline replaces the input with a notice (mockup `ChatOffline`); the app has no network monitor, so
+                // the notice has «Повторить» (FIN-40, decided with the owner).
+                state = when {
+                    state.limitExhausted -> ComposerState.LIMIT
+                    state.offline -> ComposerState.OFFLINE
+                    state.sending || state.generating -> ComposerState.BUSY
+                    else -> ComposerState.IDLE
+                },
+                onRetry = actions.onRetryAfterFailure,
+                limitText = limit?.let { "Вопросы на сегодня закончились. Новые — в ${resetTime(it.resetsAt, zone)}" } ?: "Вопросы на сегодня закончились. Новые — в 00:00 по Москве",
             )
-        } else if (state.errorPresentation != null && !state.offline) {
-            ErrorMessage(state.errorPresentation, "Не получилось отправить вопрос",
-                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(AssistantTags.SEND_FAILED),
-                onRetry = state.failedRetryAnswerId?.let { id ->
-                    if (state.retryReadyByAnswer[id] == false) null else ({ actions.onRetryAnswer(id) })
-                } ?: if (state.failedRetryAnswerId != null || !state.askRetryReady) null else actions.onRetryAfterFailure)
-        } else if (state.sendFailed && !state.offline) {
-            PfNotice(
-                "Не получилось отправить вопрос",
-                tone = NoticeTone.WARNING,
-                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(AssistantTags.SEND_FAILED),
-                action = if (state.askBlocked || state.failedRetryAnswerId != null) null else ({ PfNoticeLink("Повторить", onClick = actions.onRetryAfterFailure) }),
-            )
         }
-        // «Осталось 3 из 5 вопросов на сегодня» above the composer; with the limit spent the composer says it itself.
-        if (limit != null && !state.limitExhausted) {
-            PfLimitMeter(
-                used = (limit.dailyMax - limit.remaining).coerceAtLeast(0), total = limit.dailyMax,
-                modifier = Modifier.padding(horizontal = d.space5, vertical = d.space2).testTag(PfTestTags.LIMIT_METER),
-            )
-        }
-        VoicePanel(voiceState, actions.onVoiceFinish, actions.onVoiceCancel, actions.onVoice,
-            retryEnabled = !state.sending && !state.generating && !state.limitExhausted && !state.offline)
-        if (!voiceState.active) PfChatComposer(
-            value = state.draft,
-            onValueChange = actions.onDraft,
-            onSend = actions.onSend,
-            onVoice = actions.onVoice,
-            sendEnabled = state.askRetryReady && !state.askBlocked && !state.consentRequired,
-            // Offline replaces the input with a notice (mockup `ChatOffline`); the app has no network monitor, so
-            // the notice has «Повторить» (FIN-40, decided with the owner).
-            state = when {
-                state.limitExhausted -> ComposerState.LIMIT
-                state.offline -> ComposerState.OFFLINE
-                state.sending || state.generating -> ComposerState.BUSY
-                else -> ComposerState.IDLE
-            },
-            onRetry = actions.onRetryAfterFailure,
-            limitText = limit?.let { "Вопросы на сегодня закончились. Новые — в ${resetTime(it.resetsAt, zone)}" } ?: "Вопросы на сегодня закончились. Новые — в 00:00 по Москве",
-        )
     }
 }
 

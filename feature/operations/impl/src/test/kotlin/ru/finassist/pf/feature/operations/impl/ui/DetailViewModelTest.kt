@@ -294,4 +294,154 @@ class DetailViewModelTest {
         assertEquals("2026-10-02T00:00:00.123456789+03:00", api.openedAt.last())
     }
 
+    @Test fun `refresh preserves operation and category draft and never writes category`() {
+        val vm = vm()
+        vm.openPicker()
+        vm.choose("cat_restaurants")
+        vm.refresh()
+        assertEquals(1, api.opened.size)
+        assertEquals("cat_restaurants", vm.state.value.draftCategoryId)
+        vm.closePicker()
+        val shown = vm.state.value.operation
+        api.getFailure = AppError.Offline()
+        vm.refresh()
+        assertEquals(shown, vm.state.value.operation)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertFalse(vm.state.value.refreshing)
+        assertTrue(api.changes.isEmpty())
+    }
+
+    @Test fun `pending refresh deduplicates detail reads and keeps content visible`() = runTest {
+        val wait = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val delayed = object : ru.finassist.pf.core.api.OperationsApi by api {
+            override suspend fun getOperation(id: String, occurredAt: String): ru.finassist.pf.core.api.model.OperationDetails {
+                calls++
+                if (calls > 1) wait.await()
+                return api.getOperation(id, occurredAt)
+            }
+        }
+        val vm = DetailViewModel(savedState, delayed, categories, operations, tracker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
+        val shown = vm.state.value.operation
+        vm.refresh()
+        vm.refresh()
+        vm.load()
+        assertEquals(2, calls)
+        assertEquals(shown, vm.state.value.operation)
+        assertTrue(vm.state.value.refreshing)
+        assertFalse(vm.state.value.loading)
+        wait.complete(Unit)
+        assertFalse(vm.state.value.refreshing)
+    }
+
+    @Test fun `detail refresh preserves old data and respects retry after`() {
+        val vm = vm()
+        val shown = vm.state.value.operation
+        api.getFailure = AppError.RateLimited(null, retryAfterSeconds = 60)
+        vm.refresh()
+        vm.refresh()
+        assertEquals(2, api.opened.size)
+        assertEquals(shown, vm.state.value.operation)
+        assertFalse(vm.state.value.retryReady)
+    }
+
+    @Test fun `late refresh cannot undo a successful category mutation or restore a split identity`() = runTest {
+        val wait = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val old = api.operations.getValue("op_1")
+        var calls = 0
+        val delayed = object : ru.finassist.pf.core.api.OperationsApi by api {
+            override suspend fun getOperation(id: String, occurredAt: String): ru.finassist.pf.core.api.model.OperationDetails {
+                calls++
+                if (calls == 2) {
+                    wait.await()
+                    return old
+                }
+                return api.getOperation(id, occurredAt)
+            }
+        }
+        val vm = DetailViewModel(savedState, delayed, categories, operations, tracker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
+        vm.refresh()
+        vm.openPicker()
+        vm.choose("cat_restaurants")
+        val changed = details("split_debit", categoryId = "cat_restaurants").copy(occurredAt = old.occurredAt.plusDays(1))
+        api.operations[changed.id] = changed
+        api.changeResponse = ChangeCategoryResponse(listOf(changed), replacedId = old.id)
+        vm.save()
+        assertEquals(changed, vm.state.value.operation)
+        assertFalse(vm.state.value.refreshing)
+        val published = operations.published.toList()
+        wait.complete(Unit)
+        assertEquals(changed, vm.state.value.operation)
+        assertEquals(published, operations.published)
+        vm.load()
+        assertEquals(changed.id, api.opened.last())
+        assertEquals(changed.occurredAt, java.time.OffsetDateTime.parse(api.openedAt.last()))
+    }
+
+    @Test fun `stale read preserves endpoint wait without restoring error or operation after a successful patch`() = runTest {
+        val wait = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val delayed = object : ru.finassist.pf.core.api.OperationsApi by api {
+            override suspend fun getOperation(id: String, occurredAt: String): ru.finassist.pf.core.api.model.OperationDetails {
+                calls++
+                if (calls == 2) {
+                    wait.await()
+                    throw AppError.RateLimited(null, 60)
+                }
+                return api.getOperation(id, occurredAt)
+            }
+        }
+        val vm = DetailViewModel(savedState, delayed, categories, operations, tracker, ru.finassist.pf.core.common.time.ElapsedClock { testScheduler.currentTime })
+        vm.refresh()
+        vm.openPicker()
+        vm.choose("cat_restaurants")
+        val changed = details("op_1", categoryId = "cat_restaurants")
+        api.operations[changed.id] = changed
+        api.changeResponse = ChangeCategoryResponse(listOf(changed))
+        vm.save()
+        vm.refresh()
+        val completedCalls = calls
+        wait.complete(Unit)
+        assertEquals(changed, vm.state.value.operation)
+        assertFalse(vm.state.value.refreshing)
+        assertNull(vm.state.value.errorPresentation)
+        assertFalse(vm.state.value.retryReady)
+        vm.refresh()
+        assertEquals(completedCalls, calls)
+        testScheduler.advanceTimeBy(60_000)
+        testScheduler.runCurrent()
+        assertTrue(vm.state.value.retryReady)
+        vm.refresh()
+        assertEquals(completedCalls + 1, calls)
+    }
+
+    @Test fun `refresh not found clears a deleted operation and dismisses its category draft`() = runTest {
+        val wait = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var calls = 0
+        val delayed = object : ru.finassist.pf.core.api.OperationsApi by api {
+            override suspend fun getOperation(id: String, occurredAt: String): ru.finassist.pf.core.api.model.OperationDetails {
+                calls++
+                if (calls == 2) {
+                    wait.await()
+                    throw AppError.Api(ErrorCodes.NOT_FOUND, 404)
+                }
+                return api.getOperation(id, occurredAt)
+            }
+        }
+        val vm = DetailViewModel(savedState, delayed, categories, operations, tracker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
+        vm.refresh()
+        vm.openPicker()
+        vm.choose("cat_restaurants")
+        wait.complete(Unit)
+        assertTrue(vm.state.value.notFound)
+        assertFalse(vm.state.value.error)
+        assertFalse(vm.state.value.picker)
+        assertNull(vm.state.value.operation)
+        assertNull(vm.state.value.draftCategoryId)
+        vm.save()
+        vm.refresh()
+        assertTrue(api.changes.isEmpty())
+        assertEquals(2, calls)
+    }
+
 }

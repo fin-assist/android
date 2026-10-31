@@ -1,5 +1,6 @@
 package ru.finassist.pf.core.screenshot
 
+import androidx.compose.ui.platform.LocalInspectionMode
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
@@ -127,7 +128,7 @@ object DesignCheck {
                 statusBars = WindowInsets(top = SYSTEM_BAR_DP.dp),
                 navigationBars = WindowInsets(bottom = SYSTEM_BAR_DP.dp),
             )
-            CompositionLocalProvider(LocalPfSystemBars provides bars) {
+            CompositionLocalProvider(LocalPfSystemBars provides bars, LocalInspectionMode provides true) {
                 PfTheme(darkTheme = dark) {
                     Box(Modifier.fillMaxSize().background(PfTheme.colors.bg)) {
                         Column(Modifier.fillMaxSize()) {
