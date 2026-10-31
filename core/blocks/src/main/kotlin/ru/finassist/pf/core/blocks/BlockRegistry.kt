@@ -27,6 +27,8 @@ class BlockContext(
     /** Ids of lists shown in full («Все категории»). */
     val expanded: Set<String> = emptySet(),
     val onToggleExpanded: (id: String) -> Unit = {},
+    /** Only the Analytics screen supplies this capability; assistant charts keep it absent. */
+    val onSelectAnalyticsPeriod: ((Block, BlockAction) -> Unit)? = null,
     /** Wraps the main card of a block — the Analytics screen lays its coachmarks over it. */
     val decorate: @Composable (block: Block, content: @Composable () -> Unit) -> Unit = { _, content -> content() },
 )

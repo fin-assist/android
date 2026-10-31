@@ -55,6 +55,8 @@ object BlockLayout {
             ActionType.OPEN_OPERATIONS -> it.filter?.copy(transferMode = null)?.isEmpty == false
             ActionType.OPEN_ASSISTANT -> true
             ActionType.DISMISS_REGULAR_PAYMENT -> !it.paymentId.isNullOrBlank() && !it.label.isNullOrBlank()
+            // Point selection is context-bound; generic taps and buttons must not expose it.
+            ActionType.SELECT_ANALYTICS_PERIOD -> false
             ActionType.UNKNOWN -> false
         }
     }

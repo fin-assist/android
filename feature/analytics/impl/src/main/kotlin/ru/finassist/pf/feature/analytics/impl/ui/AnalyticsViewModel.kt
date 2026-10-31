@@ -29,6 +29,7 @@ import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.blocks.CatalogV1
+import ru.finassist.pf.core.blocks.AnalyticsPeriodTargets
 import ru.finassist.pf.core.common.time.PeriodType
 import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.common.time.PeriodKey
@@ -155,7 +156,7 @@ class AnalyticsViewModel @Inject constructor(
     fun init(params: AnalyticsParams?) {
         if (initialized) return
         initialized = true
-        if (params != null) {
+        if (params?.isValidSelection == true) {
             period = params.period
             date = params.date
             transferMode = allowedMode(params.transferMode)
@@ -334,7 +335,7 @@ class AnalyticsViewModel @Inject constructor(
                 // The refusal belongs to the failed params, not the different period restored on screen.
                 // Keep its explanation until the user requests that restored context; never retry automatically.
                 if (requested != Triple(period, date, transferMode)) retryGate.clear()
-                val failedSwitch = _state.value.data != null && requested.first != period
+                val failedSwitch = _state.value.data != null && (requested.first != period || requested.second != date)
                 if (failedSwitch) {
                     failedPeriodRequest = requested
                     periodChangeRetryGate.record(e)
@@ -375,7 +376,7 @@ class AnalyticsViewModel @Inject constructor(
 
     /** Restore this segment's choice; only a first visit derives a key from the displayed period. */
     override fun setPeriodType(type: PeriodTypeCode) {
-        if (type == period) return
+        if (type == PeriodTypeCode.UNKNOWN || type == period) return
         val targetDate = dateForType(type)
         // The segment is another entry point to the same failed request, including its wait/refusal.
         if (failedPeriodRequest == Triple(type, targetDate, transferMode)) {
@@ -390,21 +391,26 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     private fun dateForType(type: PeriodTypeCode): PeriodKey? {
+        if (type == PeriodTypeCode.ALL_TIME) return PeriodKey.ALL_TIME
         selectedDates[type]?.let { return it }
         val target = PeriodType.fromCode(type.code) ?: return null
         val shown = _state.value.data
         val key = shown?.params?.date ?: date ?: return null
         // The API accepts exact or finer keys. Coarsening preserves the existing calendar anchor.
-        if (key.type.ordinal <= target.ordinal) return key
+        if (key.isCalendar && key.type.ordinal <= target.ordinal) return key
         val info = shown?.period ?: return null
         // dataTo is an inclusive covered instant; only the calendar range has an exclusive end.
-        val last = if (info.coverage == Coverage.COMPLETE) info.range.to.minusNanos(1) else info.dataTo
+        val last = if (key.isCalendar && info.coverage == Coverage.COMPLETE) info.range.to.minusNanos(1) else info.dataTo
         if (last == null || last !in info.range) return null
         return PeriodKey.of(target, last.atZoneSameInstant(reportZone.current).toLocalDate())
     }
 
     override fun goTo(key: PeriodKey) {
         _state.update { it.copy(sheet = null) }
+        if (failedPeriodRequest == Triple(period, key, transferMode)) {
+            retryPeriodChange()
+            return
+        }
         if (key == date) return
         clearRestriction()
         date = key
@@ -485,8 +491,28 @@ class AnalyticsViewModel @Inject constructor(
                 navigate(action)
             }
             ActionType.OPEN_ASSISTANT -> navigate(action)
+            ActionType.SELECT_ANALYTICS_PERIOD -> selectChartMonth(block, action)
             ActionType.UNKNOWN -> Unit
         }
+    }
+
+    /** A chart action changes the type and exact key in one request, with the current transfer mode. */
+    private fun selectChartMonth(block: Block, action: BlockAction) {
+        if (block.id != "monthly_chart" || block.type != ru.finassist.pf.core.api.model.BlockType.CHART || block.v != 1 || !block.status.hasData) return
+        val target = AnalyticsPeriodTargets.of(action.period, action.date)?.takeIf { it.period == PeriodTypeCode.MONTH } ?: return
+        val request = Triple(target.period, target.date, transferMode)
+        if (request == Triple(period, date, transferMode)) return
+        if (failedPeriodRequest == request) {
+            retryPeriodChange()
+            return
+        }
+        val changedType = period != target.period
+        period = target.period
+        date = target.date
+        _state.update { it.copy(sheet = null) }
+        clearRestriction(periodsChanged = changedType)
+        tracker.track(Events.ANALYTICS_PERIOD_CHANGED, mapOf("period" to target.period.code))
+        load()
     }
 
     /** Exposure (FIN-9): the block was drawn — once per block id and response. */

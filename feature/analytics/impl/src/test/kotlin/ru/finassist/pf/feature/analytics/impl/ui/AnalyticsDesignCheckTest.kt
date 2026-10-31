@@ -102,7 +102,8 @@ class AnalyticsDesignCheckTest {
         val tiles = response.blocks.single { it.id == "tiles" }
         kotlin.test.assertEquals(ru.finassist.pf.core.api.model.BlockStatus.NONE, tiles.status)
         kotlin.test.assertEquals("За этот период данных нет", tiles.emptyText)
-        kotlin.test.assertTrue(tiles.decode(ru.finassist.pf.core.api.model.TileGroupData.serializer())!!.tiles.isEmpty())
+        kotlin.test.assertEquals(2, tiles.v)
+        kotlin.test.assertTrue(tiles.decode(ru.finassist.pf.core.api.model.TileGroupDataV2.serializer())!!.groups.isEmpty())
     }
 
     @Test fun analyticsNoData() = capture("AnalyticsNoData", ui(noData()), heightDp = 844)
@@ -156,5 +157,8 @@ class AnalyticsDesignCheckTest {
 
     @Test fun refreshing() = capture("AnalyticsRefreshing", ui(september()).copy(refreshing = true), heightDp = 844)
     @Test fun refreshingDark() = capture("AnalyticsRefreshingDark", ui(september()).copy(refreshing = true), heightDp = 844, dark = true)
+    // FIN-400: proposed all-time artboards; no approved Figma frames yet.
+    @Test fun analyticsAllTime() = capture("AnalyticsAllTime", ui(golden("all_time")), heightDp = 1700)
+    @Test fun analyticsAllTimeDark() = capture("AnalyticsAllTimeDark", ui(golden("all_time")), heightDp = 1700, dark = true)
 
 }

@@ -29,9 +29,12 @@ import ru.finassist.pf.core.api.model.RankedItem
 import ru.finassist.pf.core.api.model.RankedListData
 import ru.finassist.pf.core.api.model.Tile
 import ru.finassist.pf.core.api.model.TileGroupData
+import ru.finassist.pf.core.api.model.TileGroupDataV2
+import ru.finassist.pf.core.api.model.TileGroupSection
 import ru.finassist.pf.core.api.model.ValueKind
 import ru.finassist.pf.core.common.money.Money
 import ru.finassist.pf.core.common.time.RussianDates
+import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.common.time.countWithNoun
 import java.time.YearMonth
 import kotlin.math.roundToInt
@@ -43,11 +46,21 @@ import kotlin.math.roundToInt
  */
 object AnalyticsComposer {
 
-    /** `supports=type@v,…`: the newest version of each type the client draws; null — version 1 of every type. */
-    fun parseSupports(raw: String?): Map<String, Int>? = raw?.split(',')?.mapNotNull { part ->
-        val (type, v) = part.trim().split('@').takeIf { it.size == 2 } ?: return@mapNotNull null
-        v.toIntOrNull()?.let { type to it }
-    }?.toMap()
+    /** `supports=type@v,…`: absent/empty means v1; duplicate types advertise their greatest maximum. */
+    fun parseSupports(raw: String?): Map<String, Int>? {
+        if (raw.isNullOrEmpty()) return null
+        val versions = mutableMapOf<String, Int>()
+        for (part in raw.split(',')) {
+            val pair = part.split('@')
+            require(pair.size == 2 && pair[0].isNotEmpty())
+            val digits = pair[1].removePrefix("+")
+            require(digits.isNotEmpty() && digits.all { it in '0'..'9' })
+            val version = requireNotNull(digits.toIntOrNull())
+            require(version > 0)
+            versions[pair[0]] = maxOf(versions[pair[0]] ?: 0, version)
+        }
+        return versions
+    }
 
     /** `exp=key:variant,…`. */
     fun parseExperiments(raw: String?): Map<String, String> = raw?.split(',')?.mapNotNull { part ->
@@ -69,18 +82,19 @@ object AnalyticsComposer {
         val params = s.params!!
         val period = s.period!!
         val type = params.period
+        val tileVersion = if ((supports?.get(BlockType.TILE_GROUP.code) ?: 1) >= 2) 2 else 1
         // Early state (docs/calc.md, section 4): one incomplete covered month in all history — no monthly chart.
         val early = s.state?.fullMonths == 0 &&
             s.monthlyChart?.lock?.let { it.reason == LockReason.NEED_MONTHS_WITH_DATA && it.available == 1 } == true
 
         fun guarded(id: String, build: () -> List<Block>): List<Block> =
-            if (id in failing) listOf(unavailable(id)) else try {
+            if (id in failing) listOf(unavailable(id, tileVersion)) else try {
                 build()
             } catch (e: RuntimeException) {
-                listOf(unavailable(id))
+                listOf(unavailable(id, tileVersion))
             }
 
-        val tiles = guarded("tiles") { listOfNotNull(s.tiles?.let { tiles(it, s, period) }) }
+        val tiles = guarded("tiles") { listOfNotNull(s.tiles?.let { tiles(it, s, period, tileVersion) }) }
         val chart = guarded("monthly_chart") { if (early) emptyList() else listOfNotNull(s.monthlyChart?.let { monthlyChart(it, s) }) }
         val expense = guarded("expense_categories") { listOfNotNull(s.expenseCategories?.let { expenseCategories(it, s, period) }) }
         val income = guarded("income_categories") { listOfNotNull(s.incomeCategories?.let { incomeCategories(it, type, period) }) }
@@ -91,7 +105,7 @@ object AnalyticsComposer {
                 guarded("bank_fees") { listOf(bankFees(i.bankFees, period, s)) } +
                 guarded("small_frequent") { listOf(smallFrequent(i.smallFrequent, s)) }
         }.orEmpty()
-        val balance = guarded("balance") { if (type == PeriodTypeCode.YEAR) emptyList() else listOfNotNull(balance(s)) }
+        val balance = guarded("balance") { if (type == PeriodTypeCode.YEAR || type == PeriodTypeCode.ALL_TIME) emptyList() else listOfNotNull(balance(s)) }
 
         val ordered = if (experiments[ORDER_EXPERIMENT] == "b") {
             expense + income + tiles + chart + insights + balance
@@ -105,13 +119,15 @@ object AnalyticsComposer {
         )
     }
 
-    private fun unavailable(id: String) = Block(
-        id = id, type = typeOf(id), status = BlockStatus.UNAVAILABLE, title = titleOf(id), emptyText = UNAVAILABLE_TEXT,
+    private fun unavailable(id: String, tileVersion: Int = 1) = Block(
+        id = id, type = typeOf(id), v = if (id == "tiles") tileVersion else 1,
+        status = BlockStatus.UNAVAILABLE, title = titleOf(id), emptyText = UNAVAILABLE_TEXT,
         altText = UNAVAILABLE_TEXT,
         data = when (id) {
             "regular_payments", "notable_spending", "bank_fees", "small_frequent" ->
                 Block.of(BlockType.INSIGHT_CARD, InsightCardData.serializer(), InsightCardData(iconOf(id), titleOf(id) ?: "")).data
-            "tiles" -> Block.of(BlockType.TILE_GROUP, TileGroupData.serializer(), TileGroupData(emptyList())).data
+            "tiles" -> if (tileVersion == 2) Block.of(BlockType.TILE_GROUP, TileGroupDataV2.serializer(), TileGroupDataV2(emptyList())).data
+                else Block.of(BlockType.TILE_GROUP, TileGroupData.serializer(), TileGroupData(emptyList())).data
             else -> null
         },
     )
@@ -185,10 +201,12 @@ object AnalyticsComposer {
         )
     }
 
-    private fun tiles(t: AnalyticsTiles, s: AnalyticsSnapshot, period: AnalyticsPeriodInfo): Block {
-        if (period.coverage == Coverage.NO_DATA) return Block.of(
-            BlockType.TILE_GROUP, TileGroupData.serializer(), TileGroupData(emptyList()),
-        ).copy(id = "tiles", status = BlockStatus.NONE, emptyText = "За этот период данных нет", altText = "За этот период данных нет")
+    private fun tiles(t: AnalyticsTiles, s: AnalyticsSnapshot, period: AnalyticsPeriodInfo, version: Int): Block {
+        if (period.coverage == Coverage.NO_DATA) {
+            val block = if (version == 2) Block.of(BlockType.TILE_GROUP, TileGroupDataV2.serializer(), TileGroupDataV2(emptyList()), v = 2)
+                else Block.of(BlockType.TILE_GROUP, TileGroupData.serializer(), TileGroupData(emptyList()))
+            return block.copy(id = "tiles", status = BlockStatus.NONE, emptyText = "За этот период данных нет", altText = "За этот период данных нет")
+        }
         val params = s.params!!
         val share = AnalyticsServerTexts.share(t.balance)
         val balance = tile(
@@ -207,9 +225,22 @@ object AnalyticsComposer {
         val daily = tile("daily_expense", "Расходы в день", t.dailyExpense, s, caption = dailyCaption)
         val income = tile("income", "Доходы", t.income, s, showPlus = true, action = open(t.income.filters))
         val all = listOf(balance, expense, daily, income) + listOfNotNull(forecast)
-        return Block.of(BlockType.TILE_GROUP, TileGroupData.serializer(), TileGroupData(all)).copy(
+        val displayed: List<Tile>
+        val block: Block
+        if (version == 2) {
+            val facts = listOf(expense.copy(title = "Расходы за период"), income.copy(title = "Доходы за период"), balance)
+            val additional = listOf(daily.copy(title = "Средние расходы в день", caption = AnalyticsServerTexts.dailyBasis(dailyCaption))) + listOfNotNull(forecast)
+            displayed = facts + additional
+            block = Block.of(BlockType.TILE_GROUP, TileGroupDataV2.serializer(), TileGroupDataV2(listOf(
+                TileGroupSection(facts), TileGroupSection(additional, title = "Дополнительные показатели"),
+            )), v = 2)
+        } else {
+            displayed = all
+            block = Block.of(BlockType.TILE_GROUP, TileGroupData.serializer(), TileGroupData(all))
+        }
+        return block.copy(
             id = "tiles",
-            altText = all.joinToString(", ") { tl -> tl.title + (tl.value?.let { " " + Money(it.toLong()).format() } ?: " — " + (tl.lock?.text ?: "")) },
+            altText = displayed.joinToString(", ") { tl -> tl.title + (tl.value?.let { " " + Money(it.toLong()).format() } ?: " — " + (tl.lock?.text ?: "")) },
         )
     }
 
@@ -224,7 +255,7 @@ object AnalyticsComposer {
         val selected = points.indexOfFirst { it.month == s.params!!.date.value }
         return when {
             selected >= 0 -> selected
-            s.params!!.period == PeriodTypeCode.YEAR -> null
+            s.params!!.period == PeriodTypeCode.YEAR || s.params!!.period == PeriodTypeCode.ALL_TIME -> null
             else -> points.lastIndex
         }
     }
@@ -249,7 +280,11 @@ object AnalyticsComposer {
         }
         val data = ChartData(
             kind = ChartKind.BAR, valueKind = ValueKind.AMOUNT,
-            points = points.map { point(it, amount(it.expense)) },
+            points = points.map { monthly ->
+                point(monthly, amount(monthly.expense)).copy(action = if (monthly.coverage == Coverage.NO_DATA) null else BlockAction(
+                    ActionType.SELECT_ANALYTICS_PERIOD, period = PeriodTypeCode.MONTH, date = PeriodKey(monthly.month),
+                ))
+            },
             highlightIndex = highlight(points, s),
             notes = listOfNotNull(main?.let { ChartNote(it, NoteTone.PRIMARY) }, secondary?.let { ChartNote(it, NoteTone.MUTED) }),
         )

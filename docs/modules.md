@@ -91,3 +91,11 @@ impl/src/main/kotlin/ru/finassist/pf/feature/<name>/impl/
 3. Add the name to the `listOf(...)` of features in `app/build.gradle.kts` (wires `:api` + `:impl`).
 4. Register the `FeatureEntry` in the feature's Hilt module.
 5. Describe the module here and run `python3 scripts/agent-docs.py --write` (CI checks both).
+
+## Analytics block capabilities
+
+`core/blocks` negotiates `tile_group@2` while rendering legacy v1 responses. Group ordering, headings and
+average explanations come from the producer. `BlockContext` grants Analytics a monthly chart selection
+callback; assistant rendering leaves it absent. Only a valid covered monthly point can use that callback.
+The Analytics view model commits the requested month after success and keeps failed targets for an allowed
+explicit retry. All-time analytics uses the response's factual range and retains calendar selections.

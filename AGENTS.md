@@ -290,13 +290,26 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   `android.*`, `androidx.*`, Dagger / Hilt, JVM-only libraries or JVM-only stdlib (`synchronized`, `String.format`).
   An API already in `scripts/kmp-baseline.json` may be reused; an exception is justified in the PR and added there.
   `scripts/check-kmp-ready.py` (CI) fails on anything beyond the baseline; rule, inventory — `docs/kmp-readiness.md`.
+- Analytics offers Month/Quarter/Year/«За всё время» in one horizontally scrollable segmented row (FIN-400),
+  with full single-line labels, at least 48 dp touch targets and automatic reveal of the selected option.
+  Spare width is shared equally by the natural-width options; overflow keeps their natural widths and enables
+  horizontal scrolling. Manual scrolling remains available. The all_time marker has no fabricated calendar bounds;
+  the displayed range comes from the response. It retains transfer mode, calendar selections and import/deletion
+  refresh semantics. Assistant chips remain calendar-only; unknown/mismatched analytics chip params are hidden individually.
 - Analytics Month/Quarter/Year each retain their own successful selection (FIN-391); switching another
   type never resets it. A first finer selection uses the last covered instant of the displayed period
   (`period.data_to` is inclusive; a complete `range.to` is exclusive), in the current profile zone.
-  A failed type switch retains its exact request behind an explicit, separately gated Retry; resume does
-  not replace that notice or submit the target. The same segment uses the same gate; payment action
-  errors keep a separate presentation. A changed context retires the failed period request.
+  A failed period type or key change retains its exact request behind an explicit, separately gated Retry.
+  Resume does not replace that notice or submit the target. Repeating the segment, picker/navigation key or
+  chart target uses the same gate; payment action errors keep a separate presentation.
+  A changed context retires the failed period request.
   Same/finer request keys remain valid; the mock rejects coarse-to-fine keys with canonical validation errors.
+- Analytics monthly chart points select the exact server-provided month key (FIN-398); the whole column,
+  including a covered zero, is a target. The successful response commits the period atomically and preserves
+  transfer mode and vertical scroll. `select_analytics_period` is usable only through the Analytics chart
+  capability; generic blocks and assistant rendering never expose it as a button. Unselected interactive
+  year/all-time charts initially reveal the latest covered point (including zero), without selecting it;
+  manual scroll stays available.
 - Analytics refreshes on resume as well as statement/category events (FIN-394); after a data mutation old
   totals are cleared until a fresh response arrives. Loading and an empty recalculating response are
   preparation states rather than requests to upload another statement. With data, recalculation retains
@@ -314,6 +327,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   `core/blocks`; texts of blocks come from the server (in `mock` — `AnalyticsServerTexts`). A new primitive is a renderer in
   `CatalogV1` (it goes into `supports` by itself) plus the composer of the fake server. Design-check fixtures of the screen
   are golden responses the composer writes (`AnalyticsDesignFixturesTest`, `UPDATE_GOLDEN=1`).
+- `tile_group@2` (FIN-403) negotiates ordered primary and supplementary groups; its renderer also accepts
+  legacy v1 tiles. The server supplies headings and daily-average basis text. Missing/empty `supports` keeps
+  v1 responses; design-check fixtures explicitly advertise the current registry's supported versions.
 - A PR that adds or changes a user scenario covers it with a UI test in the same PR (docs/e2e.md, «When a change
   needs a UI test»). A scenario is what the user does and sees: a new screen or state, a step between screens, an
   error, empty or offline path they can reach, a flag that changes behaviour, a user-visible bug fix (the flow

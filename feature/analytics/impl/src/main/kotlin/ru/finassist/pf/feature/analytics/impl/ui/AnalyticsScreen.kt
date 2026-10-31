@@ -13,7 +13,7 @@ import ru.finassist.pf.core.blocks.BlockLayout
 import ru.finassist.pf.core.blocks.BlockTags
 import ru.finassist.pf.core.blocks.BlocksColumn
 import ru.finassist.pf.core.blocks.PreparedBlock
-import ru.finassist.pf.core.blocks.TileGroupRenderer
+import ru.finassist.pf.core.blocks.GroupedTileRenderer
 import ru.finassist.pf.core.api.model.AnalyticsPeriodInfo
 import ru.finassist.pf.core.api.model.BlockStatus
 import ru.finassist.pf.core.blocks.CatalogV1
@@ -86,7 +86,7 @@ class AnalyticsActions(
     val back: (() -> Unit)?,
 )
 
-private val PERIOD_TYPES = listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.YEAR)
+private val PERIOD_TYPES = listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.YEAR, PeriodTypeCode.ALL_TIME)
 
 @Composable
 fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: AnalyticsViewModel = hiltViewModel()) {
@@ -243,9 +243,12 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
         )
         Gap(d.space2)
         PfSegmentedControl(
-            options = listOf("Месяц", "Квартал", "Год"),
-            selected = PERIOD_TYPES.indexOf(params.period).coerceAtLeast(0),
+            options = listOf("Месяц", "Квартал", "Год", "За всё время"),
+            selected = PERIOD_TYPES.indexOf(params.period),
             onSelect = { vm.setPeriodType(PERIOD_TYPES[it]) },
+            scrollable = true,
+            modifier = Modifier.testTag(AnalyticsTags.PERIOD_TYPES),
+            optionTag = { if (it == PERIOD_TYPES.lastIndex) AnalyticsTags.ALL_TIME else "ds.segment.$it" },
         )
         if (blocks.transfersFilter) {
             Gap(d.space3)
@@ -289,7 +292,8 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
     val coverageCaption = analyticsCoverageCaption(period, params.period, prepared)
     coverageCaption?.let {
         Gap(d.space4)
-        Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
+        Text(it, style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+            modifier = if (params.period == PeriodTypeCode.ALL_TIME) Modifier.testTag(AnalyticsTags.ALL_TIME_RANGE) else Modifier)
     }
 
     Blocks(a, state, vm, actions, prepared, afterCaption = coverageCaption != null)
@@ -306,7 +310,7 @@ internal fun analyticsCoverageCaption(period: AnalyticsPeriodInfo, type: PeriodT
     if (period.coverage.effective == Coverage.NO_DATA) {
         val serverMessage = prepared.any {
             val block = it.block
-            block.id == "tiles" && block.type == BlockType.TILE_GROUP && block.v <= TileGroupRenderer.version &&
+            block.id == "tiles" && block.type == BlockType.TILE_GROUP && block.v <= GroupedTileRenderer.version &&
                 block.status.effective == BlockStatus.NONE && !block.emptyText.isNullOrBlank()
         }
         return if (serverMessage) null else AnalyticsTexts.coverage(period)
@@ -350,6 +354,7 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
         currency = a.currency,
         tags = AnalyticsBlockTags,
         onAction = { block, action -> vm.onAction(block, action, navigate) },
+        onSelectAnalyticsPeriod = { block, action -> vm.onAction(block, action, navigate) },
         expanded = state.expanded,
         onToggleExpanded = vm::toggleExpanded,
         decorate = { block, content ->
@@ -480,6 +485,9 @@ internal object AnalyticsTags {
     const val TRANSFERS_WITH = "analytics.transfers.with"
     const val TRANSFERS_WITHOUT = "analytics.transfers.without"
     const val PERIOD_OPTION = "analytics.period.option"
+    const val PERIOD_TYPES = "analytics.period.types"
+    const val ALL_TIME = "analytics.period.all_time"
+    const val ALL_TIME_RANGE = "analytics.period.all_time.range"
     const val EXPENSE_CATEGORY = "analytics.expense_category"
     const val INCOME_CATEGORY = "analytics.income_category"
     const val ALL_CATEGORIES = "analytics.all_categories"

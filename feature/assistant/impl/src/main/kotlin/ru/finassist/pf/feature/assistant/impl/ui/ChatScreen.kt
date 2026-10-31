@@ -355,7 +355,7 @@ private fun Answer(
                 AnswerFormat.groupBlocks(item.blocks).forEachIndexed { i, group -> BlockGroupView(group, chartId = "assistant.${item.id}.$i", currency = item.currency) }
             }
             // The chips follow the message and its source line, across the full width (mockup `Chat`).
-            val chips = item.chips.filter { it.screen != ChipScreen.UNKNOWN }
+            val chips = item.chips.filter { it.isSupported }
             if (chips.isNotEmpty() && item.status == AnswerStatus.COMPLETE) {
                 PfChipRow {
                     chips.forEach { chip ->
