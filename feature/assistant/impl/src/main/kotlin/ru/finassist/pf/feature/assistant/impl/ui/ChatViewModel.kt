@@ -197,6 +197,16 @@ class ChatViewModel @Inject constructor(
 
     fun load() { if (loadGate.isReady()) reload(skipStream = null) }
 
+    /** Every history mutation reconciles pagination permission with the actual next before_id. */
+    private fun updateHistoryState(transform: (ChatUiState) -> ChatUiState) {
+        val boundary = _state.value.items.firstOrNull()?.id
+        _state.update(transform)
+        if (boundary != _state.value.items.firstOrNull()?.id) {
+            olderGate.clearOriginalRefusal()
+            _state.update { it.copy(olderErrorPresentation = null, olderRetryable = null) }
+        }
+    }
+
     /**
      * Reads the latest page of the thread; on failure a shown thread stays as it is. [skipStream] is an answer
      * whose stream has just failed for good: it is not re-opened from here even if the history still says it is
@@ -219,7 +229,7 @@ class ChatViewModel @Inject constructor(
                     return@launch
                 }
                 val items = list.messages.mapNotNull(::toItem).distinctById()
-                _state.update { current ->
+                updateHistoryState { current ->
                     val priorById = beforeRead.associateBy { it.id }
                     val currentById = current.items.associateBy { it.id }
                     val firstFresh = items.firstOrNull()
@@ -250,8 +260,8 @@ class ChatViewModel @Inject constructor(
                 refreshLimit()
                 watchGenerating(skip = skipStream)
             } catch (e: AppError) {
-                loadGate.record(e)
                 if (readRevision != historyReadRevision) return@launch
+                loadGate.record(e)
                 if (mutationRevision != replacementRevision && loadGate.isReady()) {
                     _state.update { it.copy(loading = false) }
                     reload(skipStream)
@@ -275,14 +285,15 @@ class ChatViewModel @Inject constructor(
                     _state.update { it.copy(loadingOlder = false) }
                     return@launch
                 }
-                _state.update { st -> st.copy(loadingOlder = false,
+                updateHistoryState { st -> st.copy(loadingOlder = false,
                     items = (list.messages.mapNotNull(::toItem) + st.items).distinctById(), hasOlder = list.hasOlder) }
             } catch (e: AppError) {
-                olderGate.record(e)
                 if (_state.value.items.firstOrNull()?.id != first.id) {
+                    olderGate.recordEndpointWait(e)
                     _state.update { it.copy(loadingOlder = false) }
                     return@launch
                 }
+                olderGate.record(e)
                 _state.update { it.copy(loadingOlder = false, olderErrorPresentation = e.presentation, olderRetryable = e.requestRetryable) }
             }
         }
@@ -378,7 +389,7 @@ class ChatViewModel @Inject constructor(
                 val accepted = ++acceptanceRevision
                 acceptedMessageRevisions[question.id] = accepted
                 acceptedMessageRevisions[answer.id] = accepted
-                _state.update {
+                updateHistoryState {
                     it.copy(
                         sending = false, draft = if (it.draft.trim() == text) "" else it.draft, offline = false,
                         // A replayed 201 carries ids the reloaded history may already hold: keep those.
@@ -545,7 +556,7 @@ class ChatViewModel @Inject constructor(
                 val r = whileInProgress(key) { api.retry(key, answerId) }
                 retryKeys.remove(answerId)
                 replacementRevision++
-                _state.update { s ->
+                updateHistoryState { s ->
                     s.copy(
                         items = s.items.map { item ->
                             if (item.id == answerId && item is ChatItem.Answer) ChatItem.Answer(r.answerId, item.createdAt, AnswerStatus.GENERATING) else item
@@ -613,7 +624,7 @@ class ChatViewModel @Inject constructor(
         else -> false
     }
 
-    private fun applyEvent(answerId: String, event: AnswerEvent) = _state.update { s ->
+    private fun applyEvent(answerId: String, event: AnswerEvent) = updateHistoryState { s ->
         val items = s.items.map { item ->
             if (item !is ChatItem.Answer || item.id != answerId) return@map item
             when (event) {

@@ -5,6 +5,7 @@ import ru.finassist.pf.core.common.error.ErrorResponseInfo
 import ru.finassist.pf.core.common.error.ErrorSeverity
 import ru.finassist.pf.core.common.error.UserMessage
 import ru.finassist.pf.core.common.time.ElapsedClock
+import ru.finassist.pf.core.common.time.ResponseTiming
 import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -813,13 +814,126 @@ class ChatViewModelBehaviourTest {
         assertEquals("q8", api.listCalls.last())
     }
 
-    @Test fun `a stale older page explicit refusal is retained after its presentation is discarded`() {
-        val vm = failOlderReadAcrossChangedBoundary(AppError.Api(ErrorCodes.VALIDATION_ERROR, 400,
-            response = ErrorResponseInfo(ErrorCodes.VALIDATION_ERROR, 400, requestRetryable = false)))
+    @Test fun `a stale older refusal belongs to its old cursor but its captured wait still applies`() {
+        val vm = failOlderReadAcrossChangedBoundary(AppError.RateLimited(null, 3,
+            ErrorResponseInfo("RATE_LIMITED", 429, requestRetryable = false, retryAfterSeconds = 3,
+                timing = ResponseTiming(receivedElapsedMillis = 0))))
         val reads = api.listCalls.size
-        advance(60_000)
+        assertNull(vm.state.value.olderRetryable)
+        advance(2999)
         vm.loadOlder()
         assertEquals(reads, api.listCalls.size)
+        advance(1)
+        vm.loadOlder()
+        assertEquals("q8", api.listCalls.last())
+        assertEquals(reads + 1, api.listCalls.size)
+    }
+
+    @Test fun `a shown older refusal clears only when the actual cursor changes and keeps its deadline`() {
+        api.pages[null] = MessagesList(listOf(question("q2"), answer("a2")), hasOlder = true)
+        val vm = newVm()
+        api.listFailure = AppError.RateLimited(null, 3, ErrorResponseInfo("RATE_LIMITED", 429,
+            requestRetryable = false, retryAfterSeconds = 3, timing = ResponseTiming(receivedElapsedMillis = 0)))
+        vm.loadOlder()
+        assertEquals(false, vm.state.value.olderRetryable)
+        api.listFailure = null
+        // This refresh overlaps: the same before_id retains its original refusal and presentation.
+        api.pages[null] = MessagesList(listOf(answer("a2")), hasOlder = true)
+        vm.load()
+        assertEquals("q2", vm.state.value.items.first().id)
+        assertEquals(false, vm.state.value.olderRetryable)
+        advance(1000)
+        api.pages[null] = MessagesList(listOf(question("q8"), answer("a8")), hasOlder = true)
+        api.pages["q8"] = MessagesList(listOf(question("q7")), hasOlder = false)
+        vm.load()
+        assertNull(vm.state.value.olderRetryable)
+        assertNull(vm.state.value.olderErrorPresentation)
+        val reads = api.listCalls.size
+        advance(1999); vm.loadOlder()
+        assertEquals(reads, api.listCalls.size)
+        advance(1); vm.loadOlder()
+        assertEquals(reads + 1, api.listCalls.size)
+        assertEquals("q8", api.listCalls.last())
+    }
+
+    @Test fun `replacing the first answer also retires its original pagination refusal`() {
+        api.pages[null] = MessagesList(listOf(answer("a1", AnswerStatus.FAILED,
+            AnswerErrorCode.MODEL_ERROR, retryable = true)), hasOlder = true)
+        val vm = newVm()
+        api.listFailure = AppError.Api(ErrorCodes.VALIDATION_ERROR, 400,
+            response = ErrorResponseInfo(ErrorCodes.VALIDATION_ERROR, 400, requestRetryable = false))
+        vm.loadOlder()
+        assertEquals(false, vm.state.value.olderRetryable)
+        api.listFailure = null
+        api.retryOutcomes += RetryResponse("a2", remainingLimit = 2)
+        api.pages["a2"] = MessagesList(listOf(question("q1")), hasOlder = false)
+        vm.retry("a1")
+        assertEquals("a2", vm.state.value.items.first().id)
+        assertNull(vm.state.value.olderErrorPresentation)
+        assertNull(vm.state.value.olderRetryable)
+        vm.loadOlder()
+        assertEquals("a2", api.listCalls.last())
+        assertEquals("q1", vm.state.value.items.first().id)
+    }
+
+    @Test fun `a stale offline latest read cannot clear the newer rate limit in either completion order`() {
+        for (oldFinishesFirst in listOf(false, true)) {
+            api.listFailure = null
+            api.listGate = null
+            val vm = newVm()
+            vm.onResumed()
+            val oldRead = CompletableDeferred<Unit>()
+            val newRead = CompletableDeferred<Unit>()
+            api.listGate = oldRead
+            api.listFailure = AppError.Offline()
+            vm.load()
+            api.listGate = newRead
+            api.listFailure = AppError.RateLimited(null, 3)
+            vm.onResumed()
+            if (oldFinishesFirst) { oldRead.complete(Unit); newRead.complete(Unit) }
+            else { newRead.complete(Unit); oldRead.complete(Unit) }
+            assertFalse(vm.state.value.loadRetryReady)
+            api.listGate = null
+            api.listFailure = null
+            val reads = api.listCalls.size
+            advance(1000); vm.onResumed()
+            assertEquals(reads, api.listCalls.size)
+            advance(1999); vm.onResumed()
+            assertEquals(reads, api.listCalls.size)
+            advance(1); vm.onResumed()
+            assertEquals(reads + 1, api.listCalls.size)
+        }
+    }
+
+    @Test fun `a stale explicit refusal cannot block a newer successful resume in either completion order`() {
+        for (oldFinishesFirst in listOf(false, true)) {
+            api.listFailure = null
+            api.listGate = null
+            api.pages[null] = MessagesList(emptyList(), hasOlder = false)
+            val vm = newVm()
+            vm.onResumed()
+            val oldRead = CompletableDeferred<Unit>()
+            val newRead = CompletableDeferred<Unit>()
+            api.listGate = oldRead
+            api.listFailure = AppError.Api(ErrorCodes.VALIDATION_ERROR, 400,
+                response = ErrorResponseInfo(ErrorCodes.VALIDATION_ERROR, 400, requestRetryable = false))
+            vm.load()
+            api.listGate = newRead
+            api.listFailure = null
+            api.pages[null] = MessagesList(listOf(question("q8")), hasOlder = false)
+            vm.onResumed()
+            if (oldFinishesFirst) { oldRead.complete(Unit); newRead.complete(Unit) }
+            else { newRead.complete(Unit); oldRead.complete(Unit) }
+            assertTrue(vm.state.value.loadRetryReady)
+            assertNull(vm.state.value.loadErrorPresentation)
+            assertEquals(listOf("q8"), vm.state.value.items.map { it.id })
+            api.listGate = null
+            val reads = api.listCalls.size
+            api.pages[null] = MessagesList(listOf(question("q9")), hasOlder = false)
+            vm.onResumed()
+            assertEquals(reads + 1, api.listCalls.size)
+            assertEquals(listOf("q9"), vm.state.value.items.map { it.id })
+        }
     }
 
     @Test fun `a replacement during failed stream recovery rereads the authoritative history and keeps its skip id`() {
