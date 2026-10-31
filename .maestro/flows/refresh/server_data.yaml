@@ -139,7 +139,7 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?offline=false"
-# Resume must retain both notices. The disappearing current Retry acknowledges this successful pull.
+# Resume must retain both notices. Error dismissal starts the read; the real refreshing tag ending completes it.
 - assertVisible:
     id: "analytics.retry"
 - swipe:
@@ -149,6 +149,10 @@ tags:
 - extendedWaitUntil:
     notVisible:
       id: "analytics.retry"
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible:
+      id: "ds.refresh.indicator"
     timeout: 10000
 - assertVisible: "Сентябрь 2026"
 - assertVisible:
@@ -184,6 +188,10 @@ tags:
 - extendedWaitUntil:
     notVisible:
       id: "analytics.retry"
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible:
+      id: "ds.refresh.indicator"
     timeout: 10000
 - assertVisible: "Сентябрь 2026"
 - assertVisible:
