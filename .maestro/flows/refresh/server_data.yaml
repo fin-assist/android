@@ -103,6 +103,61 @@ tags:
 - extendedWaitUntil:
     visible: "Сентябрь 2026"
     timeout: 10000
+# A failed Year switch owns a separate target. Current-period refresh/Retry must keep it intact.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.retry"
+    timeout: 10000
+- assertVisible: "(?s).*Не удалось сменить период.*"
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+# First pull fails while the failed Year notice is already present.
+- swipe:
+    start: "50%, 20%"
+    end: "50%, 75%"
+    duration: 700
+- extendedWaitUntil:
+    visible:
+      id: "analytics.retry"
+    timeout: 10000
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible: "(?s).*Не удалось сменить период.*"
+- assertVisible:
+    id: "analytics.period.retry"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+# Resume must retain both notices. The disappearing current Retry acknowledges this successful pull.
+- assertVisible:
+    id: "analytics.retry"
+- swipe:
+    start: "50%, 20%"
+    end: "50%, 75%"
+    duration: 700
+- extendedWaitUntil:
+    notVisible:
+      id: "analytics.retry"
+    timeout: 10000
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible: "(?s).*Не удалось сменить период.*"
+- assertVisible:
+    id: "analytics.period.retry"
+# Produce one more current-read failure so its explicit Retry is exercised independently of the gesture.
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -111,16 +166,47 @@ tags:
     start: "50%, 20%"
     end: "50%, 75%"
     duration: 700
+- extendedWaitUntil:
+    visible:
+      id: "analytics.retry"
+    timeout: 10000
 - assertVisible: "Сентябрь 2026"
 - assertVisible:
-    id: "analytics.block.tiles"
-- extendedWaitUntil:
-    visible: "Не удаётся подключиться к серверу"
-    timeout: 10000
+    id: "analytics.period.retry"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?offline=false"
+- assertVisible:
+    id: "analytics.retry"
+- tapOn:
+    id: "analytics.retry"
+- extendedWaitUntil:
+    notVisible:
+      id: "analytics.retry"
+    timeout: 10000
+- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible: "(?s).*Не удалось сменить период.*"
+- assertVisible:
+    id: "analytics.period.retry"
+# Only the separate Year Retry is allowed to leave the shown month.
+- tapOn:
+    id: "analytics.period.retry"
+- extendedWaitUntil:
+    visible:
+      id: "ds.period.pick"
+      text: "2026"
+    timeout: 15000
+- assertVisible:
+    id: "ds.segment.2"
+    checked: true
+- assertNotVisible:
+    id: "analytics.period.retry"
+- assertNotVisible:
+    id: "analytics.retry"
 - tapOn:
     id: "ds.tab.profile"
 - extendedWaitUntil:
