@@ -23,6 +23,9 @@ internal fun Project.configureCompose(extension: CommonExtension<*, *, *, *, *, 
         add("implementation", libs.findLibrary("androidx.compose.ui.tooling.preview").get())
         add("debugImplementation", libs.findLibrary("androidx.compose.ui.tooling").get())
         add("androidTestImplementation", libs.findLibrary("androidx.compose.ui.test.junit4").get())
+        // AGP merges test dependencies into the Robolectric manifest for every build type.
+        // Keep the host Activity out of release runtime dependencies and distributable APKs.
+        add("testImplementation", libs.findLibrary("androidx.compose.ui.test.manifest").get())
         add("debugImplementation", libs.findLibrary("androidx.compose.ui.test.manifest").get())
     }
 

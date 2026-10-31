@@ -57,6 +57,25 @@ class ReleaseTest(unittest.TestCase):
         xml = f'<manifest {NS} package="ru.finassist.pf.mock"><application android:usesCleartextTraffic="false"/></manifest>'
         self.assertEqual(1, len(module.release_problems(xml)))
 
+    def test_compose_test_activity_fails_including_alias(self):
+        for component in [
+            '<activity android:name="androidx.activity.ComponentActivity" android:exported="true"/>',
+            '<activity-alias android:name="test.Host" android:targetActivity="androidx.activity.ComponentActivity"/>',
+        ]:
+            for pinned in [False, True]:
+                with self.subTest(component=component, pinned=pinned):
+                    xml = manifest(body=component)
+                    if pinned:
+                        xml = xml.replace('<application ', '<application android:networkSecurityConfig="@xml/network_security_config" ')
+                    self.assertEqual(
+                        ["Compose test activity in a release build: androidx.activity.ComponentActivity"],
+                        module.release_problems(xml, allow_config=pinned),
+                    )
+
+    def test_production_activity_subclass_is_allowed(self):
+        xml = manifest(body='<activity android:name="ru.finassist.pf.MainActivity"/>')
+        self.assertEqual([], module.release_problems(xml))
+
     def test_cleartext_not_explicitly_off_fails(self):
         self.assertEqual(1, len(module.release_problems(manifest(""))))
         self.assertEqual(1, len(module.release_problems(manifest('android:usesCleartextTraffic="true"'))))

@@ -49,6 +49,11 @@ def release_problems(manifest_xml: str, allow_config: bool = False) -> list[str]
     """Release rules; [allow_config] — a pinned build, which must use the app's own config instead of having none."""
     root = ET.fromstring(manifest_xml)
     problems = [f"test hook: {hook}" for hook in test_hooks(root)]
+    for element in root.iter():
+        if element.tag in ("activity", "activity-alias") and "androidx.activity.ComponentActivity" in (
+            element.get(ANDROID + "name"), element.get(ANDROID + "targetActivity")
+        ):
+            problems.append("Compose test activity in a release build: androidx.activity.ComponentActivity")
     application = root.find("application")
     if application is None:
         return problems + ["no <application>"]

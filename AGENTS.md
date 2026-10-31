@@ -183,11 +183,13 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   (every module, `build-logic/…/buildlogic/Coverage.kt`) runs the unit tests of the coverage variant only: `test`
   of JVM modules, `testDebugUnitTest` of Android libraries, `testMockDebugUnitTest` of `:app`.
 - CI (`.github/workflows/ci.yml`, FIN-176) runs the Gradle checks as parallel jobs: unit tests with coverage
-  (`unitTest :build-logic:convention:test` on a PR; `test`, the unit tests of every variant, on pushes to `main`,
-  `release/**` and `stage-*/**`), `lintMockDebug lintStageDebug`, and the build of `assembleMockDebug assembleLocalDebug
+  (`unitTest :build-logic:convention:test` plus analytics release and stage app unit tests on a PR; `test`, the unit
+  tests of every variant, on pushes to `main`, `release/**` and `stage-*/**`), `lintMockDebug lintStageDebug`, and the build of `assembleMockDebug assembleLocalDebug
   assembleStageDebug assembleStageRelease assembleProdRelease` (release unsigned) with `:app:checkNoMockCode`, the Tracer check and the manifest checks
   (`scripts/check-build-separation.py`, pinning included). A test that fails only in a release, `local`, `prod` or
-  `e2e` variant is caught after the merge, not on the PR (stage app unit tests also run on PRs); run `./gradlew test` locally when a change is variant-specific.
+  `e2e` variant is generally caught after the merge (analytics release and stage app tests also run on PRs);
+  run `./gradlew test` locally when a change is variant-specific. Compose's test host is a `testImplementation`
+  dependency for every variant; release manifests reject its `ComponentActivity` (FIN-414, docs/testing.md).
 - FIN-185: the assemble job resolves `mockE2eRuntimeClasspath`, both stage runtime classpaths and `prodReleaseRuntimeClasspath` using
   `scripts/compose-classpath.init.gradle` (`:app:composeClasspathReport --no-configuration-cache`), then validates
   the JSON with `scripts/check-compose-classpath.py`: Compose UI/foundation and lifecycle-runtime must match the
