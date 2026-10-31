@@ -528,4 +528,29 @@ class HistoryViewModelTest {
         assertEquals(2, api.streamOpens.size)
         assertEquals(1, api.listCalls)
     }
+    @Test fun `pull refresh retains uploads and delete confirmation and never repeats deletion`() {
+        val pending = CompletableDeferred<StatementsList>()
+        var calls = 0
+        val source = object : StatementsApi by api {
+            override suspend fun listStatements(): StatementsList {
+                calls++
+                return if (calls == 1) done else pending.await()
+            }
+        }
+        val vm = newVm(source = source)
+        vm.load()
+        vm.askDelete(done.uploads.first())
+        vm.refresh()
+        vm.refresh()
+        assertEquals(2, calls)
+        assertTrue(vm.state.value.refreshing)
+        assertEquals(done, vm.state.value.list)
+        assertEquals(done.uploads.first(), vm.state.value.confirmDelete)
+        pending.completeExceptionally(AppError.Offline())
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(done, vm.state.value.list)
+        assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
+        assertTrue(api.deleted.isEmpty())
+    }
+
 }

@@ -61,4 +61,7 @@ class ProfileDesignCheckTest {
     @Test fun serverWarning() = capture("ProfileServerWarning", state = state.copy(errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
     @Test fun serverWarningDark() = capture("ProfileServerWarningDark", dark = true, state = state.copy(errorPresentation = ErrorPresentation(UserMessage.from("Сервис получил новый тип ошибки. Попробуйте позже"), ErrorSeverity.WARNING)))
 
+    @Test fun refreshing() = capture("ProfileRefreshing", state = state.copy(refreshing = true))
+    @Test fun refreshingDark() = capture("ProfileRefreshingDark", dark = true, state = state.copy(refreshing = true))
+
 }
