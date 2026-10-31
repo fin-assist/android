@@ -714,6 +714,11 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
 
+Not covered yet (FIN-389): deterministic overlap of UserInput ownership of the private scroll mutex
+and a measurement-triggered automatic scroll. The native suite observes semantics and completed scroll
+actions, not mutex ownership; cancellation behavior was verified in the resolved library implementations.
+See [the passcode verification limits](#small-passcode-viewport-fin-389). No production synchronization hook was added.
+
 Not covered yet: voice input ([PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69), manual, FIN-404: the CI emulator has no controlled Russian speech/audio or deterministic recognition-service fixture;
 Maestro cannot produce recognizer callbacks). The preparation → actual `onReadyForSpeech`
 → listening/level → recognition/error panel, finish/cancel/back/background and on-device-to-system
@@ -1067,3 +1072,12 @@ checks all seven error-free setup/change/unlock/confirmation states at the suppo
 After automatic visibility/action checks, a separate manual scroll-up assertion verifies that a digit-only
 recomposition with an unchanged range respects the user’s position. The regression scope is portrait
 640–760 dp, font scales 1–2 and system insets 24–48 dp; the regular 390×844 dp design checks remain the baseline.
+
+The range observer uses `collectLatest`: Compose `foundation-android:1.7.8` cancels a Default-priority
+scroll when UserInput owns its internal `MutatorMutex`. Each scroll action runs in a child coroutine, so
+its cancellation does not finish collection of subsequent ranges (`kotlinx-coroutines-core-jvm:1.11.0`).
+The native tests above cover geometry and manual scroll preservation; they do not deterministically
+assert this concurrency overlap. Their completed semantic `ScrollBy` action neither holds nor exposes
+the internal UserInput mutex, and gesture injection provides no ownership acknowledgement for the
+measurement-triggered scroll. This lifecycle check is grounded in the resolved library implementations;
+no production synchronization hook was introduced solely to force the race.

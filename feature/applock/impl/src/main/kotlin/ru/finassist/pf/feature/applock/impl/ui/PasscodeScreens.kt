@@ -32,7 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import ru.finassist.pf.core.designsystem.components.BiometricKind
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.HeroTone
@@ -86,7 +86,8 @@ private fun PasscodePad(
     val digitLineHeight = with(LocalDensity.current) { PfTheme.type.title1.lineHeight.toDp() }
     LaunchedEffect(introductionScroll) {
         // Reveal dots as well as errors after measurement. User scrolling does not change this range.
-        snapshotFlow { introductionScroll.maxValue }.collect { maximum ->
+        // A user gesture may cancel this child scroll; later ranges must still be observed.
+        snapshotFlow { introductionScroll.maxValue }.collectLatest { maximum ->
             if (maximum != Int.MAX_VALUE) introductionScroll.scrollTo(maximum)
         }
     }
