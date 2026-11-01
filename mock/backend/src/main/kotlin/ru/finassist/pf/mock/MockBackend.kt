@@ -124,6 +124,10 @@ class MockBackend(
 
     var profile: Profile = emptyProfile("")
     val dismissedPayments = HashSet<String>()
+    /** Write receipts and delayed publication are separate; guarded by [mutex], mock-only test control. */
+    internal val unpublishedDismissals = mutableMapOf<String, Int>()
+    var dismissalWriteCount: Int = 0
+        internal set
     /** Category changes and statement uploads/deletions, for `changed_since` of the assistant's answers (api.md 7.2). */
     val dataChanges = DataChanges()
     val assistant = AssistantStore(dataChanges)
@@ -139,7 +143,7 @@ class MockBackend(
         catalog = catalog,
         scope = operationScope,
         coverage = ::coverage,
-        dismissedPayments = { dismissedPayments },
+        dismissedPayments = { dismissedPayments - unpublishedDismissals.keys },
         unreadLinesIn = { from, to -> unreadLines().count { l -> l.date != null && !l.date.isBefore(from) && l.date.isBefore(to) } },
         now = clock::now,
         expenseKind = { if (config.unknownCodes) MockCodes.EXPENSE_UNKNOWN else ru.finassist.pf.core.api.model.OperationKindFilter.EXPENSE },
@@ -319,6 +323,8 @@ class MockBackend(
         ledger.clear()
         uploads.clear()
         dismissedPayments.clear()
+        unpublishedDismissals.clear()
+        dismissalWriteCount = 0
         assistant.clear()
         idempotency.clear()
         profile = emptyProfile("")

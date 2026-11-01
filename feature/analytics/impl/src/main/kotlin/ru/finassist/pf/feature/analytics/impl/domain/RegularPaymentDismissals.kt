@@ -1,5 +1,9 @@
 package ru.finassist.pf.feature.analytics.impl.domain
 
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.ActionType
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.AnalyticsParams
@@ -30,7 +34,7 @@ internal class RegularPaymentDismissals {
         val card = data.blocks.firstOrNull { it.id == "regular_payments" && it.type == BlockType.INSIGHT_CARD && it.v == 1 }
         val details = card?.decode(InsightCardData.serializer())
         val visible = details?.items.orEmpty().mapNotNull { it.button?.takeIf { action -> action.type == ActionType.DISMISS_REGULAR_PAYMENT }?.paymentId }.toSet()
-        val authoritative = data.hasData && data.state?.recalculating != true && details != null &&
+        val authoritative = data.hasData && data.state?.recalculating != true && completePayments(card, details) &&
             card?.status?.effective in setOf(BlockStatus.READY, BlockStatus.TENTATIVE, BlockStatus.NONE)
         val context = data.params ?: requested
         val relevant = pending.filter { (id, receipt) -> receipt.confirmed && (receipt.origin == context || id in visible) }
@@ -46,6 +50,25 @@ internal class RegularPaymentDismissals {
             }
         }
         return Observation(awaiting, poll)
+    }
+
+    /** Rendering may drop malformed rows; a write receipt must never interpret that loss as absence. */
+    private fun completePayments(card: Block?, details: InsightCardData?): Boolean {
+        if (card == null || details == null) return false
+        val raw = card.data?.get("items")
+        // `none` carries only icon/title; ready/tentative must provide the actual list.
+        if (raw == null) return card.status == BlockStatus.NONE && details.items.isEmpty()
+        if (raw !is JsonArray || raw.size != details.items.size) return false
+        return raw.all { element ->
+            val item = element as? JsonObject
+            val title = item?.get("title") as? JsonPrimitive
+            val button = item?.get("button") as? JsonObject
+            val type = button?.get("type") as? JsonPrimitive
+            val id = button?.get("payment_id") as? JsonPrimitive
+            // String coercion is useful for rendering, but must not create a different payment identity.
+            title?.isString == true && type?.isString == true && type.content == ActionType.DISMISS_REGULAR_PAYMENT.code &&
+                id?.isString == true && id.content.isNotBlank()
+        }
     }
 
     private companion object { const val MAX_READS = 10 }

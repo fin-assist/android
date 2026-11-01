@@ -1,5 +1,5 @@
 appId: ru.finassist.pf.mock.e2e
-name: Не подписка — одно нажатие, ошибка и сохранённый результат
+name: Не подписка — ожидание публикации, таймаут и повтор только чтения
 tags:
   - analytics
   - mock-only
@@ -37,20 +37,71 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?offline=false"
-- tapOn: "Не подписка — РБК"
-# One successful tap is enough; no second PUT is needed to refresh the card.
+      LINK: "pfe2e://config?offline=false&dismissal_stale_reads=9"
+- doubleTapOn: "Не подписка — РБК"
+# The successful write is still unpublished: the row stays, and a second tap is disabled.
+- assertVisible:
+    text: "Не подписка — РБК"
+    enabled: false
+- assertVisible: "Обновляем…"
+- scrollUntilVisible:
+    element: "Пересчитываем после изменений — цифры обновятся через несколько секунд"
+    direction: UP
+- assertVisible: "Пересчитываем после изменений — цифры обновятся через несколько секунд"
 - extendedWaitUntil:
-    notVisible: "Не подписка — РБК"
-    timeout: 20000
+    notVisible: "Пересчитываем после изменений — цифры обновятся через несколько секунд"
+    timeout: 40000
+- scrollUntilVisible:
+    element: "Не подписка — Ростелеком"
+    direction: DOWN
+- assertNotVisible: "Не подписка — РБК"
 - assertVisible: "Не подписка — Ростелеком"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_dismissal_writes=1&dismissal_stale_reads=10"
+# Ten stale GETs exhaust the automatic budget; the next fresh GET must be an explicit retry.
+- tapOn: "Не подписка — Ростелеком"
+- assertVisible:
+    text: "Не подписка — Ростелеком"
+    enabled: false
+- assertVisible: "Обновляем…"
+- scrollUntilVisible:
+    element: "Пересчитываем после изменений — цифры обновятся через несколько секунд"
+    direction: UP
+- extendedWaitUntil:
+    visible: "Не удалось обновить показатели. Показаны данные до изменений"
+    timeout: 45000
+- assertVisible:
+    id: "analytics.retry"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_dismissal_writes=2"
+# Returning from the control activity must not resume timed-out polling.
+- assertVisible: "Не удалось обновить показатели. Показаны данные до изменений"
+- tapOn:
+    id: "analytics.retry"
+- extendedWaitUntil:
+    notVisible: "Не удалось обновить показатели. Показаны данные до изменений"
+    timeout: 15000
+- scrollUntilVisible:
+    element: "Не подписка — Мой телефон.*"
+    direction: DOWN
+- assertVisible: "Не подписка — Мой телефон.*"
+- assertNotVisible: "Не подписка — РБК"
+- assertNotVisible: "Не подписка — Ростелеком"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_dismissal_writes=2"
 - tapOn:
     id: "ds.tab.operations"
 - tapOn:
     id: "ds.tab.analytics"
 - scrollUntilVisible:
-    element:
-      id: "analytics.block.regular_payments"
+    element: "Не подписка — Мой телефон.*"
     direction: DOWN
+- assertVisible: "Не подписка — Мой телефон.*"
 - assertNotVisible: "Не подписка — РБК"
-- assertVisible: "Не подписка — Ростелеком"
+- assertNotVisible: "Не подписка — Ростелеком"

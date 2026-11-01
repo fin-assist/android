@@ -3,6 +3,7 @@ package ru.finassist.pf.feature.analytics.impl.ui
 import ru.finassist.pf.core.api.model.ActionType
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockAction
+import ru.finassist.pf.core.api.model.BlockStatus
 import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.InsightCardData
@@ -214,6 +215,27 @@ class AnalyticsViewModelTest {
         assertEquals(Request(PeriodTypeCode.ROLLING_QUARTER, PeriodKey.ROLLING_QUARTER, TransferMode.WITHOUT), api.requests.last())
         vm.setPeriodType(PeriodTypeCode.MONTH)
         assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITHOUT), api.requests.last())
+    }
+
+    @Test fun `clicking the selected calendar tab leaves its rolling period and restores the calendar key`() {
+        api.answers += data(mode = TransferMode.WITHOUT)
+        val vm = opened(AnalyticsParams(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITHOUT))
+        for ((calendar, rolling, key) in listOf(
+            Triple(PeriodTypeCode.YEAR, PeriodTypeCode.ROLLING_YEAR, "2026"),
+            Triple(PeriodTypeCode.QUARTER, PeriodTypeCode.ROLLING_QUARTER, "2026-Q3"),
+        )) {
+            api.reply = { data(calendar, key, TransferMode.WITHOUT) }
+            vm.setPeriodType(calendar)
+            api.reply = { data(rolling, rolling.code, TransferMode.WITHOUT) }
+            vm.setPeriodType(rolling)
+            assertEquals(rolling, vm.state.value.data?.params?.period)
+            val count = api.requests.size
+            api.reply = { data(calendar, key, TransferMode.WITHOUT) }
+            vm.setPeriodType(calendar)
+            assertEquals(count + 1, api.requests.size)
+            assertEquals(Request(calendar, PeriodKey(key), TransferMode.WITHOUT), api.requests.last())
+            assertEquals(calendar, vm.state.value.data?.params?.period)
+        }
     }
 
     @Test fun `failed rolling switch preserves the prior screen and retries the exact singleton and mode`() {
@@ -1156,7 +1178,7 @@ class AnalyticsViewModelTest {
         Block.of(BlockType.INSIGHT_CARD, InsightCardData.serializer(), InsightCardData("repeat", "Подписки",
             value = if (present) 100.0 else 0.0,
             items = if (present) listOf(InsightItem("Подписка", button = BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = "rp_1", label = "Не подписка"))) else emptyList(),
-        )).copy(id = "regular_payments"),
+        )).copy(id = "regular_payments", status = if (present) BlockStatus.READY else BlockStatus.NONE),
     ))
 
     @Test fun `one dismissal waits for an asynchronous projection without sending another PUT`() {

@@ -92,6 +92,11 @@ class AnalyticsPeriodControlTest {
             compose.waitForIdle()
             val segmentTag = if (segment == 3) "analytics.period.all_time" else "ds.segment.$segment"
             assertEquals(ToggleableState.On, compose.onNodeWithTag(segmentTag).fetchSemanticsNode().config.getOrNull(SemanticsProperties.ToggleableState))
+            if (type.isRolling) {
+                compose.onNodeWithTag(segmentTag).performClick()
+                assertEquals(if (type == PeriodTypeCode.ROLLING_YEAR) PeriodTypeCode.YEAR else PeriodTypeCode.QUARTER, selected.last(),
+                    "the selected calendar segment must remain clickable to leave its rolling period")
+            }
             for ((rolling, matching) in listOf(PeriodTypeCode.ROLLING_YEAR to (segment == 2), PeriodTypeCode.ROLLING_QUARTER to (segment == 1))) {
                 val node = compose.onNodeWithTag("analytics.period.${rolling.code}")
                 if (!matching) node.assertDoesNotExist() else {

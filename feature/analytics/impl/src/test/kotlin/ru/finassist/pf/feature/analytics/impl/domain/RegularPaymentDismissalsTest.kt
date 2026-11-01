@@ -1,5 +1,8 @@
 package ru.finassist.pf.feature.analytics.impl.domain
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
+import ru.finassist.pf.core.api.ApiJson
 import org.junit.Test
 import ru.finassist.pf.core.api.model.ActionType
 import ru.finassist.pf.core.api.model.Analytics
@@ -22,7 +25,8 @@ class RegularPaymentDismissalsTest {
     private fun response(ids: List<String>, params: AnalyticsParams = month, status: BlockStatus = BlockStatus.READY): Analytics {
         val card = Block.of(BlockType.INSIGHT_CARD, InsightCardData.serializer(), InsightCardData("repeat", "Подписки",
             items = ids.map { InsightItem(title = it, button = BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = it, label = "Не подписка")) }))
-        return Analytics(hasData = true, params = params, blocks = listOf(card.copy(id = "regular_payments", status = status)))
+        val payload = if (ids.isEmpty()) JsonObject(card.data!! + ("items" to JsonArray(emptyList()))) else card.data
+        return Analytics(hasData = true, params = params, blocks = listOf(card.copy(id = "regular_payments", status = status, data = payload)))
     }
 
     @Test fun `a confirmed write polls stale projection and completes only when payment disappears`() {
@@ -79,5 +83,37 @@ class RegularPaymentDismissalsTest {
         assertEquals(setOf("two"), tracker.ids)
         assertTrue(tracker.begin("one", month))
         tracker.confirm("unknown")
+    }
+
+    @Test fun `tolerant rendering cannot acknowledge malformed or incomplete payment lists`() {
+        for (items in listOf("{}", "null", "[null]", "[{}]", "[{\"button\":{\"type\":\"dismiss_regular_payment\",\"payment_id\":\"one\"}}]",
+            "[{\"title\":\"One\",\"button\":{\"type\":\"dismiss_regular_payment\"}}]",
+            "[{\"title\":\"One\",\"button\":{\"type\":\"dismiss_regular_payment\",\"payment_id\":123}}]",
+            "[{\"title\":123,\"button\":{\"type\":\"dismiss_regular_payment\",\"payment_id\":\"one\"}}]",
+            "[{\"title\":\"Other\",\"button\":{\"type\":\"dismiss_regular_payment\",\"payment_id\":\"two\"}},{}]")) {
+            val tracker = RegularPaymentDismissals()
+            tracker.begin("one", month)
+            tracker.confirm("one")
+            val valid = response(listOf("one"))
+            val card = valid.blocks.single()
+            val malformed = valid.copy(blocks = listOf(card.copy(data = JsonObject(card.data!! + ("items" to ApiJson.parseToJsonElement(items))))))
+            assertTrue(tracker.observe(malformed).poll, items)
+            assertEquals(setOf("one"), tracker.ids)
+            assertFalse(tracker.begin("one", month), "malformed data must not unlock another PUT")
+            assertTrue(tracker.observe(valid).poll)
+            assertFalse(tracker.observe(response(listOf("two"))).awaiting)
+            assertTrue(tracker.ids.isEmpty())
+        }
+    }
+
+    @Test fun `omitted items only acknowledges a valid none card`() {
+        val tracker = RegularPaymentDismissals()
+        tracker.begin("one", month)
+        tracker.confirm("one")
+        val valid = response(emptyList())
+        val card = valid.blocks.single().let { it.copy(data = JsonObject(it.data!! - "items")) }
+        assertTrue(tracker.observe(valid.copy(blocks = listOf(card))).poll)
+        assertFalse(tracker.observe(valid.copy(blocks = listOf(card.copy(status = BlockStatus.NONE)))).awaiting)
+        assertTrue(tracker.ids.isEmpty())
     }
 }
