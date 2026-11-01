@@ -298,17 +298,17 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
                 modifier = Modifier.testTag(AnalyticsTags.UNREAD),
             )
         }
-    }
-    if (a.state?.recalculating == true || state.awaitingDismissal) {
-        Gap(d.space3)
-        PfNotice(
-            if (state.recalculationPaused || state.dismissalRefreshPaused) "Не удалось обновить показатели. Показаны данные до изменений"
-            else "Пересчитываем после изменений — цифры обновятся через несколько секунд",
-            tone = NoticeTone.INFO,
-            action = if ((state.recalculationPaused || state.dismissalRefreshPaused) && state.retryReady) ({
-                PfNoticeLink("Повторить", onClick = { vm.refresh() }, modifier = Modifier.testTag(AnalyticsTags.RETRY))
-            }) else null,
-        )
+        if (s.recalculating) {
+            Gap(d.space3)
+            PfNotice(
+                if (state.recalculationPaused) "Не удалось обновить показатели. Показаны данные до изменений"
+                else "Пересчитываем после изменений — цифры обновятся через несколько секунд",
+                tone = NoticeTone.INFO,
+                action = if (state.recalculationPaused && state.retryReady) ({
+                    PfNoticeLink("Повторить", onClick = { vm.refresh() }, modifier = Modifier.testTag(AnalyticsTags.RETRY))
+                }) else null,
+            )
+        }
     }
     // A past month or an incomplete quarter/year says which part of it the numbers cover; the tiles follow 8 dp
     // under it (mockup `AnalyticsYear`: `margin-bottom: space-2 − space-4`).
@@ -378,7 +378,6 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
         tags = AnalyticsBlockTags,
         onAction = { block, action -> vm.onAction(block, action, navigate) },
         onSelectAnalyticsPeriod = { block, action -> vm.onAction(block, action, navigate) },
-        pendingDismissals = state.pendingDismissals,
         expanded = state.expanded,
         onToggleExpanded = vm::toggleExpanded,
         decorate = { block, content ->

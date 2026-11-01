@@ -89,13 +89,6 @@ class AnalyticsDesignCheckTest {
     // FIN-394: proposed states; authored without running UI/DesignCheck.
     @Test fun analyticsRecalculating() = capture("AnalyticsRecalculating", ui(september().copy(state = analyticsState.copy(recalculating = true))), heightDp = 2848)
     @Test fun analyticsRecalculationPaused() = capture("AnalyticsRecalculationPaused", ui(september().copy(state = analyticsState.copy(recalculating = true))).copy(recalculationPaused = true), heightDp = 2848)
-    // FIN-416 proposed states, authored without running UI/DesignCheck.
-    @Test fun analyticsDismissalPending() = capture("AnalyticsDismissalPending", ui(september()).copy(
-        pendingDismissals = setOf("r1"), awaitingDismissal = true), heightDp = 2848)
-    @Test fun analyticsDismissalPendingDark() = capture("AnalyticsDismissalPendingDark", ui(september()).copy(
-        pendingDismissals = setOf("r1"), awaitingDismissal = true), heightDp = 2848, dark = true)
-    @Test fun analyticsDismissalRefreshPaused() = capture("AnalyticsDismissalRefreshPaused", ui(september()).copy(
-        pendingDismissals = setOf("r1"), awaitingDismissal = true, dismissalRefreshPaused = true), heightDp = 2848)
     @Test fun analyticsUpdating() = capture("AnalyticsUpdating", AnalyticsUiState(blocks = blocks), heightDp = 844)
     @Test fun analyticsPreparationTimeout() = capture("AnalyticsPreparationTimeout", AnalyticsUiState(loading = false, blocks = blocks, preparationTimedOut = true), heightDp = 844)
     @Test fun analyticsPreparationTimeoutDark() = capture("AnalyticsPreparationTimeoutDark", AnalyticsUiState(loading = false, blocks = blocks, preparationTimedOut = true), heightDp = 844, dark = true)

@@ -3,7 +3,6 @@ package ru.finassist.pf.mock
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import ru.finassist.pf.core.api.model.Coverage
-import ru.finassist.pf.core.api.model.InsightCardData
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
@@ -152,54 +151,6 @@ class MockAnalyticsApiTest {
         api.restoreRegularPayment(netflix.id)
         api.restoreRegularPayment(netflix.id)
         assertTrue("Netflix" in regularTitles())
-    }
-
-    @Test
-    fun `dismissal publishes after exactly N valid reads without another write`() = runBlocking<Unit> {
-        val original = api.getAnalytics(null, null, null)
-        val card = original.blocks.single { it.id == "regular_payments" }
-        val id = card.decode(InsightCardData.serializer())!!.items.single { it.title == "Netflix" }.button!!.paymentId!!
-        backend.config = backend.config.copy(dismissalStaleReads = 10)
-        api.dismissRegularPayment(id)
-        assertTrue(id in backend.dismissedPayments, "PUT has committed before publication")
-        assertEquals(1, backend.dismissalWriteCount)
-        repeat(10) {
-            assertEquals(card, api.getAnalytics(null, null, null).blocks.single { it.id == "regular_payments" }, "keep both the row and server totals")
-        }
-        val published = api.getAnalytics(null, null, null).blocks.single { it.id == "regular_payments" }
-        assertTrue(published.decode(InsightCardData.serializer())!!.items.none { it.button?.paymentId == id })
-        assertTrue(published.decode(InsightCardData.serializer())!!.items.any { it.title == "Пятёрочка" })
-        assertEquals(1, backend.dismissalWriteCount, "retry is a GET only")
-        assertTrue(backend.unpublishedDismissals.isEmpty())
-    }
-
-    @Test
-    fun `publication control preserves auth validation failure and idempotent write boundaries`() = runBlocking<Unit> {
-        val id = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH).insights!!.regularPayments.items!!.single { it.title == "Netflix" }.id
-        backend.config = backend.config.copy(dismissalStaleReads = 2, offline = true)
-        assertFailsWith<AppError.Offline> { api.dismissRegularPayment(id) }
-        assertEquals(0, backend.dismissalWriteCount)
-        backend.config = backend.config.copy(offline = false)
-        api.dismissRegularPayment(id)
-        assertFailsWith<AppError.Api> { api.getAnalytics(PeriodTypeCode.UNKNOWN, null, null) }
-        assertEquals(2, backend.unpublishedDismissals[id])
-        backend.profile = backend.profile.copy(userId = "")
-        assertFailsWith<AppError.Unauthorized> { api.getAnalytics(null, null, null) }
-        assertFailsWith<AppError.Unauthorized> { api.dismissRegularPayment(id) }
-        assertEquals(1, backend.dismissalWriteCount)
-        assertEquals(2, backend.unpublishedDismissals[id])
-        backend.profile = backend.profile.copy(userId = "test")
-        api.getAnalytics(null, null, null)
-        api.dismissRegularPayment(id)
-        assertEquals(2, backend.dismissalWriteCount)
-        assertEquals(1, backend.unpublishedDismissals[id], "duplicate PUT does not reset publication")
-        api.restoreRegularPayment(id)
-        assertTrue(backend.unpublishedDismissals.isEmpty())
-        assertTrue("Netflix" in regularTitles())
-        api.dismissRegularPayment(id)
-        backend.wipe()
-        assertTrue(backend.unpublishedDismissals.isEmpty())
-        assertEquals(0, backend.dismissalWriteCount)
     }
 
     @Test

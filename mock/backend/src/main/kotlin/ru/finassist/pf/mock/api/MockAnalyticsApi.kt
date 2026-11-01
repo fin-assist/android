@@ -56,14 +56,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
             }
         }
         if (pending) return Analytics(hasData = false)
-        val snapshot = backend.mutex.withLock {
-            val current = backend.analytics.analytics(period, date, transferMode ?: TransferMode.WITH)
-            backend.unpublishedDismissals.keys.toList().forEach { id ->
-                val remaining = backend.unpublishedDismissals.getValue(id) - 1
-                if (remaining <= 0) backend.unpublishedDismissals.remove(id) else backend.unpublishedDismissals[id] = remaining
-            }
-            current
-        }
+        val snapshot = backend.mutex.withLock { backend.analytics.analytics(period, date, transferMode ?: TransferMode.WITH) }
         val composed = AnalyticsComposer.compose(
             snapshot,
             supports = supported,
@@ -100,22 +93,14 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
         backend.simulateNetwork()
         backend.requireSession()
         requirePayment(id)
-        backend.mutex.withLock {
-            backend.dismissalWriteCount++
-            if (backend.dismissedPayments.add(id) && backend.config.dismissalStaleReads > 0) {
-                backend.unpublishedDismissals[id] = backend.config.dismissalStaleReads
-            }
-        }
+        backend.mutex.withLock { backend.dismissedPayments += id }
     }
 
     override suspend fun restoreRegularPayment(id: String) {
         backend.simulateNetwork()
         backend.requireSession()
         requirePayment(id)
-        backend.mutex.withLock {
-            backend.dismissedPayments -= id
-            backend.unpublishedDismissals.remove(id)
-        }
+        backend.mutex.withLock { backend.dismissedPayments -= id }
     }
 
     /**
