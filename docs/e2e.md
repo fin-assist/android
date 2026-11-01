@@ -1121,3 +1121,14 @@ month is still verified separately under `ds.period.pick`.
 Qase71 and Qase75 keep their existing flow paths and IDs. Their scenario descriptions are synchronized;
 these follow-up revisions were checked statically and have not been executed on a device. Application runtime,
 accessibility semantics, timeout values and suite membership are unchanged.
+
+
+### FIN-415 count spacing and return from history
+
+The [next post-merge run 41284429429](https://github.com/fin-assist/android/actions/runs/41284429429) at `a36a5178`
+found the old January 2024 operation, but the exact count assertion used an ASCII space where `countWithNoun`
+outputs NBSP. The selector keeps `operations.search.count`, the exact count 1 and singular noun, accepting only
+normal/NBSP/narrow-NBSP separators. The same run passed the period picker in Qase71 and reached the final
+statement deletion. History has `ds.back` and no bottom tabs; Qase71 now leaves History before selecting
+Analytics for its final no-data check. Qase75's scenario and mapping are unchanged; Qase71's navigation step
+is synchronized. Both revisions are checked statically against those captured hierarchies, not by a new device run.
