@@ -1,0 +1,56 @@
+appId: ru.finassist.pf.mock.e2e
+name: Не подписка — одно нажатие, ошибка и сохранённый результат
+tags:
+  - analytics
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 15000
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 15000
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+    direction: DOWN
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- tapOn: "Не подписка — РБК"
+- extendedWaitUntil:
+    visible: "(?s).*Не получилось убрать.*"
+    timeout: 15000
+- assertVisible: "Не подписка — РБК"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- tapOn: "Не подписка — РБК"
+# One successful tap is enough; no second PUT is needed to refresh the card.
+- extendedWaitUntil:
+    notVisible: "Не подписка — РБК"
+    timeout: 20000
+- assertVisible: "Не подписка — Ростелеком"
+- tapOn:
+    id: "ds.tab.operations"
+- tapOn:
+    id: "ds.tab.analytics"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.regular_payments"
+    direction: DOWN
+- assertNotVisible: "Не подписка — РБК"
+- assertVisible: "Не подписка — Ростелеком"

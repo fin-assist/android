@@ -29,6 +29,8 @@ class BlockContext(
     val onToggleExpanded: (id: String) -> Unit = {},
     /** Only the Analytics screen supplies this capability; assistant charts keep it absent. */
     val onSelectAnalyticsPeriod: ((Block, BlockAction) -> Unit)? = null,
+    /** Dismissals awaiting the mutation response or its published analytics result. */
+    val pendingDismissals: Set<String> = emptySet(),
     /** Wraps the main card of a block — the Analytics screen lays its coachmarks over it. */
     val decorate: @Composable (block: Block, content: @Composable () -> Unit) -> Unit = { _, content -> content() },
 )

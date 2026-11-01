@@ -41,6 +41,7 @@ import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.operations.api.OperationsRepository
 import ru.finassist.pf.feature.statements.api.StatementsRepository
+import ru.finassist.pf.feature.analytics.impl.domain.RegularPaymentDismissals
 import javax.inject.Inject
 
 /**
@@ -87,6 +88,9 @@ data class AnalyticsUiState(
     val periodChangeRetryReady: Boolean = true,
     val preparationTimedOut: Boolean = false,
     val recalculationPaused: Boolean = false,
+    val pendingDismissals: Set<String> = emptySet(),
+    val awaitingDismissal: Boolean = false,
+    val dismissalRefreshPaused: Boolean = false,
 ) {
     val periodChangeFailed: Boolean get() = periodChangeErrorPresentation != null
 }
@@ -131,6 +135,7 @@ class AnalyticsViewModel @Inject constructor(
     private var periodsGeneration = 0L
     private val periodsRetryGate = RequestRetryGate(elapsedClock)
     private val dismissalGates = mutableMapOf<String, RequestRetryGate>()
+    private val dismissals = RegularPaymentDismissals()
 
     init { viewModelScope.launch { periodsRetryGate.readiness.collect { ready -> _state.update { it.copy(periodsRetryReady = ready) } } } }
 
@@ -196,13 +201,13 @@ class AnalyticsViewModel @Inject constructor(
     /** Returning to a saved tab also refreshes changes whose event arrived while its view model was absent. */
     fun onResume(params: AnalyticsParams?) {
         if (!initialized) init(params)
-        else if (!_state.value.preparationTimedOut && failedPeriodRequest == null && loadJob?.isActive != true) load(quiet = true)
+        else if (!_state.value.preparationTimedOut && !_state.value.dismissalRefreshPaused && failedPeriodRequest == null && loadJob?.isActive != true) load(quiet = true)
     }
 
     /** Actual data/zone changes invalidate the old request context, including the period directory. */
-    private fun reloadChangedData(invalidate: Boolean = false, clearSnackbar: Boolean = true) {
+    private fun reloadChangedData(invalidate: Boolean = false, clearSnackbar: Boolean = true, preserveReadWait: Boolean = false) {
         if (!initialized) return
-        clearRestriction(periodsChanged = true)
+        clearRestriction(periodsChanged = true, preserveReadWait = preserveReadWait)
         importPolls = 0
         // An import or deletion invalidates the old totals. Other edits keep the screen and its scroll position.
         if (invalidate) _state.update { it.copy(data = null, loading = true, offline = false,
@@ -210,10 +215,10 @@ class AnalyticsViewModel @Inject constructor(
         load(quiet = !invalidate)
     }
 
-    private fun clearRestriction(periodsChanged: Boolean = false) {
+    private fun clearRestriction(periodsChanged: Boolean = false, preserveReadWait: Boolean = false) {
         clearPeriodChangeFailure()
         if (periodsChanged) resetPeriodsContext()
-        retryGate.clear()
+        if (preserveReadWait) retryGate.clearOriginalRefusal() else retryGate.clear()
         _state.update { it.copy(requestRetryable = null, errorPresentation = null) }
     }
 
@@ -246,6 +251,7 @@ class AnalyticsViewModel @Inject constructor(
         val readAnalytics = loadJob?.isActive != true && retryGate.isReady()
         val readLimit = _state.value.blocks.assistant && !limitReadPending && limitRetryGate.isReady()
         if (!readAnalytics && !readLimit) return
+        if (readAnalytics) dismissals.retryRead()
         _state.update {
             if (readAnalytics) it.copy(refreshing = true, errorPresentation = null, snackbar = null, requestRetryable = null)
             else it.copy(refreshing = true)
@@ -310,13 +316,17 @@ class AnalyticsViewModel @Inject constructor(
                     transferMode = allowedMode(p.transferMode)
                     if (periodsChanged) resetPeriodsContext()
                 }
-                _state.update { it.copy(loading = false, offline = false, errorPresentation = null, requestRetryable = null, preparationTimedOut = false, data = a, response = it.response + 1) }
+                val dismissal = dismissals.observe(a, requested.second?.let { AnalyticsParams(requested.first, it, requested.third) })
+                _state.update { it.copy(loading = false, offline = false, errorPresentation = null, requestRetryable = null, preparationTimedOut = false,
+                    data = if (!a.hasData && dismissal.awaiting) it.data else a, response = it.response + 1,
+                    pendingDismissals = dismissals.ids, awaitingDismissal = dismissal.awaiting,
+                    dismissalRefreshPaused = dismissal.awaiting && !dismissal.poll) }
                 if (a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
                     _state.update { it.copy(hint = AnalyticsHint.CATEGORIES) }
                 }
                 if (updateLimit && _state.value.blocks.assistant) refreshLimit()
                 // The server is still recalculating after an edit: ask again shortly (api.md 6.1 `recalculating`).
-                if (a.state?.recalculating == true) {
+                if (dismissal.poll || a.state?.recalculating == true && !dismissal.awaiting) {
                     delay(RECALC_POLL_MS)
                     startLoad(quiet = true, updateLimit = updateLimit, preservePeriodChangeFailure = preservePeriodChangeFailure)
                 }
@@ -349,6 +359,7 @@ class AnalyticsViewModel @Inject constructor(
                             else -> null
                         },
                         recalculationPaused = it.data?.state?.recalculating == true,
+                        dismissalRefreshPaused = it.awaitingDismissal,
                         errorPresentation = if (failedSwitch || (e is AppError.Offline && it.data == null)) null else e.presentation,
                         requestRetryable = e.requestRetryable,
                         offline = it.data == null,
@@ -527,16 +538,20 @@ class AnalyticsViewModel @Inject constructor(
     /** «Не подписка» (api.md 6.3): the payment disappears and the total is recalculated. */
     fun dismissRegular(id: String) {
         val gate = dismissalGates.getOrPut(id) { RequestRetryGate(elapsedClock) }
-        if (!gate.isReady()) return
+        if (!gate.isReady() || !dismissals.begin(id, _state.value.data?.params)) return
+        _state.update { it.copy(pendingDismissals = dismissals.ids) }
         viewModelScope.launch {
             try {
                 api.dismissRegularPayment(id)
+                dismissals.confirm(id)
                 tracker.track(Events.ANALYTICS_REGULAR_DISMISSED)
-                _state.update { it.copy(snackbar = "Убрали из регулярных платежей") }
-                reloadChangedData(clearSnackbar = false)
+                _state.update { it.copy(snackbar = "Сохранили отметку «Не подписка»", awaitingDismissal = true, dismissalRefreshPaused = false) }
+                reloadChangedData(clearSnackbar = false, preserveReadWait = true)
+                if (!retryGate.isReady()) _state.update { it.copy(dismissalRefreshPaused = true) }
             } catch (e: AppError) {
+                dismissals.fail(id)
                 gate.record(e)
-                _state.update { it.copy(errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
+                _state.update { it.copy(pendingDismissals = dismissals.ids, errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
             }
         }
     }

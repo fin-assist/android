@@ -50,6 +50,66 @@ class AnalyticsPeriodControlTest {
     @Test fun `a wide period row shows all four full labels and their selection semantics`() = checkPeriods(390, 1f)
     @Test fun `a narrow large-text period row reveals selection and preserves manual scrolling`() = checkPeriods(320, 1.3f)
 
+    @Test fun `only the current quarter or year offers its right aligned rolling choice`() {
+        val data = ApiJson.decodeFromString(Analytics.serializer(), javaClass.getResource("/analytics/all_time.json")!!.readText())
+        val shown = mutableStateOf(data)
+        val selected = mutableListOf<PeriodTypeCode>()
+        val handlers = object : AnalyticsHandlers {
+            override fun load(quiet: Boolean) = Unit
+            override fun retryPeriodChange() = Unit
+            override fun consumeSnackbar() = Unit
+            override fun setPeriodType(type: PeriodTypeCode) { selected += type }
+            override fun goTo(key: PeriodKey) = Unit
+            override fun openSheet(sheet: AnalyticsSheet?) = Unit
+            override fun nextHint(stop: Boolean) = Unit
+            override fun setTransferMode(mode: TransferMode) = Unit
+            override fun currentTransferMode() = TransferMode.WITH
+            override fun toggleExpanded(id: String) = Unit
+            override fun onAction(block: Block, action: BlockAction, navigate: (BlockAction) -> Unit) = Unit
+            override fun onBlockShown(block: Block) = Unit
+        }
+        compose.setContent {
+            PfTheme {
+                CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 1.3f)) {
+                    Box(Modifier.width(320.dp)) {
+                        AnalyticsContent(AnalyticsUiState(loading = false, data = shown.value, blocks = AnalyticsBlocks(assistant = false)),
+                            AnalyticsActions({}, {}, {}, { _, _ -> }, null), handlers)
+                    }
+                }
+            }
+        }
+        val cases = listOf(
+            Triple(PeriodTypeCode.MONTH, "2026-09", 0),
+            Triple(PeriodTypeCode.QUARTER, "2026-Q3", 1),
+            Triple(PeriodTypeCode.ROLLING_QUARTER, "rolling_quarter", 1),
+            Triple(PeriodTypeCode.YEAR, "2026", 2),
+            Triple(PeriodTypeCode.ROLLING_YEAR, "rolling_year", 2),
+            Triple(PeriodTypeCode.ALL_TIME, "all_time", 3),
+            Triple(PeriodTypeCode.MONTH, "2026-09", 0),
+        )
+        for ((type, key, segment) in cases) {
+            compose.runOnIdle { shown.value = data.copy(params = data.params!!.copy(period = type, date = PeriodKey(key))) }
+            compose.waitForIdle()
+            val segmentTag = if (segment == 3) "analytics.period.all_time" else "ds.segment.$segment"
+            assertEquals(ToggleableState.On, compose.onNodeWithTag(segmentTag).fetchSemanticsNode().config.getOrNull(SemanticsProperties.ToggleableState))
+            for ((rolling, matching) in listOf(PeriodTypeCode.ROLLING_YEAR to (segment == 2), PeriodTypeCode.ROLLING_QUARTER to (segment == 1))) {
+                val node = compose.onNodeWithTag("analytics.period.${rolling.code}")
+                if (!matching) node.assertDoesNotExist() else {
+                    val bounds = node.fetchSemanticsNode().boundsInRoot
+                    val content = compose.onNodeWithTag("analytics.period.types").fetchSemanticsNode().boundsInRoot
+                    assertTrue(abs(bounds.right - content.right) <= 1f, "rolling choice must follow the content's right edge")
+                    assertEquals(type == rolling, node.fetchSemanticsNode().config.getOrNull(SemanticsProperties.ToggleableState) == ToggleableState.On)
+                    node.performClick()
+                    assertEquals(rolling, selected.last())
+                }
+            }
+            for (tag in listOf("ds.period.prev", "ds.period.pick", "ds.period.next")) {
+                if (type == PeriodTypeCode.ALL_TIME) compose.onNodeWithTag(tag).assertDoesNotExist()
+                else compose.onNodeWithTag(tag).assertExists()
+            }
+        }
+    }
+
     private fun checkPeriods(widthDp: Int, fontScale: Float) {
         val data = ApiJson.decodeFromString(Analytics.serializer(), javaClass.getResource("/analytics/all_time.json")!!.readText())
         val shown = mutableStateOf(data)

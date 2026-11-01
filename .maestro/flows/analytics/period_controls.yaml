@@ -1,0 +1,102 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — кнопки периода только в своей вкладке
+tags:
+  - analytics
+  - common
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.types"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.period.rolling_year"
+- assertNotVisible:
+    id: "analytics.period.rolling_quarter"
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.rolling_year"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.period.rolling_quarter"
+- tapOn:
+    id: "analytics.period.rolling_year"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.rolling_year"
+      checked: true
+    timeout: 15000
+- assertVisible:
+    id: "ds.segment.2"
+    checked: true
+- tapOn:
+    id: "ds.segment.1"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.rolling_quarter"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.period.rolling_year"
+- tapOn:
+    id: "analytics.period.rolling_quarter"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.rolling_quarter"
+      checked: true
+    timeout: 15000
+- assertVisible:
+    id: "ds.segment.1"
+    checked: true
+- swipe:
+    from:
+      id: "analytics.period.types"
+    direction: LEFT
+- tapOn:
+    id: "analytics.period.all_time"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.all_time"
+      checked: true
+    timeout: 15000
+- assertNotVisible:
+    id: "ds.period.pick"
+- assertNotVisible:
+    id: "ds.period.prev"
+- assertNotVisible:
+    id: "ds.period.next"
+- assertNotVisible:
+    id: "analytics.period.rolling_year"
+- assertNotVisible:
+    id: "analytics.period.rolling_quarter"
+- tapOn:
+    id: "ds.tab.operations"
+- tapOn:
+    id: "ds.tab.analytics"
+- assertVisible:
+    id: "analytics.period.all_time"
+    checked: true
+- assertNotVisible:
+    id: "ds.period.pick"
+- swipe:
+    from:
+      id: "analytics.period.types"
+    direction: RIGHT
+- tapOn:
+    id: "ds.segment.0"
+- extendedWaitUntil:
+    visible:
+      id: "ds.period.pick"
+    timeout: 15000
+- assertVisible:
+    id: "ds.period.prev"
+- assertVisible:
+    id: "ds.period.next"
+- assertNotVisible:
+    id: "analytics.period.rolling_year"
+- assertNotVisible:
+    id: "analytics.period.rolling_quarter"

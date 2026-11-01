@@ -5,6 +5,8 @@ import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockAction
 import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.OperationsFilter
+import ru.finassist.pf.core.api.model.InsightCardData
+import ru.finassist.pf.core.api.model.InsightItem
 import ru.finassist.pf.core.blocks.CatalogV1
 import ru.finassist.pf.core.toggles.Experiment
 import kotlinx.coroutines.CompletableDeferred
@@ -72,6 +74,8 @@ class AnalyticsViewModelTest {
         var periodsReply: (suspend (PeriodTypeCode?) -> AnalyticsPeriodsList)? = null
         val dismissed = mutableListOf<String>()
         var dismissFailure: AppError? = null
+        val dismissCalls = mutableListOf<String>()
+        var dismissGate: CompletableDeferred<Unit>? = null
 
         /** `supports` and `exp` of every request (FIN-4, FIN-9). */
         val extras = mutableListOf<Pair<String?, String?>>()
@@ -94,6 +98,8 @@ class AnalyticsViewModelTest {
         }
 
         override suspend fun dismissRegularPayment(id: String) {
+            dismissCalls += id
+            dismissGate?.await()
             dismissFailure?.let { throw it }
             dismissed += id
         }
@@ -663,7 +669,7 @@ class AnalyticsViewModelTest {
         assertEquals(previous, vm.state.value.data)
         assertFalse(vm.state.value.loading)
         assertFalse(vm.state.value.offline)
-        assertEquals("Убрали из регулярных платежей", vm.state.value.snackbar)
+        assertEquals("Сохранили отметку «Не подписка»", vm.state.value.snackbar)
     }
 
     @Test fun `while the server recalculates the screen asks again every 3 seconds`() {
@@ -1141,9 +1147,154 @@ class AnalyticsViewModelTest {
         val vm = opened()
         vm.dismissRegular("rp_1")
         assertEquals(listOf("rp_1"), api.dismissed)
-        assertEquals("Убрали из регулярных платежей", vm.state.value.snackbar)
+        assertEquals("Сохранили отметку «Не подписка»", vm.state.value.snackbar)
         assertEquals(Events.ANALYTICS_REGULAR_DISMISSED.name, names().last())
         assertEquals(2, api.requests.size)
+    }
+
+    private fun regularData(present: Boolean = true) = data().copy(blocks = listOf(
+        Block.of(BlockType.INSIGHT_CARD, InsightCardData.serializer(), InsightCardData("repeat", "Подписки",
+            value = if (present) 100.0 else 0.0,
+            items = if (present) listOf(InsightItem("Подписка", button = BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = "rp_1", label = "Не подписка"))) else emptyList(),
+        )).copy(id = "regular_payments"),
+    ))
+
+    @Test fun `one dismissal waits for an asynchronous projection without sending another PUT`() {
+        val old = regularData()
+        val updated = regularData(false)
+        api.answers += old
+        api.answers += old
+        api.answers += updated
+        val vm = opened()
+        api.dismissGate = CompletableDeferred()
+        vm.dismissRegular("rp_1")
+        vm.dismissRegular("rp_1")
+        assertEquals(listOf("rp_1"), api.dismissCalls)
+        assertEquals(setOf("rp_1"), vm.state.value.pendingDismissals)
+        api.dismissGate!!.complete(Unit)
+        assertTrue(vm.state.value.awaitingDismissal)
+        assertEquals(old, vm.state.value.data, "keep server values while the projection is stale")
+        vm.dismissRegular("rp_1")
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertEquals(updated, vm.state.value.data)
+        assertFalse(vm.state.value.awaitingDismissal)
+        assertTrue(vm.state.value.pendingDismissals.isEmpty())
+        assertEquals(listOf("rp_1"), api.dismissCalls)
+        assertEquals(3, api.requests.size)
+    }
+
+    @Test fun `dismissal publication timeout resumes with an explicit GET and never replays PUT`() {
+        api.answers += regularData()
+        val vm = opened()
+        vm.dismissRegular("rp_1")
+        scheduler.advanceTimeBy(30_000)
+        scheduler.runCurrent()
+        assertEquals(11, api.requests.size, "initial read plus ten bounded publication reads")
+        assertTrue(vm.state.value.dismissalRefreshPaused)
+        vm.onResume(null)
+        vm.dismissRegular("rp_1")
+        assertEquals(11, api.requests.size)
+        api.answers.clear()
+        api.answers += regularData(false)
+        vm.refresh()
+        assertEquals(12, api.requests.size)
+        assertTrue(vm.state.value.pendingDismissals.isEmpty())
+        assertFalse(vm.state.value.dismissalRefreshPaused)
+        assertEquals(listOf("rp_1"), api.dismissCalls)
+    }
+
+    @Test fun `an absent projection after dismissal keeps prior rows and polls the original read`() {
+        api.answers += regularData()
+        api.answers += Analytics(hasData = false)
+        api.answers += regularData(false)
+        val vm = opened()
+        vm.dismissRegular("rp_1")
+        assertTrue(vm.state.value.awaitingDismissal)
+        assertEquals(regularData(), vm.state.value.data)
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertEquals(regularData(false), vm.state.value.data)
+        assertTrue(vm.state.value.pendingDismissals.isEmpty())
+        assertEquals(3, api.requests.size)
+        assertEquals(listOf("rp_1"), api.dismissCalls)
+    }
+
+    @Test fun `publication read errors preserve row and respect retry wait without replaying dismissal`() {
+        api.answers += regularData()
+        api.answers += AppError.RateLimited(null, retryAfterSeconds = 2)
+        api.answers += regularData(false)
+        val vm = opened()
+        vm.dismissRegular("rp_1")
+        assertTrue(vm.state.value.dismissalRefreshPaused)
+        assertFalse(vm.state.value.retryReady)
+        assertEquals(regularData(), vm.state.value.data)
+        vm.refresh()
+        assertEquals(2, api.requests.size)
+        scheduler.advanceTimeBy(2_000)
+        scheduler.runCurrent()
+        assertEquals(2, api.requests.size, "a server wait expiring does not retry automatically")
+        vm.refresh()
+        assertEquals(3, api.requests.size)
+        assertTrue(vm.state.value.pendingDismissals.isEmpty())
+        assertEquals(listOf("rp_1"), api.dismissCalls)
+    }
+
+    @Test fun `a forbidden publication read stays blocked after resume and explicit refresh`() {
+        api.answers += regularData()
+        api.answers += AppError.Api("FUTURE_REFUSAL", 409, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "FUTURE_REFUSAL", 409, requestRetryable = false))
+        val vm = opened()
+        vm.dismissRegular("rp_1")
+        assertTrue(vm.state.value.dismissalRefreshPaused)
+        vm.refresh()
+        vm.onResume(null)
+        vm.dismissRegular("rp_1")
+        assertEquals(2, api.requests.size)
+        assertEquals(listOf("rp_1"), api.dismissCalls)
+        assertEquals(setOf("rp_1"), vm.state.value.pendingDismissals)
+    }
+
+    @Test fun `another successful dismissal cannot bypass an analytics Retry-After`() {
+        api.answers += regularData()
+        api.answers += AppError.RateLimited(null, retryAfterSeconds = 2)
+        api.answers += regularData(false)
+        val vm = opened()
+        vm.dismissRegular("rp_1")
+        vm.dismissRegular("rp_2")
+        assertEquals(listOf("rp_1", "rp_2"), api.dismissCalls)
+        assertEquals(2, api.requests.size)
+        assertTrue(vm.state.value.dismissalRefreshPaused)
+        assertFalse(vm.state.value.retryReady)
+        scheduler.advanceTimeBy(2_000)
+        scheduler.runCurrent()
+        vm.refresh()
+        assertEquals(3, api.requests.size)
+        assertTrue(vm.state.value.pendingDismissals.isEmpty())
+    }
+
+    @Test fun `late dismissal completion refreshes the shown period without acknowledging another period absence`() {
+        val year = data(PeriodTypeCode.YEAR, "2026")
+        api.answers += regularData()
+        api.answers += year
+        val vm = opened()
+        api.dismissGate = CompletableDeferred()
+        vm.dismissRegular("rp_1")
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        api.dismissGate!!.complete(Unit)
+        assertEquals(year, vm.state.value.data)
+        assertFalse(vm.state.value.awaitingDismissal)
+        assertEquals(setOf("rp_1"), vm.state.value.pendingDismissals)
+        api.answers.clear()
+        api.answers += regularData()
+        api.answers += regularData(false)
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertTrue(vm.state.value.awaitingDismissal)
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertEquals(PeriodTypeCode.MONTH, vm.state.value.data!!.params!!.period)
+        assertTrue(vm.state.value.pendingDismissals.isEmpty())
+        assertEquals(listOf("rp_1"), api.dismissCalls)
     }
 
     @Test fun `period directory failures distinguish local connection from server failure`() {
@@ -1407,7 +1558,13 @@ class AnalyticsViewModelTest {
         val vm = blockedAnalytics()
         vm.dismissRegular("rp_1")
         assertEquals(listOf("rp_1"), api.dismissed)
-        assertContextRefreshed(vm)
+        assertEquals(3, api.requests.size)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITH), api.requests.last())
+        assertTrue(vm.state.value.retryReady)
+        assertTrue(vm.state.value.awaitingDismissal)
+        assertEquals(true, vm.state.value.data?.hasData, "clearing projection must retain the prior screen until publication")
+        assertNull(vm.state.value.errorPresentation)
+        assertNull(vm.state.value.requestRetryable)
     }
 
     @Test fun `a refused year switch keeps its explanation but cannot restrict the restored month request`() {

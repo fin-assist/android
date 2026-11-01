@@ -260,6 +260,7 @@ private fun InsightCard(block: Block, data: InsightCardData, ctx: BlockContext) 
                                 val label = a.label ?: "Скрыть"
                                 PfButton(
                                     label, onClick = { ctx.onAction(block, a) }, variant = ButtonVariant.GHOST,
+                                    busy = a.paymentId in ctx.pendingDismissals, busyText = "Обновляем…",
                                     modifier = Modifier.semantics { contentDescription = "$label — ${item.title}" },
                                 )
                             }

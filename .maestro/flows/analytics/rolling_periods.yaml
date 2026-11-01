@@ -10,6 +10,12 @@ tags:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
     visible:
+      id: "ds.segment.2"
+    timeout: 15000
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
       id: "analytics.period.rolling_year"
     timeout: 15000
 - tapOn:
@@ -31,7 +37,15 @@ tags:
 - extendedWaitUntil:
     visible: "Без переводов"
     timeout: 10000
-# A failed singleton switch keeps the successful year selection and mode until explicit retry.
+# The quarter tab owns the three-month choice. A failed singleton switch keeps that calendar quarter.
+- tapOn:
+    id: "ds.segment.1"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.rolling_quarter"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.period.rolling_year"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -43,9 +57,11 @@ tags:
       id: "analytics.period.retry"
     timeout: 15000
 - assertVisible:
-    id: "analytics.period.rolling_year"
+    id: "ds.segment.1"
     checked: true
-- assertVisible: "(?s).*2.октября.2025.*1.октября.2026.*"
+- assertVisible:
+    id: "analytics.period.rolling_quarter"
+    checked: false
 - assertVisible: "Без переводов"
 - runFlow:
     file: ../../subflows/config.yaml
@@ -54,8 +70,11 @@ tags:
 - assertVisible:
     id: "analytics.period.retry"
 - assertVisible:
-    id: "analytics.period.rolling_year"
+    id: "ds.segment.1"
     checked: true
+- assertVisible:
+    id: "analytics.period.rolling_quarter"
+    checked: false
 - tapOn:
     id: "analytics.period.retry"
 - extendedWaitUntil:
@@ -85,6 +104,12 @@ tags:
     id: "ds.segment.0"
     checked: true
 - assertVisible: "Без переводов"
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.rolling_year"
+    timeout: 15000
 - tapOn:
     id: "analytics.period.rolling_year"
 - extendedWaitUntil:
