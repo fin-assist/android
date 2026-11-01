@@ -16,10 +16,13 @@ tags:
     timeout: 15000
 - scrollUntilVisible:
     element:
-      id: "analytics.tile.income"
+      text: "^0[ \u00a0\u202f]₽$"
+      childOf:
+        id: "analytics.tile.income"
 - assertVisible:
-    id: "analytics.tile.income"
-    text: "^Доходы, 0[ \u00a0\u202f]₽(?:,.*)?$"
+    text: "^0[ \u00a0\u202f]₽$"
+    childOf:
+      id: "analytics.tile.income"
 - tapOn:
     id: "ds.tab.profile"
 - extendedWaitUntil:
@@ -65,15 +68,18 @@ tags:
     id: "ds.tab.analytics"
 - scrollUntilVisible:
     element:
-      id: "analytics.tile.income"
+      text: "^[+]1[ \u00a0\u202f]200[ \u00a0\u202f]₽$"
+      childOf:
+        id: "analytics.tile.income"
 - extendedWaitUntil:
     visible:
-      id: "analytics.tile.income"
-      text: "^Доходы, [+]1[ \u00a0\u202f]200[ \u00a0\u202f]₽(?:,.*)?$"
+      text: "^[+]1[ \u00a0\u202f]200[ \u00a0\u202f]₽$"
+      childOf:
+        id: "analytics.tile.income"
     timeout: 15000
 - assertNotVisible:
     id: "analytics.empty"
-# The income node changed from 0 to +1200 for the saved October context.
+# The amount inside the income tile changed from 0 to +1200 for the saved October context.
 
 # The same October file again: nothing new.
 - tapOn:

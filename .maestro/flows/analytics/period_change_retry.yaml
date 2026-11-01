@@ -10,12 +10,18 @@ tags:
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
-    visible: "Октябрь 2026"
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 15000
 - tapOn:
     id: "ds.period.prev"
 - extendedWaitUntil:
-    visible: "Сентябрь 2026"
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - runFlow:
     file: ../../subflows/config.yaml
@@ -28,7 +34,10 @@ tags:
       id: "analytics.period.retry"
     timeout: 15000
 - assertVisible: "(?s).*Не удалось сменить период.*"
-- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "ds.segment.0"
     checked: true
@@ -61,7 +70,10 @@ tags:
     element:
       id: "analytics.ask"
     direction: UP
-- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "analytics.period.retry"
 - tapOn:
@@ -69,7 +81,8 @@ tags:
 - extendedWaitUntil:
     visible:
       text: "2026"
-      id: "ds.period.pick"
+      childOf:
+        id: "ds.period.pick"
     timeout: 15000
 - assertVisible:
     id: "ds.segment.2"
@@ -81,7 +94,10 @@ tags:
 - tapOn:
     id: "ds.segment.0"
 - extendedWaitUntil:
-    visible: "Сентябрь 2026"
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - assertVisible:
     id: "ds.segment.0"

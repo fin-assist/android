@@ -14,22 +14,28 @@ tags:
     timeout: 15000
 # "Now" is pinned to 8 October 2026. The fixture statement period runs to 1 October, so the latest month with
 # data — October, empty so far — opens by default; September one step back holds the operations.
-- assertVisible: "Октябрь 2026"
+- assertVisible:
+    text: "Октябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "analytics.ask"
 - tapOn:
     id: "ds.period.prev"
 - extendedWaitUntil:
-    visible: "Сентябрь 2026"
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - scrollUntilVisible:
     element:
-      id: "analytics.block.expense_categories"
+      id: "analytics.expense_category"
 - assertVisible:
     id: "analytics.expense_category"
 - scrollUntilVisible:
     element:
-      id: "analytics.block.income_categories"
+      id: "analytics.income_category"
     direction: DOWN
 - scrollUntilVisible:
     element:
@@ -46,21 +52,28 @@ tags:
     visible:
       id: "analytics.ask"
     timeout: 5000
-- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 
 # Each period type remembers its own choice (FIN-391). A successful switch must change
 # the exact title and selected segment, rather than merely retain the old tiles after an error.
 - tapOn:
     id: "ds.period.prev"
 - extendedWaitUntil:
-    visible: "Август 2026"
+    visible:
+      text: "Август 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - tapOn:
     id: "ds.segment.1"
 - extendedWaitUntil:
     visible:
       text: "III квартал 2026"
-      id: "ds.period.pick"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - assertVisible:
     id: "ds.segment.1"
@@ -80,7 +93,8 @@ tags:
 - extendedWaitUntil:
     visible:
       text: "II квартал 2026"
-      id: "ds.period.pick"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - assertNotVisible:
     id: "ds.error.info"
@@ -97,7 +111,8 @@ tags:
 - extendedWaitUntil:
     visible:
       text: "2026"
-      id: "ds.period.pick"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - assertVisible:
     id: "ds.segment.2"
@@ -117,7 +132,8 @@ tags:
 - extendedWaitUntil:
     visible:
       text: "Август 2026"
-      id: "ds.period.pick"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - assertVisible:
     id: "ds.segment.0"
@@ -137,7 +153,8 @@ tags:
 - extendedWaitUntil:
     visible:
       text: "II квартал 2026"
-      id: "ds.period.pick"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - assertVisible:
     id: "ds.segment.1"
@@ -157,7 +174,8 @@ tags:
 - extendedWaitUntil:
     visible:
       text: "2026"
-      id: "ds.period.pick"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - assertVisible:
     id: "ds.segment.2"
@@ -177,7 +195,8 @@ tags:
 - extendedWaitUntil:
     visible:
       text: "Август 2026"
-      id: "ds.period.pick"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - assertVisible:
     id: "ds.segment.0"
