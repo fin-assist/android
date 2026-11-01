@@ -260,6 +260,8 @@ tags:
 - assertNotVisible:
     id: "statements.history.empty"
 - tapOn:
+    id: "ds.back"
+- tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
     visible: "За этот период данных нет"
