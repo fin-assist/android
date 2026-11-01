@@ -677,7 +677,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `errors/request_retry_false` | a REST refusal with retryable=false is not resent on resume or after its wait; corrected input is a new action and a later failed result can separately allow RetryAnswer — FIN-223, Qase 50 |
 | `errors/server_messages` | profile theme mutations show an unknown ordinary server message, unknown-severity error styling and safe malformed/legacy fallbacks without diagnostics — FIN-223, Qase 48 |
 | `assistant/nothing_found_charged` | a merchant with no operations over the covered six months of the answer (`Kaspersky`, only in March): «…операций «Kaspersky» не нашли», an answer, not a refund — 4 of 5 (it used to stay 5 of 5); only a lock or no data over the period is refunded — FIN-136 |
-| `assistant/offline_retry` | draft prepared online → resume history read offline hides input → read-failure Retry restores draft without sending → explicit Send and pending-Ask Retry fail offline without spending quota → online resume restores draft without POST → explicit Send accepts exactly one new question (quota 4 → 3 of 5); Qase20, FIN-415; revised flow not executed |
+| `assistant/offline_retry` | draft prepared online → resume history read offline hides input → read-failure Retry restores draft without sending → explicit Send and pending-Ask Retry fail offline without spending quota → online resume restores draft without POST → explicit Send accepts exactly one new question (quota 4 → 3 of 5); Qase20, FIN-415; foreground online Retry limitation is listed below |
 | `assistant/chip_after_statements_deleted` | every statement deleted: the operations chip of an earlier answer opens the search without its stale selection (notice, empty result) — FIN-76 |
 | `assistant/retry_without_transfers` | `assistant_model_errors=1`: a question asked «Без переводов» fails, not spent; «Повторить» answers it still «без переводов» — FIN-76 |
 | `assistant/answer_retry` | `assistant_model_errors=1`: the answer fails, not spent; a double tap on «Повторить» while the request is on its way sends it once: one answer, no «Не получилось отправить вопрос», 4 of 5 — FIN-75 |
@@ -714,6 +714,14 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
+
+Not covered yet (FIN-40, FIN-415): tapping «Повторить» for a pending Ask after connectivity returns while
+Chat stays in the foreground. The mock control link pauses Chat; its online resume reads history and clears the
+offline notice before Maestro can tap Retry. The current mock has no Ask-only offline fixture, so Qase20 covers
+offline Retry and recovery through resume followed by explicit Send instead. The existing unit regression
+`ChatViewModelBehaviourTest#offline keeps the question and the retry re-sends it with the same key` covers the
+pending text, exactly two Ask attempts and reuse of the original idempotency key. The foreground online-Retry
+path still needs UI coverage with controllable connectivity that does not pause Chat.
 
 Not covered yet: voice input ([PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69), manual, FIN-404: the CI emulator has no controlled Russian speech/audio or deterministic recognition-service fixture;
 Maestro cannot produce recognizer callbacks). The preparation → actual `onReadyForSpeech`
@@ -1080,6 +1088,7 @@ baseline failed on that later range (expected 52 px, actual 0), while `collectLa
 private mutex access, synthetic cancellation or wall-clock sleep is involved. The previous Not-covered claim
 was disproved by this real gesture experiment and removed.
 
+### FIN-415 Maestro selectors synchronized with the 0.2.16 hierarchy
 
 FIN-415 synchronizes the 11 flows diagnosed in [UI tests run 41243782169](https://github.com/fin-assist/android/actions/runs/41243782169)
 with the release/0.2.16 accessibility hierarchy. Period labels, transfer labels, tile amounts and forecast explanations
