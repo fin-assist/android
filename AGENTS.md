@@ -286,7 +286,8 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   (FIN-198); old `uploads[].first_operation_at` / `last_operation_at` are removed. Import result 3.3 keeps its field semantics; FIN-394 removes the redundant all-operations period row from its UI.
 - The upload guide (FIN-416) labels the server download as «Скачать новые данные» when `loaded` contains
   operations, otherwise «Скачать за год». `DownloadTexts` formats the actual half-open `suggested_period`
-  as inclusive calendar days in its supplied offset; the server `download_url` is opened unchanged.
+  as inclusive calendar days in its supplied offset, omitting dates when the range has no calendar days;
+  the server `download_url` is opened unchanged.
 - Search reset (FIN-416) is a separate ghost button below the horizontal chip row, aligned to the content's
   left edge. It keeps its existing visibility rule, reset behaviour and `operations.search.chip.reset` tag.
 - Operation details 4.2 and category change 4.3 require `occurred_at` from the selected record, including offset

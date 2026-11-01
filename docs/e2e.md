@@ -1082,7 +1082,8 @@ was disproved by this real gesture experiment and removed.
 
 FIN-416 (upload copy and search reset): existing Qase2/9/14 cases and their unchanged path mappings in
 `scripts/qase-cases.json` cover the extended flows above. `DownloadTextsTest` checks first/loaded/empty states,
-the server's real suggested range, inclusive end date, year boundary and profile offset. Host JVM
+the server's real suggested range, inclusive end date, year boundary and profile offset; empty or reversed
+ranges fall back to the instruction without dates (including a future imported operation). Host JVM
 `UploadDownloadControlTest` checks unchanged download URLs, the shortened privacy notice/link and an uncut
 button label at 320dp/2.0 font scale; `SearchResetControlTest` checks the separate reset position and callback
 before/after chip scrolling at 320dp/1.3. Existing ImportGuide/Search design-check fixtures use the changed

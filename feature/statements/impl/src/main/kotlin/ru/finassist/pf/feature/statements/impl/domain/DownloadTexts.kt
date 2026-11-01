@@ -10,7 +10,10 @@ internal object DownloadTexts {
 
     fun instruction(config: ImportConfig): String {
         val range = config.suggestedPeriod
-        val period = RussianDates.dayRange(range.from.toLocalDate(), RussianDates.lastDayOf(range), withYear = true)
+        val from = range.from.toLocalDate()
+        val last = RussianDates.lastDayOf(range)
+        if (last < from) return "Нажмите «${label(config)}» — файл сохранится в «Загрузки»"
+        val period = RussianDates.dayRange(from, last, withYear = true)
         return "Нажмите «${label(config)}» — файл за $period сохранится в «Загрузки»"
     }
 }

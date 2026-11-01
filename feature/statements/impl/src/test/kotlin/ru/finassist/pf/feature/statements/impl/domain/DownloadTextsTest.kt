@@ -40,4 +40,18 @@ class DownloadTextsTest {
         assertEquals("Скачать новые данные", DownloadTexts.label(config))
         assertEquals("Скачать за год", DownloadTexts.label(config.copy(loaded = null)))
     }
+
+    @Test fun `equal range boundaries omit dates and keep the initial download label`() {
+        val boundary = t("2026-10-09T00:00:00+03:00")
+        val config = first.copy(suggestedPeriod = DateRange(boundary, boundary))
+        assertEquals("Нажмите «Скачать за год» — файл сохранится в «Загрузки»", DownloadTexts.instruction(config))
+    }
+
+    @Test fun `future operation range omits reversed dates and keeps the repeat download label`() {
+        val config = first.copy(
+            loaded = loaded.copy(lastOperationAt = t("2026-10-10T15:00:00+03:00")),
+            suggestedPeriod = DateRange(t("2026-10-10T00:00:00+03:00"), t("2026-10-09T00:00:00+03:00")),
+        )
+        assertEquals("Нажмите «Скачать новые данные» — файл сохранится в «Загрузки»", DownloadTexts.instruction(config))
+    }
 }
