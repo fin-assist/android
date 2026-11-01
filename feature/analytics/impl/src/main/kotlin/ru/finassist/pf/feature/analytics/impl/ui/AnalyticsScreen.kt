@@ -88,7 +88,6 @@ class AnalyticsActions(
 )
 
 private val PERIOD_TYPES = listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.YEAR, PeriodTypeCode.ALL_TIME)
-private val ROLLING_TYPES = listOf(PeriodTypeCode.ROLLING_YEAR, PeriodTypeCode.ROLLING_QUARTER)
 
 @Composable
 fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: AnalyticsViewModel = hiltViewModel()) {
@@ -236,25 +235,37 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
             )
         }
         Gap(d.space3)
-        PfPeriodNav(
-            label = AnalyticsTexts.periodLabel(params.date, period, params.period, early),
-            onPrev = a.navigation?.previous?.let { key -> { vm.goTo(key) } },
-            onNext = a.navigation?.next?.let { key -> { vm.goTo(key) } },
-            onPick = { vm.openSheet(AnalyticsSheet.PERIODS) },
-            unitName = AnalyticsTexts.unitName(params.period),
-        )
-        Gap(d.space2)
+        if (params.period != PeriodTypeCode.ALL_TIME) {
+            PfPeriodNav(
+                label = AnalyticsTexts.periodLabel(params.date, period, params.period, early),
+                onPrev = a.navigation?.previous?.let { key -> { vm.goTo(key) } },
+                onNext = a.navigation?.next?.let { key -> { vm.goTo(key) } },
+                onPick = { vm.openSheet(AnalyticsSheet.PERIODS) },
+                unitName = AnalyticsTexts.unitName(params.period),
+            )
+            Gap(d.space2)
+        }
+        val calendarType = when (params.period) {
+            PeriodTypeCode.ROLLING_YEAR -> PeriodTypeCode.YEAR
+            PeriodTypeCode.ROLLING_QUARTER -> PeriodTypeCode.QUARTER
+            else -> params.period
+        }
         PfSegmentedControl(
             options = listOf("Месяц", "Квартал", "Год", "За всё время"),
-            selected = PERIOD_TYPES.indexOf(params.period),
+            selected = PERIOD_TYPES.indexOf(calendarType),
             onSelect = { vm.setPeriodType(PERIOD_TYPES[it]) },
             scrollable = true,
             modifier = Modifier.testTag(AnalyticsTags.PERIOD_TYPES),
             optionTag = { if (it == PERIOD_TYPES.lastIndex) AnalyticsTags.ALL_TIME else "ds.segment.$it" },
         )
-        Gap(d.space2)
-        Column(verticalArrangement = Arrangement.spacedBy(d.space2)) {
-            ROLLING_TYPES.forEach { type ->
+        val rollingType = when (calendarType) {
+            PeriodTypeCode.YEAR -> PeriodTypeCode.ROLLING_YEAR
+            PeriodTypeCode.QUARTER -> PeriodTypeCode.ROLLING_QUARTER
+            else -> null
+        }
+        rollingType?.let { type ->
+            Gap(d.space2)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 PfChip(
                     if (type == PeriodTypeCode.ROLLING_YEAR) "Последние 12 месяцев" else "Последние 3 месяца",
                     onClick = { vm.setPeriodType(type) }, selected = params.period == type,
