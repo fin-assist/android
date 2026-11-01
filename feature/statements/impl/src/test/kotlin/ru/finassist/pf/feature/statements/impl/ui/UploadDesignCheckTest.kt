@@ -35,6 +35,7 @@ class UploadDesignCheckTest {
     /** «Сейчас загружено 1–25 сентября 2026 · 181 операция». */
     private val loaded = config.copy(
         loaded = LoadedSummary(t("2026-09-01T08:15:00+03:00"), t("2026-09-25T21:40:00+03:00"), operationCount = 181),
+        suggestedPeriod = DateRange(t("2026-09-25T00:00:00+03:00"), t("2026-09-26T00:00:00+03:00")),
     )
 
     private fun capture(
