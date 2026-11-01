@@ -162,7 +162,7 @@ tags:
 - extendedWaitUntil:
     visible:
       id: "operations.search.count"
-      text: "Найдена 1 операция"
+      text: "Найдена 1[ \u00a0\u202f]операция"
     timeout: 15000
 - assertVisible:
     id: "operations.row"
