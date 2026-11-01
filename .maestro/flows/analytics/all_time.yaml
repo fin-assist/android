@@ -150,10 +150,43 @@ tags:
     visible:
       id: "operations.search.count"
     timeout: 15000
-- scrollUntilVisible:
-    element: "История 2024 FIN-400"
-    direction: DOWN
-- assertVisible: "История 2024 FIN-400"
+# Search within the inherited range instead of scrolling through a year of newer operations.
+- assertVisible:
+    text: "1.января 2024 — 7.октября 2026"
+    childOf:
+      id: "operations.search.chip.period"
+- tapOn:
+    id: "operations.search.input"
+- inputText: "FIN-400"
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+      text: "Найдена 1 операция"
+    timeout: 15000
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "История 2024 FIN-400"
+      - text: "5[ \u00a0\u202f]января[ \u00a0\u202f]2024"
+      - text: "−200[ \u00a0\u202f]₽"
+- assertVisible:
+    text: "1.января 2024 — 7.октября 2026"
+    childOf:
+      id: "operations.search.chip.period"
+# The query must preserve the expense kind and analytics scope, not broaden the search.
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
+- assertVisible:
+    id: "operations.search.chip.kind"
+    checked: true
+    containsDescendants:
+      - text: "Только расходы"
+- assertVisible:
+    id: "operations.search.chip.scope"
+    checked: true
 - back
 # Delete the synthetic source; the retained selection shrinks to the original source envelope.
 - tapOn:
