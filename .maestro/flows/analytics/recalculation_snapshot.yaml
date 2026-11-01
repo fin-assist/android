@@ -123,3 +123,69 @@ tags:
     id: "analytics.updating"
 - assertNotVisible:
     id: "analytics.recalculating"
+
+
+# Regression: a failed mutation must not silently kill an active recalculation read.
+- scrollUntilVisible:
+    element:
+      id: "ds.segment.0"
+    direction: UP
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 65%"
+- tapOn:
+    id: "ds.segment.0"
+- extendedWaitUntil:
+    visible: "Сентябрь 2026"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_recalculating_responses=100&error_operation=analytics_dismiss&error_scenario=retry_forbidden"
+- scrollUntilVisible:
+    element:
+      id: "analytics.recalculating"
+- assertVisible: "Пересчитываем после изменений.*"
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+    timeout: 15000
+- assertVisible: "РБК"
+- tapOn: "Не подписка — РБК"
+- extendedWaitUntil:
+    visible: "Не получилось убрать.*"
+    timeout: 10000
+- assertVisible: "РБК"
+- scrollUntilVisible:
+    element:
+      id: "analytics.recalculating"
+    direction: UP
+# Do not open another control activity, pull-refresh or leave the screen before this check:
+# a resume could restart the cancelled poll and hide the original bug. The resumed GETs reach
+# the bounded wait themselves; before the fix the promise remains forever without a Retry link.
+- extendedWaitUntil:
+    visible: "Не удалось обновить показатели.*"
+    timeout: 40000
+- assertVisible:
+    id: "analytics.retry"
+    enabled: true
+- assertNotVisible:
+    id: "analytics.updating"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_error_requests=1&error_operation=off&analytics_recalculating_responses=0"
+- assertVisible: "Не удалось обновить показатели.*"
+- tapOn:
+    id: "analytics.retry"
+- extendedWaitUntil:
+    notVisible:
+      id: "analytics.recalculating"
+    timeout: 15000
+- assertVisible: "Сентябрь 2026"
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+- assertVisible: "РБК"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_error_requests=1"

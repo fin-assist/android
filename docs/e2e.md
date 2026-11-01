@@ -662,7 +662,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state (Qase75, FIN-400); authored, not executed |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
-| `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values (Qase82, FIN-416); authored, not executed |
+| `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416); authored, not executed |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
@@ -808,7 +808,7 @@ The upload flow above deliberately seeds an unknown-age record without claiming 
 
 ### FIN-223 safe error controls and coverage
 
-The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|phone_start|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden|terminal_failure`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.
+The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|phone_start|analytics_dismiss|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden|terminal_failure`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.
 
 ### FIN-352 repeated physical unread lines
 
@@ -1103,10 +1103,15 @@ restore UI call site in this scope.
 late completions, exposure stability, and serialized mutations. `MockAnalyticsApiTest` verifies the bounded fixture
 and its validation/authentication boundary. The authored Maestro flow `analytics/recalculation_snapshot` / Qase82
 combines that marker with the existing unavailable-block fixture so applying intermediate blocks would fail the test.
+It also uses the existing closed error fixture with `error_operation=analytics_dismiss` to refuse a valid dismissal
+while GETs remain usable. The flow checks the failure and retained payment, then waits for the bounded read pause
+without navigation or refresh (either could hide the lost-poll bug), explicitly recovers, and requires exactly one
+injected mutation failure. The mock fixture keeps authentication and payment validation ahead of error injection.
 Existing recalculation design-check states now use a ready response plus the separate read-status notice. These UI
 and design-check scenarios were not executed for this PR.
 
 This is the independent existing-contract subset of FIN-416, not completion of its mutation-delivery scenario.
-Receipt versions, reliable marker delivery and confirmation that a ready result includes a particular mutation
-remain dependent on the merged FIN-418 contract and the service/client implementation. A plain ready response is
-not claimed to prove post-mutation freshness. Qase81 remains planned for that dependent work.
+The mutation response carrying the updated regular-payments block and the server/client delivery guarantees remain
+dependent on the merged FIN-418 contract and the subsequent implementation. This PR keeps the current mutation API
+unchanged; it does not choose a receipt-only response. A plain ready GET is not claimed to prove post-mutation
+freshness. Qase81 remains planned for that dependent work.

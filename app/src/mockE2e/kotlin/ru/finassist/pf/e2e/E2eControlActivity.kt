@@ -58,7 +58,7 @@ import javax.inject.Inject
  *   missing applied tag. The check is instant: stream openings run on the main thread this activity holds, and the
  *   app's screen is paused under it, so the openings to count must have happened before the link is opened.
  * - `expect_stream_rate_limited_exact=<n>` — exact count, including a check that resume did not open early.
- * - `error_operation=profile_update|operations_list|assistant_ask|phone_start|off` — inject only a fixed safe failure at that API method.
+ * - `error_operation=profile_update|operations_list|assistant_ask|phone_start|analytics_dismiss|off` — inject only a fixed safe failure at that API method.
  * - `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden|terminal_failure` — closed wire fixtures.
  * - `expect_error_requests=<n>` — require exactly n injected failures; proves a refused request was not resent.
  * - `pending_upload_fixture=october` — seed an unknown-age pending UUID for the closed bundled OFX fixture.

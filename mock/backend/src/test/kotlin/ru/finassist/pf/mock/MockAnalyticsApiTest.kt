@@ -167,6 +167,44 @@ class MockAnalyticsApiTest {
     }
 
     @Test
+    fun `a targeted dismissal failure leaves the ledger intact while marked analytics keeps progressing`() = runBlocking<Unit> {
+        val payment = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+            .insights!!.regularPayments.items.orEmpty().single { it.title == "Netflix" }
+        backend.config = backend.config.copy(errorOperation = MockErrorOperation.ANALYTICS_DISMISS,
+            errorScenario = MockErrorScenario.RETRY_FORBIDDEN, analyticsRecalculatingResponses = 2)
+        assertTrue(api.getAnalytics(null, null, null).state!!.recalculating)
+        val error = assertFailsWith<AppError.RateLimited> { api.dismissRegularPayment(payment.id) }
+        assertEquals(false, error.requestRetryable)
+        assertEquals(3L, error.retryAfterSeconds)
+        assertEquals(1, backend.injectedErrorCount.value)
+        assertTrue(backend.dismissedPayments.isEmpty())
+        assertTrue("Netflix" in regularTitles())
+        assertTrue(api.getAnalytics(null, null, null).state!!.recalculating)
+        assertFalse(api.getAnalytics(null, null, null).state!!.recalculating)
+        api.restoreRegularPayment(payment.id)
+        assertEquals(1, backend.injectedErrorCount.value)
+        backend.config = backend.config.copy(errorOperation = null)
+        api.dismissRegularPayment(payment.id)
+        assertFalse("Netflix" in regularTitles())
+        assertEquals(1, backend.injectedErrorCount.value)
+    }
+
+    @Test
+    fun `the dismissal error fixture never bypasses authentication or payment validation`() = runBlocking<Unit> {
+        val config = FAST.copy(errorOperation = MockErrorOperation.ANALYTICS_DISMISS)
+        val signedOut = testBackend(userId = "", config = config)
+        assertFailsWith<AppError.Unauthorized> { MockAnalyticsApi(signedOut).dismissRegularPayment("invalid") }
+        assertEquals(0, signedOut.injectedErrorCount.value)
+        backend.config = config
+        val invalid = assertFailsWith<AppError.Api> { api.dismissRegularPayment("invalid") }
+        assertEquals(ErrorCodes.VALIDATION_ERROR, invalid.code)
+        val missing = assertFailsWith<AppError.Api> { api.dismissRegularPayment("00000000-0000-0000-0000-000000000000") }
+        assertEquals(ErrorCodes.NOT_FOUND, missing.code)
+        assertEquals(0, backend.injectedErrorCount.value)
+        assertTrue(backend.dismissedPayments.isEmpty())
+    }
+
+    @Test
     fun `a dismissed regular payment leaves the card until it is restored`() = runBlocking<Unit> {
         val card = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH).insights!!.regularPayments
         val netflix = card.items.orEmpty().single { it.title == "Netflix" }

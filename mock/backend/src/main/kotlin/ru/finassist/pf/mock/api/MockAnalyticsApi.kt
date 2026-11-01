@@ -19,6 +19,7 @@ import ru.finassist.pf.core.common.time.PeriodType
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.apiError
+import ru.finassist.pf.mock.MockErrorOperation
 import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.mock.domain.AnalyticsComposer
 
@@ -101,6 +102,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
         backend.simulateNetwork()
         backend.requireSession()
         requirePayment(id)
+        backend.maybeInjectError(MockErrorOperation.ANALYTICS_DISMISS)
         backend.mutex.withLock { backend.dismissedPayments += id }
     }
 
