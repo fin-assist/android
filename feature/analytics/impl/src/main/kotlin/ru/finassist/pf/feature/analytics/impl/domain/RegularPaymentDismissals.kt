@@ -3,6 +3,7 @@ package ru.finassist.pf.feature.analytics.impl.domain
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonNull
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.ActionType
 import ru.finassist.pf.core.api.model.Analytics
@@ -60,16 +61,24 @@ internal class RegularPaymentDismissals {
         if (raw == null) return card.status == BlockStatus.NONE && details.items.isEmpty()
         if (raw !is JsonArray || raw.size != details.items.size) return false
         return raw.all { element ->
-            val item = element as? JsonObject
-            val title = item?.get("title") as? JsonPrimitive
-            val button = item?.get("button") as? JsonObject
-            val type = button?.get("type") as? JsonPrimitive
-            val id = button?.get("payment_id") as? JsonPrimitive
+            val item = element as? JsonObject ?: return@all false
+            if ((item["title"] as? JsonPrimitive)?.isString != true) return@all false
+            // Optional buttons and new action codes are valid, complete rows, not lost dismiss actions.
+            val rawButton = item["button"] ?: return@all true
+            if (rawButton == JsonNull) return@all true
+            val button = rawButton as? JsonObject ?: return@all false
+            val type = button["type"] as? JsonPrimitive
+            if (type?.isString != true) return@all false
+            if (type.content != ActionType.DISMISS_REGULAR_PAYMENT.code) return@all true
+            val id = button["payment_id"] as? JsonPrimitive
             // String coercion is useful for rendering, but must not create a different payment identity.
-            title?.isString == true && type?.isString == true && type.content == ActionType.DISMISS_REGULAR_PAYMENT.code &&
-                id?.isString == true && id.content.isNotBlank()
+            id?.isString == true && PAYMENT_ID.matches(id.content)
         }
     }
 
-    private companion object { const val MAX_READS = 10 }
+    private companion object {
+        const val MAX_READS = 10
+        // openapi BlockAction.payment_id: canonical lowercase UUID, without whitespace or normalization.
+        val PAYMENT_ID = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+    }
 }

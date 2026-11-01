@@ -62,6 +62,8 @@ import kotlin.test.assertTrue
 /** The main dispatcher runs on [scheduler]: the 3 s re-request while the server recalculates is driven by hand. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AnalyticsViewModelTest {
+    private val firstPaymentId = "019c6e27-e55b-73d1-87d8-0c7f50590c9d"
+    private val secondPaymentId = "019c6e27-e55b-73d1-87d8-0c7f50590c9e"
     private data class Request(val period: PeriodTypeCode?, val date: PeriodKey?, val mode: TransferMode?)
 
     private class FakeApi : AnalyticsApi {
@@ -480,7 +482,7 @@ class AnalyticsViewModelTest {
         val periodError = assertNotNull(vm.state.value.periodChangeErrorPresentation)
         val target = api.requests.last()
         api.dismissFailure = AppError.Offline()
-        vm.dismissRegular("rp_1")
+        vm.dismissRegular(firstPaymentId)
         assertEquals(periodError, vm.state.value.periodChangeErrorPresentation)
         assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         assertEquals("Не получилось убрать", vm.state.value.snackbar)
@@ -687,7 +689,7 @@ class AnalyticsViewModelTest {
         api.answers += AppError.Offline()
         val vm = opened()
         val previous = vm.state.value.data
-        vm.dismissRegular("rp_1")
+        vm.dismissRegular(firstPaymentId)
         assertEquals(previous, vm.state.value.data)
         assertFalse(vm.state.value.loading)
         assertFalse(vm.state.value.offline)
@@ -1167,8 +1169,8 @@ class AnalyticsViewModelTest {
     @Test fun `a dismissed regular payment is reported and the analytics recalculated`() {
         api.answers += data()
         val vm = opened()
-        vm.dismissRegular("rp_1")
-        assertEquals(listOf("rp_1"), api.dismissed)
+        vm.dismissRegular(firstPaymentId)
+        assertEquals(listOf(firstPaymentId), api.dismissed)
         assertEquals("Сохранили отметку «Не подписка»", vm.state.value.snackbar)
         assertEquals(Events.ANALYTICS_REGULAR_DISMISSED.name, names().last())
         assertEquals(2, api.requests.size)
@@ -1177,7 +1179,7 @@ class AnalyticsViewModelTest {
     private fun regularData(present: Boolean = true) = data().copy(blocks = listOf(
         Block.of(BlockType.INSIGHT_CARD, InsightCardData.serializer(), InsightCardData("repeat", "Подписки",
             value = if (present) 100.0 else 0.0,
-            items = if (present) listOf(InsightItem("Подписка", button = BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = "rp_1", label = "Не подписка"))) else emptyList(),
+            items = if (present) listOf(InsightItem("Подписка", button = BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = firstPaymentId, label = "Не подписка"))) else emptyList(),
         )).copy(id = "regular_payments", status = if (present) BlockStatus.READY else BlockStatus.NONE),
     ))
 
@@ -1189,33 +1191,33 @@ class AnalyticsViewModelTest {
         api.answers += updated
         val vm = opened()
         api.dismissGate = CompletableDeferred()
-        vm.dismissRegular("rp_1")
-        vm.dismissRegular("rp_1")
-        assertEquals(listOf("rp_1"), api.dismissCalls)
-        assertEquals(setOf("rp_1"), vm.state.value.pendingDismissals)
+        vm.dismissRegular(firstPaymentId)
+        vm.dismissRegular(firstPaymentId)
+        assertEquals(listOf(firstPaymentId), api.dismissCalls)
+        assertEquals(setOf(firstPaymentId), vm.state.value.pendingDismissals)
         api.dismissGate!!.complete(Unit)
         assertTrue(vm.state.value.awaitingDismissal)
         assertEquals(old, vm.state.value.data, "keep server values while the projection is stale")
-        vm.dismissRegular("rp_1")
+        vm.dismissRegular(firstPaymentId)
         scheduler.advanceTimeBy(3_000)
         scheduler.runCurrent()
         assertEquals(updated, vm.state.value.data)
         assertFalse(vm.state.value.awaitingDismissal)
         assertTrue(vm.state.value.pendingDismissals.isEmpty())
-        assertEquals(listOf("rp_1"), api.dismissCalls)
+        assertEquals(listOf(firstPaymentId), api.dismissCalls)
         assertEquals(3, api.requests.size)
     }
 
     @Test fun `dismissal publication timeout resumes with an explicit GET and never replays PUT`() {
         api.answers += regularData()
         val vm = opened()
-        vm.dismissRegular("rp_1")
+        vm.dismissRegular(firstPaymentId)
         scheduler.advanceTimeBy(30_000)
         scheduler.runCurrent()
         assertEquals(11, api.requests.size, "initial read plus ten bounded publication reads")
         assertTrue(vm.state.value.dismissalRefreshPaused)
         vm.onResume(null)
-        vm.dismissRegular("rp_1")
+        vm.dismissRegular(firstPaymentId)
         assertEquals(11, api.requests.size)
         api.answers.clear()
         api.answers += regularData(false)
@@ -1223,7 +1225,7 @@ class AnalyticsViewModelTest {
         assertEquals(12, api.requests.size)
         assertTrue(vm.state.value.pendingDismissals.isEmpty())
         assertFalse(vm.state.value.dismissalRefreshPaused)
-        assertEquals(listOf("rp_1"), api.dismissCalls)
+        assertEquals(listOf(firstPaymentId), api.dismissCalls)
     }
 
     @Test fun `an absent projection after dismissal keeps prior rows and polls the original read`() {
@@ -1231,7 +1233,7 @@ class AnalyticsViewModelTest {
         api.answers += Analytics(hasData = false)
         api.answers += regularData(false)
         val vm = opened()
-        vm.dismissRegular("rp_1")
+        vm.dismissRegular(firstPaymentId)
         assertTrue(vm.state.value.awaitingDismissal)
         assertEquals(regularData(), vm.state.value.data)
         scheduler.advanceTimeBy(3_000)
@@ -1239,7 +1241,7 @@ class AnalyticsViewModelTest {
         assertEquals(regularData(false), vm.state.value.data)
         assertTrue(vm.state.value.pendingDismissals.isEmpty())
         assertEquals(3, api.requests.size)
-        assertEquals(listOf("rp_1"), api.dismissCalls)
+        assertEquals(listOf(firstPaymentId), api.dismissCalls)
     }
 
     @Test fun `publication read errors preserve row and respect retry wait without replaying dismissal`() {
@@ -1247,7 +1249,7 @@ class AnalyticsViewModelTest {
         api.answers += AppError.RateLimited(null, retryAfterSeconds = 2)
         api.answers += regularData(false)
         val vm = opened()
-        vm.dismissRegular("rp_1")
+        vm.dismissRegular(firstPaymentId)
         assertTrue(vm.state.value.dismissalRefreshPaused)
         assertFalse(vm.state.value.retryReady)
         assertEquals(regularData(), vm.state.value.data)
@@ -1259,7 +1261,7 @@ class AnalyticsViewModelTest {
         vm.refresh()
         assertEquals(3, api.requests.size)
         assertTrue(vm.state.value.pendingDismissals.isEmpty())
-        assertEquals(listOf("rp_1"), api.dismissCalls)
+        assertEquals(listOf(firstPaymentId), api.dismissCalls)
     }
 
     @Test fun `a forbidden publication read stays blocked after resume and explicit refresh`() {
@@ -1267,14 +1269,14 @@ class AnalyticsViewModelTest {
         api.answers += AppError.Api("FUTURE_REFUSAL", 409, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
             "FUTURE_REFUSAL", 409, requestRetryable = false))
         val vm = opened()
-        vm.dismissRegular("rp_1")
+        vm.dismissRegular(firstPaymentId)
         assertTrue(vm.state.value.dismissalRefreshPaused)
         vm.refresh()
         vm.onResume(null)
-        vm.dismissRegular("rp_1")
+        vm.dismissRegular(firstPaymentId)
         assertEquals(2, api.requests.size)
-        assertEquals(listOf("rp_1"), api.dismissCalls)
-        assertEquals(setOf("rp_1"), vm.state.value.pendingDismissals)
+        assertEquals(listOf(firstPaymentId), api.dismissCalls)
+        assertEquals(setOf(firstPaymentId), vm.state.value.pendingDismissals)
     }
 
     @Test fun `another successful dismissal cannot bypass an analytics Retry-After`() {
@@ -1282,9 +1284,9 @@ class AnalyticsViewModelTest {
         api.answers += AppError.RateLimited(null, retryAfterSeconds = 2)
         api.answers += regularData(false)
         val vm = opened()
-        vm.dismissRegular("rp_1")
-        vm.dismissRegular("rp_2")
-        assertEquals(listOf("rp_1", "rp_2"), api.dismissCalls)
+        vm.dismissRegular(firstPaymentId)
+        vm.dismissRegular(secondPaymentId)
+        assertEquals(listOf(firstPaymentId, secondPaymentId), api.dismissCalls)
         assertEquals(2, api.requests.size)
         assertTrue(vm.state.value.dismissalRefreshPaused)
         assertFalse(vm.state.value.retryReady)
@@ -1301,12 +1303,12 @@ class AnalyticsViewModelTest {
         api.answers += year
         val vm = opened()
         api.dismissGate = CompletableDeferred()
-        vm.dismissRegular("rp_1")
+        vm.dismissRegular(firstPaymentId)
         vm.setPeriodType(PeriodTypeCode.YEAR)
         api.dismissGate!!.complete(Unit)
         assertEquals(year, vm.state.value.data)
         assertFalse(vm.state.value.awaitingDismissal)
-        assertEquals(setOf("rp_1"), vm.state.value.pendingDismissals)
+        assertEquals(setOf(firstPaymentId), vm.state.value.pendingDismissals)
         api.answers.clear()
         api.answers += regularData()
         api.answers += regularData(false)
@@ -1316,7 +1318,7 @@ class AnalyticsViewModelTest {
         scheduler.runCurrent()
         assertEquals(PeriodTypeCode.MONTH, vm.state.value.data!!.params!!.period)
         assertTrue(vm.state.value.pendingDismissals.isEmpty())
-        assertEquals(listOf("rp_1"), api.dismissCalls)
+        assertEquals(listOf(firstPaymentId), api.dismissCalls)
     }
 
     @Test fun `period directory failures distinguish local connection from server failure`() {
@@ -1335,11 +1337,11 @@ class AnalyticsViewModelTest {
         api.answers += data()
         val vm = opened()
         api.dismissFailure = AppError.Offline()
-        vm.dismissRegular("rp_1")
+        vm.dismissRegular(firstPaymentId)
         assertEquals("Не получилось убрать", vm.state.value.snackbar)
         assertTrue(vm.state.value.errorPresentation?.connectionFailure == true)
         api.dismissFailure = AppError.Server(500)
-        vm.dismissRegular("rp_1")
+        vm.dismissRegular(firstPaymentId)
         assertEquals("Не получилось убрать. Попробуйте ещё раз", vm.state.value.snackbar)
         assertEquals(false, vm.state.value.errorPresentation?.connectionFailure)
         assertEquals(1, api.requests.size)
@@ -1359,9 +1361,9 @@ class AnalyticsViewModelTest {
         val vm = opened()
         val navigated = mutableListOf<BlockAction>()
         val card = Block(id = "regular_payments", type = BlockType.INSIGHT_CARD)
-        vm.onAction(card, BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = "rp_1", label = "Не подписка")) { navigated += it }
+        vm.onAction(card, BlockAction(ActionType.DISMISS_REGULAR_PAYMENT, paymentId = firstPaymentId, label = "Не подписка")) { navigated += it }
         vm.onAction(card, BlockAction(ActionType.UNKNOWN)) { navigated += it }
-        assertEquals(listOf("rp_1"), api.dismissed)
+        assertEquals(listOf(firstPaymentId), api.dismissed)
         assertTrue(navigated.isEmpty())
     }
 
@@ -1578,8 +1580,8 @@ class AnalyticsViewModelTest {
 
     @Test fun `a successful dismissal changes analytics data and permits its canonical refresh`() {
         val vm = blockedAnalytics()
-        vm.dismissRegular("rp_1")
-        assertEquals(listOf("rp_1"), api.dismissed)
+        vm.dismissRegular(firstPaymentId)
+        assertEquals(listOf(firstPaymentId), api.dismissed)
         assertEquals(3, api.requests.size)
         assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITH), api.requests.last())
         assertTrue(vm.state.value.retryReady)
