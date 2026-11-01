@@ -8,6 +8,8 @@ import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.blocks.CatalogV1
 import ru.finassist.pf.core.toggles.Experiment
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -72,6 +74,7 @@ class AnalyticsViewModelTest {
         var periodsReply: (suspend (PeriodTypeCode?) -> AnalyticsPeriodsList)? = null
         val dismissed = mutableListOf<String>()
         var dismissFailure: AppError? = null
+        var dismissReply: (suspend (String) -> Unit)? = null
 
         /** `supports` and `exp` of every request (FIN-4, FIN-9). */
         val extras = mutableListOf<Pair<String?, String?>>()
@@ -96,6 +99,7 @@ class AnalyticsViewModelTest {
         override suspend fun dismissRegularPayment(id: String) {
             dismissFailure?.let { throw it }
             dismissed += id
+            dismissReply?.invoke(id)
         }
 
         override suspend fun restoreRegularPayment(id: String) = Unit
@@ -562,7 +566,9 @@ class AnalyticsViewModelTest {
         scheduler.advanceTimeBy(3_000)
         scheduler.runCurrent()
         assertTrue(statements.acknowledged.isEmpty())
-        assertEquals(true, vm.state.value.data?.state?.recalculating)
+        assertTrue(vm.state.value.recalculating)
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.loading)
         scheduler.advanceTimeBy(3_000)
         scheduler.runCurrent()
         assertEquals(listOf(2L), statements.acknowledged)
@@ -602,9 +608,11 @@ class AnalyticsViewModelTest {
     }
 
     @Test fun `a failed recalculation poll keeps labelled previous data and offers recovery`() {
+        api.answers += data()
         api.answers += data(recalculating = true)
         api.answers += AppError.Offline()
         val vm = opened()
+        vm.load(quiet = true)
         scheduler.advanceTimeBy(3_000)
         scheduler.runCurrent()
         assertFalse(vm.state.value.loading)
@@ -619,9 +627,11 @@ class AnalyticsViewModelTest {
     }
 
     @Test fun `a refused recalculation poll labels previous numbers and stops polling`() {
+        api.answers += data()
         api.answers += data(recalculating = true)
         api.answers += refused()
         val vm = opened()
+        vm.load(quiet = true)
         scheduler.advanceTimeBy(3_000)
         scheduler.runCurrent()
         assertFalse(vm.state.value.loading)
@@ -630,7 +640,7 @@ class AnalyticsViewModelTest {
         assertNotNull(vm.state.value.errorPresentation)
         assertFalse(vm.state.value.retryReady)
         vm.load()
-        assertEquals(2, api.requests.size)
+        assertEquals(3, api.requests.size)
     }
 
     @Test fun `a new import generation receives a fresh full polling allowance after timeout`() {
@@ -1582,10 +1592,12 @@ class AnalyticsViewModelTest {
     }
 
     @Test fun `retrying paused recalculation through refresh retains a refused period target`() {
+        api.answers += data()
         api.answers += data(recalculating = true)
         api.answers += refused()
         api.answers += data()
         val vm = opened()
+        vm.load(quiet = true)
         vm.setPeriodType(PeriodTypeCode.YEAR)
         assertTrue(vm.state.value.recalculationPaused)
         val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
@@ -1595,7 +1607,7 @@ class AnalyticsViewModelTest {
         assertFalse(vm.state.value.periodChangeRetryReady)
         assertFalse(vm.state.value.recalculationPaused)
         vm.setPeriodType(PeriodTypeCode.YEAR)
-        assertEquals(3, api.requests.size)
+        assertEquals(4, api.requests.size)
     }
 
     @Test fun `recalculation polling after manual refresh preserves a failed period target wait`() {
@@ -1607,10 +1619,10 @@ class AnalyticsViewModelTest {
         vm.setPeriodType(PeriodTypeCode.YEAR)
         val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
         vm.refresh()
-        assertTrue(vm.state.value.data?.state?.recalculating == true)
+        assertTrue(vm.state.value.recalculating)
         scheduler.advanceTimeBy(3000)
         scheduler.runCurrent()
-        assertFalse(vm.state.value.data?.state?.recalculating == true)
+        assertFalse(vm.state.value.recalculating)
         assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
         assertFalse(vm.state.value.periodChangeRetryReady)
         vm.setPeriodType(PeriodTypeCode.YEAR)
@@ -1619,12 +1631,14 @@ class AnalyticsViewModelTest {
     }
 
     @Test fun `import publication polling after manual refresh preserves a refused period target`() {
-        statements.pendingImport = 42L
+        api.answers += data()
         api.answers += data(recalculating = true)
         api.answers += refused()
         api.answers += Analytics(hasData = false)
         api.answers += data()
         val vm = opened()
+        statements.pendingImport = 42L
+        vm.load(quiet = true)
         assertTrue(statements.acknowledged.isEmpty())
         vm.setPeriodType(PeriodTypeCode.YEAR)
         val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
@@ -1638,18 +1652,20 @@ class AnalyticsViewModelTest {
         assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
         assertFalse(vm.state.value.periodChangeRetryReady)
         vm.setPeriodType(PeriodTypeCode.YEAR)
-        assertEquals(4, api.requests.size)
-        assertTrue(api.requests.drop(2).all { it.period == PeriodTypeCode.MONTH })
+        assertEquals(5, api.requests.size)
+        assertTrue(api.requests.drop(3).all { it.period == PeriodTypeCode.MONTH })
     }
 
     @Test fun `no-data offline recovery preserves a refused period target`() {
-        statements.pendingImport = 42L
+        api.answers += data()
         api.answers += data(recalculating = true)
         api.answers += refused()
         api.answers += Analytics(hasData = false)
         api.answers += AppError.Offline()
         api.answers += data()
         val vm = opened()
+        statements.pendingImport = 42L
+        vm.load(quiet = true)
         vm.setPeriodType(PeriodTypeCode.YEAR)
         val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
         vm.refresh()
@@ -1661,13 +1677,13 @@ class AnalyticsViewModelTest {
         assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
         assertFalse(vm.state.value.periodChangeRetryReady)
         vm.setPeriodType(PeriodTypeCode.YEAR)
-        assertEquals(4, api.requests.size)
+        assertEquals(5, api.requests.size)
         val recovery = CompletableDeferred<Analytics>()
         api.reply = { recovery.await() }
         vm.refresh()
         assertTrue(vm.state.value.refreshing)
         vm.refresh()
-        assertEquals(5, api.requests.size, "the fullscreen retry is deduplicated while pending")
+        assertEquals(6, api.requests.size, "the fullscreen retry is deduplicated while pending")
         recovery.complete(data())
         assertFalse(vm.state.value.refreshing)
         assertFalse(vm.state.value.offline)
@@ -1675,16 +1691,18 @@ class AnalyticsViewModelTest {
         assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
         assertFalse(vm.state.value.periodChangeRetryReady)
         vm.setPeriodType(PeriodTypeCode.YEAR)
-        assertEquals(5, api.requests.size)
-        assertTrue(api.requests.drop(2).all { it.period == PeriodTypeCode.MONTH })
+        assertEquals(6, api.requests.size)
+        assertTrue(api.requests.drop(3).all { it.period == PeriodTypeCode.MONTH })
     }
 
     @Test fun `publication timeout recovery preserves the original period wait until its expiry`() {
-        statements.pendingImport = 42L
+        api.answers += data()
         api.answers += data(recalculating = true)
         api.answers += AppError.RateLimited(null, 60)
         api.answers += Analytics(hasData = false)
         val vm = opened()
+        statements.pendingImport = 42L
+        vm.load(quiet = true)
         vm.setPeriodType(PeriodTypeCode.YEAR)
         val failedTarget = api.requests.last()
         val explanation = assertNotNull(vm.state.value.periodChangeErrorPresentation)
@@ -1694,11 +1712,11 @@ class AnalyticsViewModelTest {
         assertNull(vm.state.value.data)
         assertTrue(vm.state.value.preparationTimedOut)
         assertFalse(vm.state.value.loading)
-        assertEquals(12, api.requests.size)
+        assertEquals(13, api.requests.size)
         assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
         assertFalse(vm.state.value.periodChangeRetryReady)
         vm.setPeriodType(PeriodTypeCode.YEAR)
-        assertEquals(12, api.requests.size)
+        assertEquals(13, api.requests.size)
         api.answers.clear()
         api.answers += data()
         api.answers += data(period = PeriodTypeCode.YEAR, date = "2026")
@@ -1708,16 +1726,16 @@ class AnalyticsViewModelTest {
         assertEquals(explanation, vm.state.value.periodChangeErrorPresentation)
         assertFalse(vm.state.value.periodChangeRetryReady)
         vm.setPeriodType(PeriodTypeCode.YEAR)
-        assertEquals(13, api.requests.size)
+        assertEquals(14, api.requests.size)
         scheduler.advanceTimeBy(29_999)
         scheduler.runCurrent()
         assertFalse(vm.state.value.periodChangeRetryReady)
         scheduler.advanceTimeBy(1)
         scheduler.runCurrent()
         assertTrue(vm.state.value.periodChangeRetryReady)
-        assertEquals(13, api.requests.size, "wait expiry must not submit Year automatically")
+        assertEquals(14, api.requests.size, "wait expiry must not submit Year automatically")
         vm.retryPeriodChange()
-        assertEquals(14, api.requests.size)
+        assertEquals(15, api.requests.size)
         assertEquals(failedTarget, api.requests.last())
         assertEquals(PeriodTypeCode.YEAR, vm.state.value.data?.params?.period)
     }
@@ -2083,6 +2101,234 @@ class AnalyticsViewModelTest {
         assertEquals(2, api.requests.size)
         assertFalse(vm.state.value.retryReady)
         assertEquals(explanation, vm.state.value.errorPresentation)
+    }
+
+    @Test fun `recalculation preserves the entire ready snapshot until a ready replacement`() {
+        val previous = data().copy(currency = "RUB", blocks = listOf(Block(id = "old", type = BlockType.UNKNOWN)))
+        val changed = data().copy(currency = "EUR", blocks = listOf(Block(id = "new", type = BlockType.UNKNOWN)))
+        api.answers += previous
+        api.answers += changed.copy(state = changed.state!!.copy(recalculating = true))
+        api.answers += changed.copy(state = changed.state!!.copy(recalculating = true))
+        api.answers += changed
+        val vm = opened()
+        vm.onBlockShown(Block(id = "old", type = BlockType.INSIGHT_CARD))
+        val response = vm.state.value.response
+        vm.load(quiet = true)
+        vm.onBlockShown(Block(id = "old", type = BlockType.INSIGHT_CARD))
+        assertEquals(response, vm.state.value.response)
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        vm.onBlockShown(Block(id = "old", type = BlockType.INSIGHT_CARD))
+        assertEquals(response, vm.state.value.response)
+        assertEquals(1, tracker.events.count { it.first == Events.ANALYTICS_BLOCK_EXPOSED })
+        assertEquals(previous, vm.state.value.data)
+        assertTrue(vm.state.value.recalculating)
+        assertFalse(vm.state.value.loading)
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertEquals(changed, vm.state.value.data)
+        assertFalse(vm.state.value.recalculating)
+    }
+
+    @Test fun `a recalculating period without a ready cache prepares instead of leaking another period`() {
+        api.answers += data()
+        api.answers += data(period = PeriodTypeCode.YEAR, date = "2026", recalculating = true)
+        api.answers += data(period = PeriodTypeCode.YEAR, date = "2026")
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.loading)
+        assertTrue(vm.state.value.recalculating)
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertEquals(PeriodTypeCode.YEAR, vm.state.value.data?.params?.period)
+        assertFalse(vm.state.value.loading)
+    }
+
+    @Test fun `recalculation times out with cached data and explicit retry recovers`() {
+        val previous = data()
+        api.answers += previous
+        api.answers += data(recalculating = true)
+        val vm = opened()
+        vm.load(quiet = true)
+        scheduler.advanceTimeBy(30_000)
+        scheduler.runCurrent()
+        assertEquals(11, api.requests.size)
+        assertEquals(previous, vm.state.value.data)
+        assertTrue(vm.state.value.recalculationPaused)
+        assertFalse(vm.state.value.preparationTimedOut)
+        vm.onResume(null)
+        assertEquals(11, api.requests.size)
+        api.answers.clear()
+        api.answers += data().copy(currency = "EUR")
+        vm.refresh()
+        assertEquals("EUR", vm.state.value.data?.currency)
+        assertFalse(vm.state.value.recalculating)
+        assertFalse(vm.state.value.recalculationPaused)
+    }
+
+    @Test fun `recalculation without cache times out with preparation retry`() {
+        api.answers += data(recalculating = true)
+        val vm = opened()
+        scheduler.advanceTimeBy(30_000)
+        scheduler.runCurrent()
+        assertEquals(10, api.requests.size)
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.preparationTimedOut)
+        assertFalse(vm.state.value.loading)
+        vm.onResume(null)
+        assertEquals(10, api.requests.size)
+        api.answers.clear()
+        api.answers += data()
+        vm.refresh()
+        assertNotNull(vm.state.value.data)
+        assertFalse(vm.state.value.preparationTimedOut)
+    }
+
+    @Test fun `a late ready response cannot replace newer data or poison its cache`() {
+        api.answers += data()
+        val vm = opened()
+        val late = CompletableDeferred<Analytics>()
+        api.reply = { withContext(NonCancellable) { late.await() } }
+        vm.load(quiet = true)
+        val fresh = data().copy(currency = "EUR")
+        api.reply = { fresh }
+        vm.load(quiet = true)
+        late.complete(data().copy(currency = "USD"))
+        scheduler.runCurrent()
+        assertEquals(fresh, vm.state.value.data)
+        api.reply = { fresh.copy(state = fresh.state!!.copy(recalculating = true)) }
+        vm.load(quiet = true)
+        assertEquals(fresh, vm.state.value.data)
+        assertTrue(vm.state.value.recalculating)
+    }
+
+    @Test fun `a late error cannot stop the newer recalculation or impose retry refusal`() {
+        api.answers += data()
+        val vm = opened()
+        val late = CompletableDeferred<Unit>()
+        api.reply = { withContext(NonCancellable) { late.await(); throw refused() } }
+        vm.load(quiet = true)
+        api.reply = { data(recalculating = true) }
+        vm.load(quiet = true)
+        late.complete(Unit)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.recalculating)
+        assertFalse(vm.state.value.recalculationPaused)
+        assertNull(vm.state.value.errorPresentation)
+        assertTrue(vm.state.value.retryReady)
+        api.reply = { data() }
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertFalse(vm.state.value.recalculating)
+    }
+
+    @Test fun `mutation start invalidates even a read whose transport ignores cancellation`() {
+        val previous = data()
+        api.answers += previous
+        val vm = opened()
+        val late = CompletableDeferred<Analytics>()
+        val mutation = CompletableDeferred<Unit>()
+        api.reply = { withContext(NonCancellable) { late.await() } }
+        vm.load(quiet = true)
+        api.dismissReply = { mutation.await() }
+        vm.dismissRegular("first")
+        late.complete(data(recalculating = true).copy(currency = "USD"))
+        scheduler.runCurrent()
+        assertEquals(previous, vm.state.value.data)
+        assertFalse(vm.state.value.recalculating)
+        api.reply = { data(recalculating = true) }
+        mutation.complete(Unit)
+        scheduler.runCurrent()
+        assertEquals(previous, vm.state.value.data)
+        assertTrue(vm.state.value.recalculating)
+    }
+
+    @Test fun `different regular payment mutations serialize and a repeated pending tap is ignored`() {
+        api.answers += data()
+        val vm = opened()
+        val first = CompletableDeferred<Unit>()
+        val second = CompletableDeferred<Unit>()
+        api.dismissReply = { if (it == "first") first.await() else second.await() }
+        vm.dismissRegular("first")
+        vm.dismissRegular("first")
+        vm.dismissRegular("second")
+        assertEquals(listOf("first"), api.dismissed)
+        first.complete(Unit)
+        scheduler.runCurrent()
+        assertEquals(listOf("first", "second"), api.dismissed)
+        second.complete(Unit)
+        scheduler.runCurrent()
+        assertEquals(3, api.requests.size)
+        assertEquals(2, tracker.events.count { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+    }
+
+    @Test fun `a failed mutation releases the block for a queued different payment`() {
+        api.answers += data()
+        val vm = opened()
+        val first = CompletableDeferred<Unit>()
+        api.dismissReply = { if (it == "first") { first.await(); throw AppError.Offline() } }
+        vm.dismissRegular("first")
+        vm.dismissRegular("second")
+        first.complete(Unit)
+        scheduler.runCurrent()
+        assertEquals(listOf("first", "second"), api.dismissed)
+        assertEquals(1, tracker.events.count { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+        assertEquals(2, api.requests.size)
+    }
+
+    @Test fun `returning to a cached context during recalculation restores its own snapshot with a new exposure epoch`() {
+        val month = data()
+        val year = data(period = PeriodTypeCode.YEAR, date = "2026")
+        api.answers += month
+        api.answers += year
+        api.answers += data(recalculating = true)
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val epoch = vm.state.value.response
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(month, vm.state.value.data)
+        assertEquals(epoch + 1, vm.state.value.response)
+        assertTrue(vm.state.value.recalculating)
+    }
+
+    @Test fun `a changed report zone cannot reuse cached financial data`() {
+        reportZone.set("Europe/Moscow")
+        api.answers += data()
+        api.answers += data(recalculating = true)
+        val vm = opened()
+        reportZone.set("Asia/Vladivostok")
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.loading)
+        assertTrue(vm.state.value.recalculating)
+    }
+
+    @Test fun `a changed experiment cannot reuse a differently composed snapshot`() {
+        api.answers += data()
+        api.answers += data(recalculating = true)
+        val vm = opened()
+        flags.set(Experiment.ANALYTICS_ORDER, "b")
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.loading)
+        assertEquals("analytics_order:b", api.extras.last().second)
+    }
+
+    @Test fun `an uncached recalculation interrupted by offline keeps recovery instead of upload advice`() {
+        api.answers += data(recalculating = true)
+        api.answers += AppError.Offline()
+        val vm = opened()
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.offline)
+        assertTrue(vm.state.value.recalculationPaused)
+        assertFalse(vm.state.value.loading)
+        api.answers.clear()
+        api.answers += data()
+        vm.refresh()
+        assertNotNull(vm.state.value.data)
+        assertFalse(vm.state.value.offline)
+        assertFalse(vm.state.value.recalculating)
     }
 
 }

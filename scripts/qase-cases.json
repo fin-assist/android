@@ -61,6 +61,7 @@
     ".maestro/flows/auth/phone_restart.yaml": 59,
     ".maestro/flows/assistant/tab_and_consent_recovery.yaml": 61,
     ".maestro/flows/analytics/import_preparation_retry.yaml": 63,
+    ".maestro/flows/analytics/recalculation_snapshot.yaml": 82,
     "ru.finassist.pf.AiConsentSpacingTest#keepsTwentyFourDpAfterConsentContentWhenScrolledAtLargeFont": 64,
     ".maestro/flows/assistant/tab_consent_in_profile.yaml": 65,
     "ru.finassist.pf.ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries": 66,

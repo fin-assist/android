@@ -45,6 +45,7 @@ import javax.inject.Inject
  *   reach «Время на звонок вышло» without waiting 5 minutes.
  * - `network_delay_ms=<n>` — latency of every backend request (keeps a «busy» state up long enough to act on it).
  * - `assistant_model_errors=<n>` — the next n assistant answers fail with MODEL_ERROR («Повторить» under them).
+ * - `analytics_recalculating_responses=<0..100>` — next n non-empty analytics reads carry `state.recalculating=true`.
  * - `analytics_pending_responses=<0..100>` — next n valid analytics reads return `has_data=false`, simulating
  *   publication lag after a UI import; zero restores the actual projection without changing the imported ledger.
  * - `stream_drops=<n>` — the next n openings of an SSE stream (call, import progress, answer) close after their first
@@ -153,6 +154,11 @@ class E2eControlActivity : ComponentActivity() {
                     val count = value.toIntOrNull()?.takeIf { it in 0..100 }
                     if (count == null) unmet = "invalid analytics pending response count"
                     else backend.mutex.withLock { backend.config = backend.config.copy(analyticsPendingResponses = count) }
+                }
+                name == "analytics_recalculating_responses" -> {
+                    val count = value.toIntOrNull()?.takeIf { it in 0..100 }
+                    if (count == null) unmet = "invalid analytics recalculating response count"
+                    else backend.mutex.withLock { backend.config = backend.config.copy(analyticsRecalculatingResponses = count) }
                 }
                 name == "stream_drops" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(streamDrops = it) }
                 name == "stream_rate_limits" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(streamRateLimits = it) }

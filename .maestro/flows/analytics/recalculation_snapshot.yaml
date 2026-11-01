@@ -1,0 +1,125 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — готовый снимок при пересчёте и подготовка другого периода
+tags:
+  - analytics
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible: "Октябрь 2026"
+    timeout: 15000
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible: "Сентябрь 2026"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "analytics.expense_category"
+# The intermediate response has changed blocks. Merely retaining the recalculating payload would fail.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_recalculating_responses=4&failing_blocks=expense_categories"
+- scrollUntilVisible:
+    element:
+      id: "analytics.recalculating"
+    direction: UP
+- assertVisible: "Пересчитываем после изменений.*"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.expense_categories"
+- assertVisible:
+    id: "analytics.expense_category"
+- assertNotVisible: "Не получилось посчитать.*"
+- extendedWaitUntil:
+    visible: "Не получилось посчитать.*"
+    timeout: 20000
+- assertNotVisible:
+    id: "analytics.expense_category"
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 65%"
+- assertNotVisible:
+    id: "analytics.recalculating"
+
+# This ready snapshot contains an unavailable block. While marked, recovery of that block stays hidden.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_recalculating_responses=100&failing_blocks="
+- scrollUntilVisible:
+    element:
+      id: "analytics.recalculating"
+- assertVisible: "Пересчитываем после изменений.*"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.expense_categories"
+- assertVisible: "Не получилось посчитать.*"
+- assertNotVisible:
+    id: "analytics.expense_category"
+- scrollUntilVisible:
+    element:
+      id: "analytics.recalculating"
+    direction: UP
+- extendedWaitUntil:
+    visible: "Не удалось обновить показатели.*"
+    timeout: 40000
+- assertVisible:
+    id: "analytics.retry"
+    enabled: true
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_recalculating_responses=0"
+- assertVisible: "Не удалось обновить показатели.*"
+- tapOn:
+    id: "analytics.retry"
+- extendedWaitUntil:
+    notVisible:
+      id: "analytics.recalculating"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "analytics.expense_category"
+- assertNotVisible: "Не получилось посчитать.*"
+
+# A first visit to Year has no matching ready snapshot. Never display September under that request.
+- scrollUntilVisible:
+    element:
+      id: "ds.segment.2"
+    direction: UP
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 65%"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_recalculating_responses=4"
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.updating"
+    timeout: 10000
+- assertNotVisible:
+    id: "analytics.block.tiles"
+- assertNotVisible:
+    id: "analytics.empty"
+- assertNotVisible: "Загрузите выписку.*"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 20000
+- assertVisible: "2026"
+- assertNotVisible:
+    id: "analytics.updating"
+- assertNotVisible:
+    id: "analytics.recalculating"

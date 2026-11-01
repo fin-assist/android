@@ -49,6 +49,40 @@ class MockAnalyticsApiTest {
     }
 
     @Test
+    fun `recalculation fixture marks exactly the configured real responses including changed blocks`() = runBlocking<Unit> {
+        val original = api.getAnalytics(null, null, null)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 2, failingBlocks = setOf("expense_categories"))
+        repeat(2) { index ->
+            val marked = api.getAnalytics(null, null, null)
+            assertTrue(marked.state!!.recalculating)
+            assertEquals(original.params, marked.params)
+            assertEquals(ru.finassist.pf.core.api.model.BlockStatus.UNAVAILABLE, marked.blocks.single { it.id == "expense_categories" }.status)
+            assertEquals(1 - index, backend.config.analyticsRecalculatingResponses)
+        }
+        assertFalse(api.getAnalytics(null, null, null).state!!.recalculating)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 100)
+        assertTrue(api.getAnalytics(null, null, null).state!!.recalculating)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 0)
+        assertFalse(api.getAnalytics(null, null, null).state!!.recalculating)
+    }
+
+    @Test
+    fun `recalculation fixture preserves validation authentication and absent projection behavior`() = runBlocking<Unit> {
+        val signedOut = testBackend(userId = "", config = FAST.copy(analyticsRecalculatingResponses = 2))
+        assertFailsWith<AppError.Unauthorized> { MockAnalyticsApi(signedOut).getAnalytics(null, null, null) }
+        assertEquals(2, signedOut.config.analyticsRecalculatingResponses)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 2)
+        assertFailsWith<AppError.Api> { api.getAnalytics(PeriodTypeCode.UNKNOWN, null, null) }
+        assertEquals(2, backend.config.analyticsRecalculatingResponses)
+        backend.config = backend.config.copy(analyticsPendingResponses = 1)
+        assertFalse(api.getAnalytics(null, null, null).hasData)
+        assertEquals(2, backend.config.analyticsRecalculatingResponses)
+        val empty = testBackend(config = FAST.copy(analyticsRecalculatingResponses = 2))
+        assertFalse(MockAnalyticsApi(empty).getAnalytics(null, null, null).hasData)
+        assertEquals(2, empty.config.analyticsRecalculatingResponses)
+    }
+
+    @Test
     fun `publication fixture withholds exactly the configured reads without losing the imported ledger`() = runBlocking<Unit> {
         val expected = api.getAnalytics(null, null, null)
         backend.config = backend.config.copy(analyticsPendingResponses = 2)

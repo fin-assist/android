@@ -313,10 +313,14 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   capability; generic blocks and assistant rendering never expose it as a button. Unselected interactive
   year/all-time charts initially reveal the latest covered point (including zero), without selecting it;
   manual scroll stays available.
-- Analytics refreshes on resume as well as statement/category events (FIN-394); after a data mutation old
-  totals are cleared until a fresh response arrives. Loading and an empty recalculating response are
+- Analytics refreshes on resume as well as statement/category events (FIN-394); after an import or upload deletion,
+  displayed totals are cleared until a fresh response arrives. Loading and an empty recalculating response are
   preparation states rather than requests to upload another statement. With data, recalculation retains
-  the screen and a notice; a stopped poll labels the previous values and offers an allowed explicit retry. A user-scoped local import token in
+  a whole last-ready response for the same normalized period/date/transfer mode and a separate notice; without a
+  matching snapshot the screen prepares data. Recalculating payloads never overwrite that cache. Marked responses
+  poll every 3 seconds for at most 10 responses; a stopped poll labels the previous values and offers an allowed explicit retry.
+  Generation checks reject late reads after newer reads or regular-payment mutations, whose shared block is serialized.
+  This existing-contract behavior does not establish post-mutation freshness; that delivery protocol remains FIN-418. A user-scoped local import token in
   `StatementsRepository` survives absent Analytics subscribers: a completed non-empty import followed by
   `has_data:false` is polled every 3 seconds, up to 10 responses, then offers an explicit refresh. The token
   is acknowledged only for the observed generation once data is present and not recalculating.
