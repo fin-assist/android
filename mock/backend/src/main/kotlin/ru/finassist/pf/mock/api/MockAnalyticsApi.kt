@@ -19,6 +19,7 @@ import ru.finassist.pf.core.common.time.PeriodType
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.apiError
+import ru.finassist.pf.mock.MockErrorOperation
 import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.mock.domain.AnalyticsComposer
 
@@ -63,7 +64,15 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
             experiments = AnalyticsComposer.parseExperiments(exp),
             failing = backend.config.failingBlocks,
         )
-        return if (backend.config.unknownCodes && composed.hasData) withUnknownCodes(composed) else composed
+        val marked = backend.mutex.withLock {
+            val remaining = backend.config.analyticsRecalculatingResponses
+            val state = composed.state
+            if (remaining > 0 && state != null) {
+                backend.config = backend.config.copy(analyticsRecalculatingResponses = remaining - 1)
+                composed.copy(state = state.copy(recalculating = true))
+            } else composed
+        }
+        return if (backend.config.unknownCodes && marked.hasData) withUnknownCodes(marked) else marked
     }
 
     /**
@@ -93,6 +102,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
         backend.simulateNetwork()
         backend.requireSession()
         requirePayment(id)
+        backend.maybeInjectError(MockErrorOperation.ANALYTICS_DISMISS)
         backend.mutex.withLock { backend.dismissedPayments += id }
     }
 

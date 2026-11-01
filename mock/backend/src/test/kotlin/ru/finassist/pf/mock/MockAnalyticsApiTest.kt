@@ -49,6 +49,40 @@ class MockAnalyticsApiTest {
     }
 
     @Test
+    fun `recalculation fixture marks exactly the configured real responses including changed blocks`() = runBlocking<Unit> {
+        val original = api.getAnalytics(null, null, null)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 2, failingBlocks = setOf("expense_categories"))
+        repeat(2) { index ->
+            val marked = api.getAnalytics(null, null, null)
+            assertTrue(marked.state!!.recalculating)
+            assertEquals(original.params, marked.params)
+            assertEquals(ru.finassist.pf.core.api.model.BlockStatus.UNAVAILABLE, marked.blocks.single { it.id == "expense_categories" }.status)
+            assertEquals(1 - index, backend.config.analyticsRecalculatingResponses)
+        }
+        assertFalse(api.getAnalytics(null, null, null).state!!.recalculating)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 100)
+        assertTrue(api.getAnalytics(null, null, null).state!!.recalculating)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 0)
+        assertFalse(api.getAnalytics(null, null, null).state!!.recalculating)
+    }
+
+    @Test
+    fun `recalculation fixture preserves validation authentication and absent projection behavior`() = runBlocking<Unit> {
+        val signedOut = testBackend(userId = "", config = FAST.copy(analyticsRecalculatingResponses = 2))
+        assertFailsWith<AppError.Unauthorized> { MockAnalyticsApi(signedOut).getAnalytics(null, null, null) }
+        assertEquals(2, signedOut.config.analyticsRecalculatingResponses)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 2)
+        assertFailsWith<AppError.Api> { api.getAnalytics(PeriodTypeCode.UNKNOWN, null, null) }
+        assertEquals(2, backend.config.analyticsRecalculatingResponses)
+        backend.config = backend.config.copy(analyticsPendingResponses = 1)
+        assertFalse(api.getAnalytics(null, null, null).hasData)
+        assertEquals(2, backend.config.analyticsRecalculatingResponses)
+        val empty = testBackend(config = FAST.copy(analyticsRecalculatingResponses = 2))
+        assertFalse(MockAnalyticsApi(empty).getAnalytics(null, null, null).hasData)
+        assertEquals(2, empty.config.analyticsRecalculatingResponses)
+    }
+
+    @Test
     fun `publication fixture withholds exactly the configured reads without losing the imported ledger`() = runBlocking<Unit> {
         val expected = api.getAnalytics(null, null, null)
         backend.config = backend.config.copy(analyticsPendingResponses = 2)
@@ -130,6 +164,44 @@ class MockAnalyticsApiTest {
         assertEquals(listOf("2026-Q3", "2026-Q2"), quarters.map { it.key.value })
         // Q2 has data for June only.
         assertEquals(listOf(Coverage.COMPLETE, Coverage.PARTIAL), quarters.map { it.coverage })
+    }
+
+    @Test
+    fun `a targeted dismissal failure leaves the ledger intact while marked analytics keeps progressing`() = runBlocking<Unit> {
+        val payment = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+            .insights!!.regularPayments.items.orEmpty().single { it.title == "Netflix" }
+        backend.config = backend.config.copy(errorOperation = MockErrorOperation.ANALYTICS_DISMISS,
+            errorScenario = MockErrorScenario.RETRY_FORBIDDEN, analyticsRecalculatingResponses = 2)
+        assertTrue(api.getAnalytics(null, null, null).state!!.recalculating)
+        val error = assertFailsWith<AppError.RateLimited> { api.dismissRegularPayment(payment.id) }
+        assertEquals(false, error.requestRetryable)
+        assertEquals(3L, error.retryAfterSeconds)
+        assertEquals(1, backend.injectedErrorCount.value)
+        assertTrue(backend.dismissedPayments.isEmpty())
+        assertTrue("Netflix" in regularTitles())
+        assertTrue(api.getAnalytics(null, null, null).state!!.recalculating)
+        assertFalse(api.getAnalytics(null, null, null).state!!.recalculating)
+        api.restoreRegularPayment(payment.id)
+        assertEquals(1, backend.injectedErrorCount.value)
+        backend.config = backend.config.copy(errorOperation = null)
+        api.dismissRegularPayment(payment.id)
+        assertFalse("Netflix" in regularTitles())
+        assertEquals(1, backend.injectedErrorCount.value)
+    }
+
+    @Test
+    fun `the dismissal error fixture never bypasses authentication or payment validation`() = runBlocking<Unit> {
+        val config = FAST.copy(errorOperation = MockErrorOperation.ANALYTICS_DISMISS)
+        val signedOut = testBackend(userId = "", config = config)
+        assertFailsWith<AppError.Unauthorized> { MockAnalyticsApi(signedOut).dismissRegularPayment("invalid") }
+        assertEquals(0, signedOut.injectedErrorCount.value)
+        backend.config = config
+        val invalid = assertFailsWith<AppError.Api> { api.dismissRegularPayment("invalid") }
+        assertEquals(ErrorCodes.VALIDATION_ERROR, invalid.code)
+        val missing = assertFailsWith<AppError.Api> { api.dismissRegularPayment("00000000-0000-0000-0000-000000000000") }
+        assertEquals(ErrorCodes.NOT_FOUND, missing.code)
+        assertEquals(0, backend.injectedErrorCount.value)
+        assertTrue(backend.dismissedPayments.isEmpty())
     }
 
     @Test

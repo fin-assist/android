@@ -287,12 +287,13 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
                 modifier = Modifier.testTag(AnalyticsTags.UNREAD),
             )
         }
-        if (s.recalculating) {
+        if (state.recalculating || s.recalculating) {
             Gap(d.space3)
             PfNotice(
                 if (state.recalculationPaused) "Не удалось обновить показатели. Показаны данные до изменений"
                 else "Пересчитываем после изменений — цифры обновятся через несколько секунд",
                 tone = NoticeTone.INFO,
+                modifier = Modifier.testTag(AnalyticsTags.RECALCULATING),
                 action = if (state.recalculationPaused && state.retryReady) ({
                     PfNoticeLink("Повторить", onClick = { vm.refresh() }, modifier = Modifier.testTag(AnalyticsTags.RETRY))
                 }) else null,
@@ -480,6 +481,7 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
 
 /** Test tags of the analytics screen (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object AnalyticsTags {
+    const val RECALCULATING = "analytics.recalculating"
     const val UPDATING = "analytics.updating"
     const val PREPARATION_TIMEOUT = "analytics.preparation_timeout"
     /** A block of the screen by its id (`analytics.block.tiles`): the ids are the server's (FIN-4). */

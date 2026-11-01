@@ -514,6 +514,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `call_ttl_ms=<n>` | lifetime of the next phone verification requests (`expires_at`, `expires_in`; 5 minutes by default): the wait ends without a call (FIN-166) | process |
   | `network_delay_ms=<n>` | latency of every backend request (a «busy» state stays up for that long) | process |
   | `unknown_codes=true\|false` | the fake server sends codes the client does not know (`MockCodes`): a filter `kind` on the expense tile, an import notice, an analytics feature, an Analytics block of an unknown type and a card locked for an unknown reason (FIN-83, FIN-4) | process |
+  | `analytics_recalculating_responses=<0..100>` | next n valid non-empty analytics reads carry existing `state.recalculating=true`; auth/validation still apply; no receipt or delivery simulation (FIN-416) | process |
   | `failing_blocks=<id>,…` | those Analytics blocks fail on the fake server and come as `unavailable` (FIN-5); empty — none | process |
   | `assistant_model_errors=<n>` | the next n assistant answers fail with MODEL_ERROR («Повторить» under them) | process (counts down) |
   | `stream_drops=<n>` | the next n openings of an SSE stream (call, import progress, answer) close after their first event without a terminal one; the app re-opens them with a pause (FIN-170) | process (counts down) |
@@ -661,6 +662,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state (Qase75, FIN-400); authored, not executed |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
+| `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416); authored, not executed |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
@@ -806,7 +808,7 @@ The upload flow above deliberately seeds an unknown-age record without claiming 
 
 ### FIN-223 safe error controls and coverage
 
-The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|phone_start|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden|terminal_failure`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.
+The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|phone_start|analytics_dismiss|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden|terminal_failure`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.
 
 ### FIN-352 repeated physical unread lines
 
@@ -1079,3 +1081,37 @@ masquerading as recovery; the next error also passes the strict geometry helper.
 baseline failed on that later range (expected 52 px, actual 0), while `collectLatest` passed. No production hook,
 private mutex access, synthetic cancellation or wall-clock sleep is involved. The previous Not-covered claim
 was disproved by this real gesture experiment and removed.
+
+
+### FIN-416 ready analytics during recalculation
+
+`AnalyticsViewModel` keeps up to 32 whole ready responses in memory, keyed by normalized period/date/transfer mode.
+A response marked with the existing `state.recalculating=true` changes the notice, while the matching ready response
+and its block exposure epoch remain intact. Without a matching snapshot, the screen prepares data. A ready response
+replaces the snapshot as a whole; import/upload deletion, a confirmed empty ledger, timezone change or experiment
+change invalidates cached snapshots. The cache lives only in the user-scoped ViewModel and is not persisted across process death.
+
+Actual marked responses keep the existing 3-second refresh cadence, bounded to 10 responses before explicit Retry.
+Offline/refused polls preserve the previous values and respect the existing retry gate. A monotonic read generation
+rejects stale success/error completions even when cancellation is ignored; starting a regular-payment dismissal
+invalidates earlier reads immediately. Dismissals for the shared block are serialized and a repeated pending ID is
+ignored. A failed dismissal resumes only an interrupted, still-current GET through its own retry gate; a refused
+read leaves the recalculation paused with an allowed explicit retry. There is no automatic mutation retry and no
+restore UI call site in this scope.
+
+`AnalyticsSnapshotsTest` and `AnalyticsViewModelTest` cover cache identity/isolation/eviction, preparing, timeout,
+late completions, exposure stability, and serialized mutations. `MockAnalyticsApiTest` verifies the bounded fixture
+and its validation/authentication boundary. The authored Maestro flow `analytics/recalculation_snapshot` / Qase82
+combines that marker with the existing unavailable-block fixture so applying intermediate blocks would fail the test.
+It also uses the existing closed error fixture with `error_operation=analytics_dismiss` to refuse a valid dismissal
+while GETs remain usable. The flow checks the failure and retained payment, then waits for the bounded read pause
+without navigation or refresh (either could hide the lost-poll bug), explicitly recovers, and requires exactly one
+injected mutation failure. The mock fixture keeps authentication and payment validation ahead of error injection.
+Existing recalculation design-check states now use a ready response plus the separate read-status notice. These UI
+and design-check scenarios were not executed for this PR.
+
+This is the independent existing-contract subset of FIN-416, not completion of its mutation-delivery scenario.
+The mutation response carrying the updated regular-payments block and the server/client delivery guarantees remain
+dependent on the merged FIN-418 contract and the subsequent implementation. This PR keeps the current mutation API
+unchanged; it does not choose a receipt-only response. A plain ready GET is not claimed to prove post-mutation
+freshness. Qase81 remains planned for that dependent work.
