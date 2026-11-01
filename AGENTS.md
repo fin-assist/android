@@ -535,4 +535,4 @@ FIN-211: dependency-only Renovate PRs may be merged/closed by the reviewed `reno
 
 FIN-411 adds rolling_year/rolling_quarter selectors in Analytics and a coverage-anchored mock calculation. The client renders server ranges and totals; only mock/backend calculates facts. Edge chart actions keep exact calendar month keys; a failed selection retains the previous screen and original retry request. See docs/e2e.md for authored Qase76 coverage.
 
-FIN-416 limits rolling selectors to their Year/Quarter tabs and removes period navigation for all_time; tapping the selected calendar segment exits its rolling period. Qase80 and docs/e2e.md cover these controls. The separate dismissal response change (item 2) awaits FIN-418 and is not implemented here.
+FIN-416 limits rolling selectors to their Year/Quarter tabs and removes period navigation for all_time; tapping the selected calendar segment exits its rolling period. Qase80 and docs/e2e.md cover these controls. Item 2 (dismissal: durable recalculating marker delivery, FIN-418) is deferred to separate PRs and is not implemented here; see docs/e2e.md. The future Temporal saga is tracked in FIN-419.
