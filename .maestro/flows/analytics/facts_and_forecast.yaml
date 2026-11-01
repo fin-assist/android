@@ -156,13 +156,13 @@ tags:
     id: "ds.period.pick"
 - scrollUntilVisible:
     element:
-      text: "Сентябрь 2026.*"
-      childOf:
-        id: "analytics.period.option"
-- tapOn:
-    text: "Сентябрь 2026.*"
-    childOf:
       id: "analytics.period.option"
+      containsDescendants:
+        - text: "Сентябрь 2026.*"
+- tapOn:
+    id: "analytics.period.option"
+    containsDescendants:
+      - text: "Сентябрь 2026.*"
 - extendedWaitUntil:
     visible:
       text: "Сентябрь 2026"

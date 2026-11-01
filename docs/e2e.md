@@ -654,11 +654,11 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `operations/days_in_profile_zone` | `profile_timezone=Asia/Vladivostok`: after the profile is read, the feed groups days in the profile zone, not the device's — an evening operation in Moscow moves to the next day — FIN-92 |
 | `operations/statement_stale` | on the preloaded statement the caption under the summary says «Данные по 1 октября» (the statement's end, not the last operation on 30 September); then the preloaded statement deleted, `stale.ofx` uploaded: «Операции» and «Аналитика» show «Данные в приложении по 20 сентября — с тех пор прошло больше двух недель», dated by the statement's end (`state.data_to`), not the last operation (15 September) — FIN-125 |
 | `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
-| `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast with the history explanation; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; authored, not executed |
+| `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast with the history explanation; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month through its option container and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; authored, not executed |
 | `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month (Qase73, FIN-391); authored, not executed |
 | `analytics/rolling_periods` (mock-only) | rolling year/quarter anchored to statement coverage, exact ranges, no forecast, failed singleton switch and explicit exact retry, transfer-mode preservation, clipped edge point → full calendar month, independent remembered calendar selection; Qase76 (FIN-411); authored, not executed |
 | `analytics/chart_month_selection` (mock-only) | whole-column selection including zero expenses, exact month/year, selected state and retained transfer mode/scroll; failed switch and explicit retry (Qase74, FIN-398); authored, not executed |
-| `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state (Qase75, FIN-400); authored, not executed |
+| `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state; expense search uses the ASCII query FIN-400 within the inherited 2024–2026 range, checks the single January 2024 debit and retained kind/scope (Qase75, FIN-400/415) |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
@@ -1104,3 +1104,20 @@ GET; a separate explicit Send reuses the pending question. Quota 4 → 3 of 5 ch
 without requiring two answers to be simultaneously visible in Chat's lazy list. No application runtime or
 accessibility semantics, timeouts, suite membership or skip rules change. These revisions were checked statically;
 all 11 flows and the full mock suite still require a separately authorized UI run.
+
+
+### FIN-415 remaining post-merge flow steps
+
+The [post-merge UI run 41281091191](https://github.com/fin-assist/android/actions/runs/41281091191) at `87f218cf`
+passed the original failure points but exposed two later steps. In `analytics/all_time`, the 20-second scroll
+stopped among September 2026 operations before the January 2024 target. The flow now searches for `FIN-400`
+through the normal query field without clearing the inherited period or analytics filters. It requires exactly
+one result with the fixture's name, January 2024 date and debit amount, then checks the retained period,
+expense kind and analytics scope. The matching income from the same fixture must remain excluded.
+In `analytics/facts_and_forecast`, `PfOptionRow` puts an untagged view between the tagged option and its text.
+Both scroll and tap now select `analytics.period.option` with the month in `containsDescendants`; the selected
+month is still verified separately under `ds.period.pick`.
+
+Qase71 and Qase75 keep their existing flow paths and IDs. Their scenario descriptions are synchronized;
+these follow-up revisions were checked statically and have not been executed on a device. Application runtime,
+accessibility semantics, timeout values and suite membership are unchanged.
