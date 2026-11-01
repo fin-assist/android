@@ -1088,14 +1088,16 @@ was disproved by this real gesture experiment and removed.
 `AnalyticsViewModel` keeps up to 32 whole ready responses in memory, keyed by normalized period/date/transfer mode.
 A response marked with the existing `state.recalculating=true` changes the notice, while the matching ready response
 and its block exposure epoch remain intact. Without a matching snapshot, the screen prepares data. A ready response
-replaces the snapshot as a whole; a confirmed empty ledger, timezone change or experiment change invalidates cached
-snapshots. The cache lives only in the user-scoped ViewModel and is not persisted across process death.
+replaces the snapshot as a whole; import/upload deletion, a confirmed empty ledger, timezone change or experiment
+change invalidates cached snapshots. The cache lives only in the user-scoped ViewModel and is not persisted across process death.
 
 Actual marked responses keep the existing 3-second refresh cadence, bounded to 10 responses before explicit Retry.
 Offline/refused polls preserve the previous values and respect the existing retry gate. A monotonic read generation
 rejects stale success/error completions even when cancellation is ignored; starting a regular-payment dismissal
 invalidates earlier reads immediately. Dismissals for the shared block are serialized and a repeated pending ID is
-ignored. There is no restore UI call site in this scope.
+ignored. A failed dismissal resumes only an interrupted, still-current GET through its own retry gate; a refused
+read leaves the recalculation paused with an allowed explicit retry. There is no automatic mutation retry and no
+restore UI call site in this scope.
 
 `AnalyticsSnapshotsTest` and `AnalyticsViewModelTest` cover cache identity/isolation/eviction, preparing, timeout,
 late completions, exposure stability, and serialized mutations. `MockAnalyticsApiTest` verifies the bounded fixture

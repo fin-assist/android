@@ -119,6 +119,7 @@ class AnalyticsViewModel @Inject constructor(
     private var transferMode: TransferMode = TransferMode.WITH
     private var loadJob: Job? = null
     private var loadGeneration = 0L
+    private var readInterruptedByMutation = false
     private val snapshots = AnalyticsSnapshots()
     private var recalculationPolls = 0
     private var initialized = false
@@ -222,8 +223,11 @@ class AnalyticsViewModel @Inject constructor(
         importPolls = 0
         recalculationPolls = 0
         // An import or deletion invalidates the old totals. Other edits keep the screen and its scroll position.
-        if (invalidate) _state.update { it.copy(data = null, loading = true, offline = false,
-            snackbar = if (clearSnackbar) null else it.snackbar, preparationTimedOut = false) }
+        if (invalidate) {
+            snapshots.clear()
+            _state.update { it.copy(data = null, loading = true, offline = false,
+                snackbar = if (clearSnackbar) null else it.snackbar, preparationTimedOut = false) }
+        }
         load(quiet = !invalidate)
     }
 
@@ -288,13 +292,15 @@ class AnalyticsViewModel @Inject constructor(
         startLoad(quiet, updateLimit = true)
     }
 
-    private fun invalidateAnalyticsRead() {
+    private fun invalidateAnalyticsRead(forMutation: Boolean = false) {
+        if (forMutation && loadJob?.isActive == true) readInterruptedByMutation = true
         loadGeneration++
         loadJob?.cancel()
     }
 
     private fun startLoad(quiet: Boolean, updateLimit: Boolean, preservePeriodChangeFailure: Boolean = false) {
         if (!retryGate.isReady()) return
+        readInterruptedByMutation = false
         if (_state.value.preparationTimedOut) importPolls = 0
         invalidateAnalyticsRead()
         val generation = loadGeneration
@@ -573,12 +579,13 @@ class AnalyticsViewModel @Inject constructor(
     fun dismissRegular(id: String) {
         val gate = dismissalGates.getOrPut(id) { RequestRetryGate(elapsedClock) }
         if (!gate.isReady() || !pendingRegularMutations.add(id)) return
-        invalidateAnalyticsRead()
+        invalidateAnalyticsRead(forMutation = true)
         viewModelScope.launch {
             try {
                 regularMutations.withLock {
                     // All payment edits affect the same block, including different payment IDs.
-                    invalidateAnalyticsRead()
+                    invalidateAnalyticsRead(forMutation = true)
+                    val generation = loadGeneration
                     try {
                         api.dismissRegularPayment(id)
                         tracker.track(Events.ANALYTICS_REGULAR_DISMISSED)
@@ -586,7 +593,14 @@ class AnalyticsViewModel @Inject constructor(
                         reloadChangedData(clearSnackbar = false)
                     } catch (e: AppError) {
                         gate.record(e)
-                        _state.update { it.copy(errorPresentation = e.presentation, snackbar = if (e is AppError.Offline) "Не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
+                        _state.update { it.copy(errorPresentation = e.presentation,
+                            recalculationPaused = it.recalculationPaused || (generation == loadGeneration && it.recalculating),
+                            snackbar = if (e is AppError.Offline) "Не получилось убрать" else "Не получилось убрать. Попробуйте ещё раз") }
+                        // Restore only the interrupted GET, through its own gate. Never retry the mutation here.
+                        // A queued mutation retains this obligation until a current read actually starts.
+                        if (generation == loadGeneration && readInterruptedByMutation) {
+                            startLoad(quiet = true, updateLimit = true, preservePeriodChangeFailure = true)
+                        }
                     }
                 }
             } finally {

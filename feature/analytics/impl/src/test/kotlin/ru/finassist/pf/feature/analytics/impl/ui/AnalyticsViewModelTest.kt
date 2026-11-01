@@ -2331,4 +2331,209 @@ class AnalyticsViewModelTest {
         assertFalse(vm.state.value.recalculating)
     }
 
+    @Test fun `a failed dismissal resumes the interrupted recalculation without retrying the mutation`() {
+        api.answers += data()
+        api.answers += data(recalculating = true)
+        val fresh = data().copy(currency = "EUR")
+        api.answers += fresh
+        val vm = opened()
+        vm.load(quiet = true)
+        api.dismissFailure = AppError.Offline()
+        vm.dismissRegular("first")
+        assertEquals(3, api.requests.size)
+        assertEquals(fresh, vm.state.value.data)
+        assertFalse(vm.state.value.recalculating)
+        assertFalse(vm.state.value.recalculationPaused)
+        assertEquals("Не получилось убрать", vm.state.value.snackbar)
+        assertTrue(tracker.events.none { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+        scheduler.advanceTimeBy(30_000)
+        scheduler.runCurrent()
+        assertEquals(3, api.requests.size)
+    }
+
+    @Test fun `a resumed read that is rate limited pauses and waits for explicit permitted recovery`() {
+        api.answers += data()
+        api.answers += data(recalculating = true)
+        api.answers += AppError.RateLimited(null, 60)
+        val vm = opened()
+        val previous = vm.state.value.data
+        vm.load(quiet = true)
+        api.dismissFailure = AppError.Offline()
+        vm.dismissRegular("first")
+        assertEquals(previous, vm.state.value.data)
+        assertTrue(vm.state.value.recalculationPaused)
+        assertFalse(vm.state.value.retryReady)
+        vm.refresh()
+        assertEquals(3, api.requests.size)
+        scheduler.advanceTimeBy(60_000)
+        scheduler.runCurrent()
+        vm.onResume(null)
+        assertEquals(3, api.requests.size)
+        assertTrue(vm.state.value.retryReady)
+        api.answers.clear()
+        api.answers += data()
+        vm.refresh()
+        assertEquals(4, api.requests.size)
+        assertFalse(vm.state.value.recalculationPaused)
+    }
+
+    @Test fun `a mutation failure cannot release an existing analytics request refusal`() {
+        api.answers += data()
+        api.answers += data(recalculating = true)
+        api.answers += refused()
+        val vm = opened()
+        vm.load(quiet = true)
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.recalculationPaused)
+        api.dismissFailure = AppError.Server(500)
+        vm.dismissRegular("first")
+        vm.refresh()
+        scheduler.advanceTimeBy(60_000)
+        scheduler.runCurrent()
+        assertEquals(3, api.requests.size)
+        assertTrue(vm.state.value.recalculationPaused)
+        assertFalse(vm.state.value.retryReady)
+    }
+
+    @Test fun `a failed second mutation recovers the read cancelled after the first succeeded`() {
+        api.answers += data()
+        val vm = opened()
+        val first = CompletableDeferred<Unit>()
+        val second = CompletableDeferred<Unit>()
+        val cancelledRead = CompletableDeferred<Analytics>()
+        api.dismissReply = { id ->
+            if (id == "first") first.await() else { second.await(); throw AppError.Offline() }
+        }
+        api.reply = { withContext(NonCancellable) { cancelledRead.await() } }
+        vm.dismissRegular("first")
+        vm.dismissRegular("second")
+        first.complete(Unit)
+        scheduler.runCurrent()
+        assertEquals(2, api.requests.size)
+        val afterFirst = data().copy(currency = "EUR")
+        api.reply = { afterFirst }
+        second.complete(Unit)
+        scheduler.runCurrent()
+        assertEquals(3, api.requests.size)
+        assertEquals(afterFirst, vm.state.value.data)
+        cancelledRead.complete(data())
+        scheduler.runCurrent()
+        assertEquals(afterFirst, vm.state.value.data)
+        assertEquals(listOf("first", "second"), api.dismissed)
+        assertEquals(1, tracker.events.count { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+    }
+
+    @Test fun `queued failures carry an interrupted read until the final failure resumes it`() {
+        api.answers += data()
+        api.answers += data(recalculating = true)
+        api.answers += data()
+        val vm = opened()
+        vm.load(quiet = true)
+        val first = CompletableDeferred<Unit>()
+        val second = CompletableDeferred<Unit>()
+        api.dismissReply = { id ->
+            if (id == "first") first.await() else second.await()
+            throw AppError.Offline()
+        }
+        vm.dismissRegular("first")
+        vm.dismissRegular("second")
+        first.complete(Unit)
+        scheduler.runCurrent()
+        assertEquals(2, api.requests.size)
+        second.complete(Unit)
+        scheduler.runCurrent()
+        assertEquals(3, api.requests.size)
+        assertFalse(vm.state.value.recalculating)
+    }
+
+    @Test fun `a failed mutation resumes the exact interrupted period request`() {
+        api.answers += data()
+        val vm = opened()
+        val cancelled = CompletableDeferred<Analytics>()
+        api.reply = { withContext(NonCancellable) { cancelled.await() } }
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val target = api.requests.last()
+        val year = data(period = PeriodTypeCode.YEAR, date = "2026")
+        api.reply = { year }
+        api.dismissFailure = AppError.Offline()
+        vm.dismissRegular("first")
+        assertEquals(target, api.requests.last())
+        assertEquals(3, api.requests.size)
+        assertEquals(year, vm.state.value.data)
+        cancelled.complete(year.copy(currency = "USD"))
+        scheduler.runCurrent()
+        assertEquals(year, vm.state.value.data)
+    }
+
+    @Test fun `a failed mutation does not restart or pause a newer independently started read`() {
+        api.answers += data()
+        api.answers += data(recalculating = true)
+        val vm = opened()
+        vm.load(quiet = true)
+        val mutation = CompletableDeferred<Unit>()
+        api.dismissReply = { mutation.await(); throw AppError.Offline() }
+        vm.dismissRegular("first")
+        api.answers.clear()
+        api.answers += data().copy(currency = "EUR")
+        vm.load(quiet = true)
+        mutation.complete(Unit)
+        scheduler.runCurrent()
+        assertEquals(3, api.requests.size)
+        assertEquals("EUR", vm.state.value.data?.currency)
+        assertFalse(vm.state.value.recalculationPaused)
+    }
+
+    @Test fun `upload deletion invalidates all ready snapshots before a marked response`() {
+        api.answers += data()
+        api.answers += data(period = PeriodTypeCode.YEAR, date = "2026")
+        api.answers += data(period = PeriodTypeCode.YEAR, date = "2026", recalculating = true)
+        api.answers += data(recalculating = true)
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("source"))
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.loading)
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.loading)
+        api.answers.clear()
+        api.answers += data()
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertNotNull(vm.state.value.data)
+    }
+
+    @Test fun `an import invalidates the ready snapshot while its projection recalculates`() {
+        api.answers += data()
+        api.answers += data(recalculating = true)
+        val vm = opened()
+        statements.pendingImport = 5L
+        statements.events.tryEmit(StatementsEvent.ImportCompleted("source", ImportResult(
+            operationCount = 1, newCount = 1, duplicateCount = 0, unreadCount = 0, isFirstImport = false,
+            accounts = emptyList(), categorizedCount = 1, ownTransferCount = 0, uncategorizedCount = 0,
+            coverage = ru.finassist.pf.core.api.model.ImportCoverage(0, 0, emptyList(), emptyList(), emptyList()), notices = emptyList(),
+        )))
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.loading)
+        assertTrue(statements.acknowledged.isEmpty())
+        api.answers.clear()
+        api.answers += data()
+        scheduler.advanceTimeBy(3_000)
+        scheduler.runCurrent()
+        assertNotNull(vm.state.value.data)
+        assertEquals(listOf(5L), statements.acknowledged)
+    }
+
+    @Test fun `category changes keep the still valid ready snapshot during recalculation`() {
+        val previous = data()
+        api.answers += previous
+        api.answers += data(recalculating = true).copy(currency = "EUR")
+        val vm = opened()
+        operations.categoryChanges.tryEmit(Unit)
+        assertEquals(previous, vm.state.value.data)
+        assertTrue(vm.state.value.recalculating)
+        assertFalse(vm.state.value.loading)
+    }
+
 }
