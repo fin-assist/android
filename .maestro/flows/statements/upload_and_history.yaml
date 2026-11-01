@@ -41,6 +41,13 @@ tags:
     id: "statements.history.upload"
 - scrollUntilVisible:
     element:
+      id: "statements.upload.download"
+- assertVisible:
+    id: "statements.upload.download"
+    text: "Скачать новые данные"
+- assertNotVisible: "Скачать за год"
+- scrollUntilVisible:
+    element:
       id: "statements.upload.pick"
 - tapOn:
     id: "statements.upload.pick"
@@ -101,6 +108,12 @@ tags:
       id: "statements.history.upload"
 - tapOn:
     id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.download"
+- assertVisible:
+    id: "statements.upload.download"
+    text: "Скачать новые данные"
 - scrollUntilVisible:
     element:
       id: "statements.upload.pick"
@@ -187,3 +200,25 @@ tags:
     id: "analytics.block.tiles"
 - assertNotVisible:
     id: "analytics.updating"
+
+# No operations remain: reopening upload restores the initial yearly download, regardless of past downloads.
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "profile.statements"
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.download"
+- assertVisible:
+    id: "statements.upload.download"
+    text: "Скачать за год"
+- assertNotVisible: "Скачать новые данные"
+- scrollUntilVisible:
+    element:
+      text: "Операции видите только вы.*"
+- assertVisible: "Операции видите только вы\\. Удалить загрузку или аккаунт — в профиле\\. Как мы защищаем данные"

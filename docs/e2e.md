@@ -637,7 +637,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | Flow | Checks |
 |---|---|
 | `refresh/server_data` | pull-to-refresh on the feed, operation details, empty search, selected analytics month, profile, upload history, unread lines and an assistant draft; offline retains data/query/period, online clears the failure; after a failed Year switch, failed/successful Month pulls and current-read Retry preserve Month and its separate target notice, then only the Year Retry changes the period; a history read never asks or retries a question (Qase70, FIN-399); authored, not executed |
-| `auth/register_new_user` (smoke) | independent 14+/PD before phone → new number → create account without another consent → passcode → first upload → result → feed (Qase2, FIN-365) |
+| `auth/register_new_user` (smoke) | independent 14+/PD before phone → new number → create account without another consent → passcode → first upload offers «Скачать за год» and reachable «Загружу позже» → result → feed (Qase2, FIN-365, FIN-416) |
 | `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the main tabs (Qase1, FIN-365) |
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
 | `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains confirmations; repeated confirm_phone keeps both checked and input enabled (Qase57, FIN-365, FIN-375) |
@@ -653,7 +653,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `operations/unknown_filter_kind` | `unknown_codes=true`: the expense tile sends a `kind` the client does not know; the search keeps it under «Как на „Аналитике“» and finds no incomes — FIN-83 |
 | `operations/days_in_profile_zone` | `profile_timezone=Asia/Vladivostok`: after the profile is read, the feed groups days in the profile zone, not the device's — an evening operation in Moscow moves to the next day — FIN-92 |
 | `operations/statement_stale` | on the preloaded statement the caption under the summary says «Данные по 1 октября» (the statement's end, not the last operation on 30 September); then the preloaded statement deleted, `stale.ofx` uploaded: «Операции» and «Аналитика» show «Данные в приложении по 20 сентября — с тех пор прошло больше двух недель», dated by the statement's end (`state.data_to`), not the last operation (15 September) — FIN-125 |
-| `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, «Сбросить», period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
+| `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, separate «Сбросить» below the chips stays visible at both horizontal scroll edges (FIN-416, Qase9), period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
 | `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast with the history explanation; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; authored, not executed |
 | `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month (Qase73, FIN-391); authored, not executed |
 | `analytics/rolling_periods` (mock-only) | rolling year/quarter anchored to statement coverage, exact ranges, no forecast, failed singleton switch and explicit exact retry, transfer-mode preservation, clipped edge point → full calendar month, independent remembered calendar selection; Qase76 (FIN-411); authored, not executed |
@@ -687,7 +687,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
-| `statements/upload_and_history` (smoke) | new operations without a duplicate period row; saved Analytics tab income changes from 0 to +1200 after import, and refreshes after deletion with remaining data and last deletion (FIN-394); duplicate file → «История загрузок» |
+| `statements/upload_and_history` (smoke) | new operations without a duplicate period row; saved Analytics tab income changes from 0 to +1200 after import, and refreshes after deletion with remaining data and last deletion (FIN-394); duplicate file → «История загрузок»; «Скачать новые данные» with loaded operations and «Скачать за год» after the last deletion, shortened privacy notice (FIN-416, Qase14) |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
 | `statements/upload_restored_key` | A seeded unknown-age UUID does not send the file or silently change key; the upload count remains 1 (preloaded statement). Only «Загрузить заново» starts a new action and changes the count to 2 (Qase51) — FIN-223 |
 | `assistant/retry_after_consent` | A model failure, consent revocation and denied RetryAnswer lead to consent correction; the same operation resumes and history contains one question with the successful replacement (Qase52) — FIN-223 |
@@ -1079,3 +1079,14 @@ masquerading as recovery; the next error also passes the strict geometry helper.
 baseline failed on that later range (expected 52 px, actual 0), while `collectLatest` passed. No production hook,
 private mutex access, synthetic cancellation or wall-clock sleep is involved. The previous Not-covered claim
 was disproved by this real gesture experiment and removed.
+
+FIN-416 (upload copy and search reset): existing Qase2/9/14 cases and their unchanged path mappings in
+`scripts/qase-cases.json` cover the extended flows above. `DownloadTextsTest` checks first/loaded/empty states,
+the server's real suggested range, inclusive end date, year boundary and profile offset. Host JVM
+`UploadDownloadControlTest` checks unchanged download URLs, the shortened privacy notice/link and an uncut
+button label at 320dp/2.0 font scale; `SearchResetControlTest` checks the separate reset position and callback
+before/after chip scrolling at 320dp/1.3. Existing ImportGuide/Search design-check fixtures use the changed
+content; the loaded import fixture now has the correct suggested update range. No emulator, Maestro,
+instrumented or DesignCheck execution was performed for this change.
+The registration flow checks «Скачать за год» before the first import and scrolls to «Загружу позже»;
+the longer download instructions and full-width buttons may move it below the initial viewport.

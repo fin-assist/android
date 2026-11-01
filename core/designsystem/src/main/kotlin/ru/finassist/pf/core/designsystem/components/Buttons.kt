@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,6 +49,8 @@ enum class ButtonVariant { PRIMARY, SECONDARY, GHOST, DANGER }
  *
  * @param busy the action is running: the label is replaced by [busyText], taps are ignored, the button is not
  * disabled so TalkBack focus stays on it; no spinner (DS: it cannot be stopped by "Remove animations").
+ * @param maxLines allow a long label to wrap at larger system font sizes; such buttons keep `control` as a
+ * minimum height and grow to fit the label.
  */
 @Composable
 fun PfButton(
@@ -60,6 +63,7 @@ fun PfButton(
     enabled: Boolean = true,
     busy: Boolean = false,
     busyText: String? = null,
+    maxLines: Int = 1,
 ) {
     val c = PfTheme.colors
     val shape = RoundedCornerShape(PfTheme.dimens.radiusMd)
@@ -82,13 +86,14 @@ fun PfButton(
     Box(
         modifier = modifier
             .then(if (block) Modifier.fillMaxWidth() else Modifier)
-            .height(PfTheme.dimens.control)
+            .then(if (maxLines > 1) Modifier.heightIn(min = PfTheme.dimens.control) else Modifier.height(PfTheme.dimens.control))
             .clip(shape)
             .background(background, shape)
             .then(if (variant == ButtonVariant.SECONDARY && enabled) Modifier.border(1.dp, c.border, shape) else Modifier)
             .clickable(enabled = enabled && !busy, role = Role.Button, onClick = onClick)
             .semantics { if (busy) contentDescription = label }
-            .padding(horizontal = PfTheme.dimens.space4),
+            .padding(horizontal = PfTheme.dimens.space4)
+            .then(if (maxLines > 1) Modifier.padding(vertical = PfTheme.dimens.space2) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         CompositionLocalProvider(LocalContentColor provides content) {
@@ -103,7 +108,7 @@ fun PfButton(
                 }
                 // `.pf-btn` 15/20 600; `.pf-btn-ghost` 14.
                 val style = if (variant == ButtonVariant.GHOST) PfTheme.type.body.copy(fontWeight = FontWeight.SemiBold) else PfTheme.type.bodyStrong
-                Text(label, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                Text(label, style = style, maxLines = maxLines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
             }
         }
     }
