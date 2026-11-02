@@ -787,7 +787,20 @@ class AnalyticsViewModel @Inject constructor(
                             unknownMutationFailures.remove(id)
                             mutationContexts.remove(id)
                         }
-                        if (unknown) unknownMutationFailures += id
+                        if (unknown) {
+                            unknownMutationFailures += id
+                            if (generation == loadGeneration && readInterruptedByMutation) {
+                                // A deferred selection did not load: keep controls and future reads on the shown snapshot.
+                                readInterruptedByMutation = false
+                                _state.value.data?.params?.let { shown ->
+                                    val changedType = period != shown.period
+                                    period = shown.period
+                                    date = shown.date
+                                    transferMode = allowedMode(shown.transferMode)
+                                    if (changedType) resetPeriodsContext()
+                                }
+                            }
+                        }
                         _state.update { it.copy(errorPresentation = e.presentation,
                             recalculating = it.recalculating || unknown,
                             recalculationPaused = it.recalculationPaused || unknown || (generation == loadGeneration && it.recalculating),
@@ -830,10 +843,12 @@ class AnalyticsViewModel @Inject constructor(
     /** The user can resume reading without claiming an unknown command succeeded or retrying a forbidden PUT. */
     override fun recoverUnknownMutationRead() {
         if (requestOwner == null || !_state.value.unknownReadRecoveryAvailable || !retryGate.isReady() || pendingRegularMutations.isNotEmpty()) return
+        val hasSnapshot = _state.value.data != null
+        if (!hasSnapshot) _state.update { it.copy(loading = true) }
         snapshots.allowReadsDespiteUnknownOutcomes()
         updateUnknownMutationNotice()
         invalidateAnalyticsRead()
-        load(quiet = true)
+        load(quiet = hasSnapshot)
     }
 
     private companion object {

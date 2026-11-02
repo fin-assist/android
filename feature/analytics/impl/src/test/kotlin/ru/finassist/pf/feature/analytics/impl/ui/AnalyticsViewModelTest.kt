@@ -3097,4 +3097,80 @@ class AnalyticsViewModelTest {
         assertTrue(vm.state.value.unknownMutation)
     }
 
+    @Test fun `uncached unknown recovery prepares until the delayed Year reply arrives`() {
+        api.answers += data()
+        val vm = opened()
+        api.dismissReply = { throw AppError.Offline() }
+        vm.dismissRegular("first")
+        val year = data(PeriodTypeCode.YEAR, "2026")
+        api.reply = { year }
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertNull(vm.state.value.data)
+        val finish = CompletableDeferred<Analytics>()
+        api.reply = { finish.await() }
+        vm.recoverUnknownMutationRead()
+        assertTrue(vm.state.value.loading)
+        assertTrue(vm.state.value.unknownReadRecoveryUsed)
+        assertNull(vm.state.value.data)
+        scheduler.advanceTimeBy(10_000); scheduler.runCurrent()
+        assertTrue(vm.state.value.loading)
+        finish.complete(year); scheduler.runCurrent()
+        assertEquals(year, vm.state.value.data)
+        assertFalse(vm.state.value.loading)
+        assertTrue(vm.state.value.unknownMutation)
+    }
+
+    @Test fun `invalidated unknown recovery prepares until empty history is actually confirmed`() {
+        api.answers += data()
+        val vm = opened()
+        api.dismissReply = { throw AppError.Offline() }
+        vm.dismissRegular("first")
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("upload")); scheduler.runCurrent()
+        val finish = CompletableDeferred<Analytics>()
+        api.reply = { finish.await() }
+        vm.recoverUnknownMutationRead()
+        assertTrue(vm.state.value.loading)
+        assertNull(vm.state.value.data)
+        val empty = Analytics(false, calculation = AnalyticsCalculation(10, false))
+        finish.complete(empty); scheduler.runCurrent()
+        assertFalse(vm.state.value.loading)
+        assertEquals(empty, vm.state.value.data)
+        assertTrue(vm.state.value.unknownMutation)
+    }
+
+    @Test fun `unknown PUT restores the shown period and permits the same Year selection again`() = unknownDeferredSelection(
+        { it.setPeriodType(PeriodTypeCode.YEAR) }, Request(PeriodTypeCode.YEAR, PeriodKey("2026-09"), TransferMode.WITH),
+        data(PeriodTypeCode.YEAR, "2026"))
+
+    @Test fun `unknown PUT restores the shown month and permits the same month selection again`() = unknownDeferredSelection(
+        { it.goTo(PeriodKey("2026-08")) }, Request(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITH), data(date = "2026-08"))
+
+    @Test fun `unknown PUT restores the shown mode and permits the same transfer selection again`() = unknownDeferredSelection(
+        { it.setTransferMode(TransferMode.WITHOUT) }, Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITHOUT),
+        data(mode = TransferMode.WITHOUT))
+
+    private fun unknownDeferredSelection(select: (AnalyticsViewModel) -> Unit, target: Request, targetResponse: Analytics) {
+        val shown = data()
+        api.answers += shown
+        val vm = opened()
+        val finish = CompletableDeferred<Unit>()
+        api.dismissReply = { finish.await(); throw AppError.Offline() }
+        vm.dismissRegular("first")
+        select(vm)
+        assertEquals(1, api.requests.size)
+        finish.complete(Unit); scheduler.runCurrent()
+        assertEquals(shown, vm.state.value.data)
+        assertEquals(TransferMode.WITH, vm.currentTransferMode())
+        assertEquals(1, api.requests.size) // An unknown completion cannot silently load the deferred target.
+        vm.recoverUnknownMutationRead()
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH), api.requests.last())
+        assertEquals(shown, vm.state.value.data)
+        api.reply = { targetResponse }
+        select(vm)
+        assertEquals(target, api.requests.last())
+        assertEquals(targetResponse, vm.state.value.data)
+        assertTrue(vm.state.value.unknownMutation)
+        assertEquals(listOf("first"), api.dismissed)
+    }
+
 }

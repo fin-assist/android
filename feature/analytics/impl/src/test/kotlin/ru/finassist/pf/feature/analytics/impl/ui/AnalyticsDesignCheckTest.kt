@@ -42,6 +42,8 @@ class AnalyticsDesignCheckTest {
         unknownMutation = true, unknownReadRecoveryAvailable = true, recalculating = true, recalculationPaused = true), 1100)
     @Test fun unknownMutationWithoutCache() = capture("AnalyticsUnknownMutationEmpty", AnalyticsUiState(loading = false, blocks = blocks,
         unknownMutation = true, unknownReadRecoveryAvailable = true), 844)
+    @Test fun unknownMutationReadPreparing() = capture("AnalyticsUnknownMutationPreparing", AnalyticsUiState(loading = true, blocks = blocks,
+        unknownMutation = true, unknownReadRecoveryUsed = true), 844)
     @Test fun unknownMutationAfterRead() = capture("AnalyticsUnknownMutationRead", ui(september()).copy(
         unknownMutation = true, unknownReadRecoveryUsed = true), 1100)
 
