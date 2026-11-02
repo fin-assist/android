@@ -18,6 +18,8 @@ import retrofit2.http.Tag
 import ru.finassist.pf.core.api.RequestOwner
 import ru.finassist.pf.core.common.time.RequestReplayWindow
 import ru.finassist.pf.core.api.model.Analytics
+import ru.finassist.pf.core.api.model.AnalyticsBlockUpdate
+import ru.finassist.pf.core.api.model.AnalyticsChartPage
 import ru.finassist.pf.core.api.model.AnalyticsPeriodsList
 import ru.finassist.pf.core.api.model.AskRequest
 import ru.finassist.pf.core.api.model.AskResponse
@@ -97,7 +99,7 @@ internal interface ProfileService {
 
 internal interface StatementsService {
     @GET("v1/statements/config")
-    suspend fun getImportConfig(): Response<ImportConfig>
+    suspend fun getImportConfig(@Query("period_from") periodFrom: String?, @Query("period_to") periodTo: String?): Response<ImportConfig>
 
     @Multipart
     @POST("v1/statements")
@@ -161,7 +163,11 @@ internal interface AnalyticsService {
     suspend fun listPeriods(@Query("period") period: String?): Response<AnalyticsPeriodsList>
 
     @PUT("v1/analytics/regular-payments/{id}/dismissal")
-    suspend fun dismissRegularPayment(@Path("id") id: String): Response<Unit>
+    suspend fun dismissRegularPayment(@Path("id") id: String, @Query("date") date: String,
+        @Query("transfer_mode") transferMode: String): Response<AnalyticsBlockUpdate>
+
+    @GET("v1/analytics/charts/monthly_chart")
+    suspend fun getMonthlyChartPage(@Query("cursor") cursor: String): Response<AnalyticsChartPage>
 
     @DELETE("v1/analytics/regular-payments/{id}/dismissal")
     suspend fun restoreRegularPayment(@Path("id") id: String): Response<Unit>

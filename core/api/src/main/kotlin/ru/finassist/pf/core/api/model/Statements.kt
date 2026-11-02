@@ -13,6 +13,7 @@ data class ImportConfig(
     val acceptedFormats: List<String>,
     val suggestedPeriod: DateRange,
     val loaded: LoadedSummary? = null,
+    val timeZone: String? = null,
 )
 
 @Serializable
@@ -146,6 +147,7 @@ data class ImportResult(
     val notices: List<ImportNotice>,
     /** Currency of every amount of the event (FIN-82); always RUB today. */
     val currency: String = "RUB",
+    val timeZone: String? = null,
 ) {
     fun has(code: ImportNoticeCode): Boolean = notices.any { it.code == code }
 }

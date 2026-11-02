@@ -27,6 +27,8 @@ import ru.finassist.pf.core.api.ProfileApi
 import ru.finassist.pf.core.api.StatementsApi
 import ru.finassist.pf.core.api.UploadFile
 import ru.finassist.pf.core.api.model.Analytics
+import ru.finassist.pf.core.api.model.AnalyticsBlockUpdate
+import ru.finassist.pf.core.api.model.AnalyticsChartPage
 import ru.finassist.pf.core.api.model.AnalyticsPeriodsList
 import ru.finassist.pf.core.api.model.AnswerBlockEvent
 import ru.finassist.pf.core.api.model.AnswerChunkEvent
@@ -169,7 +171,8 @@ internal class HttpProfileApi(private val service: ProfileService) : ProfileApi 
 }
 
 internal class HttpStatementsApi(private val service: StatementsService, private val sse: SseRequests) : StatementsApi {
-    override suspend fun getImportConfig(): ImportConfig = call { service.getImportConfig() }
+    override suspend fun getImportConfig(periodFrom: String?, periodTo: String?): ImportConfig =
+        call { service.getImportConfig(periodFrom, periodTo) }
 
     override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted {
         val body = object : RequestBody() {
@@ -245,7 +248,9 @@ internal class HttpAnalyticsApi(private val service: AnalyticsService) : Analyti
     override suspend fun listPeriods(period: PeriodTypeCode?): AnalyticsPeriodsList =
         call { service.listPeriods(period?.code) }
 
-    override suspend fun dismissRegularPayment(id: String) { call { service.dismissRegularPayment(id) } }
+    override suspend fun dismissRegularPayment(id: String, date: PeriodKey, transferMode: TransferMode): AnalyticsBlockUpdate =
+        call { service.dismissRegularPayment(id, date.value, transferMode.code) }
+    override suspend fun getMonthlyChartPage(cursor: String): AnalyticsChartPage = call { service.getMonthlyChartPage(cursor) }
     override suspend fun restoreRegularPayment(id: String) { call { service.restoreRegularPayment(id) } }
 }
 

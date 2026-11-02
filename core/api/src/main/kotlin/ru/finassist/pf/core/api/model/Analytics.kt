@@ -33,7 +33,7 @@ data class AnalyticsState(
     val recalculating: Boolean,
 )
 
-/** Analytics screen response (api.md 6.1). When [hasData] is false nothing else is present. */
+/** Analytics screen response (api.md 6.1); calculation is required even for an empty ledger. */
 @Serializable
 data class Analytics(
     val hasData: Boolean,
@@ -46,6 +46,8 @@ data class Analytics(
     @Serializable(with = BlockList::class)
     val blocks: List<Block> = emptyList(),
     val state: AnalyticsState? = null,
+    val timeZone: String? = null,
+    val calculation: AnalyticsCalculation? = null,
 )
 
 @Serializable
@@ -56,4 +58,23 @@ data class AnalyticsPeriodItem(
 )
 
 @Serializable
-data class AnalyticsPeriodsList(val periods: List<AnalyticsPeriodItem>)
+data class AnalyticsPeriodsList(val periods: List<AnalyticsPeriodItem>, val timeZone: String? = null)
+
+/** Applied user data version, distinct from the target accepted by a mutation. */
+@Serializable
+data class AnalyticsCalculation(val calcVersion: Int, val recalculating: Boolean)
+
+/** Complete replacement blocks, never decoded with the tolerant screen block-list serializer. */
+@Serializable
+data class AnalyticsBlockUpdate(
+    val params: AnalyticsParams,
+    val currency: String,
+    val timeZone: String,
+    val requiredCalcVersion: Int,
+    val blocks: List<Block>,
+)
+
+/** Adjacent monthly-chart page; selection and notes continue to belong to the full response. */
+@Serializable
+data class AnalyticsChartPage(val block: Block, val timeZone: String)
+

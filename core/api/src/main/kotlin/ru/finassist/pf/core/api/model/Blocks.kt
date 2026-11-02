@@ -116,6 +116,7 @@ data class Block(
     val title: String? = null,
     val altText: String? = null,
     val emptyText: String? = null,
+    val helpText: String? = null,
     val data: JsonObject? = null,
     val action: BlockAction? = null,
 ) {
@@ -191,7 +192,12 @@ data class ChartData(
     val summary: BlockValue? = null,
     val caption: String? = null,
     val notes: List<ChartNote> = emptyList(),
+    val page: ChartPageInfo? = null,
 )
+
+/** Opaque revision and cursors supplied by the server. */
+@Serializable
+data class ChartPageInfo(val revision: String, val previous: String? = null, val next: String? = null)
 
 @Serializable
 data class ChartPoint(
@@ -249,6 +255,7 @@ data class Tile(
     val approx: Boolean = false,
     val showPlus: Boolean = false,
     val caption: String? = null,
+    val helpText: String? = null,
     val action: BlockAction? = null,
 )
 
