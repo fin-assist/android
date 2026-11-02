@@ -49,12 +49,48 @@ class MockAnalyticsApiTest {
     }
 
     @Test
+    fun `recalculation fixture marks exactly the configured real responses including changed blocks`() = runBlocking<Unit> {
+        val original = api.getAnalytics(null, null, null)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 2, failingBlocks = setOf("expense_categories"))
+        repeat(2) { index ->
+            val marked = api.getAnalytics(null, null, null)
+            assertTrue(marked.state!!.recalculating)
+            assertEquals(original.params, marked.params)
+            assertEquals(ru.finassist.pf.core.api.model.BlockStatus.UNAVAILABLE, marked.blocks.single { it.id == "expense_categories" }.status)
+            assertEquals(1 - index, backend.config.analyticsRecalculatingResponses)
+        }
+        assertFalse(api.getAnalytics(null, null, null).state!!.recalculating)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 100)
+        assertTrue(api.getAnalytics(null, null, null).state!!.recalculating)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 0)
+        assertFalse(api.getAnalytics(null, null, null).state!!.recalculating)
+    }
+
+    @Test
+    fun `recalculation fixture preserves validation authentication and absent projection behavior`() = runBlocking<Unit> {
+        val signedOut = testBackend(userId = "", config = FAST.copy(analyticsRecalculatingResponses = 2))
+        assertFailsWith<AppError.Unauthorized> { MockAnalyticsApi(signedOut).getAnalytics(null, null, null) }
+        assertEquals(2, signedOut.config.analyticsRecalculatingResponses)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 2)
+        assertFailsWith<AppError.Api> { api.getAnalytics(PeriodTypeCode.UNKNOWN, null, null) }
+        assertEquals(2, backend.config.analyticsRecalculatingResponses)
+        backend.config = backend.config.copy(analyticsPendingResponses = 1)
+        assertFalse(api.getAnalytics(null, null, null).hasData)
+        assertEquals(2, backend.config.analyticsRecalculatingResponses)
+        val empty = testBackend(config = FAST.copy(analyticsRecalculatingResponses = 2))
+        assertFalse(MockAnalyticsApi(empty).getAnalytics(null, null, null).hasData)
+        assertEquals(1, empty.config.analyticsRecalculatingResponses)
+    }
+
+    @Test
     fun `publication fixture withholds exactly the configured reads without losing the imported ledger`() = runBlocking<Unit> {
         val expected = api.getAnalytics(null, null, null)
         backend.config = backend.config.copy(analyticsPendingResponses = 2)
         repeat(2) { index ->
             val pending = api.getAnalytics(null, null, null)
-            assertEquals(ru.finassist.pf.core.api.model.Analytics(hasData = false), pending)
+            assertFalse(pending.hasData)
+            assertEquals(expected.calculation?.calcVersion, pending.calculation?.calcVersion)
+            assertTrue(pending.calculation!!.recalculating)
             assertEquals(1 - index, backend.config.analyticsPendingResponses)
         }
         assertEquals(expected, api.getAnalytics(null, null, null))
@@ -133,6 +169,44 @@ class MockAnalyticsApiTest {
     }
 
     @Test
+    fun `a targeted dismissal failure leaves the ledger intact while marked analytics keeps progressing`() = runBlocking<Unit> {
+        val payment = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+            .insights!!.regularPayments.items.orEmpty().single { it.title == "Netflix" }
+        backend.config = backend.config.copy(errorOperation = MockErrorOperation.ANALYTICS_DISMISS,
+            errorScenario = MockErrorScenario.RETRY_FORBIDDEN, analyticsRecalculatingResponses = 2)
+        assertTrue(api.getAnalytics(null, null, null).state!!.recalculating)
+        val error = assertFailsWith<AppError.RateLimited> { api.dismissRegularPayment(payment.id, ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH) }
+        assertEquals(false, error.requestRetryable)
+        assertEquals(3L, error.retryAfterSeconds)
+        assertEquals(1, backend.injectedErrorCount.value)
+        assertTrue(backend.dismissedPayments.isEmpty())
+        assertTrue("Netflix" in regularTitles())
+        assertTrue(api.getAnalytics(null, null, null).state!!.recalculating)
+        assertFalse(api.getAnalytics(null, null, null).state!!.recalculating)
+        api.restoreRegularPayment(payment.id)
+        assertEquals(1, backend.injectedErrorCount.value)
+        backend.config = backend.config.copy(errorOperation = null)
+        api.dismissRegularPayment(payment.id, ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH)
+        assertFalse("Netflix" in regularTitles())
+        assertEquals(1, backend.injectedErrorCount.value)
+    }
+
+    @Test
+    fun `the dismissal error fixture never bypasses authentication or payment validation`() = runBlocking<Unit> {
+        val config = FAST.copy(errorOperation = MockErrorOperation.ANALYTICS_DISMISS)
+        val signedOut = testBackend(userId = "", config = config)
+        assertFailsWith<AppError.Unauthorized> { MockAnalyticsApi(signedOut).dismissRegularPayment("invalid", ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH) }
+        assertEquals(0, signedOut.injectedErrorCount.value)
+        backend.config = config
+        val invalid = assertFailsWith<AppError.Api> { api.dismissRegularPayment("invalid", ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH) }
+        assertEquals(ErrorCodes.VALIDATION_ERROR, invalid.code)
+        val missing = assertFailsWith<AppError.Api> { api.dismissRegularPayment("00000000-0000-0000-0000-000000000000", ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH) }
+        assertEquals(ErrorCodes.NOT_FOUND, missing.code)
+        assertEquals(0, backend.injectedErrorCount.value)
+        assertTrue(backend.dismissedPayments.isEmpty())
+    }
+
+    @Test
     fun `a dismissed regular payment leaves the card until it is restored`() = runBlocking<Unit> {
         val card = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH).insights!!.regularPayments
         val netflix = card.items.orEmpty().single { it.title == "Netflix" }
@@ -145,7 +219,7 @@ class MockAnalyticsApiTest {
         val all = MockOperationsApi(backend).listOperations(OperationsQuery(assertNotNull(card.filters)))
         assertEquals(card.items.orEmpty().map { it.title }.toSet(), all.items.map { it.title }.toSet())
 
-        api.dismissRegularPayment(netflix.id)
+        api.dismissRegularPayment(netflix.id, ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH)
         assertFalse("Netflix" in regularTitles())
         // Restoring twice is harmless.
         api.restoreRegularPayment(netflix.id)
@@ -156,7 +230,7 @@ class MockAnalyticsApiTest {
     @Test
     fun `dismissing or restoring an unknown regular payment is NOT_FOUND`() = runBlocking<Unit> {
         val unknown = "0b9d5c2e-6f1a-4c3b-9a7e-2d4f6b8c0e1a"
-        val dismiss = assertFailsWith<AppError.Api> { api.dismissRegularPayment(unknown) }
+        val dismiss = assertFailsWith<AppError.Api> { api.dismissRegularPayment(unknown, ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH) }
         assertEquals(ErrorCodes.NOT_FOUND to 404, dismiss.code to dismiss.httpStatus)
         val restore = assertFailsWith<AppError.Api> { api.restoreRegularPayment(unknown) }
         assertEquals(ErrorCodes.NOT_FOUND to 404, restore.code to restore.httpStatus)
@@ -168,7 +242,7 @@ class MockAnalyticsApiTest {
         val netflix = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH).insights!!
             .regularPayments.items.orEmpty().single { it.title == "Netflix" }.id
         for (id in listOf("rp_unknown_merchant", netflix.uppercase(), "Netflix", "")) {
-            for (call in listOf<suspend () -> Unit>({ api.dismissRegularPayment(id) }, { api.restoreRegularPayment(id) })) {
+            for (call in listOf<suspend () -> Unit>({ api.dismissRegularPayment(id, ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH) }, { api.restoreRegularPayment(id) })) {
                 val e = assertFailsWith<AppError.Api>(id) { call() }
                 assertEquals(ErrorCodes.VALIDATION_ERROR to 400, e.code to e.httpStatus, id)
                 assertEquals(listOf("id"), e.details.map { it.field }, id)
@@ -189,7 +263,7 @@ class MockAnalyticsApiTest {
         val signedOut = MockAnalyticsApi(testBackend(userId = ""))
         assertFailsWith<AppError.Unauthorized> { signedOut.getAnalytics(null, null, null) }
         assertFailsWith<AppError.Unauthorized> { signedOut.listPeriods(null) }
-        assertFailsWith<AppError.Unauthorized> { signedOut.dismissRegularPayment("rp_x") }
+        assertFailsWith<AppError.Unauthorized> { signedOut.dismissRegularPayment("rp_x", ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH) }
         assertFailsWith<AppError.Unauthorized> { signedOut.restoreRegularPayment("rp_x") }
     }
 }

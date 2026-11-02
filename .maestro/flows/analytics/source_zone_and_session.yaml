@@ -1,0 +1,83 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — пояс ответа и очистка снимка после нового входа
+tags:
+  - analytics
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?response_time_zone=unsupported"
+- extendedWaitUntil:
+    visible: "Устройство не поддерживает часовой пояс этих данных"
+    timeout: 15000
+- assertVisible:
+    id: "analytics.block.tiles"
+- assertVisible:
+    text: "Октябрь 2026"
+    childOf:
+      id: "ds.period.pick"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- tapOn:
+    id: "analytics.retry"
+- assertVisible: "Устройство не поддерживает часовой пояс этих данных"
+- assertVisible: "Показаны прежние данные"
+- assertVisible:
+    id: "analytics.block.tiles"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false&response_time_zone=default"
+- extendedWaitUntil:
+    notVisible: "Устройство не поддерживает часовой пояс этих данных"
+    timeout: 15000
+# Logout destroys the ready snapshot. A new login's marked response must prepare, not borrow it.
+- tapOn:
+    id: "ds.tab.profile"
+- scrollUntilVisible:
+    element:
+      id: "profile.logout"
+- tapOn:
+    id: "profile.logout"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 15000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_recalculating_responses=100"
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.updating"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.block.tiles"
+- assertNotVisible:
+    id: "analytics.expense.monthly"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_recalculating_responses=0"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.tiles"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.updating"

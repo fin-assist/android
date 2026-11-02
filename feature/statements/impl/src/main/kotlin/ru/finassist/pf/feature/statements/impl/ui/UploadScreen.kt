@@ -86,6 +86,9 @@ fun UploadScreen(
         vm.consumeDone()
         onDone(id)
     }
+    LaunchedEffect(state.downloadUrlToOpen) {
+        state.downloadUrlToOpen?.let { url -> vm.consumeDownload(); openUrl(context, url) }
+    }
     LifecycleResumeEffect(Unit) {
         vm.watch()
         onPauseOrDispose { vm.stopWatching() }
@@ -110,6 +113,7 @@ fun UploadScreen(
         onSupport = { writeToSupport(context, "Не получилось загрузить выписку") },
         onStartNewUpload = vm::startNewUpload,
         onOpenHistory = onOpenHistory,
+        onShowPeriod = vm::showPeriodPicker, onSelectPeriod = vm::selectPeriod, onDownloadPeriod = vm::downloadPeriod,
     )
 }
 
@@ -132,6 +136,9 @@ internal fun UploadContent(
     onSupport: () -> Unit,
     onStartNewUpload: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
+    onShowPeriod: (Boolean) -> Unit = {},
+    onSelectPeriod: (java.time.LocalDate?, java.time.LocalDate?) -> Unit = { _, _ -> },
+    onDownloadPeriod: () -> Unit = {},
 ) {
     val d = PfTheme.dimens
     val busy = state.phase as? UploadPhase.Busy
@@ -166,10 +173,12 @@ internal fun UploadContent(
                 .padding(top = d.space4, bottom = d.space4),
         ) {
             state.guideErrorPresentation?.let {
-                ErrorMessage(it, "Не получилось обновить условия загрузки. Используем сохранённые условия", modifier = Modifier.padding(horizontal = d.space5))
+                ErrorMessage(it, "Не получилось обновить условия загрузки", onRetry = onRetry.takeIf { state.configRetryReady }, retryModifier = Modifier.testTag(StatementsTags.UPLOAD_RETRY))
+                PfNotice("Показаны ранее загруженные данные. Они могут быть неактуальны", tone = NoticeTone.WARNING)
             }
             when (val phase = state.phase) {
                 UploadPhase.Loading -> Unit
+                is UploadPhase.ConfigFailure -> ErrorMessage(phase.presentation, "Не получилось загрузить условия загрузки", onRetry = onRetry.takeIf { state.configRetryReady }, retryModifier = Modifier.testTag(StatementsTags.UPLOAD_RETRY))
                 // First run has no back arrow: these states must offer a way on.
                 UploadPhase.Disabled -> PfEmptyState(PfIcons.FILE_TEXT, "Загрузка выписки временно недоступна", "Попробуйте позже — операции и аналитика работают как обычно") {
                     if (firstRun) PfButton("Продолжить", onClick = onLater, variant = ButtonVariant.PRIMARY)
@@ -185,6 +194,7 @@ internal fun UploadContent(
                     retryEnabled = state.uploadRetryReady,
                     canSkip = firstRun || (state.config ?: (phase as? UploadPhase.Guide)?.config)?.loaded == null,
                     onShowFallback = { onShowFallback(true) },
+                    onSelectPeriod = { onShowPeriod(true) },
                     onDownload = { url -> onOpenUrl(url) },
                     onPick = onPick,
                     onRetryUpload = onRetryUpload,
@@ -201,6 +211,7 @@ internal fun UploadContent(
             }
         }
     }
+    if (state.periodPickerOpen) DownloadPeriodSheet(state, onSelectPeriod, onDownloadPeriod, onDismiss = { onShowPeriod(false) })
     if (state.fallbackOpen) FallbackSheet(onDismiss = { onShowFallback(false) })
     if (state.askCancel) {
         PfDialog(
@@ -229,6 +240,7 @@ private fun ColumnScope.Guide(
     retryEnabled: Boolean = true,
     canSkip: Boolean,
     onShowFallback: () -> Unit,
+    onSelectPeriod: () -> Unit,
     onDownload: (String) -> Unit,
     onPick: () -> Unit,
     onRetryUpload: () -> Unit,
@@ -241,7 +253,7 @@ private fun ColumnScope.Guide(
         PfCard(Modifier.testTag(StatementsTags.UPLOAD_LOADED)) {
             Text("Сейчас загружено", style = PfTheme.type.caption, color = c.textMuted)
             Text(
-                "${RussianDates.dayRange(loaded.firstOperationAt.toLocalDate(), loaded.lastOperationAt.toLocalDate(), withYear = true)} · " +
+                "${RussianDates.dayRange(loaded.firstOperationAt.atZoneSameInstant(ru.finassist.pf.core.common.time.SourceTimeZone.require(config.timeZone)).toLocalDate(), loaded.lastOperationAt.atZoneSameInstant(ru.finassist.pf.core.common.time.SourceTimeZone.require(config.timeZone)).toLocalDate(), withYear = true)} · " +
                     countWithNoun(loaded.operationCount, "операция", "операции", "операций"),
                 style = PfTheme.type.bodyStrong.copy(fontFeatureSettings = "tnum"), color = c.text,
                 modifier = Modifier.padding(top = d.space1),
@@ -274,6 +286,8 @@ private fun ColumnScope.Guide(
                 modifier = Modifier.testTag(StatementsTags.UPLOAD_DOWNLOAD), maxLines = 2,
             )
         }
+        Spacer(Modifier.height(d.space3))
+        PfButton("Скачать за период", onClick = onSelectPeriod, variant = ButtonVariant.SECONDARY, block = true, enabled = busy == null, modifier = Modifier.testTag("statements.upload.download_period"))
         Spacer(Modifier.height(d.space1))
         PfLink("Не скачивается?", onClick = onShowFallback, modifier = Modifier.testTag(StatementsTags.UPLOAD_FALLBACK))
     }

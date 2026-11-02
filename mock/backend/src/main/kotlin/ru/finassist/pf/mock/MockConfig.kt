@@ -32,8 +32,12 @@ data class MockConfig(
     val assistantModelErrors: Int = 0,
     /** Next n valid analytics reads return no projection; exercises publication lag after an actual UI import. */
     val analyticsPendingResponses: Int = 0,
+    /** Next n valid non-empty analytics responses carry the existing recalculation marker (UI fixture only). */
+    val analyticsRecalculatingResponses: Int = 0,
     /** Send codes the client does not know ([MockCodes]) where the contract allows new ones (FIN-83). */
     val unknownCodes: Boolean = false,
+    /** Fixed valid-shaped zone absent from the device tzdb; response metadata only, for UI tests. */
+    val unsupportedResponseTimeZone: Boolean = false,
     /** Ids of Analytics blocks that fail to build: they come as `unavailable` (FIN-5), the rest of the screen stays. */
     val failingBlocks: Set<String> = emptySet(),
     /** A parse not finished this long after its start ends with `PROCESSING_FAILED` (api.md 3.3: 3 minutes). */

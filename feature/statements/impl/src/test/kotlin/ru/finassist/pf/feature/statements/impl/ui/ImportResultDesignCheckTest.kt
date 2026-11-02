@@ -62,6 +62,7 @@ class ImportResultDesignCheckTest {
             features = listOf(feature(AnalyticsFeature.COMPARISON, open = true, openedNow = true)),
         ),
         notices = emptyList(),
+        timeZone = "Europe/Moscow",
     )
 
     /** Repeat upload: 214 new of 526, 312 duplicates, 5 unread lines. */
@@ -84,6 +85,7 @@ class ImportResultDesignCheckTest {
         accounts = emptyList(), categorizedCount = 0, ownTransferCount = 0, uncategorizedCount = 0,
         coverage = ImportCoverage(0, 0, emptyList(), emptyList(), emptyList()),
         notices = listOf(ImportNotice(ImportNoticeCode.EMPTY_STATEMENT, "В выписке нет операций")),
+        timeZone = "Europe/Moscow",
     )
 
     /** First import of 1–25 September only: no full month yet, comparison and regular payments closed. */
@@ -146,6 +148,15 @@ class ImportResultDesignCheckTest {
                 onUploadAnother = {}, onOpenHistory = {},
             )
         }
+
+    @Test fun unsupportedSourceZone() = DesignCheck.capture("ImportResultUnsupportedZone") {
+        ResultContent(null, true, {}, {}, {}, {}, {}, {}, error = ru.finassist.pf.core.common.error.ErrorPresentation(
+            ru.finassist.pf.core.common.error.UserMessage.from(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE)))
+    }
+    @Test fun cachedUnsupportedSourceZone() = DesignCheck.capture("ImportResultUnsupportedZoneCached") {
+        ResultContent(first, true, {}, {}, {}, {}, {}, {}, error = ru.finassist.pf.core.common.error.ErrorPresentation(
+            ru.finassist.pf.core.common.error.UserMessage.from(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE)))
+    }
 
     @Test fun importResult() = capture("ImportResult", first, 856)
 

@@ -61,6 +61,7 @@
     ".maestro/flows/auth/phone_restart.yaml": 59,
     ".maestro/flows/assistant/tab_and_consent_recovery.yaml": 61,
     ".maestro/flows/analytics/import_preparation_retry.yaml": 63,
+    ".maestro/flows/analytics/recalculation_snapshot.yaml": 82,
     "ru.finassist.pf.AiConsentSpacingTest#keepsTwentyFourDpAfterConsentContentWhenScrolledAtLargeFont": 64,
     ".maestro/flows/assistant/tab_consent_in_profile.yaml": 65,
     "ru.finassist.pf.ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries": 66,
@@ -75,6 +76,14 @@
     ".maestro/flows/analytics/all_time.yaml": 75,
     "ru.finassist.pf.PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport": 77,
     "ru.finassist.pf.PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont": 78,
-    "ru.finassist.pf.PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag": 79
+    "ru.finassist.pf.PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag": 79,
+    ".maestro/flows/analytics/regular_block_update.yaml": 81,
+    ".maestro/flows/analytics/chart_history_pages.yaml": 83,
+    ".maestro/flows/analytics/source_zone_and_session.yaml": 88,
+    ".maestro/flows/statements/download_period.yaml": 84,
+    "ru.finassist.pf.StatementPickerTest#opensTheServerUrlForSelectedInclusiveDates": 85,
+    ".maestro/flows/operations/source_time_zone.yaml": 86,
+    ".maestro/flows/statements/source_time_zone.yaml": 87,
+    ".maestro/flows/analytics/unknown_mutation_recovery.yaml": 89
   }
 }

@@ -28,6 +28,39 @@
             }
         },
         {
+            "id": "monthly_chart",
+            "type": "chart",
+            "title": "Расходы по месяцам",
+            "alt_text": "Расходы по месяцам: октябрь 500 ₽",
+            "help_text": "Столбики показывают полные календарные месяцы всей загруженной истории. Прокрутите к краю графика, чтобы загрузить соседние месяцы. Нажмите на месяц с данными, чтобы открыть его аналитику. Итоги и выводы экрана относятся к выбранному периоду.",
+            "data": {
+                "kind": "bar",
+                "value_kind": "amount",
+                "points": [
+                    {
+                        "range": {
+                            "from": "2026-10-01T00:00:00+03:00",
+                            "to": "2026-11-01T00:00:00+03:00"
+                        },
+                        "value": 50000.0,
+                        "coverage": "partial",
+                        "data_from": "2026-10-01T00:00:00+03:00",
+                        "data_to": "2026-10-07T23:59:59+03:00",
+                        "note": "по 7-е",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-10"
+                        }
+                    }
+                ],
+                "page": {
+                    "revision": "fixture"
+                },
+                "notes": []
+            }
+        },
+        {
             "id": "expense_categories",
             "type": "ranked_list",
             "status": "none",
@@ -113,6 +146,7 @@
             "type": "chart",
             "title": "Доходы минус расходы",
             "alt_text": "Доходы минус расходы: 0 ₽",
+            "help_text": "Доходов за период нет",
             "data": {
                 "kind": "bar",
                 "value_kind": "percent",
@@ -121,8 +155,7 @@
                 "summary": {
                     "value": 0.0,
                     "value_kind": "amount"
-                },
-                "caption": "Доходов за период нет"
+                }
             }
         }
     ],
@@ -134,6 +167,11 @@
         "full_months": 0,
         "unread_lines_count": 0,
         "calculated_at": "2026-10-08T12:00:00+03:00",
+        "recalculating": false
+    },
+    "time_zone": "Europe/Moscow",
+    "calculation": {
+        "calc_version": 0,
         "recalculating": false
     }
 }

@@ -467,17 +467,17 @@ class HttpApisTest {
     fun `analytics periods and regular payment dismissal`() = runBlocking {
         reply("""{"periods":[]}""")
         reply("""{"periods":[]}""")
-        noContent()
+        reply("""{"params":{"period":"month","date":"2026-09","transfer_mode":"with"},"currency":"RUB","time_zone":"Europe/Moscow","required_calc_version":42,"blocks":[{"id":"regular_payments","type":"insight_card","v":1,"status":"none","data":{"icon":"repeat","title":"Подписки"}}]}""")
         noContent()
 
         api.analytics.listPeriods()
         api.analytics.listPeriods(PeriodTypeCode.YEAR)
-        api.analytics.dismissRegularPayment("rp-1")
+        api.analytics.dismissRegularPayment("rp-1", ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH)
         api.analytics.restoreRegularPayment("rp-1")
 
         assertEquals("/v1/analytics/periods", taken().path)
         assertEquals("/v1/analytics/periods?period=year", taken().path)
-        assertEquals("PUT /v1/analytics/regular-payments/rp-1/dismissal", taken().let { "${it.method} ${it.path}" })
+        assertEquals("PUT /v1/analytics/regular-payments/rp-1/dismissal?date=2026-09&transfer_mode=with", taken().let { "${it.method} ${it.path}" })
         assertEquals("DELETE /v1/analytics/regular-payments/rp-1/dismissal", taken().let { "${it.method} ${it.path}" })
     }
 

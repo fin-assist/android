@@ -259,8 +259,14 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   directly: design-check snapshots replace them with the mockups' fixed bars.
 - "Now" and "today" come from the injected `Clock` (`LocalPfClock` in composables), never `LocalDate.now()` /
   `OffsetDateTime.now()`: the e2e build pins that clock, and the whole app has to live on the same date.
-  `Clock.zone` is the profile zone (`ReportZone`, kept by the profile feature), not the device's: days and months
-  on the client match analytics (FIN-92). It can change while the process lives — read it when needed, do not keep it.
+  `Clock.zone` is the current profile preference (`ReportZone`), not the device's. It may be used for new input,
+  but response dates belong to the response's `time_zone` (FIN-418): ImportConfig, ImportResult and every dated
+  OperationsList resolve that source zone before displaying or caching calendar values. Preserve the raw operation
+  timestamp for details/category requests. Never reinterpret a retained response through a newer profile zone.
+  An unsupported device zone shows the explicit incompatibility notice, including above a stale verified cache;
+  stop automatic retries until explicit retry/reopen/context change, and clear the notice only on a valid response.
+  Paired import `period_from`/`period_to` are inclusive civil dates. Verify returned suggested bounds against exact
+  source-zone starts of the first day and day after the last (including DST gaps), then open the unchanged server URL.
 - A PR that adds a screen, a new state of a screen, a bottom sheet or a dialog wires it into the design check in
   the same PR: a `…Content` the test can render, and a `*DesignCheckTest` capturing it under the artboard name
   (`popups = true` for a sheet or dialog). An artboard is a top-level screen frame in Figma, named like `Main`
@@ -307,7 +313,7 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   refresh semantics. Assistant chips remain calendar-only; unknown/mismatched analytics chip params are hidden individually.
 - Analytics Month/Quarter/Year each retain their own successful selection (FIN-391); switching another
   type never resets it. A first finer selection uses the last covered instant of the displayed period
-  (`period.data_to` is inclusive; a complete `range.to` is exclusive), in the current profile zone.
+  (`period.data_to` is inclusive; a complete `range.to` is exclusive), in the displayed response source zone.
   A failed period type or key change retains its exact request behind an explicit, separately gated Retry.
   Resume does not replace that notice or submit the target. Repeating the segment, picker/navigation key or
   chart target uses the same gate; payment action errors keep a separate presentation.
@@ -319,13 +325,34 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   capability; generic blocks and assistant rendering never expose it as a button. Unselected interactive
   year/all-time charts initially reveal the latest covered point (including zero), without selecting it;
   manual scroll stays available.
-- Analytics refreshes on resume as well as statement/category events (FIN-394); after a data mutation old
-  totals are cleared until a fresh response arrives. Loading and an empty recalculating response are
+- Analytics refreshes on resume as well as statement/category events (FIN-394); after an import or upload deletion,
+  displayed totals are cleared until a fresh response arrives. Loading and an empty recalculating response are
   preparation states rather than requests to upload another statement. With data, recalculation retains
-  the screen and a notice; a stopped poll labels the previous values and offers an allowed explicit retry. A user-scoped local import token in
+  a whole last-ready response for the same normalized period/date/transfer mode and a separate notice; without a
+  matching snapshot the screen prepares data. Recalculating payloads never overwrite that cache. Marked responses
+  poll every 3 seconds for at most 10 responses; a stopped poll labels the previous values and offers an allowed explicit retry.
+  Generation checks reject late reads after newer reads or regular-payment mutations, whose shared block is serialized.
+  FIN-418 mutation responses replace only their complete listed blocks in the matching snapshot and raise a
+  user-wide required calculation version. Ready GETs below it cannot roll back the change; unknown mutation
+  outcomes remain separate from read freezes: explicit «Обновить аналитику» releases reads after any unknown
+  command, but GET never confirms its outcome. The warning survives until 200, saved-context 422 or exact
+  date/OUT_OF_RANGE 400 establishes the current assignment. Unknown results survive other retry refusals.
+  New explicit commands can retire an original refusal only for changed params/source zone or an accepted ready
+  version strictly newer than the captured baseline; Retry-After still applies. Import/delete alone cannot do so.
+  The mock's GET regular metric stays at the published calculation version; only the mutation response uses fresh
+  source facts until final publication. Its shared memory snapshots are isolated by owner, actual zone and params.
+  No GET runs while a PUT is in flight. SessionRepository's
+  confirmed user/login epoch owns the cache: logout, account/epoch change clear all financial state and retire
+  late reads/writes; RequestOwner binds HTTP requests to that login. No response is rendered before confirmation.
+  A user-scoped local import token in
   `StatementsRepository` survives absent Analytics subscribers: a completed non-empty import followed by
   `has_data:false` is polled every 3 seconds, up to 10 responses, then offers an explicit refresh. The token
   is acknowledged only for the observed generation once data is present and not recalculating.
+- FIN-418 monthly history uses an embedded first page of 60 months, opaque cursor paging in both directions,
+  at most three neighbouring pages, and virtualized columns. Selected-month identity and selected-period notes
+  survive page changes. Source-zone/revision/context mismatch rejects a page; an expired cursor refreshes the
+  current selection once, then uses an explicit retry without a loop. Response source zones own calendar labels.
+  Block/tile `help_text` opens a scrollable info sheet without replacing main content or concise lock reasons.
 - Voice dictation (FIN-404): `VoiceInput` adapts Android recognition, `VoiceSession` rejects stale callbacks,
   and `VoicePanel` shows preparation, actual readiness, sound level and recognition/errors at the composer.
   Lifecycle stop/background/navigation cancels the active session; final text appends to the draft and never sends a question.
@@ -541,4 +568,4 @@ FIN-211: dependency-only Renovate PRs may be merged/closed by the reviewed `reno
 
 FIN-411 adds rolling_year/rolling_quarter selectors in Analytics and a coverage-anchored mock calculation. The client renders server ranges and totals; only mock/backend calculates facts. Edge chart actions keep exact calendar month keys; a failed selection retains the previous screen and original retry request. See docs/e2e.md for authored Qase76 coverage.
 
-FIN-416 limits rolling selectors to their Year/Quarter tabs and removes period navigation for all_time; tapping the selected calendar segment exits its rolling period. Qase80 and docs/e2e.md cover these controls. Item 2 (dismissal: durable recalculating marker delivery, FIN-418) is deferred to separate PRs and is not implemented here; see docs/e2e.md. The future Temporal saga is tracked in FIN-419.
+FIN-416 limits rolling selectors to their Year/Quarter tabs and removes period navigation for all_time; tapping the selected calendar segment exits its rolling period. Qase80 and docs/e2e.md cover these controls. The dismissal client uses complete block updates and retains ready snapshots while recalculating; see the FIN-416 response-update section in docs/e2e.md. The future Temporal saga is tracked in FIN-419.

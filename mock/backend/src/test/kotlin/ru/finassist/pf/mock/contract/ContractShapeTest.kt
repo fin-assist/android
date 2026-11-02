@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock.contract
 
+import ru.finassist.pf.mock.load
+
 import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
 
 import kotlinx.coroutines.runBlocking
@@ -274,13 +276,18 @@ class ContractShapeTest(private val name: String) {
             case("listAnalyticsPeriods", "listAnalyticsPeriods") { s ->
                 s.call("listAnalyticsPeriods", AnalyticsPeriodsList.serializer()) { s.analytics.listPeriods(PeriodTypeCode.MONTH) }
             },
+            case("getAnalyticsChartPage", "getAnalyticsChartPage") { s ->
+                s.backend.load(ru.finassist.pf.mock.statement("2000-01-01", "2000-01-31", ru.finassist.pf.mock.trn("old-history", "2000-01-03T12:00", 100, "Shop", "Супермаркеты")))
+                val first = s.analytics.getAnalytics().blocks.single { it.id == "monthly_chart" }.decode(ru.finassist.pf.core.api.model.ChartData.serializer())!!
+                s.call("getAnalyticsChartPage", ru.finassist.pf.core.api.model.AnalyticsChartPage.serializer()) { s.analytics.getMonthlyChartPage(first.page!!.previous!!) }
+            },
             case("dismissRegularPayment", "dismissRegularPayment") { s ->
                 val id = s.regularPaymentIds().first()
-                s.call("dismissRegularPayment", null, id) { s.analytics.dismissRegularPayment(id) }
+                s.call("dismissRegularPayment", ru.finassist.pf.core.api.model.AnalyticsBlockUpdate.serializer(), id) { s.analytics.dismissRegularPayment(id, ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH) }
             },
             case("restoreRegularPayment", "restoreRegularPayment") { s ->
                 val id = s.regularPaymentIds().first()
-                s.analytics.dismissRegularPayment(id)
+                s.analytics.dismissRegularPayment(id, ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH)
                 s.call("restoreRegularPayment", null, id) { s.analytics.restoreRegularPayment(id) }
             },
 

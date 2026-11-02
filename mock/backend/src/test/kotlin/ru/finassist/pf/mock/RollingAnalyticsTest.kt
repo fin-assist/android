@@ -63,10 +63,11 @@ class RollingAnalyticsTest {
             assertNull(s.tiles!!.expense.typical)
             assertNull(s.insights)
             val chart = AnalyticsComposer.compose(s).blocks.single { it.id == "monthly_chart" }.decode(ChartData.serializer())!!
-            assertEquals(13, chart.points.size)
-            assertEquals(expected.toDouble(), chart.points.sumOf { it.value ?: 0.0 })
-            assertEquals("2025-10-31", chart.points.first().range.from.toLocalDate().toString())
-            assertEquals(PeriodKey("2025-10"), chart.points.first().action!!.date)
+            assertEquals(25, chart.points.size)
+            assertEquals(100_000.0, chart.points.first().value)
+            assertTrue(chart.points.sumOf { it.value ?: 0.0 } > expected)
+            assertEquals("2024-10-01", chart.points.first().range.from.toLocalDate().toString())
+            assertEquals(PeriodKey("2024-10"), chart.points.first().action!!.date)
             assertEquals(PeriodKey("2026-10"), chart.points.last().action!!.date)
             assertNull(chart.highlightIndex)
         }
@@ -88,7 +89,8 @@ class RollingAnalyticsTest {
         val s2 = AnalyticsComposer.compose(s)
         assertFalse(s2.blocks.any { it.id == "balance" || it.id == "regular_payments" })
         val chart = s2.blocks.single { it.id == "monthly_chart" }.decode(ChartData.serializer())!!
-        assertNull(chart.points[0].action)
+        assertEquals(PeriodKey("2026-08"), chart.points[0].action!!.date)
+        assertNull(chart.points[1].action)
         assertEquals(PeriodKey("2026-10"), chart.points.last().action!!.date)
     }
 

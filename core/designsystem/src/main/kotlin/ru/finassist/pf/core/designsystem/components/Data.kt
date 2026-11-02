@@ -95,6 +95,7 @@ fun PfStatTile(
     chartId: String? = null,
     onClick: (() -> Unit)? = null,
     minAmountFontSize: TextUnit = 14.sp,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val c = PfTheme.colors
     val shape = RoundedCornerShape(PfTheme.dimens.radiusXl)
@@ -112,7 +113,10 @@ fun PfStatTile(
             .padding(PfTheme.dimens.space3)
             .semantics(mergeDescendants = true) { contentDescription = spoken },
     ) {
-        Text(label, style = PfTheme.type.caption, color = c.textMuted)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = PfTheme.type.caption, color = c.textMuted, modifier = Modifier.weight(1f))
+            trailing?.invoke()
+        }
         if (locked) {
             // `.pf-stat-lock`: 8 dp below the label, a 16 dp lock centred on the text, 8 dp gap.
             Spacer(Modifier.height(PfTheme.dimens.space2))

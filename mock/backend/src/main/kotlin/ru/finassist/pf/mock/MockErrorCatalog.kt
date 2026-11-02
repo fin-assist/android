@@ -37,6 +37,7 @@ internal object MockErrorCatalog {
             "WRONG_BANK" -> "Загрузите выписку поддерживаемого банка"
             "TOO_MANY_RESULTS" -> "Уточните условия поиска"
             "SELECTION_NOT_FOUND" -> "Данные изменились. Повторите поиск"
+            "ANALYTICS_CONTEXT_UNAVAILABLE" -> "Изменение сохранено, но данные для этого периода недоступны. Обновите аналитику"
             "CATEGORY_NOT_ASSIGNABLE" -> "Эту категорию нельзя назначить операции"
             "RETRY_NOT_ALLOWED" -> "Этот ответ нельзя повторить"
             "CANCELLED" -> "Загрузка отменена"

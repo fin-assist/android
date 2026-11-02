@@ -41,7 +41,7 @@ class UploadDownloadControlTest {
     @get:Rule val compose = createComposeRule()
     private fun t(value: String) = OffsetDateTime.parse(value)
     private val empty = ImportConfig("https://example.org/year", "https://example.org/login", 10_485_760, listOf("OFX"),
-        DateRange(t("2025-10-08T00:00:00+03:00"), t("2026-10-09T00:00:00+03:00")))
+        DateRange(t("2025-10-08T00:00:00+03:00"), t("2026-10-09T00:00:00+03:00")), timeZone = "Europe/Moscow")
 
     @Test fun `copy follows loaded operations and keeps the exact server download URL`() {
         val config = mutableStateOf(empty)

@@ -36,6 +36,7 @@ internal fun importResult(newCount: Int = 12, isFirstImport: Boolean = false) = 
     operationCount = newCount, newCount = newCount, duplicateCount = 0, unreadCount = 0,
     isFirstImport = isFirstImport, accounts = emptyList(), categorizedCount = newCount, ownTransferCount = 0,
     uncategorizedCount = 0, coverage = ImportCoverage(0, 0, emptyList(), emptyList(), emptyList()), notices = emptyList(),
+    timeZone = "Europe/Moscow",
 )
 
 internal fun upload(id: String, status: UploadStatus = UploadStatus.DONE) = Upload(
@@ -82,7 +83,7 @@ internal class FakeStatementsApi : StatementsApi {
     var unreadResult: Any = UnreadLinesList(emptyList())
     val unreadCalls = mutableListOf<Any>()
 
-    override suspend fun getImportConfig(): ImportConfig = error("unused")
+    override suspend fun getImportConfig(periodFrom: String?, periodTo: String?): ImportConfig = error("unused")
     override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted = error("unused")
 
     override fun streamProgress(uploadId: String): Flow<ImportEvent> {

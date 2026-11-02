@@ -32,9 +32,10 @@ class AnalyticsComposerTest {
         )
     }
 
-    @Test fun `a year has no insights and no balance chart, an early month no monthly chart`() {
+    @Test fun `a year has no insights or balance but the early month retains its available history chart`() {
         assertEquals(listOf("tiles", "monthly_chart", "expense_categories", "income_categories"), ids(f.year2026))
-        assertTrue("monthly_chart" !in ids(f.early))
+        assertTrue("monthly_chart" in ids(f.early))
+        assertEquals(BlockStatus.READY, AnalyticsComposer.compose(f.early).blocks.single { it.id == "monthly_chart" }.status)
     }
 
     @Test fun `variant b of the order experiment puts the categories first, an unknown variant changes nothing`() {
@@ -78,12 +79,10 @@ class AnalyticsComposerTest {
     }
 
     @Test fun `a locked block carries the server's lock text`() {
-        // One full month of data: the chart is there, locked (the early state hides it only for an incomplete month).
-        val oneFullMonth = f.september().let { s -> s.copy(period = s.period!!.copy(coverage = Coverage.COMPLETE), monthlyChart = f.early.monthlyChart) }
-        val chart = AnalyticsComposer.compose(oneFullMonth).blocks.single { it.id == "monthly_chart" }
-        assertEquals(BlockStatus.LOCKED, chart.status)
-        assertEquals("Нужно 2 месяца с данными, есть 1", chart.lock?.text?.replace('\u00A0', ' '))
-        assertEquals(BlockType.CHART, chart.type)
+        val regular = AnalyticsComposer.compose(f.early).blocks.single { it.id == "regular_payments" }
+        assertEquals(BlockStatus.LOCKED, regular.status)
+        assertEquals("Нужно 2 полных месяца — пока есть только 1–25 сентября", regular.lock?.text?.replace('\u00A0', ' '))
+        assertEquals(BlockType.INSIGHT_CARD, regular.type)
     }
 
     @Test fun `the fake API passes supports, the experiment and failing blocks to the composer`() = runBlocking<Unit> {

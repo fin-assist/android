@@ -201,4 +201,9 @@ data class AnalyticsSnapshot(
     val insights: Insights? = null,
     val state: AnalyticsState? = null,
     val forecastHistory: List<MonthlyPoint>? = null,
+    val timeZone: String = "Europe/Moscow",
+    val historyChart: HistoryChartPage? = null,
 )
+
+/** A bounded calendar history window before opaque transport cursors are attached. */
+data class HistoryChartPage(val chart: MonthlyChart, val index: Int, val previous: Int?, val next: Int?)

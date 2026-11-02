@@ -18,6 +18,8 @@ import retrofit2.http.Tag
 import ru.finassist.pf.core.api.RequestOwner
 import ru.finassist.pf.core.common.time.RequestReplayWindow
 import ru.finassist.pf.core.api.model.Analytics
+import ru.finassist.pf.core.api.model.AnalyticsBlockUpdate
+import ru.finassist.pf.core.api.model.AnalyticsChartPage
 import ru.finassist.pf.core.api.model.AnalyticsPeriodsList
 import ru.finassist.pf.core.api.model.AskRequest
 import ru.finassist.pf.core.api.model.AskResponse
@@ -97,7 +99,7 @@ internal interface ProfileService {
 
 internal interface StatementsService {
     @GET("v1/statements/config")
-    suspend fun getImportConfig(): Response<ImportConfig>
+    suspend fun getImportConfig(@Query("period_from") periodFrom: String?, @Query("period_to") periodTo: String?): Response<ImportConfig>
 
     @Multipart
     @POST("v1/statements")
@@ -155,16 +157,21 @@ internal interface AnalyticsService {
         @Query("transfer_mode") transferMode: String?,
         @Query("supports") supports: String?,
         @Query("exp") exp: String?,
+        @Tag owner: RequestOwner? = null,
     ): Response<Analytics>
 
     @GET("v1/analytics/periods")
-    suspend fun listPeriods(@Query("period") period: String?): Response<AnalyticsPeriodsList>
+    suspend fun listPeriods(@Query("period") period: String?, @Tag owner: RequestOwner? = null): Response<AnalyticsPeriodsList>
 
     @PUT("v1/analytics/regular-payments/{id}/dismissal")
-    suspend fun dismissRegularPayment(@Path("id") id: String): Response<Unit>
+    suspend fun dismissRegularPayment(@Path("id") id: String, @Query("date") date: String,
+        @Query("transfer_mode") transferMode: String, @Tag owner: RequestOwner? = null): Response<AnalyticsBlockUpdate>
+
+    @GET("v1/analytics/charts/monthly_chart")
+    suspend fun getMonthlyChartPage(@Query("cursor") cursor: String, @Tag owner: RequestOwner? = null): Response<AnalyticsChartPage>
 
     @DELETE("v1/analytics/regular-payments/{id}/dismissal")
-    suspend fun restoreRegularPayment(@Path("id") id: String): Response<Unit>
+    suspend fun restoreRegularPayment(@Path("id") id: String, @Tag owner: RequestOwner? = null): Response<Unit>
 }
 
 internal interface AssistantService {
@@ -178,5 +185,5 @@ internal interface AssistantService {
     suspend fun retry(@Header(HEADER_IDEMPOTENCY_KEY) key: String, @Path("answer_id") answerId: String, @Tag replayWindow: RequestReplayWindow? = null): Response<RetryResponse>
 
     @GET("v1/assistant/limit")
-    suspend fun getLimit(): Response<AssistantLimit>
+    suspend fun getLimit(@Tag owner: RequestOwner? = null): Response<AssistantLimit>
 }

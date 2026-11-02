@@ -17,6 +17,7 @@ import androidx.compose.ui.test.printToLog
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intended
@@ -79,6 +80,23 @@ class StatementPickerTest {
 
         intended(hasComponent(E2eDocumentPickerActivity::class.java.name))
         compose.waitForTag("statements.result", timeoutMs = 30_000)
+    }
+
+    @Test
+    fun opensTheServerUrlForSelectedInclusiveDates() {
+        signInWithExistingAccount()
+        compose.onNodeWithTag("operations.feed.upload_new").performClick()
+        compose.waitForTag("statements.upload.download_period")
+        compose.onNodeWithTag("statements.upload.download_period").performScrollTo().performClick()
+        compose.waitForTag("statements.download_period.from")
+        compose.onNodeWithTag("statements.download_period.from").performTextReplacement("2026-09-01")
+        compose.onNodeWithTag("statements.download_period.to").performTextReplacement("2026-09-30")
+        intending(hasAction(Intent.ACTION_VIEW)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null))
+        compose.onNodeWithTag("statements.download_period.confirm").performClick()
+        val expected = "https://www.tbank-online.com/mybank/api/operations/timeline/public/legacy/v1/export_operations" +
+            "?appName=supreme&appVersion=0.0.1&origin=web%2Cib5%2Cplatform&start=1788210000000&end=1790802000000&format=ofx"
+        compose.waitUntil(10_000) { Intents.getIntents().any { it.action == Intent.ACTION_VIEW && it.dataString == expected } }
+        intended(allOf(hasAction(Intent.ACTION_VIEW), hasData(expected)))
     }
 
     private fun signInWithExistingAccount() {

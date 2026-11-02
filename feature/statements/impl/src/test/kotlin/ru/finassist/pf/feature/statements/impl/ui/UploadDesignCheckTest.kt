@@ -30,6 +30,7 @@ class UploadDesignCheckTest {
         maxFileSizeBytes = 10L * 1024 * 1024,
         acceptedFormats = listOf("OFX"),
         suggestedPeriod = DateRange(t("2025-09-26T00:00:00+03:00"), t("2026-09-26T00:00:00+03:00")),
+        timeZone = "Europe/Moscow",
     )
 
     /** «Сейчас загружено 1–25 сентября 2026 · 181 операция». */
@@ -61,6 +62,14 @@ class UploadDesignCheckTest {
     private val busy = UploadUiState(phase = UploadPhase.Busy("operations_2026.ofx", 0.6f, uploadId = "u1"), config = loaded)
 
     private fun error(code: String, file: String) = UploadUiState(phase = UploadPhase.Error(code, file, config))
+
+    private val selectedPeriod = guide.copy(periodPickerOpen = true, periodFrom = java.time.LocalDate.parse("2026-09-07"),
+        periodTo = java.time.LocalDate.parse("2026-09-22"), periodToday = java.time.LocalDate.parse("2026-09-26"))
+    @Test fun downloadPeriod() = capture("ImportDownloadPeriod", selectedPeriod, popups = true)
+    @Test fun downloadPeriodDark() = capture("ImportDownloadPeriodDark", selectedPeriod, dark = true, popups = true)
+    @Test fun downloadPeriodFailure() = capture("ImportDownloadPeriodFailure", selectedPeriod.copy(periodError = ErrorPresentation(UserMessage.from("Не получилось подготовить ссылку"))), popups = true)
+    @Test fun unsupportedConfigZone() = capture("ImportUnsupportedZone", guide.copy(guideErrorPresentation = ErrorPresentation(UserMessage.from(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE))))
+    @Test fun coldUnsupportedConfigZone() = capture("ImportUnsupportedZoneCold", UploadUiState(phase = UploadPhase.ConfigFailure(ErrorPresentation(UserMessage.from(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE)))))
 
     @Test fun importGuide() = capture("ImportGuide", guide)
 

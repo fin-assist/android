@@ -129,7 +129,7 @@ class ProfileViewModelTest {
             failure?.let { throw it }
             return StatementsList(summary, emptyList())
         }
-        override suspend fun getImportConfig(): ImportConfig = error("unused")
+        override suspend fun getImportConfig(periodFrom: String?, periodTo: String?): ImportConfig = error("unused")
         override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted = error("unused")
         override fun streamProgress(uploadId: String): Flow<ImportEvent> = error("unused")
         override suspend fun deleteStatement(uploadId: String) = Unit

@@ -10,7 +10,10 @@ tags:
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
-    visible: "Октябрь 2026"
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 15000
 - tapOn:
     id: "analytics.transfers"
@@ -46,8 +49,9 @@ tags:
       id: "analytics.ask"
     direction: UP
 - assertVisible:
-    id: "ds.period.pick"
     text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "ds.segment.0"
     checked: true
@@ -57,12 +61,13 @@ tags:
     id: "ds.segment.2"
 - extendedWaitUntil:
     visible:
-      id: "ds.period.pick"
       text: "2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - scrollUntilVisible:
     element:
-      id: "analytics.block.monthly_chart"
+      id: "analytics.expense.monthly.point.2026-10"
     centerElement: true
 # An unselected year chart already reveals its latest covered month, including this zero.
 - assertVisible:
@@ -118,8 +123,9 @@ tags:
       id: "analytics.ask"
     direction: UP
 - assertVisible:
-    id: "ds.period.pick"
     text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "ds.segment.0"
     checked: true

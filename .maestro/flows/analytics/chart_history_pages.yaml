@@ -1,0 +1,143 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — вся история по страницам и возврат к выбранному месяцу
+tags:
+  - analytics
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+# Replace the full preloaded year through the public UI. This rolling year covers 11 complete months;
+# the only operation is in August, so calendar completeness cannot depend on edge transactions.
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.empty"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- scrollUntilVisible:
+    element:
+      id: "e2e.picker.chart-history.ofx"
+- tapOn:
+    id: "e2e.picker.chart-history.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "statements.result.analytics"
+- tapOn:
+    id: "statements.result.analytics"
+- extendedWaitUntil:
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.monthly_chart"
+    centerElement: true
+- assertVisible:
+    id: "analytics.expense.monthly.point.2026-10"
+# 26 years require more than the three-page cache. Bounded swipes load and evict neighbours.
+- repeat:
+    times: 90
+    commands:
+      - runFlow:
+          when:
+            notVisible:
+              id: "analytics.expense.monthly.point.2000-01"
+          commands:
+            - swipe:
+                from:
+                  id: "analytics.expense.monthly"
+                direction: RIGHT
+                duration: 300
+- assertVisible:
+    id: "analytics.expense.monthly.point.2000-01"
+# A covered zero is a complete selectable month, even in the earliest page.
+- tapOn:
+    id: "analytics.expense.monthly.point.2000-01"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.expense.monthly.point.2000-01"
+      checked: true
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
+- assertVisible:
+    text: "Январь 2000"
+    childOf:
+      id: "ds.period.pick"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.monthly_chart"
+    centerElement: true
+# Reload evicted recent pages in the opposite direction; scrolling does not select another month.
+- repeat:
+    times: 90
+    commands:
+      - runFlow:
+          when:
+            notVisible:
+              id: "analytics.expense.monthly.point.2026-10"
+          commands:
+            - swipe:
+                from:
+                  id: "analytics.expense.monthly"
+                direction: LEFT
+                duration: 300
+- assertVisible:
+    id: "analytics.expense.monthly.point.2026-10"
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
+- assertVisible:
+    text: "Январь 2000"
+    childOf:
+      id: "ds.period.pick"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.monthly_chart"
+    centerElement: true
+- tapOn:
+    id: "analytics.expense.monthly.point.2026-10"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.expense.monthly.point.2026-10"
+      checked: true
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
+- assertVisible:
+    text: "Октябрь 2026"
+    childOf:
+      id: "ds.period.pick"

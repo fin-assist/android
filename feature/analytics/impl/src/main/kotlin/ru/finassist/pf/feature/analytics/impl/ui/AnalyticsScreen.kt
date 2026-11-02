@@ -50,6 +50,8 @@ import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.time.PeriodKey
+import ru.finassist.pf.core.common.time.SourceTimeZone
+import ru.finassist.pf.core.common.error.UserMessage
 import ru.finassist.pf.core.common.time.StaleData
 import ru.finassist.pf.core.common.time.toApiString
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
@@ -74,6 +76,7 @@ import ru.finassist.pf.core.designsystem.components.PfStatTile
 import ru.finassist.pf.core.designsystem.components.PfTabHeader
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import java.time.ZoneId
+import ru.finassist.pf.core.common.time.withZone
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.analytics.impl.domain.AnalyticsTexts
@@ -116,33 +119,69 @@ interface AnalyticsHandlers {
     fun currentTransferMode(): TransferMode
     fun toggleExpanded(id: String)
     fun onAction(block: Block, action: BlockAction, navigate: (BlockAction) -> Unit)
+    fun loadChartPage(older: Boolean, retry: Boolean = false) {}
+    fun recoverUnknownMutationRead() {}
     fun onBlockShown(block: Block)
 }
 
 @Composable
 internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions, vm: AnalyticsHandlers) {
+    val baseClock = LocalPfClock.current
+    val sourceClock = state.data?.timeZone?.let { source ->
+        remember(baseClock, source) { baseClock.withZone(ru.finassist.pf.core.common.time.SourceTimeZone.require(source)) }
+    } ?: baseClock
+    androidx.compose.runtime.CompositionLocalProvider(LocalPfClock provides sourceClock) {
     val d = PfTheme.dimens
     PfRefreshContainer(refreshing = state.refreshing, onRefresh = vm::refresh, enabled = (state.retryReady || (state.blocks.assistant && state.limitRetryReady)) && !state.loading, modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().testTag(AnalyticsTags.SCREEN)) {
             if (actions.back != null) PfPageHeader("Аналитика", onBack = actions.back) else PfTabHeader("Аналитика")
             val a = state.data
+            if (state.unknownMutation) {
+                PfNotice(title = "Результат изменения не подтверждён", text = when {
+                    state.unknownReadRecoveryUsed -> "Аналитика загружается отдельно. Результат прежнего действия «Не подписка» остаётся неизвестным."
+                    state.unknownReadRecoveryAvailable -> "Можно заново загрузить аналитику. Это не подтвердит результат прежнего действия «Не подписка»."
+                    else -> "Прежние показатели сохранены. Если платёж остаётся в списке, повторите «Не подписка», когда повтор станет доступен."
+                }, modifier = Modifier.padding(d.space4).testTag(AnalyticsTags.UNKNOWN_MUTATION), tone = NoticeTone.WARNING,
+                    action = if (state.unknownReadRecoveryAvailable && state.retryReady) ({
+                        PfNoticeLink("Обновить аналитику", onClick = vm::recoverUnknownMutationRead,
+                            modifier = Modifier.testTag(AnalyticsTags.UNKNOWN_READ_RECOVERY))
+                    }) else null)
+            }
+            val unsupportedZoneMessage = UserMessage.from(SourceTimeZone.MESSAGE)
+            val zoneReadFailure = state.errorPresentation?.userMessage == unsupportedZoneMessage
+            val zonePeriodFailure = state.periodChangeErrorPresentation?.userMessage == unsupportedZoneMessage
             val quotaVisible = state.blocks.assistant && !state.loading && !state.offline &&
                 !state.preparationTimedOut && a?.hasData == true
             state.limitErrorPresentation?.takeIf { quotaVisible }?.let {
                 ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4),
                     onRetry = ({ vm.refresh() }).takeIf { state.limitRetryReady })
             }
-            state.periodChangeErrorPresentation?.let { presentation ->
+            state.periodChangeErrorPresentation?.takeUnless { state.sourceZoneUnsupported && zonePeriodFailure }?.let { presentation ->
                 ErrorMessage(presentation, "Не удалось сменить период", modifier = Modifier.padding(d.space4),
                     onRetry = if (state.periodChangeRetryReady) ({ vm.retryPeriodChange() }) else null,
                     retryModifier = Modifier.testTag(AnalyticsTags.PERIOD_RETRY))
             }
-            state.errorPresentation?.let { presentation ->
+            state.errorPresentation?.takeUnless { state.sourceZoneUnsupported && zoneReadFailure }?.let { presentation ->
                 ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику",
                     modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.refresh() }),
                     retryModifier = Modifier.testTag(AnalyticsTags.RETRY))
             }
+            if (state.sourceZoneUnsupported) {
+                // This explanation belongs to the response zone, not the latest transient network failure.
+                PfNotice(text = SourceTimeZone.MESSAGE,
+                    modifier = Modifier.padding(d.space4), tone = NoticeTone.WARNING,
+                    action = when {
+                        zonePeriodFailure && state.periodChangeRetryReady -> ({ PfNoticeLink("Повторить", onClick = vm::retryPeriodChange,
+                            modifier = Modifier.testTag(AnalyticsTags.PERIOD_RETRY)) })
+                        zoneReadFailure && state.retryReady -> ({ PfNoticeLink("Повторить", onClick = vm::refresh,
+                            modifier = Modifier.testTag(AnalyticsTags.RETRY)) })
+                        else -> null
+                    })
+                if (a?.hasData == true) Text("Показаны прежние данные", style = PfTheme.type.hint, color = PfTheme.colors.textMuted,
+                    modifier = Modifier.padding(horizontal = d.space4))
+            }
             when {
+                state.unknownMutation && !state.unknownReadRecoveryUsed && a == null -> Unit
                 state.loading || (a?.hasData == false && a.state?.recalculating == true) -> Column(
                     Modifier.weight(1f).fillMaxWidth().padding(d.space5).testTag(AnalyticsTags.UPDATING),
                     verticalArrangement = Arrangement.Center,
@@ -192,6 +231,7 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
         }
     }
     Sheets(state, vm)
+    }
 }
 
 /**
@@ -203,7 +243,9 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
     val params = a.params ?: return
     val period = a.period ?: return
     val blocks = state.blocks
-    val prepared = remember(a.blocks, blocks.hidden) { prepareAnalyticsBlocks(a.blocks, blocks.hidden) }
+    val prepared = remember(a.blocks, blocks.hidden, state.chartBlock) {
+        prepareAnalyticsBlocks(a.blocks.map { if (it.id == "monthly_chart") state.chartBlock ?: it else it }, blocks.hidden)
+    }
     val d = PfTheme.dimens
 
     if (blocks.assistant) {
@@ -298,12 +340,13 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
                 modifier = Modifier.testTag(AnalyticsTags.UNREAD),
             )
         }
-        if (s.recalculating) {
+        if ((state.recalculating || s.recalculating) && (!state.unknownMutation || state.unknownReadRecoveryUsed)) {
             Gap(d.space3)
             PfNotice(
                 if (state.recalculationPaused) "Не удалось обновить показатели. Показаны данные до изменений"
                 else "Пересчитываем после изменений — цифры обновятся через несколько секунд",
                 tone = NoticeTone.INFO,
+                modifier = Modifier.testTag(AnalyticsTags.RECALCULATING),
                 action = if (state.recalculationPaused && state.retryReady) ({
                     PfNoticeLink("Повторить", onClick = { vm.refresh() }, modifier = Modifier.testTag(AnalyticsTags.RETRY))
                 }) else null,
@@ -375,6 +418,12 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
     }
     val ctx = BlockContext(
         currency = a.currency,
+        sourceZone = LocalPfClock.current.zone,
+        chartPaging = ru.finassist.pf.core.blocks.ChartPaging(
+            state.chartHasOlder, state.chartHasNewer, state.chartLoading, state.chartError,
+            state.chartRetryReady, { vm.loadChartPage(it) }, { vm.loadChartPage(true, retry = true) },
+            a.params?.takeIf { it.period == PeriodTypeCode.MONTH }?.date?.value,
+        ),
         tags = AnalyticsBlockTags,
         onAction = { block, action -> vm.onAction(block, action, navigate) },
         onSelectAnalyticsPeriod = { block, action -> vm.onAction(block, action, navigate) },
@@ -491,6 +540,9 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
 
 /** Test tags of the analytics screen (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object AnalyticsTags {
+    const val RECALCULATING = "analytics.recalculating"
+    const val UNKNOWN_MUTATION = "analytics.unknown_mutation"
+    const val UNKNOWN_READ_RECOVERY = "analytics.unknown_read_recovery"
     const val UPDATING = "analytics.updating"
     const val PREPARATION_TIMEOUT = "analytics.preparation_timeout"
     /** A block of the screen by its id (`analytics.block.tiles`): the ids are the server's (FIN-4). */
@@ -520,6 +572,10 @@ internal object AnalyticsTags {
     // Tiles: the chart id of a tile is also its test tag (`Tile` → `PfStatTile(modifier.testTag(chartId))`).
     const val TILE_BALANCE = "analytics.tile.balance"
     const val TILE_FORECAST = "analytics.tile.forecast"
+    // Shared BlockHelpButton and PfPagedBarChart compose these concrete tags from their host's identifiers.
+    const val TILE_FORECAST_HELP = "analytics.tile.forecast.help"
+    const val TILE_FORECAST_HELP_SHEET = "analytics.tile.forecast.help.sheet"
+    const val MONTHLY_HISTORY = "analytics.expense.monthly"
     const val TILE_DAILY = "analytics.tile.daily"
     const val TILE_INCOME = "analytics.tile.income"
     const val TILE_EXPENSE = "analytics.tile.expense"

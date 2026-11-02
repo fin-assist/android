@@ -42,6 +42,9 @@ import ru.finassist.pf.feature.operations.api.OperationRecords
 import java.time.OffsetDateTime
 import ru.finassist.pf.feature.operations.impl.domain.OperationFormat
 import java.time.LocalDate
+import java.time.ZoneId
+import ru.finassist.pf.core.common.time.SourceTimeZone
+import ru.finassist.pf.feature.operations.impl.domain.sourceZone
 import javax.inject.Inject
 
 /** Which filter chips are available (feature toggles `search.filter.*`). */
@@ -56,6 +59,7 @@ sealed interface SearchResult {
         val totalCount: Int,
         val range: DateRange?,
         val hasOlderData: Boolean,
+        val sourceZone: ZoneId? = null,
     ) : SearchResult
     data object TooMany : SearchResult
     data object Offline : SearchResult
@@ -75,6 +79,7 @@ data class SearchUiState(
     val categories: List<Category> = emptyList(),
     /** The preset `selection` from analytics no longer exists: shown once above the results. */
     val selectionDropped: Boolean = false,
+    val sourceZoneUnsupported: Boolean = false,
     /** First day of the default 12-month window, from the last search made with it (period sheet: «С октября 2025»). */
     val windowFrom: LocalDate? = null,
     val errorPresentation: ErrorPresentation? = null,
@@ -255,31 +260,32 @@ class SearchViewModel @Inject constructor(
             if (debounce) delay(350)
             if (generation != searchGeneration) return@launch
             val keep = refresh && _state.value.result is SearchResult.Found
-            _state.update { it.copy(errorPresentation = null, requestRetryable = null) }
+            _state.update { it.copy(errorPresentation = if (it.sourceZoneUnsupported) it.errorPresentation else null, requestRetryable = null) }
             // The old selection's result is visible only until the corrected query settles.
             if (!keep && correctingSelection == null) _state.update { it.copy(result = SearchResult.Loading) }
             val filter = _state.value.filter
             try {
                 val allTime = _state.value.allTime
                 val list = api.listOperations(OperationsQuery(filter = filter, allTime = allTime))
+                val sourceZone = list.sourceZone()
                 if (generation != searchGeneration) return@launch
                 tracker.track(Events.OPERATIONS_SEARCH_SUBMITTED, mapOf("count" to (list.totalCount ?: list.items.size).toString()))
-                val window = OperationFormat.defaultWindowStart(list.range, filter, allTime)
+                val window = if (!allTime && filter.from == null && filter.to == null) list.range?.from?.atZoneSameInstant(sourceZone)?.toLocalDate() else null
                 _state.update {
                     it.copy(
-                        windowFrom = window ?: it.windowFrom,
+                        sourceZoneUnsupported = false, errorPresentation = null, windowFrom = window ?: it.windowFrom,
                         result = SearchResult.Found(
                             items = list.items,
                             totalCount = list.totalCount ?: list.items.size,
                             range = list.range,
-                            hasOlderData = list.hasOlderData == true,
+                            hasOlderData = list.hasOlderData == true, sourceZone = sourceZone,
                         ),
                     )
                 }
             } catch (e: AppError) {
                 if (generation != searchGeneration) return@launch
                 retryGate.record(e)
-                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline && !keep }, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(sourceZoneUnsupported = it.sourceZoneUnsupported || (e is AppError.Api && e.code == SourceTimeZone.UNSUPPORTED), errorPresentation = if (it.sourceZoneUnsupported) it.errorPresentation else e.presentation.takeUnless { e is AppError.Offline && !keep }, requestRetryable = e.requestRetryable) }
                 when {
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.SELECTION_NOT_FOUND && filter.selection != null -> {
                         // Removing the stale selection changes the request context, including its retry restriction.

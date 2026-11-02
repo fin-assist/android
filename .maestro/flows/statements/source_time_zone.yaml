@@ -1,0 +1,59 @@
+appId: ru.finassist.pf.mock.e2e
+name: Загрузка — несовместимый пояс условий и результата
+tags:
+  - statements
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?response_time_zone=unsupported"
+- tapOn:
+    id: "operations.feed.upload_new"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
+- extendedWaitUntil:
+    visible: "Устройство не поддерживает часовой пояс этих данных"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?response_time_zone=default"
+- tapOn:
+    id: "statements.upload.retry"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?response_time_zone=unsupported"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- tapOn:
+    id: "e2e.picker.october.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "Устройство не поддерживает часовой пояс этих данных"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?response_time_zone=default"
+- tapOn:
+    id: "statements.result.retry"
+- extendedWaitUntil:
+    notVisible: "Устройство не поддерживает часовой пояс этих данных"
+    timeout: 10000
+- assertVisible:
+    id: "statements.result.new"
