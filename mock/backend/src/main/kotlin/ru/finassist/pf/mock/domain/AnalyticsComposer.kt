@@ -211,7 +211,7 @@ object AnalyticsComposer {
         val share = AnalyticsServerTexts.share(t.balance)
         val balance = tile(
             "balance", "Доходы минус расходы", t.balance, s,
-            caption = if (t.balance.shareOfIncome != null && share.endsWith("дохода")) "$share · по выписке" else share,
+            caption = share,
         )
         val expense = tile("expense", "Расходы", t.expense, s, caption = periodCaption(period), action = open(t.expense.filters))
         val forecast = t.forecast?.takeUnless { it.lock?.reason == LockReason.STALE_DATA }?.let { f ->

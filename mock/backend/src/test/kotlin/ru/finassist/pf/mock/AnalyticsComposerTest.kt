@@ -63,7 +63,7 @@ class AnalyticsComposerTest {
         val a = AnalyticsComposer.compose(f.september())
         val tiles = assertNotNull(a.blocks.first { it.id == "tiles" }.decode(TileGroupData.serializer())).tiles
         assertEquals(listOf("balance", "expense", "daily_expense", "income", "forecast"), tiles.map { it.id })
-        assertEquals("46% дохода · по выписке", tiles[0].caption)
+        assertEquals("46% дохода", tiles[0].caption)
         assertTrue(tiles[4].approx)
         assertTrue(tiles[3].showPlus)
         assertEquals(ActionType.OPEN_OPERATIONS, tiles[3].action?.type)
