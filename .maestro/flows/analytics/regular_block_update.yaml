@@ -35,13 +35,9 @@ tags:
     notVisible: "Не подписка — РБК"
     timeout: 10000
 - assertNotVisible: "РБК"
-- scrollUntilVisible:
-    element:
-      id: "analytics.recalculating"
-    direction: UP
-- assertVisible: "Пересчитываем после изменений.*"
 # Observe the applied PUT block for longer than two 3 s polls while GET still returns the old row.
 # The promoted third row is a positive oracle: an offscreen RBC row alone would not prove retention.
+# Stay in the same card before observing, preserving the ten-response poll budget for the final scroll up.
 - scrollUntilVisible:
     element: "Не подписка — планшет.*"
 - evalScript: ${output.markedReadUntil = Date.now() + 7000}
@@ -52,13 +48,12 @@ tags:
       - assertVisible: "Не подписка — планшет.*"
       - assertNotVisible: "Не подписка — РБК"
       - assertNotVisible: "РБК"
-# The recalculation notice is above the financial cards; check it there before allowing a ready GET.
+# The active notice text distinguishes polling from the paused state, which shares the same tag.
 - scrollUntilVisible:
     element:
       id: "analytics.recalculating"
     direction: UP
-- assertVisible:
-    id: "analytics.recalculating"
+- assertVisible: "Пересчитываем после изменений.*"
 - assertVisible:
     text: "Сентябрь 2026"
     childOf:
