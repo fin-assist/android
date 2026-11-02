@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import ru.finassist.pf.feature.statements.impl.domain.ImportErrorTexts
+import ru.finassist.pf.feature.statements.impl.domain.DownloadTexts
 import ru.finassist.pf.core.designsystem.components.TextPart
 import ru.finassist.pf.core.designsystem.components.PfDivider
 import ru.finassist.pf.core.designsystem.components.PfBottomSheet
@@ -236,7 +237,7 @@ private fun ColumnScope.Guide(
 ) {
     val d = PfTheme.dimens
     val c = PfTheme.colors
-    config.loaded?.let { loaded ->
+    config.loaded?.takeIf { it.operationCount > 0 }?.let { loaded ->
         PfCard(Modifier.testTag(StatementsTags.UPLOAD_LOADED)) {
             Text("Сейчас загружено", style = PfTheme.type.caption, color = c.textMuted)
             Text(
@@ -246,7 +247,7 @@ private fun ColumnScope.Guide(
                 modifier = Modifier.padding(top = d.space1),
             )
             Text(
-                "Кнопка «Скачать за год» захватит и прошлые месяцы — сравнивать станет с чем. Совпадающие операции не задвоятся",
+                "Скачайте новые данные со дня последней загруженной операции. Совпадающие операции не задвоятся",
                 style = PfTheme.type.caption, color = c.textMuted, modifier = Modifier.padding(top = d.space2),
             )
         }
@@ -258,19 +259,19 @@ private fun ColumnScope.Guide(
         PfOrderedSteps(
             listOf(
                 "Войдите в кабинет Т-Банка в браузере",
-                "Нажмите «Скачать за год» — файл сохранится в «Загрузки»",
+                DownloadTexts.instruction(config),
                 "Выберите скачанный файл ниже",
             ),
         )
         Spacer(Modifier.height(d.space2))
-        Row(horizontalArrangement = Arrangement.spacedBy(d.space3)) {
+        Column(verticalArrangement = Arrangement.spacedBy(d.space3)) {
             PfButton(
                 "Войти в Т-Банк", onClick = { onDownload(config.loginUrl) }, variant = ButtonVariant.SECONDARY, block = true,
-                modifier = Modifier.weight(1f).testTag(StatementsTags.UPLOAD_LOGIN),
+                modifier = Modifier.testTag(StatementsTags.UPLOAD_LOGIN),
             )
             PfButton(
-                "Скачать за год", onClick = { onDownload(config.downloadUrl) }, variant = ButtonVariant.SECONDARY, block = true,
-                modifier = Modifier.weight(1f).testTag(StatementsTags.UPLOAD_DOWNLOAD),
+                DownloadTexts.label(config), onClick = { onDownload(config.downloadUrl) }, variant = ButtonVariant.SECONDARY, block = true,
+                modifier = Modifier.testTag(StatementsTags.UPLOAD_DOWNLOAD), maxLines = 2,
             )
         }
         Spacer(Modifier.height(d.space1))
@@ -307,8 +308,7 @@ private fun ColumnScope.Guide(
         PfLink("Загружу позже", onClick = onLater, modifier = Modifier.align(Alignment.CenterHorizontally).testTag(StatementsTags.UPLOAD_LATER))
     }
     Spacer(Modifier.height(d.space4))
-    val privacy = "Операции видите только вы. Файл выписки храним зашифрованным — поддержка открывает его, только чтобы " +
-        "исправить ошибку разбора. Помощнику данные уходят с вашего согласия. Удалить загрузку или аккаунт — в профиле. "
+    val privacy = "Операции видите только вы. Удалить загрузку или аккаунт — в профиле. "
     PfNotice(
         privacy,
         tone = NoticeTone.INFO,

@@ -156,9 +156,12 @@ internal fun SearchContent(
                 if (f.selection != null || f.transferMode != null || (f.kind != null && knownKind == null)) {
                     PfChip((f.selectionName ?: "Как на «Аналитике»") + "  ✕", onClick = actions.clearAnalyticsScope, selected = true, modifier = Modifier.testTag(OperationsTags.CHIP_SCOPE))
                 }
-                if (!state.onlyQuery) {
-                    PfChip("Сбросить", onClick = actions.reset, modifier = Modifier.testTag(OperationsTags.CHIP_RESET))
-                }
+            }
+            if (!state.onlyQuery) {
+                PfButton(
+                    "Сбросить", onClick = actions.reset, variant = ButtonVariant.GHOST,
+                    modifier = Modifier.padding(start = d.space5, top = d.space1).testTag(OperationsTags.CHIP_RESET),
+                )
             }
             if (state.selectionDropped) {
                 PfNotice("Выборка с «Аналитики» больше не действует — ищем без неё", tone = NoticeTone.INFO, modifier = Modifier.padding(horizontal = d.space5))
