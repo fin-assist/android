@@ -75,6 +75,9 @@
     ".maestro/flows/analytics/all_time.yaml": 75,
     "ru.finassist.pf.PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport": 77,
     "ru.finassist.pf.PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont": 78,
-    "ru.finassist.pf.PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag": 79
+    "ru.finassist.pf.PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag": 79,
+    ".maestro/flows/analytics/regular_block_update.yaml": 81,
+    ".maestro/flows/analytics/chart_history_pages.yaml": 83,
+    ".maestro/flows/analytics/source_zone_and_session.yaml": 88
   }
 }

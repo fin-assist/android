@@ -75,7 +75,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
      */
     private val failures = ConcurrentHashMap<String, ImportEvent.Error>()
 
-    override suspend fun getImportConfig(): ImportConfig {
+    override suspend fun getImportConfig(periodFrom: String?, periodTo: String?): ImportConfig {
         backend.simulateNetwork()
         backend.requireSession()
         // Calendar days in the profile zone (FIN-92), each bound with its own offset (DST).

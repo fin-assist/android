@@ -301,7 +301,7 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   refresh semantics. Assistant chips remain calendar-only; unknown/mismatched analytics chip params are hidden individually.
 - Analytics Month/Quarter/Year each retain their own successful selection (FIN-391); switching another
   type never resets it. A first finer selection uses the last covered instant of the displayed period
-  (`period.data_to` is inclusive; a complete `range.to` is exclusive), in the current profile zone.
+  (`period.data_to` is inclusive; a complete `range.to` is exclusive), in the displayed response source zone.
   A failed period type or key change retains its exact request behind an explicit, separately gated Retry.
   Resume does not replace that notice or submit the target. Repeating the segment, picker/navigation key or
   chart target uses the same gate; payment action errors keep a separate presentation.
@@ -320,10 +320,20 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   matching snapshot the screen prepares data. Recalculating payloads never overwrite that cache. Marked responses
   poll every 3 seconds for at most 10 responses; a stopped poll labels the previous values and offers an allowed explicit retry.
   Generation checks reject late reads after newer reads or regular-payment mutations, whose shared block is serialized.
-  This existing-contract behavior does not establish post-mutation freshness; that delivery protocol remains FIN-418. A user-scoped local import token in
+  FIN-418 mutation responses replace only their complete listed blocks in the matching snapshot and raise a
+  user-wide required calculation version. Ready GETs below it cannot roll back the change; unknown mutation
+  outcomes require explicit successful PUT retry. No GET runs while a PUT is in flight. SessionRepository's
+  confirmed user/login epoch owns the cache: logout, account/epoch change clear all financial state and retire
+  late reads/writes; RequestOwner binds HTTP requests to that login. No response is rendered before confirmation.
+  A user-scoped local import token in
   `StatementsRepository` survives absent Analytics subscribers: a completed non-empty import followed by
   `has_data:false` is polled every 3 seconds, up to 10 responses, then offers an explicit refresh. The token
   is acknowledged only for the observed generation once data is present and not recalculating.
+- FIN-418 monthly history uses an embedded first page of 60 months, opaque cursor paging in both directions,
+  at most three neighbouring pages, and virtualized columns. Selected-month identity and selected-period notes
+  survive page changes. Source-zone/revision/context mismatch rejects a page; an expired cursor refreshes the
+  current selection once, then uses an explicit retry without a loop. Response source zones own calendar labels.
+  Block/tile `help_text` opens a scrollable info sheet without replacing main content or concise lock reasons.
 - Voice dictation (FIN-404): `VoiceInput` adapts Android recognition, `VoiceSession` rejects stale callbacks,
   and `VoicePanel` shows preparation, actual readiness, sound level and recognition/errors at the composer.
   Lifecycle stop/background/navigation cancels the active session; final text appends to the draft and never sends a question.

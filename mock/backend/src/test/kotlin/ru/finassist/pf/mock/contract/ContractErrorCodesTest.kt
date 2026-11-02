@@ -118,9 +118,15 @@ class ContractErrorCodesTest(private val name: String) {
                 val s = Scene()
                 s.call("askAssistant", null) { s.assistant.ask(IdempotencyKey.random(), AskRequest(" ")) }
             },
+            case(ErrorCodes.ANALYTICS_CONTEXT_UNAVAILABLE, "saved dismissal no longer has the requested context") {
+                val s = Scene()
+                val id = s.regularPaymentIds().first()
+                s.analytics.dismissRegularPayment(id, ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH)
+                s.call("dismissRegularPayment", null, id) { s.analytics.dismissRegularPayment(id, ru.finassist.pf.core.common.time.PeriodKey("1999-01"), ru.finassist.pf.core.api.model.TransferMode.WITH) }
+            },
             case(ErrorCodes.VALIDATION_ERROR, "regular payment id that is not a UUID") {
                 val s = Scene()
-                s.call("dismissRegularPayment", null, "Netflix") { s.analytics.dismissRegularPayment("Netflix") }
+                s.call("dismissRegularPayment", null, "Netflix") { s.analytics.dismissRegularPayment("Netflix", ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH) }
             },
             case(ErrorCodes.INVALID_TOKEN, "a call without a session") {
                 val s = Scene(signedIn = false)

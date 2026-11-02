@@ -74,6 +74,7 @@ import ru.finassist.pf.core.designsystem.components.PfStatTile
 import ru.finassist.pf.core.designsystem.components.PfTabHeader
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import java.time.ZoneId
+import ru.finassist.pf.core.common.time.withZone
 import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.feature.analytics.impl.domain.AnalyticsTexts
@@ -117,11 +118,17 @@ interface AnalyticsHandlers {
     fun currentTransferMode(): TransferMode
     fun toggleExpanded(id: String)
     fun onAction(block: Block, action: BlockAction, navigate: (BlockAction) -> Unit)
+    fun loadChartPage(older: Boolean, retry: Boolean = false) {}
     fun onBlockShown(block: Block)
 }
 
 @Composable
 internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions, vm: AnalyticsHandlers) {
+    val baseClock = LocalPfClock.current
+    val sourceClock = state.data?.timeZone?.let { source ->
+        remember(baseClock, source) { baseClock.withZone(ru.finassist.pf.core.common.time.SourceTimeZone.require(source)) }
+    } ?: baseClock
+    androidx.compose.runtime.CompositionLocalProvider(LocalPfClock provides sourceClock) {
     val d = PfTheme.dimens
     PfRefreshContainer(refreshing = state.refreshing, onRefresh = vm::refresh, enabled = (state.retryReady || (state.blocks.assistant && state.limitRetryReady)) && !state.loading, modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().testTag(AnalyticsTags.SCREEN)) {
@@ -193,6 +200,7 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
         }
     }
     Sheets(state, vm)
+    }
 }
 
 /**
@@ -204,7 +212,9 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
     val params = a.params ?: return
     val period = a.period ?: return
     val blocks = state.blocks
-    val prepared = remember(a.blocks, blocks.hidden) { prepareAnalyticsBlocks(a.blocks, blocks.hidden) }
+    val prepared = remember(a.blocks, blocks.hidden, state.chartBlock) {
+        prepareAnalyticsBlocks(a.blocks.map { if (it.id == "monthly_chart") state.chartBlock ?: it else it }, blocks.hidden)
+    }
     val d = PfTheme.dimens
 
     if (blocks.assistant) {
@@ -365,6 +375,12 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
     }
     val ctx = BlockContext(
         currency = a.currency,
+        sourceZone = LocalPfClock.current.zone,
+        chartPaging = ru.finassist.pf.core.blocks.ChartPaging(
+            state.chartHasOlder, state.chartHasNewer, state.chartLoading, state.chartError,
+            state.chartRetryReady, { vm.loadChartPage(it) }, { vm.loadChartPage(true, retry = true) },
+            a.params?.takeIf { it.period == PeriodTypeCode.MONTH }?.date?.value,
+        ),
         tags = AnalyticsBlockTags,
         onAction = { block, action -> vm.onAction(block, action, navigate) },
         onSelectAnalyticsPeriod = { block, action -> vm.onAction(block, action, navigate) },

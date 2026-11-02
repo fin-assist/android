@@ -18,11 +18,11 @@ import kotlin.math.abs
 internal object CalcCompare {
     const val IGNORED = "<ignored>"
 
-    private val OPAQUE_KEYS = setOf("id", "replaced_id", "upload_id", "payment_id", "selection", "calculated_at")
+    private val OPAQUE_KEYS = setOf("id", "replaced_id", "upload_id", "payment_id", "selection", "calculated_at", "download_url", "login_url")
     private val TEXT_KEYS = setOf(
         "selection_name", "type_name", "feature_name", "text", "alt_text", "empty_text", "title", "caption", "label",
         "note", "description", "badge", "sublabel", "value_suffix", "more_label", "spoken", "note_details", "source_name",
-        "message",
+        "message", "help_text",
     )
     private val DATA_TITLE_OUTSIDE_BLOCKS = setOf("title", "note", "description")
     private val RFC3339 = Regex("""^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$""")
@@ -44,6 +44,11 @@ internal object CalcCompare {
         val e = expected.orNull()
         val a = actual.orNull()
         if (e is JsonPrimitive && e.isString && e.content == IGNORED) return emptyList()
+        if (e is JsonPrimitive && e.isString && e.content == "<opaque>") {
+            val maximum = if (key == "revision") 128 else 2048
+            return if (a is JsonPrimitive && a.isString && a.content.length in 1..maximum) emptyList()
+                else listOf("$path: expected a nonempty opaque string")
+        }
         return when (e) {
             is JsonObject -> {
                 if (a !is JsonObject) return listOf("$path: expected an object, got $a")
@@ -54,7 +59,7 @@ internal object CalcCompare {
                         k == "status" && ev.isReadyOrNull() && av.isReadyOrNull() -> emptyList()
                         ev == null && av == null -> emptyList()
                         k !in e && extraAllowed(k, inBlocks, parentIsItems) -> emptyList()
-                        else -> compare(ev, av, "$path.$k", inBlocks || k == "blocks", false, k)
+                        else -> compare(ev, av, "$path.$k", inBlocks || k == "blocks" || k == "block", false, k)
                     }
                 }
             }

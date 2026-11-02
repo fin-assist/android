@@ -243,15 +243,15 @@ internal class HttpOperationsApi(private val service: OperationsService) : Opera
 
 internal class HttpAnalyticsApi(private val service: AnalyticsService) : AnalyticsApi {
     override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?, supports: String?, exp: String?): Analytics =
-        call { service.getAnalytics(period?.code, date?.value, transferMode?.code, supports, exp?.takeIf { it.isNotEmpty() }) }
+        call { service.getAnalytics(period?.code, date?.value, transferMode?.code, supports, exp?.takeIf { it.isNotEmpty() }, currentCoroutineContext()[RequestOwner]) }
 
     override suspend fun listPeriods(period: PeriodTypeCode?): AnalyticsPeriodsList =
-        call { service.listPeriods(period?.code) }
+        call { service.listPeriods(period?.code, currentCoroutineContext()[RequestOwner]) }
 
     override suspend fun dismissRegularPayment(id: String, date: PeriodKey, transferMode: TransferMode): AnalyticsBlockUpdate =
-        call { service.dismissRegularPayment(id, date.value, transferMode.code) }
-    override suspend fun getMonthlyChartPage(cursor: String): AnalyticsChartPage = call { service.getMonthlyChartPage(cursor) }
-    override suspend fun restoreRegularPayment(id: String) { call { service.restoreRegularPayment(id) } }
+        call { service.dismissRegularPayment(id, date.value, transferMode.code, currentCoroutineContext()[RequestOwner]) }
+    override suspend fun getMonthlyChartPage(cursor: String): AnalyticsChartPage = call { service.getMonthlyChartPage(cursor, currentCoroutineContext()[RequestOwner]) }
+    override suspend fun restoreRegularPayment(id: String) { call { service.restoreRegularPayment(id, currentCoroutineContext()[RequestOwner]) } }
 }
 
 internal class HttpAssistantApi(private val service: AssistantService, private val sse: SseRequests) : AssistantApi {
@@ -277,7 +277,7 @@ internal class HttpAssistantApi(private val service: AssistantService, private v
     override suspend fun retry(key: IdempotencyKey, answerId: String): RetryResponse =
         call { service.retry(key.value, answerId, key.replayWindow) }
 
-    override suspend fun getLimit(): AssistantLimit = call { service.getLimit() }
+    override suspend fun getLimit(): AssistantLimit = call { service.getLimit(currentCoroutineContext()[RequestOwner]) }
 }
 
 /** `error` event payload shared by the verification and import streams. */

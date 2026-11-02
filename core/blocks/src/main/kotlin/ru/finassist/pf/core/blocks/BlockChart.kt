@@ -73,7 +73,8 @@ private fun ChartCard(block: Block, data: ChartData, ctx: BlockContext) {
         if (data.points.isNotEmpty()) {
             if (data.summary != null || data.caption != null) Spacer(Modifier.height(d.space4))
             BlockChartBars(data, ctx.tags.chart(block.id ?: "chart"), height = if (data.showValues == true) 64.dp else 96.dp, currency = ctx.currency,
-                pointClicks = AnalyticsChartActions.clicks(block, data.points, ctx.onSelectAnalyticsPeriod))
+                pointClicks = AnalyticsChartActions.clicks(block, data.points, ctx.sourceZone, ctx.onSelectAnalyticsPeriod),
+                zone = ctx.sourceZone, paging = ctx.chartPaging.takeIf { block.id == "monthly_chart" })
         }
         data.notes.forEachIndexed { i, n ->
             val primary = n.tone == NoteTone.PRIMARY
@@ -92,26 +93,39 @@ private fun ChartCard(block: Block, data: ChartData, ctx: BlockContext) {
  * the largest magnitude with the sign kept, a partial period filled by its days with data.
  */
 @Composable
-fun BlockChartBars(data: ChartData, chartId: String, height: Dp, currency: String, pointClicks: Map<String, () -> Unit> = emptyMap()) {
+fun BlockChartBars(data: ChartData, chartId: String, height: Dp, currency: String, pointClicks: Map<String, () -> Unit> = emptyMap(), zone: java.time.ZoneId? = null, paging: ChartPaging? = null) {
     val max = data.points.mapNotNull { it.value?.let(::abs) }.maxOrNull()?.takeIf { it > 0 } ?: 1.0
-    val showYear = data.points.map { it.range.from.year }.distinct().size > 1
-    PfBarChart(
-        chartId = chartId,
-        points = data.points.map { p ->
-            val ym = YearMonth.from(p.range.from)
+    val showYear = data.points.map { YearMonth.from(zone?.let { zone -> it.range.from.atZoneSameInstant(zone) } ?: it.range.from).year }.distinct().size > 1
+    val bars = data.points.map { p ->
+            val ym = YearMonth.from(zone?.let { p.range.from.atZoneSameInstant(it) } ?: p.range.from)
             val partial = p.coverage.effective == Coverage.PARTIAL
             BarPoint(
                 key = ym.toString(),
-                label = BlockFormat.chartMonthLabel(p, showYear),
+                label = BlockFormat.chartMonthLabel(p, showYear, zone),
                 spokenLabel = RussianDates.monthTitle(ym),
                 value = p.value?.let { (it / max).toFloat() },
                 display = BlockFormat.value(p.value, data.valueKind, currency) ?: "нет данных",
                 partial = partial,
-                partialFill = BlockFormat.partialFill(p) ?: DEFAULT_PARTIAL_FILL,
+                partialFill = BlockFormat.partialFill(p, zone) ?: DEFAULT_PARTIAL_FILL,
                 note = p.note.takeIf { partial },
                 selectable = ym.toString() in pointClicks,
             )
-        },
+        }
+    if (paging != null) {
+        ru.finassist.pf.core.designsystem.components.PfPagedBarChart(chartId, bars, paging.selectedMonth, height,
+            onPointClick = { pointClicks[it]?.invoke() }, onEdge = { older ->
+                if (!paging.loading && paging.error == null && if (older) paging.hasOlder else paging.hasNewer) paging.load(older)
+            })
+        if (paging.loading) Text("Загружаем месяцы…", style = PfTheme.type.hint, color = PfTheme.colors.textMuted)
+        paging.error?.let { error ->
+            ru.finassist.pf.core.designsystem.components.ErrorMessage(error, "Не получилось загрузить месяцы",
+                onRetry = paging.retry.takeIf { paging.retryReady })
+        }
+        return
+    }
+    PfBarChart(
+        chartId = chartId,
+        points = bars,
         highlight = data.highlightIndex ?: -1,
         height = height,
         showValues = data.showValues == true,

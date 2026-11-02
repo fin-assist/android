@@ -115,13 +115,15 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
         backend.maybeInjectError(MockErrorOperation.ANALYTICS_DISMISS)
         return backend.mutex.withLock {
             requirePayment(id)
+            val before = backend.analytics.analytics(PeriodTypeCode.MONTH, date, transferMode)
+            if (!before.hasData || before.period?.coverage == ru.finassist.pf.core.api.model.Coverage.NO_DATA) {
+                if (id in backend.dismissedPayments) throw backend.apiError("ANALYTICS_CONTEXT_UNAVAILABLE", 422)
+                throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+                    details = listOf(AppError.FieldError("date", FieldErrorCodes.OUT_OF_RANGE, "Period unavailable")))
+            }
             val target = backend.calculation.dismiss(id)
             backend.dismissedPayments += id
-            val snapshot = backend.analytics.analytics(PeriodTypeCode.MONTH, date, transferMode)
-            if (!snapshot.hasData || snapshot.period?.coverage == ru.finassist.pf.core.api.model.Coverage.NO_DATA) {
-                throw backend.apiError("ANALYTICS_CONTEXT_UNAVAILABLE", 422)
-            }
-            val response = AnalyticsComposer.compose(snapshot)
+            val response = AnalyticsComposer.compose(backend.analytics.analytics(PeriodTypeCode.MONTH, date, transferMode))
             AnalyticsBlockUpdate(response.params!!, response.currency, response.timeZone!!, target,
                 response.blocks.filter { it.id == "regular_payments" })
         }
@@ -164,7 +166,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
                 details = listOf(AppError.FieldError("id", FieldErrorCodes.INVALID_FORMAT, "must be a lowercase UUID")),
             )
         }
-        if (backend.analytics.regularPaymentName("s_regular_$id") == null) throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
+        if (id !in backend.dismissedPayments && backend.analytics.regularPaymentName("s_regular_$id") == null) throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
     }
 
     private companion object {

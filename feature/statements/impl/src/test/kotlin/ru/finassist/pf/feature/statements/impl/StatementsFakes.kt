@@ -82,7 +82,7 @@ internal class FakeStatementsApi : StatementsApi {
     var unreadResult: Any = UnreadLinesList(emptyList())
     val unreadCalls = mutableListOf<Any>()
 
-    override suspend fun getImportConfig(): ImportConfig = error("unused")
+    override suspend fun getImportConfig(periodFrom: String?, periodTo: String?): ImportConfig = error("unused")
     override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted = error("unused")
 
     override fun streamProgress(uploadId: String): Flow<ImportEvent> {

@@ -94,7 +94,7 @@ class UploadViewModelTest {
         var deleteFailure: AppError? = null
         val deleted = mutableListOf<String>()
 
-        override suspend fun getImportConfig(): ImportConfig {
+        override suspend fun getImportConfig(periodFrom: String?, periodTo: String?): ImportConfig {
             configCalls++
             return configFailure?.let { throw it } ?: currentConfig
         }

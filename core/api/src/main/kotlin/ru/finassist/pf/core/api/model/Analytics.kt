@@ -71,7 +71,7 @@ data class AnalyticsBlockUpdate(
     val currency: String,
     val timeZone: String,
     val requiredCalcVersion: Int,
-    val blocks: List<Block>,
+    @Serializable(with = CompleteBlockList::class) val blocks: List<Block>,
 )
 
 /** Adjacent monthly-chart page; selection and notes continue to belong to the full response. */

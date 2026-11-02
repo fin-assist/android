@@ -91,7 +91,8 @@ internal class CalcScenario(private val root: File) {
             upload.result?.let { encode(ImportResult.serializer(), it) }
         }
         "get" -> {
-            val request = step["filter_from"]?.let { "GET /v1/operations" to filterQuery(resolve(it.jsonObject)) }
+            val request = step["cursor_from"]?.let { "GET /v1/analytics/charts/monthly_chart" to mapOf("cursor" to resolve(it.jsonObject).jsonPrimitive.content) }
+                ?: step["filter_from"]?.let { "GET /v1/operations" to filterQuery(resolve(it.jsonObject)) }
                 ?: parse(step.string("request"))
             get(request.first.removePrefix("GET "), request.second)
         }
@@ -110,9 +111,18 @@ internal class CalcScenario(private val root: File) {
             val card = screen.getValue("blocks").jsonArray.first { it.jsonObject["id"]?.jsonPrimitive?.content == "regular_payments" }
             val row = card.jsonObject.getValue("data").jsonObject.getValue("items").jsonArray
                 .first { it.jsonObject.string("title") == step.string("title") }
-            analytics.dismissRegularPayment(row.jsonObject.getValue("button").jsonObject.string("payment_id"))
+            backend.deferAnalyticsCalculation = step["defer_calculation"]?.jsonPrimitive?.boolean == true
+            encode(ru.finassist.pf.core.api.model.AnalyticsBlockUpdate.serializer(), analytics.dismissRegularPayment(
+                row.jsonObject.getValue("button").jsonObject.string("payment_id"),
+                PeriodKey(screen.getValue("params").jsonObject.string("date")),
+                TransferMode.entries.first { it.code == screen.getValue("params").jsonObject.string("transfer_mode") },
+            ))
+        }
+        "ack_recalculation" -> {
+            backend.calculation.mark(resolve(step.getValue("version_from").jsonObject).jsonPrimitive.int)
             null
         }
+        "finish_recalculation" -> { backend.calculation.calculateNow(); backend.deferAnalyticsCalculation = false; null }
         "delete_upload" -> {
             val name = File(step.string("file")).name
             statements.deleteStatement(backend.uploads.first { it.fileName == name }.id)
@@ -131,6 +141,8 @@ internal class CalcScenario(private val root: File) {
                 supports = query["supports"], exp = query["exp"],
             ),
         )
+        "/v1/analytics/charts/monthly_chart" -> encode(ru.finassist.pf.core.api.model.AnalyticsChartPage.serializer(), analytics.getMonthlyChartPage(query["cursor"].orEmpty()))
+        "/v1/statements/config" -> encode(ru.finassist.pf.core.api.model.ImportConfig.serializer(), statements.getImportConfig(query["period_from"], query["period_to"]))
         "/v1/analytics/periods" -> encode(
             AnalyticsPeriodsList.serializer(),
             analytics.listPeriods(query["period"]?.let { code -> PeriodTypeCode.entries.first { it.code == code } }),

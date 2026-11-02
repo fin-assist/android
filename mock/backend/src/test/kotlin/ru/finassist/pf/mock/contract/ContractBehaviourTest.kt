@@ -161,7 +161,7 @@ class ContractBehaviourTest {
             ErrorCodes.INVALID_TOKEN, "401 before 400: feed",
             s.call("listOperations", null) { s.operations.listOperations(OperationsQuery(OperationsFilter(q = "а"), before = s.clock.at)) },
         )
-        expect(ErrorCodes.INVALID_TOKEN, "401 before 400: payment id", s.call("dismissRegularPayment", null, "x") { s.analytics.dismissRegularPayment("x") })
+        expect(ErrorCodes.INVALID_TOKEN, "401 before 400: payment id", s.call("dismissRegularPayment", null, "x") { s.analytics.dismissRegularPayment("x", ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH) })
     }
 
     @Test
