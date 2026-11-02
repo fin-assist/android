@@ -93,10 +93,11 @@ tags:
       LINK: "pfe2e://config?offline=false"
 - scrollUntilVisible:
     element:
-      id: "analytics.retry"
+      id: "analytics.unknown_mutation"
     direction: UP
-- tapOn:
-    id: "analytics.retry"
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 65%"
 - scrollUntilVisible:
     element: "Не подписка — РБК"
 - assertVisible: "РБК"

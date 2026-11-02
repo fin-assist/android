@@ -57,9 +57,9 @@ internal fun DownloadPeriodSheet(state: UploadUiState, onSelect: (LocalDate?, Lo
         Spacer(Modifier.height(d.space4))
         Row(horizontalArrangement = Arrangement.spacedBy(d.space3)) {
             PfTextField(fromText, onValueChange = { fromText = it; val date = parseDownloadDay(it); onSelect(date, to); if (date != null) month = YearMonth.from(date) },
-                label = "С (ГГГГ-ММ-ДД)", enabled = enabled, modifier = Modifier.weight(1f), testTag = "statements.download_period.from")
+                label = "С (ГГГГ-ММ-ДД)", enabled = enabled, modifier = Modifier.weight(1f), testTag = DownloadPeriodTags.FROM)
             PfTextField(toText, onValueChange = { toText = it; val date = parseDownloadDay(it); onSelect(from, date); if (date != null) month = YearMonth.from(date) },
-                label = "По (ГГГГ-ММ-ДД)", enabled = enabled, modifier = Modifier.weight(1f), testTag = "statements.download_period.to")
+                label = "По (ГГГГ-ММ-ДД)", enabled = enabled, modifier = Modifier.weight(1f), testTag = DownloadPeriodTags.TO)
         }
         Spacer(Modifier.height(d.space4))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -84,7 +84,7 @@ internal fun DownloadPeriodSheet(state: UploadUiState, onSelect: (LocalDate?, Lo
                         topEnd = if (end) d.radiusMd else 0.dp, bottomEnd = if (end) d.radiusMd else 0.dp)
                     Box(Modifier.weight(1f).height(d.touch)
                         .background(if (selectedDay) colors.accentSoft else colors.surface, shape)
-                        .then(if (date == null) Modifier else Modifier.testTag("statements.download_period.day.$date").semantics {
+                        .then(if (date == null) Modifier else Modifier.testTag(DownloadPeriodTags.day(date)).semantics {
                             selected = selectedDay; contentDescription = RussianDates.day(date, currentYear = 0)
                         }.clickable(enabled = enabled && date <= today, role = Role.Button) {
                             if (from == null || to != null || date < from) { fromText = date.toString(); toText = ""; onSelect(date, null) }
@@ -97,6 +97,12 @@ internal fun DownloadPeriodSheet(state: UploadUiState, onSelect: (LocalDate?, Lo
             }
         }
     }
+}
+
+internal object DownloadPeriodTags {
+    const val FROM = "statements.download_period.from"
+    const val TO = "statements.download_period.to"
+    fun day(date: LocalDate) = "statements.download_period.day.$date"
 }
 
 internal fun parseDownloadDay(raw: String): LocalDate? = runCatching { LocalDate.parse(raw) }.getOrNull()

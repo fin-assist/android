@@ -11,15 +11,20 @@ internal class AnalyticsSnapshots {
     var requiredVersion: Int = 0
         private set
     private val uncertainMutations = mutableSetOf<String>()
+    private val readableUnknownMutations = mutableSetOf<String>()
 
     val hasUnresolvedMutation: Boolean get() = uncertainMutations.isNotEmpty()
+    val freezesUnknownReads: Boolean get() = uncertainMutations.any { it !in readableUnknownMutations }
 
     fun isWaiting(response: Analytics): Boolean = response.calculation!!.let {
-        it.recalculating || it.calcVersion < requiredVersion || uncertainMutations.isNotEmpty()
+        it.recalculating || it.calcVersion < requiredVersion || freezesUnknownReads
     }
 
-    fun unknownOutcome(id: String) { uncertainMutations += id }
-    fun resolved(id: String) { uncertainMutations -= id }
+    fun unknownOutcome(id: String) { uncertainMutations += id; readableUnknownMutations -= id }
+    fun resolved(id: String) { uncertainMutations -= id; readableUnknownMutations -= id }
+
+    /** Explicit read recovery retires every read freeze, never the unknown commands or known version barrier. */
+    fun allowReadsDespiteUnknownOutcomes() { readableUnknownMutations += uncertainMutations }
 
     fun display(response: Analytics, requested: AnalyticsParams?): Analytics? {
         AnalyticsIntegrity.requireValid(response)
@@ -53,7 +58,7 @@ internal class AnalyticsSnapshots {
     fun clear() = ready.clear()
 
     /** A new login has an independent version space, even for the same account. */
-    fun resetOwner() { ready.clear(); requiredVersion = 0; uncertainMutations.clear() }
+    fun resetOwner() { ready.clear(); requiredVersion = 0; uncertainMutations.clear(); readableUnknownMutations.clear() }
 
     private companion object { const val MAX_SNAPSHOTS = 32 }
 }

@@ -328,7 +328,12 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   Generation checks reject late reads after newer reads or regular-payment mutations, whose shared block is serialized.
   FIN-418 mutation responses replace only their complete listed blocks in the matching snapshot and raise a
   user-wide required calculation version. Ready GETs below it cannot roll back the change; unknown mutation
-  outcomes require explicit successful PUT retry. No GET runs while a PUT is in flight. SessionRepository's
+  outcomes remain separate from read freezes: explicit «Обновить аналитику» releases reads after any unknown
+  command, but GET never confirms its outcome. The warning survives until 200, saved-context 422 or exact
+  date/OUT_OF_RANGE 400 establishes the current assignment. Unknown results survive other retry refusals.
+  New explicit commands can retire an original refusal only for changed params/source zone or an accepted ready
+  version strictly newer than the captured baseline; Retry-After still applies. Import/delete alone cannot do so.
+  No GET runs while a PUT is in flight. SessionRepository's
   confirmed user/login epoch owns the cache: logout, account/epoch change clear all financial state and retire
   late reads/writes; RequestOwner binds HTTP requests to that login. No response is rendered before confirmation.
   A user-scoped local import token in

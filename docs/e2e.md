@@ -664,6 +664,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416); authored, not executed |
 | `analytics/regular_block_update` (mock-only) | a single successful action replaces the full regular block while GET stays marked; unknown offline result retains the row until explicit PUT retry (Qase81, FIN-416); authored, not executed |
+| `analytics/unknown_mutation_recovery` (mock-only) | forbidden 500 → explicit read with retained unknown warning and no PUT; Offline → uncached Year or upload deletion → reachable recovery outside the missing snapshot; Qase89 (FIN-416); authored, not executed |
 | `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); authored, not executed |
 | `analytics/source_zone_and_session` (mock-only) | unsupported source-zone notice survives an offline retry over cached data, supported response recovery, logout/new login with marked response prepares without old financial blocks (Qase88, FIN-416); authored, not executed |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
@@ -1098,9 +1099,20 @@ only the listed complete blocks in the matching whole snapshot. Other blocks, gl
 metadata remain unchanged. The client never subtracts row amounts or hides a payment speculatively.
 A user-wide minimum calculation version protects every period. Marked or older GETs change only the notice;
 ready GETs at or above the minimum replace the whole snapshot. An unknown mutation result retains old data and
-requires an explicit successful PUT retry; a plain false GET cannot settle that uncertainty. A date OUT_OF_RANGE
-400 means not saved; context-unavailable 422 means already saved. Both retire the obsolete month and read the
-current default once, without retrying the PUT automatically. Server durable-delivery implementation is separate.
+keeps its command warning independently from the read freeze. After any completed unknown command, explicit
+«Обновить аналитику» releases all unknown read freezes without resolving outcomes, lowering the minimum version,
+retrying a PUT or clearing its refusal. A ready GET can then update the screen, but the warning remains. Import,
+deletion and a cache miss never release the freeze automatically. 403/404/429 on a later retry do not prove an
+older unknown attempt failed. A date OUT_OF_RANGE 400 establishes that the current assignment is not saved;
+context-unavailable 422 means already saved. Both retire the obsolete month and read the
+current default once, without retrying the PUT automatically. FIN-420 clarifies the 400 validation ordering and
+unknown recovery semantics without changing the REST shape. Server durable-delivery implementation is separate.
+
+An original command refusal is scoped to the verified owner, payment, params, actual source zone and the known
+ready calculation version at command start. An explicit new command with changed params/zone or a strictly newer
+accepted ready version retires only that refusal; its endpoint wait survives. The same-version GET does neither.
+These states are memory-only in the owning ViewModel; configuration retaining that VM keeps them. Losing the VM
+also loses its financial cache and resumes with a fresh read, never a claimed command success.
 
 `AnalyticsSnapshots` stores at most 32 whole ready responses by normalized period/date/transfer mode. Import and
 upload deletion invalidate them; category updates retain a still-valid snapshot. Uncached marked responses show
@@ -1140,3 +1152,5 @@ Proposed artboards without Figma frames: ImportDownloadPeriod/ImportDownloadPeri
 ImportUnsupportedZone/ImportUnsupportedZoneCold, ImportResultUnsupportedZone/ImportResultUnsupportedZoneCached,
 MainUnsupportedZone/MainUnsupportedZoneCold and SearchUnsupportedZone. Design checks are authored, not executed.
 
+
+FIN-416 review regression adds deferred period selection during a refused in-flight command to `analytics/period_change_retry` (Qase73), and proposed `AnalyticsUnknownMutation`, `AnalyticsUnknownMutationEmpty`, `AnalyticsUnknownMutationRead` design states. These additions are authored only; UI and DesignCheck were not run.

@@ -82,6 +82,7 @@
     ".maestro/flows/statements/download_period.yaml": 84,
     "ru.finassist.pf.StatementPickerTest#opensTheServerUrlForSelectedInclusiveDates": 85,
     ".maestro/flows/operations/source_time_zone.yaml": 86,
-    ".maestro/flows/statements/source_time_zone.yaml": 87
+    ".maestro/flows/statements/source_time_zone.yaml": 87,
+    ".maestro/flows/analytics/unknown_mutation_recovery.yaml": 89
   }
 }

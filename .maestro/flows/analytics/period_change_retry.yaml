@@ -34,7 +34,11 @@ tags:
     checked: true
 - assertVisible:
     id: "analytics.period.retry"
-# The saved month remains interactive. A second, unrelated failure must keep its own message.
+# The saved month remains interactive. A known command refusal preserves the separate period error.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false&error_operation=analytics_dismiss&error_scenario=unknown_code"
 - scrollUntilVisible:
     element: "Не подписка"
     direction: DOWN
@@ -50,7 +54,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?offline=false"
+      LINK: "pfe2e://config?error_operation=off"
 # Resume is not consent to retry the failed target, nor to replace its notice with a refresh of the old month.
 # The content retained its scroll at regular payments. Bring the complete period controls back into view.
 - scrollUntilVisible:
@@ -86,3 +90,52 @@ tags:
 - assertVisible:
     id: "ds.segment.0"
     checked: true
+
+# Selection during an unfinished command is deferred and resumed even when that command is refused.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 15000
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 10000
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?network_delay_ms=20000&error_operation=analytics_dismiss&error_scenario=unknown_code"
+- tapOn: "Не подписка — РБК"
+- scrollUntilVisible:
+    element:
+      id: "ds.segment.2"
+    direction: UP
+- assertNotVisible: "Не получилось убрать.*"
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
+      text: "2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 60000
+- assertVisible:
+    id: "ds.segment.2"
+    checked: true
+- assertNotVisible:
+    id: "analytics.period.retry"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?network_delay_ms=0&error_operation=off&expect_error_requests=1"

@@ -2851,4 +2851,250 @@ class AnalyticsViewModelTest {
         assertTrue(vm.state.value.recalculating)
     }
 
+    @Test fun `period selection during a refused PUT is read after the command finishes`() = deferredSelection(
+        { it.setPeriodType(PeriodTypeCode.YEAR) }, data(PeriodTypeCode.YEAR, "2026"))
+
+    @Test fun `month selection during a refused PUT is read after the command finishes`() = deferredSelection(
+        { it.goTo(PeriodKey("2026-08")) }, data(date = "2026-08"))
+
+    @Test fun `transfer selection during a refused PUT is read after the command finishes`() = deferredSelection(
+        { it.setTransferMode(TransferMode.WITHOUT) }, data(mode = TransferMode.WITHOUT))
+
+    private fun deferredSelection(select: (AnalyticsViewModel) -> Unit, expected: Analytics) {
+        api.answers += data()
+        val vm = opened()
+        val finish = CompletableDeferred<Unit>()
+        api.dismissReply = { finish.await(); throw AppError.Api("NOT_FOUND", 404) }
+        vm.dismissRegular("first")
+        select(vm)
+        assertEquals(1, api.requests.size)
+        api.reply = { expected }
+        finish.complete(Unit); scheduler.runCurrent()
+        assertEquals(expected, vm.state.value.data)
+        val params = expected.params!!
+        val requestedDate = if (params.period == PeriodTypeCode.YEAR) PeriodKey("2026-09") else params.date
+        assertEquals(Request(params.period, requestedDate, params.transferMode), api.requests.last())
+        assertEquals(listOf("first"), api.dismissed)
+    }
+
+    private fun malformedChart(month: String): Block {
+        val block = chart(month)
+        val payload = block.decode(ru.finassist.pf.core.api.model.ChartData.serializer())!!
+        return block.copy(data = ru.finassist.pf.core.api.ApiJson.encodeToJsonElement(ru.finassist.pf.core.api.model.ChartData.serializer(),
+            payload.copy(points = payload.points + payload.points)) as kotlinx.serialization.json.JsonObject)
+    }
+
+    @Test fun `a malformed chart target cannot become the successful month segment memory`() {
+        api.answers += data()
+        api.answers += data(date = "2026-03").copy(blocks = data().blocks + malformedChart("2026-03"))
+        api.answers += data(PeriodTypeCode.QUARTER, "2026-Q3")
+        api.answers += data()
+        val vm = opened()
+        vm.selectMonth("2026-03")
+        assertEquals(PeriodKey("2026-09"), vm.state.value.data!!.params!!.date)
+        assertTrue(vm.state.value.periodChangeFailed)
+        vm.setPeriodType(PeriodTypeCode.QUARTER)
+        vm.setPeriodType(PeriodTypeCode.MONTH)
+        assertEquals(PeriodKey("2026-09"), api.requests.last().date)
+    }
+
+    @Test fun `a malformed chart cannot acknowledge an import projection`() {
+        statements.pendingImport = 17
+        api.answers += data().copy(blocks = data().blocks + malformedChart("2026-09"))
+        val vm = opened()
+        assertEquals(17L, statements.pendingImport)
+        assertTrue(statements.acknowledged.isEmpty())
+        assertNull(vm.state.value.data)
+        api.reply = { data() }
+        vm.refresh()
+        assertEquals(listOf(17L), statements.acknowledged)
+    }
+
+    private fun forbiddenWrite() = AppError.Server(500, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+        "INTERNAL_ERROR", 500, requestRetryable = false))
+
+    @Test fun `forbidden unknown write offers explicit read recovery without confirming or repeating it`() {
+        val old = data().copy(blocks = data().blocks + chart("2026-09"))
+        api.answers += old
+        val vm = opened()
+        api.dismissReply = { throw forbiddenWrite() }
+        vm.dismissRegular("first")
+        assertTrue(vm.state.value.unknownMutation)
+        assertTrue(vm.state.value.unknownReadRecoveryAvailable)
+        val fresh = old.copy(currency = "EUR")
+        api.reply = { fresh }
+        vm.refresh()
+        assertEquals(old, vm.state.value.data)
+        assertFalse(vm.state.value.unknownReadRecoveryUsed)
+        vm.recoverUnknownMutationRead()
+        assertEquals(fresh, vm.state.value.data)
+        assertTrue(vm.state.value.unknownMutation)
+        assertTrue(vm.state.value.unknownReadRecoveryUsed)
+        assertFalse(vm.state.value.unknownReadRecoveryAvailable)
+        assertFalse(vm.state.value.recalculating)
+        vm.dismissRegular("first")
+        assertEquals(listOf("first"), api.dismissed)
+        assertFalse(tracker.events.any { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+        api.pageReply = { AnalyticsChartPage(chart("2026-08", previous = null, next = "back"), "Europe/Moscow") }
+        vm.loadChartPage(true, false)
+        assertEquals(listOf("older"), api.pageRequests)
+    }
+
+    @Test fun `data invalidation retains unknown outcome and requires explicit read recovery with no hidden PUT`() {
+        api.answers += data()
+        val vm = opened()
+        api.dismissReply = { throw AppError.Offline() }
+        vm.dismissRegular("first")
+        assertTrue(vm.state.value.unknownReadRecoveryAvailable)
+        statements.events.tryEmit(StatementsEvent.UploadDeleted("upload")); scheduler.runCurrent()
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.unknownReadRecoveryAvailable)
+        val fresh = data().copy(currency = "EUR")
+        api.reply = { fresh }
+        vm.refresh()
+        assertNull(vm.state.value.data)
+        vm.recoverUnknownMutationRead()
+        assertEquals(fresh, vm.state.value.data)
+        assertTrue(vm.state.value.unknownMutation)
+        assertEquals(listOf("first"), api.dismissed)
+        assertFalse(tracker.events.any { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+        api.dismissReply = null
+        vm.dismissRegular("first")
+        assertFalse(vm.state.value.unknownMutation)
+        assertEquals(1, tracker.events.count { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+    }
+
+    @Test fun `one explicit read recovery retires all unknown read freezes and owner change removes their warnings`() {
+        api.answers += data()
+        val vm = opened()
+        api.dismissReply = { throw forbiddenWrite() }
+        vm.dismissRegular("first")
+        vm.dismissRegular("second")
+        val late = CompletableDeferred<Analytics>()
+        api.reply = { withContext(NonCancellable) { late.await() } }
+        vm.recoverUnknownMutationRead()
+        assertTrue(vm.state.value.unknownReadRecoveryUsed)
+        val fresh = data().copy(currency = "EUR")
+        api.reply = { fresh }
+        vm.load(quiet = true)
+        assertEquals(fresh, vm.state.value.data)
+        assertTrue(vm.state.value.unknownMutation)
+        assertEquals(listOf("first", "second"), api.dismissed)
+        session.state.value = ru.finassist.pf.feature.auth.api.SessionState.SignedIn("u1", "login-2")
+        assertFalse(vm.state.value.unknownMutation)
+        late.complete(data().copy(currency = "USD")); scheduler.runCurrent()
+        assertEquals(fresh, vm.state.value.data)
+        assertFalse(vm.state.value.unknownMutation)
+        assertFalse(tracker.events.any { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+    }
+
+    @Test fun `an uncached period retains a reachable recovery for the unknown command without confirming it`() {
+        api.answers += data()
+        val vm = opened()
+        api.dismissReply = { throw AppError.Offline() }
+        vm.dismissRegular("first")
+        val year = data(PeriodTypeCode.YEAR, "2026")
+        api.reply = { year }
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        assertNull(vm.state.value.data)
+        assertTrue(vm.state.value.unknownReadRecoveryAvailable)
+        vm.recoverUnknownMutationRead()
+        assertEquals(year, vm.state.value.data)
+        assertTrue(vm.state.value.unknownMutation)
+        assertEquals(listOf("first"), api.dismissed)
+        assertFalse(tracker.events.any { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+    }
+
+    @Test fun `a refused retry never turns the earlier unknown command into a known failure`() {
+        val old = data()
+        api.answers += old
+        val vm = opened()
+        api.dismissReply = { throw AppError.Offline() }
+        vm.dismissRegular("first")
+        api.dismissReply = { throw refused() }
+        vm.dismissRegular("first")
+        api.reply = { old.copy(currency = "EUR", calculation = AnalyticsCalculation(100, false)) }
+        vm.refresh()
+        assertEquals(old, vm.state.value.data)
+        assertTrue(vm.state.value.unknownMutation)
+        assertFalse(vm.state.value.unknownReadRecoveryUsed)
+        assertFalse(tracker.events.any { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+        assertEquals(listOf("first", "first"), api.dismissed)
+    }
+
+    @Test fun `date validation after an unknown retry confirms the current assignment is absent`() {
+        api.answers += data()
+        val vm = opened()
+        api.dismissReply = { throw AppError.Offline() }
+        vm.dismissRegular("first")
+        api.dismissReply = { throw AppError.Api("VALIDATION_ERROR", 400,
+            details = listOf(AppError.FieldError("date", "OUT_OF_RANGE", "unavailable"))) }
+        vm.dismissRegular("first")
+        assertFalse(vm.state.value.unknownMutation)
+        assertFalse(vm.state.value.recalculating)
+        assertEquals("Период больше недоступен. Изменение не сохранено", vm.state.value.snackbar)
+        assertEquals(listOf("first", "first"), api.dismissed)
+        assertFalse(tracker.events.any { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+    }
+
+    @Test fun `strictly newer accepted ready data permits an explicit new command without GET proof`() {
+        api.answers += data()
+        val vm = opened()
+        api.dismissReply = { throw forbiddenWrite() }
+        vm.dismissRegular("first")
+        val newer = data().copy(calculation = AnalyticsCalculation(11, false))
+        api.reply = { newer }
+        vm.refresh()
+        vm.dismissRegular("first")
+        assertEquals(1, api.dismissed.size)
+        vm.recoverUnknownMutationRead()
+        assertEquals(newer, vm.state.value.data)
+        assertTrue(vm.state.value.unknownMutation)
+        assertEquals(1, api.dismissed.size)
+        api.dismissReply = { throw AppError.Api("NOT_FOUND", 404) }
+        vm.dismissRegular("first")
+        assertEquals(2, api.dismissed.size)
+        assertTrue(vm.state.value.unknownMutation)
+        assertFalse(vm.state.value.unknownReadRecoveryUsed)
+        assertFalse(tracker.events.any { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
+    }
+
+    @Test fun `an explicitly changed month permits a new command using its shown parameters`() {
+        api.answers += data()
+        val vm = opened()
+        api.dismissReply = { throw forbiddenWrite() }
+        vm.dismissRegular("first")
+        api.reply = { data(date = "2026-08") }
+        vm.selectMonth("2026-08")
+        vm.recoverUnknownMutationRead()
+        val expected = AnalyticsBlockUpdate(AnalyticsParams(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITH),
+            "RUB", "Europe/Moscow", 11, listOf(Block(id = "regular_payments", type = BlockType.UNKNOWN, altText = "August update")))
+        api.update = expected
+        api.dismissReply = null
+        vm.dismissRegular("first")
+        assertEquals(2, api.dismissed.size)
+        assertFalse(vm.state.value.unknownMutation)
+        assertEquals("August update", vm.state.value.data!!.blocks.single().altText)
+    }
+
+    @Test fun `changed source zone preserves endpoint wait before a new explicit command`() {
+        api.answers += data()
+        val vm = opened()
+        api.dismissReply = { throw AppError.Server(500, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "INTERNAL_ERROR", 500, requestRetryable = false, retryAfterSeconds = 60,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = scheduler.currentTime))) }
+        vm.dismissRegular("first")
+        api.reply = { data().copy(timeZone = "Asia/Tokyo") }
+        vm.recoverUnknownMutationRead()
+        assertEquals("Asia/Tokyo", vm.state.value.data!!.timeZone)
+        api.dismissReply = { throw AppError.Offline() }
+        vm.dismissRegular("first")
+        assertEquals(1, api.dismissed.size)
+        scheduler.advanceTimeBy(60_000); scheduler.runCurrent()
+        assertEquals(1, api.dismissed.size)
+        vm.dismissRegular("first")
+        assertEquals(2, api.dismissed.size)
+        assertTrue(vm.state.value.unknownMutation)
+    }
+
 }

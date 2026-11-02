@@ -74,6 +74,9 @@ data class AnalyticsUiState(
     val refreshing: Boolean = false,
     val offline: Boolean = false,
     val sourceZoneUnsupported: Boolean = false,
+    val unknownMutation: Boolean = false,
+    val unknownReadRecoveryAvailable: Boolean = false,
+    val unknownReadRecoveryUsed: Boolean = false,
     val data: Analytics? = null,
     val blocks: AnalyticsBlocks,
     val sheet: AnalyticsSheet? = null,
@@ -162,13 +165,19 @@ class AnalyticsViewModel @Inject constructor(
     private var periodsJob: Job? = null
     private var periodsGeneration = 0L
     private val periodsRetryGate = RequestRetryGate(elapsedClock)
+    private data class DismissalContext(val params: AnalyticsParams, val timeZone: String?, val readyVersion: Int?) {
+        fun differsFrom(original: DismissalContext) = params != original.params || timeZone != original.timeZone ||
+            (readyVersion != null && original.readyVersion != null && readyVersion > original.readyVersion)
+    }
     private val dismissalGates = mutableMapOf<String, RequestRetryGate>()
+    private val dismissalContexts = mutableMapOf<String, DismissalContext>()
     private var regularMutations = Mutex()
     private var inFlightOwner: RequestOwner? = null
     private var requestOwner: RequestOwner? = null
     private val mutationJobs = mutableSetOf<Job>()
     private val pendingRegularMutations = mutableSetOf<String>()
     private val mutationContexts = mutableMapOf<String, AnalyticsParams>()
+    private val unknownMutationFailures = mutableSetOf<String>()
 
     init { viewModelScope.launch { periodsRetryGate.readiness.collect { ready -> _state.update { it.copy(periodsRetryReady = ready) } } } }
 
@@ -208,6 +217,7 @@ class AnalyticsViewModel @Inject constructor(
                 pendingRegularMutations.clear()
                 mutationContexts.clear()
                 dismissalGates.clear()
+                dismissalContexts.clear()
                 snapshots.resetOwner()
                 chartPages.clear()
                 chartFailure = null
@@ -220,6 +230,7 @@ class AnalyticsViewModel @Inject constructor(
                 limitReadPending = false
                 failedPeriodRequest = null
                 selectedDates.clear()
+                unknownMutationFailures.clear()
                 exposed.clear()
                 shownExperiments = null
                 period = PeriodTypeCode.MONTH
@@ -295,6 +306,7 @@ class AnalyticsViewModel @Inject constructor(
         // An import or deletion invalidates the old totals. Other edits keep the screen and its scroll position.
         if (invalidate) {
             snapshots.clear()
+            updateUnknownMutationNotice()
             chartPages.clear()
             updateChartState()
             _state.update { it.copy(data = null, loading = true, offline = false,
@@ -375,7 +387,11 @@ class AnalyticsViewModel @Inject constructor(
 
     private fun startLoad(quiet: Boolean, updateLimit: Boolean, preservePeriodChangeFailure: Boolean = false) {
         val owner = requestOwner ?: return
-        if (inFlightOwner != null || !retryGate.isReady()) return
+        if (inFlightOwner != null) {
+            readInterruptedByMutation = true
+            return
+        }
+        if (!retryGate.isReady()) return
         readInterruptedByMutation = false
         if (_state.value.preparationTimedOut) importPolls = 0
         invalidateAnalyticsRead()
@@ -403,6 +419,7 @@ class AnalyticsViewModel @Inject constructor(
                 if (a.hasData && (a.params!!.period != requested.first || a.params!!.transferMode != requested.third ||
                     (requestedParams != null && a.params != requestedParams))) throw AppError.Server(500)
                 val recalculating = snapshots.isWaiting(a)
+                if (!recalculating && a.hasData) chartPages.validate(a)
                 // `complete` confirms the ledger commit, while the analytics projection can still be absent.
                 // Never turn that known non-empty import into an instruction to upload the same file again.
                 if (pendingImport != null && !a.hasData) {
@@ -432,7 +449,6 @@ class AnalyticsViewModel @Inject constructor(
                 }
                 recalculationPolls = if (recalculating) recalculationPolls + 1 else 0
                 val expired = recalculating && recalculationPolls >= MAX_IMPORT_POLLS
-                if (!recalculating && a.hasData) chartPages.validate(a)
                 val displayed = snapshots.display(a, requestedParams)
                 if (!recalculating || displayed != _state.value.data) {
                     if (displayed == null) chartPages.clear() else chartPages.accept(displayed)
@@ -445,9 +461,10 @@ class AnalyticsViewModel @Inject constructor(
                     exposed.clear()
                     shownExperiments = exp
                 }
-                _state.update { it.copy(loading = displayed == null && !expired, offline = false, errorPresentation = null, sourceZoneUnsupported = false,
+                _state.update { it.copy(loading = displayed == null && !expired && !snapshots.freezesUnknownReads, offline = false, errorPresentation = null, sourceZoneUnsupported = false,
                     requestRetryable = null, preparationTimedOut = displayed == null && expired, data = displayed,
-                    recalculating = recalculating, recalculationPaused = expired, response = it.response + if (newExposure) 1 else 0) }
+                    recalculating = recalculating, recalculationPaused = expired || snapshots.freezesUnknownReads, response = it.response + if (newExposure) 1 else 0) }
+                updateUnknownMutationNotice()
                 if (!recalculating && a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
                     if (generation != loadGeneration) return@launch
                     _state.update { it.copy(hint = AnalyticsHint.CATEGORIES) }
@@ -455,7 +472,7 @@ class AnalyticsViewModel @Inject constructor(
                 if (generation != loadGeneration) return@launch
                 if (updateLimit && _state.value.blocks.assistant) refreshLimit()
                 // The server is still recalculating after an edit: ask again shortly (api.md 6.1 `recalculating`).
-                if (recalculating && !expired) {
+                if (recalculating && !expired && !snapshots.freezesUnknownReads) {
                     delay(RECALC_POLL_MS)
                     if (generation != loadGeneration) return@launch
                     startLoad(quiet = true, updateLimit = updateLimit, preservePeriodChangeFailure = preservePeriodChangeFailure)
@@ -508,7 +525,7 @@ class AnalyticsViewModel @Inject constructor(
 
     override fun loadChartPage(older: Boolean, retry: Boolean) {
         val owner = requestOwner ?: return
-        if (snapshots.hasUnresolvedMutation || chartJob?.isActive == true || !chartRetryGate.isReady() || (!retry && chartFailure != null)) return
+        if (snapshots.freezesUnknownReads || _state.value.recalculating || chartJob?.isActive == true || !chartRetryGate.isReady() || (!retry && chartFailure != null)) return
         val cursor = if (retry) chartFailure?.first ?: return else chartPages.cursor(older) ?: return
         val direction = if (retry) chartFailure!!.second else older
         val context = chartPages.context ?: return
@@ -713,11 +730,20 @@ class AnalyticsViewModel @Inject constructor(
     fun dismissRegular(id: String) {
         val owner = requestOwner ?: return
         val mutex = regularMutations
-        val context = mutationContexts[id] ?: _state.value.data?.params?.takeIf { it.period == PeriodTypeCode.MONTH } ?: return
+        if (id in pendingRegularMutations) return
+        val shown = _state.value.data?.takeIf { it.params?.period == PeriodTypeCode.MONTH }
+        val context = shown?.params ?: mutationContexts[id] ?: return
+        val signature = shown?.let { DismissalContext(context, it.timeZone, it.calculation?.calcVersion) }
         val gate = dismissalGates.getOrPut(id) { RequestRetryGate(elapsedClock) }
+        if (signature != null && dismissalContexts[id]?.let(signature::differsFrom) == true) {
+            // Only this explicit command changes the original-request scope. Endpoint waiting survives.
+            gate.clearOriginalRefusal()
+        }
         if (!gate.isReady() || !pendingRegularMutations.add(id)) return
+        signature?.let { dismissalContexts[id] = it }
         mutationContexts[id] = context
         snapshots.unknownOutcome(id)
+        updateUnknownMutationNotice()
         invalidateAnalyticsRead(forMutation = true)
         val job = viewModelScope.launch(owner) {
             try {
@@ -737,6 +763,7 @@ class AnalyticsViewModel @Inject constructor(
                         if (update.params != context) throw AppError.Server(500)
                         val replaced = snapshots.apply(update)
                         snapshots.resolved(id)
+                        unknownMutationFailures.remove(id)
                         mutationContexts.remove(id)
                         tracker.track(Events.ANALYTICS_REGULAR_DISMISSED)
                         if (_state.value.data?.params == context && replaced != null) {
@@ -755,10 +782,12 @@ class AnalyticsViewModel @Inject constructor(
                             e.details.any { it.field == "date" && it.code == "OUT_OF_RANGE" }
                         val unknown = receivedUpdate || e is AppError.Offline || e is AppError.Server || e is AppError.Unknown ||
                             e is AppError.Api && e.httpStatus >= 500
-                        if (!unknown) {
+                        if (!unknown && (id !in unknownMutationFailures || unavailable || invalidDate)) {
                             snapshots.resolved(id)
+                            unknownMutationFailures.remove(id)
                             mutationContexts.remove(id)
                         }
+                        if (unknown) unknownMutationFailures += id
                         _state.update { it.copy(errorPresentation = e.presentation,
                             recalculating = it.recalculating || unknown,
                             recalculationPaused = it.recalculationPaused || unknown || (generation == loadGeneration && it.recalculating),
@@ -780,7 +809,10 @@ class AnalyticsViewModel @Inject constructor(
                     }
                 }
             } finally {
-                if (requestOwner === owner) pendingRegularMutations.remove(id)
+                if (requestOwner === owner) {
+                    pendingRegularMutations.remove(id)
+                    updateUnknownMutationNotice()
+                }
             }
         }
         mutationJobs += job
@@ -788,6 +820,21 @@ class AnalyticsViewModel @Inject constructor(
     }
 
     override fun consumeSnackbar() = _state.update { it.copy(snackbar = null, errorPresentation = null) }
+
+    private fun updateUnknownMutationNotice() {
+        _state.update { it.copy(unknownMutation = unknownMutationFailures.isNotEmpty(),
+            unknownReadRecoveryAvailable = unknownMutationFailures.isNotEmpty() && pendingRegularMutations.isEmpty() && snapshots.freezesUnknownReads,
+            unknownReadRecoveryUsed = unknownMutationFailures.isNotEmpty() && !snapshots.freezesUnknownReads) }
+    }
+
+    /** The user can resume reading without claiming an unknown command succeeded or retrying a forbidden PUT. */
+    override fun recoverUnknownMutationRead() {
+        if (requestOwner == null || !_state.value.unknownReadRecoveryAvailable || !retryGate.isReady() || pendingRegularMutations.isNotEmpty()) return
+        snapshots.allowReadsDespiteUnknownOutcomes()
+        updateUnknownMutationNotice()
+        invalidateAnalyticsRead()
+        load(quiet = true)
+    }
 
     private companion object {
         const val RECALC_POLL_MS = 3_000L

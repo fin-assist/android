@@ -121,6 +121,7 @@ interface AnalyticsHandlers {
     fun toggleExpanded(id: String)
     fun onAction(block: Block, action: BlockAction, navigate: (BlockAction) -> Unit)
     fun loadChartPage(older: Boolean, retry: Boolean = false) {}
+    fun recoverUnknownMutationRead() {}
     fun onBlockShown(block: Block)
 }
 
@@ -136,6 +137,17 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
         Column(Modifier.fillMaxSize().testTag(AnalyticsTags.SCREEN)) {
             if (actions.back != null) PfPageHeader("Аналитика", onBack = actions.back) else PfTabHeader("Аналитика")
             val a = state.data
+            if (state.unknownMutation) {
+                PfNotice(title = "Результат изменения не подтверждён", text = when {
+                    state.unknownReadRecoveryUsed -> "Аналитика загружается отдельно. Результат прежнего действия «Не подписка» остаётся неизвестным."
+                    state.unknownReadRecoveryAvailable -> "Можно заново загрузить аналитику. Это не подтвердит результат прежнего действия «Не подписка»."
+                    else -> "Прежние показатели сохранены. Если платёж остаётся в списке, повторите «Не подписка», когда повтор станет доступен."
+                }, modifier = Modifier.padding(d.space4).testTag(AnalyticsTags.UNKNOWN_MUTATION), tone = NoticeTone.WARNING,
+                    action = if (state.unknownReadRecoveryAvailable && state.retryReady) ({
+                        PfNoticeLink("Обновить аналитику", onClick = vm::recoverUnknownMutationRead,
+                            modifier = Modifier.testTag(AnalyticsTags.UNKNOWN_READ_RECOVERY))
+                    }) else null)
+            }
             val unsupportedZoneMessage = UserMessage.from(SourceTimeZone.MESSAGE)
             val zoneReadFailure = state.errorPresentation?.userMessage == unsupportedZoneMessage
             val zonePeriodFailure = state.periodChangeErrorPresentation?.userMessage == unsupportedZoneMessage
@@ -170,6 +182,7 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
                     modifier = Modifier.padding(horizontal = d.space4))
             }
             when {
+                state.unknownMutation && !state.unknownReadRecoveryUsed && a == null -> Unit
                 state.loading || (a?.hasData == false && a.state?.recalculating == true) -> Column(
                     Modifier.weight(1f).fillMaxWidth().padding(d.space5).testTag(AnalyticsTags.UPDATING),
                     verticalArrangement = Arrangement.Center,
@@ -316,7 +329,7 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
                 modifier = Modifier.testTag(AnalyticsTags.UNREAD),
             )
         }
-        if (state.recalculating || s.recalculating) {
+        if ((state.recalculating || s.recalculating) && (!state.unknownMutation || state.unknownReadRecoveryUsed)) {
             Gap(d.space3)
             PfNotice(
                 if (state.recalculationPaused) "Не удалось обновить показатели. Показаны данные до изменений"
@@ -517,6 +530,8 @@ private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
 /** Test tags of the analytics screen (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object AnalyticsTags {
     const val RECALCULATING = "analytics.recalculating"
+    const val UNKNOWN_MUTATION = "analytics.unknown_mutation"
+    const val UNKNOWN_READ_RECOVERY = "analytics.unknown_read_recovery"
     const val UPDATING = "analytics.updating"
     const val PREPARATION_TIMEOUT = "analytics.preparation_timeout"
     /** A block of the screen by its id (`analytics.block.tiles`): the ids are the server's (FIN-4). */
@@ -546,6 +561,10 @@ internal object AnalyticsTags {
     // Tiles: the chart id of a tile is also its test tag (`Tile` → `PfStatTile(modifier.testTag(chartId))`).
     const val TILE_BALANCE = "analytics.tile.balance"
     const val TILE_FORECAST = "analytics.tile.forecast"
+    // Shared BlockHelpButton and PfPagedBarChart compose these concrete tags from their host's identifiers.
+    const val TILE_FORECAST_HELP = "analytics.tile.forecast.help"
+    const val TILE_FORECAST_HELP_SHEET = "analytics.tile.forecast.help.sheet"
+    const val MONTHLY_HISTORY = "analytics.expense.monthly"
     const val TILE_DAILY = "analytics.tile.daily"
     const val TILE_INCOME = "analytics.tile.income"
     const val TILE_EXPENSE = "analytics.tile.expense"

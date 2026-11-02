@@ -175,4 +175,28 @@ class AnalyticsSnapshotsTest {
         assertNull(cache.display(calculating(), params))
     }
 
+    @Test fun `explicit reads retire all freezes but preserve unknown commands and known version requirements`() {
+        val old = withPayment()
+        cache.display(old, params)
+        cache.apply(update())
+        cache.unknownOutcome("first")
+        cache.unknownOutcome("second")
+        cache.allowReadsDespiteUnknownOutcomes()
+        assertTrue(cache.hasUnresolvedMutation)
+        assertFalse(cache.freezesUnknownReads)
+        assertEquals(12, cache.requiredVersion)
+        assertTrue(cache.isWaiting(ready().copy(calculation = AnalyticsCalculation(11, false))))
+        assertTrue(cache.isWaiting(calculating().copy(calculation = AnalyticsCalculation(12, true))))
+        val fresh = ready().copy(calculation = AnalyticsCalculation(12, false))
+        assertSame(fresh, cache.display(fresh, params))
+        assertTrue(cache.hasUnresolvedMutation)
+        cache.unknownOutcome("third")
+        assertTrue(cache.freezesUnknownReads)
+        cache.resolved("third")
+        assertFalse(cache.freezesUnknownReads)
+        cache.resetOwner()
+        assertFalse(cache.hasUnresolvedMutation)
+        assertEquals(0, cache.requiredVersion)
+    }
+
 }

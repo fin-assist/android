@@ -37,6 +37,14 @@ class AnalyticsDesignCheckTest {
     @Test fun unsupportedSourceZoneDark() = capture("AnalyticsUnsupportedZoneDark", ui(september()).copy(
         sourceZoneUnsupported = true, errorPresentation = ErrorPresentation(userMessage = UserMessage.from("Устройство не поддерживает часовой пояс этих данных"))), 940, dark = true)
 
+    // FIN-416: proposed recovery artboards, authored without running DesignCheck.
+    @Test fun unknownMutationRecovery() = capture("AnalyticsUnknownMutation", ui(september()).copy(
+        unknownMutation = true, unknownReadRecoveryAvailable = true, recalculating = true, recalculationPaused = true), 1100)
+    @Test fun unknownMutationWithoutCache() = capture("AnalyticsUnknownMutationEmpty", AnalyticsUiState(loading = false, blocks = blocks,
+        unknownMutation = true, unknownReadRecoveryAvailable = true), 844)
+    @Test fun unknownMutationAfterRead() = capture("AnalyticsUnknownMutationRead", ui(september()).copy(
+        unknownMutation = true, unknownReadRecoveryUsed = true), 1100)
+
     private fun day(m: Int, d: Int) = OffsetDateTime.of(2026, m, d, 0, 0, 0, 0, ZoneOffset.ofHours(3))
 
     /**
