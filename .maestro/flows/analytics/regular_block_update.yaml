@@ -40,6 +40,25 @@ tags:
       id: "analytics.recalculating"
     direction: UP
 - assertVisible: "Пересчитываем после изменений.*"
+# Observe the applied PUT block for longer than two 3 s polls while GET still returns the old row.
+# The promoted third row is a positive oracle: an offscreen RBC row alone would not prove retention.
+- scrollUntilVisible:
+    element: "Не подписка — планшет.*"
+- evalScript: ${output.markedReadUntil = Date.now() + 7000}
+- repeat:
+    while:
+      true: ${Date.now() < output.markedReadUntil}
+    commands:
+      - assertVisible: "Не подписка — планшет.*"
+      - assertNotVisible: "Не подписка — РБК"
+      - assertNotVisible: "РБК"
+# The recalculation notice is above the financial cards; check it there before allowing a ready GET.
+- scrollUntilVisible:
+    element:
+      id: "analytics.recalculating"
+    direction: UP
+- assertVisible:
+    id: "analytics.recalculating"
 - assertVisible:
     text: "Сентябрь 2026"
     childOf:
