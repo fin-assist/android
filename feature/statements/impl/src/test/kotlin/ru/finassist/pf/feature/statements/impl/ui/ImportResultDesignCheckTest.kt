@@ -62,7 +62,7 @@ class ImportResultDesignCheckTest {
             features = listOf(feature(AnalyticsFeature.COMPARISON, open = true, openedNow = true)),
         ),
         notices = emptyList(),
-    )
+     timeZone = "Europe/Moscow")
 
     /** Repeat upload: 214 new of 526, 312 duplicates, 5 unread lines. */
     private val repeat = first.copy(
@@ -84,7 +84,7 @@ class ImportResultDesignCheckTest {
         accounts = emptyList(), categorizedCount = 0, ownTransferCount = 0, uncategorizedCount = 0,
         coverage = ImportCoverage(0, 0, emptyList(), emptyList(), emptyList()),
         notices = listOf(ImportNotice(ImportNoticeCode.EMPTY_STATEMENT, "В выписке нет операций")),
-    )
+     timeZone = "Europe/Moscow")
 
     /** First import of 1–25 September only: no full month yet, comparison and regular payments closed. */
     private val short = first.copy(

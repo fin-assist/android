@@ -37,6 +37,9 @@ import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.statements.impl.data.StatementsRepositoryImpl
+import java.time.LocalDate
+import ru.finassist.pf.core.common.time.SourceTimeZone
+import ru.finassist.pf.feature.statements.impl.domain.DownloadPeriod
 import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
@@ -51,6 +54,8 @@ sealed interface UploadPhase {
 
     /** Could not load the config: no network. */
     data object Offline : UploadPhase
+
+    data class ConfigFailure(val presentation: ErrorPresentation) : UploadPhase
 
     data class Guide(val config: ImportConfig) : UploadPhase
 
@@ -75,6 +80,14 @@ data class UploadUiState(
     /** «Не скачивается?» sheet open. */
     val fallbackOpen: Boolean = false,
     val askCancel: Boolean = false,
+    val periodPickerOpen: Boolean = false,
+    val periodDownloading: Boolean = false,
+    val periodRetryReady: Boolean = true,
+    val periodError: ErrorPresentation? = null,
+    val periodFrom: LocalDate? = null,
+    val periodTo: LocalDate? = null,
+    val periodToday: LocalDate? = null,
+    val downloadUrlToOpen: String? = null,
     /** Finished import: the screen navigates to the result. */
     val doneUploadId: String? = null,
 )
@@ -94,6 +107,8 @@ class UploadViewModel @Inject constructor(
     private val uploadGates = mutableMapOf<String, RequestRetryGate>()
     private var uploadReadinessJob: Job? = null
     private val configGate = RequestRetryGate(elapsedClock)
+    private val periodGate = RequestRetryGate(elapsedClock)
+    private var configJob: Job? = null
     val state: StateFlow<UploadUiState> = _state
     private var config: ImportConfig? = null
     private var uploadJob: Job? = null
@@ -121,25 +136,31 @@ class UploadViewModel @Inject constructor(
     private var pendingUploadRecovery: PendingUploadRecovery? = null
 
     init {
+        viewModelScope.launch { periodGate.readiness.collect { ready -> _state.update { it.copy(periodRetryReady = ready) } } }
         load()
     }
 
     fun load() {
-        if (!configGate.isReady()) return
+        if (!configGate.isReady() || configJob?.isActive == true) return
         if (!flags.isEnabled(Flag.STATEMENTS_UPLOAD)) {
             _state.update { it.copy(phase = UploadPhase.Disabled) }
             return
         }
-        viewModelScope.launch {
-            _state.update { it.copy(phase = UploadPhase.Loading) }
+        configJob = viewModelScope.launch {
+            _state.update { it.copy(phase = if (config == null) UploadPhase.Loading else it.phase) }
             try {
                 val c = api.getImportConfig()
+                SourceTimeZone.require(c.timeZone)
                 config = c
-                _state.update { it.copy(phase = UploadPhase.Guide(c), config = c) }
+                _state.update { it.copy(phase = UploadPhase.Guide(c), config = c, guideErrorPresentation = null) }
             } catch (e: AppError) {
                 configGate.record(e)
                 _state.update {
-                    if (e is AppError.Offline) it.copy(phase = UploadPhase.Offline) else it.copy(phase = UploadPhase.Guide(fallbackConfig()), config = fallbackConfig(), guideErrorPresentation = e.presentation)
+                    when {
+                        config != null -> it.copy(phase = UploadPhase.Guide(config!!), guideErrorPresentation = e.presentation)
+                        e is AppError.Offline -> it.copy(phase = UploadPhase.Offline)
+                        else -> it.copy(phase = UploadPhase.ConfigFailure(e.presentation))
+                    }
                 }
             }
         }
@@ -157,6 +178,43 @@ class UploadViewModel @Inject constructor(
     )
 
     fun showFallback(show: Boolean) = _state.update { it.copy(fallbackOpen = show) }
+
+    fun showPeriodPicker(show: Boolean) {
+        if (!show) { if (!_state.value.periodDownloading) _state.update { it.copy(periodPickerOpen = false) }; return }
+        val c = config ?: return
+        val zone = SourceTimeZone.require(c.timeZone)
+        val today = clock.now().atZoneSameInstant(zone).toLocalDate()
+        _state.update { it.copy(periodPickerOpen = true, periodToday = today, periodError = null,
+            periodFrom = it.periodFrom ?: c.suggestedPeriod.from.atZoneSameInstant(zone).toLocalDate().coerceAtMost(today),
+            periodTo = it.periodTo ?: c.suggestedPeriod.to.atZoneSameInstant(zone).toLocalDate().minusDays(1).coerceAtMost(today)) }
+    }
+
+    fun selectPeriod(from: LocalDate?, to: LocalDate?) {
+        if (_state.value.periodDownloading) return
+        periodGate.clearOriginalRefusal()
+        _state.update { it.copy(periodFrom = from, periodTo = to, periodError = null) }
+    }
+
+    fun downloadPeriod() {
+        val s = _state.value
+        val period = DownloadPeriod(s.periodFrom ?: return, s.periodTo ?: return)
+        if (s.periodDownloading || !periodGate.isReady() || !period.valid(s.periodToday ?: return)) return
+        _state.update { it.copy(periodDownloading = true, periodError = null) }
+        viewModelScope.launch {
+            try {
+                val response = api.getImportConfig(period.from.toString(), period.to.toString())
+                val zone = period.validateResponse(response)
+                if (!period.valid(clock.now().atZoneSameInstant(zone).toLocalDate())) throw AppError.Server(500)
+                _state.update { it.copy(periodDownloading = false, periodPickerOpen = false, guideErrorPresentation = null, downloadUrlToOpen = response.downloadUrl) }
+            } catch (e: AppError) {
+                periodGate.record(e)
+                _state.update { it.copy(periodDownloading = false, periodError = e.presentation, guideErrorPresentation = if (e is AppError.Api && e.code == SourceTimeZone.UNSUPPORTED) e.presentation else it.guideErrorPresentation) }
+            }
+        }
+    }
+
+    fun consumeDownload() = _state.update { it.copy(downloadUrlToOpen = null) }
+
 
     fun onFilePicked(uri: Uri) {
         if (uploadInFlight) return

@@ -34,6 +34,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ru.finassist.pf.core.common.error.ErrorPresentation
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -64,20 +68,6 @@ import ru.finassist.pf.feature.statements.api.StatementsRoutes
 import ru.finassist.pf.feature.statements.impl.domain.ResultTexts
 import javax.inject.Inject
 
-@HiltViewModel
-class ResultViewModel @Inject constructor(
-    savedState: SavedStateHandle,
-    repository: StatementsRepository,
-    flags: FeatureFlags,
-) : ViewModel() {
-    val uploadEnabled: Boolean = flags.isEnabled(Flag.STATEMENTS_UPLOAD)
-
-    val uploadId: String = savedState.toRoute<StatementsRoutes.Result>().uploadId
-
-    /** Null after process death: the screen then shows a short «loaded» state without numbers. */
-    val result: ImportResult? = repository.lastResult(uploadId)
-}
-
 /** «Итог загрузки» (api.md 3.3 `complete`). */
 @Composable
 fun ResultScreen(
@@ -89,13 +79,15 @@ fun ResultScreen(
     onOpenHistory: () -> Unit,
     vm: ResultViewModel = hiltViewModel(),
 ) {
+    val state by vm.state.collectAsStateWithLifecycle()
     BackHandler(onBack = onDone)
     ResultContent(
-        result = vm.result,
+        result = state.result,
+        error = state.error, onRetry = vm::retry, retrying = state.retrying,
         uploadEnabled = vm.uploadEnabled,
         onDone = onDone,
         onOpenSearch = onOpenSearch,
-        onOpenUnread = { onOpenUnread(vm.uploadId, (vm.result?.operationCount ?: 0) > 0) },
+        onOpenUnread = { onOpenUnread(vm.uploadId, (state.result?.operationCount ?: 0) > 0) },
         onOpenAnalytics = onOpenAnalytics,
         onUploadAnother = onUploadAnother,
         onOpenHistory = onOpenHistory,
@@ -117,6 +109,9 @@ internal fun ResultContent(
     onOpenAnalytics: () -> Unit,
     onUploadAnother: () -> Unit,
     onOpenHistory: () -> Unit,
+    error: ErrorPresentation? = null,
+    onRetry: () -> Unit = {},
+    retrying: Boolean = false,
 ) {
     val d = PfTheme.dimens
     val c = PfTheme.colors
@@ -136,6 +131,14 @@ internal fun ResultContent(
                 .heightIn(min = viewport)
                 .padding(start = d.space5, end = d.space5, top = d.space6, bottom = d.space4),
         ) {
+            if (error != null) {
+                ErrorMessage(error, "Не получилось показать итоги загрузки", onRetry = onRetry.takeUnless { retrying })
+                if (r != null) PfNotice("Показаны ранее загруженные данные. Они могут быть неактуальны", tone = NoticeTone.WARNING)
+                if (r == null) {
+                    PfButton("Готово", onClick = onDone, block = true)
+                    return@Column
+                }
+            }
             // Special cases this client does not know (FIN-83): above everything, so an empty statement or a file with
             // nothing new does not lose them.
             r?.notices?.filter { it.code == ImportNoticeCode.UNKNOWN }?.mapNotNull { it.text?.takeIf(String::isNotBlank) }?.forEach { text ->

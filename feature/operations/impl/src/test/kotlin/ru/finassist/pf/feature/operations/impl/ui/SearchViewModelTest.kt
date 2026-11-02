@@ -61,7 +61,7 @@ class SearchViewModelTest {
     }
 
     private fun found(vararg ids: String, total: Int? = null, range: DateRange? = window, older: Boolean? = null) =
-        OperationsList(items = ids.map { item(it) }, range = range, totalCount = total, hasOlderData = older)
+        OperationsList(items = ids.map { item(it) }, range = range, totalCount = total, hasOlderData = older, timeZone = "Europe/Moscow")
 
     private fun typed(vm: SearchViewModel, q: String) {
         vm.setQuery(q)

@@ -78,8 +78,8 @@ import java.time.ZoneOffset
 fun SearchScreen(onBack: () -> Unit, onOpenOperation: (OperationItem) -> Unit, vm: SearchViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val clock = LocalPfClock.current
-    val zone = clock.zone
-    val today = remember(clock) { clock.today() }
+    val zone = (state.result as? SearchResult.Found)?.sourceZone ?: java.time.ZoneOffset.UTC
+    val today = clock.now().atZoneSameInstant(zone).toLocalDate()
     SearchContent(
         state = state, zone = zone, today = today, onBack = onBack, onOpenOperation = onOpenOperation,
         actions = remember(vm) {
@@ -137,7 +137,7 @@ internal fun SearchContent(
                 // non-editable chip (docs/flags.md); «Сбросить» still removes it.
                 val period = f.from != null || f.to != null || state.allTime
                 if (state.chips.period || period) {
-                    PfChip(periodLabel(f, state.allTime), onClick = { actions.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period, modifier = Modifier.testTag(OperationsTags.CHIP_PERIOD))
+                    PfChip(periodLabel(f, state.allTime, zone), onClick = { actions.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period, modifier = Modifier.testTag(OperationsTags.CHIP_PERIOD))
                 }
                 if (state.chips.category || f.categoryId != null) {
                     val name = state.categories.firstOrNull { it.id == f.categoryId }?.name
@@ -170,6 +170,9 @@ internal fun SearchContent(
                     modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
                     onRetry = if (!state.retryReady || state.result == SearchResult.TooMany) null else actions.retry,
                 )
+            }
+            if (state.sourceZoneUnsupported && state.result is SearchResult.Found) {
+                PfNotice("Показаны ранее загруженные данные. Они могут быть неактуальны", tone = NoticeTone.WARNING, modifier = Modifier.padding(horizontal = d.space5))
             }
             when (val r = state.result) {
                 // Nothing under the chips until the first search (mockup `SearchInitial`).
@@ -227,7 +230,7 @@ internal fun SearchContent(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(d.space1),
                                 ) {
-                                    val window = r.range?.let { " — " + OperationFormat.windowStart(it.from.toLocalDate()) }.orEmpty()
+                                    val window = r.range?.let { " — " + OperationFormat.windowStart(it.from.atZoneSameInstant(zone).toLocalDate()) }.orEmpty()
                                     Text(
                                         "Искали за последние 12 месяцев$window. Есть операции и раньше",
                                         style = PfTheme.type.hint, color = PfTheme.colors.textMuted, textAlign = TextAlign.Center,
@@ -267,9 +270,9 @@ internal fun SearchContent(
     }
 }
 
-private fun periodLabel(f: OperationsFilter, allTime: Boolean): String {
-    val from = f.from
-    val to = f.to
+private fun periodLabel(f: OperationsFilter, allTime: Boolean, zone: ZoneId? = null): String {
+    val from = f.from?.let { if (zone != null) it.atZoneSameInstant(zone).toOffsetDateTime() else it }
+    val to = f.to?.let { if (zone != null) it.atZoneSameInstant(zone).toOffsetDateTime() else it }
     return when {
         allTime -> "За всё время"
         from != null && to != null -> RussianDates.dayRange(from.toLocalDate(), to.toLocalDate().minusDays(1))

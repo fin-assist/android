@@ -60,7 +60,7 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
             lastUploadedAt = backend.uploads.filter { it.isDone }.maxOfOrNull { it.uploadedAt },
             dataTo = lastDay?.plusDays(1)?.atStartOfDay(zone)?.toOffsetDateTime(),
         )
-        if (records.isEmpty()) return OperationsList(items = emptyList(), summary = emptyList(), state = state, range = null, nextBefore = null)
+        if (records.isEmpty()) return OperationsList(timeZone = zone.id, items = emptyList(), summary = emptyList(), state = state, range = null, nextBefore = null)
 
         val endMonth = query.before?.let { YearMonth.from(it.atZoneSameInstant(zone).toLocalDate().minusDays(1)) }
             ?: YearMonth.from(records.first().occurredAt.atZoneSameInstant(zone).toLocalDate())
@@ -74,6 +74,7 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
             .filter { coverage.hasData(it) }
             .map { backend.analytics.monthSummary(it) }
         return OperationsList(
+            timeZone = zone.id,
             items = page.map(views::item),
             summary = summary,
             state = state,
@@ -105,6 +106,7 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
         if (matched.size > MAX_SEARCH_RESULTS) throw backend.apiError(ErrorCodes.TOO_MANY_RESULTS, 422)
         val hasOlderData = if (defaultPeriod) views.records().any { it.occurredAt.isBefore(from!!) } else null
         return OperationsList(
+            timeZone = zone.id,
             items = matched.map(views::item),
             totalCount = matched.size,
             range = if (from != null && to != null) DateRange(from, to) else null,

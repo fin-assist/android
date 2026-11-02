@@ -30,7 +30,7 @@ class UploadDesignCheckTest {
         maxFileSizeBytes = 10L * 1024 * 1024,
         acceptedFormats = listOf("OFX"),
         suggestedPeriod = DateRange(t("2025-09-26T00:00:00+03:00"), t("2026-09-26T00:00:00+03:00")),
-    )
+     timeZone = "Europe/Moscow")
 
     /** «Сейчас загружено 1–25 сентября 2026 · 181 операция». */
     private val loaded = config.copy(
