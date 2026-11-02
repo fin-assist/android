@@ -125,7 +125,10 @@ class MockBackend(
     var profile: Profile = emptyProfile("")
     val dismissedPayments = HashSet<String>()
     /** Category changes and statement uploads/deletions, for `changed_since` of the assistant's answers (api.md 7.2). */
-    val dataChanges = DataChanges()
+    val calculation = ru.finassist.pf.mock.domain.MockCalculation()
+    /** Test-only delayed completion; not a wire field or a public control endpoint. */
+    var deferAnalyticsCalculation = false
+    val dataChanges = DataChanges { calculation.calculateNow() }
     val assistant = AssistantStore(dataChanges)
 
     /** `Idempotency-Key` → cached response for the endpoints api.md marks idempotent. */
@@ -319,6 +322,8 @@ class MockBackend(
         ledger.clear()
         uploads.clear()
         dismissedPayments.clear()
+        calculation.clear()
+        deferAnalyticsCalculation = false
         assistant.clear()
         idempotency.clear()
         profile = emptyProfile("")

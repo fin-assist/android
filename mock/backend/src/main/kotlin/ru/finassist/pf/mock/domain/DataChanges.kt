@@ -9,7 +9,7 @@ import ru.finassist.pf.core.api.model.ChangedSince
  * changed after that. The order of changes is a counter, not a timestamp, so a change made within the same
  * millisecond as the calculation (a pinned or coarse clock) is still seen as later. Mutated under the backend mutex.
  */
-class DataChanges {
+class DataChanges(private val onChange: () -> Unit = {}) {
     /** One immutable value: a reader outside the backend mutex never sees one field updated and the other not. */
     private data class State(val version: Long = 0, val categoriesAt: Long = 0, val uploadsAt: Long = 0)
 
@@ -22,12 +22,14 @@ class DataChanges {
     fun categoriesChanged() {
         val s = state
         state = s.copy(version = s.version + 1, categoriesAt = s.version + 1)
+        onChange()
     }
 
     /** A statement finished importing or was deleted. A failed or cancelled upload leaves the data as it was. */
     fun uploadsChanged() {
         val s = state
         state = s.copy(version = s.version + 1, uploadsAt = s.version + 1)
+        onChange()
     }
 
     /** Codes of what changed after [calculatedOn], in the order of api.md; empty — nothing did. */

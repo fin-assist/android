@@ -71,6 +71,7 @@ object ErrorCodes {
     const val RETRY_NOT_ALLOWED = "RETRY_NOT_ALLOWED"
     const val RATE_LIMITED = "RATE_LIMITED"
     const val INTERNAL_ERROR = "INTERNAL_ERROR"
+    const val ANALYTICS_CONTEXT_UNAVAILABLE = "ANALYTICS_CONTEXT_UNAVAILABLE"
 
     // Stream-only codes
     const val PROCESSING_FAILED = "PROCESSING_FAILED"

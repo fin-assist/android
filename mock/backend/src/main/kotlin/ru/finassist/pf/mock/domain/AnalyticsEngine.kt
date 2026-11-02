@@ -76,7 +76,29 @@ class AnalyticsEngine(
 
     // ---- main ----
 
-    fun analytics(period: PeriodTypeCode?, date: PeriodKey?, mode: TransferMode): AnalyticsSnapshot {
+    fun analytics(period: PeriodTypeCode?, date: PeriodKey?, mode: TransferMode): AnalyticsSnapshot =
+        selectedAnalytics(period, date, mode).let { snapshot ->
+            if (!snapshot.hasData) snapshot else snapshot.copy(timeZone = zone.id,
+                historyChart = historyPage(mode, snapshot.params?.takeIf { it.period == PeriodTypeCode.MONTH }?.date))
+        }
+
+    /** Chunks of 60 months anchored to the newest covered month, including uncovered calendar gaps. */
+    fun historyPage(mode: TransferMode, anchor: PeriodKey? = null, index: Int? = null): HistoryChartPage {
+        val cov = coverage()
+        val first = YearMonth.from(requireNotNull(cov.firstDay))
+        val last = YearMonth.from(requireNotNull(cov.lastDay))
+        val distance = ChronoUnit.MONTHS.between(first, last).toInt()
+        val page = index ?: ((anchor?.let { ChronoUnit.MONTHS.between(YearMonth.from(it.start()), last).toInt() } ?: 0) / 60).coerceIn(0, distance / 60)
+        require(page in 0..distance / 60)
+        val count = minOf(60, distance + 1 - page * 60)
+        val end = last.minusMonths(page * 60L)
+        val visible = scope.visible(mode)
+        val points = (count - 1 downTo 0).map { monthlyPoint(end.minusMonths(it.toLong()), visible, cov) }
+        return HistoryChartPage(MonthlyChart(MetricStatus.READY, points = points), page,
+            (page + 1).takeIf { it <= distance / 60 }, (page - 1).takeIf { it >= 0 })
+    }
+
+    private fun selectedAnalytics(period: PeriodTypeCode?, date: PeriodKey?, mode: TransferMode): AnalyticsSnapshot {
         val cov = coverage()
         if (cov.isEmpty || ledger.all.isEmpty()) return AnalyticsSnapshot(hasData = false)
         if (period?.isRolling == true) return rollingAnalytics(period, mode, cov)
