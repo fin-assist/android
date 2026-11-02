@@ -7,7 +7,7 @@ data class ImportErrorText(val reason: String, val advice: String)
 
 object ImportErrorTexts {
     private const val DOWNLOAD_ADVICE =
-        "Скачайте выписку кнопкой «Скачать за год» на экране загрузки или в кабинете Т-Банка выберите «Скачать в OFX»"
+        "Скачайте выписку на экране загрузки или в кабинете Т-Банка выберите «Скачать в OFX»"
 
     /**
      * [code] from api.md 3.2 / 3.3. A file of the wrong format is named by its extension — «Это файл PDF, а нужен

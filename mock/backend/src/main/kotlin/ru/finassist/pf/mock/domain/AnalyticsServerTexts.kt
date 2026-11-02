@@ -367,7 +367,7 @@ object AnalyticsServerTexts {
         return "${countWithNoun(count, "строку", "строки", "строк")} $span не прочитали ${RussianDates.EM_DASH} суммы могут быть неполными"
     }
 
-    /** «Прогноз на год» for a year, «Прогноз расходов» otherwise. */
+    /** «Прогноз расходов на год» for a year, «Прогноз расходов» otherwise. */
     fun forecastLabel(type: PeriodTypeCode): String = if (type == PeriodTypeCode.YEAR) "Прогноз расходов на год" else "Прогноз расходов"
 
     /**

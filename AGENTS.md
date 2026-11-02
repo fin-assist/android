@@ -290,6 +290,12 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   not know instead of building one itself or skipping it (FIN-83: import features and notices, `changed_since_text`).
 - Upload history uses inclusive profile calendar days `period_from` / `period_to`, without device-zone conversion
   (FIN-198); old `uploads[].first_operation_at` / `last_operation_at` are removed. Import result 3.3 keeps its field semantics; FIN-394 removes the redundant all-operations period row from its UI.
+- The upload guide (FIN-416) labels the server download as «Скачать новые данные» when `loaded` contains
+  operations, otherwise «Скачать за год». `DownloadTexts` formats the actual half-open `suggested_period`
+  as inclusive calendar days in its supplied offset, omitting dates when the range has no calendar days;
+  the server `download_url` is opened unchanged.
+- Search reset (FIN-416) is a separate ghost button below the horizontal chip row, aligned to the content's
+  left edge. It keeps its existing visibility rule, reset behaviour and `operations.search.chip.reset` tag.
 - Operation details 4.2 and category change 4.3 require `occurred_at` from the selected record, including offset
   and fractional seconds (FIN-203); use the latest returned timestamp for retries and reopening the record.
 - A new block type or code value changes both `:core:api` and the fake backend `:mock:backend` in the same PR.
@@ -561,3 +567,5 @@ Also check:
 FIN-211: dependency-only Renovate PRs may be merged/closed by the reviewed `renovate-policy.yml` controller, after exact-head required CI and bot-only commit checks. Ordinary PRs and release-to-main PRs still require the owner. Do not enable native automerge or bypass protections. Preserve base policy in `renovate-base.json` (schedules, groups, allowed versions and manual Go upgrades); generated target/version approvals live on the separate `renovate-policy` branch. Failed exact values are isolated for explicit Dashboard approval; new values keep their original groups. AndroidX/Compose and mixed groups never auto-merge. See `docs/renovate-policy.md` for credentials, safeguards, bootstrap and verification.
 
 FIN-411 adds rolling_year/rolling_quarter selectors in Analytics and a coverage-anchored mock calculation. The client renders server ranges and totals; only mock/backend calculates facts. Edge chart actions keep exact calendar month keys; a failed selection retains the previous screen and original retry request. See docs/e2e.md for authored Qase76 coverage.
+
+FIN-416 limits rolling selectors to their Year/Quarter tabs and removes period navigation for all_time; tapping the selected calendar segment exits its rolling period. Qase80 and docs/e2e.md cover these controls. The dismissal client uses complete block updates and retains ready snapshots while recalculating; see the FIN-416 response-update section in docs/e2e.md. The future Temporal saga is tracked in FIN-419.

@@ -31,6 +31,15 @@ tags:
     visible:
       id: "statements.upload"
     timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.download"
+- assertVisible:
+    id: "statements.upload.download"
+    text: "Скачать за год"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.later"
 - assertVisible:
     id: "statements.upload.later"
 - scrollUntilVisible:
