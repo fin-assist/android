@@ -10,7 +10,10 @@ tags:
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
-    visible: "Октябрь 2026"
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 15000
 # Bounded horizontal reveal: on wide screens this clamps without moving the row.
 - swipe:
@@ -24,9 +27,12 @@ tags:
       id: "analytics.period.all_time"
       checked: true
     timeout: 15000
-- assertVisible:
+- assertNotVisible:
     id: "ds.period.pick"
-    text: "За всё время.*"
+- assertNotVisible:
+    id: "ds.period.prev"
+- assertNotVisible:
+    id: "ds.period.next"
 - assertVisible:
     id: "analytics.period.all_time.range"
     text: ".*2025.*2026.*"
@@ -36,8 +42,9 @@ tags:
     text: "Без переводов.*"
 - extendedWaitUntil:
     visible:
-      id: "analytics.transfers"
       text: "Без переводов.*"
+      childOf:
+        id: "analytics.transfers"
     timeout: 10000
 # Calendar selection is restored; a failed all-time transition retains that exact screen.
 - swipe:
@@ -47,7 +54,10 @@ tags:
 - tapOn:
     id: "ds.segment.0"
 - extendedWaitUntil:
-    visible: "Октябрь 2026"
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 - runFlow:
     file: ../../subflows/config.yaml
@@ -64,7 +74,10 @@ tags:
     visible:
       id: "analytics.period.retry"
     timeout: 15000
-- assertVisible: "Октябрь 2026"
+- assertVisible:
+    text: "Октябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - swipe:
     from:
       id: "analytics.period.types"
@@ -84,8 +97,9 @@ tags:
       checked: true
     timeout: 15000
 - assertVisible:
-    id: "analytics.transfers"
     text: "Без переводов.*"
+    childOf:
+      id: "analytics.transfers"
 - assertNotVisible:
     id: "analytics.period.retry"
 # An older source extends the existing all-time tab; it is not a rolling twelve-month view.
@@ -126,8 +140,9 @@ tags:
     id: "analytics.period.all_time"
     checked: true
 - assertVisible:
-    id: "analytics.transfers"
     text: "Без переводов.*"
+    childOf:
+      id: "analytics.transfers"
 - scrollUntilVisible:
     element:
       id: "analytics.tile.expense"
@@ -137,10 +152,43 @@ tags:
     visible:
       id: "operations.search.count"
     timeout: 15000
-- scrollUntilVisible:
-    element: "История 2024 FIN-400"
-    direction: DOWN
-- assertVisible: "История 2024 FIN-400"
+# Search within the inherited range instead of scrolling through a year of newer operations.
+- assertVisible:
+    text: "1.января 2024 — 7.октября 2026"
+    childOf:
+      id: "operations.search.chip.period"
+- tapOn:
+    id: "operations.search.input"
+- inputText: "FIN-400"
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+      text: "Найдена 1[ \u00a0\u202f]операция"
+    timeout: 15000
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "История 2024 FIN-400"
+      - text: "5[ \u00a0\u202f]января[ \u00a0\u202f]2024"
+      - text: "−200[ \u00a0\u202f]₽"
+- assertVisible:
+    text: "1.января 2024 — 7.октября 2026"
+    childOf:
+      id: "operations.search.chip.period"
+# The query must preserve the expense kind and analytics scope, not broaden the search.
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
+- assertVisible:
+    id: "operations.search.chip.kind"
+    checked: true
+    containsDescendants:
+      - text: "Только расходы"
+- assertVisible:
+    id: "operations.search.chip.scope"
+    checked: true
 - back
 # Delete the synthetic source; the retained selection shrinks to the original source envelope.
 - tapOn:
@@ -170,6 +218,10 @@ tags:
 - back
 - tapOn:
     id: "ds.tab.analytics"
+- scrollUntilVisible:
+    element:
+      id: "analytics.period.all_time.range"
+    direction: UP
 - extendedWaitUntil:
     visible:
       id: "analytics.period.all_time.range"
