@@ -23,6 +23,12 @@ internal class MonthlyChartPages {
 
     fun clear() { context = null; original = null; selected = null; pages.clear() }
 
+    /** Validate before the whole financial cache commits the response. */
+    fun validate(response: Analytics) {
+        response.blocks.firstOrNull { it.id == "monthly_chart" && it.type == ru.finassist.pf.core.api.model.BlockType.CHART && it.v == 1 && it.status.hasData }
+            ?.let { validated(it, response.timeZone) }
+    }
+
     fun accept(response: Analytics) {
         val block = response.blocks.firstOrNull { it.id == "monthly_chart" && it.type == ru.finassist.pf.core.api.model.BlockType.CHART && it.v == 1 && it.status.hasData }
         if (block == null) { clear(); return }

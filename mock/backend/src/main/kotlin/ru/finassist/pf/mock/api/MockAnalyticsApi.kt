@@ -77,7 +77,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
             val remaining = backend.config.analyticsRecalculatingResponses
             if (remaining > 0) backend.config = backend.config.copy(analyticsRecalculatingResponses = remaining - 1)
             val calculation = backend.calculation.state().let { if (remaining > 0) it.copy(recalculating = true) else it }
-            val marked = composed.copy(calculation = calculation,
+            val marked = composed.copy(timeZone = composed.timeZone?.let { if (backend.config.unsupportedResponseTimeZone) "Area/Future_City" else it }, calculation = calculation,
                 state = composed.state?.copy(recalculating = calculation.recalculating))
             if (backend.config.unknownCodes && marked.hasData) withUnknownCodes(marked) else marked
         }
@@ -103,7 +103,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
         backend.simulateNetwork()
         backend.requireSession()
         if (period == PeriodTypeCode.UNKNOWN) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
-        return backend.mutex.withLock { backend.analytics.periods(period ?: PeriodTypeCode.MONTH).let { it.copy(timeZone = backend.profileZone().id.takeIf { _ -> it.periods.isNotEmpty() }) } }
+        return backend.mutex.withLock { backend.analytics.periods(period ?: PeriodTypeCode.MONTH).let { it.copy(timeZone = (if (backend.config.unsupportedResponseTimeZone) "Area/Future_City" else backend.profileZone().id).takeIf { _ -> it.periods.isNotEmpty() }) } }
     }
 
     override suspend fun dismissRegularPayment(id: String, date: PeriodKey, transferMode: TransferMode): AnalyticsBlockUpdate {
@@ -124,7 +124,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
             val target = backend.calculation.dismiss(id)
             backend.dismissedPayments += id
             val response = AnalyticsComposer.compose(backend.analytics.analytics(PeriodTypeCode.MONTH, date, transferMode))
-            AnalyticsBlockUpdate(response.params!!, response.currency, response.timeZone!!, target,
+            AnalyticsBlockUpdate(response.params!!, response.currency, if (backend.config.unsupportedResponseTimeZone) "Area/Future_City" else response.timeZone!!, target,
                 response.blocks.filter { it.id == "regular_payments" })
         }
     }
@@ -141,7 +141,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
             val block = composed.blocks.single { it.id == "monthly_chart" }
             // Page responses carry no selection-specific notes/highlight.
             val data = block.decode(ChartData.serializer())!!.copy(notes = emptyList(), highlightIndex = null)
-            AnalyticsChartPage(block.copy(data = ApiJson.encodeToJsonElement(ChartData.serializer(), data).jsonObject), backend.profileZone().id)
+            AnalyticsChartPage(block.copy(data = ApiJson.encodeToJsonElement(ChartData.serializer(), data).jsonObject), if (backend.config.unsupportedResponseTimeZone) "Area/Future_City" else backend.profileZone().id)
         }
     }
 

@@ -92,7 +92,7 @@ internal class CalcScenario(private val root: File) {
         }
         "get" -> {
             val request = step["cursor_from"]?.let { "GET /v1/analytics/charts/monthly_chart" to mapOf("cursor" to resolve(it.jsonObject).jsonPrimitive.content) }
-                ?: step["filter_from"]?.let { "GET /v1/operations" to filterQuery(resolve(it.jsonObject)) }
+                ?: step["filter_from"]?.let { "GET /v1/operations" to filterQuery(resolve(it.jsonObject).jsonObject) }
                 ?: parse(step.string("request"))
             get(request.first.removePrefix("GET "), request.second)
         }
@@ -168,7 +168,7 @@ internal class CalcScenario(private val root: File) {
     }
 
     /** `{"step": "<name>", "path": [...]}` → a value of an earlier response; `{"id": …}` picks the element with that id. */
-    private fun resolve(ref: JsonObject): JsonObject {
+    private fun resolve(ref: JsonObject): JsonElement {
         var v: JsonElement = checkNotNull(responses[ref.string("step")]) { "no response of ${ref.string("step")}" }
         for (p in ref.getValue("path").jsonArray) {
             v = when {
@@ -177,7 +177,7 @@ internal class CalcScenario(private val root: File) {
                 else -> v.jsonArray[p.jsonPrimitive.int]
             }
         }
-        return v.jsonObject
+        return v
     }
 
     /** `operations_filter` → query parameters of 4.1 (`selection_name` is for display only). */

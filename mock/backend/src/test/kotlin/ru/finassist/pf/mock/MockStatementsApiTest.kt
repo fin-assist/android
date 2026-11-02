@@ -463,7 +463,9 @@ class MockStatementsApiTest {
         val typical = first.features.single { it.feature == AnalyticsFeature.TYPICAL }
         assertFalse(typical.open)
         assertEquals(2, typical.requiredFullMonths)
-        assertEquals(2, first.features.single { it.feature == AnalyticsFeature.MONTHLY_CHART }.requiredMonthsWithData)
+        val chart = first.features.single { it.feature == AnalyticsFeature.MONTHLY_CHART }
+        assertTrue(chart.open && chart.openedNow)
+        assertNull(chart.requiredMonthsWithData)
 
         // August plus the current month so far: August is new and full, October is incomplete and in progress.
         val second = assertNotNull(
@@ -473,7 +475,7 @@ class MockStatementsApiTest {
         assertEquals(1, second.fullMonthsBefore)
         assertEquals(listOf("2026-08"), second.newlyFullMonths)
         val opened = second.features.filter { it.openedNow }.map { it.feature }.toSet()
-        assertEquals(setOf(AnalyticsFeature.MONTHLY_CHART, AnalyticsFeature.TYPICAL, AnalyticsFeature.REGULAR_PAYMENTS), opened)
+        assertEquals(setOf(AnalyticsFeature.TYPICAL, AnalyticsFeature.REGULAR_PAYMENTS), opened)
         val october = second.incompleteMonths.single()
         assertEquals("2026-10", october.month.toString())
         assertTrue(october.inProgress)

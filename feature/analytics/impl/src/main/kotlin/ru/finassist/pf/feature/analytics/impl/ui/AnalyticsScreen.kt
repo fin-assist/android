@@ -50,6 +50,8 @@ import ru.finassist.pf.core.api.model.OperationsFilter
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.time.PeriodKey
+import ru.finassist.pf.core.common.time.SourceTimeZone
+import ru.finassist.pf.core.common.error.UserMessage
 import ru.finassist.pf.core.common.time.StaleData
 import ru.finassist.pf.core.common.time.toApiString
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
@@ -134,21 +136,38 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
         Column(Modifier.fillMaxSize().testTag(AnalyticsTags.SCREEN)) {
             if (actions.back != null) PfPageHeader("Аналитика", onBack = actions.back) else PfTabHeader("Аналитика")
             val a = state.data
+            val unsupportedZoneMessage = UserMessage.from(SourceTimeZone.MESSAGE)
+            val zoneReadFailure = state.errorPresentation?.userMessage == unsupportedZoneMessage
+            val zonePeriodFailure = state.periodChangeErrorPresentation?.userMessage == unsupportedZoneMessage
             val quotaVisible = state.blocks.assistant && !state.loading && !state.offline &&
                 !state.preparationTimedOut && a?.hasData == true
             state.limitErrorPresentation?.takeIf { quotaVisible }?.let {
                 ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4),
                     onRetry = ({ vm.refresh() }).takeIf { state.limitRetryReady })
             }
-            state.periodChangeErrorPresentation?.let { presentation ->
+            state.periodChangeErrorPresentation?.takeUnless { state.sourceZoneUnsupported && zonePeriodFailure }?.let { presentation ->
                 ErrorMessage(presentation, "Не удалось сменить период", modifier = Modifier.padding(d.space4),
                     onRetry = if (state.periodChangeRetryReady) ({ vm.retryPeriodChange() }) else null,
                     retryModifier = Modifier.testTag(AnalyticsTags.PERIOD_RETRY))
             }
-            state.errorPresentation?.let { presentation ->
+            state.errorPresentation?.takeUnless { state.sourceZoneUnsupported && zoneReadFailure }?.let { presentation ->
                 ErrorMessage(presentation, state.snackbar ?: "Не получилось загрузить аналитику",
                     modifier = Modifier.padding(d.space4), onRetry = if (!state.retryReady || state.snackbar != null) null else ({ vm.refresh() }),
                     retryModifier = Modifier.testTag(AnalyticsTags.RETRY))
+            }
+            if (state.sourceZoneUnsupported) {
+                // This explanation belongs to the response zone, not the latest transient network failure.
+                PfNotice(text = SourceTimeZone.MESSAGE,
+                    modifier = Modifier.padding(d.space4), tone = NoticeTone.WARNING,
+                    action = when {
+                        zonePeriodFailure && state.periodChangeRetryReady -> ({ PfNoticeLink("Повторить", onClick = vm::retryPeriodChange,
+                            modifier = Modifier.testTag(AnalyticsTags.PERIOD_RETRY)) })
+                        zoneReadFailure && state.retryReady -> ({ PfNoticeLink("Повторить", onClick = vm::refresh,
+                            modifier = Modifier.testTag(AnalyticsTags.RETRY)) })
+                        else -> null
+                    })
+                if (a?.hasData == true) Text("Показаны прежние данные", style = PfTheme.type.hint, color = PfTheme.colors.textMuted,
+                    modifier = Modifier.padding(horizontal = d.space4))
             }
             when {
                 state.loading || (a?.hasData == false && a.state?.recalculating == true) -> Column(

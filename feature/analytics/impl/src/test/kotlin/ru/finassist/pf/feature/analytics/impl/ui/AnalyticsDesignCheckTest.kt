@@ -32,6 +32,11 @@ import java.time.ZoneOffset
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class AnalyticsDesignCheckTest {
+    @Test fun unsupportedSourceZone() = capture("AnalyticsUnsupportedZone", ui(september()).copy(
+        sourceZoneUnsupported = true, errorPresentation = ErrorPresentation(userMessage = UserMessage.from("Устройство не поддерживает часовой пояс этих данных"))), 940)
+    @Test fun unsupportedSourceZoneDark() = capture("AnalyticsUnsupportedZoneDark", ui(september()).copy(
+        sourceZoneUnsupported = true, errorPresentation = ErrorPresentation(userMessage = UserMessage.from("Устройство не поддерживает часовой пояс этих данных"))), 940, dark = true)
+
     private fun day(m: Int, d: Int) = OffsetDateTime.of(2026, m, d, 0, 0, 0, 0, ZoneOffset.ofHours(3))
 
     /**

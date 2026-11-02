@@ -1,5 +1,7 @@
 package ru.finassist.pf.mock.contract
 
+import ru.finassist.pf.mock.load
+
 import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
 
 import kotlinx.coroutines.runBlocking

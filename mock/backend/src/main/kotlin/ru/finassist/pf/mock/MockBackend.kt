@@ -88,8 +88,8 @@ class MockBackend(
         val id: String,
         val fileName: String,
         val uploadedAt: OffsetDateTime,
-        val coverageFrom: OffsetDateTime,
-        val coverageTo: OffsetDateTime,
+        val coverageFrom: OffsetDateTime?,
+        val coverageTo: OffsetDateTime?,
         val unreadLines: List<UnreadLine>,
         /** `DTSTART`/`DTEND` per account (FIN-79). */
         val accountPeriods: Map<String, StatementPeriod> = emptyMap(),
@@ -164,7 +164,11 @@ class MockBackend(
     fun coverage(including: Upload? = null): Coverage {
         val zone = profileZone()
         return Coverage(
-            uploads.filter { it.isDone || it === including }.map { it.coverageFrom to it.coverageTo },
+            uploads.filter { it.isDone || it === including }.mapNotNull { upload ->
+                val from = upload.coverageFrom ?: return@mapNotNull null
+                val to = upload.coverageTo ?: return@mapNotNull null
+                from to to
+            },
             zone,
             now().atZoneSameInstant(zone).toLocalDate(),
         )

@@ -149,13 +149,12 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
 
     /** Also used at start-up to preload the bundled statement (synchronously, without delays). */
     suspend fun startUpload(fileName: String, doc: OfxDocument, uploadedAt: OffsetDateTime, instant: Boolean = false): MockBackend.Upload {
-        val now = backend.now()
         val upload = MockBackend.Upload(
             id = UUID.randomUUID().toString(),
             fileName = fileName,
             uploadedAt = uploadedAt,
-            coverageFrom = doc.coverageFrom ?: doc.transactions.minOfOrNull { it.postedAt } ?: now,
-            coverageTo = doc.coverageTo ?: doc.transactions.maxOfOrNull { it.postedAt } ?: now,
+            coverageFrom = doc.coverageFrom ?: doc.transactions.minOfOrNull { it.postedAt },
+            coverageTo = doc.coverageTo ?: doc.transactions.maxOfOrNull { it.postedAt },
             unreadLines = doc.unreadLines,
             accountPeriods = doc.accountPeriods,
             operationCount = doc.transactions.size,
@@ -256,7 +255,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
 
         val features = listOf(
             feature(AnalyticsFeature.COMPARISON, fullAfter.isNotEmpty(), fullBefore.isNotEmpty(), requiredFull = 1),
-            feature(AnalyticsFeature.MONTHLY_CHART, after.monthsWithData.size >= 2, before.monthsWithData.size >= 2, requiredWithData = 2),
+            feature(AnalyticsFeature.MONTHLY_CHART, after.monthsWithData.isNotEmpty(), before.monthsWithData.isNotEmpty(), requiredWithData = 1),
             feature(AnalyticsFeature.TYPICAL, fullAfter.size >= 2, fullBefore.size >= 2, requiredFull = 2),
             feature(AnalyticsFeature.REGULAR_PAYMENTS, fullAfter.size >= 2, fullBefore.size >= 2, requiredFull = 2),
             feature(AnalyticsFeature.NOTABLE_SPENDING, fullAfter.size >= 3, fullBefore.size >= 3, requiredFull = 3),

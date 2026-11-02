@@ -141,6 +141,8 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
             }
             // Only a real change marks the assistant's earlier answers: the same category again is not one (FIN-135).
             if (categoryState() != before) backend.dataChanges.categoriesChanged()
+            // A successful PATCH still refreshes the projection watermark, including an unchanged category.
+            else backend.calculation.calculateNow()
             ChangeCategoryResponse(
                 items = items.map { item ->
                     when (item) {

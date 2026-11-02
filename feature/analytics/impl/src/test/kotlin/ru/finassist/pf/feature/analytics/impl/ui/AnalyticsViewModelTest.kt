@@ -2650,12 +2650,37 @@ class AnalyticsViewModelTest {
         vm.load(quiet = true)
         assertEquals(original, vm.state.value.data)
         assertEquals(ru.finassist.pf.core.common.error.UserMessage.from(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE), vm.state.value.errorPresentation!!.userMessage)
+        assertTrue(vm.state.value.sourceZoneUnsupported)
         scheduler.advanceTimeBy(60_000); scheduler.runCurrent()
         assertEquals(2, api.requests.size)
+        api.reply = { throw AppError.Offline() }
+        vm.refresh()
+        assertTrue(vm.state.value.sourceZoneUnsupported)
+        assertEquals(original, vm.state.value.data)
+        scheduler.advanceTimeBy(60_000); scheduler.runCurrent()
+        assertEquals(3, api.requests.size)
         api.reply = { original.copy(timeZone = "Asia/Tokyo") }
         vm.onResume(null)
         assertNull(vm.state.value.errorPresentation)
+        assertFalse(vm.state.value.sourceZoneUnsupported)
         assertEquals("Asia/Tokyo", vm.state.value.data!!.timeZone)
+    }
+
+    @Test fun `unsupported source zone on a cold screen survives offline retry until a supported answer`() {
+        api.reply = { data().copy(timeZone = "Area/Future_City") }
+        val vm = opened()
+        assertTrue(vm.state.value.sourceZoneUnsupported)
+        assertNull(vm.state.value.data)
+        api.reply = { throw AppError.Offline() }
+        vm.refresh()
+        assertTrue(vm.state.value.sourceZoneUnsupported)
+        assertNull(vm.state.value.data)
+        scheduler.advanceTimeBy(60_000); scheduler.runCurrent()
+        assertEquals(2, api.requests.size)
+        api.reply = { data() }
+        vm.refresh()
+        assertFalse(vm.state.value.sourceZoneUnsupported)
+        assertNotNull(vm.state.value.data)
     }
 
     private fun chart(month: String, previous: String? = "older", next: String? = null, revision: String = "r1"): Block {
@@ -2805,6 +2830,25 @@ class AnalyticsViewModelTest {
         assertNull(vm.state.value.errorPresentation)
         assertEquals(1, tracker.events.count { it.first == Events.ANALYTICS_REGULAR_DISMISSED })
         assertEquals("u2", api.owners.last()!!.userId)
+    }
+
+    @Test fun `invalid calendar points fail before committing the whole financial cache`() {
+        val original = data().copy(blocks = data().blocks + chart("2026-09"))
+        api.answers += original
+        val vm = opened()
+        val block = chart("2026-09")
+        val points = block.decode(ru.finassist.pf.core.api.model.ChartData.serializer())!!
+        val broken = block.copy(data = ru.finassist.pf.core.api.ApiJson.encodeToJsonElement(ru.finassist.pf.core.api.model.ChartData.serializer(),
+            points.copy(points = points.points + points.points)) as kotlinx.serialization.json.JsonObject)
+        api.reply = { original.copy(currency = "USD", blocks = original.blocks.dropLast(1) + broken) }
+        vm.load(quiet = true)
+        assertEquals(original, vm.state.value.data)
+        assertNotNull(vm.state.value.errorPresentation)
+        api.reply = { original.copy(state = original.state!!.copy(recalculating = true), calculation = AnalyticsCalculation(10, true)) }
+        vm.load(quiet = true)
+        assertEquals(original, vm.state.value.data)
+        assertEquals(original.blocks.last(), vm.state.value.chartBlock)
+        assertTrue(vm.state.value.recalculating)
     }
 
 }

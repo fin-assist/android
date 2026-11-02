@@ -80,4 +80,21 @@ class AnalyticsRevisionContractTest {
         assertEquals("INVALID_FORMAT", foreign.details.single().code)
         assertEquals("REQUIRED", assertFailsWith<AppError.Api> { api.getMonthlyChartPage("") }.details.single().code)
     }
+    @Test fun `an unavailable date distinguishes unsaved validation from an already persisted assignment`() = runBlocking<Unit> {
+        val backend = history()
+        val api = MockAnalyticsApi(backend)
+        val ready = api.getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+        val id = ready.blocks.single { it.id == "regular_payments" }.decode(InsightCardData.serializer())!!.items.single().button!!.paymentId!!
+        val rejected = assertFailsWith<AppError.Api> { api.dismissRegularPayment(id, PeriodKey("1999-01"), TransferMode.WITH) }
+        assertEquals(400, rejected.httpStatus)
+        assertEquals("OUT_OF_RANGE", rejected.details.single().code)
+        assertTrue(backend.dismissedPayments.isEmpty())
+        api.dismissRegularPayment(id, PeriodKey("2026-09"), TransferMode.WITH)
+        val saved = assertFailsWith<AppError.Api> { api.dismissRegularPayment(id, PeriodKey("1999-01"), TransferMode.WITH) }
+        assertEquals(422, saved.httpStatus)
+        assertEquals("ANALYTICS_CONTEXT_UNAVAILABLE", saved.code)
+        assertEquals(false, saved.requestRetryable)
+        assertEquals(setOf(id), backend.dismissedPayments)
+    }
+
 }

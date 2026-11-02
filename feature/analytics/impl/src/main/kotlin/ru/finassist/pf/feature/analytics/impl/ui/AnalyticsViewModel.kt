@@ -73,6 +73,7 @@ data class AnalyticsUiState(
     val loading: Boolean = true,
     val refreshing: Boolean = false,
     val offline: Boolean = false,
+    val sourceZoneUnsupported: Boolean = false,
     val data: Analytics? = null,
     val blocks: AnalyticsBlocks,
     val sheet: AnalyticsSheet? = null,
@@ -282,7 +283,7 @@ class AnalyticsViewModel @Inject constructor(
     /** Returning to a saved tab also refreshes changes whose event arrived while its view model was absent. */
     fun onResume(params: AnalyticsParams?) {
         if (!initialized) init(params)
-        else if (!_state.value.preparationTimedOut && (!_state.value.recalculationPaused || _state.value.errorPresentation?.userMessage == ru.finassist.pf.core.common.error.UserMessage.from(SourceTimeZone.MESSAGE)) && failedPeriodRequest == null && loadJob?.isActive != true) load(quiet = true)
+        else if (!_state.value.preparationTimedOut && (!_state.value.recalculationPaused || _state.value.sourceZoneUnsupported) && failedPeriodRequest == null && loadJob?.isActive != true) load(quiet = true)
     }
 
     /** Actual data/zone changes invalidate the old request context, including the period directory. */
@@ -431,6 +432,7 @@ class AnalyticsViewModel @Inject constructor(
                 }
                 recalculationPolls = if (recalculating) recalculationPolls + 1 else 0
                 val expired = recalculating && recalculationPolls >= MAX_IMPORT_POLLS
+                if (!recalculating && a.hasData) chartPages.validate(a)
                 val displayed = snapshots.display(a, requestedParams)
                 if (!recalculating || displayed != _state.value.data) {
                     if (displayed == null) chartPages.clear() else chartPages.accept(displayed)
@@ -443,7 +445,7 @@ class AnalyticsViewModel @Inject constructor(
                     exposed.clear()
                     shownExperiments = exp
                 }
-                _state.update { it.copy(loading = displayed == null && !expired, offline = false, errorPresentation = null,
+                _state.update { it.copy(loading = displayed == null && !expired, offline = false, errorPresentation = null, sourceZoneUnsupported = false,
                     requestRetryable = null, preparationTimedOut = displayed == null && expired, data = displayed,
                     recalculating = recalculating, recalculationPaused = expired, response = it.response + if (newExposure) 1 else 0) }
                 if (!recalculating && a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
@@ -482,6 +484,7 @@ class AnalyticsViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         loading = false,
+                        sourceZoneUnsupported = it.sourceZoneUnsupported || e.rawCode == SourceTimeZone.UNSUPPORTED,
                         periodChangeErrorPresentation = when {
                             failedSwitch -> e.presentation
                             preservePeriodChangeFailure -> it.periodChangeErrorPresentation
@@ -737,7 +740,8 @@ class AnalyticsViewModel @Inject constructor(
                         mutationContexts.remove(id)
                         tracker.track(Events.ANALYTICS_REGULAR_DISMISSED)
                         if (_state.value.data?.params == context && replaced != null) {
-                            _state.update { it.copy(data = replaced, recalculating = true,
+                            exposed.removeAll(update.blocks.mapNotNull { it.id }.toSet())
+                            _state.update { it.copy(data = replaced, recalculating = true, response = it.response + 1,
                                 snackbar = "Убрали из регулярных платежей", errorPresentation = null) }
                         }
                         // The response is sufficient for this block. The existing read path observes completion

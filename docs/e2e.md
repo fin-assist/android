@@ -665,7 +665,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416); authored, not executed |
 | `analytics/regular_block_update` (mock-only) | a single successful action replaces the full regular block while GET stays marked; unknown offline result retains the row until explicit PUT retry (Qase81, FIN-416); authored, not executed |
 | `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); authored, not executed |
-| `analytics/source_zone_and_session` (mock-only) | unsupported source-zone notice over cached data, supported response recovery, logout/new login with marked response prepares without old financial blocks (Qase88, FIN-416); authored, not executed |
+| `analytics/source_zone_and_session` (mock-only) | unsupported source-zone notice survives an offline retry over cached data, supported response recovery, logout/new login with marked response prepares without old financial blocks (Qase88, FIN-416); authored, not executed |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
@@ -1113,7 +1113,7 @@ request is exposed. Logout, a different account, or a new login epoch clear snap
 mutations, page cache and gates, and retire old jobs. Owner checks also reject uncancellable completions. Existing
 `RequestOwner` tags bind all analytics HTTP calls and its quota read to that login, including authenticator retries.
 No financial cache is persisted. Response-owned `time_zone` controls calendar rendering; an unsupported zone
-shows an explicit notice even over cache and never silently substitutes the profile or transport offset.
+shows an explicit notice even over cache, retains it across transient failures until a supported answer, and never silently substitutes the profile or transport offset.
 
 The embedded monthly-chart page contains at most 60 calendar months. Edge scrolling loads opaque adjacent
 cursors in both directions; at most three neighbouring pages remain, and LazyRow composes visible columns.
@@ -1127,8 +1127,8 @@ facts/forecast and chart-selection flows are synchronized from main. Proposed li
 artboards are authored; approved Figma artboards for these new states do not yet exist.
 
 JVM scenarios cover full-block replacement, version barriers, missing/malformed data, owner changes and late
-responses, page ownership/eviction/errors, source-zone conversion and HTTP routing. Maestro cases81,82,83,88 and
-the changed case71 are authored with Qase mappings. UI, native and design-check execution was not authorized and
+responses, page ownership/eviction/errors, source-zone conversion and HTTP routing. Maestro cases 81, 82, 83, 88 and
+the changed case 71 are authored with Qase mappings. UI, native and design-check execution was not authorized and
 has not been performed. Backend post-commit failures and durable delivery still need service integration coverage;
 the mock proves client transitions, not cross-service durability.
 FIN-416 adds the closed mockE2e-only control `response_time_zone=unsupported|default`. `unsupported` substitutes

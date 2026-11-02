@@ -446,10 +446,12 @@ class AnalyticsEngine(
                 .takeWhile { it <= YearMonth.from(cov.lastDay) }.toList()
         }
         val withData = cov.monthsWithData.size
+        // Notes for the selected period exist from the first covered month; the balance chart keeps its gate.
+        val points = months.map { m -> monthlyPoint(m, visible, cov) }
         if (type != PeriodType.ALL_TIME && withData < CHART_MIN_MONTHS) {
-            return MonthlyChart(status = MetricStatus.LOCKED, lock = MetricLock(LockReason.NEED_MONTHS_WITH_DATA, CHART_MIN_MONTHS, withData))
+            return MonthlyChart(status = MetricStatus.LOCKED, lock = MetricLock(LockReason.NEED_MONTHS_WITH_DATA, CHART_MIN_MONTHS, withData), points = points)
         }
-        return MonthlyChart(status = MetricStatus.READY, points = months.map { m -> monthlyPoint(m, visible, cov) })
+        return MonthlyChart(status = MetricStatus.READY, points = points)
     }
 
     fun monthlyPoint(m: YearMonth, visible: List<Operation>, cov: Coverage): MonthlyPoint {
