@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,12 +53,13 @@ internal fun DownloadPeriodSheet(state: UploadUiState, onSelect: (LocalDate?, Lo
             modifier = Modifier.testTag("statements.download_period.confirm"))
     }) {
         Text("Выберите начало и конец периода. Обе даты входят в выписку", style = PfTheme.type.body, color = colors.textMuted)
+        state.periodError?.let { ErrorMessage(it, "Не получилось подготовить ссылку") }
         Spacer(Modifier.height(d.space4))
         Row(horizontalArrangement = Arrangement.spacedBy(d.space3)) {
             PfTextField(fromText, onValueChange = { fromText = it; val date = parseDownloadDay(it); onSelect(date, to); if (date != null) month = YearMonth.from(date) },
-                label = "С (ГГГГ-ММ-ДД)", enabled = enabled, modifier = Modifier.weight(1f).testTag("statements.download_period.from"))
+                label = "С (ГГГГ-ММ-ДД)", enabled = enabled, modifier = Modifier.weight(1f), testTag = "statements.download_period.from")
             PfTextField(toText, onValueChange = { toText = it; val date = parseDownloadDay(it); onSelect(from, date); if (date != null) month = YearMonth.from(date) },
-                label = "По (ГГГГ-ММ-ДД)", enabled = enabled, modifier = Modifier.weight(1f).testTag("statements.download_period.to"))
+                label = "По (ГГГГ-ММ-ДД)", enabled = enabled, modifier = Modifier.weight(1f), testTag = "statements.download_period.to")
         }
         Spacer(Modifier.height(d.space4))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -97,7 +96,6 @@ internal fun DownloadPeriodSheet(state: UploadUiState, onSelect: (LocalDate?, Lo
                 }
             }
         }
-        state.periodError?.let { ErrorMessage(it, "Не получилось подготовить ссылку. Проверьте даты и попробуйте ещё раз") }
     }
 }
 

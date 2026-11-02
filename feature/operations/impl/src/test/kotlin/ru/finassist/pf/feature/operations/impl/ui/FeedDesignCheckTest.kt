@@ -64,6 +64,11 @@ class FeedDesignCheckTest {
         FeedContent(state, today, zone, onOpenSearch = {}, onOpenOperation = {}, onUpload = {}, onRetry = {}, onLoadMore = {})
     }
 
+    @Test fun unsupportedSourceZone() = capture("MainUnsupportedZone", state = state.copy(sourceZone = zone, sourceZoneUnsupported = true,
+        errorPresentation = ErrorPresentation(UserMessage.from(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE))))
+    @Test fun coldUnsupportedSourceZone() = capture("MainUnsupportedZoneCold", state = FeedUiState(loading = false, sourceZoneUnsupported = true,
+        errorPresentation = ErrorPresentation(UserMessage.from(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE))))
+
     @Test fun main() = capture("Main", dark = false)
 
     @Test fun mainDark() = capture("MainDark", dark = true)

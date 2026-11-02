@@ -68,6 +68,9 @@ class SearchDesignCheckTest {
             SearchContent(state, zone, today, onBack = {}, onOpenOperation = {}, actions = actions)
         }
 
+    @Test fun unsupportedSourceZone() = capture("SearchUnsupportedZone", results.copy(sourceZoneUnsupported = true,
+        errorPresentation = ErrorPresentation(UserMessage.from(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE))), heightDp = 892)
+
     @Test fun search() = capture("Search", results, heightDp = 892)
 
     @Test fun searchDark() = capture("SearchDark", results, heightDp = 892, dark = true)

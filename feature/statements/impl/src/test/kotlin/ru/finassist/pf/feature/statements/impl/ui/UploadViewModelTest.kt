@@ -73,7 +73,8 @@ class UploadViewModelTest {
         downloadUrl = "https://www.tbank.ru/export", loginUrl = "https://tbank-online.com/login",
         maxFileSizeBytes = 5L * 1024 * 1024, acceptedFormats = listOf("OFX"),
         suggestedPeriod = DateRange(OffsetDateTime.parse("2025-09-26T00:00:00+03:00"), OffsetDateTime.parse("2026-09-26T00:00:00+03:00")),
-     timeZone = "Europe/Moscow")
+        timeZone = "Europe/Moscow",
+    )
 
     private inner class FakeApi : StatementsApi {
         var offline = false
@@ -184,6 +185,34 @@ class UploadViewModelTest {
         assertTrue(vm.state.value.periodError != null)
     }
 
+    @Test fun `today cutoff comes from the accepted response zone`() {
+        api.currentConfig = config.copy(timeZone = "Pacific/Honolulu")
+        vm.load()
+        vm.showPeriodPicker(true)
+        assertEquals(java.time.LocalDate.parse("2026-10-07"), vm.state.value.periodToday)
+        vm.selectPeriod(java.time.LocalDate.parse("2026-10-08"), java.time.LocalDate.parse("2026-10-08"))
+        val calls = api.configCalls
+        vm.downloadPeriod()
+        assertEquals(calls, api.configCalls)
+    }
+
+    @Test fun `same period does not release request refusal but changed dates do`() {
+        vm.showPeriodPicker(true)
+        val first = java.time.LocalDate.parse("2026-09-01")
+        val last = java.time.LocalDate.parse("2026-09-30")
+        vm.selectPeriod(first, last)
+        api.configFailure = AppError.Api("VALIDATION_ERROR", 400, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "VALIDATION_ERROR", 400, requestRetryable = false))
+        vm.downloadPeriod()
+        val calls = api.configCalls
+        vm.selectPeriod(first, last)
+        vm.downloadPeriod()
+        assertEquals(calls, api.configCalls)
+        vm.selectPeriod(first.plusDays(1), last)
+        vm.downloadPeriod()
+        assertEquals(calls + 1, api.configCalls)
+    }
+
     @Test fun `unknown source zone keeps verified guide and requires an explicit supported response`() {
         api.currentConfig = config.copy(timeZone = "Future/Valid_Zone")
         vm.load()
@@ -192,6 +221,11 @@ class UploadViewModelTest {
         val calls = api.configCalls
         dispatcher.scheduler.advanceTimeBy(30000)
         assertEquals(calls, api.configCalls)
+        api.configFailure = AppError.Offline()
+        vm.load()
+        assertTrue(vm.state.value.sourceZoneUnsupported)
+        assertEquals(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE, vm.state.value.guideErrorPresentation!!.textOrFallback("fallback"))
+        api.configFailure = null
         api.currentConfig = config.copy(timeZone = "Asia/Vladivostok")
         vm.load()
         assertEquals("Asia/Vladivostok", vm.state.value.config?.timeZone)

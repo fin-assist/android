@@ -22,6 +22,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FeedViewModelTest {
@@ -54,10 +55,32 @@ class FeedViewModelTest {
         vm.loadMore()
         assertEquals(calls, api.queries.size)
         api.lists.clear()
+        api.lists += AppError.Offline()
+        vm.load()
+        assertTrue(vm.state.value.sourceZoneUnsupported)
+        assertEquals(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE, vm.state.value.errorPresentation!!.textOrFallback("fallback"))
+        api.lists.clear()
         api.lists += OperationsList(listOf(item("two")), timeZone = "Europe/Moscow")
         vm.load()
         assertEquals(listOf("two"), vm.state.value.items.map { it.id })
         assertFalse(vm.state.value.sourceZoneUnsupported)
+    }
+
+    @Test fun `explicit supported page clears incompatibility without altering previous timestamps`() {
+        val old = item("one")
+        api.lists += OperationsList(listOf(old), timeZone = "Europe/Moscow", nextBefore = at(1))
+        val vm = vm()
+        api.lists.clear()
+        api.lists += OperationsList(listOf(item("bad")), timeZone = "Area/Future_City")
+        vm.loadMore()
+        assertTrue(vm.state.value.sourceZoneUnsupported)
+        api.lists.clear()
+        api.lists += OperationsList(listOf(item("new")), timeZone = "Europe/Moscow")
+        vm.loadMore(explicit = true)
+        assertEquals(old, vm.state.value.items.first())
+        assertEquals(listOf("one", "new"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.sourceZoneUnsupported)
+        assertNull(vm.state.value.errorPresentation)
     }
 
     @Test fun `paging never merges different source zones`() {
@@ -88,7 +111,8 @@ class FeedViewModelTest {
         summary = listOf(month(month)),
         state = FeedState(stale = false, lastOperationAt = at(25)),
         nextBefore = next?.let { at(it) },
-     timeZone = "Europe/Moscow")
+        timeZone = "Europe/Moscow",
+    )
 
     @Test fun `opening loads the first portion of the feed`() {
         api.lists += page("op_1", "op_2", next = 1)

@@ -36,7 +36,8 @@ internal fun importResult(newCount: Int = 12, isFirstImport: Boolean = false) = 
     operationCount = newCount, newCount = newCount, duplicateCount = 0, unreadCount = 0,
     isFirstImport = isFirstImport, accounts = emptyList(), categorizedCount = newCount, ownTransferCount = 0,
     uncategorizedCount = 0, coverage = ImportCoverage(0, 0, emptyList(), emptyList(), emptyList()), notices = emptyList(),
- timeZone = "Europe/Moscow")
+    timeZone = "Europe/Moscow",
+)
 
 internal fun upload(id: String, status: UploadStatus = UploadStatus.DONE) = Upload(
     uploadId = id, fileName = "$id.ofx", status = status, uploadedAt = T0, operationCount = 10, unreadCount = 0,

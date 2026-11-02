@@ -209,6 +209,11 @@ class E2eControlActivity : ComponentActivity() {
                     val actual = backend.mutex.withLock { backend.uploads.size }
                     if (expected == null || actual != expected) unmet = "unexpected upload count"
                 }
+                name == "response_time_zone" -> when (value) {
+                    "unsupported" -> backend.config = backend.config.copy(unsupportedResponseTimeZone = true)
+                    "default" -> backend.config = backend.config.copy(unsupportedResponseTimeZone = false)
+                    else -> unmet = "unsupported response time zone fixture"
+                }
                 name == "unknown_codes" -> backend.config = backend.config.copy(unknownCodes = value.toBoolean())
                 name == "failing_blocks" -> backend.config = backend.config.copy(failingBlocks = value.split(',').map(String::trim).filter(String::isNotEmpty).toSet())
                 name == "profile_timezone" -> backend.mutex.withLock { backend.profile = backend.profile.copy(timezone = value) }

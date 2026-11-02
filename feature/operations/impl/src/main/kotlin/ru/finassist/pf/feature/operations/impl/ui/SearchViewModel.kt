@@ -260,7 +260,7 @@ class SearchViewModel @Inject constructor(
             if (debounce) delay(350)
             if (generation != searchGeneration) return@launch
             val keep = refresh && _state.value.result is SearchResult.Found
-            _state.update { it.copy(errorPresentation = null, requestRetryable = null) }
+            _state.update { it.copy(errorPresentation = if (it.sourceZoneUnsupported) it.errorPresentation else null, requestRetryable = null) }
             // The old selection's result is visible only until the corrected query settles.
             if (!keep && correctingSelection == null) _state.update { it.copy(result = SearchResult.Loading) }
             val filter = _state.value.filter
@@ -273,7 +273,7 @@ class SearchViewModel @Inject constructor(
                 val window = if (!allTime && filter.from == null && filter.to == null) list.range?.from?.atZoneSameInstant(sourceZone)?.toLocalDate() else null
                 _state.update {
                     it.copy(
-                        sourceZoneUnsupported = false, windowFrom = window ?: it.windowFrom,
+                        sourceZoneUnsupported = false, errorPresentation = null, windowFrom = window ?: it.windowFrom,
                         result = SearchResult.Found(
                             items = list.items,
                             totalCount = list.totalCount ?: list.items.size,
@@ -285,7 +285,7 @@ class SearchViewModel @Inject constructor(
             } catch (e: AppError) {
                 if (generation != searchGeneration) return@launch
                 retryGate.record(e)
-                _state.update { it.copy(errorPresentation = e.presentation.takeUnless { e is AppError.Offline && !keep }, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(sourceZoneUnsupported = it.sourceZoneUnsupported || (e is AppError.Api && e.code == SourceTimeZone.UNSUPPORTED), errorPresentation = if (it.sourceZoneUnsupported) it.errorPresentation else e.presentation.takeUnless { e is AppError.Offline && !keep }, requestRetryable = e.requestRetryable) }
                 when {
                     e is AppError.Api && e.response?.context != ErrorContext.RESULT_EVENT && e.code == ErrorCodes.SELECTION_NOT_FOUND && filter.selection != null -> {
                         // Removing the stale selection changes the request context, including its retry restriction.

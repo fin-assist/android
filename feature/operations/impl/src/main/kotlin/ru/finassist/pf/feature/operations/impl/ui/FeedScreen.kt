@@ -104,6 +104,7 @@ internal fun FeedContent(
                 ErrorMessage(
                     presentation, "Не получилось загрузить операции",
                     modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
+                    retryModifier = Modifier.testTag(OperationsTags.FEED_RETRY),
                     onRetry = if (state.moreFailed) onLoadMore.takeIf { state.moreRetryReady } else onRetry.takeIf { state.retryReady },
                 )
             }

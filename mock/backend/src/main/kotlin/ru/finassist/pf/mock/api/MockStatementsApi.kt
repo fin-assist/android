@@ -110,7 +110,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         }
         val count = backend.ledger.all.size
         return ImportConfig(
-            timeZone = zone.id,
+            timeZone = if (backend.config.unsupportedResponseTimeZone) "Area/Future_City" else zone.id,
             downloadUrl = "https://www.tbank-online.com/mybank/api/operations/timeline/public/legacy/v1/export_operations" +
                 "?appName=supreme&appVersion=0.0.1&origin=web%2Cib5%2Cplatform&start=${from.toInstant().toEpochMilli()}&end=${tomorrow.toInstant().toEpochMilli()}&format=ofx",
             loginUrl = "https://tbank-online.com/login",
@@ -334,7 +334,8 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             ) { true }
         return backend.droppable(
             upload.events.transformWhile { event ->
-                emit(event)
+                emit(if (event is ImportEvent.Complete && backend.config.unsupportedResponseTimeZone)
+                    event.copy(result = event.result.copy(timeZone = "Area/Future_City")) else event)
                 event is ImportEvent.Progress
             },
         ) { it !is ImportEvent.Progress }

@@ -172,11 +172,12 @@ internal fun UploadContent(
                 .padding(top = d.space4, bottom = d.space4),
         ) {
             state.guideErrorPresentation?.let {
-                ErrorMessage(it, "Не получилось обновить условия загрузки. Используем сохранённые условия", modifier = Modifier.padding(horizontal = d.space5))
+                ErrorMessage(it, "Не получилось обновить условия загрузки", onRetry = onRetry.takeIf { state.configRetryReady }, retryModifier = Modifier.testTag(StatementsTags.UPLOAD_RETRY))
+                PfNotice("Показаны ранее загруженные данные. Они могут быть неактуальны", tone = NoticeTone.WARNING)
             }
             when (val phase = state.phase) {
                 UploadPhase.Loading -> Unit
-                is UploadPhase.ConfigFailure -> ErrorMessage(phase.presentation, "Не получилось загрузить условия загрузки", onRetry = onRetry)
+                is UploadPhase.ConfigFailure -> ErrorMessage(phase.presentation, "Не получилось загрузить условия загрузки", onRetry = onRetry.takeIf { state.configRetryReady }, retryModifier = Modifier.testTag(StatementsTags.UPLOAD_RETRY))
                 // First run has no back arrow: these states must offer a way on.
                 UploadPhase.Disabled -> PfEmptyState(PfIcons.FILE_TEXT, "Загрузка выписки временно недоступна", "Попробуйте позже — операции и аналитика работают как обычно") {
                     if (firstRun) PfButton("Продолжить", onClick = onLater, variant = ButtonVariant.PRIMARY)

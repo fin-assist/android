@@ -78,6 +78,10 @@
     "ru.finassist.pf.PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag": 79,
     ".maestro/flows/analytics/regular_block_update.yaml": 81,
     ".maestro/flows/analytics/chart_history_pages.yaml": 83,
-    ".maestro/flows/analytics/source_zone_and_session.yaml": 88
+    ".maestro/flows/analytics/source_zone_and_session.yaml": 88,
+    ".maestro/flows/statements/download_period.yaml": 84,
+    "ru.finassist.pf.StatementPickerTest#opensTheServerUrlForSelectedInclusiveDates": 85,
+    ".maestro/flows/operations/source_time_zone.yaml": 86,
+    ".maestro/flows/statements/source_time_zone.yaml": 87
   }
 }

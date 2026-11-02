@@ -119,7 +119,7 @@ class FeedViewModel @Inject constructor(
         firstPagePending = true
         viewModelScope.launch {
             if (requestGeneration != generation) return@launch
-            _state.update { it.copy(loading = it.items.isEmpty(), refreshing = it.items.isNotEmpty(), offline = false, loadingMore = false, moreFailed = false, errorPresentation = null, requestRetryable = null) }
+            _state.update { it.copy(loading = it.items.isEmpty(), refreshing = it.items.isNotEmpty(), offline = false, loadingMore = false, moreFailed = false, errorPresentation = if (it.sourceZoneUnsupported) it.errorPresentation else null, requestRetryable = null) }
             fetchFirst(requestGeneration)
         }
     }
@@ -136,7 +136,7 @@ class FeedViewModel @Inject constructor(
         firstPagePending = true
         viewModelScope.launch {
             if (requestGeneration != generation) return@launch
-            _state.update { it.copy(refreshing = true, loadingMore = false, moreFailed = false, errorPresentation = null, requestRetryable = null) }
+            _state.update { it.copy(refreshing = true, loadingMore = false, moreFailed = false, errorPresentation = if (it.sourceZoneUnsupported) it.errorPresentation else null, requestRetryable = null) }
             fetchFirst(requestGeneration)
         }
     }
@@ -157,7 +157,7 @@ class FeedViewModel @Inject constructor(
         } catch (e: AppError) {
             if (requestGeneration != generation) return
             retryGate.record(e)
-            _state.update { it.copy(sourceZoneUnsupported = e is AppError.Api && e.code == SourceTimeZone.UNSUPPORTED, loading = false, refreshing = false, offline = it.items.isEmpty(), errorPresentation = if (e is AppError.Offline && it.items.isEmpty()) null else e.presentation, requestRetryable = e.requestRetryable) }
+            _state.update { it.copy(sourceZoneUnsupported = it.sourceZoneUnsupported || (e is AppError.Api && e.code == SourceTimeZone.UNSUPPORTED), loading = false, refreshing = false, offline = it.items.isEmpty(), errorPresentation = if (it.sourceZoneUnsupported) it.errorPresentation else if (e is AppError.Offline && it.items.isEmpty()) null else e.presentation, requestRetryable = e.requestRetryable) }
         }
         firstPagePending = false
         if (pendingLoadMore) {
@@ -182,7 +182,7 @@ class FeedViewModel @Inject constructor(
         val requestGeneration = generation
         viewModelScope.launch {
             if (requestGeneration != generation) return@launch
-            _state.update { it.copy(loadingMore = true, moreFailed = false, errorPresentation = null, requestRetryable = null) }
+            _state.update { it.copy(loadingMore = true, moreFailed = false, errorPresentation = if (it.sourceZoneUnsupported) it.errorPresentation else null, requestRetryable = null) }
             try {
                 val page = api.listOperations(OperationsQuery(before = before))
                 val sourceZone = page.sourceZone()
@@ -191,7 +191,7 @@ class FeedViewModel @Inject constructor(
                 pendingLoadMore = false
                 _state.update {
                     it.copy(
-                        loadingMore = false, sourceZoneUnsupported = false,
+                        loadingMore = false, sourceZoneUnsupported = false, errorPresentation = null,
                         items = it.items + page.items.filter { new -> it.items.none { old -> old.id == new.id } },
                         summary = it.summary + page.summary.orEmpty(),
                         nextBefore = page.nextBefore,
@@ -202,7 +202,7 @@ class FeedViewModel @Inject constructor(
                 if (requestGeneration != generation) return@launch
                 pageGate.record(e)
                 pendingLoadMore = false
-                _state.update { it.copy(sourceZoneUnsupported = e is AppError.Api && e.code == SourceTimeZone.UNSUPPORTED, loadingMore = false, moreFailed = true, errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(sourceZoneUnsupported = it.sourceZoneUnsupported || (e is AppError.Api && e.code == SourceTimeZone.UNSUPPORTED), loadingMore = false, moreFailed = true, errorPresentation = if (it.sourceZoneUnsupported) it.errorPresentation else e.presentation, requestRetryable = e.requestRetryable) }
             }
         }
     }

@@ -1,0 +1,62 @@
+appId: ru.finassist.pf.mock.e2e
+name: Операции и поиск — несовместимый пояс и явное восстановление
+tags:
+  - operations
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?response_time_zone=unsupported"
+- swipe:
+    start: "50%, 25%"
+    end: "50%, 80%"
+    duration: 700
+- extendedWaitUntil:
+    visible: "Устройство не поддерживает часовой пояс этих данных"
+    timeout: 10000
+- assertVisible: "Показаны ранее загруженные данные. Они могут быть неактуальны"
+- assertVisible:
+    id: "operations.row"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?response_time_zone=default"
+- tapOn:
+    id: "operations.feed.retry"
+- extendedWaitUntil:
+    notVisible: "Устройство не поддерживает часовой пояс этих данных"
+    timeout: 10000
+- tapOn:
+    id: "operations.feed.search"
+- tapOn:
+    id: "operations.search.input"
+- inputText: "Ozon"
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: "operations.row"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?response_time_zone=unsupported"
+- swipe:
+    start: "50%, 25%"
+    end: "50%, 80%"
+    duration: 700
+- extendedWaitUntil:
+    visible: "Устройство не поддерживает часовой пояс этих данных"
+    timeout: 10000
+- assertVisible: "Показаны ранее загруженные данные. Они могут быть неактуальны"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?response_time_zone=default"
+- tapOn:
+    id: "operations.search.retry"
+- extendedWaitUntil:
+    notVisible: "Устройство не поддерживает часовой пояс этих данных"
+    timeout: 10000

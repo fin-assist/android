@@ -259,8 +259,14 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   directly: design-check snapshots replace them with the mockups' fixed bars.
 - "Now" and "today" come from the injected `Clock` (`LocalPfClock` in composables), never `LocalDate.now()` /
   `OffsetDateTime.now()`: the e2e build pins that clock, and the whole app has to live on the same date.
-  `Clock.zone` is the profile zone (`ReportZone`, kept by the profile feature), not the device's: days and months
-  on the client match analytics (FIN-92). It can change while the process lives — read it when needed, do not keep it.
+  `Clock.zone` is the current profile preference (`ReportZone`), not the device's. It may be used for new input,
+  but response dates belong to the response's `time_zone` (FIN-418): ImportConfig, ImportResult and every dated
+  OperationsList resolve that source zone before displaying or caching calendar values. Preserve the raw operation
+  timestamp for details/category requests. Never reinterpret a retained response through a newer profile zone.
+  An unsupported device zone shows the explicit incompatibility notice, including above a stale verified cache;
+  stop automatic retries until explicit retry/reopen/context change, and clear the notice only on a valid response.
+  Paired import `period_from`/`period_to` are inclusive civil dates. Verify returned suggested bounds against exact
+  source-zone starts of the first day and day after the last (including DST gaps), then open the unchanged server URL.
 - A PR that adds a screen, a new state of a screen, a bottom sheet or a dialog wires it into the design check in
   the same PR: a `…Content` the test can render, and a `*DesignCheckTest` capturing it under the artboard name
   (`popups = true` for a sheet or dialog). An artboard is a top-level screen frame in Figma, named like `Main`

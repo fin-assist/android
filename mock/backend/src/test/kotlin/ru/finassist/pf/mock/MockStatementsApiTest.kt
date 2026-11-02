@@ -71,6 +71,7 @@ class MockStatementsApiTest {
         assertEquals(progress.sortedBy { it.percent }, progress, "progress only goes forward")
         assertTrue(progress.all { it.stage in setOf(ImportStage.PARSING, ImportStage.DEDUP, ImportStage.RULES) })
         val result = assertIs<ImportEvent.Complete>(events.last()).result
+        assertEquals("Europe/Moscow", result.timeZone)
         assertEquals(2, result.operationCount)
         assertEquals(2, result.newCount)
         assertTrue(result.isFirstImport)
@@ -516,6 +517,49 @@ class MockStatementsApiTest {
         val start = config.suggestedPeriod.from.toInstant().toEpochMilli()
         val end = config.suggestedPeriod.to.toInstant().toEpochMilli()
         assertTrue(config.downloadUrl.contains("start=$start&end=$end&format=ofx"), config.downloadUrl)
+    }
+
+    @Test fun `custom inclusive dates use source starts including DST gaps and preserve the server URL`() = runBlocking<Unit> {
+        val backend = testBackend(clock)
+        val api = MockStatementsApi(backend)
+        for ((zone, first, last, from, to) in listOf(
+            listOf("America/Toronto", "1919-03-31", "1919-03-31", "1919-03-31T04:30:00Z", "1919-04-01T04:00:00Z"),
+            listOf("Pacific/Apia", "2011-12-30", "2011-12-31", "2011-12-30T10:00:00Z", "2011-12-31T10:00:00Z"),
+            listOf("Europe/Moscow", "1900-01-01", "1900-01-01", "1899-12-31T21:29:43Z", "1900-01-01T21:29:43Z"),
+        )) {
+            backend.profile = backend.profile.copy(timezone = zone)
+            val config = api.getImportConfig(first, last)
+            assertEquals(zone, config.timeZone)
+            assertEquals(dt(from).toInstant(), config.suggestedPeriod.from.toInstant())
+            assertEquals(dt(to).toInstant(), config.suggestedPeriod.to.toInstant())
+            assertTrue(config.downloadUrl.contains("start=${dt(from).toInstant().toEpochMilli()}&end=${dt(to).toInstant().toEpochMilli()}&format=ofx"))
+        }
+        backend.config = backend.config.copy(unsupportedResponseTimeZone = true)
+        assertEquals("Area/Future_City", api.getImportConfig().timeZone)
+        backend.config = backend.config.copy(unsupportedResponseTimeZone = false)
+        assertEquals("Europe/Moscow", api.getImportConfig().timeZone)
+    }
+
+    @Test fun `custom dates reject missing invalid reversed future and empty skipped intervals`() = runBlocking<Unit> {
+        val backend = testBackend(clock)
+        val api = MockStatementsApi(backend)
+        for ((first, last, field, code) in listOf(
+            listOf(null, "2026-09-01", "period_from", "REQUIRED"),
+            listOf("2026-09-01", null, "period_to", "REQUIRED"),
+            listOf("2026-02-30", "2026-09-01", "period_from", "INVALID_FORMAT"),
+            listOf("0000-01-01", "2026-09-01", "period_from", "INVALID_FORMAT"),
+            listOf("2026-09-02", "2026-09-01", "period_from", "OUT_OF_RANGE"),
+            listOf("2026-09-01", "2026-12-01", "period_to", "OUT_OF_RANGE"),
+        )) {
+            val error = assertFailsWith<AppError.Api> { api.getImportConfig(first, last) }
+            assertEquals(ErrorCodes.VALIDATION_ERROR, error.code)
+            assertEquals(field, error.details.single().field)
+            assertEquals(code, error.details.single().code)
+        }
+        backend.profile = backend.profile.copy(timezone = "Pacific/Apia")
+        assertFailsWith<AppError.Api> { api.getImportConfig("2011-12-30", "2011-12-30") }
+        backend.profile = backend.profile.copy(timezone = "Europe/Moscow")
+        assertFailsWith<AppError.Api> { api.getImportConfig("0001-01-01", "0001-01-01") }
     }
 
     @Test

@@ -691,6 +691,10 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
+| `statements/download_period` (mock-only) | inclusive calendar selection, invalid/reversed/future bounds, network failure retains dates and offers explicit retry; Qase84 (FIN-416); authored, not executed |
+| `StatementPickerTest#opensTheServerUrlForSelectedInclusiveDates` | exact server download URL handed to browser for 1–30 September; native Espresso-Intents because Maestro cannot inspect destination; Qase85; authored, not executed |
+| `operations/source_time_zone` (mock-only) | unsupported IANA metadata above verified feed/search cache; stale notice and explicit supported recovery; Qase86; authored, not executed |
+| `statements/source_time_zone` (mock-only) | unsupported import config and complete result; explicit supported recovery; Qase87; authored, not executed |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
 | `statements/upload_and_history` (smoke) | new operations without a duplicate period row; saved Analytics tab income changes from 0 to +1200 after import, and refreshes after deletion with remaining data and last deletion (FIN-394); duplicate file → «История загрузок» |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
@@ -1127,3 +1131,12 @@ responses, page ownership/eviction/errors, source-zone conversion and HTTP routi
 the changed case71 are authored with Qase mappings. UI, native and design-check execution was not authorized and
 has not been performed. Backend post-commit failures and durable delivery still need service integration coverage;
 the mock proves client transitions, not cross-service durability.
+FIN-416 adds the closed mockE2e-only control `response_time_zone=unsupported|default`. `unsupported` substitutes
+only response metadata with `Area/Future_City`; calculations, stored import results and profile zone stay unchanged.
+The production client resolves every ImportConfig, ImportResult and dated OperationsList source zone before accepting
+its dates; no local profile/offset alias substitutes it. Unknown-device-zone warnings remain until a supported response;
+no retry loop is started. Date-boundary JVM tests cover DST midnight gaps, skipped dates and historical second offsets.
+Proposed artboards without Figma frames: ImportDownloadPeriod/ImportDownloadPeriodDark/ImportDownloadPeriodFailure,
+ImportUnsupportedZone/ImportUnsupportedZoneCold, ImportResultUnsupportedZone/ImportResultUnsupportedZoneCached,
+MainUnsupportedZone/MainUnsupportedZoneCold and SearchUnsupportedZone. Design checks are authored, not executed.
+

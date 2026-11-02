@@ -137,7 +137,7 @@ internal fun SearchContent(
                 // non-editable chip (docs/flags.md); «Сбросить» still removes it.
                 val period = f.from != null || f.to != null || state.allTime
                 if (state.chips.period || period) {
-                    PfChip(periodLabel(f, state.allTime, zone), onClick = { actions.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period, modifier = Modifier.testTag(OperationsTags.CHIP_PERIOD))
+                    PfChip(periodLabel(f, state.allTime, (state.result as? SearchResult.Found)?.sourceZone), onClick = { actions.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period, modifier = Modifier.testTag(OperationsTags.CHIP_PERIOD))
                 }
                 if (state.chips.category || f.categoryId != null) {
                     val name = state.categories.firstOrNull { it.id == f.categoryId }?.name
@@ -168,6 +168,7 @@ internal fun SearchContent(
                     presentation,
                     if (state.result == SearchResult.TooMany) "Слишком много операций. Выберите период покороче или добавьте фильтр" else "Не получилось найти. Попробуйте ещё раз",
                     modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
+                    retryModifier = Modifier.testTag("operations.search.retry"),
                     onRetry = if (!state.retryReady || state.result == SearchResult.TooMany) null else actions.retry,
                 )
             }

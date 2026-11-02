@@ -41,11 +41,7 @@ import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.lifecycle.SavedStateHandle
-import androidx.lifecycle.ViewModel
-import androidx.navigation.toRoute
 import androidx.hilt.navigation.compose.hiltViewModel
-import dagger.hilt.android.lifecycle.HiltViewModel
 import ru.finassist.pf.core.api.model.ImportNoticeCode
 import ru.finassist.pf.core.api.model.ImportResult
 import ru.finassist.pf.core.api.model.ImportTotalsScope
@@ -61,12 +57,7 @@ import ru.finassist.pf.core.designsystem.components.PfNoticeLink
 import ru.finassist.pf.core.designsystem.components.PfNotice
 import ru.finassist.pf.core.designsystem.components.PfStatusHero
 import ru.finassist.pf.core.designsystem.theme.PfTheme
-import ru.finassist.pf.core.toggles.FeatureFlags
-import ru.finassist.pf.core.toggles.Flag
-import ru.finassist.pf.feature.statements.api.StatementsRepository
-import ru.finassist.pf.feature.statements.api.StatementsRoutes
 import ru.finassist.pf.feature.statements.impl.domain.ResultTexts
-import javax.inject.Inject
 
 /** «Итог загрузки» (api.md 3.3 `complete`). */
 @Composable
@@ -83,7 +74,7 @@ fun ResultScreen(
     BackHandler(onBack = onDone)
     ResultContent(
         result = state.result,
-        error = state.error, onRetry = vm::retry, retrying = state.retrying,
+        error = state.error, onRetry = vm::retry, retrying = state.retrying || !state.retryReady,
         uploadEnabled = vm.uploadEnabled,
         onDone = onDone,
         onOpenSearch = onOpenSearch,
@@ -132,7 +123,7 @@ internal fun ResultContent(
                 .padding(start = d.space5, end = d.space5, top = d.space6, bottom = d.space4),
         ) {
             if (error != null) {
-                ErrorMessage(error, "Не получилось показать итоги загрузки", onRetry = onRetry.takeUnless { retrying })
+                ErrorMessage(error, "Не получилось показать итоги загрузки", onRetry = onRetry.takeUnless { retrying }, retryModifier = Modifier.testTag("statements.result.retry"))
                 if (r != null) PfNotice("Показаны ранее загруженные данные. Они могут быть неактуальны", tone = NoticeTone.WARNING)
                 if (r == null) {
                     PfButton("Готово", onClick = onDone, block = true)

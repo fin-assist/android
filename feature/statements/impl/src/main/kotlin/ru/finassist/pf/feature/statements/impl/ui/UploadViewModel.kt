@@ -83,6 +83,8 @@ data class UploadUiState(
     val periodPickerOpen: Boolean = false,
     val periodDownloading: Boolean = false,
     val periodRetryReady: Boolean = true,
+    val configRetryReady: Boolean = true,
+    val sourceZoneUnsupported: Boolean = false,
     val periodError: ErrorPresentation? = null,
     val periodFrom: LocalDate? = null,
     val periodTo: LocalDate? = null,
@@ -136,6 +138,7 @@ class UploadViewModel @Inject constructor(
     private var pendingUploadRecovery: PendingUploadRecovery? = null
 
     init {
+        viewModelScope.launch { configGate.readiness.collect { ready -> _state.update { it.copy(configRetryReady = ready) } } }
         viewModelScope.launch { periodGate.readiness.collect { ready -> _state.update { it.copy(periodRetryReady = ready) } } }
         load()
     }
@@ -147,19 +150,21 @@ class UploadViewModel @Inject constructor(
             return
         }
         configJob = viewModelScope.launch {
-            _state.update { it.copy(phase = if (config == null) UploadPhase.Loading else it.phase) }
+            _state.update { it.copy(phase = if (config == null && !it.sourceZoneUnsupported) UploadPhase.Loading else it.phase) }
             try {
                 val c = api.getImportConfig()
                 SourceTimeZone.require(c.timeZone)
                 config = c
-                _state.update { it.copy(phase = UploadPhase.Guide(c), config = c, guideErrorPresentation = null) }
+                _state.update { it.copy(phase = UploadPhase.Guide(c), config = c, guideErrorPresentation = null, sourceZoneUnsupported = false) }
             } catch (e: AppError) {
                 configGate.record(e)
                 _state.update {
-                    when {
-                        config != null -> it.copy(phase = UploadPhase.Guide(config!!), guideErrorPresentation = e.presentation)
+                    if (it.sourceZoneUnsupported) it.copy(phase = if (config != null) UploadPhase.Guide(config!!) else UploadPhase.ConfigFailure(sourceZoneError()))
+                    else when {
+                        config != null -> it.copy(phase = UploadPhase.Guide(config!!), guideErrorPresentation = e.presentation,
+                            sourceZoneUnsupported = e is AppError.Api && e.code == SourceTimeZone.UNSUPPORTED)
                         e is AppError.Offline -> it.copy(phase = UploadPhase.Offline)
-                        else -> it.copy(phase = UploadPhase.ConfigFailure(e.presentation))
+                        else -> it.copy(phase = UploadPhase.ConfigFailure(e.presentation), sourceZoneUnsupported = e is AppError.Api && e.code == SourceTimeZone.UNSUPPORTED)
                     }
                 }
             }
@@ -184,34 +189,37 @@ class UploadViewModel @Inject constructor(
         val c = config ?: return
         val zone = SourceTimeZone.require(c.timeZone)
         val today = clock.now().atZoneSameInstant(zone).toLocalDate()
-        _state.update { it.copy(periodPickerOpen = true, periodToday = today, periodError = null,
+        _state.update { it.copy(periodPickerOpen = true, periodToday = today, periodError = if (it.sourceZoneUnsupported) sourceZoneError() else null,
             periodFrom = it.periodFrom ?: c.suggestedPeriod.from.atZoneSameInstant(zone).toLocalDate().coerceAtMost(today),
             periodTo = it.periodTo ?: c.suggestedPeriod.to.atZoneSameInstant(zone).toLocalDate().minusDays(1).coerceAtMost(today)) }
     }
 
     fun selectPeriod(from: LocalDate?, to: LocalDate?) {
         if (_state.value.periodDownloading) return
-        periodGate.clearOriginalRefusal()
-        _state.update { it.copy(periodFrom = from, periodTo = to, periodError = null) }
+        if (from != _state.value.periodFrom || to != _state.value.periodTo) periodGate.clearOriginalRefusal()
+        _state.update { it.copy(periodFrom = from, periodTo = to, periodError = if (it.sourceZoneUnsupported) sourceZoneError() else null) }
     }
 
     fun downloadPeriod() {
         val s = _state.value
         val period = DownloadPeriod(s.periodFrom ?: return, s.periodTo ?: return)
         if (s.periodDownloading || !periodGate.isReady() || !period.valid(s.periodToday ?: return)) return
-        _state.update { it.copy(periodDownloading = true, periodError = null) }
+        _state.update { it.copy(periodDownloading = true, periodError = if (it.sourceZoneUnsupported) sourceZoneError() else null) }
         viewModelScope.launch {
             try {
                 val response = api.getImportConfig(period.from.toString(), period.to.toString())
                 val zone = period.validateResponse(response)
                 if (!period.valid(clock.now().atZoneSameInstant(zone).toLocalDate())) throw AppError.Server(500)
-                _state.update { it.copy(periodDownloading = false, periodPickerOpen = false, guideErrorPresentation = null, downloadUrlToOpen = response.downloadUrl) }
+                _state.update { it.copy(periodDownloading = false, periodPickerOpen = false, guideErrorPresentation = null, sourceZoneUnsupported = false, downloadUrlToOpen = response.downloadUrl) }
             } catch (e: AppError) {
                 periodGate.record(e)
-                _state.update { it.copy(periodDownloading = false, periodError = e.presentation, guideErrorPresentation = if (e is AppError.Api && e.code == SourceTimeZone.UNSUPPORTED) e.presentation else it.guideErrorPresentation) }
+                _state.update { it.copy(periodDownloading = false, periodError = if (it.sourceZoneUnsupported) sourceZoneError() else e.presentation, sourceZoneUnsupported = it.sourceZoneUnsupported || (e is AppError.Api && e.code == SourceTimeZone.UNSUPPORTED), guideErrorPresentation = if (e is AppError.Api && e.code == SourceTimeZone.UNSUPPORTED) e.presentation else it.guideErrorPresentation) }
             }
         }
     }
+
+    private fun sourceZoneError() = ru.finassist.pf.core.common.error.ErrorPresentation(
+        ru.finassist.pf.core.common.error.UserMessage.from(SourceTimeZone.MESSAGE))
 
     fun consumeDownload() = _state.update { it.copy(downloadUrlToOpen = null) }
 
