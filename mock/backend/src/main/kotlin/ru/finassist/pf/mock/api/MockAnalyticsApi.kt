@@ -68,8 +68,9 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
             if (backend.calculation.pending && !backend.deferAnalyticsCalculation && backend.config.analyticsRecalculatingResponses == 0) backend.calculation.calculateNow()
             val snapshot = backend.analytics.analytics(period, date, transferMode ?: TransferMode.WITH)
             if (snapshot.hasData && backend.calculation.state().calcVersion == 0) backend.calculation.calculateNow()
+            val published = backend.regularSnapshots.forRead(snapshot, backend.profile.userId, backend.calculation.state().calcVersion)
             val composed = AnalyticsComposer.compose(
-                snapshot, supports = supported, experiments = AnalyticsComposer.parseExperiments(exp),
+                published, supports = supported, experiments = AnalyticsComposer.parseExperiments(exp),
                 failing = backend.config.failingBlocks,
                 chartPage = snapshot.historyChart?.let { chartPages.info(transferMode ?: TransferMode.WITH, it) }
                     ?: ru.finassist.pf.core.api.model.ChartPageInfo("empty"),

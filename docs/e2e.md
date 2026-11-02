@@ -1093,7 +1093,7 @@ was disproved by this real gesture experiment and removed.
 
 ### FIN-416 response updates, history and source ownership
 
-The client implements REST FIN-418 (`gen/go/v0.10.0`, contracts `2cbca8aeaabd58e6662ee681a81f905aad121ad2`).
+The client implements REST FIN-418 (`gen/go/v0.11.0`, contracts `60fa09c0224b7432b8567994c6863a0acd22bd4d`).
 The PUT carries the shown month and transfer mode; its successful `AnalyticsBlockUpdate` immediately replaces
 only the listed complete blocks in the matching whole snapshot. Other blocks, global timestamps and calculation
 metadata remain unchanged. The client never subtracts row amounts or hides a payment speculatively.
@@ -1105,8 +1105,10 @@ retrying a PUT or clearing its refusal. A ready GET can then update the screen, 
 deletion and a cache miss never release the freeze automatically. 403/404/429 on a later retry do not prove an
 older unknown attempt failed. A date OUT_OF_RANGE 400 establishes that the current assignment is not saved;
 context-unavailable 422 means already saved. Both retire the obsolete month and read the
-current default once, without retrying the PUT automatically. FIN-420 clarifies the 400 validation ordering and
-unknown recovery semantics without changing the REST shape. Server durable-delivery implementation is separate.
+current default once, without retrying the PUT automatically. Merged FIN-420 clarifies the 400 validation ordering and
+unknown recovery semantics without changing the REST shape. The mock keeps its published regular metric for
+GET at the applied calculation version; the mutation response uses fresh source facts. Pending GETs may therefore
+still contain the old row, which the client must not use to overwrite the complete block received from PUT. Server durable-delivery implementation is separate.
 
 An original command refusal is scoped to the verified owner, payment, params, actual source zone and the known
 ready calculation version at command start. An explicit new command with changed params/zone or a strictly newer

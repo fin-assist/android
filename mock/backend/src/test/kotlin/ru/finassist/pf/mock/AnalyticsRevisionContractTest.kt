@@ -32,6 +32,10 @@ class AnalyticsRevisionContractTest {
         val pending = api.getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
         assertTrue(pending.calculation!!.recalculating)
         assertTrue(pending.calculation!!.calcVersion < update.requiredCalcVersion)
+        assertEquals(initial.blocks.single { it.id == "regular_payments" }, pending.blocks.single { it.id == "regular_payments" })
+        // Another API consumer observes the same published metric; only PUT carries the fresh source result.
+        val cold = MockAnalyticsApi(backend).getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+        assertEquals(pending.blocks.single { it.id == "regular_payments" }, cold.blocks.single { it.id == "regular_payments" })
         val repeated = api.dismissRegularPayment(id, PeriodKey("2026-09"), TransferMode.WITH)
         assertEquals(update, repeated)
         backend.calculation.calculateNow()
@@ -95,6 +99,39 @@ class AnalyticsRevisionContractTest {
         assertEquals("ANALYTICS_CONTEXT_UNAVAILABLE", saved.code)
         assertEquals(false, saved.requestRetryable)
         assertEquals(setOf(id), backend.dismissedPayments)
+    }
+
+    @Test fun `published regular metrics isolate mode month zone and owner and clear on wipe`() = runBlocking<Unit> {
+        val backend = history().apply { deferAnalyticsCalculation = true }
+        val api = MockAnalyticsApi(backend)
+        val month = PeriodKey("2026-09")
+        val initial = api.getAnalytics(PeriodTypeCode.MONTH, month, TransferMode.WITH)
+        val regular = initial.blocks.single { it.id == "regular_payments" }
+        val id = regular.decode(InsightCardData.serializer())!!.items.single().button!!.paymentId!!
+        api.dismissRegularPayment(id, month, TransferMode.WITH)
+        // New contexts are independently published, rather than borrowing a metric from another selection.
+        assertEquals(BlockStatus.NONE, api.getAnalytics(PeriodTypeCode.MONTH, month, TransferMode.WITHOUT)
+            .blocks.single { it.id == "regular_payments" }.status)
+        assertEquals(BlockStatus.NONE, api.getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITH)
+            .blocks.single { it.id == "regular_payments" }.status)
+        assertEquals(regular, api.getAnalytics(PeriodTypeCode.MONTH, month, TransferMode.WITH)
+            .blocks.single { it.id == "regular_payments" })
+        backend.profile = backend.profile.copy(timezone = "Asia/Tokyo")
+        assertEquals(BlockStatus.NONE, api.getAnalytics(PeriodTypeCode.MONTH, month, TransferMode.WITH)
+            .blocks.single { it.id == "regular_payments" }.status)
+        backend.profile = backend.profile.copy(userId = "other-owner")
+        backend.dismissedPayments.clear()
+        assertEquals(BlockStatus.READY, api.getAnalytics(PeriodTypeCode.MONTH, month, TransferMode.WITH)
+            .blocks.single { it.id == "regular_payments" }.status)
+        val profile = backend.profile
+        backend.wipe()
+        backend.profile = profile
+        backend.load(statement("2026-06-01", "2026-09-30", *(6..9).map { m ->
+            trn("new-$m", "2026-${m.toString().padStart(2, '0')}-03T09:00", 899, "Different subscription", "Онлайн-кинотеатры")
+        }.toTypedArray()))
+        val newRegular = api.getAnalytics(PeriodTypeCode.MONTH, month, TransferMode.WITH)
+            .blocks.single { it.id == "regular_payments" }.decode(InsightCardData.serializer())!!
+        assertEquals("Different subscription", newRegular.items.single().title)
     }
 
 }

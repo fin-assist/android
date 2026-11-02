@@ -126,6 +126,7 @@ class MockBackend(
     val dismissedPayments = HashSet<String>()
     /** Category changes and statement uploads/deletions, for `changed_since` of the assistant's answers (api.md 7.2). */
     val calculation = ru.finassist.pf.mock.domain.MockCalculation()
+    internal val regularSnapshots = ru.finassist.pf.mock.domain.MockRegularSnapshots()
     /** Test-only delayed completion; not a wire field or a public control endpoint. */
     var deferAnalyticsCalculation = false
     val dataChanges = DataChanges { calculation.calculateNow() }
@@ -327,6 +328,7 @@ class MockBackend(
         uploads.clear()
         dismissedPayments.clear()
         calculation.clear()
+        regularSnapshots.clear()
         deferAnalyticsCalculation = false
         assistant.clear()
         idempotency.clear()
