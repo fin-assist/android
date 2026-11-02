@@ -507,7 +507,7 @@ Preserve agreed correctness and security guarantees when simplifying.
 
 ### Existing mandatory review passes
 
-Read by `@claude` (through `CLAUDE.md`) and by the Codex integration, which looks for this heading. Two areas get a
+Read by `@claude` (through `CLAUDE.md`) and by the Codex integration, which looks for the `Code Review Rules` heading. Two areas get a
 dedicated pass on every PR: Security and Test coverage of use cases (below).
 
 ### General
