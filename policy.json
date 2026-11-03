@@ -251,6 +251,19 @@
       ]
     },
     {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "renovate"
+      ],
+      "matchDatasources": [
+        "npm"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 44"
+      ]
+    },
+    {
       "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
       "matchPackageNames": [
         "io.github.takahirom.roborazzi:roborazzi-compose"
@@ -640,6 +653,22 @@
       "matchNewValue": "/^2\\.3\\.13$/",
       "matchJsonata": [
         "$not($exists(newDigest)) or newDigest = null"
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "renovate"
+      ],
+      "matchDatasources": [
+        "npm"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-253-",
+      "matchJsonata": [
+        "newDigest = \"sha512-HM6juIjS2pKiSz82tdIJ+4cUsumHjkbFojx/xmXsEakWJYuD6XJWZmaqjDDBWL+BVsT8Rgksire0KmHLIxAm/g==\""
       ]
     }
   ]
