@@ -214,11 +214,11 @@ tags:
     id: "ds.tab.profile"
 - tapOn:
     id: "profile.statements"
-- scrollUntilVisible:
-    element:
-      id: "statements.history.upload"
-- tapOn:
-    id: "statements.history.upload"
+# With no uploads the profile opens the upload guide directly, bypassing History.
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
 - scrollUntilVisible:
     element:
       id: "statements.upload.download"

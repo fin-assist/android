@@ -1252,3 +1252,11 @@ are corrected in the flows without changing application runtime or the mock API:
 The Qase mappings and scenario count remain unchanged. These are authored corrections with static
 checks; they do not report a successful emulator run. Local/UI workflow execution needs the owner's
 separate authorization.
+
+FIN-427 post-merge follow-up (run 41831477238): Qase73 reaches the deferred Year response
+(the Year segment is selected and its rolling-year control is shown), but the retained body scroll
+leaves `ds.period.pick` above the viewport. The flow now waits for that response-specific control,
+then scrolls to the period picker and still requires exactly 2026. Qase14 reaches the final empty
+state after deleting all three uploads; Profile routes directly to Upload when no statements remain,
+so the flow waits for `statements.upload` rather than a History upload button. The yearly label and
+privacy checks remain. These follow-up steps have static evidence, not a new emulator execution.
