@@ -111,10 +111,16 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?offline=true"
+# Resuming from the control link can insert a read-error notice above the retained financial body.
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+    centerElement: true
 - tapOn: "Не подписка — РБК"
 - extendedWaitUntil:
     visible: "(?s)Не получилось убрать.*"
     timeout: 10000
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
 - assertVisible: "РБК"
 - runFlow:
     file: ../../subflows/config.yaml

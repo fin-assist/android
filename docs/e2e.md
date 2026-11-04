@@ -1260,3 +1260,9 @@ then scrolls to the period picker and still requires exactly 2026. Qase14 reache
 state after deleting all three uploads; Profile routes directly to Upload when no statements remain,
 so the flow waits for `statements.upload` rather than a History upload button. The yearly label and
 privacy checks remain. These follow-up steps have static evidence, not a new emulator execution.
+
+The same run passed the full PUT-block/polling/retry section of Qase81, then failed before
+the separate offline mutation: resuming the offline control link inserted a read-error notice and
+pushed the already located RBC action below the viewport. The flow now scrolls to that action
+after the link, and again after the mutation error before asserting that the payment is retained.
+The failure is not evidence of a missing payment: its RBC row remains in the captured hierarchy.
