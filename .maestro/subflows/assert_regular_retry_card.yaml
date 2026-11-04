@@ -1,0 +1,52 @@
+# Independent bundled-ledger oracle for FIN-438, before/after excluding RBC.
+# Caller starts at a row of this card. Money regexes accept the formatter's space variants.
+# env: TOTAL, COUNT, CHANGED_ROW, CHANGED_TITLE, CHANGED_AMOUNT, ROW_DIRECTION, MORE, MORE_AMOUNT.
+appId: ru.finassist.pf.mock.e2e
+---
+- scrollUntilVisible:
+    element: "Подписки и регулярные платежи"
+    direction: UP
+    centerElement: true
+- assertVisible: "Подписки и регулярные платежи"
+- assertVisible: ${TOTAL}
+- assertVisible: ${COUNT}
+- assertVisible:
+    id: "analytics.block.regular_payments"
+    containsDescendants:
+      - text: ${TOTAL}
+      - text: ${COUNT}
+- scrollUntilVisible:
+    element: "Не подписка — Ростелеком"
+    centerElement: true
+- assertVisible: "Ростелеком"
+- assertVisible:
+    id: "analytics.regular_payments.item"
+    containsDescendants:
+      - text: "Ростелеком"
+      - text: '1[\s\u00A0\u202F]089[\s\u00A0\u202F]₽'
+- scrollUntilVisible:
+    element: "Не подписка — Мой телефон.*"
+    centerElement: true
+- assertVisible:
+    id: "analytics.regular_payments.item"
+    containsDescendants:
+      - text: "Мой телефон.*"
+      - text: '1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- scrollUntilVisible:
+    element: ${CHANGED_ROW}
+    direction: ${ROW_DIRECTION}
+    centerElement: true
+- assertVisible: ${CHANGED_ROW}
+- assertVisible:
+    id: "analytics.regular_payments.item"
+    containsDescendants:
+      - text: ${CHANGED_TITLE}
+      - text: ${CHANGED_AMOUNT}
+- scrollUntilVisible:
+    element: ${MORE}
+    centerElement: true
+- assertVisible:
+    id: "analytics.regular_payments.more"
+    containsDescendants:
+      - text: ${MORE}
+      - text: ${MORE_AMOUNT}

@@ -114,7 +114,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
         if (transferMode == TransferMode.UNKNOWN) invalidField("transfer_mode")
         backend.mutex.withLock { requirePayment(id) }
         backend.maybeInjectError(MockErrorOperation.ANALYTICS_DISMISS)
-        return backend.mutex.withLock {
+        val update = backend.mutex.withLock {
             requirePayment(id)
             val before = backend.analytics.analytics(PeriodTypeCode.MONTH, date, transferMode)
             if (!before.hasData || before.period?.coverage == ru.finassist.pf.core.api.model.Coverage.NO_DATA) {
@@ -128,6 +128,9 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
             AnalyticsBlockUpdate(response.params!!, response.currency, if (backend.config.unsupportedResponseTimeZone) "Area/Future_City" else response.timeZone!!, target,
                 response.blocks.filter { it.id == "regular_payments" })
         }
+        // The assignment and target survive an unavailable response composer, as with the real PUT.
+        backend.maybeInjectError(MockErrorOperation.ANALYTICS_DISMISS, afterCommit = true)
+        return update
     }
 
     override suspend fun getMonthlyChartPage(cursor: String): AnalyticsChartPage {

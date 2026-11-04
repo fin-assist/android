@@ -1,11 +1,14 @@
 package ru.finassist.pf.mock
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.cancel
 import org.junit.Test
 import ru.finassist.pf.core.api.model.Coverage
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
+import ru.finassist.pf.core.api.model.InsightCardData
+import ru.finassist.pf.core.api.model.BlockStatus
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.mock.api.MockAnalyticsApi
@@ -189,6 +192,97 @@ class MockAnalyticsApiTest {
         api.dismissRegularPayment(payment.id, ru.finassist.pf.core.common.time.PeriodKey("2026-09"), ru.finassist.pf.core.api.model.TransferMode.WITH)
         assertFalse("Netflix" in regularTitles())
         assertEquals(1, backend.injectedErrorCount.value)
+    }
+
+    @Test
+    fun `bundled UI fixture has independently reconciled regular rows before and after post commit retry`() = runBlocking<Unit> {
+        val seeded = testBackend(clock = TestClock("2026-10-08T12:00:00+03:00")).apply { load(fixtureDoc()) }
+        try {
+            val service = MockAnalyticsApi(seeded)
+            val before = service.getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+            val regular = before.blocks.single { it.id == "regular_payments" }
+            val original = assertNotNull(regular.decode(InsightCardData.serializer()))
+            // Source ledger: 1500 + 1089 + 1000 + 1000 + 500 + 99 RUB, not the calculation-only golden fixture.
+            assertEquals(BlockStatus.READY, regular.status)
+            assertEquals(518_800.0, original.value)
+            assertEquals("в месяц · 6\u00a0списаний каждый месяц с октября", original.description)
+            assertEquals(listOf("РБК", "Ростелеком", "Мой телефон +7 900 000-00-00"), original.items.map { it.title })
+            assertEquals(listOf(150_000.0, 108_900.0, 100_000.0), original.items.map { it.value })
+            assertEquals("Ещё 3", original.itemsMore?.label)
+            assertEquals(159_900.0, original.itemsMore?.value)
+            val id = assertNotNull(original.items.first().button?.paymentId)
+            seeded.config = seeded.config.copy(errorOperation = MockErrorOperation.ANALYTICS_DISMISS,
+                errorScenario = MockErrorScenario.POST_COMMIT_FAILURE, analyticsRecalculatingResponses = 100)
+            assertFailsWith<AppError.Server> { service.dismissRegularPayment(id, PeriodKey("2026-09"), TransferMode.WITH) }
+            assertEquals(setOf(id), seeded.dismissedPayments)
+            assertEquals(regular, service.getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+                .blocks.single { it.id == "regular_payments" })
+            seeded.config = seeded.config.copy(errorOperation = null)
+            val update = service.dismissRegularPayment(id, PeriodKey("2026-09"), TransferMode.WITH)
+            val block = update.blocks.single { it.id == "regular_payments" }
+            val changed = assertNotNull(block.decode(InsightCardData.serializer()))
+            assertEquals(BlockStatus.READY, block.status)
+            assertEquals(368_800.0, changed.value)
+            assertEquals("в месяц · 5\u00a0списаний каждый месяц с октября", changed.description)
+            assertEquals(listOf("Ростелеком", "Мой телефон +7 900 000-00-00", "планшет +7 900 000-00-00"), changed.items.map { it.title })
+            assertEquals(listOf(108_900.0, 100_000.0, 100_000.0), changed.items.map { it.value })
+            assertEquals("Ещё 2", changed.itemsMore?.label)
+            assertEquals(59_900.0, changed.itemsMore?.value)
+            assertEquals(setOf(id), seeded.dismissedPayments)
+            assertEquals(1, seeded.injectedErrorCount.value)
+        } finally { seeded.scope.cancel() }
+    }
+
+    @Test
+    fun `post commit failure preserves assignment and published rows until an explicit retry`() = runBlocking<Unit> {
+        val before = api.getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+        val payment = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+            .insights!!.regularPayments.items.orEmpty().single { it.title == "Netflix" }
+        val baseline = assertNotNull(before.calculation).calcVersion
+        backend.config = backend.config.copy(errorOperation = MockErrorOperation.ANALYTICS_DISMISS,
+            errorScenario = MockErrorScenario.POST_COMMIT_FAILURE, analyticsRecalculatingResponses = 100)
+
+        val error = assertFailsWith<AppError.Server> {
+            api.dismissRegularPayment(payment.id, PeriodKey("2026-09"), TransferMode.WITH)
+        }
+        assertEquals("INTERNAL_ERROR", error.rawCode)
+        assertEquals(true, error.requestRetryable)
+        assertEquals("Не удалось выполнить запрос. Попробуйте позже", error.presentation.textOrFallback("fallback"))
+        assertEquals(setOf(payment.id), backend.dismissedPayments)
+        assertTrue(backend.calculation.pending)
+        assertFalse("Netflix" in regularTitles())
+        assertEquals(1, backend.injectedErrorCount.value)
+        val marked = api.getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+        assertEquals(before.blocks.single { it.id == "regular_payments" }, marked.blocks.single { it.id == "regular_payments" })
+        assertEquals(baseline, marked.calculation!!.calcVersion)
+        assertTrue(marked.calculation!!.recalculating)
+        assertEquals(1, backend.injectedErrorCount.value)
+
+        backend.config = backend.config.copy(errorOperation = null)
+        val repeated = api.dismissRegularPayment(payment.id, PeriodKey("2026-09"), TransferMode.WITH)
+        assertEquals(baseline + 1, repeated.requiredCalcVersion)
+        assertEquals(setOf(payment.id), backend.dismissedPayments)
+        assertEquals(1, backend.injectedErrorCount.value)
+        backend.config = backend.config.copy(analyticsRecalculatingResponses = 0)
+        val ready = api.getAnalytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+        assertTrue(ready.calculation!!.calcVersion >= repeated.requiredCalcVersion)
+        assertFalse(ready.calculation!!.recalculating)
+        assertEquals(repeated.requiredCalcVersion,
+            api.dismissRegularPayment(payment.id, PeriodKey("2026-09"), TransferMode.WITH).requiredCalcVersion)
+        assertEquals(setOf(payment.id), backend.dismissedPayments)
+    }
+
+    @Test
+    fun `post commit fixture still rejects invalid requests without an assignment or injected failure`() = runBlocking<Unit> {
+        backend.config = backend.config.copy(errorOperation = MockErrorOperation.ANALYTICS_DISMISS,
+            errorScenario = MockErrorScenario.POST_COMMIT_FAILURE)
+        for (date in listOf("2026", "2030-01")) {
+            val payment = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+                .insights!!.regularPayments.items.orEmpty().single { it.title == "Netflix" }
+            assertFailsWith<AppError.Api> { api.dismissRegularPayment(payment.id, PeriodKey(date), TransferMode.WITH) }
+        }
+        assertTrue(backend.dismissedPayments.isEmpty())
+        assertEquals(0, backend.injectedErrorCount.value)
     }
 
     @Test

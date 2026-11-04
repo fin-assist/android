@@ -72,6 +72,16 @@ class MockErrorCatalogTest {
         } finally { backend.scope.cancel() }
     }
 
+    @Test fun `post commit fixture cannot grant retry advice to an unrelated endpoint`() = runBlocking<Unit> {
+        val backend = testBackend(config = FAST.copy(errorOperation = MockErrorOperation.PROFILE_UPDATE,
+            errorScenario = MockErrorScenario.POST_COMMIT_FAILURE))
+        try {
+            val profile = MockProfileApi(backend).updateProfile(ProfileUpdate(theme = Theme.DARK))
+            assertEquals(Theme.DARK, profile.theme)
+            assertEquals(0, backend.injectedErrorCount.value)
+        } finally { backend.scope.cancel() }
+    }
+
     @Test fun `request permission stays separate from answer permission and elapsed timing survives wall jumps`() = runBlocking<Unit> {
         var elapsed = 10_000L
         val wall = TestClock(NOW)
