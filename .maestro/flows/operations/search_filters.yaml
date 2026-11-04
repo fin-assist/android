@@ -52,6 +52,8 @@ tags:
 - assertVisible:
     id: "operations.search.chip.kind"
     checked: true
+- assertVisible:
+    id: "operations.search.chip.reset"
 
 # Amount sheet.
 - tapOn:
@@ -73,12 +75,23 @@ tags:
       id: "operations.search.count"
     timeout: 10000
 
-# «Сбросить» drops the filters but keeps the query.
+# FIN-416: reset is below the row and stays visible at either scroll edge.
 - swipe:
     from:
       id: "operations.search.chip.amount"
+    direction: RIGHT
+- assertVisible:
+    id: "operations.search.chip.reset"
+- swipe:
+    from:
+      id: "operations.search.chip.period"
     direction: LEFT
+- assertVisible:
+    id: "operations.search.chip.reset"
+# «Сбросить» drops the filters but keeps the query.
 - tapOn:
+    id: "operations.search.chip.reset"
+- assertNotVisible:
     id: "operations.search.chip.reset"
 - assertVisible:
     id: "operations.search.chip.amount"

@@ -33,6 +33,7 @@ class ResultTextsTest {
         firstOperationAt = t("2026-04-01T09:12:00+03:00"), lastOperationAt = t("2026-09-25T21:40:00+03:00"),
         isFirstImport = true, accounts = emptyList(), categorizedCount = 1052, ownTransferCount = 24,
         uncategorizedCount = 34, coverage = coverage, notices = emptyList(),
+        timeZone = "Europe/Moscow",
     )
 
     @Test

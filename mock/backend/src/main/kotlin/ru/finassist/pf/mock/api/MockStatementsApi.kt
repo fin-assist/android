@@ -75,17 +75,42 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
      */
     private val failures = ConcurrentHashMap<String, ImportEvent.Error>()
 
-    override suspend fun getImportConfig(): ImportConfig {
+    override suspend fun getImportConfig(periodFrom: String?, periodTo: String?): ImportConfig {
         backend.simulateNetwork()
         backend.requireSession()
+        return backend.mutex.withLock { configSnapshot(periodFrom, periodTo) }
+    }
+
+    private fun configSnapshot(periodFrom: String?, periodTo: String?): ImportConfig {
         // Calendar days in the profile zone (FIN-92), each bound with its own offset (DST).
         val zone = backend.profileZone()
         val today = backend.now().atZoneSameInstant(zone).toLocalDate()
-        val tomorrow = today.plusDays(1).atStartOfDay(zone).toOffsetDateTime()
+        var tomorrow = today.plusDays(1).atStartOfDay(zone).toOffsetDateTime()
         val lastOp = backend.ledger.all.maxOfOrNull { it.occurredAt }
-        val from = (lastOp?.atZoneSameInstant(zone)?.toLocalDate() ?: today.minusMonths(12)).atStartOfDay(zone).toOffsetDateTime()
+        var from = (lastOp?.atZoneSameInstant(zone)?.toLocalDate() ?: today.minusMonths(12)).atStartOfDay(zone).toOffsetDateTime()
+        if (periodFrom != null || periodTo != null) {
+            fun reject(field: String, code: String): Nothing = throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+                details = listOf(AppError.FieldError(field, code, "Проверьте выбранную дату")))
+            fun parse(value: String?, field: String): java.time.LocalDate? {
+                if (value == null) return null
+                val date = runCatching { java.time.LocalDate.parse(value) }.getOrNull()
+                if (date == null || !value.matches(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}")) || date.year !in 1..9999) reject(field, "INVALID_FORMAT")
+                return date
+            }
+            val first = parse(periodFrom, "period_from")
+            val last = parse(periodTo, "period_to")
+            if (first == null) reject("period_from", "REQUIRED")
+            if (last == null) reject("period_to", "REQUIRED")
+            if (first > last) reject("period_from", "OUT_OF_RANGE")
+            if (last > today) reject("period_to", "OUT_OF_RANGE")
+            from = first.atStartOfDay(zone).toOffsetDateTime()
+            tomorrow = last.plusDays(1).atStartOfDay(zone).toOffsetDateTime()
+            if (from.withOffsetSameInstant(java.time.ZoneOffset.UTC).year !in 1..9999) reject("period_from", "OUT_OF_RANGE")
+            if (tomorrow.withOffsetSameInstant(java.time.ZoneOffset.UTC).year !in 1..9999 || !from.isBefore(tomorrow)) reject("period_to", "OUT_OF_RANGE")
+        }
         val count = backend.ledger.all.size
         return ImportConfig(
+            timeZone = if (backend.config.unsupportedResponseTimeZone) "Area/Future_City" else zone.id,
             downloadUrl = "https://www.tbank-online.com/mybank/api/operations/timeline/public/legacy/v1/export_operations" +
                 "?appName=supreme&appVersion=0.0.1&origin=web%2Cib5%2Cplatform&start=${from.toInstant().toEpochMilli()}&end=${tomorrow.toInstant().toEpochMilli()}&format=ofx",
             loginUrl = "https://tbank-online.com/login",
@@ -124,13 +149,12 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
 
     /** Also used at start-up to preload the bundled statement (synchronously, without delays). */
     suspend fun startUpload(fileName: String, doc: OfxDocument, uploadedAt: OffsetDateTime, instant: Boolean = false): MockBackend.Upload {
-        val now = backend.now()
         val upload = MockBackend.Upload(
             id = UUID.randomUUID().toString(),
             fileName = fileName,
             uploadedAt = uploadedAt,
-            coverageFrom = doc.coverageFrom ?: doc.transactions.minOfOrNull { it.postedAt } ?: now,
-            coverageTo = doc.coverageTo ?: doc.transactions.maxOfOrNull { it.postedAt } ?: now,
+            coverageFrom = doc.coverageFrom ?: doc.transactions.minOfOrNull { it.postedAt },
+            coverageTo = doc.coverageTo ?: doc.transactions.maxOfOrNull { it.postedAt },
             unreadLines = doc.unreadLines,
             accountPeriods = doc.accountPeriods,
             operationCount = doc.transactions.size,
@@ -231,7 +255,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
 
         val features = listOf(
             feature(AnalyticsFeature.COMPARISON, fullAfter.isNotEmpty(), fullBefore.isNotEmpty(), requiredFull = 1),
-            feature(AnalyticsFeature.MONTHLY_CHART, after.monthsWithData.size >= 2, before.monthsWithData.size >= 2, requiredWithData = 2),
+            feature(AnalyticsFeature.MONTHLY_CHART, after.monthsWithData.isNotEmpty(), before.monthsWithData.isNotEmpty(), requiredWithData = 1),
             feature(AnalyticsFeature.TYPICAL, fullAfter.size >= 2, fullBefore.size >= 2, requiredFull = 2),
             feature(AnalyticsFeature.REGULAR_PAYMENTS, fullAfter.size >= 2, fullBefore.size >= 2, requiredFull = 2),
             feature(AnalyticsFeature.NOTABLE_SPENDING, fullAfter.size >= 3, fullBefore.size >= 3, requiredFull = 3),
@@ -265,6 +289,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
         }
         val totalsOps = if (isFirst) added else newVisible
         return ImportResult(
+            timeZone = zone.id,
             operationCount = doc.transactions.size,
             newCount = added.size,
             duplicateCount = duplicates,
@@ -308,7 +333,8 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
             ) { true }
         return backend.droppable(
             upload.events.transformWhile { event ->
-                emit(event)
+                emit(if (event is ImportEvent.Complete && backend.config.unsupportedResponseTimeZone)
+                    event.copy(result = event.result.copy(timeZone = "Area/Future_City")) else event)
                 event is ImportEvent.Progress
             },
         ) { it !is ImportEvent.Progress }

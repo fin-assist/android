@@ -61,12 +61,37 @@ class SearchViewModelTest {
     }
 
     private fun found(vararg ids: String, total: Int? = null, range: DateRange? = window, older: Boolean? = null) =
-        OperationsList(items = ids.map { item(it) }, range = range, totalCount = total, hasOlderData = older)
+        OperationsList(items = ids.map { item(it) }, range = range, totalCount = total, hasOlderData = older, timeZone = "Europe/Moscow")
 
     private fun typed(vm: SearchViewModel, q: String) {
         vm.setQuery(q)
         scheduler.advanceTimeBy(350)
         scheduler.runCurrent()
+    }
+
+    @Test fun `search uses response zone and unsupported refresh retains only verified data`() {
+        api.lists += found("old").copy(timeZone = "Asia/Vladivostok")
+        val vm = vm(OperationsFilter(q = "test"))
+        val original = assertIs<SearchResult.Found>(vm.state.value.result)
+        assertEquals("Asia/Vladivostok", original.sourceZone!!.id)
+        api.lists.clear()
+        api.lists += found("bad").copy(timeZone = "Area/Future_City")
+        vm.refresh()
+        assertEquals(original, vm.state.value.result)
+        assertTrue(vm.state.value.sourceZoneUnsupported)
+        val calls = api.queries.size
+        scheduler.advanceTimeBy(60_000); scheduler.runCurrent()
+        assertEquals(calls, api.queries.size)
+        api.lists.clear()
+        api.lists += AppError.Offline()
+        vm.retry()
+        assertTrue(vm.state.value.sourceZoneUnsupported)
+        assertEquals(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE, vm.state.value.errorPresentation!!.textOrFallback("fallback"))
+        api.lists.clear()
+        api.lists += found("new").copy(timeZone = "Asia/Vladivostok")
+        vm.retry()
+        assertFalse(vm.state.value.sourceZoneUnsupported)
+        assertEquals(listOf("new"), assertIs<SearchResult.Found>(vm.state.value.result).items.map { it.id })
     }
 
     @Test fun `a blank search waits for input and asks nothing`() {

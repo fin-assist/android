@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 
 class ImportErrorTextsTest {
     private val tenMb = 10L * 1024 * 1024
-    private val download = "Скачайте выписку кнопкой «Скачать за год» на экране загрузки или в кабинете Т-Банка выберите «Скачать в OFX»"
+    private val download = "Скачайте выписку на экране загрузки или в кабинете Т-Банка выберите «Скачать в OFX»"
 
     @Test fun `a wrong format is named by the extension`() {
         val t = ImportErrorTexts.of(ErrorCodes.WRONG_FORMAT, "statement_09_2026.pdf", tenMb)

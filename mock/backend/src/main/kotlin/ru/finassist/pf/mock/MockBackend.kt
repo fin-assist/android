@@ -88,8 +88,8 @@ class MockBackend(
         val id: String,
         val fileName: String,
         val uploadedAt: OffsetDateTime,
-        val coverageFrom: OffsetDateTime,
-        val coverageTo: OffsetDateTime,
+        val coverageFrom: OffsetDateTime?,
+        val coverageTo: OffsetDateTime?,
         val unreadLines: List<UnreadLine>,
         /** `DTSTART`/`DTEND` per account (FIN-79). */
         val accountPeriods: Map<String, StatementPeriod> = emptyMap(),
@@ -125,7 +125,11 @@ class MockBackend(
     var profile: Profile = emptyProfile("")
     val dismissedPayments = HashSet<String>()
     /** Category changes and statement uploads/deletions, for `changed_since` of the assistant's answers (api.md 7.2). */
-    val dataChanges = DataChanges()
+    val calculation = ru.finassist.pf.mock.domain.MockCalculation()
+    internal val regularSnapshots = ru.finassist.pf.mock.domain.MockRegularSnapshots()
+    /** Test-only delayed completion; not a wire field or a public control endpoint. */
+    var deferAnalyticsCalculation = false
+    val dataChanges = DataChanges { calculation.calculateNow() }
     val assistant = AssistantStore(dataChanges)
 
     /** `Idempotency-Key` → cached response for the endpoints api.md marks idempotent. */
@@ -161,7 +165,11 @@ class MockBackend(
     fun coverage(including: Upload? = null): Coverage {
         val zone = profileZone()
         return Coverage(
-            uploads.filter { it.isDone || it === including }.map { it.coverageFrom to it.coverageTo },
+            uploads.filter { it.isDone || it === including }.mapNotNull { upload ->
+                val from = upload.coverageFrom ?: return@mapNotNull null
+                val to = upload.coverageTo ?: return@mapNotNull null
+                from to to
+            },
             zone,
             now().atZoneSameInstant(zone).toLocalDate(),
         )
@@ -319,6 +327,9 @@ class MockBackend(
         ledger.clear()
         uploads.clear()
         dismissedPayments.clear()
+        calculation.clear()
+        regularSnapshots.clear()
+        deferAnalyticsCalculation = false
         assistant.clear()
         idempotency.clear()
         profile = emptyProfile("")

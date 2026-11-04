@@ -27,7 +27,7 @@ class ForecastHistoryTest {
         assertEquals(listOf("balance", "expense", "daily_expense", "income", "forecast"), tiles.map { it.id })
         assertEquals(100_000.0, tiles.single { it.id == "expense" }.value)
         assertEquals(BlockStatus.LOCKED, tiles.last().status)
-        val text = assertNotNull(tiles.last().lock).text.replace('\u00a0', ' ')
+        val text = assertNotNull(tiles.last().helpText).replace('\u00a0', ' ')
         assertTrue(text.contains("есть 11"))
         assertTrue(text.contains("независимо от выбранного года"))
         assertTrue(text.contains("ноябрь 2025"))
@@ -48,7 +48,7 @@ class ForecastHistoryTest {
         }
         val snapshot = backend.analytics.analytics(PeriodTypeCode.YEAR, PeriodKey("2026"), TransferMode.WITH)
         val tiles = assertNotNull(AnalyticsComposer.compose(snapshot).blocks.single { it.id == "tiles" }.decode(TileGroupData.serializer())).tiles
-        val text = assertNotNull(tiles.last().lock).text.replace('\u00a0', ' ')
+        val text = assertNotNull(tiles.last().helpText).replace('\u00a0', ' ')
         assertEquals(2, snapshot.state?.fullMonths)
         assertTrue(text.contains("Учтены полные месяцы: ноябрь 2025, февраль 2026."))
         assertTrue(text.contains("нет данных за 10–12 октября"))
@@ -90,7 +90,7 @@ class ForecastHistoryTest {
         for (mode in listOf(TransferMode.WITH, TransferMode.WITHOUT)) {
             val snapshot = backend.analytics.analytics(PeriodTypeCode.YEAR, PeriodKey("2026"), mode)
             val tiles = assertNotNull(AnalyticsComposer.compose(snapshot).blocks.single { it.id == "tiles" }.decode(TileGroupData.serializer())).tiles
-            val text = assertNotNull(tiles.last().lock).text
+            val text = assertNotNull(tiles.last().helpText)
             assertTrue(text.contains("Учтены полные месяцы: январь 2020, сентябрь 2026 — октябрь 2026."))
             assertTrue(text.contains("Месяцы без данных: февраль 2020 — август 2026."))
             assertFalse(text.contains("месяц ещё не закончился"))
@@ -98,13 +98,13 @@ class ForecastHistoryTest {
         }
     }
 
-    @Test fun `one incomplete month hides the chart also for an explicit no-data period`() {
+    @Test fun `one incomplete month remains navigable even from an explicit no-data period`() {
         val backend = testBackend().apply { load(statement("2026-09-15", "2026-09-30", trn("one", "2026-09-20T12:00", 1000, "Магазин", "Супермаркеты"))) }
         val snapshot = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITH)
         val response = AnalyticsComposer.compose(snapshot)
         assertEquals(null, response.navigation?.previous)
         assertEquals(null, response.navigation?.next)
-        assertFalse(response.blocks.any { it.id == "monthly_chart" })
+        assertEquals(BlockStatus.READY, response.blocks.single { it.id == "monthly_chart" }.status)
         assertEquals(BlockStatus.NONE, response.blocks.single { it.id == "tiles" }.status)
     }
 

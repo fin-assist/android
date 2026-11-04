@@ -11,19 +11,22 @@ import java.time.YearMonth
 
 /** Context-specific actions: other charts and generic block taps never acquire period selection. */
 object AnalyticsChartActions {
-    fun selection(block: Block, point: ChartPoint): BlockAction? {
+    fun selection(block: Block, point: ChartPoint, zone: java.time.ZoneId? = null): BlockAction? {
         if (block.id != "monthly_chart" || block.type != BlockType.CHART || block.v != 1 || !block.status.hasData) return null
         if (point.coverage == Coverage.NO_DATA) return null
         val action = point.action?.takeIf { it.type == ActionType.SELECT_ANALYTICS_PERIOD } ?: return null
         val target = AnalyticsPeriodTargets.of(action.period, action.date) ?: return null
-        if (target.period != PeriodTypeCode.MONTH || target.date.value != YearMonth.from(point.range.from).toString()) return null
+        if (target.period != PeriodTypeCode.MONTH || target.date.value != YearMonth.from(zone?.let { point.range.from.atZoneSameInstant(it) } ?: point.range.from).toString()) return null
         return action
     }
 
-    fun clicks(block: Block, points: List<ChartPoint>, onSelect: ((Block, BlockAction) -> Unit)?): Map<String, () -> Unit> {
+    fun clicks(block: Block, points: List<ChartPoint>, onSelect: ((Block, BlockAction) -> Unit)?): Map<String, () -> Unit> =
+        clicks(block, points, null, onSelect)
+
+    fun clicks(block: Block, points: List<ChartPoint>, zone: java.time.ZoneId?, onSelect: ((Block, BlockAction) -> Unit)?): Map<String, () -> Unit> {
         val select = onSelect ?: return emptyMap()
         return points.mapNotNull { point ->
-            val action = selection(block, point) ?: return@mapNotNull null
+            val action = selection(block, point, zone) ?: return@mapNotNull null
             action.date!!.value to { select(block, action) }
         }.toMap()
     }

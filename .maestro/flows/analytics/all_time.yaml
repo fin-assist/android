@@ -27,10 +27,12 @@ tags:
       id: "analytics.period.all_time"
       checked: true
     timeout: 15000
-- assertVisible:
-    text: "За всё время.*"
-    childOf:
-      id: "ds.period.pick"
+- assertNotVisible:
+    id: "ds.period.pick"
+- assertNotVisible:
+    id: "ds.period.prev"
+- assertNotVisible:
+    id: "ds.period.next"
 - assertVisible:
     id: "analytics.period.all_time.range"
     text: ".*2025.*2026.*"

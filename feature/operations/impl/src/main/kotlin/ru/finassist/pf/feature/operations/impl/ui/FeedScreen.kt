@@ -66,14 +66,14 @@ fun FeedScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val clock = LocalPfClock.current
-    val zone = clock.zone
-    val today = remember(clock) { clock.today() }
+    val zone = state.sourceZone ?: java.time.ZoneOffset.UTC
+    val today = clock.now().atZoneSameInstant(zone).toLocalDate()
     val listState = rememberLazyListState()
-    LoadMoreEffect(listState, cursor = state.nextBefore, onLoadMore = vm::loadMore)
+    LoadMoreEffect(listState, cursor = state.nextBefore, onLoadMore = { vm.loadMore() })
     FeedContent(
         state = state, today = today, zone = zone, listState = listState,
         onOpenSearch = onOpenSearch, onOpenOperation = onOpenOperation, onUpload = onUpload,
-        onRetry = vm::load, onRefresh = { vm.refresh() }, onLoadMore = vm::loadMore,
+        onRetry = vm::load, onRefresh = { vm.refresh() }, onLoadMore = { vm.loadMore(explicit = true) },
     )
 }
 
@@ -104,8 +104,12 @@ internal fun FeedContent(
                 ErrorMessage(
                     presentation, "Не получилось загрузить операции",
                     modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
+                    retryModifier = Modifier.testTag(OperationsTags.FEED_RETRY),
                     onRetry = if (state.moreFailed) onLoadMore.takeIf { state.moreRetryReady } else onRetry.takeIf { state.retryReady },
                 )
+            }
+            if (state.sourceZoneUnsupported && state.items.isNotEmpty()) {
+                PfNotice("Показаны ранее загруженные данные. Они могут быть неактуальны", tone = NoticeTone.WARNING, modifier = Modifier.padding(horizontal = d.space5))
             }
             when {
                 state.loading -> Unit

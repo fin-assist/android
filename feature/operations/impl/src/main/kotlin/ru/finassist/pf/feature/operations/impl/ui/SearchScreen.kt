@@ -78,8 +78,8 @@ import java.time.ZoneOffset
 fun SearchScreen(onBack: () -> Unit, onOpenOperation: (OperationItem) -> Unit, vm: SearchViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val clock = LocalPfClock.current
-    val zone = clock.zone
-    val today = remember(clock) { clock.today() }
+    val zone = (state.result as? SearchResult.Found)?.sourceZone ?: java.time.ZoneOffset.UTC
+    val today = clock.now().atZoneSameInstant(zone).toLocalDate()
     SearchContent(
         state = state, zone = zone, today = today, onBack = onBack, onOpenOperation = onOpenOperation,
         actions = remember(vm) {
@@ -137,7 +137,7 @@ internal fun SearchContent(
                 // non-editable chip (docs/flags.md); «Сбросить» still removes it.
                 val period = f.from != null || f.to != null || state.allTime
                 if (state.chips.period || period) {
-                    PfChip(periodLabel(f, state.allTime), onClick = { actions.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period, modifier = Modifier.testTag(OperationsTags.CHIP_PERIOD))
+                    PfChip(periodLabel(f, state.allTime, (state.result as? SearchResult.Found)?.sourceZone), onClick = { actions.openSheet(SearchSheet.PERIOD) }, selected = period, dropdown = state.chips.period, enabled = state.chips.period, modifier = Modifier.testTag(OperationsTags.CHIP_PERIOD))
                 }
                 if (state.chips.category || f.categoryId != null) {
                     val name = state.categories.firstOrNull { it.id == f.categoryId }?.name
@@ -156,9 +156,12 @@ internal fun SearchContent(
                 if (f.selection != null || f.transferMode != null || (f.kind != null && knownKind == null)) {
                     PfChip((f.selectionName ?: "Как на «Аналитике»") + "  ✕", onClick = actions.clearAnalyticsScope, selected = true, modifier = Modifier.testTag(OperationsTags.CHIP_SCOPE))
                 }
-                if (!state.onlyQuery) {
-                    PfChip("Сбросить", onClick = actions.reset, modifier = Modifier.testTag(OperationsTags.CHIP_RESET))
-                }
+            }
+            if (!state.onlyQuery) {
+                PfButton(
+                    "Сбросить", onClick = actions.reset, variant = ButtonVariant.GHOST,
+                    modifier = Modifier.padding(start = d.space5, top = d.space1).testTag(OperationsTags.CHIP_RESET),
+                )
             }
             if (state.selectionDropped) {
                 PfNotice("Выборка с «Аналитики» больше не действует — ищем без неё", tone = NoticeTone.INFO, modifier = Modifier.padding(horizontal = d.space5))
@@ -168,8 +171,12 @@ internal fun SearchContent(
                     presentation,
                     if (state.result == SearchResult.TooMany) "Слишком много операций. Выберите период покороче или добавьте фильтр" else "Не получилось найти. Попробуйте ещё раз",
                     modifier = Modifier.padding(horizontal = d.space5, vertical = d.space3),
+                    retryModifier = Modifier.testTag("operations.search.retry"),
                     onRetry = if (!state.retryReady || state.result == SearchResult.TooMany) null else actions.retry,
                 )
+            }
+            if (state.sourceZoneUnsupported && state.result is SearchResult.Found) {
+                PfNotice("Показаны ранее загруженные данные. Они могут быть неактуальны", tone = NoticeTone.WARNING, modifier = Modifier.padding(horizontal = d.space5))
             }
             when (val r = state.result) {
                 // Nothing under the chips until the first search (mockup `SearchInitial`).
@@ -227,7 +234,7 @@ internal fun SearchContent(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(d.space1),
                                 ) {
-                                    val window = r.range?.let { " — " + OperationFormat.windowStart(it.from.toLocalDate()) }.orEmpty()
+                                    val window = r.range?.let { " — " + OperationFormat.windowStart(it.from.atZoneSameInstant(zone).toLocalDate()) }.orEmpty()
                                     Text(
                                         "Искали за последние 12 месяцев$window. Есть операции и раньше",
                                         style = PfTheme.type.hint, color = PfTheme.colors.textMuted, textAlign = TextAlign.Center,
@@ -267,9 +274,9 @@ internal fun SearchContent(
     }
 }
 
-private fun periodLabel(f: OperationsFilter, allTime: Boolean): String {
-    val from = f.from
-    val to = f.to
+private fun periodLabel(f: OperationsFilter, allTime: Boolean, zone: ZoneId? = null): String {
+    val from = f.from?.let { if (zone != null) it.atZoneSameInstant(zone).toOffsetDateTime() else it }
+    val to = f.to?.let { if (zone != null) it.atZoneSameInstant(zone).toOffsetDateTime() else it }
     return when {
         allTime -> "За всё время"
         from != null && to != null -> RussianDates.dayRange(from.toLocalDate(), to.toLocalDate().minusDays(1))

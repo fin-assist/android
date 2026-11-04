@@ -1,0 +1,67 @@
+appId: ru.finassist.pf.mock.e2e
+name: Скачать выписку за выбранный период — границы и ошибка сети
+tags:
+  - statements
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "operations.feed.upload_new"
+- extendedWaitUntil:
+    visible:
+      id: "statements.upload"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.download_period"
+- tapOn:
+    id: "statements.upload.download_period"
+# Fixed clock is 8 October 2026; the initial month is October.
+- tapOn:
+    id: "statements.download_period.day.2026-10-01"
+- tapOn:
+    id: "statements.download_period.day.2026-10-08"
+- assertVisible:
+    id: "statements.download_period.confirm"
+    enabled: true
+- tapOn:
+    id: "statements.download_period.to"
+- eraseText
+- inputText: "2026-09-30"
+- hideKeyboard
+- assertVisible:
+    id: "statements.download_period.confirm"
+    enabled: false
+- tapOn:
+    id: "statements.download_period.to"
+- eraseText
+- inputText: "2026-10-09"
+- hideKeyboard
+- assertVisible:
+    id: "statements.download_period.confirm"
+    enabled: false
+- tapOn:
+    id: "statements.download_period.to"
+- eraseText
+- inputText: "2026-10-08"
+- hideKeyboard
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- tapOn:
+    id: "statements.download_period.confirm"
+- extendedWaitUntil:
+    visible: "Не удаётся подключиться к серверу"
+    timeout: 10000
+- assertVisible:
+    id: "statements.download_period.from"
+    text: "2026-10-01"
+- assertVisible:
+    id: "statements.download_period.to"
+    text: "2026-10-08"
+- assertVisible:
+    id: "statements.download_period.confirm"
+    enabled: true
+# Successful ACTION_VIEW URI is covered by StatementPickerTest: Maestro cannot inspect intents.

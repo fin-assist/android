@@ -1,0 +1,275 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — явное чтение сохраняет неизвестный результат действия
+tags:
+  - analytics
+  - mock-only
+---
+# A forbidden retry must not trap the screen, and read recovery must not silently send a PUT.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 15000
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 10000
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=analytics_dismiss&error_scenario=terminal_failure"
+- tapOn: "Не подписка — РБК"
+- extendedWaitUntil:
+    visible: "Не получилось убрать.*"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "analytics.unknown_read_recovery"
+    direction: UP
+- assertVisible: "Результат изменения не подтверждён"
+- tapOn:
+    id: "analytics.unknown_read_recovery"
+- extendedWaitUntil:
+    visible: "Аналитика загружается отдельно.*"
+    timeout: 10000
+- assertVisible: "Результат изменения не подтверждён"
+- assertNotVisible: "Убрали из регулярных платежей"
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+- assertVisible: "РБК"
+# The ready GET has the same calculation version, so the original refusal still applies.
+- tapOn: "Не подписка — РБК"
+- assertVisible: "РБК"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_error_requests=1"
+
+# An uncached period loses the row button; recovery stays outside financial content.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 15000
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 10000
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- tapOn: "Не подписка — РБК"
+- extendedWaitUntil:
+    visible: "Не получилось убрать.*"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- scrollUntilVisible:
+    element:
+      id: "ds.segment.2"
+    direction: UP
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.unknown_read_recovery"
+    timeout: 10000
+- assertNotVisible:
+    id: "analytics.updating"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?network_delay_ms=10000"
+- tapOn:
+    id: "analytics.unknown_read_recovery"
+- assertVisible:
+    id: "analytics.updating"
+- assertNotVisible:
+    id: "analytics.empty"
+- extendedWaitUntil:
+    visible:
+      text: "2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 20000
+- assertVisible: "Результат изменения не подтверждён"
+- assertVisible: "Аналитика загружается отдельно.*"
+- assertNotVisible: "Убрали из регулярных платежей"
+
+# Confirmed deletion invalidates the financial cache but does not settle the unknown command.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 15000
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 10000
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- tapOn: "Не подписка — РБК"
+- extendedWaitUntil:
+    visible: "Не получилось убрать.*"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.empty"
+    timeout: 10000
+- tapOn:
+    id: "ds.back"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.unknown_read_recovery"
+    timeout: 10000
+- assertVisible: "Результат изменения не подтверждён"
+- assertNotVisible:
+    id: "analytics.empty"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?network_delay_ms=10000"
+- tapOn:
+    id: "analytics.unknown_read_recovery"
+- assertVisible:
+    id: "analytics.updating"
+- assertNotVisible:
+    id: "analytics.empty"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.empty"
+    timeout: 20000
+- assertVisible: "Результат изменения не подтверждён"
+- assertVisible: "Аналитика загружается отдельно.*"
+- assertNotVisible: "Убрали из регулярных платежей"
+
+# An unknown completion rolls an unperformed selection back to the shown month, without a hidden GET.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 15000
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 10000
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?network_delay_ms=20000&error_operation=analytics_dismiss&error_scenario=terminal_failure"
+- tapOn: "Не подписка — РБК"
+- scrollUntilVisible:
+    element:
+      id: "ds.segment.2"
+    direction: UP
+- assertNotVisible: "Не получилось убрать.*"
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    visible: "Результат изменения не подтверждён"
+    timeout: 30000
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?network_delay_ms=0"
+# This second tap must issue the Year read, rather than being swallowed as an unchanged internal target.
+- tapOn:
+    id: "ds.segment.2"
+- extendedWaitUntil:
+    notVisible:
+      id: "ds.period.pick"
+    timeout: 10000
+- assertVisible:
+    id: "analytics.unknown_read_recovery"
+- tapOn:
+    id: "analytics.unknown_read_recovery"
+- extendedWaitUntil:
+    visible:
+      text: "2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 10000
+- assertVisible: "Результат изменения не подтверждён"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_error_requests=1"

@@ -54,6 +54,16 @@ class MockOperationsApiTest {
     private suspend fun found(filter: OperationsFilter, allTime: Boolean = false): Set<String> =
         search(filter, allTime).items.map { item -> backend.ledger.byId(item.id)?.fitId ?: "pair".also { assertEquals(pairId, item.id) } }.toSet()
 
+    @Test fun `list replies own the source zone independently of raw operation offsets`() = runBlocking<Unit> {
+        backend.profile = backend.profile.copy(timezone = "Asia/Vladivostok")
+        assertEquals("Asia/Vladivostok", search(OperationsFilter()).timeZone)
+        assertEquals("Asia/Vladivostok", search(OperationsFilter(q = "absent")).timeZone)
+        backend.config = backend.config.copy(unsupportedResponseTimeZone = true)
+        assertEquals("Area/Future_City", search(OperationsFilter()).timeZone)
+        backend.config = backend.config.copy(unsupportedResponseTimeZone = false)
+        assertEquals("Asia/Vladivostok", search(OperationsFilter()).timeZone)
+    }
+
     // ---- search ----
 
     @Test

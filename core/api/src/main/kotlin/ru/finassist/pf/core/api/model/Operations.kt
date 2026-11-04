@@ -109,6 +109,7 @@ data class OperationsList(
     val nextBefore: ApiDateTime? = null,
     val totalCount: Int? = null,
     val hasOlderData: Boolean? = null,
+    val timeZone: String? = null,
 )
 
 /** Query of `listOperations`. Feed = all filters empty (+ optional [before]); search = at least one filter. */

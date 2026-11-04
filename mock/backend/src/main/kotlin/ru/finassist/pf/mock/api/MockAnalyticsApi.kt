@@ -3,6 +3,12 @@ package ru.finassist.pf.mock.api
 import kotlinx.coroutines.sync.withLock
 import ru.finassist.pf.core.api.AnalyticsApi
 import ru.finassist.pf.core.api.model.Analytics
+import ru.finassist.pf.core.api.model.AnalyticsBlockUpdate
+import ru.finassist.pf.core.api.model.AnalyticsChartPage
+import ru.finassist.pf.core.api.model.AnalyticsCalculation
+import ru.finassist.pf.core.api.model.ChartData
+import ru.finassist.pf.core.api.ApiJson
+import kotlinx.serialization.json.jsonObject
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockLock
 import ru.finassist.pf.core.api.model.BlockStatus
@@ -19,10 +25,12 @@ import ru.finassist.pf.core.common.time.PeriodType
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.apiError
+import ru.finassist.pf.mock.MockErrorOperation
 import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.mock.domain.AnalyticsComposer
 
 class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
+    private val chartPages = ru.finassist.pf.mock.domain.MockChartPages(backend)
 
     override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?, supports: String?, exp: String?): Analytics {
         val supported = try {
@@ -55,15 +63,25 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
                 true
             }
         }
-        if (pending) return Analytics(hasData = false)
-        val snapshot = backend.mutex.withLock { backend.analytics.analytics(period, date, transferMode ?: TransferMode.WITH) }
-        val composed = AnalyticsComposer.compose(
-            snapshot,
-            supports = supported,
-            experiments = AnalyticsComposer.parseExperiments(exp),
-            failing = backend.config.failingBlocks,
-        )
-        return if (backend.config.unknownCodes && composed.hasData) withUnknownCodes(composed) else composed
+        if (pending) return Analytics(hasData = false, calculation = backend.calculation.state().copy(recalculating = true))
+        return backend.mutex.withLock {
+            if (backend.calculation.pending && !backend.deferAnalyticsCalculation && backend.config.analyticsRecalculatingResponses == 0) backend.calculation.calculateNow()
+            val snapshot = backend.analytics.analytics(period, date, transferMode ?: TransferMode.WITH)
+            if (snapshot.hasData && backend.calculation.state().calcVersion == 0) backend.calculation.calculateNow()
+            val published = backend.regularSnapshots.forRead(snapshot, backend.profile.userId, backend.calculation.state().calcVersion)
+            val composed = AnalyticsComposer.compose(
+                published, supports = supported, experiments = AnalyticsComposer.parseExperiments(exp),
+                failing = backend.config.failingBlocks,
+                chartPage = snapshot.historyChart?.let { chartPages.info(transferMode ?: TransferMode.WITH, it) }
+                    ?: ru.finassist.pf.core.api.model.ChartPageInfo("empty"),
+            )
+            val remaining = backend.config.analyticsRecalculatingResponses
+            if (remaining > 0) backend.config = backend.config.copy(analyticsRecalculatingResponses = remaining - 1)
+            val calculation = backend.calculation.state().let { if (remaining > 0) it.copy(recalculating = true) else it }
+            val marked = composed.copy(timeZone = composed.timeZone?.let { if (backend.config.unsupportedResponseTimeZone) "Area/Future_City" else it }, calculation = calculation,
+                state = composed.state?.copy(recalculating = calculation.recalculating))
+            if (backend.config.unknownCodes && marked.hasData) withUnknownCodes(marked) else marked
+        }
     }
 
     /**
@@ -86,21 +104,56 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
         backend.simulateNetwork()
         backend.requireSession()
         if (period == PeriodTypeCode.UNKNOWN) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400)
-        return backend.mutex.withLock { backend.analytics.periods(period ?: PeriodTypeCode.MONTH) }
+        return backend.mutex.withLock { backend.analytics.periods(period ?: PeriodTypeCode.MONTH).let { it.copy(timeZone = (if (backend.config.unsupportedResponseTimeZone) "Area/Future_City" else backend.profileZone().id).takeIf { _ -> it.periods.isNotEmpty() }) } }
     }
 
-    override suspend fun dismissRegularPayment(id: String) {
+    override suspend fun dismissRegularPayment(id: String, date: PeriodKey, transferMode: TransferMode): AnalyticsBlockUpdate {
         backend.simulateNetwork()
         backend.requireSession()
-        requirePayment(id)
-        backend.mutex.withLock { backend.dismissedPayments += id }
+        if (!date.isCalendar || date.type != PeriodType.MONTH || !PeriodKey.isValid(date.value)) invalidField("date")
+        if (transferMode == TransferMode.UNKNOWN) invalidField("transfer_mode")
+        backend.mutex.withLock { requirePayment(id) }
+        backend.maybeInjectError(MockErrorOperation.ANALYTICS_DISMISS)
+        return backend.mutex.withLock {
+            requirePayment(id)
+            val before = backend.analytics.analytics(PeriodTypeCode.MONTH, date, transferMode)
+            if (!before.hasData || before.period?.coverage == ru.finassist.pf.core.api.model.Coverage.NO_DATA) {
+                if (id in backend.dismissedPayments) throw backend.apiError("ANALYTICS_CONTEXT_UNAVAILABLE", 422)
+                throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+                    details = listOf(AppError.FieldError("date", FieldErrorCodes.OUT_OF_RANGE, "Period unavailable")))
+            }
+            val target = backend.calculation.dismiss(id)
+            backend.dismissedPayments += id
+            val response = AnalyticsComposer.compose(backend.analytics.analytics(PeriodTypeCode.MONTH, date, transferMode))
+            AnalyticsBlockUpdate(response.params!!, response.currency, if (backend.config.unsupportedResponseTimeZone) "Area/Future_City" else response.timeZone!!, target,
+                response.blocks.filter { it.id == "regular_payments" })
+        }
     }
+
+    override suspend fun getMonthlyChartPage(cursor: String): AnalyticsChartPage {
+        backend.simulateNetwork()
+        backend.requireSession()
+        return backend.mutex.withLock {
+            val request = chartPages.resolve(cursor)
+            val page = backend.analytics.historyPage(request.mode, index = request.index)
+            val snapshot = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey(page.chart.points!!.last().month), request.mode)
+                .copy(historyChart = page)
+            val composed = AnalyticsComposer.compose(snapshot, chartPage = chartPages.info(request.mode, page))
+            val block = composed.blocks.single { it.id == "monthly_chart" }
+            // Page responses carry no selection-specific notes/highlight.
+            val data = block.decode(ChartData.serializer())!!.copy(notes = emptyList(), highlightIndex = null)
+            AnalyticsChartPage(block.copy(data = ApiJson.encodeToJsonElement(ChartData.serializer(), data).jsonObject), if (backend.config.unsupportedResponseTimeZone) "Area/Future_City" else backend.profileZone().id)
+        }
+    }
+
+    private fun invalidField(field: String): Nothing = throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
+        details = listOf(AppError.FieldError(field, FieldErrorCodes.INVALID_FORMAT, "Invalid selection")))
 
     override suspend fun restoreRegularPayment(id: String) {
         backend.simulateNetwork()
         backend.requireSession()
         requirePayment(id)
-        backend.mutex.withLock { backend.dismissedPayments -= id }
+        backend.mutex.withLock { backend.dismissedPayments -= id; backend.calculation.restore(id) }
     }
 
     /**
@@ -114,7 +167,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
                 details = listOf(AppError.FieldError("id", FieldErrorCodes.INVALID_FORMAT, "must be a lowercase UUID")),
             )
         }
-        if (backend.analytics.regularPaymentName("s_regular_$id") == null) throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
+        if (id !in backend.dismissedPayments && backend.analytics.regularPaymentName("s_regular_$id") == null) throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
     }
 
     private companion object {

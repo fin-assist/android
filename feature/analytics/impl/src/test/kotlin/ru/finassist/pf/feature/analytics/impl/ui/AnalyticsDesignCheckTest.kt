@@ -32,6 +32,21 @@ import java.time.ZoneOffset
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class AnalyticsDesignCheckTest {
+    @Test fun unsupportedSourceZone() = capture("AnalyticsUnsupportedZone", ui(september()).copy(
+        sourceZoneUnsupported = true, errorPresentation = ErrorPresentation(userMessage = UserMessage.from("Устройство не поддерживает часовой пояс этих данных"))), 940)
+    @Test fun unsupportedSourceZoneDark() = capture("AnalyticsUnsupportedZoneDark", ui(september()).copy(
+        sourceZoneUnsupported = true, errorPresentation = ErrorPresentation(userMessage = UserMessage.from("Устройство не поддерживает часовой пояс этих данных"))), 940, dark = true)
+
+    // FIN-416: proposed recovery artboards, authored without running DesignCheck.
+    @Test fun unknownMutationRecovery() = capture("AnalyticsUnknownMutation", ui(september()).copy(
+        unknownMutation = true, unknownReadRecoveryAvailable = true, recalculating = true, recalculationPaused = true), 1100)
+    @Test fun unknownMutationWithoutCache() = capture("AnalyticsUnknownMutationEmpty", AnalyticsUiState(loading = false, blocks = blocks,
+        unknownMutation = true, unknownReadRecoveryAvailable = true), 844)
+    @Test fun unknownMutationReadPreparing() = capture("AnalyticsUnknownMutationPreparing", AnalyticsUiState(loading = true, blocks = blocks,
+        unknownMutation = true, unknownReadRecoveryUsed = true), 844)
+    @Test fun unknownMutationAfterRead() = capture("AnalyticsUnknownMutationRead", ui(september()).copy(
+        unknownMutation = true, unknownReadRecoveryUsed = true), 1100)
+
     private fun day(m: Int, d: Int) = OffsetDateTime.of(2026, m, d, 0, 0, 0, 0, ZoneOffset.ofHours(3))
 
     /**
@@ -87,8 +102,8 @@ class AnalyticsDesignCheckTest {
         }
 
     // FIN-394: proposed states; authored without running UI/DesignCheck.
-    @Test fun analyticsRecalculating() = capture("AnalyticsRecalculating", ui(september().copy(state = analyticsState.copy(recalculating = true))), heightDp = 2848)
-    @Test fun analyticsRecalculationPaused() = capture("AnalyticsRecalculationPaused", ui(september().copy(state = analyticsState.copy(recalculating = true))).copy(recalculationPaused = true), heightDp = 2848)
+    @Test fun analyticsRecalculating() = capture("AnalyticsRecalculating", ui(september()).copy(recalculating = true), heightDp = 2848)
+    @Test fun analyticsRecalculationPaused() = capture("AnalyticsRecalculationPaused", ui(september()).copy(recalculating = true, recalculationPaused = true), heightDp = 2848)
     @Test fun analyticsUpdating() = capture("AnalyticsUpdating", AnalyticsUiState(blocks = blocks), heightDp = 844)
     @Test fun analyticsPreparationTimeout() = capture("AnalyticsPreparationTimeout", AnalyticsUiState(loading = false, blocks = blocks, preparationTimedOut = true), heightDp = 844)
     @Test fun analyticsPreparationTimeoutDark() = capture("AnalyticsPreparationTimeoutDark", AnalyticsUiState(loading = false, blocks = blocks, preparationTimedOut = true), heightDp = 844, dark = true)

@@ -4,6 +4,8 @@ import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
 
 import kotlinx.coroutines.flow.Flow
 import ru.finassist.pf.core.api.model.Analytics
+import ru.finassist.pf.core.api.model.AnalyticsBlockUpdate
+import ru.finassist.pf.core.api.model.AnalyticsChartPage
 import ru.finassist.pf.core.api.model.AnalyticsPeriodsList
 import ru.finassist.pf.core.api.model.AnswerEvent
 import ru.finassist.pf.core.api.model.AskRequest
@@ -98,7 +100,8 @@ sealed interface ImportEvent {
 }
 
 interface StatementsApi {
-    suspend fun getImportConfig(): ImportConfig
+    /** Optional paired inclusive civil dates, YYYY-MM-DD; the response owns its source zone and URL. */
+    suspend fun getImportConfig(periodFrom: String? = null, periodTo: String? = null): ImportConfig
     suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted
     /** `GET /v1/statements/{upload_id}/progress`. Completes after `complete` or `error`. */
     fun streamProgress(uploadId: String): Flow<ImportEvent>
@@ -133,7 +136,10 @@ interface AnalyticsApi {
     ): Analytics
 
     suspend fun listPeriods(period: PeriodTypeCode? = null): AnalyticsPeriodsList
-    suspend fun dismissRegularPayment(id: String)
+    /** Exact shown month and transfer mode; replaces only the returned complete blocks (api.md 6.3). */
+    suspend fun dismissRegularPayment(id: String, date: PeriodKey, transferMode: TransferMode): AnalyticsBlockUpdate
+    /** Opaque cursor from the embedded first page or a neighbouring page (api.md 6.4). */
+    suspend fun getMonthlyChartPage(cursor: String): AnalyticsChartPage
     suspend fun restoreRegularPayment(id: String)
 }
 

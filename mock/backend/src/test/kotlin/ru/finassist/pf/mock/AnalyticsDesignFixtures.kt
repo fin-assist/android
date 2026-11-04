@@ -196,6 +196,7 @@ object AnalyticsDesignFixtures {
                 ),
             ),
             monthlyChart = MonthlyChart(MetricStatus.READY, basis = basis, points = spend.mapIndexed { i, e -> point(4 + i, e, kept[i]) }),
+            historyChart = ru.finassist.pf.mock.domain.HistoryChartPage(MonthlyChart(MetricStatus.READY, points = spend.mapIndexed { i, e -> point(4 + i, e, kept[i]) }), 0, null, null),
             insights = insights(s),
             state = analyticsState,
         )
@@ -240,6 +241,7 @@ object AnalyticsDesignFixtures {
                 ),
             ),
             monthlyChart = MonthlyChart(MetricStatus.READY, basis = basis, points = (1..12).map { m -> point(m, spend[m], kept[m]) }),
+            historyChart = ru.finassist.pf.mock.domain.HistoryChartPage(MonthlyChart(MetricStatus.READY, points = (4..9).map { m -> point(m, spend[m], kept[m]) }), 0, null, null),
             insights = null,
             state = analyticsState,
         )
@@ -255,6 +257,7 @@ object AnalyticsDesignFixtures {
                 dailyExpense = a.tiles!!.dailyExpense.copy(comparison = noFull),
             ),
             monthlyChart = MonthlyChart(MetricStatus.LOCKED, lock = MetricLock(LockReason.NEED_MONTHS_WITH_DATA, 2, 1)),
+            historyChart = ru.finassist.pf.mock.domain.HistoryChartPage(MonthlyChart(MetricStatus.READY, points = listOf(a.monthlyChart!!.points!!.last())), 0, null, null),
             insights = Insights(
                 regularPayments = RegularPaymentsCard(MetricStatus.LOCKED, lock = MetricLock(LockReason.NEED_FULL_MONTHS, 2, 0)),
                 notableSpending = NotableSpendingCard(MetricStatus.LOCKED, lock = MetricLock(LockReason.NEED_FULL_MONTHS, 3, 0)),

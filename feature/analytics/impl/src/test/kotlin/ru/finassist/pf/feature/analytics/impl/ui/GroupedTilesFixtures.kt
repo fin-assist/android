@@ -24,7 +24,7 @@ internal object GroupedTilesFixtures {
             Tile("earned", "Доходы за период", value = if (large) 123_456_789_000.0 else 15_690_000.0,
                 valueKind = ValueKind.AMOUNT, showPlus = true, action = open),
             Tile("difference", "Доходы минус расходы", value = if (large) -864_197_532_000.0 else 7_258_000.0,
-                valueKind = ValueKind.AMOUNT, caption = "46% дохода · по выписке"),
+                valueKind = ValueKind.AMOUNT, caption = "46% дохода"),
         )),
         TileGroupSection(listOf(
             Tile("average", "Средние расходы в день", value = 0.0, valueKind = ValueKind.AMOUNT,

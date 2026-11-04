@@ -73,6 +73,7 @@ class UploadViewModelTest {
         downloadUrl = "https://www.tbank.ru/export", loginUrl = "https://tbank-online.com/login",
         maxFileSizeBytes = 5L * 1024 * 1024, acceptedFormats = listOf("OFX"),
         suggestedPeriod = DateRange(OffsetDateTime.parse("2025-09-26T00:00:00+03:00"), OffsetDateTime.parse("2026-09-26T00:00:00+03:00")),
+        timeZone = "Europe/Moscow",
     )
 
     private inner class FakeApi : StatementsApi {
@@ -80,6 +81,7 @@ class UploadViewModelTest {
         var configFailure: AppError? = null
         var currentConfig = config
         var configCalls = 0
+        val dateRequests = mutableListOf<Pair<String?, String?>>()
         val keys: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
         /** `file.name` of every upload attempt, in the order of [keys]. */
         val names: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
@@ -94,8 +96,9 @@ class UploadViewModelTest {
         var deleteFailure: AppError? = null
         val deleted = mutableListOf<String>()
 
-        override suspend fun getImportConfig(): ImportConfig {
+        override suspend fun getImportConfig(periodFrom: String?, periodTo: String?): ImportConfig {
             configCalls++
+            dateRequests += periodFrom to periodTo
             return configFailure?.let { throw it } ?: currentConfig
         }
         override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted {
@@ -154,19 +157,79 @@ class UploadViewModelTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    @Test fun `without the config the guide suggests the last 12 months by the app's clock`() {
-        api.configFailure = AppError.Server(500)
-        val vm = newViewModel()
-        val period = vm.state.value.config!!.suggestedPeriod
-        assertEquals(OffsetDateTime.parse("2025-10-08T12:00:00+03:00"), period.from)
-        assertEquals(OffsetDateTime.parse("2026-10-09T12:00:00+03:00"), period.to)
-    }
-
-    @Test fun `cold config failure never opens the obsolete login address`() {
+    @Test fun `cold config error shows an explicit failure without invented calendar data`() {
         api.configFailure = AppError.Server(500)
         val state = newViewModel().state.value
-        assertEquals("https://tbank-online.com/login", assertIs<UploadPhase.Guide>(state.phase).config.loginUrl)
-        assertEquals("https://tbank-online.com/login", state.config!!.downloadUrl)
+        assertIs<UploadPhase.ConfigFailure>(state.phase)
+        assertNull(state.config)
+    }
+
+    @Test fun `selected dates request exact inclusive days and open unchanged server URL only after validation`() {
+        vm.showPeriodPicker(true)
+        val from = java.time.LocalDate.parse("2026-09-01")
+        val to = java.time.LocalDate.parse("2026-09-30")
+        vm.selectPeriod(from, to)
+        api.currentConfig = config.copy(downloadUrl = "https://bank.example/selected?opaque=value", suggestedPeriod = DateRange(
+            OffsetDateTime.parse("2026-08-31T21:00:00Z"), OffsetDateTime.parse("2026-09-30T21:00:00Z")))
+        vm.downloadPeriod()
+        assertEquals("2026-09-01" to "2026-09-30", api.dateRequests.last())
+        assertEquals(api.currentConfig.downloadUrl, vm.state.value.downloadUrlToOpen)
+        assertFalse(vm.state.value.periodPickerOpen)
+        vm.consumeDownload()
+        assertNull(vm.state.value.downloadUrlToOpen)
+        vm.showPeriodPicker(true)
+        api.currentConfig = api.currentConfig.copy(suggestedPeriod = config.suggestedPeriod)
+        vm.downloadPeriod()
+        assertNull(vm.state.value.downloadUrlToOpen)
+        assertTrue(vm.state.value.periodPickerOpen)
+        assertTrue(vm.state.value.periodError != null)
+    }
+
+    @Test fun `today cutoff comes from the accepted response zone`() {
+        api.currentConfig = config.copy(timeZone = "Pacific/Honolulu")
+        vm.load()
+        vm.showPeriodPicker(true)
+        assertEquals(java.time.LocalDate.parse("2026-10-07"), vm.state.value.periodToday)
+        vm.selectPeriod(java.time.LocalDate.parse("2026-10-08"), java.time.LocalDate.parse("2026-10-08"))
+        val calls = api.configCalls
+        vm.downloadPeriod()
+        assertEquals(calls, api.configCalls)
+    }
+
+    @Test fun `same period does not release request refusal but changed dates do`() {
+        vm.showPeriodPicker(true)
+        val first = java.time.LocalDate.parse("2026-09-01")
+        val last = java.time.LocalDate.parse("2026-09-30")
+        vm.selectPeriod(first, last)
+        api.configFailure = AppError.Api("VALIDATION_ERROR", 400, response = ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "VALIDATION_ERROR", 400, requestRetryable = false))
+        vm.downloadPeriod()
+        val calls = api.configCalls
+        vm.selectPeriod(first, last)
+        vm.downloadPeriod()
+        assertEquals(calls, api.configCalls)
+        vm.selectPeriod(first.plusDays(1), last)
+        vm.downloadPeriod()
+        assertEquals(calls + 1, api.configCalls)
+    }
+
+    @Test fun `unknown source zone keeps verified guide and requires an explicit supported response`() {
+        api.currentConfig = config.copy(timeZone = "Future/Valid_Zone")
+        vm.load()
+        assertEquals(config, vm.state.value.config)
+        assertTrue(vm.state.value.guideErrorPresentation != null)
+        val calls = api.configCalls
+        dispatcher.scheduler.advanceTimeBy(30000)
+        assertEquals(calls, api.configCalls)
+        api.configFailure = AppError.Offline()
+        vm.load()
+        assertTrue(vm.state.value.sourceZoneUnsupported)
+        assertEquals(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE, vm.state.value.guideErrorPresentation!!.textOrFallback("fallback"))
+        api.configFailure = null
+        api.currentConfig = config.copy(timeZone = "Asia/Vladivostok")
+        vm.load()
+        assertEquals("Asia/Vladivostok", vm.state.value.config?.timeZone)
+        assertNull(vm.state.value.guideErrorPresentation)
     }
 
     @Test fun `server destination changes apply on reload and survive a later config failure`() {

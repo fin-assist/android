@@ -93,11 +93,29 @@ tags:
       id: "analytics.tile.expense"
 - scrollUntilVisible:
     element:
-      text: "(?s).*есть 11.*независимо от выбранного года.*ноябрь 2025.*сентябрь 2026.*Неполные месяцы.*октябрь 2025.*октябрь 2026.*"
+      text: ".*есть 11.*"
       childOf:
         id: "analytics.tile.forecast"
 - assertVisible:
-    text: "(?s).*есть 11.*независимо от выбранного года.*ноябрь 2025.*сентябрь 2026.*Неполные месяцы.*октябрь 2025.*октябрь 2026.*"
+    text: ".*есть 11.*"
+    childOf:
+      id: "analytics.tile.forecast"
+- assertNotVisible: ".*независимо от выбранного года.*"
+- tapOn:
+    id: "analytics.tile.forecast.help"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.tile.forecast.help.sheet"
+    timeout: 10000
+- assertVisible: "Прогноз расходов на год"
+- scrollUntilVisible:
+    element:
+      text: "(?s).*Неполные месяцы.*октябрь 2025.*октябрь 2026.*"
+- assertVisible: "(?s).*независимо от выбранного года.*"
+- tapOn:
+    id: "ds.sheet.close"
+- assertVisible:
+    text: ".*есть 11.*"
     childOf:
       id: "analytics.tile.forecast"
 - scrollUntilVisible:

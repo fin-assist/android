@@ -44,8 +44,8 @@ object BlockFormat {
     }
 
     /** Axis label; a multi-year chart keeps the year on a separate line. */
-    fun chartMonthLabel(point: ChartPoint, showYear: Boolean): String {
-        val month = YearMonth.from(point.range.from)
+    fun chartMonthLabel(point: ChartPoint, showYear: Boolean, zone: java.time.ZoneId? = null): String {
+        val month = YearMonth.from(zone?.let { point.range.from.atZoneSameInstant(it) } ?: point.range.from)
         return RussianDates.monthShort(month.month) + if (showYear) "\n${month.year}" else ""
     }
 
@@ -53,12 +53,13 @@ object BlockFormat {
      * Filled share of a partial bar: the days from `data_from` to `data_to` (inclusive) over the days of the period's
      * month. September with data to the 25th → 25/30. `null` for a complete point.
      */
-    fun partialFill(p: ChartPoint): Float? {
+    fun partialFill(p: ChartPoint, zone: java.time.ZoneId? = null): Float? {
         if (p.coverage.effective != Coverage.PARTIAL) return null
-        val monthStart = p.range.from.toLocalDate()
-        val monthEnd = p.range.to.toLocalDate().minusDays(1)
-        val from = p.dataFrom?.toLocalDate()?.coerceAtLeast(monthStart) ?: monthStart
-        val to = p.dataTo?.toLocalDate()?.coerceAtMost(monthEnd) ?: monthEnd
+        fun day(value: java.time.OffsetDateTime) = (zone?.let { value.atZoneSameInstant(it).toLocalDate() } ?: value.toLocalDate())
+        val monthStart = day(p.range.from)
+        val monthEnd = day(p.range.to).minusDays(1)
+        val from = p.dataFrom?.let(::day)?.coerceAtLeast(monthStart) ?: monthStart
+        val to = p.dataTo?.let(::day)?.coerceAtMost(monthEnd) ?: monthEnd
         val days = monthStart.lengthOfMonth()
         val covered = (to.toEpochDay() - from.toEpochDay() + 1).coerceIn(0, days.toLong())
         return covered.toFloat() / days

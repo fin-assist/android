@@ -59,7 +59,7 @@ class AnalyticsGroupedTilesTest {
             }
             assertEquals("Расходы за период", after.getValue("expense").title)
             assertEquals("Доходы за период", after.getValue("income").title)
-            assertTrue(after.getValue("daily_expense").caption!!.startsWith("По дням с данными не позже сегодня; пропуски не учитываются"))
+            assertTrue(after.getValue("daily_expense").helpText!!.startsWith("По дням с данными не позже сегодня; пропуски не учитываются"))
         }
     }
 
@@ -102,7 +102,7 @@ class AnalyticsGroupedTilesTest {
                 else assertEquals(emptyList(), block.decode(TileGroupData.serializer())!!.tiles)
             }
         }
-        assertEquals(Analytics(hasData = false), AnalyticsComposer.compose(AnalyticsSnapshot(hasData = false), supports))
+        assertEquals(Analytics(hasData = false, calculation = ru.finassist.pf.core.api.model.AnalyticsCalculation(0, false)), AnalyticsComposer.compose(AnalyticsSnapshot(hasData = false), supports))
     }
 
     @Test fun `groups keep experiment ordering and their readable fallback follows display order`() {

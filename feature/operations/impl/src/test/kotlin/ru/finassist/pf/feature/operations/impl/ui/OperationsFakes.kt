@@ -66,7 +66,7 @@ internal class FakeOperationsApi : OperationsApi {
         queries += query
         listReply?.let { return it(query) }
         gate?.await()
-        val next = if (lists.size > 1) lists.removeFirst() else lists.firstOrNull() ?: OperationsList(emptyList())
+        val next = if (lists.size > 1) lists.removeFirst() else lists.firstOrNull() ?: OperationsList(emptyList(), timeZone = "Europe/Moscow")
         if (next is AppError) throw next
         return next as OperationsList
     }

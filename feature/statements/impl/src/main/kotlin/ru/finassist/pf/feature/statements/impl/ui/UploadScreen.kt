@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import ru.finassist.pf.feature.statements.impl.domain.ImportErrorTexts
+import ru.finassist.pf.feature.statements.impl.domain.DownloadTexts
 import ru.finassist.pf.core.designsystem.components.TextPart
 import ru.finassist.pf.core.designsystem.components.PfDivider
 import ru.finassist.pf.core.designsystem.components.PfBottomSheet
@@ -85,6 +86,9 @@ fun UploadScreen(
         vm.consumeDone()
         onDone(id)
     }
+    LaunchedEffect(state.downloadUrlToOpen) {
+        state.downloadUrlToOpen?.let { url -> vm.consumeDownload(); openUrl(context, url) }
+    }
     LifecycleResumeEffect(Unit) {
         vm.watch()
         onPauseOrDispose { vm.stopWatching() }
@@ -109,6 +113,7 @@ fun UploadScreen(
         onSupport = { writeToSupport(context, "Не получилось загрузить выписку") },
         onStartNewUpload = vm::startNewUpload,
         onOpenHistory = onOpenHistory,
+        onShowPeriod = vm::showPeriodPicker, onSelectPeriod = vm::selectPeriod, onDownloadPeriod = vm::downloadPeriod,
     )
 }
 
@@ -131,6 +136,9 @@ internal fun UploadContent(
     onSupport: () -> Unit,
     onStartNewUpload: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
+    onShowPeriod: (Boolean) -> Unit = {},
+    onSelectPeriod: (java.time.LocalDate?, java.time.LocalDate?) -> Unit = { _, _ -> },
+    onDownloadPeriod: () -> Unit = {},
 ) {
     val d = PfTheme.dimens
     val busy = state.phase as? UploadPhase.Busy
@@ -165,10 +173,12 @@ internal fun UploadContent(
                 .padding(top = d.space4, bottom = d.space4),
         ) {
             state.guideErrorPresentation?.let {
-                ErrorMessage(it, "Не получилось обновить условия загрузки. Используем сохранённые условия", modifier = Modifier.padding(horizontal = d.space5))
+                ErrorMessage(it, "Не получилось обновить условия загрузки", onRetry = onRetry.takeIf { state.configRetryReady }, retryModifier = Modifier.testTag(StatementsTags.UPLOAD_RETRY))
+                PfNotice("Показаны ранее загруженные данные. Они могут быть неактуальны", tone = NoticeTone.WARNING)
             }
             when (val phase = state.phase) {
                 UploadPhase.Loading -> Unit
+                is UploadPhase.ConfigFailure -> ErrorMessage(phase.presentation, "Не получилось загрузить условия загрузки", onRetry = onRetry.takeIf { state.configRetryReady }, retryModifier = Modifier.testTag(StatementsTags.UPLOAD_RETRY))
                 // First run has no back arrow: these states must offer a way on.
                 UploadPhase.Disabled -> PfEmptyState(PfIcons.FILE_TEXT, "Загрузка выписки временно недоступна", "Попробуйте позже — операции и аналитика работают как обычно") {
                     if (firstRun) PfButton("Продолжить", onClick = onLater, variant = ButtonVariant.PRIMARY)
@@ -184,6 +194,7 @@ internal fun UploadContent(
                     retryEnabled = state.uploadRetryReady,
                     canSkip = firstRun || (state.config ?: (phase as? UploadPhase.Guide)?.config)?.loaded == null,
                     onShowFallback = { onShowFallback(true) },
+                    onSelectPeriod = { onShowPeriod(true) },
                     onDownload = { url -> onOpenUrl(url) },
                     onPick = onPick,
                     onRetryUpload = onRetryUpload,
@@ -200,6 +211,7 @@ internal fun UploadContent(
             }
         }
     }
+    if (state.periodPickerOpen) DownloadPeriodSheet(state, onSelectPeriod, onDownloadPeriod, onDismiss = { onShowPeriod(false) })
     if (state.fallbackOpen) FallbackSheet(onDismiss = { onShowFallback(false) })
     if (state.askCancel) {
         PfDialog(
@@ -228,6 +240,7 @@ private fun ColumnScope.Guide(
     retryEnabled: Boolean = true,
     canSkip: Boolean,
     onShowFallback: () -> Unit,
+    onSelectPeriod: () -> Unit,
     onDownload: (String) -> Unit,
     onPick: () -> Unit,
     onRetryUpload: () -> Unit,
@@ -236,17 +249,17 @@ private fun ColumnScope.Guide(
 ) {
     val d = PfTheme.dimens
     val c = PfTheme.colors
-    config.loaded?.let { loaded ->
+    config.loaded?.takeIf { it.operationCount > 0 }?.let { loaded ->
         PfCard(Modifier.testTag(StatementsTags.UPLOAD_LOADED)) {
             Text("Сейчас загружено", style = PfTheme.type.caption, color = c.textMuted)
             Text(
-                "${RussianDates.dayRange(loaded.firstOperationAt.toLocalDate(), loaded.lastOperationAt.toLocalDate(), withYear = true)} · " +
+                "${RussianDates.dayRange(loaded.firstOperationAt.atZoneSameInstant(ru.finassist.pf.core.common.time.SourceTimeZone.require(config.timeZone)).toLocalDate(), loaded.lastOperationAt.atZoneSameInstant(ru.finassist.pf.core.common.time.SourceTimeZone.require(config.timeZone)).toLocalDate(), withYear = true)} · " +
                     countWithNoun(loaded.operationCount, "операция", "операции", "операций"),
                 style = PfTheme.type.bodyStrong.copy(fontFeatureSettings = "tnum"), color = c.text,
                 modifier = Modifier.padding(top = d.space1),
             )
             Text(
-                "Кнопка «Скачать за год» захватит и прошлые месяцы — сравнивать станет с чем. Совпадающие операции не задвоятся",
+                "Скачайте новые данные со дня последней загруженной операции. Совпадающие операции не задвоятся",
                 style = PfTheme.type.caption, color = c.textMuted, modifier = Modifier.padding(top = d.space2),
             )
         }
@@ -258,21 +271,23 @@ private fun ColumnScope.Guide(
         PfOrderedSteps(
             listOf(
                 "Войдите в кабинет Т-Банка в браузере",
-                "Нажмите «Скачать за год» — файл сохранится в «Загрузки»",
+                DownloadTexts.instruction(config),
                 "Выберите скачанный файл ниже",
             ),
         )
         Spacer(Modifier.height(d.space2))
-        Row(horizontalArrangement = Arrangement.spacedBy(d.space3)) {
+        Column(verticalArrangement = Arrangement.spacedBy(d.space3)) {
             PfButton(
                 "Войти в Т-Банк", onClick = { onDownload(config.loginUrl) }, variant = ButtonVariant.SECONDARY, block = true,
-                modifier = Modifier.weight(1f).testTag(StatementsTags.UPLOAD_LOGIN),
+                modifier = Modifier.testTag(StatementsTags.UPLOAD_LOGIN),
             )
             PfButton(
-                "Скачать за год", onClick = { onDownload(config.downloadUrl) }, variant = ButtonVariant.SECONDARY, block = true,
-                modifier = Modifier.weight(1f).testTag(StatementsTags.UPLOAD_DOWNLOAD),
+                DownloadTexts.label(config), onClick = { onDownload(config.downloadUrl) }, variant = ButtonVariant.SECONDARY, block = true,
+                modifier = Modifier.testTag(StatementsTags.UPLOAD_DOWNLOAD), maxLines = 2,
             )
         }
+        Spacer(Modifier.height(d.space3))
+        PfButton("Скачать за период", onClick = onSelectPeriod, variant = ButtonVariant.SECONDARY, block = true, enabled = busy == null, modifier = Modifier.testTag("statements.upload.download_period"))
         Spacer(Modifier.height(d.space1))
         PfLink("Не скачивается?", onClick = onShowFallback, modifier = Modifier.testTag(StatementsTags.UPLOAD_FALLBACK))
     }
@@ -307,8 +322,7 @@ private fun ColumnScope.Guide(
         PfLink("Загружу позже", onClick = onLater, modifier = Modifier.align(Alignment.CenterHorizontally).testTag(StatementsTags.UPLOAD_LATER))
     }
     Spacer(Modifier.height(d.space4))
-    val privacy = "Операции видите только вы. Файл выписки храним зашифрованным — поддержка открывает его, только чтобы " +
-        "исправить ошибку разбора. Помощнику данные уходят с вашего согласия. Удалить загрузку или аккаунт — в профиле. "
+    val privacy = "Операции видите только вы. Удалить загрузку или аккаунт — в профиле. "
     PfNotice(
         privacy,
         tone = NoticeTone.INFO,

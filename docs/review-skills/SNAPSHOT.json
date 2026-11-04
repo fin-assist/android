@@ -1,0 +1,240 @@
+{
+  "snapshot_date": "2026-11-04",
+  "repository": "fin-assist/android",
+  "skills": {
+    "code-review-and-quality": {
+      "url": "https://github.com/addyosmani/agent-skills",
+      "comparison_revision": "301b02b12bff98e4688e6984af6556802322bbde",
+      "path": "skills/code-review-and-quality",
+      "local_differences": [
+        "SKILL.md",
+        "references/performance-checklist.md",
+        "references/security-checklist.md"
+      ],
+      "license": "MIT",
+      "licenses": [
+        "licenses/addyosmani-MIT.txt",
+        "licenses/engineering-suite-MIT.txt"
+      ],
+      "snapshot": "2026-11-04",
+      "intermediary": {
+        "package": "engineering-suite@openai-curated-remote",
+        "version": "1.1.1",
+        "basis": "Preserved references identify this intermediary; attribution is retained without inferring authorship of every difference from Addy upstream. The package is no longer installed locally.",
+        "license": "MIT",
+        "licenses": [
+          "licenses/engineering-suite-MIT.txt"
+        ],
+        "notice_source": {
+          "url": "https://github.com/fin-assist/go-service-template/blob/77491fb876eb124fd9c085deb24a9ff9432e4514/docs/review-skills/licenses/MIT.txt",
+          "git_blob_sha": "79d4137f6a9773b62dbe6375f88099a3c5246fa9",
+          "sha256": "cf528a33542cc035fc8063e7e924505d4b8464f4361d9ef18f6728918594254f"
+        }
+      }
+    },
+    "security-and-hardening": {
+      "url": "https://github.com/addyosmani/agent-skills",
+      "comparison_revision": "301b02b12bff98e4688e6984af6556802322bbde",
+      "path": "skills/security-and-hardening",
+      "local_differences": [
+        "SKILL.md",
+        "references/hardening-patterns.md",
+        "references/security-checklist.md"
+      ],
+      "license": "MIT",
+      "licenses": [
+        "licenses/addyosmani-MIT.txt",
+        "licenses/engineering-suite-MIT.txt"
+      ],
+      "snapshot": "2026-11-04",
+      "intermediary": {
+        "package": "engineering-suite@openai-curated-remote",
+        "version": "1.1.1",
+        "basis": "Preserved references identify this intermediary; attribution is retained without inferring authorship of every difference from Addy upstream. The package is no longer installed locally.",
+        "license": "MIT",
+        "licenses": [
+          "licenses/engineering-suite-MIT.txt"
+        ],
+        "notice_source": {
+          "url": "https://github.com/fin-assist/go-service-template/blob/77491fb876eb124fd9c085deb24a9ff9432e4514/docs/review-skills/licenses/MIT.txt",
+          "git_blob_sha": "79d4137f6a9773b62dbe6375f88099a3c5246fa9",
+          "sha256": "cf528a33542cc035fc8063e7e924505d4b8464f4361d9ef18f6728918594254f"
+        }
+      }
+    },
+    "cicd-security": {
+      "url": "https://github.com/briiirussell/cybersecurity-skills",
+      "comparison_revision": "18642b272e9fe57ed6bdf3fd96614915e8a4d71d",
+      "path": "skills/cicd-security",
+      "local_differences": [],
+      "license": "MIT",
+      "licenses": [
+        "licenses/briiirussell-MIT.txt"
+      ],
+      "snapshot": "2026-11-04"
+    },
+    "github-actions-validator": {
+      "url": "https://github.com/akin-ozer/cc-devops-skills",
+      "comparison_revision": "276af751e659315aaf56d3ad13d7c26f4e72e28a",
+      "path": "devops-skills-plugin/skills/github-actions-validator",
+      "local_differences": [],
+      "license": "Apache-2.0",
+      "licenses": [
+        "licenses/akin-ozer-Apache-2.0.txt"
+      ],
+      "snapshot": "2026-11-04"
+    },
+    "senior-architect": {
+      "url": "https://github.com/alirezarezvani/claude-skills",
+      "comparison_revision": "c85b17e1fb621ba760478baaacc4fcb9be225e74",
+      "path": "engineering-team/skills/senior-architect",
+      "local_differences": [],
+      "license": "MIT",
+      "licenses": [
+        "licenses/alirezarezvani-MIT.txt"
+      ],
+      "snapshot": "2026-11-04"
+    },
+    "api-and-interface-design": {
+      "url": "https://github.com/addyosmani/agent-skills",
+      "comparison_revision": "301b02b12bff98e4688e6984af6556802322bbde",
+      "path": "skills/api-and-interface-design",
+      "local_differences": [],
+      "license": "MIT",
+      "licenses": [
+        "licenses/addyosmani-MIT.txt"
+      ],
+      "snapshot": "2026-11-04"
+    },
+    "testing-setup": {
+      "url": "https://github.com/android/skills",
+      "revision": "6daa53ef27fa2aa87827d183a85c06cedceca833",
+      "package_version": "1.0.19",
+      "path": "testing/testing-setup/SKILL.md",
+      "license": "Apache-2.0",
+      "licenses": [
+        "vendor/android-skills/LICENSE.txt"
+      ]
+    },
+    "jetpack-compose-performance": {
+      "url": "https://github.com/android/skills",
+      "revision": "6daa53ef27fa2aa87827d183a85c06cedceca833",
+      "package_version": "1.0.19",
+      "path": "jetpack-compose/jetpack-compose-performance/SKILL.md",
+      "license": "Apache-2.0",
+      "licenses": [
+        "vendor/android-skills/LICENSE.txt"
+      ]
+    },
+    "android-intent-security": {
+      "url": "https://github.com/android/skills",
+      "revision": "6daa53ef27fa2aa87827d183a85c06cedceca833",
+      "package_version": "1.0.19",
+      "path": "security/android-intent-security/SKILL.md",
+      "license": "Apache-2.0",
+      "licenses": [
+        "vendor/android-skills/LICENSE.txt"
+      ]
+    },
+    "android-permissions-security": {
+      "url": "https://github.com/android/skills",
+      "revision": "6daa53ef27fa2aa87827d183a85c06cedceca833",
+      "package_version": "1.0.19",
+      "path": "security/android-permissions-security/SKILL.md",
+      "license": "Apache-2.0",
+      "licenses": [
+        "vendor/android-skills/LICENSE.txt"
+      ]
+    },
+    "anr-audit-and-fix": {
+      "url": "https://github.com/android/skills",
+      "revision": "6daa53ef27fa2aa87827d183a85c06cedceca833",
+      "package_version": "1.0.19",
+      "path": "performance/anr-audit-and-fix/SKILL.md",
+      "license": "Apache-2.0",
+      "licenses": [
+        "vendor/android-skills/LICENSE.txt"
+      ]
+    },
+    "edge-to-edge": {
+      "url": "https://github.com/android/skills",
+      "revision": "6daa53ef27fa2aa87827d183a85c06cedceca833",
+      "package_version": "1.0.19",
+      "path": "system/edge-to-edge/SKILL.md",
+      "license": "Apache-2.0",
+      "licenses": [
+        "vendor/android-skills/LICENSE.txt"
+      ]
+    }
+  },
+  "files_sha256": {
+    "docs/review-skills/vendor/code-review-and-quality/LICENSE": "6f202f8bd568cd730dbb2b0d1f8e243bc74c2fa1f64dbce9b2c7ea08bd5c9fd7",
+    "docs/review-skills/vendor/code-review-and-quality/SKILL.md": "89f97f166b08f72750f706a3355d7963cee12b335068efcb4e208f768c89f0f4",
+    "docs/review-skills/vendor/code-review-and-quality/references/performance-checklist.md": "69b3fcdf5d3ae9bf8eb0fd5360c20682640d488c5f4ff9f276e3e2e69fd56883",
+    "docs/review-skills/vendor/code-review-and-quality/references/security-checklist.md": "9fe6bfa63bc598b59c5c8fdb2b2ea2dba92ab633a9ca4afd010eb78519d07474",
+    "docs/review-skills/licenses/addyosmani-MIT.txt": "6f202f8bd568cd730dbb2b0d1f8e243bc74c2fa1f64dbce9b2c7ea08bd5c9fd7",
+    "docs/review-skills/licenses/engineering-suite-MIT.txt": "cf528a33542cc035fc8063e7e924505d4b8464f4361d9ef18f6728918594254f",
+    "docs/review-skills/vendor/security-and-hardening/LICENSE": "6f202f8bd568cd730dbb2b0d1f8e243bc74c2fa1f64dbce9b2c7ea08bd5c9fd7",
+    "docs/review-skills/vendor/security-and-hardening/SKILL.md": "600c954bb214edc80eca849e14bfe3c6cfd8d909c5782d85f2a10307fe136736",
+    "docs/review-skills/vendor/security-and-hardening/references/hardening-patterns.md": "d4e6dfdcd2d3bc91e0ad7424362d9fb4260a2a1cb745dac76a88fb10715139f4",
+    "docs/review-skills/vendor/security-and-hardening/references/security-checklist.md": "9fe6bfa63bc598b59c5c8fdb2b2ea2dba92ab633a9ca4afd010eb78519d07474",
+    "docs/review-skills/vendor/cicd-security/SKILL.md": "5e4d82639ed3cefb8e43951fc35537addc502fb5894ade583f1217b1473c71a4",
+    "docs/review-skills/vendor/cicd-security/references/ai-agents-in-ci.md": "4eaeb1c1c5ffdb4fd365425533e35cbc9b108e8ecc2db93e67359d18098c8d45",
+    "docs/review-skills/vendor/cicd-security/references/checks.md": "1939a744e9048597f4851c9698e7ac167e8700fca941d35c21b2169ef0b56c65",
+    "docs/review-skills/vendor/cicd-security/references/findings-format.md": "0f70feb3437c8fab5b10b6d0014326d4a46a66812f8ad7d273ee633486687d40",
+    "docs/review-skills/vendor/cicd-security/references/findings.schema.json": "2f95361c80938400ee8a869d86149aadbf53b665c7cdbd140a662de8c788b77a",
+    "docs/review-skills/vendor/cicd-security/references/gitlab-circleci.md": "96ab508cdfef5dc799bec3126d59cbc2da50d49156a1009b033559bbbe56a50f",
+    "docs/review-skills/vendor/cicd-security/references/severity-calibration.md": "4c60a269d5050b9635839f9b6f792e6c37135370fae9313841f148cdd87d723d",
+    "docs/review-skills/vendor/cicd-security/references/to-sarif.mjs": "70ee7a3d056a60a15b9aebdd654a1e026377a3b19f9c760179dd21845fc0ed5e",
+    "docs/review-skills/vendor/cicd-security/references/validate-findings.mjs": "e26d295f029294905e83ab991b0618be43b0d7b36063e6f8af2c714446f26cd1",
+    "docs/review-skills/vendor/cicd-security/references/verification.md": "62062060314072a4959b8ee307813a95a76d582cccabd9c39f16d7dd2bd0c17e",
+    "docs/review-skills/vendor/cicd-security/references/worked-examples.md": "44f2e8e4f396abd4c0da2fcf08f58dc791455aba4abef9a80ed1a9d7d88dfdeb",
+    "docs/review-skills/licenses/briiirussell-MIT.txt": "951fb9d5201f7d90c61d8ef5d33c75d08bdf2dd4e47cde4760fb465969e9a44d",
+    "docs/review-skills/vendor/github-actions-validator/SKILL.md": "aa9fa15e70ef975eb14dc58f6dcf8dd671a33a585c7d77f70f87565c94d220e0",
+    "docs/review-skills/vendor/github-actions-validator/references/act_usage.md": "e084aac424e4153203ea30c6b76a435ca0ca376491fd82b4606cb29c7440b13f",
+    "docs/review-skills/vendor/github-actions-validator/references/action_versions.md": "3277b776935f2d29a620ff67fdaa233c5a844c2b6333d64a41e6afe0f119327a",
+    "docs/review-skills/vendor/github-actions-validator/references/actionlint_usage.md": "9019ecc43223200b93435422df5b530c10825e62b2a5acd6412b9ff11dcdc195",
+    "docs/review-skills/vendor/github-actions-validator/references/common_errors.md": "200256a62ec58e07221f84bb0af644e4dd775d0a15f2c1284a96afdd8fc74dbd",
+    "docs/review-skills/vendor/github-actions-validator/references/modern_features.md": "cacdf2968f73327fd9dee098d09c480d2dfe8ab85a9c53d2521cf665a73dc838",
+    "docs/review-skills/vendor/github-actions-validator/references/runners.md": "794dde89fa077e6f1e57f28635a1eec3f5321cb6ef0109a6ed1804898078fab9",
+    "docs/review-skills/vendor/github-actions-validator/scripts/install_tools.sh": "831fe16a6773e4c97b6f59132e273ebd38e97cf6cb4549f5d0b4d88e0ab794b2",
+    "docs/review-skills/vendor/github-actions-validator/scripts/validate_workflow.sh": "d1078eb9946e569376550111ba97473ea64ae70b5bea3c58d0400c01bb582e02",
+    "docs/review-skills/licenses/akin-ozer-Apache-2.0.txt": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "docs/review-skills/vendor/senior-architect/SKILL.md": "91282ace728addf68d5d681ff5532c10d3a45b05271f5c0133e2060beb56693a",
+    "docs/review-skills/vendor/senior-architect/references/architecture_patterns.md": "29f2f8549551551da428181a3e728df6fb076f52760b6f82236b8b9ed7292ded",
+    "docs/review-skills/vendor/senior-architect/references/system_design_workflows.md": "aa88778dd7ef7a18eb71943310c348b97bf044cbd62bc7251941c8716feae260",
+    "docs/review-skills/vendor/senior-architect/references/tech_decision_guide.md": "a6a322d7199aa534640d0ede61431fce0e8232a4bd19a3d9a93c30920b58d51f",
+    "docs/review-skills/vendor/senior-architect/scripts/architecture_diagram_generator.py": "53b8b0c24065f34b4f21ce15eaf551679670bf5d9e4f4d201c3253e0fabd7b2b",
+    "docs/review-skills/vendor/senior-architect/scripts/dependency_analyzer.py": "bce84d2dd0a2b6d6034356f01c30ee5fec51a1fa13e7c617bde53eb1d61c2145",
+    "docs/review-skills/vendor/senior-architect/scripts/project_architect.py": "f421cd71f7ee790e292c44a29656b9b3f38bc93126a894e2faf2fed6f8aa1aab",
+    "docs/review-skills/licenses/alirezarezvani-MIT.txt": "a20126646f93d32a8989c3cf4772d59194f405034f7babe7daebeac22b8ab151",
+    "docs/review-skills/vendor/api-and-interface-design/SKILL.md": "cc5e2166c484b2c297e8253f56e7525e5031f81d66101ca4e760ef378ea6bad0",
+    "docs/review-skills/vendor/android-skills/testing-setup/SKILL.md": "613970834fedb22c5f85bbc900e600e9a17cd953157af5a7e953e5938d7c2457",
+    "docs/review-skills/vendor/android-skills/testing-setup/references/android/develop/ui/compose/testing/common-patterns.md": "57fc697835d875cae7179d1b164db371e1b8c37881719fb32be51c09fa5c8c35",
+    "docs/review-skills/vendor/android-skills/testing-setup/references/android/studio/preview/compose-screenshot-testing-with-testsuites.md": "4b4ada7a50201bcf9ab90b0d9f00cc2ceb16513d1de7f63c12d634318a2ec20d",
+    "docs/review-skills/vendor/android-skills/testing-setup/references/android/studio/preview/compose-screenshot-testing.md": "d9b9c86efe82e0aa841f43435e4a29466794e75dd452e84a29fdc4f332a4d699",
+    "docs/review-skills/vendor/android-skills/testing-setup/references/android/training/dependency-injection/hilt-testing.md": "5e774a6ab09c0f469b4712ea8c468402b38dd4a19dce9570bacc49ad9af9c814",
+    "docs/review-skills/vendor/android-skills/LICENSE.txt": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+    "docs/review-skills/vendor/android-skills/jetpack-compose-performance/SKILL.md": "a1680a1ae079faa47fc706bf034b88d4c4c4903dfa4187e98e0af8b056e1848b",
+    "docs/review-skills/vendor/android-skills/jetpack-compose-performance/references/android/develop/ui/compose/custom-modifiers.md": "b4ede8f37dc56c54f3621a5ad21f91a649450a9854bc1bacc1a24eb65fe31b38",
+    "docs/review-skills/vendor/android-skills/jetpack-compose-performance/references/android/develop/ui/compose/performance/backwards-write.md": "e9b5b1afa36dca37f9548a8d706cc8474b3f03e61bc77037dfa6ab7b1a2169b7",
+    "docs/review-skills/vendor/android-skills/jetpack-compose-performance/references/android/develop/ui/compose/performance/stability/strongskipping.md": "3a69e68553d6d628e8787b3e499766798e73d86779a149c800fff7bb4340cce4",
+    "docs/review-skills/vendor/android-skills/jetpack-compose-performance/references/animation.md": "fe21a3bc55b85b807e3655f427f00e3898a7a0da0590a9fe2825a20d43e440fe",
+    "docs/review-skills/vendor/android-skills/jetpack-compose-performance/references/effects-and-threading.md": "4a612526c8e9d28d26fb51b1d942d1b34a1fa2316dfe43d2869206dda49bbfa3",
+    "docs/review-skills/vendor/android-skills/jetpack-compose-performance/references/graphics-performance.md": "3dc5881c2fb8eb4bcbf59b410008d995321a5fd2583e98194ee42407bdb7d266",
+    "docs/review-skills/vendor/android-skills/jetpack-compose-performance/references/layouts.md": "619da0bd169a2a2c1b7e99868ab358a3be8c06f25f2bef0dd15353670ce12c06",
+    "docs/review-skills/vendor/android-skills/jetpack-compose-performance/references/lazy-layouts.md": "68a0a4f43d311e4d57238ce745d0de775b1948748ab462608d5cbfe8f07b9bfe",
+    "docs/review-skills/vendor/android-skills/jetpack-compose-performance/references/state-and-stability.md": "46aff96f166d19d1b2f5510c35679a0efac4fe9f578b4a1e186f5017a696ba37",
+    "docs/review-skills/vendor/android-skills/android-intent-security/SKILL.md": "4f5792c0f1e92a1298398c7c823a14e9cea9518a02b252c802577a097dfec48b",
+    "docs/review-skills/vendor/android-skills/android-permissions-security/SKILL.md": "3e109c4cc07fe0d3c20ea1c66a3b53cc892b7d547a70ef3080e14d844ab4d7e3",
+    "docs/review-skills/vendor/android-skills/android-permissions-security/references/android/guide/topics/manifest/permission-element.md": "06e8c6e6eee6c53ed26db9599e5d461ccadcd2e54c785e7eabaf676cb5a16587",
+    "docs/review-skills/vendor/android-skills/android-permissions-security/references/android/guide/topics/permissions/overview.md": "95e34ec29d120e352814c905f574175ceb30f1ffe062e7ea8eddb36852b9419a",
+    "docs/review-skills/vendor/android-skills/android-permissions-security/references/android/privacy-and-security/risks/sender-of-pending-intents.md": "74adeb0c724b5c43a45de8953698707a8034a81238bb1c91d27684e1f262f2bb",
+    "docs/review-skills/vendor/android-skills/android-permissions-security/references/android/training/permissions/requesting.md": "cec4c45adaa81e9f819fdb51f0d5b4c747493fa48682e67e20cff9bb7751fef8",
+    "docs/review-skills/vendor/android-skills/anr-audit-and-fix/SKILL.md": "0ea6c5ab75a621b0cf24fa6276cdfa2c6799bbd2538631b8fc81a1e4dcd282bd",
+    "docs/review-skills/vendor/android-skills/anr-audit-and-fix/references/anr_trace_report_template.md": "7e8494d46a0aaf97d19b7efc59ade16b3be4eca922f9025c178152595a76f5a6",
+    "docs/review-skills/vendor/android-skills/anr-audit-and-fix/references/risk_analysis_guide.md": "71ea8e0ae7ee5cd708a9b97e818691a93a88d638df6d24984ba8b93de707ea13",
+    "docs/review-skills/vendor/android-skills/anr-audit-and-fix/references/trace_analysis_guide.md": "86361ab2892ec91e424a7d0f8c6712d3ed4aa98f8b74d74aa0dbcc2774726011",
+    "docs/review-skills/vendor/android-skills/edge-to-edge/SKILL.md": "4ca04cb6a5330b96e51410bc815f878b4ca642fba46fe5e1ad724c94e04d6eb8"
+  }
+}

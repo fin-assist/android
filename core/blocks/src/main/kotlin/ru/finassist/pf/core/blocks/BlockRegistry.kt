@@ -26,6 +26,8 @@ class BlockContext(
     val onAction: (block: Block, action: BlockAction) -> Unit,
     /** Ids of lists shown in full («Все категории»). */
     val expanded: Set<String> = emptySet(),
+    val sourceZone: java.time.ZoneId? = null,
+    val chartPaging: ChartPaging? = null,
     val onToggleExpanded: (id: String) -> Unit = {},
     /** Only the Analytics screen supplies this capability; assistant charts keep it absent. */
     val onSelectAnalyticsPeriod: ((Block, BlockAction) -> Unit)? = null,
@@ -58,7 +60,12 @@ class BlockRegistry(renderers: List<BlockRenderer>, private val fallback: BlockR
     fun prepare(block: Block): PreparedBlock? {
         val renderer = byType[block.type]?.takeIf { block.v <= it.version }
         val draw = renderer?.prepare(block) ?: fallback?.prepare(block) ?: return null
-        return PreparedBlock(block, draw)
+        return PreparedBlock(block) { context ->
+            draw(context)
+            block.helpText?.takeIf { it.isNotBlank() }?.let { text ->
+                BlockHelpRow(text, block.title ?: "Пояснение", context.tags.block(block.id ?: block.type.code))
+            }
+        }
     }
 
     fun prepareAll(blocks: List<Block>): List<PreparedBlock> = blocks.mapNotNull(::prepare)

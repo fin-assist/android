@@ -105,6 +105,8 @@ fun PfBarChart(
     height: Dp = 120.dp,
     showValues: Boolean = false,
     onPointClick: ((String) -> Unit)? = null,
+    baselineHasNegative: Boolean? = null,
+    pointTagPrefix: String = chartId,
 ) {
     val c = PfTheme.colors
     val reduced = rememberReducedMotion()
@@ -163,7 +165,7 @@ fun PfBarChart(
                 scroll.scrollTo(target)
             }
         }
-        val hasNegative = points.any { (it.value ?: 0f) < 0f }
+        val hasNegative = baselineHasNegative ?: points.any { (it.value ?: 0f) < 0f }
         val baselineFraction = if (hasNegative) 0.5f else 1f
         val valueSpace = if (showValues) 20.dp else 0.dp
         val anyNote = points.any { it.note != null }
@@ -179,7 +181,7 @@ fun PfBarChart(
                 val click = onPointClick?.takeIf { p.selectable }
                 val pointModifier = Modifier.weight(1f).then(
                     if (click != null) Modifier
-                        .testTag("$chartId.point.${p.key}")
+                        .testTag("$pointTagPrefix.point.${p.key}")
                         .clickable(role = Role.Button, onClick = { click(p.key) })
                         .semantics(mergeDescendants = true) {
                             selected = i == highlight

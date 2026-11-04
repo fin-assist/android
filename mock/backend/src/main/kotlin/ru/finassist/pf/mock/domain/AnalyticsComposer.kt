@@ -12,6 +12,8 @@ import ru.finassist.pf.core.api.model.BlockLock
 import ru.finassist.pf.core.api.model.BlockStatus
 import ru.finassist.pf.core.api.model.BlockType
 import ru.finassist.pf.core.api.model.BlockValue
+import ru.finassist.pf.core.api.model.AnalyticsCalculation
+import ru.finassist.pf.core.api.model.ChartPageInfo
 import ru.finassist.pf.core.api.model.ChartData
 import ru.finassist.pf.core.api.model.ChartKind
 import ru.finassist.pf.core.api.model.ChartNote
@@ -77,16 +79,13 @@ object AnalyticsComposer {
         experiments: Map<String, String> = emptyMap(),
         failing: Set<String> = emptySet(),
         currency: String = Money.RUB,
+        chartPage: ChartPageInfo = ChartPageInfo("fixture"),
     ): Analytics {
-        if (!s.hasData) return Analytics(hasData = false)
+        if (!s.hasData) return Analytics(hasData = false, calculation = AnalyticsCalculation(0, false))
         val params = s.params!!
         val period = s.period!!
         val type = params.period
         val tileVersion = if ((supports?.get(BlockType.TILE_GROUP.code) ?: 1) >= 2) 2 else 1
-        // Early state (docs/calc.md, section 4): one incomplete covered month in all history — no monthly chart.
-        val early = s.state?.fullMonths == 0 &&
-            s.monthlyChart?.lock?.let { it.reason == LockReason.NEED_MONTHS_WITH_DATA && it.available == 1 } == true
-
         fun guarded(id: String, build: () -> List<Block>): List<Block> =
             if (id in failing) listOf(unavailable(id, tileVersion)) else try {
                 build()
@@ -95,7 +94,7 @@ object AnalyticsComposer {
             }
 
         val tiles = guarded("tiles") { listOfNotNull(s.tiles?.let { tiles(it, s, period, tileVersion) }) }
-        val chart = guarded("monthly_chart") { if (early) emptyList() else listOfNotNull(s.monthlyChart?.let { monthlyChart(it, s) }) }
+        val chart = guarded("monthly_chart") { listOfNotNull(s.monthlyChart?.let { monthlyChart(it, s, chartPage) }) }
         val expense = guarded("expense_categories") { listOfNotNull(s.expenseCategories?.let { expenseCategories(it, s, period) }) }
         val income = guarded("income_categories") { listOfNotNull(s.incomeCategories?.let { incomeCategories(it, type, period) }) }
         val insights = s.insights?.let { i ->
@@ -115,7 +114,7 @@ object AnalyticsComposer {
         val compatible = ordered.filter { b -> supports == null || (supports[b.type.code] ?: 0) >= b.v }
         return Analytics(
             hasData = true, params = params, period = period, navigation = s.navigation, currency = currency,
-            blocks = compatible, state = s.state,
+            blocks = compatible, state = s.state, timeZone = s.timeZone, calculation = AnalyticsCalculation(0, s.state?.recalculating == true),
         )
     }
 
@@ -191,7 +190,7 @@ object AnalyticsComposer {
     ): Tile = if (!m.isReady) {
         Tile(id, title, status = BlockStatus.LOCKED, lock = lock(m, s.state)?.let { value ->
             if (id == "forecast" && m.lock?.reason == LockReason.NEED_FULL_MONTHS) {
-                value.copy(text = AnalyticsServerTexts.forecastLock(m.lock, s.state, s.forecastHistory))
+                value.copy(text = "Нужно ${m.lock.required} полных ${if (m.lock.required == 3) "месяца" else "месяцев"}, есть ${m.lock.available ?: 0}")
             } else value
         })
     } else {
@@ -211,25 +210,30 @@ object AnalyticsComposer {
         val share = AnalyticsServerTexts.share(t.balance)
         val balance = tile(
             "balance", "Доходы минус расходы", t.balance, s,
-            caption = if (t.balance.shareOfIncome != null && share.endsWith("дохода")) "$share · по выписке" else share,
+            caption = share,
         )
         val expense = tile("expense", "Расходы", t.expense, s, caption = periodCaption(period), action = open(t.expense.filters))
         val forecast = t.forecast?.takeUnless { it.lock?.reason == LockReason.STALE_DATA }?.let { f ->
-            tile("forecast", AnalyticsServerTexts.forecastLabel(params.period), f, s, caption = AnalyticsServerTexts.forecastNote(params.date), approx = true)
+            tile("forecast", AnalyticsServerTexts.forecastLabel(params.period), f, s, caption = AnalyticsServerTexts.forecastNote(params.date), approx = true).copy(
+                helpText = listOfNotNull(
+                    if (params.period == PeriodTypeCode.YEAR) "Это оценка расходов за весь год. К расходам с начала года добавляем прогноз на оставшиеся дни по средним дневным расходам за последние 12 полных месяцев загруженной истории." else null,
+                    if (f.lock?.reason == LockReason.NEED_FULL_MONTHS) AnalyticsServerTexts.forecastLock(f.lock, s.state, s.forecastHistory) else null,
+                ).joinToString(" ").ifEmpty { null },
+            )
         }
         val dailyCaption = if (params.period == PeriodTypeCode.MONTH) {
             AnalyticsServerTexts.dailyComparison(t.dailyExpense.comparison)
         } else {
             AnalyticsServerTexts.dailyAverageOver(period)
         }
-        val daily = tile("daily_expense", "Расходы в день", t.dailyExpense, s, caption = dailyCaption)
+        val daily = tile("daily_expense", "Расходы в день", t.dailyExpense, s, caption = dailyCaption).copy(helpText = AnalyticsServerTexts.dailyBasis(null))
         val income = tile("income", "Доходы", t.income, s, showPlus = true, action = open(t.income.filters))
         val all = listOf(balance, expense, daily, income) + listOfNotNull(forecast)
         val displayed: List<Tile>
         val block: Block
         if (version == 2) {
             val facts = listOf(expense.copy(title = "Расходы за период"), income.copy(title = "Доходы за период"), balance)
-            val additional = listOf(daily.copy(title = "Средние расходы в день", caption = AnalyticsServerTexts.dailyBasis(dailyCaption))) + listOfNotNull(forecast)
+            val additional = listOf(daily.copy(title = "Средние расходы в день")) + listOfNotNull(forecast)
             displayed = facts + additional
             block = Block.of(BlockType.TILE_GROUP, TileGroupDataV2.serializer(), TileGroupDataV2(listOf(
                 TileGroupSection(facts), TileGroupSection(additional, title = "Дополнительные показатели"),
@@ -260,7 +264,8 @@ object AnalyticsComposer {
         }
     }
 
-    private fun monthlyChart(c: MonthlyChart, s: AnalyticsSnapshot): Block {
+    private fun monthlyChart(selected: MonthlyChart, s: AnalyticsSnapshot, page: ChartPageInfo): Block {
+        val c = s.historyChart?.chart ?: selected
         val title = "Расходы по месяцам"
         if (!c.isReady || c.points.isNullOrEmpty()) {
             return Block(id = "monthly_chart", type = BlockType.CHART, status = BlockStatus.LOCKED, lock = lock(c, s.state), title = title, altText = "График по месяцам")
@@ -271,10 +276,10 @@ object AnalyticsComposer {
         val main = if (params.period == PeriodTypeCode.MONTH) {
             expense?.value?.let { AnalyticsServerTexts.comparison(it, expense.comparison, params.period, params.date) }
         } else {
-            AnalyticsServerTexts.peakMonth(points)
+            AnalyticsServerTexts.peakMonth(selected.points.orEmpty())
         }
         val secondary = if (params.period.isRolling) null else if (params.period == PeriodTypeCode.YEAR) {
-            AnalyticsServerTexts.yearChartNote(points, s.period?.isCurrent == true)
+            AnalyticsServerTexts.yearChartNote(selected.points.orEmpty(), s.period?.isCurrent == true)
         } else {
             AnalyticsServerTexts.typical(expense?.typical)
         }
@@ -285,12 +290,14 @@ object AnalyticsComposer {
                     ActionType.SELECT_ANALYTICS_PERIOD, period = PeriodTypeCode.MONTH, date = PeriodKey(monthly.month),
                 ))
             },
-            highlightIndex = highlight(points, s),
-            notes = listOfNotNull(main?.let { ChartNote(it, NoteTone.PRIMARY) }, secondary?.let { ChartNote(it, NoteTone.MUTED) }),
+            highlightIndex = if (params.period == PeriodTypeCode.MONTH) points.indexOfFirst { it.month == params.date.value }.takeIf { it >= 0 } else null,
+            page = page,
+            notes = listOfNotNull(main?.let { ChartNote("За выбранный период ${params.date.value}: $it", NoteTone.PRIMARY) }, secondary?.let { ChartNote("За выбранный период ${params.date.value}: $it", NoteTone.MUTED) }),
         )
         // The lines under the chart are always there, an empty list too (docs/calc.md, section 10).
         return withEmptyList(Block.of(BlockType.CHART, ChartData.serializer(), data), "notes").copy(
             id = "monthly_chart", title = title,
+            helpText = "Столбики показывают полные календарные месяцы всей загруженной истории. Прокрутите к краю графика, чтобы загрузить соседние месяцы. Нажмите на месяц с данными, чтобы открыть его аналитику. Итоги и выводы экрана относятся к выбранному периоду.",
             altText = "$title: " + points.joinToString(", ") { p ->
                 RussianDates.monthNominative(YearMonth.parse(p.month).month) + " " + (p.expense?.format() ?: "нет данных")
             },
@@ -460,10 +467,11 @@ object AnalyticsComposer {
             highlightIndex = if (withChart) (points.indexOfFirst { it.month == s.params!!.date.value }.takeIf { it >= 0 } ?: points.lastIndex) else null,
             showValues = true,
             summary = balance.value?.let { BlockValue(value = it.minor.toDouble(), valueKind = ValueKind.AMOUNT) },
-            caption = AnalyticsServerTexts.balanceExplained(balance, withChart),
+            caption = null,
         )
         return Block.of(BlockType.CHART, ChartData.serializer(), data).copy(
             id = "balance", title = title,
+            helpText = AnalyticsServerTexts.balanceExplained(balance, withChart),
             altText = "$title: " + (balance.value?.format() ?: "") + points.joinToString("") { p ->
                 AnalyticsServerTexts.balanceShare(p)?.let { v -> ", ${RussianDates.monthNominative(YearMonth.parse(p.month).month)} ${(v * 100).roundToInt()}%" } ?: ""
             },

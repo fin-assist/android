@@ -64,7 +64,7 @@
                                 "title": "Доходы минус расходы",
                                 "value": 200000.0,
                                 "value_kind": "amount",
-                                "caption": "67% дохода · по выписке"
+                                "caption": "67% дохода"
                             }
                         ]
                     },
@@ -75,7 +75,8 @@
                                 "title": "Средние расходы в день",
                                 "value": 1086.0,
                                 "value_kind": "amount",
-                                "caption": "По дням с данными не позже сегодня; пропуски не учитываются\nв среднем за июль — октябрь"
+                                "caption": "в среднем за июль — октябрь",
+                                "help_text": "По дням с данными не позже сегодня; пропуски не учитываются"
                             }
                         ],
                         "title": "Дополнительные показатели"
@@ -87,20 +88,139 @@
             "id": "monthly_chart",
             "type": "chart",
             "title": "Расходы по месяцам",
-            "alt_text": "Расходы по месяцам: июль 0 ₽, август 1 000 ₽, сентябрь 0 ₽, октябрь 0 ₽",
+            "alt_text": "Расходы по месяцам: октябрь 0 ₽, ноябрь 0 ₽, декабрь 0 ₽, январь 0 ₽, февраль 0 ₽, март 0 ₽, апрель 0 ₽, май 0 ₽, июнь 0 ₽, июль 0 ₽, август 1 000 ₽, сентябрь 0 ₽, октябрь 0 ₽",
+            "help_text": "Столбики показывают полные календарные месяцы всей загруженной истории. Прокрутите к краю графика, чтобы загрузить соседние месяцы. Нажмите на месяц с данными, чтобы открыть его аналитику. Итоги и выводы экрана относятся к выбранному периоду.",
             "data": {
                 "kind": "bar",
                 "value_kind": "amount",
                 "points": [
                     {
                         "range": {
-                            "from": "2026-07-31T00:00:00+03:00",
-                            "to": "2026-08-01T00:00:00+03:00"
+                            "from": "2025-10-01T00:00:00+03:00",
+                            "to": "2025-11-01T00:00:00+03:00"
                         },
                         "value": 0.0,
                         "coverage": "partial",
-                        "data_from": "2026-07-31T00:00:00+03:00",
-                        "data_to": "2026-07-31T23:59:59+03:00",
+                        "data_from": "2025-10-30T00:00:00+03:00",
+                        "data_to": "2025-10-31T23:59:59+03:00",
+                        "note": "с 30-го",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2025-10"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2025-11-01T00:00:00+03:00",
+                            "to": "2025-12-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2025-11"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2025-12-01T00:00:00+03:00",
+                            "to": "2026-01-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2025-12"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-01-01T00:00:00+03:00",
+                            "to": "2026-02-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-01"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-02-01T00:00:00+03:00",
+                            "to": "2026-03-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-02"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-03-01T00:00:00+03:00",
+                            "to": "2026-04-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-03"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-04-01T00:00:00+03:00",
+                            "to": "2026-05-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-04"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-05-01T00:00:00+03:00",
+                            "to": "2026-06-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-05"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-06-01T00:00:00+03:00",
+                            "to": "2026-07-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
+                        "action": {
+                            "type": "select_analytics_period",
+                            "period": "month",
+                            "date": "2026-06"
+                        }
+                    },
+                    {
+                        "range": {
+                            "from": "2026-07-01T00:00:00+03:00",
+                            "to": "2026-08-01T00:00:00+03:00"
+                        },
+                        "value": 0.0,
+                        "coverage": "complete",
                         "action": {
                             "type": "select_analytics_period",
                             "period": "month",
@@ -136,12 +256,13 @@
                     {
                         "range": {
                             "from": "2026-10-01T00:00:00+03:00",
-                            "to": "2026-10-31T00:00:00+03:00"
+                            "to": "2026-11-01T00:00:00+03:00"
                         },
                         "value": 0.0,
                         "coverage": "partial",
                         "data_from": "2026-10-01T00:00:00+03:00",
                         "data_to": "2026-10-30T23:59:59+03:00",
+                        "note": "по 30-е",
                         "action": {
                             "type": "select_analytics_period",
                             "period": "month",
@@ -151,10 +272,13 @@
                 ],
                 "notes": [
                     {
-                        "text": "Больше всего — в августе: 1 000 ₽",
+                        "text": "За выбранный период rolling_quarter: Больше всего — в августе: 1 000 ₽",
                         "tone": "primary"
                     }
-                ]
+                ],
+                "page": {
+                    "revision": "fixture"
+                }
             }
         },
         {
@@ -240,6 +364,11 @@
         "full_months": 11,
         "unread_lines_count": 0,
         "calculated_at": "2026-10-31T12:00:00+03:00",
+        "recalculating": false
+    },
+    "time_zone": "Europe/Moscow",
+    "calculation": {
+        "calc_version": 0,
         "recalculating": false
     }
 }

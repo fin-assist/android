@@ -22,6 +22,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FeedViewModelTest {
@@ -39,6 +40,57 @@ class FeedViewModelTest {
     private val reportZone = ru.finassist.pf.core.common.time.ReportZone { java.time.ZoneId.of("Europe/Moscow") }
 
     private fun vm() = FeedViewModel(api, statements, operations, operations, flags, tracker, reportZone, ru.finassist.pf.core.common.time.ElapsedClock { scheduler.currentTime })
+
+    @Test fun `source zone owns dates while unsupported refresh preserves and marks the verified cache`() {
+        api.lists += OperationsList(listOf(item("one")), timeZone = "Asia/Vladivostok", nextBefore = at(1))
+        val vm = vm()
+        assertEquals("Asia/Vladivostok", vm.state.value.sourceZone?.id)
+        api.lists.clear()
+        api.lists += OperationsList(listOf(item("wrong")), timeZone = "Future/Valid_Zone")
+        vm.refresh()
+        assertEquals(listOf("one"), vm.state.value.items.map { it.id })
+        assertEquals("Asia/Vladivostok", vm.state.value.sourceZone?.id)
+        assertTrue(vm.state.value.sourceZoneUnsupported)
+        val calls = api.queries.size
+        vm.loadMore()
+        assertEquals(calls, api.queries.size)
+        api.lists.clear()
+        api.lists += AppError.Offline()
+        vm.load()
+        assertTrue(vm.state.value.sourceZoneUnsupported)
+        assertEquals(ru.finassist.pf.core.common.time.SourceTimeZone.MESSAGE, vm.state.value.errorPresentation!!.textOrFallback("fallback"))
+        api.lists.clear()
+        api.lists += OperationsList(listOf(item("two")), timeZone = "Europe/Moscow")
+        vm.load()
+        assertEquals(listOf("two"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.sourceZoneUnsupported)
+    }
+
+    @Test fun `explicit supported page clears incompatibility without altering previous timestamps`() {
+        val old = item("one")
+        api.lists += OperationsList(listOf(old), timeZone = "Europe/Moscow", nextBefore = at(1))
+        val vm = vm()
+        api.lists.clear()
+        api.lists += OperationsList(listOf(item("bad")), timeZone = "Area/Future_City")
+        vm.loadMore()
+        assertTrue(vm.state.value.sourceZoneUnsupported)
+        api.lists.clear()
+        api.lists += OperationsList(listOf(item("new")), timeZone = "Europe/Moscow")
+        vm.loadMore(explicit = true)
+        assertEquals(old, vm.state.value.items.first())
+        assertEquals(listOf("one", "new"), vm.state.value.items.map { it.id })
+        assertFalse(vm.state.value.sourceZoneUnsupported)
+        assertNull(vm.state.value.errorPresentation)
+    }
+
+    @Test fun `paging never merges different source zones`() {
+        api.lists += OperationsList(listOf(item("one")), timeZone = "Asia/Vladivostok", nextBefore = at(1))
+        api.lists += OperationsList(listOf(item("two")), timeZone = "Europe/Moscow")
+        val vm = vm()
+        vm.loadMore()
+        assertEquals(listOf("one"), vm.state.value.items.map { it.id })
+        assertTrue(vm.state.value.moreFailed)
+    }
 
     @Test fun `a new profile zone reloads the feed from the top, the first known zone does not (FIN-92)`() {
         api.lists += page("op_1", next = 1)
@@ -59,6 +111,7 @@ class FeedViewModelTest {
         summary = listOf(month(month)),
         state = FeedState(stale = false, lastOperationAt = at(25)),
         nextBefore = next?.let { at(it) },
+        timeZone = "Europe/Moscow",
     )
 
     @Test fun `opening loads the first portion of the feed`() {
@@ -75,14 +128,14 @@ class FeedViewModelTest {
     }
 
     @Test fun `no operations and no older portion is the empty feed`() {
-        api.lists += OperationsList(emptyList())
+        api.lists += OperationsList(emptyList(), timeZone = "Europe/Moscow")
         val s = vm().state.value
         assertTrue(s.isEmpty)
         assertEquals(emptyList(), s.summary) // a missing summary is an empty one
     }
 
     @Test fun `an empty portion with an older one behind it is not the empty feed`() {
-        api.lists += OperationsList(emptyList(), nextBefore = at(1))
+        api.lists += OperationsList(emptyList(), nextBefore = at(1), timeZone = "Europe/Moscow")
         assertFalse(vm().state.value.isEmpty)
     }
 
@@ -221,7 +274,7 @@ class FeedViewModelTest {
     }
 
     @Test fun `no portion is requested while the first one is reloading behind the full-screen loader`() {
-        api.lists += OperationsList(emptyList(), nextBefore = at(1))
+        api.lists += OperationsList(emptyList(), nextBefore = at(1), timeZone = "Europe/Moscow")
         val vm = vm()
         val gate = CompletableDeferred<Unit>()
         api.gate = gate
