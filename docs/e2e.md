@@ -649,10 +649,10 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
 | `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains confirmations; repeated confirm_phone keeps both checked and input enabled (Qase57, FIN-365, FIN-375) |
 | `auth/phone_consent_recovery` | document offline → explicit refresh → confirmations → Start offline → retry with the existing intent (Qase58, FIN-365) |
-| `auth/phone_validation` | locked phone and age-unlock hint (FIN-394); short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number — FIN-166 |
-| `auth/call_expired` | `call_ttl_ms=15000`: the wait ends either by the stream's `expired` or by the device timer (their order is not fixed); both lead to «Время на звонок вышло» with no number; «Позвонить ещё раз» brings the number and a new deadline back — FIN-166 |
+| `auth/phone_validation` | `call_delay_ms=60000` before Start leaves time to inspect the call screen; locked phone and age-unlock hint (FIN-394); short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number (Qase3, FIN-166/436) |
+| `auth/call_expired` | `call_delay_ms=600000&call_ttl_ms=15000` before Start prevents early mock verification; this 15s test override does not change the normal 5-minute rule. The stream's `expired` or device timer ends the wait (order not fixed); both lead to «Время на звонок вышло» with no number. Restoring `call_ttl_ms=300000` before «Позвонить ещё раз» brings back the number and normal deadline (Qase41, FIN-166/436) |
 | `auth/call_stream_rate_limited` | live 429 marker before negative checks; `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: one actual refusal, number stays, no ErrorMessage (`ds.error.info/warning/error`) or offline message; exact count across control-link resume, remove future refusals, retained wait → passcode → feed (Qase44, FIN-170, FIN-376, FIN-380) |
-| `auth/registration_closed` | `auth.registration=false`: new number → «Регистрация пока закрыта»; existing account still signs in |
+| `auth/registration_closed` | clean state, `flag.auth.registration=false` before sign-in: confirmed new number → «Регистрация пока закрыта»; existing account still signs in (Qase4, FIN-436) |
 | `applock/unlock` (smoke) | cold start → unlock; wrong code error |
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |
 | `applock/change_passcode` | current → new → mismatch → new → repeat; the new code unlocks after restart |
@@ -670,7 +670,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416/427); retained category row is observed before the bounded pause and an explicit Retry with a fresh finite recalculation countdown; final month header is revealed after Retry; follow-up to failed run 41855090174, not executed |
-| `analytics/regular_block_update` (mock-only) | a single successful action replaces the full regular block; seven seconds in the same card retain the promoted third row without RBC across marked GET polls; bounded polling then pauses, the visible period remains September, and an explicit Retry permits the ready response; unknown offline result retains the row until explicit PUT retry (Qase81, FIN-416/427); updated after failed run 41819133288, follow-up to failed run 41844441379, not executed |
+| `analytics/regular_block_update` (mock-only) | successful PUT removes RBC and promotes the third visible payment row before a ready GET; seven seconds in the same card retain that row without RBC across marked GET polls; bounded polling pauses with September retained, then explicit Retry permits ready GET; separate unknown offline result retains RBC until explicit PUT retry (Qase81, FIN-416/427/436). Its case-level Passed covers these UI observations only; JVM version/context checks and backend post-commit/durable delivery are separate |
 | `analytics/unknown_mutation_recovery` (mock-only) | forbidden 500 → explicit read with retained unknown warning and no PUT; Offline → uncached Year or upload deletion → reachable recovery outside the missing snapshot, delayed GET shows preparation before data/empty; unknown in-flight PUT rolls an unperformed selection back, then the same segment tap works; Qase89 (FIN-416/427); re-locate the RBC action after offline resume; follow-up to failed run 41844441379, not executed |
 | `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `analytics/source_zone_and_session` (mock-only) | unsupported source-zone notice survives an offline retry over cached data, supported response recovery, logout/new login with marked response prepares without old financial blocks (Qase88, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
@@ -704,7 +704,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `operations/source_time_zone` (mock-only) | unsupported IANA metadata above verified feed/search cache; stale notice and explicit supported recovery; Qase86; updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `statements/source_time_zone` (mock-only) | unsupported import config and complete result; explicit supported recovery; Qase87; authored, not executed |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
-| `statements/upload_and_history` (smoke) | new operations without a duplicate period row; saved Analytics tab income changes from 0 to +1200 after import, and refreshes after deletion with remaining data and last deletion (FIN-394); duplicate file → «История загрузок»; «Скачать новые данные» with loaded operations and «Скачать за год» after the last deletion, shortened privacy notice (FIN-416, Qase14) |
+| `statements/upload_and_history` (smoke) | new operations without a duplicate period row; October income 0 → +1200 after import; duplicate import and deletion of its first source each retain +1200 and exactly the same three October rows with names/dates/amounts; deleting the second source yields income 0 and an empty October search while preload analytics stays; last deletion clears old totals (FIN-394/436); loaded/yearly download labels and privacy notice remain (FIN-416, Qase14); new assertions authored, not executed |
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
 | `statements/upload_restored_key` | A seeded unknown-age UUID does not send the file or silently change key; the upload count remains 1 (preloaded statement). Only «Загрузить заново» starts a new action and changes the count to 2 (Qase51) — FIN-223 |
 | `assistant/retry_after_consent` | A model failure, consent revocation and denied RetryAnswer lead to consent correction; the same operation resumes and history contains one question with the successful replacement (Qase52) — FIN-223 |
@@ -715,7 +715,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `profile/delete_account` | passcode (wrong, right) → «Удалить аккаунт?» over the profile → «Удаляем…» ignores Back → «Аккаунт удалён» |
 | `availability/update_required` | `min_version=9.0.0`: the next request gets `CLIENT_VERSION_UNSUPPORTED`, the update screen covers the app — FIN-22 |
 | `availability/maintenance` | The check button is disabled during `Retry-After`; the first automatic probe is refused, then a guarded manual check after the fresh wait opens the app; a new maintenance episode has its own one-shot automatic check — FIN-22, FIN-223 |
-| `availability/maintenance_on_sign_in` | `maintenance=unknown` before sign-in: «Продолжить» on the phone screen gets the maintenance screen over sign-in, without an end time — FIN-22 |
+| `availability/maintenance_on_sign_in` | load the consent document and confirm age/PD first, then `maintenance=unknown&maintenance_retry_after=600`; «Продолжить» on the phone screen gets maintenance over sign-in, without an end time (Qase35, FIN-22/436) |
 | `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
 | `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; existing «Повторить» after recovery (Qase19, FIN-396) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
@@ -820,6 +820,9 @@ flow. The mock PD version can be changed by JVM fixtures but has no external con
 versions remain fixed; a separate controllable REST fixture is required. `PhoneViewModelTest`,
 `MockPhoneConsentTest`, `CallViewModelTest` and `AiConsentViewModelTest` cover version rejection/refresh and pinning.
 Register never refetches current PD consent; mismatched original evidence restarts phone verification.
+[Qase54](https://app.qase.io/case/PLAINFIN-54) is a manual REST/peer specification for rotation at Start,
+the pinned original version at Register and restart when that evidence is unavailable (FIN-436); it is not
+an automated post-call document-refresh screen and has no mock mapping.
 
 Real client process-death recovery of an uncertain assistant request is not covered by a mock UI flow
 (Qase53). The fake backend, its token state and idempotency cache live in the client process: killing it
@@ -828,6 +831,14 @@ fixture is needed to test that boundary. `ChatViewModelBehaviourTest` restores t
 and tests no automatic POST, consent correction, fresh-history permission and explicit new intent;
 `ChatAskRecovery`, `ChatAskRecoveryDark` and `ChatRetryRecovery` fixtures cover the proposed visible states.
 The upload flow above deliberately seeds an unknown-age record without claiming real process death.
+
+[Qase60](https://app.qase.io/case/PLAINFIN-60) is Draft / To be automated for the current
+[FIN-386](https://finassist.youtrack.cloud/issue/FIN-386) common/mock-only architecture. Its old stage
+experiment held a real Ask response on the client; that mechanism was rejected and PR228 was closed without
+merge. Historical runs remain evidence of that previous implementation only. Current main has neither
+`stageE2e` nor a mapped Qase60 test. The original boundary still requires independent server state and proof
+that Ask was accepted before client process death, without a client response hold/transform. Until an allowed
+reproduction exists, that boundary remains pending; a neighbouring recovery scenario is not its replacement.
 
 ### FIN-223 safe error controls and coverage
 
@@ -1300,3 +1311,26 @@ response, further control link/refresh, fixed sleep or change to the app's poll 
 This explicit phase boundary also handles a slow observation that consumed all ten earlier reads;
 changing the mock counter alone cannot reset the client's budget or resume a paused read.
 This revision is checked against source and captured commands/hierarchy, not by a new device run.
+
+
+### FIN-436 Qase review corrections
+
+`statements/upload_and_history` keeps Qase14 and its existing mapping. The added shared assertion
+`assert_october_operations` runs after duplicate import and after deleting only the first October source.
+It checks the retained Month/October selection, income +1 200 ₽, one income result, then removes only the
+income-kind chip while retaining the exact 1–31 October range and Analytics scope. Exactly three results
+are required, each identified by its own row descendants: «Поступление», 6 October, +1 200 ₽;
+«Яндекс Такси», 5 October, −389 ₽; «Пятёрочка», 3 October, −754 ₽. Deleting the other October source
+requires income 0 and an empty search for that same month with kind removed; an offscreen row or a smaller
+upload count is not evidence that operations survived or were removed. Existing import/result/download-copy,
+history-count and final-empty-state assertions remain. These additional UI assertions have not been run.
+
+Qase3/4/35/41 now state the existing mock controls and setup order documented in the coverage rows;
+no app/runtime or mock-control behavior changes. Qase54 retains its manual status and Qase60 keeps its
+identity/history with the pending status described above. Qase81 now describes only its mapped Maestro
+observations. Its successful result does not assert exact replacement of every response field, delayed
+version/context rejection or cross-service post-commit recovery; the former two are lower-level JVM
+checks, and the latter is [Qase90](https://app.qase.io/case/PLAINFIN-90), a Draft / Manual specification for
+post-commit composition failure, durable delivery and an idempotent PUT retry. It has no mock mapping
+or executed result; implementation of the service harness remains separate. No Qase result is created
+by these edits.
