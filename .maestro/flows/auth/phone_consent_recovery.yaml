@@ -12,7 +12,10 @@ tags:
 - launchApp:
     stopApp: false
 - extendedWaitUntil:
-    visible: "Не получилось загрузить документ согласия"
+    visible:
+      text: "(?s)Не получилось загрузить документ согласия.*Проверьте интернет.*"
+      childOf:
+        id: "ds.error.error"
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -47,8 +50,15 @@ tags:
 - tapOn:
     id: "auth.phone.submit"
 - extendedWaitUntil:
-    visible: "(?s).*Не удаётся подключиться к серверу.*Проверьте интернет.*"
+    visible:
+      text: "Не удаётся подключиться к серверу"
+      childOf:
+        id: "ds.error.error"
     timeout: 10000
+- assertVisible:
+    text: "(?s)Не получилось отправить номер.*Проверьте интернет.*"
+    childOf:
+      id: "ds.error.error"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
