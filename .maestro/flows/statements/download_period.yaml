@@ -31,7 +31,10 @@ tags:
 - eraseText: 50
 - assertVisible:
     id: "statements.download_period.to"
-    text: "^$"
+    focused: true
+- assertNotVisible:
+    id: "statements.download_period.to"
+    text: ".+"
 - inputText: "2026-09-30"
 - hideKeyboard
 - assertVisible:
@@ -46,7 +49,10 @@ tags:
 - eraseText: 50
 - assertVisible:
     id: "statements.download_period.to"
-    text: "^$"
+    focused: true
+- assertNotVisible:
+    id: "statements.download_period.to"
+    text: ".+"
 - inputText: "2026-10-09"
 - hideKeyboard
 - assertVisible:
@@ -61,7 +67,10 @@ tags:
 - eraseText: 50
 - assertVisible:
     id: "statements.download_period.to"
-    text: "^$"
+    focused: true
+- assertNotVisible:
+    id: "statements.download_period.to"
+    text: ".+"
 - inputText: "2026-10-08"
 - hideKeyboard
 - assertVisible:
