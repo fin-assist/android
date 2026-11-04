@@ -31,7 +31,7 @@ tags:
       LINK: "pfe2e://config?error_operation=analytics_dismiss&error_scenario=terminal_failure"
 - tapOn: "Не подписка — РБК"
 - extendedWaitUntil:
-    visible: "Не получилось убрать.*"
+    visible: "Не удалось выполнить запрос\\. Попробуйте позже"
     timeout: 10000
 - scrollUntilVisible:
     element:
@@ -83,7 +83,7 @@ tags:
       LINK: "pfe2e://config?offline=true"
 - tapOn: "Не подписка — РБК"
 - extendedWaitUntil:
-    visible: "Не получилось убрать.*"
+    visible: "(?s)Не получилось убрать.*"
     timeout: 10000
 - runFlow:
     file: ../../subflows/config.yaml
@@ -148,7 +148,7 @@ tags:
       LINK: "pfe2e://config?offline=true"
 - tapOn: "Не подписка — РБК"
 - extendedWaitUntil:
-    visible: "Не получилось убрать.*"
+    visible: "(?s)Не получилось убрать.*"
     timeout: 10000
 - runFlow:
     file: ../../subflows/config.yaml
@@ -234,7 +234,7 @@ tags:
     element:
       id: "ds.segment.2"
     direction: UP
-- assertNotVisible: "Не получилось убрать.*"
+- assertNotVisible: "Не удалось выполнить запрос[.] Попробуйте позже"
 - tapOn:
     id: "ds.segment.2"
 - extendedWaitUntil:

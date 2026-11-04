@@ -33,7 +33,7 @@ tags:
     id: "operations.feed.search"
 - tapOn:
     id: "operations.search.input"
-- inputText: "Ozon"
+- inputText: "Krabsbir"
 - hideKeyboard
 - extendedWaitUntil:
     visible:

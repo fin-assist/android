@@ -27,25 +27,49 @@ tags:
     enabled: true
 - tapOn:
     id: "statements.download_period.to"
-- eraseText
+    point: "95%,50%"
+- eraseText: 50
+- assertVisible:
+    id: "statements.download_period.to"
+    text: "^$"
 - inputText: "2026-09-30"
 - hideKeyboard
 - assertVisible:
-    id: "statements.download_period.confirm"
-    enabled: false
-- tapOn:
     id: "statements.download_period.to"
-- eraseText
-- inputText: "2026-10-09"
-- hideKeyboard
+    text: "2026-09-30"
 - assertVisible:
     id: "statements.download_period.confirm"
     enabled: false
 - tapOn:
     id: "statements.download_period.to"
-- eraseText
+    point: "95%,50%"
+- eraseText: 50
+- assertVisible:
+    id: "statements.download_period.to"
+    text: "^$"
+- inputText: "2026-10-09"
+- hideKeyboard
+- assertVisible:
+    id: "statements.download_period.to"
+    text: "2026-10-09"
+- assertVisible:
+    id: "statements.download_period.confirm"
+    enabled: false
+- tapOn:
+    id: "statements.download_period.to"
+    point: "95%,50%"
+- eraseText: 50
+- assertVisible:
+    id: "statements.download_period.to"
+    text: "^$"
 - inputText: "2026-10-08"
 - hideKeyboard
+- assertVisible:
+    id: "statements.download_period.to"
+    text: "2026-10-08"
+- assertVisible:
+    id: "statements.download_period.confirm"
+    enabled: true
 - runFlow:
     file: ../../subflows/config.yaml
     env:

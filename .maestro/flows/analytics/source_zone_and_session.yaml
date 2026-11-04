@@ -60,7 +60,8 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?analytics_recalculating_responses=100"
-- runFlow: ../../subflows/fast_login.yaml
+# The live app already entered passcode setup after logout. Complete that UI flow as a user would.
+- runFlow: ../../subflows/login.yaml
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:

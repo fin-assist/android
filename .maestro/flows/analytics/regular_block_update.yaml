@@ -37,7 +37,7 @@ tags:
 - assertNotVisible: "РБК"
 # Observe the applied PUT block for longer than two 3 s polls while GET still returns the old row.
 # The promoted third row is a positive oracle: an offscreen RBC row alone would not prove retention.
-# Stay in the same card before observing, preserving the ten-response poll budget for the final scroll up.
+# Stay in the same card before observing: do not let an offscreen old row look like a successful update.
 - scrollUntilVisible:
     element: "Не подписка — планшет.*"
 - evalScript: ${output.markedReadUntil = Date.now() + 7000}
@@ -48,12 +48,22 @@ tags:
       - assertVisible: "Не подписка — планшет.*"
       - assertNotVisible: "Не подписка — РБК"
       - assertNotVisible: "РБК"
-# The active notice text distinguishes polling from the paused state, which shares the same tag.
+# UI interactions can consume the ten-response poll budget. Observe its bounded pause explicitly;
+# a ready GET is still forbidden, and the PUT block must remain applied throughout.
 - scrollUntilVisible:
     element:
       id: "analytics.recalculating"
     direction: UP
-- assertVisible: "Пересчитываем после изменений.*"
+- extendedWaitUntil:
+    visible: "Не удалось обновить показатели\\. Показаны данные до изменений"
+    timeout: 40000
+- assertVisible:
+    id: "analytics.retry"
+    enabled: true
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
 - assertVisible:
     text: "Сентябрь 2026"
     childOf:
@@ -62,13 +72,18 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?analytics_recalculating_responses=0"
+- scrollUntilVisible:
+    element:
+      id: "analytics.retry"
+- assertVisible: "Не удалось обновить показатели\\. Показаны данные до изменений"
+- tapOn:
+    id: "analytics.retry"
 - extendedWaitUntil:
     notVisible:
       id: "analytics.recalculating"
     timeout: 15000
 - scrollUntilVisible:
-    element:
-      id: "analytics.block.regular_payments"
+    element: "Не подписка — планшет.*"
 - assertNotVisible: "РБК"
 
 # An offline result is unknown. Returning online and a read cannot claim this write succeeded.
@@ -98,7 +113,7 @@ tags:
       LINK: "pfe2e://config?offline=true"
 - tapOn: "Не подписка — РБК"
 - extendedWaitUntil:
-    visible: "Не получилось убрать.*"
+    visible: "(?s)Не получилось убрать.*"
     timeout: 10000
 - assertVisible: "РБК"
 - runFlow:

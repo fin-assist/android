@@ -55,7 +55,7 @@ tags:
     text: "Не подписка"
     index: 0
 - extendedWaitUntil:
-    visible: "(?s).*Не получилось убрать.*"
+    visible: "Сервис получил новый тип ошибки\\. Попробуйте позже"
     timeout: 10000
 - assertVisible: "(?s).*Не удалось сменить период.*"
 - assertVisible:
@@ -137,7 +137,7 @@ tags:
     element:
       id: "ds.segment.2"
     direction: UP
-- assertNotVisible: "Не получилось убрать.*"
+- assertNotVisible: "Сервис получил новый тип ошибки\\. Попробуйте позже"
 - tapOn:
     id: "ds.segment.2"
 - extendedWaitUntil:

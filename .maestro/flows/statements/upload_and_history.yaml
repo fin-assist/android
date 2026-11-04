@@ -46,8 +46,9 @@ tags:
     element:
       id: "statements.upload.download"
 - assertVisible:
-    id: "statements.upload.download"
     text: "Скачать новые данные"
+    childOf:
+      id: "statements.upload.download"
 - assertNotVisible: "Скачать за год"
 - scrollUntilVisible:
     element:
@@ -118,8 +119,9 @@ tags:
     element:
       id: "statements.upload.download"
 - assertVisible:
-    id: "statements.upload.download"
     text: "Скачать новые данные"
+    childOf:
+      id: "statements.upload.download"
 - scrollUntilVisible:
     element:
       id: "statements.upload.pick"
@@ -221,8 +223,9 @@ tags:
     element:
       id: "statements.upload.download"
 - assertVisible:
-    id: "statements.upload.download"
     text: "Скачать за год"
+    childOf:
+      id: "statements.upload.download"
 - assertNotVisible: "Скачать новые данные"
 - scrollUntilVisible:
     element:
