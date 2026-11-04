@@ -669,7 +669,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state; expense search uses the ASCII query FIN-400 within the inherited 2024–2026 range, checks the single January 2024 debit and retained kind/scope (Qase75, FIN-400/415); follow-up not executed (previous run failed) |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
-| `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416/427); final month header is revealed after Retry; follow-up to failed run 41844441379, not executed |
+| `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416/427); retained category row is observed before the bounded pause and an explicit Retry with a fresh finite recalculation countdown; final month header is revealed after Retry; follow-up to failed run 41855090174, not executed |
 | `analytics/regular_block_update` (mock-only) | a single successful action replaces the full regular block; seven seconds in the same card retain the promoted third row without RBC across marked GET polls; bounded polling then pauses, the visible period remains September, and an explicit Retry permits the ready response; unknown offline result retains the row until explicit PUT retry (Qase81, FIN-416/427); updated after failed run 41819133288, follow-up to failed run 41844441379, not executed |
 | `analytics/unknown_mutation_recovery` (mock-only) | forbidden 500 → explicit read with retained unknown warning and no PUT; Offline → uncached Year or upload deletion → reachable recovery outside the missing snapshot, delayed GET shows preparation before data/empty; unknown in-flight PUT rolls an unperformed selection back, then the same segment tap works; Qase89 (FIN-416/427); re-locate the RBC action after offline resume; follow-up to failed run 41844441379, not executed |
 | `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
@@ -1286,3 +1286,17 @@ Qase81 and Qase82 now scroll to the September Text child of that picker, preserv
 assertion instead of accepting a clipped wrapper. No extra refresh, polling budget or fixed delay is added.
 Qase73, Qase14 and the full 2000–2026 chart-history traversal pass in this run; Qase81's offline
 section remains unexecuted because the earlier header assertion stops the flow.
+
+FIN-427 follow-up to [run 41855090174](https://github.com/fin-assist/android/actions/runs/41855090174)
+at `f4064c8e`: Qase89 now passes completely. Qase82 stops earlier, before the final month check:
+its first retention observation scrolls to the category block wrapper, then waits for an offscreen row
+while the four marked responses expire. The failure hierarchy already contains the ready unavailable
+category block. The flow now holds marked responses while locating and centring the actual category row,
+asserts retained data and no unavailable message, then waits for the bounded polling pause. It sets
+a four-response countdown and uses the existing explicit Retry to start a fresh client budget.
+After that marked Retry response, the unavailable block must arrive through automatic polling;
+the flow centres the stable category heading for this observation. There is no injected ready
+response, further control link/refresh, fixed sleep or change to the app's poll budget.
+This explicit phase boundary also handles a slow observation that consumed all ten earlier reads;
+changing the mock counter alone cannot reset the client's budget or resume a paused read.
+This revision is checked against source and captured commands/hierarchy, not by a new device run.
