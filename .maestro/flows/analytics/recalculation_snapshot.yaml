@@ -181,7 +181,20 @@ tags:
     notVisible:
       id: "analytics.recalculating"
     timeout: 15000
-- assertVisible: "Сентябрь 2026"
+# Removing the notice preserves the body offset and can leave the period header above the viewport.
+- scrollUntilVisible:
+    element:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    direction: UP
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
 - scrollUntilVisible:
     element: "Не подписка — РБК"
 - assertVisible: "РБК"
