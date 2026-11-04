@@ -586,6 +586,8 @@ internal object AnalyticsTags {
     const val BLOCK_EXPENSE_CATEGORIES = "analytics.block.expense_categories"
     const val BLOCK_INCOME_CATEGORIES = "analytics.block.income_categories"
     const val BLOCK_REGULAR_PAYMENTS = "analytics.block.regular_payments"
+    const val REGULAR_PAYMENT_ITEM = "analytics.regular_payments.item"
+    const val REGULAR_PAYMENTS_MORE = "analytics.regular_payments.more"
     const val BLOCK_NOTABLE_SPENDING = "analytics.block.notable_spending"
     const val BLOCK_BANK_FEES = "analytics.block.bank_fees"
     const val BLOCK_SMALL_FREQUENT = "analytics.block.small_frequent"

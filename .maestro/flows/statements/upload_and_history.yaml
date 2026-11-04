@@ -141,6 +141,17 @@ tags:
       id: "statements.history"
     timeout: 10000
 
+# The duplicate result and upload count do not prove ledger deduplication.
+# Verify the exact three operations and unchanged income before deleting either source.
+- back
+- tapOn:
+    id: "ds.tab.analytics"
+- runFlow: ../../subflows/assert_october_operations.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "profile.statements"
+
 # Delete an upload: the dialog, then one row less.
 - extendedWaitUntil:
     visible:
@@ -158,6 +169,16 @@ tags:
       id: "statements.history.row"
       index: 2
     timeout: 15000
+
+# One October source still owns all three records; deleting its duplicate must not remove them.
+- back
+- tapOn:
+    id: "ds.tab.analytics"
+- runFlow: ../../subflows/assert_october_operations.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "profile.statements"
 
 # Delete the other October source: the original year still supplies analytics.
 - tapOn:
@@ -179,6 +200,64 @@ tags:
     timeout: 15000
 - assertNotVisible:
     id: "analytics.empty"
+# All October operations belonged to the two removed sources. The preloaded year still covers October,
+# so exact zero and an empty October search are required, not merely any remaining Analytics tiles.
+- scrollUntilVisible:
+    element:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    direction: UP
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- scrollUntilVisible:
+    element:
+      text: "^0[ \u00a0\u202f]₽$"
+      childOf:
+        id: "analytics.tile.income"
+- assertVisible:
+    text: "^0[ \u00a0\u202f]₽$"
+    childOf:
+      id: "analytics.tile.income"
+- tapOn:
+    id: "analytics.tile.income"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.empty"
+    timeout: 15000
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
+- assertVisible:
+    id: "operations.search.chip.kind"
+    checked: true
+    containsDescendants:
+      - text: "Только доходы"
+- tapOn:
+    id: "operations.search.chip.kind"
+- assertVisible:
+    id: "operations.search.chip.kind"
+    checked: false
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.empty"
+    timeout: 15000
+- assertVisible:
+    id: "operations.search.chip.scope"
+    checked: true
+- swipe:
+    from:
+      id: "operations.search.chip.amount"
+    direction: RIGHT
+- assertVisible:
+    text: "1–31[ \u00a0\u202f]октября"
+    childOf:
+      id: "operations.search.chip.period"
+- assertNotVisible:
+    id: "operations.row"
+- back
 - tapOn:
     id: "ds.tab.profile"
 - tapOn:
