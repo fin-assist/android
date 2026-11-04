@@ -1375,3 +1375,13 @@ Focused local runs then exposed clipped rows and header totals after the fixed u
 notices appeared. Centring a title or an action against the whole screen could move the data behind those
 notices. The helper now scrolls to the same scoped header/row/footer value pairs that it subsequently
 asserts, without centring; changing-row actions are observed separately after their merchant/amount pair.
+
+### FIN-440: preserve Qase81 polling pause until explicit retry
+
+In the same main UI run, `analytics/regular_block_update` reached the paused notice and enabled retry,
+then its upward month-picker scroll triggered pull-to-refresh (`ds.refresh.indicator` in the captured log).
+After the control link released marked responses, that refresh consumed the ready GET before the explicit
+retry tap. The month-picker scroll and exact September assertion now run after the explicit retry completes.
+The paused notice and enabled retry are checked immediately before releasing the hold. The month/context,
+retained card, replacement row, unknown-result, offline and mutation-count assertions remain; runtime,
+poll budgets, control hooks and timeouts are unchanged. Qase81 keeps its existing ID and flow mapping.
