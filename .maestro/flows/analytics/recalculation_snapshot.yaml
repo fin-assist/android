@@ -23,7 +23,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?analytics_recalculating_responses=4&failing_blocks=expense_categories"
+      LINK: "pfe2e://config?analytics_recalculating_responses=100&failing_blocks=expense_categories"
 - scrollUntilVisible:
     element:
       id: "analytics.recalculating"
@@ -31,10 +31,16 @@ tags:
 - assertVisible: "Пересчитываем после изменений.*"
 - scrollUntilVisible:
     element:
-      id: "analytics.block.expense_categories"
+      id: "analytics.expense_category"
+    centerElement: true
 - assertVisible:
     id: "analytics.expense_category"
 - assertNotVisible: "Не получилось посчитать.*"
+# Start the finite countdown only after observing the retained row. Ready still arrives via polling.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_recalculating_responses=4"
 - extendedWaitUntil:
     visible: "Не получилось посчитать.*"
     timeout: 20000
