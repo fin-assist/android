@@ -60,17 +60,8 @@ tags:
 - assertVisible:
     id: "analytics.retry"
     enabled: true
-# The picker container can be clipped to a strip; wait for its actual label before checking the month.
-- scrollUntilVisible:
-    element:
-      text: "Сентябрь 2026"
-      childOf:
-        id: "ds.period.pick"
-    direction: UP
-- assertVisible:
-    text: "Сентябрь 2026"
-    childOf:
-      id: "ds.period.pick"
+# Keep the paused notice in view until the explicit retry. Scrolling up to the month here can
+# trigger pull-to-refresh, restart polling and consume the ready GET before the retry is tapped.
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -85,6 +76,18 @@ tags:
     notVisible:
       id: "analytics.recalculating"
     timeout: 15000
+# Check the preserved month after the explicit retry has completed. The picker container can be
+# clipped to a strip; wait for its actual label before checking the month.
+- scrollUntilVisible:
+    element:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    direction: UP
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - scrollUntilVisible:
     element: "Не подписка — планшет.*"
 - assertNotVisible: "РБК"
