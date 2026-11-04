@@ -101,7 +101,10 @@ tags:
 - tapOn:
     id: "ds.period.prev"
 - extendedWaitUntil:
-    visible: "Сентябрь 2026"
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 10000
 # A failed Year switch owns a separate target. Current-period refresh/Retry must keep it intact.
 - runFlow:
@@ -115,7 +118,10 @@ tags:
       id: "analytics.period.retry"
     timeout: 10000
 - assertVisible: "(?s).*Не удалось сменить период.*"
-- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "ds.segment.0"
     checked: true
@@ -128,7 +134,10 @@ tags:
     visible:
       id: "analytics.retry"
     timeout: 10000
-- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "ds.segment.0"
     checked: true
@@ -154,7 +163,10 @@ tags:
     notVisible:
       id: "ds.refresh.indicator"
     timeout: 10000
-- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "ds.segment.0"
     checked: true
@@ -174,7 +186,10 @@ tags:
     visible:
       id: "analytics.retry"
     timeout: 10000
-- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "analytics.period.retry"
 - runFlow:
@@ -193,7 +208,10 @@ tags:
     notVisible:
       id: "ds.refresh.indicator"
     timeout: 10000
-- assertVisible: "Сентябрь 2026"
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "ds.segment.0"
     checked: true
@@ -205,8 +223,9 @@ tags:
     id: "analytics.period.retry"
 - extendedWaitUntil:
     visible:
-      id: "ds.period.pick"
       text: "2026"
+      childOf:
+        id: "ds.period.pick"
     timeout: 15000
 - assertVisible:
     id: "ds.segment.2"

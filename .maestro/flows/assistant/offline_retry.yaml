@@ -58,38 +58,99 @@ tags:
       enabled: true
     timeout: 20000
 
-# Without the network the question is not sent: the notice replaces the input (mockup `ChatOffline`).
+# Keep the draft before the control activity pauses Chat. Resume reads history and hides the composer on failure.
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Krabsbir again"
+- hideKeyboard
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?offline=true"
-- tapOn:
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.offline"
+    timeout: 15000
+- assertVisible:
+    text: "Не удаётся подключиться к серверу. Проверьте интернет и попробуйте ещё раз"
+    childOf:
+      id: "ds.chat.offline"
+- assertNotVisible:
     id: "ds.chat.input"
-- inputText: "Krabsbir"
+- assertVisible: ".*[Оо]сталось 4 из 5.*"
+- assertNotVisible:
+    text: "Krabsbir again"
+    childOf:
+      id: "assistant.question"
+
+# A read failure has no pending Ask. Retry restores the draft without sending it, even while still offline.
+- tapOn:
+    id: "ds.chat.retry"
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.input"
+      text: "Krabsbir again"
+      enabled: true
+    timeout: 10000
+- assertVisible: ".*[Оо]сталось 4 из 5.*"
+- assertNotVisible:
+    text: "Krabsbir again"
+    childOf:
+      id: "assistant.question"
+# Only this explicit Send creates a pending question; the failed send replaces the input again.
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:
     visible:
       id: "ds.chat.offline"
     timeout: 15000
-- assertVisible: "Не удаётся подключиться к серверу. Проверьте интернет и попробуйте ещё раз"
 - assertNotVisible:
     id: "ds.chat.input"
+- assertVisible: ".*[Оо]сталось 4 из 5.*"
+# Retrying the pending Ask while offline must neither append a question nor consume quota.
+- tapOn:
+    id: "ds.chat.retry"
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.offline"
+    timeout: 15000
+- assertVisible: ".*[Оо]сталось 4 из 5.*"
+- assertNotVisible:
+    text: "Krabsbir again"
+    childOf:
+      id: "assistant.question"
 
-# Back online, «Повторить» sends the same question: the input returns and a second answer comes.
+# Online resume recovers the history read, not the POST. The same pending draft still needs explicit Send.
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?offline=false"
-- tapOn:
-    id: "ds.chat.retry"
-- extendedWaitUntil:
-    notVisible:
-      id: "ds.chat.offline"
-    timeout: 10000
 - extendedWaitUntil:
     visible:
-      id: "assistant.answer"
-      index: 1
+      id: "ds.chat.input"
+      text: "Krabsbir again"
+      enabled: true
+    timeout: 10000
+- assertNotVisible:
+    id: "ds.chat.offline"
+- assertVisible: ".*[Оо]сталось 4 из 5.*"
+- assertNotVisible:
+    text: "Krabsbir again"
+    childOf:
+      id: "assistant.question"
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible: ".*[Оо]сталось 3 из 5.*"
     timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: "ds.chat.input"
+      enabled: true
+    timeout: 20000
+- assertVisible:
+    id: "assistant.answer"
+# Chat uses a lazy list: quota proves one new accepted question without relying on two answers being on screen.
 - assertVisible: ".*[Оо]сталось 3 из 5.*"
+- assertNotVisible:
+    id: "assistant.chat.send_failed"

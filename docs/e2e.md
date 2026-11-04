@@ -655,12 +655,12 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `operations/days_in_profile_zone` | `profile_timezone=Asia/Vladivostok`: after the profile is read, the feed groups days in the profile zone, not the device's — an evening operation in Moscow moves to the next day — FIN-92 |
 | `operations/statement_stale` | on the preloaded statement the caption under the summary says «Данные по 1 октября» (the statement's end, not the last operation on 30 September); then the preloaded statement deleted, `stale.ofx` uploaded: «Операции» and «Аналитика» show «Данные в приложении по 20 сентября — с тех пор прошло больше двух недель», dated by the statement's end (`state.data_to`), not the last operation (15 September) — FIN-125 |
 | `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, separate «Сбросить» below the chips stays visible at both horizontal scroll edges (FIN-416, Qase9), period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
-| `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast with the history explanation; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; authored, not executed |
+| `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast and opens the history explanation in its help sheet; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month through its option container and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; follow-up not executed (previous run failed) |
 | `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month (Qase73, FIN-391); authored, not executed |
 | `analytics/period_controls` (common) | Month/All-time hide rolling choices; Quarter/Year expose only their right-aligned choice; tapping the selected calendar segment exits its rolling period; All-time removes the whole period row across tab navigation (Qase80, FIN-416); authored, not executed |
 | `analytics/rolling_periods` (mock-only) | rolling year/quarter anchored to statement coverage, exact ranges, no forecast, failed singleton switch and explicit exact retry, transfer-mode preservation, clipped edge point → full calendar month, independent remembered calendar selection; Qase76 (FIN-411); authored, not executed |
 | `analytics/chart_month_selection` (mock-only) | whole-column selection including zero expenses, exact month/year, selected state and retained transfer mode/scroll; failed switch and explicit retry (Qase74, FIN-398); authored, not executed |
-| `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state (Qase75, FIN-400); authored, not executed |
+| `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state; expense search uses the ASCII query FIN-400 within the inherited 2024–2026 range, checks the single January 2024 debit and retained kind/scope (Qase75, FIN-400/415); follow-up not executed (previous run failed) |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416); authored, not executed |
@@ -684,7 +684,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `errors/request_retry_false` | a REST refusal with retryable=false is not resent on resume or after its wait; corrected input is a new action and a later failed result can separately allow RetryAnswer — FIN-223, Qase 50 |
 | `errors/server_messages` | profile theme mutations show an unknown ordinary server message, unknown-severity error styling and safe malformed/legacy fallbacks without diagnostics — FIN-223, Qase 48 |
 | `assistant/nothing_found_charged` | a merchant with no operations over the covered six months of the answer (`Kaspersky`, only in March): «…операций «Kaspersky» не нашли», an answer, not a refund — 4 of 5 (it used to stay 5 of 5); only a lock or no data over the period is refunded — FIN-136 |
-| `assistant/offline_retry` | no network: the notice replaces the input; «Повторить» sends the question once the network is back |
+| `assistant/offline_retry` | draft prepared online → resume history read offline hides input → read-failure Retry restores draft without sending → explicit Send and pending-Ask Retry fail offline without spending quota → online resume restores draft without POST → explicit Send accepts exactly one new question (quota 4 → 3 of 5); Qase20, FIN-415; foreground online Retry limitation is listed below |
 | `assistant/chip_after_statements_deleted` | every statement deleted: the operations chip of an earlier answer opens the search without its stale selection (notice, empty result) — FIN-76 |
 | `assistant/retry_without_transfers` | `assistant_model_errors=1`: a question asked «Без переводов» fails, not spent; «Повторить» answers it still «без переводов» — FIN-76 |
 | `assistant/answer_retry` | `assistant_model_errors=1`: the answer fails, not spent; a double tap on «Повторить» while the request is on its way sends it once: one answer, no «Не получилось отправить вопрос», 4 of 5 — FIN-75 |
@@ -725,6 +725,14 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
+
+Not covered yet (FIN-40, FIN-415): tapping «Повторить» for a pending Ask after connectivity returns while
+Chat stays in the foreground. The mock control link pauses Chat; its online resume reads history and clears the
+offline notice before Maestro can tap Retry. The current mock has no Ask-only offline fixture, so Qase20 covers
+offline Retry and recovery through resume followed by explicit Send instead. The existing unit regression
+`ChatViewModelBehaviourTest#offline keeps the question and the retry re-sends it with the same key` covers the
+pending text, exactly two Ask attempts and reuse of the original idempotency key. The foreground online-Retry
+path still needs UI coverage with controllable connectivity that does not pause Chat.
 
 Not covered yet: voice input ([PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69), manual, FIN-404: the CI emulator has no controlled Russian speech/audio or deterministic recognition-service fixture;
 Maestro cannot produce recognizer callbacks). The preparation → actual `onReadyForSpeech`
@@ -1171,3 +1179,48 @@ The registration flow checks «Скачать за год» before the first imp
 the longer download instructions and full-width buttons may move it below the initial viewport.
 
 FIN-416 binds rolling choices to their calendar tabs, aligns them to the content right edge and removes the whole all-time period row. Qase75/76 keep their existing scenario identity and are updated; all_time also retains the fixes already verified on main in FIN-415. Qase80 covers returning to a calendar year/quarter by tapping its already selected segment. UI/Maestro/DesignCheck were not run. The implemented dismissal client and Qase81 coverage are described in the response-update section above. The future Temporal saga is tracked separately in FIN-419.
+
+### FIN-415 Maestro selectors synchronized with the 0.2.16 hierarchy
+
+FIN-415 synchronizes the 11 flows diagnosed in [UI tests run 41243782169](https://github.com/fin-assist/android/actions/runs/41243782169)
+with the release/0.2.16 accessibility hierarchy. Period labels, transfer labels, tile amounts and forecast explanations
+are checked inside their tagged parent (`childOf`); combined text/id selectors are kept only where the hierarchy
+actually puts both on one node. Scroll targets are the checked category row, amount or unavailable/forecast text,
+so a visible container border cannot prematurely finish a scroll. The existing checked-state assertions stay:
+the captured Android hierarchy exposes selected segments and chart columns as `checked=true`.
+
+Qase mappings are unchanged: 10, 14, 20, 21, 30, 58, 70, 71, 73, 74 and 75. Qase20 separates a failed history
+read from a failed pending Ask. The draft is typed before offline control; read recovery, failed send/retry and
+online resume cannot create its question or spend quota. Online resume restores the input through a successful
+GET; a separate explicit Send reuses the pending question. Quota 4 → 3 of 5 checks one new accepted question
+without requiring two answers to be simultaneously visible in Chat's lazy list. No application runtime or
+accessibility semantics, timeouts, suite membership or skip rules change. These revisions were checked statically;
+all 11 flows and the full mock suite still require a separately authorized UI run.
+
+
+### FIN-415 remaining post-merge flow steps
+
+The [post-merge UI run 41281091191](https://github.com/fin-assist/android/actions/runs/41281091191) at `87f218cf`
+passed the original failure points but exposed two later steps. In `analytics/all_time`, the 20-second scroll
+stopped among September 2026 operations before the January 2024 target. The flow now searches for `FIN-400`
+through the normal query field without clearing the inherited period or analytics filters. It requires exactly
+one result with the fixture's name, January 2024 date and debit amount, then checks the retained period,
+expense kind and analytics scope. The matching income from the same fixture must remain excluded.
+In `analytics/facts_and_forecast`, `PfOptionRow` puts an untagged view between the tagged option and its text.
+Both scroll and tap now select `analytics.period.option` with the month in `containsDescendants`; the selected
+month is still verified separately under `ds.period.pick`.
+
+Qase71 and Qase75 keep their existing flow paths and IDs. Their scenario descriptions are synchronized;
+these follow-up revisions were checked statically and have not been executed on a device. Application runtime,
+accessibility semantics, timeout values and suite membership are unchanged.
+
+
+### FIN-415 count spacing and return from history
+
+The [next post-merge run 41284429429](https://github.com/fin-assist/android/actions/runs/41284429429) at `a36a5178`
+found the old January 2024 operation, but the exact count assertion used an ASCII space where `countWithNoun`
+outputs NBSP. The selector keeps `operations.search.count`, the exact count 1 and singular noun, accepting only
+normal/NBSP/narrow-NBSP separators. The same run passed the period picker in Qase71 and reached the final
+statement deletion. History has `ds.back` and no bottom tabs; Qase71 now leaves History before selecting
+Analytics for its final no-data check. Qase75's scenario and mapping are unchanged; Qase71's navigation step
+is synchronized. Both revisions are checked statically against those captured hierarchies, not by a new device run.

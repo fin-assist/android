@@ -56,7 +56,16 @@ tags:
     visible:
       id: "statements.upload.send_offline"
     timeout: 15000
-- assertVisible: "(?s).*Не удаётся подключиться к серверу.*Файл не загружен.*Проверьте интернет.*"
+- assertVisible:
+    text: "Не удаётся подключиться к серверу"
+    childOf:
+      id: "statements.upload.send_offline"
+- assertVisible:
+    text: "(?s)Файл не загружен.*Проверьте интернет.*"
+    childOf:
+      id: "statements.upload.send_offline"
+- assertVisible:
+    id: "statements.upload.send_retry"
 
 # Back online, «Повторить» sends the same file and the result opens.
 - runFlow:
