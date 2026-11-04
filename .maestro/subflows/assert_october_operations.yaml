@@ -1,0 +1,97 @@
+# Checks the imported October fixture through the normal Analytics → Search path.
+# Starts and ends on the saved October Analytics tab; no fixture/control changes.
+appId: ru.finassist.pf.mock.e2e
+---
+- scrollUntilVisible:
+    element:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    direction: UP
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- scrollUntilVisible:
+    element:
+      text: "^[+]1[ \u00a0\u202f]200[ \u00a0\u202f]₽$"
+      childOf:
+        id: "analytics.tile.income"
+- assertVisible:
+    text: "^[+]1[ \u00a0\u202f]200[ \u00a0\u202f]₽$"
+    childOf:
+      id: "analytics.tile.income"
+- tapOn:
+    id: "analytics.tile.income"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+      text: "Найдена 1[ \u00a0\u202f]операция"
+    timeout: 15000
+# Removing only kind keeps the server-provided October range and Analytics scope.
+- swipe:
+    from:
+      id: "operations.search.chip.category"
+    direction: LEFT
+- assertVisible:
+    id: "operations.search.chip.kind"
+    checked: true
+    containsDescendants:
+      - text: "Только доходы"
+- tapOn:
+    id: "operations.search.chip.kind"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.count"
+      text: "Найдено 3[ \u00a0\u202f]операции"
+    timeout: 15000
+- assertVisible:
+    id: "operations.search.chip.scope"
+    checked: true
+- swipe:
+    from:
+      id: "operations.search.chip.amount"
+    direction: RIGHT
+- assertVisible:
+    text: "1–31[ \u00a0\u202f]октября"
+    childOf:
+      id: "operations.search.chip.period"
+- scrollUntilVisible:
+    element:
+      id: "operations.row"
+      containsDescendants:
+        - text: "Поступление"
+        - text: "6[ \u00a0\u202f]октября"
+        - text: "[+]1[ \u00a0\u202f]200[ \u00a0\u202f]₽"
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Поступление"
+      - text: "6[ \u00a0\u202f]октября"
+      - text: "[+]1[ \u00a0\u202f]200[ \u00a0\u202f]₽"
+- scrollUntilVisible:
+    element:
+      id: "operations.row"
+      containsDescendants:
+        - text: "Яндекс Такси"
+        - text: "5[ \u00a0\u202f]октября"
+        - text: "−389[ \u00a0\u202f]₽"
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Яндекс Такси"
+      - text: "5[ \u00a0\u202f]октября"
+      - text: "−389[ \u00a0\u202f]₽"
+- scrollUntilVisible:
+    element:
+      id: "operations.row"
+      containsDescendants:
+        - text: "Пятёрочка"
+        - text: "3[ \u00a0\u202f]октября"
+        - text: "−754[ \u00a0\u202f]₽"
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Пятёрочка"
+      - text: "3[ \u00a0\u202f]октября"
+      - text: "−754[ \u00a0\u202f]₽"
+- back
