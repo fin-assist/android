@@ -142,10 +142,17 @@ tags:
     id: "ds.segment.2"
 - extendedWaitUntil:
     visible:
-      text: "2026"
-      childOf:
-        id: "ds.period.pick"
+      id: "analytics.period.rolling_year"
     timeout: 60000
+# The Year response preserves the body scroll offset; its period header can be above the viewport.
+- scrollUntilVisible:
+    element:
+      id: "ds.period.pick"
+    direction: UP
+- assertVisible:
+    text: "2026"
+    childOf:
+      id: "ds.period.pick"
 - assertVisible:
     id: "ds.segment.2"
     checked: true

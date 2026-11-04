@@ -18,6 +18,22 @@
 | [android-permissions-security](vendor/android-skills/android-permissions-security/SKILL.md) | Manifest, runtime permissions, IPC и проверка вызывающего. |
 | [anr-audit-and-fix](vendor/android-skills/anr-audit-and-fix/SKILL.md) | Блокировка главного потока и подтверждённые риски ANR. |
 | [edge-to-edge](vendor/android-skills/edge-to-edge/SKILL.md) | System bars, insets и IME: доступность и видимость элементов Compose. |
+| [ai-qa-review](vendor/ai-qa-review/SKILL.md) | Изменённые тесты: проверяемое поведение, assertions, границы/ошибки, изоляция, надёжность и диагностика. |
+| [mobile-testing](vendor/mobile-testing/SKILL.md) | Мобильные сценарии: cold start, background/foreground, deep links, сеть и разрешения; существующий Maestro и документированные native gaps. |
+| [test-case-management](vendor/test-case-management/SKILL.md) | Качество Qase-кейсов PLAINFIN и их связь с UI-флоу, scripts/qase-cases.json и таблицей покрытия. |
+| [release-readiness](vendor/release-readiness/SKILL.md) | Готовность конкретного выпуска: привязанные к сборке проверки, smoke, фактическое состояние среды и согласованный откат. |
+
+## QA-профили (FIN-430)
+
+Выбирайте QA-профиль по изменённому поведению или тестам; наличие профиля не требует его применения
+к каждому PR. Перед применением прочитайте [общие правила QA](vendor/qa-project-context/references/plainfin-policy.md).
+Они уточняют границы generic Verification/Done When: существующие harness, обязательные проверки и формат
+ревью сохраняются; новые CI gates, инструменты, отчёты, mutation score и минимальные размеры datasets
+не становятся условиями обычного PR. В сводке — названия действительно применённых навыков, если применялись.
+Go table-driven tests, обоснованные ожидания и связные lifecycle-тесты не являются дефектом по синтаксису.
+Замечание требует конкретного нарушения поведения, полноты, надёжности или диагностической ценности.
+UI/эмуляторные прогоны, платные model evals, публикации Qase и deployment требуют применимых полномочий;
+поставка навыков их не предоставляет. Не исполняйте scripts навыков из PR head, включая injection detector.
 
 ## Применение в контексте PR
 
