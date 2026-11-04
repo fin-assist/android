@@ -629,16 +629,22 @@ flow checks:
 | `auth/sign_in_existing_user` | the sign-in of an existing account itself (phone, call, passcode setup) |
 | `applock/unlock`, `applock/forgot_code`, `applock/change_passcode` | the passcode set on the setup screen, then unlocked, forgotten or changed |
 | `profile/delete_account` | the passcode is checked again before the deletion |
+| `analytics/source_zone_and_session` (second login) | logout has already put the live app into passcode setup; `login.yaml` completes setup and its biometric offer before the new Analytics session |
 
 The other sign-in flows (`auth/*`, `availability/maintenance_on_sign_in`, `offline/stream_drops`) drive the screens
 themselves. Every other flow uses `fast_login.yaml`; a new one does too unless it checks one of the above.
+
+FIN-427: `auth/register_new_user` first removes the preloaded fixture through History under the existing
+mock account, signs out and registers the new number in the same process. The one-user in-process server
+otherwise already has 1969 operations at registration. The flow verifies the empty upload guide and
+«Скачать за год» before the first import; clearing app data or restarting that process would preload it again.
 
 ## Coverage
 
 | Flow | Checks |
 |---|---|
 | `refresh/server_data` | pull-to-refresh on the feed, operation details, empty search, selected analytics month, profile, upload history, unread lines and an assistant draft; offline retains data/query/period, online clears the failure; after a failed Year switch, failed/successful Month pulls and current-read Retry preserve Month and its separate target notice, then only the Year Retry changes the period; a history read never asks or retries a question (Qase70, FIN-399); authored, not executed |
-| `auth/register_new_user` (smoke) | independent 14+/PD before phone → new number → create account without another consent → passcode → first upload offers «Скачать за год» and reachable «Загружу позже» → result → feed (Qase2, FIN-365, FIN-416) |
+| `auth/register_new_user` (smoke) | empty mock history prepared through UI before registration; independent 14+/PD before phone → new number → create account without another consent → passcode → first upload offers «Скачать за год» and reachable «Загружу позже» → result → feed (Qase2, FIN-365, FIN-416/427) |
 | `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the main tabs (Qase1, FIN-365) |
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
 | `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains confirmations; repeated confirm_phone keeps both checked and input enabled (Qase57, FIN-365, FIN-375) |
@@ -656,7 +662,7 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `operations/statement_stale` | on the preloaded statement the caption under the summary says «Данные по 1 октября» (the statement's end, not the last operation on 30 September); then the preloaded statement deleted, `stale.ofx` uploaded: «Операции» and «Аналитика» show «Данные в приложении по 20 сентября — с тех пор прошло больше двух недель», dated by the statement's end (`state.data_to`), not the last operation (15 September) — FIN-125 |
 | `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, separate «Сбросить» below the chips stays visible at both horizontal scroll edges (FIN-416, Qase9), period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
 | `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast and opens the history explanation in its help sheet; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month through its option container and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; follow-up not executed (previous run failed) |
-| `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month (Qase73, FIN-391); authored, not executed |
+| `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month (Qase73, FIN-391); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `analytics/period_controls` (common) | Month/All-time hide rolling choices; Quarter/Year expose only their right-aligned choice; tapping the selected calendar segment exits its rolling period; All-time removes the whole period row across tab navigation (Qase80, FIN-416); authored, not executed |
 | `analytics/rolling_periods` (mock-only) | rolling year/quarter anchored to statement coverage, exact ranges, no forecast, failed singleton switch and explicit exact retry, transfer-mode preservation, clipped edge point → full calendar month, independent remembered calendar selection; Qase76 (FIN-411); authored, not executed |
 | `analytics/chart_month_selection` (mock-only) | whole-column selection including zero expenses, exact month/year, selected state and retained transfer mode/scroll; failed switch and explicit retry (Qase74, FIN-398); authored, not executed |
@@ -664,10 +670,10 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416); authored, not executed |
-| `analytics/regular_block_update` (mock-only) | a single successful action replaces the full regular block; a seven-second observation in the same card spans marked GET polls and retains the promoted third row without RBC, then one scroll up verifies the active (not paused) notice text before allowing a ready response; unknown offline result retains the row until explicit PUT retry (Qase81, FIN-416); authored, not executed |
-| `analytics/unknown_mutation_recovery` (mock-only) | forbidden 500 → explicit read with retained unknown warning and no PUT; Offline → uncached Year or upload deletion → reachable recovery outside the missing snapshot, delayed GET shows preparation before data/empty; unknown in-flight PUT rolls an unperformed selection back, then the same segment tap works; Qase89 (FIN-416); authored, not executed |
-| `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); authored, not executed |
-| `analytics/source_zone_and_session` (mock-only) | unsupported source-zone notice survives an offline retry over cached data, supported response recovery, logout/new login with marked response prepares without old financial blocks (Qase88, FIN-416); authored, not executed |
+| `analytics/regular_block_update` (mock-only) | a single successful action replaces the full regular block; seven seconds in the same card retain the promoted third row without RBC across marked GET polls; bounded polling then pauses, the visible period remains September, and an explicit Retry permits the ready response; unknown offline result retains the row until explicit PUT retry (Qase81, FIN-416/427); updated after failed run 41819133288, follow-up not executed |
+| `analytics/unknown_mutation_recovery` (mock-only) | forbidden 500 → explicit read with retained unknown warning and no PUT; Offline → uncached Year or upload deletion → reachable recovery outside the missing snapshot, delayed GET shows preparation before data/empty; unknown in-flight PUT rolls an unperformed selection back, then the same segment tap works; Qase89 (FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
+| `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
+| `analytics/source_zone_and_session` (mock-only) | unsupported source-zone notice survives an offline retry over cached data, supported response recovery, logout/new login with marked response prepares without old financial blocks (Qase88, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
 | `analytics/cards_open_search` | September: «Мелкие частые траты» opens its first group as a selection (chip with the group's name), a row of the card — its own group, a row of «Подписки и регулярные платежи» — that payment's charges — FIN-108 |
@@ -693,9 +699,9 @@ themselves. Every other flow uses `fast_login.yaml`; a new one does too unless i
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
-| `statements/download_period` (mock-only) | inclusive calendar selection, invalid/reversed/future bounds, network failure retains dates and offers explicit retry; Qase84 (FIN-416); authored, not executed |
+| `statements/download_period` (mock-only) | inclusive calendar selection, invalid/reversed/future bounds, network failure retains dates and offers explicit retry; Qase84 (FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `StatementPickerTest#opensTheServerUrlForSelectedInclusiveDates` | exact server download URL handed to browser for 1–30 September; native Espresso-Intents because Maestro cannot inspect destination; Qase85; authored, not executed |
-| `operations/source_time_zone` (mock-only) | unsupported IANA metadata above verified feed/search cache; stale notice and explicit supported recovery; Qase86; authored, not executed |
+| `operations/source_time_zone` (mock-only) | unsupported IANA metadata above verified feed/search cache; stale notice and explicit supported recovery; Qase86; updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `statements/source_time_zone` (mock-only) | unsupported import config and complete result; explicit supported recovery; Qase87; authored, not executed |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
 | `statements/upload_and_history` (smoke) | new operations without a duplicate period row; saved Analytics tab income changes from 0 to +1200 after import, and refreshes after deletion with remaining data and last deletion (FIN-394); duplicate file → «История загрузок»; «Скачать новые данные» with loaded operations and «Скачать за год» after the last deletion, shortened privacy notice (FIN-416, Qase14) |
@@ -1224,3 +1230,25 @@ normal/NBSP/narrow-NBSP separators. The same run passed the period picker in Qas
 statement deletion. History has `ds.back` and no bottom tabs; Qase71 now leaves History before selecting
 Analytics for its final no-data check. Qase75's scenario and mapping are unchanged; Qase71's navigation step
 is synchronized. Both revisions are checked statically against those captured hierarchies, not by a new device run.
+
+## FIN-427 Maestro assertions
+
+The nine failures of [run 41819133288](https://github.com/fin-assist/android/actions/runs/41819133288)
+are corrected in the flows without changing application runtime or the mock API:
+
+- Match download labels in the child Text of `statements.upload.download`, including both later
+  reimports and the empty-state yearly download. Registration explicitly prepares an empty mock ledger.
+- Known refusal/terminal error fixtures assert their safe server message, not the feature fallback.
+  Offline fallback, unknown-outcome warnings and exact mutation-count checks stay separate.
+- Re-login after logout completes the real phone/passcode UI, preserving the same backend process.
+- Date replacement taps the trailing edge of the field before backspacing, asserts it is empty,
+  then verifies the exact replacement before checking reversed/future bounds and online/offline submission.
+- Full-block retention observes the promoted payment before waiting for the existing bounded polling
+  pause. It scrolls to the actual period picker and uses explicit Retry after allowing ready responses.
+- History swipes stop as soon as the target month is visible, with a ceiling of 400 gestures per
+  direction for the 322-month fixture. Both endpoints and retained month selection remain assertions.
+- The source-zone search uses `Krabsbir`, present in the bundled fixture, before checking cache recovery.
+
+The Qase mappings and scenario count remain unchanged. These are authored corrections with static
+checks; they do not report a successful emulator run. Local/UI workflow execution needs the owner's
+separate authorization.

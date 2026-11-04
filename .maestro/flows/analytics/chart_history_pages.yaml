@@ -6,8 +6,7 @@ tags:
 ---
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/fast_login.yaml
-# Replace the full preloaded year through the public UI. This rolling year covers 11 complete months;
-# the only operation is in August, so calendar completeness cannot depend on edge transactions.
+# Replace the preloaded year through the public UI with synthetic history spanning 2000–2026.
 - tapOn:
     id: "ds.tab.profile"
 - extendedWaitUntil:
@@ -62,20 +61,19 @@ tags:
     centerElement: true
 - assertVisible:
     id: "analytics.expense.monthly.point.2026-10"
-# 26 years require more than the three-page cache. Bounded swipes load and evict neighbours.
+# Stop on the actual month, not an assumed distance per gesture. The 400-gesture ceiling allows
+# at least one gesture per covered month (322 months), plus page-boundary settling, and still fails a stuck chart.
 - repeat:
-    times: 90
+    times: 400
+    while:
+      notVisible:
+        id: "analytics.expense.monthly.point.2000-01"
     commands:
-      - runFlow:
-          when:
-            notVisible:
-              id: "analytics.expense.monthly.point.2000-01"
-          commands:
-            - swipe:
-                from:
-                  id: "analytics.expense.monthly"
-                direction: RIGHT
-                duration: 300
+      - swipe:
+          from:
+            id: "analytics.expense.monthly"
+          direction: RIGHT
+          duration: 300
 - assertVisible:
     id: "analytics.expense.monthly.point.2000-01"
 # A covered zero is a complete selectable month, even in the earliest page.
@@ -100,18 +98,16 @@ tags:
     centerElement: true
 # Reload evicted recent pages in the opposite direction; scrolling does not select another month.
 - repeat:
-    times: 90
+    times: 400
+    while:
+      notVisible:
+        id: "analytics.expense.monthly.point.2026-10"
     commands:
-      - runFlow:
-          when:
-            notVisible:
-              id: "analytics.expense.monthly.point.2026-10"
-          commands:
-            - swipe:
-                from:
-                  id: "analytics.expense.monthly"
-                direction: LEFT
-                duration: 300
+      - swipe:
+          from:
+            id: "analytics.expense.monthly"
+          direction: LEFT
+          duration: 300
 - assertVisible:
     id: "analytics.expense.monthly.point.2026-10"
 - scrollUntilVisible:

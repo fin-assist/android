@@ -5,7 +5,39 @@ tags:
   - auth
 ---
 - runFlow: ../../subflows/clear_state.yaml
-- launchApp
+# The single-user mock preloads a statement even before registration. Prepare an empty server through
+# the public UI, then keep this process alive while registering the new number (no clearState/relaunch).
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.empty"
+    timeout: 10000
+- tapOn:
+    id: "ds.back"
+- scrollUntilVisible:
+    element:
+      id: "profile.logout"
+- tapOn:
+    id: "profile.logout"
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 15000
 - runFlow:
     file: ../../subflows/sign_in.yaml
     env:
@@ -35,8 +67,12 @@ tags:
     element:
       id: "statements.upload.download"
 - assertVisible:
-    id: "statements.upload.download"
     text: "Скачать за год"
+    childOf:
+      id: "statements.upload.download"
+- assertNotVisible:
+    id: "statements.upload.loaded"
+- assertNotVisible: "Скачать новые данные"
 - scrollUntilVisible:
     element:
       id: "statements.upload.later"
