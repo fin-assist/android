@@ -548,6 +548,10 @@ set in `PfApplication`); release builds keep tags out of the accessibility tree.
   `statements.upload.error.wrong_bank`. The constants live next to the screens (`AuthTags`, `OperationsTags`, …).
 - Shared components use `ds.*` (`PfTestTags`): `ds.back`, `ds.dialog.confirm`, `ds.numpad.<digit>`,
   `ds.tab.<operations|analytics|profile>`, `ds.chat.input`.
+- Listed insight rows expose `<prefix>.<block_id>.item`, and their remainder row exposes
+  `<prefix>.<block_id>.more` (for example `analytics.regular_payments.item` / `.more`). Match a name
+  and its amount with `containsDescendants` on the same tagged row; global amount matches do not
+  prove which payment owns the value. Row tags carry only the block ID, never a user or payment ID.
 - Analytics blocks are tagged with the names of the flags that hide them (`analytics.block.tiles`, …).
 - Tag the screen root, every control a scenario uses, and states a scenario checks (errors, empty, offline).
   Prefer ids to texts: texts are fine for checking content, not for finding controls.
@@ -671,6 +675,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416/427); retained category row is observed before the bounded pause and an explicit Retry with a fresh finite recalculation countdown; final month header is revealed after Retry; follow-up to failed run 41855090174, not executed |
 | `analytics/regular_block_update` (mock-only) | successful PUT removes RBC and promotes the third visible payment row before a ready GET; seven seconds in the same card retain that row without RBC across marked GET polls; bounded polling pauses with September retained, then explicit Retry permits ready GET; separate unknown offline result retains RBC until explicit PUT retry (Qase81, FIN-416/427/436). Its case-level Passed covers these UI observations only; JVM version/context checks and backend post-commit/durable delivery are separate |
+| `analytics/regular_post_commit_retry` (mock-only) | post-commit retryable 500 keeps the original card and unknown warning; persistent fault plus exactly one injected failure excludes a hidden retry; fault recovery/resume retains RBC until another explicit row action; complete PUT block changes 5188/6/«Ещё 3»1599 RUB to 3688/5/«Ещё 2»599 RUB and promotes tablet while ready GET remains withheld (Qase91, FIN-438); authored, not executed |
 | `analytics/unknown_mutation_recovery` (mock-only) | forbidden 500 → explicit read with retained unknown warning and no PUT; Offline → uncached Year or upload deletion → reachable recovery outside the missing snapshot, delayed GET shows preparation before data/empty; unknown in-flight PUT rolls an unperformed selection back, then the same segment tap works; Qase89 (FIN-416/427); re-locate the RBC action after offline resume; follow-up to failed run 41844441379, not executed |
 | `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `analytics/source_zone_and_session` (mock-only) | unsupported source-zone notice survives an offline retry over cached data, supported response recovery, logout/new login with marked response prepares without old financial blocks (Qase88, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
@@ -842,7 +847,7 @@ reproduction exists, that boundary remains pending; a neighbouring recovery scen
 
 ### FIN-223 safe error controls and coverage
 
-The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|phone_start|analytics_dismiss|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden|terminal_failure`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.
+The mockE2e-only control link accepts `error_operation=profile_update|operations_list|assistant_ask|phone_start|analytics_dismiss|off` and `error_scenario=unknown_code|unknown_severity|invalid_message|legacy_response|retry_forbidden|terminal_failure|post_commit_failure`. These are closed fixtures with fixed safe texts, not arbitrary messages/actions. `post_commit_failure` is valid only with `analytics_dismiss` (or `off`): it saves the mock assignment/target before returning a canonical 500 with explicit request retry permission. Existing scenarios still fail before the mutation. `expect_error_requests=<n>` requires the exact cumulative number of injected failures; changing the operation does not reset it. Unknown upload-key recovery uses the closed `pending_upload_fixture=october` seed and `expect_uploads` check; it does not claim to kill the client process. The new flows and design-check fixtures were authored but not executed: owner instruction forbids UI, Maestro, instrumented and DesignCheck runs. New server-message/recovery fixture artboard names are proposed; corresponding Figma artboards are not available yet.
 
 ### FIN-352 repeated physical unread lines
 
@@ -1330,7 +1335,32 @@ no app/runtime or mock-control behavior changes. Qase54 retains its manual statu
 identity/history with the pending status described above. Qase81 now describes only its mapped Maestro
 observations. Its successful result does not assert exact replacement of every response field, delayed
 version/context rejection or cross-service post-commit recovery; the former two are lower-level JVM
-checks, and the latter is [Qase90](https://app.qase.io/case/PLAINFIN-90), a Draft / Manual specification for
-post-commit composition failure, durable delivery and an idempotent PUT retry. It has no mock mapping
-or executed result; implementation of the service harness remains separate. No Qase result is created
-by these edits.
+checks, and the latter is [Qase90](https://app.qase.io/case/PLAINFIN-90). At FIN-436 it was a Draft / Manual
+specification; FIN-437 subsequently automated the real cross-service scenario in bank-bff PR #36 and
+recorded independent Passed runs 57/58. It remains outside the Android UI mapping. The FIN-436 edits
+did not create a new execution result.
+
+### FIN-438: UI recovery after a saved dismissal fails to compose
+
+`analytics/regular_post_commit_retry` maps to [Qase91](https://app.qase.io/case/PLAINFIN-91).
+The existing mock-only control uses `error_operation=analytics_dismiss&error_scenario=post_commit_failure`.
+Authentication, payment/context validation and the mock assignment still run; the assignment and original
+calculation target survive the safe `INTERNAL_ERROR` 500 with `retryable=true`. The existing `terminal_failure`
+and offline scenarios keep their pre-commit semantics. A JVM regression checks the committed assignment,
+unchanged published GET, stable original target through the successful retry and later ready calculation.
+
+The flow checks the error, unknown-result notice and the whole retained card. While the persistent fault
+is enabled, `expect_error_requests=1` proves there was no hidden PUT. After the fault is turned off,
+resume still retains the old row/warning until an explicit second tap of «Не подписка — РБК».
+`analytics_recalculating_responses=100` withholds ready GET throughout, so only the complete PUT response
+can explain the replacement. It positively checks the promoted tablet row, the unchanged remaining rows,
+total/count and the rest of the list, rather than treating an offscreen RBC row as deletion.
+
+The oracle comes from the actual bundled preload, not calculation/design-only goldens: RBC1500 +
+Rostelecom1089 + phone1000 + tablet1000 + animal charity500 + Premier99 = 5188 RUB and 6 payments.
+The original visible rows end with phone; «Ещё 3» totals1599 RUB. Removing only RBC leaves3688 RUB,
+5 payments, promotes tablet and leaves «Ещё 2» totalling599 RUB. A JVM test reconciles these exact
+source-derived values against the API block. This mock UI case does not claim PostgreSQL/outbox
+durability or two total PUT calls from the injected-failure counter; backend Qase90 owns those server
+guarantees. Qase81/Qase89 and their historical results are preserved. The new Maestro flow is authored;
+UI, native, emulator and DesignCheck execution were not run in this change.

@@ -254,7 +254,8 @@ private fun InsightCard(block: Block, data: InsightCardData, ctx: BlockContext) 
                 Column(Modifier.padding(top = d.space2)) {
                     PfDivider()
                     data.items.forEach { item ->
-                        PfDataRow(item.title, itemValue(item, ctx).orEmpty(), sublabel = item.sublabel, onClick = ctx.clickOf(block, item.action), divider = false)
+                        PfDataRow(item.title, itemValue(item, ctx).orEmpty(), modifier = Modifier.testTag(ctx.tags.item(block.id.orEmpty())),
+                            sublabel = item.sublabel, onClick = ctx.clickOf(block, item.action), divider = false)
                         BlockLayout.usable(item.button)?.let { a ->
                             Box(Modifier.offset(x = -d.space4)) {
                                 val label = a.label ?: "Скрыть"
@@ -267,7 +268,8 @@ private fun InsightCard(block: Block, data: InsightCardData, ctx: BlockContext) 
                         PfDivider()
                     }
                     data.itemsMore?.let { more ->
-                        PfDataRow(more.label.orEmpty(), BlockFormat.value(more.value, more.valueKind, ctx.currency).orEmpty(), tone = ValueTone.MUTED, divider = false)
+                        PfDataRow(more.label.orEmpty(), BlockFormat.value(more.value, more.valueKind, ctx.currency).orEmpty(),
+                            modifier = Modifier.testTag(ctx.tags.more(block.id.orEmpty())), tone = ValueTone.MUTED, divider = false)
                     }
                 }
             } else {

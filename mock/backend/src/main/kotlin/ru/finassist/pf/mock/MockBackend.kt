@@ -66,9 +66,13 @@ class MockBackend(
     /** Cumulative: clearing the scenario does not erase evidence of an accidental resend. */
     val injectedErrorCount: StateFlow<Int> = injectedErrors.asStateFlow()
 
-    internal suspend fun maybeInjectError(operation: MockErrorOperation) {
+    internal suspend fun maybeInjectError(operation: MockErrorOperation, afterCommit: Boolean = false) {
         val scenario = mutex.withLock {
             if (config.errorOperation != operation) return@withLock null
+            if (config.errorScenario == MockErrorScenario.POST_COMMIT_FAILURE && operation != MockErrorOperation.ANALYTICS_DISMISS) return@withLock null
+            val postCommit = operation == MockErrorOperation.ANALYTICS_DISMISS &&
+                config.errorScenario == MockErrorScenario.POST_COMMIT_FAILURE
+            if (postCommit != afterCommit) return@withLock null
             injectedErrors.value += 1
             config.errorScenario
         } ?: return

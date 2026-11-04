@@ -1,0 +1,116 @@
+appId: ru.finassist.pf.mock.e2e
+name: Не подписка — ошибка после сохранения и явный повтор обновляют полный список
+tags:
+  - analytics
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 15000
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 10000
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+    centerElement: true
+- runFlow:
+    file: ../../subflows/assert_regular_retry_card.yaml
+    env:
+      TOTAL: '5[\s\u00A0\u202F]188[\s\u00A0\u202F]₽'
+      COUNT: 'в месяц · 6[\s\u00A0\u202F]списаний каждый месяц с октября'
+      CHANGED_ROW: "Не подписка — РБК"
+      CHANGED_TITLE: "РБК"
+      CHANGED_AMOUNT: '1[\s\u00A0\u202F]500[\s\u00A0\u202F]₽'
+      ROW_DIRECTION: UP
+      MORE: "Ещё 3"
+      MORE_AMOUNT: '1[\s\u00A0\u202F]599[\s\u00A0\u202F]₽'
+# Only a successful explicit PUT may replace this block; ready GETs remain withheld throughout.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_recalculating_responses=100&error_operation=analytics_dismiss&error_scenario=post_commit_failure"
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+    direction: UP
+    centerElement: true
+- tapOn: "Не подписка — РБК"
+- extendedWaitUntil:
+    visible: "Не удалось выполнить запрос\\. Попробуйте позже"
+    timeout: 10000
+- assertVisible:
+    id: "analytics.unknown_mutation"
+- assertVisible: "Результат изменения не подтверждён"
+- assertNotVisible: "Убрали из регулярных платежей"
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+    centerElement: true
+# The server has already saved the exclusion, but an error cannot authorize an optimistic UI subtraction.
+- runFlow:
+    file: ../../subflows/assert_regular_retry_card.yaml
+    env:
+      TOTAL: '5[\s\u00A0\u202F]188[\s\u00A0\u202F]₽'
+      COUNT: 'в месяц · 6[\s\u00A0\u202F]списаний каждый месяц с октября'
+      CHANGED_ROW: "Не подписка — РБК"
+      CHANGED_TITLE: "РБК"
+      CHANGED_AMOUNT: '1[\s\u00A0\u202F]500[\s\u00A0\u202F]₽'
+      ROW_DIRECTION: UP
+      MORE: "Ещё 3"
+      MORE_AMOUNT: '1[\s\u00A0\u202F]599[\s\u00A0\u202F]₽'
+# The fault is still enabled: a hidden PUT would increase this cumulative failure count.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_error_requests=1"
+- assertVisible:
+    id: "analytics.unknown_mutation"
+- assertNotVisible: "Убрали из регулярных платежей"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=off&expect_error_requests=1"
+# Recovery/resume itself must neither resend the command nor announce that it succeeded.
+- assertVisible:
+    id: "analytics.unknown_mutation"
+- assertNotVisible: "Убрали из регулярных платежей"
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+    direction: UP
+    centerElement: true
+- assertVisible: "РБК"
+- tapOn: "Не подписка — РБК"
+- extendedWaitUntil:
+    notVisible:
+      id: "analytics.unknown_mutation"
+    timeout: 10000
+# A new visible third row proves replacement; an offscreen RBC row alone would prove nothing.
+- scrollUntilVisible:
+    element: "Не подписка — планшет.*"
+    centerElement: true
+- assertNotVisible: "Не подписка — РБК"
+- assertNotVisible: "РБК"
+- runFlow:
+    file: ../../subflows/assert_regular_retry_card.yaml
+    env:
+      TOTAL: '3[\s\u00A0\u202F]688[\s\u00A0\u202F]₽'
+      COUNT: 'в месяц · 5[\s\u00A0\u202F]списаний каждый месяц с октября'
+      CHANGED_ROW: "Не подписка — планшет.*"
+      CHANGED_TITLE: "планшет.*"
+      CHANGED_AMOUNT: '1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+      ROW_DIRECTION: DOWN
+      MORE: "Ещё 2"
+      MORE_AMOUNT: '599[\s\u00A0\u202F]₽'
+- assertNotVisible:
+    id: "analytics.unknown_mutation"
+- assertNotVisible: "Результат изменения не подтверждён"
