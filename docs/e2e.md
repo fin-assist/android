@@ -17,6 +17,11 @@ Prerequisites: an emulator or device with `adb`, [Maestro](https://maestro.dev) 
 (`curl -Ls https://get.maestro.mobile.dev | bash`), JDK 21. Set the emulator time zone to Europe/Moscow
 (Settings → System → Date & time, or `-timezone Europe/Moscow` when starting it).
 
+To reproduce a CI failure locally, use `MAESTRO_VERSION` and the `AVD_API`, `AVD_TARGET`, `AVD_ARCH`
+and `AVD_PROFILE` values from `.github/workflows/e2e.yml`, with animations disabled as in that workflow.
+Record the actual CLI, image and viewport in the result. Use an absolute path with `--flow`: the runner
+changes the working directory to its screenshot output folder before invoking Maestro.
+
 ```bash
 # All flows and the native tests
 scripts/e2e.sh
@@ -25,7 +30,7 @@ scripts/e2e.sh
 scripts/e2e.sh --tags smoke
 
 # One flow while writing it (Maestro Studio helps to find elements: `maestro studio`); --flow may be repeated
-scripts/e2e.sh --no-build --flow .maestro/flows/assistant/ask_question.yaml
+scripts/e2e.sh --no-build --flow "$PWD/.maestro/flows/assistant/ask_question.yaml"
 
 # One shard of the CI split (below): the flows `scripts/e2e-shards.py list --shard 2/4` prints; native tests in 1/n only
 scripts/e2e.sh --shard 2/4
