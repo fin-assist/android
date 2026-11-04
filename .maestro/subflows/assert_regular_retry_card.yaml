@@ -4,9 +4,12 @@
 appId: ru.finassist.pf.mock.e2e
 ---
 - scrollUntilVisible:
-    element: "Подписки и регулярные платежи"
+    element:
+      id: "analytics.block.regular_payments"
+      containsDescendants:
+        - text: ${TOTAL}
+        - text: ${COUNT}
     direction: UP
-    centerElement: true
 - assertVisible: "Подписки и регулярные платежи"
 - assertVisible: ${TOTAL}
 - assertVisible: ${COUNT}
@@ -16,8 +19,11 @@ appId: ru.finassist.pf.mock.e2e
       - text: ${TOTAL}
       - text: ${COUNT}
 - scrollUntilVisible:
-    element: "Ростелеком"
-    centerElement: true
+    element:
+      id: "analytics.regular_payments.item"
+      containsDescendants:
+        - text: "Ростелеком"
+        - text: '1[\s\u00A0\u202F]089[\s\u00A0\u202F]₽'
 - assertVisible: "Ростелеком"
 - assertVisible:
     id: "analytics.regular_payments.item"
@@ -25,30 +31,40 @@ appId: ru.finassist.pf.mock.e2e
       - text: "Ростелеком"
       - text: '1[\s\u00A0\u202F]089[\s\u00A0\u202F]₽'
 - scrollUntilVisible:
-    element: "Мой телефон.*"
-    centerElement: true
+    element:
+      id: "analytics.regular_payments.item"
+      containsDescendants:
+        - text: "Мой телефон.*"
+        - text: '1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
 - assertVisible:
     id: "analytics.regular_payments.item"
     containsDescendants:
       - text: "Мой телефон.*"
       - text: '1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
 - scrollUntilVisible:
-    element: "Подписки и регулярные платежи"
+    element: ${TOTAL}
     direction: UP
-    centerElement: true
 - scrollUntilVisible:
-    element: ${CHANGED_TITLE}
+    element:
+      id: "analytics.regular_payments.item"
+      containsDescendants:
+        - text: ${CHANGED_TITLE}
+        - text: ${CHANGED_AMOUNT}
     direction: DOWN
-    centerElement: true
-- assertVisible: ${CHANGED_ROW}
 - assertVisible:
     id: "analytics.regular_payments.item"
     containsDescendants:
       - text: ${CHANGED_TITLE}
       - text: ${CHANGED_AMOUNT}
 - scrollUntilVisible:
-    element: ${MORE}
-    centerElement: true
+    element: ${CHANGED_ROW}
+- assertVisible: ${CHANGED_ROW}
+- scrollUntilVisible:
+    element:
+      id: "analytics.regular_payments.more"
+      containsDescendants:
+        - text: ${MORE}
+        - text: ${MORE_AMOUNT}
 - assertVisible:
     id: "analytics.regular_payments.more"
     containsDescendants:

@@ -1371,6 +1371,7 @@ shard 4 stopped before running its flows because Maestro rejected the parameteri
 card heading before locating the changing row with the literal `DOWN` direction. This finds both
 the original RBC row and the promoted tablet row from the same starting position; row-scoped
 merchant/amount, total/count, remainder and explicit-retry assertions are retained.
-The focused local run then exposed a clipped row after the unknown-result notice appeared: centring
-the action below the row could leave its merchant and amount above the viewport. The helper centres
-the merchant title before requiring the same row-scoped merchant/amount pair; the action assertions remain.
+Focused local runs then exposed clipped rows and header totals after the fixed unknown-result and error
+notices appeared. Centring a title or an action against the whole screen could move the data behind those
+notices. The helper now scrolls to the same scoped header/row/footer value pairs that it subsequently
+asserts, without centring; changing-row actions are observed separately after their merchant/amount pair.
