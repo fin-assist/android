@@ -81,6 +81,10 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?offline=true"
+# Resume inserts a read-error notice, moving the previously located action below the viewport.
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+    centerElement: true
 - tapOn: "Не подписка — РБК"
 - extendedWaitUntil:
     visible: "(?s)Не получилось убрать.*"
@@ -146,6 +150,9 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?offline=true"
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
+    centerElement: true
 - tapOn: "Не подписка — РБК"
 - extendedWaitUntil:
     visible: "(?s)Не получилось убрать.*"
