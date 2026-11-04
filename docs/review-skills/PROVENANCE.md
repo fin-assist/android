@@ -1,23 +1,29 @@
 # Источники и лицензии навыков
 
-## Engineering Suite
+Снимок установленных существующих навыков — 04.11.2026. Исходные SKILL.md и используемые вспомогательные
+файлы скопированы без изменений из установленного набора; проектные правила применения находятся в README.
+Ревизия upstream и локально адаптированный снимок различаются: local_differences/adaptation в SNAPSHOT.json
+не выдаются за неизменённый upstream. Полные SHA256 всех поставленных исходников и лицензий — в [SNAPSHOT.json](SNAPSHOT.json).
 
-Пакет `engineering-suite@openai-curated-remote` версии 1.1.1. Его `UPSTREAM_LOCK.json` и
-`THIRD_PARTY_NOTICES.md` фиксируют следующие источники выбранных неизменённых файлов:
-
-| Файлы | Источник и точная ревизия | Лицензия |
+| Навык | Источник / ревизия сравнения | Лицензия |
 | --- | --- | --- |
-| code-review, codebase-design, domain-modeling и их вспомогательные Markdown-файлы | [Matt Pocock skills](https://github.com/mattpocock/skills/tree/3cca18b368ae95cdbdebbff572ccafa662551015/skills/engineering), commit `3cca18b368ae95cdbdebbff572ccafa662551015` | [MIT — Matt Pocock](licenses/aihero-LICENSE.txt) |
-| api-and-interface-design, security-and-hardening, ci-cd-and-automation | [Addy Osmani agent-skills](https://github.com/addyosmani/agent-skills/tree/6ca0cd7db39b41b1c37e26d335c507ee92382c6d/skills), commit `6ca0cd7db39b41b1c37e26d335c507ee92382c6d` | [MIT — Addy Osmani](licenses/addy-LICENSE.txt) |
-| Общий security-checklist.md | [Addy references](https://github.com/addyosmani/agent-skills/blob/6ca0cd7db39b41b1c37e26d335c507ee92382c6d/references/security-checklist.md), та же ревизия | [MIT — Addy Osmani](licenses/addy-LICENSE.txt) |
+| code-review-and-quality | [https://github.com/addyosmani/agent-skills](https://github.com/addyosmani/agent-skills); `301b02b12bff98e4688e6984af6556802322bbde`; через Engineering Suite 1.1.1 | MIT; [addyosmani-MIT.txt](licenses/addyosmani-MIT.txt); [engineering-suite-MIT.txt](licenses/engineering-suite-MIT.txt) |
+| security-and-hardening | [https://github.com/addyosmani/agent-skills](https://github.com/addyosmani/agent-skills); `301b02b12bff98e4688e6984af6556802322bbde`; через Engineering Suite 1.1.1 | MIT; [addyosmani-MIT.txt](licenses/addyosmani-MIT.txt); [engineering-suite-MIT.txt](licenses/engineering-suite-MIT.txt) |
+| cicd-security | [https://github.com/briiirussell/cybersecurity-skills](https://github.com/briiirussell/cybersecurity-skills); `18642b272e9fe57ed6bdf3fd96614915e8a4d71d` | MIT; [briiirussell-MIT.txt](licenses/briiirussell-MIT.txt) |
+| github-actions-validator | [https://github.com/akin-ozer/cc-devops-skills](https://github.com/akin-ozer/cc-devops-skills); `276af751e659315aaf56d3ad13d7c26f4e72e28a` | Apache-2.0; [akin-ozer-Apache-2.0.txt](licenses/akin-ozer-Apache-2.0.txt) |
+| senior-architect | [https://github.com/alirezarezvani/claude-skills](https://github.com/alirezarezvani/claude-skills); `c85b17e1fb621ba760478baaacc4fcb9be225e74` | MIT; [alirezarezvani-MIT.txt](licenses/alirezarezvani-MIT.txt) |
+| api-and-interface-design | [https://github.com/addyosmani/agent-skills](https://github.com/addyosmani/agent-skills); `301b02b12bff98e4688e6984af6556802322bbde` | MIT; [addyosmani-MIT.txt](licenses/addyosmani-MIT.txt) |
+| testing-setup | [https://github.com/android/skills](https://github.com/android/skills); `6daa53ef27fa2aa87827d183a85c06cedceca833` | Apache-2.0; [LICENSE.txt](vendor/android-skills/LICENSE.txt) |
+| jetpack-compose-performance | [https://github.com/android/skills](https://github.com/android/skills); `6daa53ef27fa2aa87827d183a85c06cedceca833` | Apache-2.0; [LICENSE.txt](vendor/android-skills/LICENSE.txt) |
+| android-intent-security | [https://github.com/android/skills](https://github.com/android/skills); `6daa53ef27fa2aa87827d183a85c06cedceca833` | Apache-2.0; [LICENSE.txt](vendor/android-skills/LICENSE.txt) |
+| android-permissions-security | [https://github.com/android/skills](https://github.com/android/skills); `6daa53ef27fa2aa87827d183a85c06cedceca833` | Apache-2.0; [LICENSE.txt](vendor/android-skills/LICENSE.txt) |
+| anr-audit-and-fix | [https://github.com/android/skills](https://github.com/android/skills); `6daa53ef27fa2aa87827d183a85c06cedceca833` | Apache-2.0; [LICENSE.txt](vendor/android-skills/LICENSE.txt) |
+| edge-to-edge | [https://github.com/android/skills](https://github.com/android/skills); `6daa53ef27fa2aa87827d183a85c06cedceca833` | Apache-2.0; [LICENSE.txt](vendor/android-skills/LICENSE.txt) |
 
-Сохранена также [лицензия пакета Engineering Suite](licenses/MIT.txt).
-Общий справочник расположен в `vendor/references/security-checklist.md`: туда разрешается исходный
-путь `../../references/security-checklist.md` из выбранного security-навыка.
+Для `code-review-and-quality`, `security-and-hardening` исходные references указывают посредника EngineeringSuite 1.1.1.
+Сохранено [исходное MIT-уведомление Engineering Suite contributors](licenses/engineering-suite-MIT.txt) из [закреплённой копии go-service-template](https://github.com/fin-assist/go-service-template/blob/77491fb876eb124fd9c085deb24a9ff9432e4514/docs/review-skills/licenses/MIT.txt). Цепочка Addy Osmani → Engineering Suite 1.1.1 → установленный снимок отражена в поле
+`intermediary` SNAPSHOT.json. Пакет сейчас не установлен; список `local_differences` означает отличия от
+закреплённого Addy upstream, а не утверждение об авторстве каждого отличия. Исходные reference-тексты не менялись.
 
-## Android Skills
-
-Пакет 1.0.19, upstream tag `v1.0.19`: [android/skills](https://github.com/android/skills/tree/6daa53ef27fa2aa87827d183a85c06cedceca833),
-commit `6daa53ef27fa2aa87827d183a85c06cedceca833`.
-Сохранены исходные файлы с указанием Google LLC и [LICENSE.txt](licenses/Apache-2.0.txt).
-Отдельных `NOTICE` и `COPYRIGHT` файлов в этой ревизии нет.
+Для источников GitHub поставлены исходные LICENSE/NOTICE либо закреплённая лицензия автора; прямые ссылки
+приведены в таблице, а связь каждого навыка с файлами лицензий — в поле `licenses` SNAPSHOT.json.
