@@ -670,7 +670,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416/427); final month header is revealed after Retry; follow-up to failed run 41844441379, not executed |
-| `analytics/regular_block_update` (mock-only) | a single successful action replaces the full regular block; seven seconds in the same card retain the promoted third row without RBC across marked GET polls; bounded polling then pauses, the visible period remains September, and an explicit Retry permits the ready response; unknown offline result retains the row until explicit PUT retry (Qase81, FIN-416/427); updated after failed run 41819133288, follow-up not executed |
+| `analytics/regular_block_update` (mock-only) | a single successful action replaces the full regular block; seven seconds in the same card retain the promoted third row without RBC across marked GET polls; bounded polling then pauses, the visible period remains September, and an explicit Retry permits the ready response; unknown offline result retains the row until explicit PUT retry (Qase81, FIN-416/427); updated after failed run 41819133288, follow-up to failed run 41844441379, not executed |
 | `analytics/unknown_mutation_recovery` (mock-only) | forbidden 500 → explicit read with retained unknown warning and no PUT; Offline → uncached Year or upload deletion → reachable recovery outside the missing snapshot, delayed GET shows preparation before data/empty; unknown in-flight PUT rolls an unperformed selection back, then the same segment tap works; Qase89 (FIN-416/427); re-locate the RBC action after offline resume; follow-up to failed run 41844441379, not executed |
 | `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `analytics/source_zone_and_session` (mock-only) | unsupported source-zone notice survives an offline retry over cached data, supported response recovery, logout/new login with marked response prepares without old financial blocks (Qase88, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
@@ -1271,9 +1271,18 @@ FIN-427 follow-up to [run 41844441379](https://github.com/fin-assist/android/act
 at `1610ed6b`: Qase82 reaches the final ready September response after the refused mutation and
 bounded polling pause. Removing the notice retains the body offset: the hierarchy shows September
 totals and the selected `2026-09` chart point, while the period picker is above the viewport. The flow
-now scrolls to that picker before requiring its exact September label and the selected Month segment.
+now scrolls to that picker's actual September label before requiring it and the selected Month segment.
 Qase89 passes the terminal refusal, explicit read and exact one-PUT check, then fails before the
 separate offline mutation: its resume-time read-error notice pushes the RBC action below the viewport.
 Both isolated offline sections now locate and centre that action after applying offline, before tapping.
 The unknown-outcome, preparation/empty-state and mutation-count assertions stay intact. These changes
 have static artifact/source evidence; the changed flows have not been executed on a device.
+
+The completed run has 71/74 Maestro and 10/10 native passes (Qase run 54: 81/84, no
+skipped/untested cases). Qase81 is the third failure: after the bounded polling pause,
+`ds.period.pick` is clipped to `[179,212][901,231]` and has no visible label child. Its container
+therefore satisfies Maestro's visibility check before any scroll, but the exact September check fails.
+Qase81 and Qase82 now scroll to the September Text child of that picker, preserving the exact month
+assertion instead of accepting a clipped wrapper. No extra refresh, polling budget or fixed delay is added.
+Qase73, Qase14 and the full 2000–2026 chart-history traversal pass in this run; Qase81's offline
+section remains unexecuted because the earlier header assertion stops the flow.

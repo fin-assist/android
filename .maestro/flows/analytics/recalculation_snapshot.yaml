@@ -184,7 +184,9 @@ tags:
 # Removing the notice preserves the body offset and can leave the period header above the viewport.
 - scrollUntilVisible:
     element:
-      id: "ds.period.pick"
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     direction: UP
 - assertVisible:
     text: "Сентябрь 2026"

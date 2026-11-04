@@ -60,9 +60,12 @@ tags:
 - assertVisible:
     id: "analytics.retry"
     enabled: true
+# The picker container can be clipped to a strip; wait for its actual label before checking the month.
 - scrollUntilVisible:
     element:
-      id: "ds.period.pick"
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     direction: UP
 - assertVisible:
     text: "Сентябрь 2026"
