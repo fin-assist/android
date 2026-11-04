@@ -1364,3 +1364,10 @@ source-derived values against the API block. This mock UI case does not claim Po
 durability or two total PUT calls from the injected-failure counter; backend Qase90 owns those server
 guarantees. Qase81/Qase89 and their historical results are preserved. The new Maestro flow is authored;
 UI, native, emulator and DesignCheck execution were not run in this change.
+
+FIN-438 follow-up to [UI run 41924455407](https://github.com/fin-assist/android/actions/runs/41924455407):
+shard 4 stopped before running its flows because Maestro rejected the parameterized
+`scrollUntilVisible.direction` in `assert_regular_retry_card.yaml`. The helper now returns to the
+card heading before locating the changing row with the literal `DOWN` direction. This finds both
+the original RBC row and the promoted tablet row from the same starting position; row-scoped
+merchant/amount, total/count, remainder and explicit-retry assertions are retained.

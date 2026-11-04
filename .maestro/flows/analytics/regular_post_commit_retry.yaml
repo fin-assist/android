@@ -33,7 +33,6 @@ tags:
       CHANGED_ROW: "Не подписка — РБК"
       CHANGED_TITLE: "РБК"
       CHANGED_AMOUNT: '1[\s\u00A0\u202F]500[\s\u00A0\u202F]₽'
-      ROW_DIRECTION: UP
       MORE: "Ещё 3"
       MORE_AMOUNT: '1[\s\u00A0\u202F]599[\s\u00A0\u202F]₽'
 # Only a successful explicit PUT may replace this block; ready GETs remain withheld throughout.
@@ -65,7 +64,6 @@ tags:
       CHANGED_ROW: "Не подписка — РБК"
       CHANGED_TITLE: "РБК"
       CHANGED_AMOUNT: '1[\s\u00A0\u202F]500[\s\u00A0\u202F]₽'
-      ROW_DIRECTION: UP
       MORE: "Ещё 3"
       MORE_AMOUNT: '1[\s\u00A0\u202F]599[\s\u00A0\u202F]₽'
 # The fault is still enabled: a hidden PUT would increase this cumulative failure count.
@@ -108,7 +106,6 @@ tags:
       CHANGED_ROW: "Не подписка — планшет.*"
       CHANGED_TITLE: "планшет.*"
       CHANGED_AMOUNT: '1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
-      ROW_DIRECTION: DOWN
       MORE: "Ещё 2"
       MORE_AMOUNT: '599[\s\u00A0\u202F]₽'
 - assertNotVisible:

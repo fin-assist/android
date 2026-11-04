@@ -1,6 +1,6 @@
 # Independent bundled-ledger oracle for FIN-438, before/after excluding RBC.
 # Caller starts at a row of this card. Money regexes accept the formatter's space variants.
-# env: TOTAL, COUNT, CHANGED_ROW, CHANGED_TITLE, CHANGED_AMOUNT, ROW_DIRECTION, MORE, MORE_AMOUNT.
+# env: TOTAL, COUNT, CHANGED_ROW, CHANGED_TITLE, CHANGED_AMOUNT, MORE, MORE_AMOUNT.
 appId: ru.finassist.pf.mock.e2e
 ---
 - scrollUntilVisible:
@@ -33,8 +33,12 @@ appId: ru.finassist.pf.mock.e2e
       - text: "Мой телефон.*"
       - text: '1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
 - scrollUntilVisible:
+    element: "Подписки и регулярные платежи"
+    direction: UP
+    centerElement: true
+- scrollUntilVisible:
     element: ${CHANGED_ROW}
-    direction: ${ROW_DIRECTION}
+    direction: DOWN
     centerElement: true
 - assertVisible: ${CHANGED_ROW}
 - assertVisible:
