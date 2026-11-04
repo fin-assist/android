@@ -36,11 +36,28 @@ tags:
 - assertVisible:
     id: "analytics.expense_category"
 - assertNotVisible: "Не получилось посчитать.*"
-# Start the finite countdown only after observing the retained row. Ready still arrives via polling.
+# Give the next phase its own full client budget, even if observation consumed the current one.
+- scrollUntilVisible:
+    element:
+      id: "analytics.recalculating"
+    direction: UP
+- extendedWaitUntil:
+    visible: "Не удалось обновить показатели.*"
+    timeout: 40000
+- assertVisible:
+    id: "analytics.retry"
+    enabled: true
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?analytics_recalculating_responses=4"
+- assertVisible: "Не удалось обновить показатели.*"
+- tapOn:
+    id: "analytics.retry"
+# No more control links or refreshes: the marked Retry response must advance to ready via polling.
+- scrollUntilVisible:
+    element: "Расходы по категориям"
+    centerElement: true
 - extendedWaitUntil:
     visible: "Не получилось посчитать.*"
     timeout: 20000
