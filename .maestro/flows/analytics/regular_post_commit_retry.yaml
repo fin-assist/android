@@ -52,9 +52,6 @@ tags:
     id: "analytics.unknown_mutation"
 - assertVisible: "Результат изменения не подтверждён"
 - assertNotVisible: "Убрали из регулярных платежей"
-- scrollUntilVisible:
-    element: "Не подписка — РБК"
-    centerElement: true
 # The server has already saved the exclusion, but an error cannot authorize an optimistic UI subtraction.
 - runFlow:
     file: ../../subflows/assert_regular_retry_card.yaml

@@ -1380,6 +1380,8 @@ Focused local runs then exposed clipped rows and header totals after the fixed u
 notices appeared. Centring a title or an action against the whole screen could move the data behind those
 notices. The helper now scrolls to the same scoped header/row/footer value pairs that it subsequently
 asserts, without centring; changing-row actions are observed separately after their merchant/amount pair.
+After the error notices appear, the flow enters that helper directly: an extra downward search for the
+retained RBC action could skip it above the smaller viewport. The helper still checks RBC and its action.
 
 ### FIN-440: preserve Qase81 polling pause until explicit retry
 
