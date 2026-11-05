@@ -5,9 +5,11 @@ import hashlib
 import json
 import os
 import re
+import signal
 from pathlib import Path
 import shutil
 import subprocess
+import tarfile
 import time
 import uuid
 
@@ -40,6 +42,55 @@ def mark(name):
     data = state()
     data['marks'][name] = time.time()
     write(data)
+
+
+def archive_maestro_output(out=Path('build/e2e')):
+    """Finish e2e.sh's upload-safe archive after an interrupted shard, once its writers have stopped."""
+    raw = out / 'maestro'
+    if raw.is_dir():
+        archive = out / 'maestro-output.tgz'
+        temporary = archive.with_suffix('.tmp')
+        with tarfile.open(temporary, 'w:gz') as stream:
+            stream.add(raw, arcname='maestro')
+        temporary.replace(archive)
+        shutil.rmtree(raw)
+
+
+def run_tests(shard, timeout=2400, grace=10):
+    """Keep the shard's deadline, stop its whole process group, then preserve per-flow evidence."""
+    def interrupted(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    previous = signal.signal(signal.SIGTERM, interrupted)
+    try:
+        process = subprocess.Popen(['scripts/e2e.sh', '--no-build', '--shard', shard], start_new_session=True)
+        try:
+            return process.wait(timeout=timeout)
+        except BaseException:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            deadline = time.monotonic() + grace
+            try:
+                while time.monotonic() < deadline:
+                    process.poll()  # Reap the leader; descendants may still be flushing their reports.
+                    try:
+                        os.killpg(process.pid, 0)
+                    except ProcessLookupError:
+                        break
+                    time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+            finally:
+                # The shell can exit before a resistant Maestro descendant. Kill the group even then.
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait()
+            raise
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+        archive_maestro_output()
 
 
 def fingerprint():
@@ -327,10 +378,10 @@ def main():
         # The coordinator uses this durable marker to distinguish preparation failure from a real test failure.
         mark('tests-started')
         try:
-            result = subprocess.run(['scripts/e2e.sh', '--no-build', '--shard', args.shard], timeout=2400)
+            result = run_tests(args.shard)
         finally:
             mark('tests-finished')
-        raise SystemExit(result.returncode)
+        raise SystemExit(result)
     elif args.command == 'fallback':
         wait_stopped()
         data = state()
