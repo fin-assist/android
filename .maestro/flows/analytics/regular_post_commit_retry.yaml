@@ -80,10 +80,15 @@ tags:
     id: "analytics.unknown_mutation"
 - assertNotVisible: "Убрали из регулярных платежей"
 - scrollUntilVisible:
-    element: "Не подписка — РБК"
+    element:
+      id: "analytics.regular_payments.item"
+      containsDescendants:
+        - text: "РБК"
+        - text: '1[\s\u00A0\u202F]500[\s\u00A0\u202F]₽'
     direction: UP
-    centerElement: true
 - assertVisible: "РБК"
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
 - tapOn: "Не подписка — РБК"
 - extendedWaitUntil:
     notVisible:

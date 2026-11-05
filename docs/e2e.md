@@ -1382,6 +1382,8 @@ notices. The helper now scrolls to the same scoped header/row/footer value pairs
 asserts, without centring; changing-row actions are observed separately after their merchant/amount pair.
 After the error notices appear, the flow enters that helper directly: an extra downward search for the
 retained RBC action could skip it above the smaller viewport. The helper still checks RBC and its action.
+Before the explicit retry, the flow likewise locates the retained RBC name/amount pair before scrolling
+to its action; centring only the action could leave the name hidden behind the fixed notices.
 
 ### FIN-440: preserve Qase81 polling pause until explicit retry
 
