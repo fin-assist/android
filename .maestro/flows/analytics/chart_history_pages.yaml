@@ -74,6 +74,12 @@ tags:
             id: "analytics.expense.monthly"
           direction: RIGHT
           duration: 300
+# First visibility can be a clipped sliver; one more drag reaches the oldest edge before tapping.
+- swipe:
+    from:
+      id: "analytics.expense.monthly"
+    direction: RIGHT
+    duration: 300
 - assertVisible:
     id: "analytics.expense.monthly.point.2000-01"
 # A covered zero is a complete selectable month, even in the earliest page.
@@ -108,6 +114,12 @@ tags:
             id: "analytics.expense.monthly"
           direction: LEFT
           duration: 300
+# Likewise expose the newest edge completely before the later explicit selection.
+- swipe:
+    from:
+      id: "analytics.expense.monthly"
+    direction: LEFT
+    duration: 300
 - assertVisible:
     id: "analytics.expense.monthly.point.2026-10"
 - scrollUntilVisible:
