@@ -3,6 +3,7 @@ name: Вход — обновление документа на Start и исх�
 tags:
   - auth
   - offline
+  - mock-only
 ---
 # Qase54 / FIN-446. The mock changes server documents; every client action uses the real sign-in UI.
 - runFlow: ../../subflows/clear_state.yaml

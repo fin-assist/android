@@ -672,7 +672,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `auth/call_expired` | `call_delay_ms=600000&call_ttl_ms=15000` before Start prevents early mock verification; this 15s test override does not change the normal 5-minute rule. The stream's `expired` or device timer ends the wait (order not fixed); both lead to «Время на звонок вышло» with no number. Restoring `call_ttl_ms=300000` before «Позвонить ещё раз» brings back the number and normal deadline (Qase41, FIN-166/436) |
 | `auth/call_stream_rate_limited` | live 429 marker before negative checks; `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: one actual refusal, number stays, no ErrorMessage (`ds.error.info/warning/error`) or offline message; exact count across control-link resume, remove future refusals, retained wait → passcode → feed (Qase44, FIN-170, FIN-376, FIN-380) |
 | `auth/registration_closed` | clean state, `flag.auth.registration=false` before sign-in: confirmed new number → «Регистрация пока закрыта»; existing account still signs in (Qase4, FIN-436) |
-| `auth/consent_document_rotation` (mock-only) | pd-1 rejected at Start after publication of pd-2; offline/same-version/held/429 reads, no repeated Start, explicit restart with fresh choices/key; published pd-3 preserves accepted pd-2 at Register; refused Register returns to fresh Phone (Qase54, FIN-446); authored, UI not run |
+| `auth/consent_document_rotation` (mock-only) | pd-1 rejected at Start after publication of pd-2; offline/same-version/held/429 reads, no repeated Start, explicit restart with fresh choices/key; published pd-3 preserves accepted pd-2 at Register; refused Register returns to fresh Phone (Qase54, FIN-446); LOCAL Passed348.626s/run78 |
 | `applock/unlock` (smoke) | cold start → unlock; wrong code error |
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |
 | `applock/change_passcode` | current → new → mismatch → new → repeat; the new code unlocks after restart |
@@ -731,7 +731,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
 | `statements/upload_restored_key` | A seeded unknown-age UUID does not send the file or silently change key; the upload count remains 1 (preloaded statement). Only «Загрузить заново» starts a new action and changes the count to 2 (Qase51) — FIN-223 |
 | `assistant/retry_after_consent` | A model failure, consent revocation and denied RetryAnswer lead to consent correction; the same operation resumes and history contains one question with the successful replacement (Qase52) — FIN-223 |
-| `assistant/consent_document_rotation` (mock-only) | outdated PUT → offline/same-version/held GET, one read in flight, new version resets the tick and needs explicit grant; draft/quota retained without Ask; independent GET429/false remains blocked after its captured wait (Qase55, FIN-446); authored, UI not run |
+| `assistant/consent_document_rotation` (mock-only) | outdated PUT → offline/same-version/held GET, one read in flight, new version resets the tick and needs explicit grant; draft/quota retained without Ask; independent GET429/false remains blocked after its captured wait (Qase55, FIN-446); LOCAL Passed360.281s/run80 |
 | `statements/upload_rate_limited_resume` | `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: after the first 429, both control-link and background returns retain the original deadline (`expect_stream_rate_limited_exact=1`); lifting the limiter does not skip that wait, then the result opens within 45s without an upload error (Qase45) — FIN-170, FIN-223 |
 | `statements/upload_no_description` | a line without a description is imported (no unread notice) and shown as «Без описания» in the feed and on the operation |
 | `statements/upload_unknown_codes` | `unknown_codes=true`: the import result shows the server's text for a notice code and for a locked analytics feature the client does not know — FIN-83 |
@@ -844,7 +844,7 @@ Consent-document rotation between GET and phone Start (FIN-365) and assistant gr
 `assistant/consent_document_rotation` / [Qase55](https://app.qase.io/case/PLAINFIN-55) (FIN-446).
 The bounded mock controls separate publication from stale/held document responses; no stage is required.
 Register never refetches current PD consent; mismatched original evidence restarts phone verification.
-The new flows have not been executed. `PhoneViewModelTest`, `PhoneStartGateTest`, `MockPhoneConsentTest`,
+The full flows passed separately in LOCAL runs78/80 (see FIN-446 below). `PhoneViewModelTest`, `PhoneStartGateTest`, `MockPhoneConsentTest`,
 `CallViewModelTest` and `AiConsentViewModelTest` remain independent lower-level checks, including exact captured
 deadlines, missing local registration evidence and the out-of-order initial assistant GET. Those internal
 interleavings are not claimed as executed steps of these two UI cases.
@@ -1521,7 +1521,22 @@ are unchanged. Single-flow Qase83 execution is recorded separately; run75 keeps 
 
 Qase54 and Qase55 keep their original IDs and history. They are mapped to
 `auth/consent_document_rotation.yaml` and `assistant/consent_document_rotation.yaml`.
-The new flows are authored; no device execution or Passed result is claimed.
+The full flows were executed separately on an owned API34 google_apis x86_64 Pixel6, native1080×2400/dpi420,
+MSK, animations0, Maestro2.11.0, through stock `scripts/e2e.sh --flow ABS --no-build` with a real1800s
+process-group deadline and no native/full-suite run. Q54 passed348.626s on source
+`e80d681073385b5eb4a5b74972448da897126333` in [LOCAL run78](https://app.qase.io/run/PLAINFIN/dashboard/78).
+Q55 passed360.281s on `7cbb056e62379087f98dc4f21a4fe2dcb70086a3` in
+[LOCAL run80](https://app.qase.io/run/PLAINFIN/dashboard/80). The APK runtime was identical in both:
+SHA256 `5b99abbf1f2a9d414d27f08925cef957b5165f116a6cbd88ab5ca666d22d19fa`.
+The first Q55 attempt failed157.749s because the action container was a clipped strip below the error;
+[run79](https://app.qase.io/run/PLAINFIN/dashboard/79) is retained. Scroll targets now require the visible
+button text child, while assertions/probes/deadlines are unchanged. The later mock-only tag and documentation/
+shard-duration updates do not change the exercised flow bodies or APK runtime. These are focused LOCAL
+results, not full post-merge UI acceptance. The dedicated emulator was stopped after the tests.
+
+To avoid assigning a median duration to these longer new flows, their successful local durations rounded
+up to349s/361s seed `e2e-durations.json`, explicitly marked LOCAL/provisional. Existing CI samples and the
+2400s timeout remain unchanged; replace these two estimates from successful main CI when available.
 
 `MockConsentScenarios` uses the existing in-process APIs, with independent publication and document replies.
 It limits request evidence and held reads to 128, exposes only counts/version sequences/key cardinality,
