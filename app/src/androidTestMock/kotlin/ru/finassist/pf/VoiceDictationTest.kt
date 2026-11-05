@@ -8,8 +8,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextEquals
@@ -19,7 +17,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
-import androidx.compose.ui.text.AnnotatedString
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
@@ -259,7 +256,7 @@ class VoiceDictationTest {
         compose.waitUntil(10_000) { !vm.state.value.generating && vm.state.value.items.any { it.id == "voice-new-q" } }
         compose.onNodeWithText(EDITED).assertIsDisplayed()
         // The empty field still merges the visible placeholder; assert its editable value separately.
-        compose.onNodeWithTag(INPUT).assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        assertEquals("", compose.onNodeWithTag(INPUT).fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
         compose.runOnIdle {
             assertEquals("", vm.state.value.draft)
             assertEquals(listOf(EDITED, EDITED), api.attempts)
