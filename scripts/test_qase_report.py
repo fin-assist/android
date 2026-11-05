@@ -82,6 +82,24 @@ class MapTest(unittest.TestCase):
         self.assertEqual(payload[0]["comment"], "Assertion is false: id: x is visible")
         self.assertEqual(payload[0]["stacktrace"], "trace line")
 
+    def test_partial_component_pass_does_not_pass_the_whole_case(self):
+        one = qase.TestResult("maestro", "maestro", "passed", 12)
+        payload, unmapped = qase.map_results([one], {"maestro": 17, "native": 17})
+        self.assertEqual(payload, [{"case_id": 17, "status": "skipped", "time_ms": 12,
+                                   "comment": "Incomplete UI case; not run: native"}])
+        self.assertEqual(unmapped, [])
+
+    def test_complete_component_passes_pass_the_case(self):
+        results = [qase.TestResult(key, key, "passed", 12) for key in ["maestro", "native"]]
+        payload, _ = qase.map_results(results, {"maestro": 84, "native": 84})
+        self.assertEqual(payload, [{"case_id": 84, "status": "passed", "time_ms": 12}])
+
+    def test_missing_companion_does_not_hide_a_component_failure(self):
+        failure = qase.TestResult("native", "native", "failed", 7, message="browser opened")
+        payload, _ = qase.map_results([failure], {"maestro": 84, "native": 84})
+        self.assertEqual(payload, [{"case_id": 84, "status": "failed", "time_ms": 7,
+                                   "comment": "browser opened"}])
+
 
 class SendTest(unittest.TestCase):
     def test_creates_run_with_reported_cases_records_results_and_completes(self):

@@ -29,8 +29,8 @@
 | [Q15](https://app.qase.io/case/PLAINFIN-15) | Загрузка — CSV, не выписка, другой банк | 5 / 2 / 0 / 0 | [statements](statements.json#L1020) |
 | [Q16](https://app.qase.io/case/PLAINFIN-16) | Вход в банк и выбор выписки системным диалогом | 3 / 2 / 1 / 0 | [statements](statements.json#L1306) |
 | [Q17](https://app.qase.io/case/PLAINFIN-17) | Профиль — тема и выход из аккаунта | 5 / 2 / 0 / 0 | [shell](shell.json#L2034) |
-| [Q18](https://app.qase.io/case/PLAINFIN-18) | Удаление аккаунта — код-пароль, подтверждение в диалоге, «Назад» во время удаления | 7 / 3 / 0 / 0 | [shell](shell.json#L2277) |
-| [Q19](https://app.qase.io/case/PLAINFIN-19) | Ошибка соединения — подсказка и «Повторить» | 5 / 4 / 0 / 0 | [shell](shell.json#L2618) |
+| [Q18](https://app.qase.io/case/PLAINFIN-18) | Удаление аккаунта — код-пароль, подтверждение в диалоге, «Назад» во время удаления | 7 / 3 / 0 / 0 | [shell](shell.json#L2292) |
+| [Q19](https://app.qase.io/case/PLAINFIN-19) | Ошибка соединения — подсказка и «Повторить» | 5 / 4 / 0 / 0 | [shell](shell.json#L2633) |
 | [Q20](https://app.qase.io/case/PLAINFIN-20) | Помощник — нет сети вместо поля ввода и «Повторить» | 15 / 3 / 0 / 0 | [assistant](assistant.json#L797) |
 | [Q21](https://app.qase.io/case/PLAINFIN-21) | Загрузка — «Не скачивается?», нет сети при отправке файла и «Повторить» | 4 / 5 / 0 / 0 | [statements](statements.json#L1561) |
 | [Q22](https://app.qase.io/case/PLAINFIN-22) | Загрузка — ни одной прочитанной операции, непрочитанные строки видны и открываются списком | 6 / 6 / 0 / 0 | [statements](statements.json#L1935) |
@@ -44,39 +44,39 @@
 | [Q30](https://app.qase.io/case/PLAINFIN-30) | Аналитика — блок, который не удалось посчитать, не ломает экран | 4 / 0 / 0 / 0 | [finance](finance.json#L3422) |
 | [Q31](https://app.qase.io/case/PLAINFIN-31) | Аналитика — блок неизвестного типа и неизвестная блокировка показываются текстом сервера | 1 / 2 / 0 / 0 | [finance](finance.json#L3638) |
 | [Q32](https://app.qase.io/case/PLAINFIN-32) | Загрузка — серверные тексты для неизвестного уведомления и неизвестной закрытой функции | 7 / 1 / 0 / 0 | [statements](statements.json#L2970) |
-| [Q33](https://app.qase.io/case/PLAINFIN-33) | Версия ниже минимальной — экран обновления поверх приложения | 5 / 2 / 0 / 0 | [shell](shell.json#L2935) |
-| [Q34](https://app.qase.io/case/PLAINFIN-34) | Техработы — ожидание Retry-After, одна автопроверка и ручное восстановление | 6 / 4 / 0 / 0 | [shell](shell.json#L3129) |
-| [Q35](https://app.qase.io/case/PLAINFIN-35) | Техработы до входа — экран техработ поверх входа, без времени окончания | 4 / 1 / 1 / 0 | [shell](shell.json#L3454) |
+| [Q33](https://app.qase.io/case/PLAINFIN-33) | Версия ниже минимальной — экран обновления поверх приложения | 5 / 2 / 0 / 0 | [shell](shell.json#L2950) |
+| [Q34](https://app.qase.io/case/PLAINFIN-34) | Техработы — ожидание Retry-After, одна автопроверка и ручное восстановление | 6 / 4 / 0 / 0 | [shell](shell.json#L3144) |
+| [Q35](https://app.qase.io/case/PLAINFIN-35) | Техработы до входа — экран техработ поверх входа, без времени окончания | 4 / 1 / 1 / 0 | [shell](shell.json#L3469) |
 | [Q36](https://app.qase.io/case/PLAINFIN-36) | Аналитика — карточки наблюдений открывают свои операции | 2 / 5 / 0 / 0 | [finance](finance.json#L3830) |
 | [Q37](https://app.qase.io/case/PLAINFIN-37) | Устаревшая выписка: плашка на «Операциях» и «Аналитике» с датой конца выписки | 7 / 2 / 1 / 0 | [finance](finance.json#L4240) |
 | [Q38](https://app.qase.io/case/PLAINFIN-38) | Аналитика — Поиск «как на Аналитике» не показывает переводы себе | 4 / 3 / 0 / 0 | [finance](finance.json#L4645) |
 | [Q39](https://app.qase.io/case/PLAINFIN-39) | Помощник — вопрос не по теме даёт текст сервера без «Повторить» и не тратит попытку | 9 / 0 / 0 / 0 | [assistant](assistant.json#L2028) |
 | [Q40](https://app.qase.io/case/PLAINFIN-40) | Помощник — «с тех пор данные менялись» под прежним ответом | 6 / 2 / 0 / 0 | [assistant](assistant.json#L2240) |
-| [Q41](https://app.qase.io/case/PLAINFIN-41) | Время на звонок вышло и «Позвонить ещё раз» | 6 / 3 / 1 / 0 | [shell](shell.json#L3613) |
+| [Q41](https://app.qase.io/case/PLAINFIN-41) | Время на звонок вышло и «Позвонить ещё раз» | 6 / 3 / 1 / 0 | [shell](shell.json#L3628) |
 | [Q42](https://app.qase.io/case/PLAINFIN-42) | Помощник — «не нашли» за покрытый период — ответ, попытка списывается | 8 / 0 / 0 / 0 | [assistant](assistant.json#L2490) |
-| [Q43](https://app.qase.io/case/PLAINFIN-43) | Обрыв потока без терминального события — поток переоткрывается, ошибки нет | 10 / 1 / 1 / 0 | [shell](shell.json#L3961) |
-| [Q44](https://app.qase.io/case/PLAINFIN-44) | Звонок — 429 после обрыва потока | 7 / 2 / 1 / 0 | [shell](shell.json#L4338) |
+| [Q43](https://app.qase.io/case/PLAINFIN-43) | Обрыв потока без терминального события — поток переоткрывается, ошибки нет | 10 / 1 / 1 / 0 | [shell](shell.json#L3976) |
+| [Q44](https://app.qase.io/case/PLAINFIN-44) | Звонок — 429 после обрыва потока | 7 / 2 / 1 / 0 | [shell](shell.json#L4353) |
 | [Q45](https://app.qase.io/case/PLAINFIN-45) | Загрузка — 429 сохраняет исходную паузу при возврате на экран | 5 / 2 / 0 / 0 | [statements](statements.json#L3227) |
-| [Q46](https://app.qase.io/case/PLAINFIN-46) | Техработы во время разбора выписки — переоткрытие потока получает 503, экран техработ поверх загрузки, после техработ выписка разобрана | 6 / 5 / 0 / 0 | [shell](shell.json#L4698) |
+| [Q46](https://app.qase.io/case/PLAINFIN-46) | Техработы во время разбора выписки — переоткрытие потока получает 503, экран техработ поверх загрузки, после техработ выписка разобрана | 6 / 5 / 0 / 0 | [shell](shell.json#L4713) |
 | [Q47](https://app.qase.io/case/PLAINFIN-47) | История загрузок: период выписки, даты операций и отсутствие периода (FIN-198) | 7 / 3 / 0 / 0 | [statements](statements.json#L3512) |
-| [Q48](https://app.qase.io/case/PLAINFIN-48) | Универсальные серверные сообщения вне помощника | 8 / 2 / 0 / 0 | [shell](shell.json#L5053) |
+| [Q48](https://app.qase.io/case/PLAINFIN-48) | Универсальные серверные сообщения вне помощника | 8 / 2 / 0 / 0 | [shell](shell.json#L5068) |
 | [Q49](https://app.qase.io/case/PLAINFIN-49) | OFF_TOPIC: недельная блокировка сохраняет черновик и дневной остаток | 10 / 6 / 0 / 0 | [assistant](assistant.json#L2687) |
-| [Q50](https://app.qase.io/case/PLAINFIN-50) | REST retryable=false отделён от новой попытки генерации | 8 / 1 / 0 / 0 | [shell](shell.json#L5406) |
+| [Q50](https://app.qase.io/case/PLAINFIN-50) | REST retryable=false отделён от новой попытки генерации | 8 / 1 / 0 / 0 | [shell](shell.json#L5421) |
 | [Q51](https://app.qase.io/case/PLAINFIN-51) | Загрузка — неизвестный возраст ключа требует явного нового действия | 4 / 3 / 0 / 0 | [statements](statements.json#L3872) |
 | [Q52](https://app.qase.io/case/PLAINFIN-52) | Помощник — RetryAnswer возобновляется после исправления согласия | 8 / 2 / 0 / 0 | [assistant](assistant.json#L3138) |
-| [Q54](https://app.qase.io/case/PLAINFIN-54) | Вход — смена документа на Start и закреплённая версия согласия в Register | 17 / 0 / 1 / 0 | [shell](shell.json#L5721) |
+| [Q54](https://app.qase.io/case/PLAINFIN-54) | Вход — смена документа на Start и закреплённая версия согласия в Register | 17 / 0 / 1 / 0 | [shell](shell.json#L5736) |
 | [Q55](https://app.qase.io/case/PLAINFIN-55) | Помощник — обновление документа согласия без повтора старого PUT | 18 / 3 / 0 / 0 | [assistant](assistant.json#L3429) |
 | [Q56](https://app.qase.io/case/PLAINFIN-56) | Непрочитанные строки: две операции одной физической строки с одинаковой причиной | 6 / 2 / 0 / 0 | [statements](statements.json#L4163) |
-| [Q57](https://app.qase.io/case/PLAINFIN-57) | Два независимых подтверждения до отправки телефона | 7 / 2 / 0 / 0 | [shell](shell.json#L6264) |
-| [Q58](https://app.qase.io/case/PLAINFIN-58) | Согласие до телефона — восстановление без сети | 5 / 3 / 0 / 0 | [shell](shell.json#L6576) |
-| [Q59](https://app.qase.io/case/PLAINFIN-59) | Новый вход после запрета повтора | 4 / 4 / 0 / 0 | [shell](shell.json#L6880) |
+| [Q57](https://app.qase.io/case/PLAINFIN-57) | Два независимых подтверждения до отправки телефона | 7 / 2 / 0 / 0 | [shell](shell.json#L6279) |
+| [Q58](https://app.qase.io/case/PLAINFIN-58) | Согласие до телефона — восстановление без сети | 5 / 3 / 0 / 0 | [shell](shell.json#L6591) |
+| [Q59](https://app.qase.io/case/PLAINFIN-59) | Новый вход после запрета повтора | 4 / 4 / 0 / 0 | [shell](shell.json#L6895) |
 | [Q61](https://app.qase.io/case/PLAINFIN-61) | Помощник — вкладка сохраняет черновик и историю, согласие повторно открывается без автоотправки | 11 / 3 / 0 / 0 | [assistant](assistant.json#L3939) |
-| [Q62](https://app.qase.io/case/PLAINFIN-62) | Ошибка связи — VPN-подсказка меняется после повтора | 3 / 3 / 0 / 0 | [shell](shell.json#L7141) |
+| [Q62](https://app.qase.io/case/PLAINFIN-62) | Ошибка связи — VPN-подсказка меняется после повтора | 3 / 3 / 0 / 0 | [shell](shell.json#L7156) |
 | [Q63](https://app.qase.io/case/PLAINFIN-63) | Аналитика после импорта — подготовка, ограниченное ожидание и явный повтор | 11 / 3 / 0 / 0 | [finance](finance.json#L4972) |
 | [Q64](https://app.qase.io/case/PLAINFIN-64) | Согласие помощника — измеренный отступ 24 dp после прокрутки при шрифте 150% | 3 / 2 / 1 / 0 | [assistant](assistant.json#L4364) |
 | [Q65](https://app.qase.io/case/PLAINFIN-65) | Согласие помощника из Профиля разблокирует сохранённый черновик вкладки | 6 / 4 / 0 / 0 | [assistant](assistant.json#L4556) |
-| [Q66](https://app.qase.io/case/PLAINFIN-66) | Профиль — ошибка сохранения темы сменяется ошибкой чтения и доступным повтором | 4 / 1 / 0 / 0 | [shell](shell.json#L7379) |
-| [Q67](https://app.qase.io/case/PLAINFIN-67) | История загрузок — ошибка удаления сменяется ошибкой чтения и доступным повтором | 4 / 1 / 0 / 0 | [shell](shell.json#L7574) |
+| [Q66](https://app.qase.io/case/PLAINFIN-66) | Профиль — ошибка сохранения темы сменяется ошибкой чтения и доступным повтором | 4 / 1 / 0 / 0 | [shell](shell.json#L7394) |
+| [Q67](https://app.qase.io/case/PLAINFIN-67) | История загрузок — ошибка удаления сменяется ошибкой чтения и доступным повтором | 4 / 1 / 0 / 0 | [shell](shell.json#L7589) |
 | [Q68](https://app.qase.io/case/PLAINFIN-68) | Позднее включение помощника допускает вход и сохраняется до конца слоя | 7 / 3 / 0 / 0 | [assistant](assistant.json#L4855) |
 | [Q69](https://app.qase.io/case/PLAINFIN-69) | Диктовка — готовность, отмена и редактируемый черновик (симуляция распознавателя) | 18 / 5 / 3 / 0 | [assistant](assistant.json#L5189) |
 | [Q70](https://app.qase.io/case/PLAINFIN-70) | Обновление свайпом сохраняет данные, период, фильтры и черновик (FIN-399) | 24 / 4 / 0 / 0 | [finance](finance.json#L5582) |
@@ -86,27 +86,29 @@
 | [Q74](https://app.qase.io/case/PLAINFIN-74) | Аналитика — выбор месяца столбиком, нулевые расходы и повтор ошибки | 14 / 3 / 0 / 0 | [finance](finance.json#L9238) |
 | [Q75](https://app.qase.io/case/PLAINFIN-75) | Аналитика «За всё время» — периоды, переводы и обновление данных (FIN-400) | 7 / 8 / 0 / 0 | [finance](finance.json#L10228) |
 | [Q76](https://app.qase.io/case/PLAINFIN-76) | Скользящие 12 и 3 месяца: точные даты, вкладки и переход в календарный месяц | 6 / 11 / 2 / 0 | [finance](finance.json#L11607) |
-| [Q77](https://app.qase.io/case/PLAINFIN-77) | Неверный код целиком виден на малом экране при разблокировке и удалении | 5 / 1 / 0 / 1 | [shell](shell.json#L7769) |
-| [Q78](https://app.qase.io/case/PLAINFIN-78) | Точки и действия PIN доступны без ошибки при крупном шрифте во всей семье экранов | 5 / 1 / 0 / 1 | [shell](shell.json#L8068) |
-| [Q79](https://app.qase.io/case/PLAINFIN-79) | Наблюдатель PIN-прокрутки переживает отмену во время удерживаемого UserInput drag | 7 / 0 / 1 / 1 | [shell](shell.json#L8327) |
+| [Q77](https://app.qase.io/case/PLAINFIN-77) | Неверный код целиком виден на малом экране при разблокировке и удалении | 5 / 1 / 0 / 1 | [shell](shell.json#L7784) |
+| [Q78](https://app.qase.io/case/PLAINFIN-78) | Точки и действия PIN доступны без ошибки при крупном шрифте во всей семье экранов | 5 / 1 / 0 / 1 | [shell](shell.json#L8083) |
+| [Q79](https://app.qase.io/case/PLAINFIN-79) | Наблюдатель PIN-прокрутки переживает отмену во время удерживаемого UserInput drag | 7 / 0 / 1 / 1 | [shell](shell.json#L8342) |
 | [Q80](https://app.qase.io/case/PLAINFIN-80) | Аналитика: скользящие периоды в своих вкладках и скрытая навигация за всё время | 8 / 7 / 0 / 0 | [finance](finance.json#L13107) |
 | [Q81](https://app.qase.io/case/PLAINFIN-81) | Не подписка: обновлённый список, сохранение при пересчёте и явный повтор неизвестного результата | 21 / 8 / 1 / 0 | [finance](finance.json#L13822) |
 | [Q82](https://app.qase.io/case/PLAINFIN-82) | Аналитика: сохранение готовых показателей во время пересчёта | 19 / 4 / 0 / 0 | [finance](finance.json#L15709) |
 | [Q83](https://app.qase.io/case/PLAINFIN-83) | График аналитики: вся история, соседние страницы и возврат к выбранному месяцу | 12 / 0 / 1 / 0 | [finance](finance.json#L17009) |
 | [Q84](https://app.qase.io/case/PLAINFIN-84) | Выписка — выбор включительного периода и ошибки подготовки ссылки (FIN-416) | 6 / 2 / 0 / 0 | [statements](statements.json#L4465) |
-| [Q85](https://app.qase.io/case/PLAINFIN-85) | Выписка — браузер получает точную серверную ссылку выбранного периода (FIN-416) | 4 / 1 / 0 / 0 | [statements](statements.json#L4856) |
+| [Q85](https://app.qase.io/case/PLAINFIN-85) | Выписка — браузер получает точную серверную ссылку выбранного периода (FIN-416) | 4 / 1 / 0 / 0 | [statements](statements.json#L4871) |
 | [Q86](https://app.qase.io/case/PLAINFIN-86) | Операции — неподдерживаемый пояс сохраняет проверенный кэш и восстанавливается явно (FIN-416) | 0 / 5 / 1 / 0 | [finance](finance.json#L17657) |
-| [Q87](https://app.qase.io/case/PLAINFIN-87) | Загрузка — неподдерживаемый пояс условий и результата (FIN-416) | 6 / 2 / 0 / 0 | [statements](statements.json#L5048) |
+| [Q87](https://app.qase.io/case/PLAINFIN-87) | Загрузка — неподдерживаемый пояс условий и результата (FIN-416) | 6 / 2 / 0 / 0 | [statements](statements.json#L5063) |
 | [Q88](https://app.qase.io/case/PLAINFIN-88) | Аналитика: неподдерживаемый пояс и новый вход не подменяют готовый снимок | 4 / 5 / 3 / 0 | [finance](finance.json#L18079) |
 | [Q89](https://app.qase.io/case/PLAINFIN-89) | Неизвестный результат «Не подписка»: явное чтение без подтверждения команды | 11 / 13 / 0 / 0 | [finance](finance.json#L18819) |
 | [Q91](https://app.qase.io/case/PLAINFIN-91) | Не подписка — ошибка после сохранения и явный повтор обновляют полный список | 16 / 7 / 2 / 0 | [finance](finance.json#L20625) |
 | [Q92](https://app.qase.io/case/PLAINFIN-92) | Возврат денег — распознавание, ручная категория и расходы вместо дохода | 11 / 0 / 1 / 0 | [finance](finance.json#L21686) |
 | [Q93](https://app.qase.io/case/PLAINFIN-93) | Смена категории разделяет пару собственных переводов на две операции | 21 / 0 / 1 / 0 | [finance](finance.json#L22345) |
 
-Опубликованы и подтверждены обратным чтением уточнения 31 существующего кейса Qase; точные изменения — в [publication.json](publication.json). ID, статусы, автоматизация и незатронутые поля сохранены. Результаты прогонов не создавались и не менялись.
+Опубликованы и подтверждены обратным чтением уточнения 32 существующих кейсов Qase; точные изменения — в [publication.json](publication.json). ID, статусы, автоматизация и незатронутые поля сохранены. Результаты прогонов не создавались и не менялись.
 
 Q49 уточнён решением владельца от 06.11.2026: черновик сохраняется при отказе до закрытия вложенного чата; после полного Back и повторного открытия прежний текст не восстанавливается. История и дневной остаток сохраняются. Решение записано в [Confluence](https://finassist.atlassian.net/wiki/spaces/PF/pages/11370516), версия 4, и Qase49; тест проверяет оба момента отдельно. Производственное хранение не менялось. По Q77–79 исходное API35 сохранено, выполнение на API35 не проводилось.
 
-Пройдены сборка mockE2e и native test APK, `checkNoMockCode`, 569 JVM-тестов backend, 15 JVM-тестов control helpers, 20 Python-тестов Qase reporter, синтаксис YAML и проверка комплектности матрицы. Kover Unit: 139/139 изменённых исполняемых строк, учитываемых Unit-отчётом. MockE2e helpers исключены из стандартного Unit variant и отдельно проверены JVM-тестами. Это не заменяет запуск новых UI/native-проверок.
+Пройдены сборка mockE2e и native test APK, `checkNoMockCode`, 569 JVM-тестов backend, 15 JVM-тестов control helpers, 23 Python-теста Qase reporter, синтаксис YAML и проверка комплектности матрицы. Kover Unit: 139/139 изменённых исполняемых строк, учитываемых Unit-отчётом. MockE2e helpers исключены из стандартного Unit variant и отдельно проверены JVM-тестами. Это не заменяет запуск новых UI/native-проверок.
 
 Само наличие mapping или зелёного старого прогона не означает точного совпадения всех требований.
+
+Q17 и Q84 принимаются целиком только при наличии Maestro- и native-частей в отчёте. Частичный успешный прогон отмечается Skipped с недостающим тестом; наблюдаемое падение остаётся Failed. Штатные Python-проверки: 417/417. Исторические результаты Qase не изменялись.

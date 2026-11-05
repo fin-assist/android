@@ -2271,7 +2271,22 @@
       },
       "additional_test_keys": [
         "ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette"
-      ]
+      ],
+      "reporting": {
+        "rule": "All mapped components must be present to report Passed; partial pass becomes Skipped, observed failure remains Failed.",
+        "evidence": [
+          {
+            "path": "scripts/qase-report.py",
+            "line": 98,
+            "detail": "Track actual reported component keys and downgrade an incomplete pass before recording the case result."
+          },
+          {
+            "path": "scripts/test_qase_report.py",
+            "line": 88,
+            "detail": "Discriminating partial/complete/failure tests cover the combined case outcome."
+          }
+        ]
+      }
     },
     {
       "case_id": 18,

@@ -591,7 +591,9 @@ newly authored checks are distinguished from baseline Qase85 execution. The FIN-
 have not yet been executed. Qase77–79 retain API35 as specified; normal API34 CI is not API35 acceptance.
 Qase17 retains its Maestro flow and adds `ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette`
 for the actual MainActivity's rendered light/dark palette. Both map to Qase17; the reporter keeps their worst
-result when both components are present. A focused component run must identify that limited scope in its description.
+result when both components are present. If any mapped component is missing, an otherwise passing case is
+reported Skipped with the missing test named; a reported failure stays Failed. A focused component run must
+identify its limited scope in the description and cannot establish a full-case Passed by itself.
 Qase84 likewise combines its Maestro calendar/input/error flow with
 `StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser`, which intercepts ACTION_VIEW
 and asserts zero browser launches after offline download preparation. This native companion is authored,

@@ -275,6 +275,18 @@
       ]
     },
     {
+      "case_id": 17,
+      "title": "Профиль — тема и выход из аккаунта",
+      "readback": "matched; untouched fields preserved",
+      "changes": [
+        {
+          "field": "description",
+          "before": "Автотест: `.maestro/flows/profile/theme_and_logout.yaml`",
+          "after": "Автотест: `.maestro/flows/profile/theme_and_logout.yaml`\n\nFIN-450: кейс состоит из Maestro .maestro/flows/profile/theme_and_logout.yaml и native ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette (фактически отрисованная палитра реальной MainActivity). Полный Passed требует обеих частей; частичный успешный прогон отмечается Skipped с указанием недостающей части. Новая native-проверка написана, не запускалась."
+        }
+      ]
+    },
+    {
       "case_id": 21,
       "title": "Загрузка — «Не скачивается?», нет сети при отправке файла и «Повторить»",
       "readback": "matched; untouched fields preserved",
@@ -746,7 +758,7 @@
         {
           "field": "description",
           "before": ".maestro/flows/statements/download_period.yaml. Сценарий упал в run 41819133288.\n\nFIN-427: исправления после run 41819133288 подготовлены; повторный UI-прогон не выполнялся. Статические проверки не являются результатом выполнения кейса.",
-          "after": ".maestro/flows/statements/download_period.yaml. Сценарий упал в run 41819133288.\n\nFIN-427: исправления после run 41819133288 подготовлены; повторный UI-прогон не выполнялся. Статические проверки не являются результатом выполнения кейса.\n\nFIN-450: отсутствие открытия браузера при ошибке подготовки ссылки дополнительно проверяет native companion StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser. Maestro проверяет календарь, ввод дат, сохранение выбора и ошибку; native companion перехватывает ACTION_VIEW и требует 0 таких интентов после отказа offline. Изменённый native companion написан, но в рамках FIN-450 не запускался."
+          "after": ".maestro/flows/statements/download_period.yaml. Сценарий упал в run 41819133288.\n\nFIN-427: исправления после run 41819133288 подготовлены; повторный UI-прогон не выполнялся. Статические проверки не являются результатом выполнения кейса.\n\nFIN-450: отсутствие открытия браузера при ошибке подготовки ссылки дополнительно проверяет native companion StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser. Maestro проверяет календарь, ввод дат, сохранение выбора и ошибку; native companion перехватывает ACTION_VIEW и требует 0 таких интентов после отказа offline. Изменённый native companion написан, но в рамках FIN-450 не запускался.\n\nFIN-450: полный Passed требует и Maestro download_period.yaml, и native StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser. При отсутствии одной части частичный успешный прогон отмечается Skipped; наблюдаемое падение остаётся Failed. Новые проверки написаны, не запускались."
         }
       ]
     },
@@ -787,5 +799,6 @@
       ]
     }
   ],
-  "excluded": "API35 retained; runtime acceptance pending. Q60 remains stopped. Q49 owner clarification published; no results changed."
+  "excluded": "API35 retained; runtime acceptance pending. Q60 remains stopped. Q49 owner clarification published; no results changed.",
+  "reporting_policy": "A complete case needs all mapped components. If a component is missing, an otherwise passing case is Skipped with the missing component named; actual failures stay Failed. No historical results changed."
 }
