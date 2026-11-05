@@ -6,6 +6,7 @@ tags:
 ---
 # FIN-446 / Qase55. Phase A: recover through explicit document reads and a fresh tick.
 # Exact mock request probes supplement the visible form; they do not change client state.
+# Scroll to the button text: the container can be a clipped strip below an expanded error.
 - runFlow: ../../subflows/q55_open_consent.yaml
 - tapOn:
     id: "assistant.consent.checkbox"
@@ -15,7 +16,9 @@ tags:
       LINK: "pfe2e://config?consent_type=assistant&consent_publish=2&consent_read=offline"
 - scrollUntilVisible:
     element:
-      id: "assistant.consent.submit"
+      text: "(Продолжить|Обновить документ)"
+      childOf:
+        id: "assistant.consent.submit"
     direction: DOWN
 - tapOn:
     id: "assistant.consent.submit"
@@ -25,7 +28,9 @@ tags:
     timeout: 10000
 - scrollUntilVisible:
     element:
-      id: "assistant.consent.submit"
+      text: "(Продолжить|Обновить документ)"
+      childOf:
+        id: "assistant.consent.submit"
     direction: DOWN
 - assertVisible:
     id: "assistant.consent.submit"
@@ -54,7 +59,9 @@ tags:
       LINK: "pfe2e://config?consent_type=assistant&consent_document=1&consent_read=ready&expect_consent_reads=2&expect_consent_grants=1"
 - scrollUntilVisible:
     element:
-      id: "assistant.consent.submit"
+      text: "(Продолжить|Обновить документ)"
+      childOf:
+        id: "assistant.consent.submit"
     direction: DOWN
 - tapOn:
     id: "assistant.consent.submit"
@@ -119,7 +126,9 @@ tags:
 # Loading version2 clears the old tick, but does not grant consent or submit the draft.
 - scrollUntilVisible:
     element:
-      id: "assistant.consent.submit"
+      text: "(Продолжить|Обновить документ)"
+      childOf:
+        id: "assistant.consent.submit"
     direction: DOWN
 - tapOn:
     id: "assistant.consent.submit"
@@ -140,7 +149,9 @@ tags:
     id: "assistant.consent.checkbox"
 - scrollUntilVisible:
     element:
-      id: "assistant.consent.submit"
+      text: "(Продолжить|Обновить документ)"
+      childOf:
+        id: "assistant.consent.submit"
     direction: DOWN
 - tapOn:
     id: "assistant.consent.submit"
@@ -173,7 +184,9 @@ tags:
       LINK: "pfe2e://config?consent_type=assistant&consent_publish=2&consent_read=rate_limited&consent_retry_s=3"
 - scrollUntilVisible:
     element:
-      id: "assistant.consent.submit"
+      text: "(Продолжить|Обновить документ)"
+      childOf:
+        id: "assistant.consent.submit"
     direction: DOWN
 - tapOn:
     id: "assistant.consent.submit"
@@ -183,7 +196,9 @@ tags:
     timeout: 10000
 - scrollUntilVisible:
     element:
-      id: "assistant.consent.submit"
+      text: "(Продолжить|Обновить документ)"
+      childOf:
+        id: "assistant.consent.submit"
     direction: DOWN
 - assertVisible:
     id: "assistant.consent.submit"
@@ -216,7 +231,9 @@ tags:
     id: "assistant.consent.checkbox"
 - scrollUntilVisible:
     element:
-      id: "assistant.consent.submit"
+      text: "(Продолжить|Обновить документ)"
+      childOf:
+        id: "assistant.consent.submit"
     direction: DOWN
 - assertVisible:
     id: "assistant.consent.submit"
