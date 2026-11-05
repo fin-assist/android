@@ -214,19 +214,6 @@
     {
       "description": "FIN-211: recovery of an automatically failed dependency family",
       "matchPackageNames": [
-        "renovate"
-      ],
-      "matchDatasources": [
-        "npm"
-      ],
-      "recreateWhen": "always",
-      "matchJsonata": [
-        "newMajor = 44"
-      ]
-    },
-    {
-      "description": "FIN-211: recovery of an automatically failed dependency family",
-      "matchPackageNames": [
         "com.android.library:com.android.library.gradle.plugin"
       ],
       "matchDatasources": [
@@ -261,6 +248,19 @@
       "recreateWhen": "always",
       "matchJsonata": [
         "newMajor = 9"
+      ]
+    },
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "renovate"
+      ],
+      "matchDatasources": [
+        "npm"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 44"
       ]
     },
     {
@@ -752,6 +752,22 @@
       "matchNewValue": "/^9\\.5\\.1$/",
       "matchJsonata": [
         "$not($exists(newDigest)) or newDigest = null"
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "renovate"
+      ],
+      "matchDatasources": [
+        "npm"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-278-",
+      "matchJsonata": [
+        "newDigest = \"sha512-nTXnzeUbzzY+xBfjuz1J3JPXd2dvrD3304PavXDGFe6/7ocy6eiu+fxUHoxNqUr8oQM/jFF4QRw4xkVsKJuimA==\""
       ]
     }
   ]
