@@ -670,6 +670,8 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `operations/days_in_profile_zone` | `profile_timezone=Asia/Vladivostok`: after the profile is read, the feed groups days in the profile zone, not the device's — an evening operation in Moscow moves to the next day — FIN-92 |
 | `operations/statement_stale` | on the preloaded statement the caption under the summary says «Данные по 1 октября» (the statement's end, not the last operation on 30 September); then the preloaded statement deleted, `stale.ofx` uploaded: «Операции» and «Аналитика» show «Данные в приложении по 20 сентября — с тех пор прошло больше двух недель», dated by the statement's end (`state.data_to`), not the last operation (15 September) — FIN-125 |
 | `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, separate «Сбросить» below the chips stays visible at both horizontal scroll edges (FIN-416, Qase9), period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
+| `operations/refund_category` (mock-only) | automatic refund card and explicit refund category for an ordinary credit; synthetic September expense/income 900/+300 RUB → 600/0 RUB, target explanation and retained row/details after reopening (Qase92, FIN-442); execution evidence in PR #273 |
+| `operations/own_transfer_split` (mock-only) | two known own-transfer pairs: expense category goes to debit, income category to credit; split notice, exact search count 1→2, signed rows, each side's own timestamp/category after reopening (Qase93, FIN-442); execution evidence in PR #273 |
 | `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast and opens the history explanation in its help sheet; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month through its option container and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; follow-up not executed (previous run failed) |
 | `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month (Qase73, FIN-391); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `analytics/period_controls` (common) | Month/All-time hide rolling choices; Quarter/Year expose only their right-aligned choice; tapping the selected calendar segment exits its rolling period; All-time removes the whole period row across tab navigation (Qase80, FIN-416); authored, not executed |
@@ -1414,3 +1416,42 @@ the tagged centre x81 outside that viewport, so the month remained unselected. O
 toward each history edge now exposes its endpoint before selection. Both 400-gesture ceilings,
 the covered-zero/checked assertions, retained January selection during reverse paging and final
 October selection remain unchanged. This repair changes no runtime, fixtures or timeouts.
+
+### FIN-442: financial refunds and category changes that split own transfers
+
+Two `mock-only` flows import small synthetic OFX files through the existing document picker after deleting
+the preloaded statement. `refund-categories.ofx` separates an automatic same-name refund from a normal
+incoming credit; explicitly assigning Refund to that credit moves 300 RUB from income to expense reduction.
+`own-transfer-split.ofx` contains two accounts and two pairs, distinguished by amounts 1000/2000 RUB.
+The flow selects an expense-only and an income-only category, checks the replacement of one pair by two
+ordinary records and reopens both sides. It does not infer a split from the absence of an offscreen row.
+
+`E2eStatementsTest` validates these exact files through the mock operations API and accounting engine,
+including category targets, totals, replacement identities, reimport persistence and the both-directions
+category rule. Those JVM checks do not establish device/UI acceptance. Qase92/93 describe the assertions
+in their respective flows; other refund-target branches, cross-month behavior and reimport are not
+reported as executed UI steps. Execution status, source and environment evidence are recorded in PR #273
+and the linked Qase runs. Local execution follows the owner-permission rule above. Qase8 and Qase38
+retain their existing scope and result history.
+
+The local FIN-442 execution exposed two setup boundaries. Loading the bundled 1969-operation ledger
+can exceed the sign-in helper's 30 s budget (46.242 s observed). These two flows first launch the app
+and wait at most 60 s for `auth.phone.document`, rendered only after a successful backend document
+read. With the app already open, service sign-in can leave `PfApp`'s first-run setup layer visible even
+after the hook saves the passcode. Both flows therefore use the existing `login.yaml` UI path, including
+passcode setup and its completion callback. Shared helpers, authentication deadlines and financial
+assertions are unchanged. Preserved local attempt reports and final execution evidence are linked in
+[PR #273](https://github.com/fin-assist/android/pull/273).
+
+The Qase93 run also exposed FIN-443: scrolling the unfiltered category list toward Income crashed on
+`Расходы-cat_repair`, because the mock directory included two spelling aliases (NBSP/space) with the
+same ID. `Catalog.categories` now returns one entry per ID, keeping the first registered category and
+both bank-name lookups. It preserves category IDs, kinds and financial assignments. `CatalogTest`
+reproduces the duplicate-ID failure before the fix and checks both aliases, directory uniqueness and
+the retained Salary category. Qase93 keeps its ordinary scroll to Salary, so the crash is not bypassed
+with a search query. This is a mock-backend correction; shared UI helpers and control hooks are unchanged.
+
+Qase93 navigates the long unfiltered directory in two observable steps: scroll to the Income heading,
+then to Salary inside that section, each with Maestro's existing 20 s default. A single scroll across
+the whole directory exhausted that navigation budget on the local Pixel6. No financial assertion is
+removed, and the ordinary path still traverses the expense categories where FIN-443 reproduced.

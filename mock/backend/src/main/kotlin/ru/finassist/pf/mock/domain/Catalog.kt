@@ -38,7 +38,8 @@ class Catalog(
         KNOWN.forEach { (name, slug, icon) -> byName[name] = category(name, slug, icon) }
     }
 
-    val categories: List<Category> get() = byName.values.toList()
+    // Bank spelling aliases share one stable ID; API lists must not repeat the same category.
+    val categories: List<Category> get() = byName.values.distinctBy { it.id }
 
     fun byId(id: String): Category? = byName.values.firstOrNull { it.id == id }
 

@@ -1,0 +1,225 @@
+appId: ru.finassist.pf.mock.e2e
+name: Возврат денег — распознавание, ручная категория и расходы вместо дохода
+tags:
+  - operations
+  - analytics
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+# A successful document read proves the seeded mock backend is ready. Fixture loading must not
+# consume the UI consent-loading budget (46 s was observed on a cold local AVD).
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 60000
+# Use the normal UI setup: launching before the service sign-in can retain PfApp's setup layer.
+- runFlow: ../../subflows/login.yaml
+# A known four-operation ledger makes the financial oracle independent of the bundled year.
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.empty"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- scrollUntilVisible:
+    element:
+      id: "e2e.picker.refund-categories.ofx"
+- tapOn:
+    id: "e2e.picker.refund-categories.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.new"
+- assertNotVisible:
+    id: "statements.result.unread"
+- scrollUntilVisible:
+    element:
+      id: "statements.result.done"
+- tapOn:
+    id: "statements.result.done"
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+# Same-name 400 RUB credit is an automatic refund, not income; keep it distinct from the 1000 RUB purchase.
+- scrollUntilVisible:
+    element:
+      id: "operations.row"
+      containsDescendants:
+        - text: "Refund Shop"
+        - text: '\+400[\s\u00A0\u202F]₽'
+        - text: "возврат · Маркетплейсы"
+- tapOn:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Refund Shop"
+      - text: '\+400[\s\u00A0\u202F]₽'
+      - text: "возврат · Маркетплейсы"
+- extendedWaitUntil:
+    visible:
+      text: "Refund Shop"
+      childOf:
+        id: "operations.detail.title"
+    timeout: 10000
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: "Возврат"
+      - text: "Уменьшает расходы «Маркетплейсы» в сентябре"
+- tapOn:
+    id: "ds.back"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 15000
+# Purchases 1000+300 minus the automatic refund 400 = expenses 900; Manual Credit is still income 300.
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.expense"
+      containsDescendants:
+        - text: '^900[\s\u00A0\u202F]₽$'
+- assertVisible:
+    id: "analytics.tile.expense"
+    containsDescendants:
+      - text: '^900[\s\u00A0\u202F]₽$'
+- assertVisible:
+    id: "analytics.tile.income"
+    containsDescendants:
+      - text: '^\+300[\s\u00A0\u202F]₽$'
+- tapOn:
+    id: "ds.tab.operations"
+- scrollUntilVisible:
+    element:
+      id: "operations.row"
+      containsDescendants:
+        - text: "Manual Credit"
+        - text: '\+300[\s\u00A0\u202F]₽'
+        - text: "Пополнения"
+    direction: UP
+- tapOn:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Manual Credit"
+      - text: '\+300[\s\u00A0\u202F]₽'
+      - text: "Пополнения"
+- extendedWaitUntil:
+    visible:
+      text: "Manual Credit"
+      childOf:
+        id: "operations.detail.title"
+    timeout: 10000
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: "Пополнения"
+- tapOn:
+    id: "operations.detail.category"
+- extendedWaitUntil:
+    visible:
+      id: "operations.category.search"
+    timeout: 5000
+- tapOn:
+    id: "operations.category.option"
+    containsDescendants:
+      - text: "Возврат"
+- assertVisible:
+    id: "operations.detail.save"
+    enabled: true
+- tapOn:
+    id: "operations.detail.save"
+- extendedWaitUntil:
+    notVisible:
+      id: "operations.category.search"
+    timeout: 10000
+# With no same-name purchase, the same-account/same-amount 300 RUB Dinner Shop debit determines the target.
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: "Возврат"
+      - text: "Уменьшает расходы «Рестораны» в сентябре"
+- tapOn:
+    id: "ds.back"
+- scrollUntilVisible:
+    element:
+      id: "operations.row"
+      containsDescendants:
+        - text: "Manual Credit"
+        - text: '\+300[\s\u00A0\u202F]₽'
+        - text: "возврат · Рестораны"
+    direction: UP
+- tapOn:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Manual Credit"
+      - text: '\+300[\s\u00A0\u202F]₽'
+      - text: "возврат · Рестораны"
+- extendedWaitUntil:
+    visible:
+      text: "Manual Credit"
+      childOf:
+        id: "operations.detail.title"
+    timeout: 10000
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: "Возврат"
+      - text: "Уменьшает расходы «Рестораны» в сентябре"
+- tapOn:
+    id: "ds.back"
+- tapOn:
+    id: "ds.tab.analytics"
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.expense"
+    direction: UP
+# Wait for the authoritative recalculated block: the credit now reduces expenses rather than increasing income.
+- extendedWaitUntil:
+    visible:
+      id: "analytics.tile.expense"
+      containsDescendants:
+        - text: '^600[\s\u00A0\u202F]₽$'
+    timeout: 15000
+- assertVisible:
+    id: "analytics.tile.income"
+    containsDescendants:
+      - text: '^0[\s\u00A0\u202F]₽$'
+- scrollUntilVisible:
+    element:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    direction: UP
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"

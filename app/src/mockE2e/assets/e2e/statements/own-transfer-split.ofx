@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<?OFX OFXHEADER="200" VERSION="202" SECURITY="NONE" OLDFILEUID="NONE" NEWFILEUID="NONE"?>
+<OFX>
+  <SIGNONMSGSRSV1>
+    <SONRS>
+      <STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>
+      <DTSERVER>20261007120000.000[+3:MSK]</DTSERVER>
+      <LANGUAGE>RUS</LANGUAGE>
+    </SONRS>
+  </SIGNONMSGSRSV1>
+  <BANKMSGSRSV1>
+    <STMTTRNRS>
+      <TRNUID>1</TRNUID>
+      <STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>
+      <STMTRS>
+        <CURDEF>RUB</CURDEF>
+        <BANKACCTFROM>
+          <BANKID>T-BANK</BANKID>
+          <ACCTID>40817810000000001111</ACCTID>
+          <ACCTTYPE>CHECKING</ACCTTYPE>
+        </BANKACCTFROM>
+        <BANKTRANLIST>
+          <DTSTART>20260901000000.000[+3:MSK]</DTSTART>
+          <DTEND>20260930235959.000[+3:MSK]</DTEND>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20260910100000.000[+3:MSK]</DTPOSTED>
+            <TRNAMT>-1000.00</TRNAMT>
+            <FITID>e2e-pair-expense-debit</FITID>
+            <NAME>Себе в другой банк</NAME>
+            <MEMO>Переводы</MEMO>
+            <CURRENCY><CURSYM>RUB</CURSYM><CURRATE>1.0</CURRATE></CURRENCY>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20260920120000.000[+3:MSK]</DTPOSTED>
+            <TRNAMT>-2000.00</TRNAMT>
+            <FITID>e2e-pair-income-debit</FITID>
+            <NAME>Себе в другой банк</NAME>
+            <MEMO>Переводы</MEMO>
+            <CURRENCY><CURSYM>RUB</CURSYM><CURRATE>1.0</CURRATE></CURRENCY>
+          </STMTTRN>
+        </BANKTRANLIST>
+      </STMTRS>
+    </STMTTRNRS>
+    <STMTTRNRS>
+      <TRNUID>2</TRNUID>
+      <STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>
+      <STMTRS>
+        <CURDEF>RUB</CURDEF>
+        <BANKACCTFROM>
+          <BANKID>T-BANK</BANKID>
+          <ACCTID>40817810000000002222</ACCTID>
+          <ACCTTYPE>SAVINGS</ACCTTYPE>
+        </BANKACCTFROM>
+        <BANKTRANLIST>
+          <DTSTART>20260901000000.000[+3:MSK]</DTSTART>
+          <DTEND>20260930235959.000[+3:MSK]</DTEND>
+          <STMTTRN>
+            <TRNTYPE>CREDIT</TRNTYPE>
+            <DTPOSTED>20260911110000.000[+3:MSK]</DTPOSTED>
+            <TRNAMT>1000.00</TRNAMT>
+            <FITID>e2e-pair-expense-credit</FITID>
+            <NAME>Себе из другого банка</NAME>
+            <MEMO>Переводы</MEMO>
+            <CURRENCY><CURSYM>RUB</CURSYM><CURRATE>1.0</CURRATE></CURRENCY>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>CREDIT</TRNTYPE>
+            <DTPOSTED>20260921130000.000[+3:MSK]</DTPOSTED>
+            <TRNAMT>2000.00</TRNAMT>
+            <FITID>e2e-pair-income-credit</FITID>
+            <NAME>Себе из другого банка</NAME>
+            <MEMO>Переводы</MEMO>
+            <CURRENCY><CURSYM>RUB</CURSYM><CURRATE>1.0</CURRATE></CURRENCY>
+          </STMTTRN>
+        </BANKTRANLIST>
+      </STMTRS>
+    </STMTTRNRS>
+  </BANKMSGSRSV1>
+</OFX>
