@@ -17,6 +17,11 @@ Prerequisites: an emulator or device with `adb`, [Maestro](https://maestro.dev) 
 (`curl -Ls https://get.maestro.mobile.dev | bash`), JDK 21. Set the emulator time zone to Europe/Moscow
 (Settings → System → Date & time, or `-timezone Europe/Moscow` when starting it).
 
+To reproduce a CI failure locally, use `MAESTRO_VERSION` and the `AVD_API`, `AVD_TARGET`, `AVD_ARCH`
+and `AVD_PROFILE` values from `.github/workflows/e2e.yml`, with animations disabled as in that workflow.
+Record the actual CLI, image and viewport in the result. Use an absolute path with `--flow`: the runner
+changes the working directory to its screenshot output folder before invoking Maestro.
+
 ```bash
 # All flows and the native tests
 scripts/e2e.sh
@@ -25,7 +30,7 @@ scripts/e2e.sh
 scripts/e2e.sh --tags smoke
 
 # One flow while writing it (Maestro Studio helps to find elements: `maestro studio`); --flow may be repeated
-scripts/e2e.sh --no-build --flow .maestro/flows/assistant/ask_question.yaml
+scripts/e2e.sh --no-build --flow "$PWD/.maestro/flows/assistant/ask_question.yaml"
 
 # One shard of the CI split (below): the flows `scripts/e2e-shards.py list --shard 2/4` prints; native tests in 1/n only
 scripts/e2e.sh --shard 2/4
@@ -675,7 +680,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416/427); retained category row is observed before the bounded pause and an explicit Retry with a fresh finite recalculation countdown; final month header is revealed after Retry; follow-up to failed run 41855090174, not executed |
 | `analytics/regular_block_update` (mock-only) | successful PUT removes RBC and promotes the third visible payment row before a ready GET; seven seconds in the same card retain that row without RBC across marked GET polls; bounded polling pauses with September retained, then explicit Retry permits ready GET; separate unknown offline result retains RBC until explicit PUT retry (Qase81, FIN-416/427/436). Its case-level Passed covers these UI observations only; JVM version/context checks and backend post-commit/durable delivery are separate |
-| `analytics/regular_post_commit_retry` (mock-only) | post-commit retryable 500 keeps the original card and unknown warning; persistent fault plus exactly one injected failure excludes a hidden retry; fault recovery/resume retains RBC until another explicit row action; complete PUT block changes 5188/6/«Ещё 3»1599 RUB to 3688/5/«Ещё 2»599 RUB and promotes tablet while ready GET remains withheld (Qase91, FIN-438); authored, not executed |
+| `analytics/regular_post_commit_retry` (mock-only) | post-commit retryable 500 keeps the original card and unknown warning; persistent fault plus exactly one injected failure excludes a hidden retry; fault recovery/resume retains RBC until another explicit row action; complete PUT block changes 5188/6/«Ещё 3»1599 RUB to 3688/5/«Ещё 2»599 RUB and promotes tablet while ready GET remains withheld (Qase91, FIN-438); focused local API34/Pixel6/Maestro2.11.0 pass in PR #271 |
 | `analytics/unknown_mutation_recovery` (mock-only) | forbidden 500 → explicit read with retained unknown warning and no PUT; Offline → uncached Year or upload deletion → reachable recovery outside the missing snapshot, delayed GET shows preparation before data/empty; unknown in-flight PUT rolls an unperformed selection back, then the same segment tap works; Qase89 (FIN-416/427); re-locate the RBC action after offline resume; follow-up to failed run 41844441379, not executed |
 | `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `analytics/source_zone_and_session` (mock-only) | unsupported source-zone notice survives an offline retry over cached data, supported response recovery, logout/new login with marked response prepares without old financial blocks (Qase88, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
@@ -1362,5 +1367,40 @@ The original visible rows end with phone; «Ещё 3» totals1599 RUB. Removing 
 5 payments, promotes tablet and leaves «Ещё 2» totalling599 RUB. A JVM test reconciles these exact
 source-derived values against the API block. This mock UI case does not claim PostgreSQL/outbox
 durability or two total PUT calls from the injected-failure counter; backend Qase90 owns those server
-guarantees. Qase81/Qase89 and their historical results are preserved. The new Maestro flow is authored;
-UI, native, emulator and DesignCheck execution were not run in this change.
+guarantees. Qase81/Qase89 and their historical results are preserved. The original FIN-438 change authored this Maestro flow without UI execution; the focused repair
+execution is recorded below. Native and DesignCheck execution was not part of the repair.
+
+FIN-438 follow-up to [UI run 41924455407](https://github.com/fin-assist/android/actions/runs/41924455407):
+shard 4 stopped before running its flows because Maestro rejected the parameterized
+`scrollUntilVisible.direction` in `assert_regular_retry_card.yaml`. The helper now returns to the
+card heading before locating the changing row with the literal `DOWN` direction. This finds both
+the original RBC row and the promoted tablet row from the same starting position; row-scoped
+merchant/amount, total/count, remainder and explicit-retry assertions are retained.
+Focused local runs then exposed clipped rows and header totals after the fixed unknown-result and error
+notices appeared. Centring a title or an action against the whole screen could move the data behind those
+notices. The helper now scrolls to the same scoped header/row/footer value pairs that it subsequently
+asserts, without centring; changing-row actions are observed separately after their merchant/amount pair.
+After the error notices appear, the flow enters that helper directly: an extra downward search for the
+retained RBC action could skip it above the smaller viewport. The helper still checks RBC and its action.
+Before the explicit retry, the flow likewise locates the retained RBC name/amount pair before scrolling
+to its action; centring only the action could leave the name hidden behind the fixed notices.
+
+### FIN-440: preserve Qase81 polling pause until explicit retry
+
+In the same main UI run, `analytics/regular_block_update` reached the paused notice and enabled retry,
+then its upward month-picker scroll triggered pull-to-refresh (`ds.refresh.indicator` in the captured log).
+After the control link released marked responses, that refresh consumed the ready GET before the explicit
+retry tap. The month-picker scroll and exact September assertion now run after the explicit retry completes.
+The paused notice and enabled retry are checked immediately before releasing the hold. The month/context,
+retained card, replacement row, unknown-result, offline and mutation-count assertions remain; runtime,
+poll budgets, control hooks and timeouts are unchanged. Qase81 keeps its existing ID and flow mapping.
+
+Focused repair verification (PR #271): Qase91 passed in 139.623 s on source
+`b8af1fae97c22a7bb169d8827a6e3c20e6e01f64`; Qase81 passed in 272.007 s on source
+`21b85817ad73abe114343db78c02a620337daa61` (its flow is unchanged in the final candidate).
+Each was run separately with the existing runner, without native tests, on a disposable API34
+`google_apis` x86_64 Pixel6 AVD (1080×2400, dpi420, Europe/Moscow, animations disabled), using
+the workflow-pinned Maestro2.11.0 and a 900 s process deadline. The runtime APK is unchanged
+from main `f962ddf0`; this repair changes only YAML and documentation. Earlier local failures
+and the original CI/Qase run59 remain recorded; these focused local passes are not a full
+post-merge UI-suite result.
