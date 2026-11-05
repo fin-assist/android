@@ -44,6 +44,8 @@ import javax.inject.Inject
  * - `call_ttl_ms=<n>` — lifetime of the next phone verification requests (`expires_at`, `expires_in`); lets a flow
  *   reach «Время на звонок вышло» without waiting 5 minutes.
  * - `network_delay_ms=<n>` — latency of every backend request (keeps a «busy» state up long enough to act on it).
+ * - `consent_type=personal_data|assistant` with closed document controls or exact `expect_consent_*` checks —
+ *   version rotation, held reads and safe request evidence for Qase54/55; see [E2eConsentControl] and docs/e2e.md.
  * - `assistant_model_errors=<n>` — the next n assistant answers fail with MODEL_ERROR («Повторить» under them).
  * - `analytics_recalculating_responses=<0..100>` — next n non-empty analytics reads carry `state.recalculating=true`.
  * - `analytics_pending_responses=<0..100>` — next n valid analytics reads return `has_data=false`, simulating
@@ -137,10 +139,15 @@ class E2eControlActivity : ComponentActivity() {
 
     /** Applies the values; returns what an `expect_*` check did not find, or null. */
     private suspend fun apply(uri: Uri?): String? {
-        var unmet: String? = null
+        val consentParameters = uri?.queryParameterNames.orEmpty()
+            .filter { it.startsWith("consent_") || it.startsWith("expect_consent_") }
+            .associateWith { uri?.getQueryParameters(it).orEmpty() }
+        var unmet = E2eConsentControl(backend.consents).apply(consentParameters)
+        if (unmet != null) return unmet
         uri?.queryParameterNames.orEmpty().forEach { name ->
             val value = uri?.getQueryParameter(name).orEmpty()
             when {
+                name in consentParameters -> Unit // validated and applied together above
                 name == "flags" && value == "reset" -> overrides.clear()
                 name.startsWith(FLAG_PREFIX) -> {
                     val flag = Flag.byKey(name.removePrefix(FLAG_PREFIX))

@@ -1,0 +1,327 @@
+appId: ru.finassist.pf.mock.e2e
+name: Вход — обновление документа на Start и исходная версия в Register
+tags:
+  - auth
+  - offline
+  - mock-only
+---
+# Qase54 / FIN-446. The mock changes server documents; every client action uses the real sign-in UI.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&consent_publish=pd-1&consent_document=current&consent_read=ready&call_delay_ms=60000"
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: false
+- assertVisible:
+    id: "auth.phone.input"
+    enabled: false
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: false
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "9160000054"
+- hideKeyboard
+
+# The document changes after it was read and accepted, before the first Start.
+# Only the corrective document GET is offline; the Start reaches the server and is rejected.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&consent_publish=pd-2&consent_read=offline&expect_consent_reads=1&expect_consent_starts=&expect_consent_registers="
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- scrollUntilVisible:
+    element:
+      text: "(?s)Не получилось загрузить документ согласия.*Проверьте интернет.*"
+      childOf:
+        id: "ds.error.error"
+    direction: UP
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: true
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: false
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- assertVisible:
+    id: "auth.phone.submit"
+    enabled: false
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&consent_document=pd-1&consent_read=ready&expect_consent_reads=2&expect_consent_starts=pd-1&expect_consent_start_keys=1&expect_consent_registers="
+
+# A successful GET of the rejected version does not allow the old Start again.
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.document_refresh"
+- tapOn:
+    id: "auth.phone.document_refresh"
+- extendedWaitUntil:
+    visible: "Новая версия согласия пока недоступна. Обновите документ позже"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- tapOn:
+    id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: false
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- assertVisible:
+    id: "auth.phone.submit"
+    enabled: false
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&consent_read=held&expect_consent_reads=3&expect_consent_starts=pd-1&expect_consent_registers="
+
+# Hold the actual next GET. Repeated taps cannot start a second simultaneous read.
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.document_refresh"
+- tapOn:
+    id: "auth.phone.document_refresh"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document_refresh"
+      enabled: false
+    timeout: 10000
+- tapOn:
+    id: "auth.phone.document_refresh"
+- tapOn:
+    id: "auth.phone.document_refresh"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&expect_consent_reads=4&expect_consent_active=1&expect_consent_max_active=1&expect_consent_starts=pd-1"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&consent_release=true"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document_refresh"
+      enabled: true
+    timeout: 10000
+- assertVisible: "Новая версия согласия пока недоступна. Обновите документ позже"
+
+# A false-denied 429 belongs to document reads, independently of the refused Start.
+# Thirty seconds lets the UI leave and return while the captured deadline is still pending.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&consent_read=rate_limited&consent_retry_s=30&expect_consent_reads=4&expect_consent_starts=pd-1"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.document_refresh"
+- tapOn:
+    id: "auth.phone.document_refresh"
+- extendedWaitUntil:
+    visible: "Слишком много запросов\\. Попробуйте позже"
+    timeout: 10000
+- assertVisible: "Повторите в [0-2][0-9]:[0-5][0-9]"
+- assertVisible:
+    id: "auth.phone.document_refresh"
+    enabled: false
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- assertVisible:
+    id: "auth.phone.submit"
+    enabled: false
+- assertNotVisible:
+    id: "auth.phone.restart"
+- pressKey: HOME
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.document_refresh"
+- assertVisible:
+    id: "auth.phone.document_refresh"
+    enabled: false
+- assertNotVisible:
+    id: "auth.phone.restart"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&consent_document=current&consent_read=ready&expect_consent_reads=5&expect_consent_starts=pd-1&expect_consent_registers="
+# Expiry offers an explicit restart; it neither reads nor sends automatically.
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.restart"
+      enabled: true
+    direction: DOWN
+    timeout: 60000
+- assertVisible:
+    id: "auth.phone.document_refresh"
+    enabled: false
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&expect_consent_reads=5&expect_consent_starts=pd-1&expect_consent_registers="
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.restart"
+- tapOn:
+    id: "auth.phone.restart"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: false
+- assertVisible:
+    id: "auth.phone.input"
+    enabled: false
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: false
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&expect_consent_reads=6&expect_consent_starts=pd-1&expect_consent_registers="
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&consent_publish=pd-3&expect_consent_reads=6&expect_consent_starts=pd-1,pd-2&expect_consent_start_keys=2&expect_consent_registers="
+
+# Register uses the accepted Start's pd-2 even though pd-3 is now current.
+# The existing stream captured the configured 60-second verification delay when it opened.
+- extendedWaitUntil:
+    visible:
+      id: "auth.consent"
+    timeout: 75000
+- assertNotVisible:
+    id: "auth.consent.checkbox"
+- assertNotVisible:
+    id: "auth.phone.document_refresh"
+- scrollUntilVisible:
+    element:
+      id: "auth.consent.submit"
+- tapOn:
+    id: "auth.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "applock.setup"
+    timeout: 20000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&expect_consent_reads=6&expect_consent_starts=pd-1,pd-2&expect_consent_start_keys=2&expect_consent_registers=pd-2"
+
+# Independent failure branch: a refused Register drops its evidence and returns to a fresh Phone screen.
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&consent_publish=pd-1&consent_document=current&consent_read=ready&consent_register_error=outdated"
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 60000
+- runFlow:
+    file: ../../subflows/sign_in.yaml
+    env:
+      PHONE: "9160000054"
+- extendedWaitUntil:
+    visible:
+      id: "auth.consent"
+    timeout: 20000
+- assertNotVisible:
+    id: "auth.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "auth.consent.submit"
+- tapOn:
+    id: "auth.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: false
+- assertVisible:
+    id: "auth.phone.input"
+    enabled: false
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: false
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- assertVisible:
+    id: "auth.phone.submit"
+    enabled: false
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&expect_consent_reads=2&expect_consent_starts=pd-1&expect_consent_start_keys=1&expect_consent_registers=pd-1"

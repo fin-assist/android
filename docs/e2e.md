@@ -518,6 +518,16 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `call_delay_ms=<n>` | how long the sign-in call takes | process |
   | `call_ttl_ms=<n>` | lifetime of the next phone verification requests (`expires_at`, `expires_in`; 5 minutes by default): the wait ends without a call (FIN-166) | process |
   | `network_delay_ms=<n>` | latency of every backend request (a «busy» state stays up for that long) | process |
+  | `consent_type=personal_data\|assistant` | required scope for every consent command below; unknown/duplicate/malformed controls fail closed | command |
+  | `consent_publish=<version>` | publishes the version checked by Start/assistant grant; does not replace captured Start evidence or silently grant consent | process |
+  | `consent_document=<version>\|current` | override the next document responses independently from publication; `current` removes the override; versions are 1..64 ASCII letters/digits/`.`/`_`/`-` | process |
+  | `consent_read=ready\|offline\|rate_limited\|held`, `consent_retry_s=1..60` | closed GET fixtures; 429 uses canonical `retryable:false`, a fresh Retry-After and captured receipt deadline; held GET captures its reply before waiting | process |
+  | `consent_release=true` | releases currently held reads; subsequent held-mode reads return normally | process |
+  | `consent_register_error=outdated\|required\|off` | personal-data scope only: reject Register before creating an account, or restore normal validation | process |
+  | `expect_consent_reads`, `expect_consent_active`, `expect_consent_max_active` | exact document request/concurrency counts for the selected type, each 0..128 | instant check |
+  | `expect_consent_starts`, `expect_consent_registers`, `expect_consent_grants` | exact comma-separated attempted version sequence, including failures; an empty value requires zero attempts | instant check |
+  | `expect_consent_start_keys=0..128` | exact number of distinct Start keys; no raw key, phone or token is exposed | instant check |
+  | `expect_consent_wait_elapsed=true` | requires a real prior document-429 receipt and zero remaining captured wait; missing receipt fails | instant check |
   | `unknown_codes=true\|false` | the fake server sends codes the client does not know (`MockCodes`): a filter `kind` on the expense tile, an import notice, an analytics feature, an Analytics block of an unknown type and a card locked for an unknown reason (FIN-83, FIN-4) | process |
   | `analytics_recalculating_responses=<0..100>` | next n valid analytics reads carry `calculation.recalculating=true` and the matching legacy state flag when present; auth/validation still apply; no durable-delivery simulation (FIN-416) | process |
   | `failing_blocks=<id>,…` | those Analytics blocks fail on the fake server and come as `unavailable` (FIN-5); empty — none | process |
@@ -662,6 +672,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `auth/call_expired` | `call_delay_ms=600000&call_ttl_ms=15000` before Start prevents early mock verification; this 15s test override does not change the normal 5-minute rule. The stream's `expired` or device timer ends the wait (order not fixed); both lead to «Время на звонок вышло» with no number. Restoring `call_ttl_ms=300000` before «Позвонить ещё раз» brings back the number and normal deadline (Qase41, FIN-166/436) |
 | `auth/call_stream_rate_limited` | live 429 marker before negative checks; `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: one actual refusal, number stays, no ErrorMessage (`ds.error.info/warning/error`) or offline message; exact count across control-link resume, remove future refusals, retained wait → passcode → feed (Qase44, FIN-170, FIN-376, FIN-380) |
 | `auth/registration_closed` | clean state, `flag.auth.registration=false` before sign-in: confirmed new number → «Регистрация пока закрыта»; existing account still signs in (Qase4, FIN-436) |
+| `auth/consent_document_rotation` (mock-only) | pd-1 rejected at Start after publication of pd-2; offline/same-version/held/429 reads, no repeated Start, explicit restart with fresh choices/key; published pd-3 preserves accepted pd-2 at Register; refused Register returns to fresh Phone (Qase54, FIN-446); LOCAL Passed348.626s/run78 |
 | `applock/unlock` (smoke) | cold start → unlock; wrong code error |
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |
 | `applock/change_passcode` | current → new → mismatch → new → repeat; the new code unlocks after restart |
@@ -720,6 +731,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `statements/upload_offline_retry` | «Не скачивается?» sheet; no network while sending: notice on the guide, «Повторить» sends the same file |
 | `statements/upload_restored_key` | A seeded unknown-age UUID does not send the file or silently change key; the upload count remains 1 (preloaded statement). Only «Загрузить заново» starts a new action and changes the count to 2 (Qase51) — FIN-223 |
 | `assistant/retry_after_consent` | A model failure, consent revocation and denied RetryAnswer lead to consent correction; the same operation resumes and history contains one question with the successful replacement (Qase52) — FIN-223 |
+| `assistant/consent_document_rotation` (mock-only) | outdated PUT → offline/same-version/held GET, one read in flight, new version resets the tick and needs explicit grant; draft/quota retained without Ask; independent GET429/false remains blocked after its captured wait (Qase55, FIN-446); LOCAL Passed360.281s/run80 |
 | `statements/upload_rate_limited_resume` | `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: after the first 429, both control-link and background returns retain the original deadline (`expect_stream_rate_limited_exact=1`); lifting the limiter does not skip that wait, then the result opens within 45s without an upload error (Qase45) — FIN-170, FIN-223 |
 | `statements/upload_no_description` | a line without a description is imported (no unread notice) and shown as «Без описания» in the feed and on the operation |
 | `statements/upload_unknown_codes` | `unknown_codes=true`: the import result shows the server's text for a notice code and for a locked analytics feature the client does not know — FIN-83 |
@@ -827,14 +839,15 @@ The existing authored `MaintenanceWaiting` fixture covers the disabled check but
 execution is claimed. The existing maintenance flows and Qase34/35/46 cover the maintenance paths only.
 
 
-Consent-document rotation between GET and phone Start (FIN-365) and assistant grant is not covered by a mock UI
-flow. The mock PD version can be changed by JVM fixtures but has no external control-link mutation, and assistant
-versions remain fixed; a separate controllable REST fixture is required. `PhoneViewModelTest`,
-`MockPhoneConsentTest`, `CallViewModelTest` and `AiConsentViewModelTest` cover version rejection/refresh and pinning.
+Consent-document rotation between GET and phone Start (FIN-365) and assistant grant is authored in
+`auth/consent_document_rotation` / [Qase54](https://app.qase.io/case/PLAINFIN-54) and
+`assistant/consent_document_rotation` / [Qase55](https://app.qase.io/case/PLAINFIN-55) (FIN-446).
+The bounded mock controls separate publication from stale/held document responses; no stage is required.
 Register never refetches current PD consent; mismatched original evidence restarts phone verification.
-[Qase54](https://app.qase.io/case/PLAINFIN-54) is a manual REST/peer specification for rotation at Start,
-the pinned original version at Register and restart when that evidence is unavailable (FIN-436); it is not
-an automated post-call document-refresh screen and has no mock mapping.
+The full flows passed separately in LOCAL runs78/80 (see FIN-446 below). `PhoneViewModelTest`, `PhoneStartGateTest`, `MockPhoneConsentTest`,
+`CallViewModelTest` and `AiConsentViewModelTest` remain independent lower-level checks, including exact captured
+deadlines, missing local registration evidence and the out-of-order initial assistant GET. Those internal
+interleavings are not claimed as executed steps of these two UI cases.
 
 Real client process-death recovery of an uncertain assistant request is not covered by a mock UI flow
 (Qase53). The fake backend, its token state and idempotency cache live in the client process: killing it
@@ -1338,7 +1351,8 @@ upload count is not evidence that operations survived or were removed. Existing 
 history-count and final-empty-state assertions remain. These additional UI assertions have not been run.
 
 Qase3/4/35/41 now state the existing mock controls and setup order documented in the coverage rows;
-no app/runtime or mock-control behavior changes. Qase54 retains its manual status and Qase60 keeps its
+no app/runtime or mock-control behavior changes. At FIN-436 Qase54 retained its manual status (subsequently
+automated by FIN-446) and Qase60 kept its
 identity/history with the pending status described above. Qase81 now describes only its mapped Maestro
 observations. Its successful result does not assert exact replacement of every response field, delayed
 version/context rejection or cross-service post-commit recovery; the former two are lower-level JVM
@@ -1501,3 +1515,50 @@ as do the complete 2000–2026 traversal in both directions, 400-gesture bounds 
 swipes of FIN-441. Cold setup reuses the positive document readiness and existing UI login already
 used by Qase73/92/93. Shared helpers, application runtime, assertion deadlines and financial expectations
 are unchanged. Single-flow Qase83 execution is recorded separately; run75 keeps its original failure.
+
+
+### FIN-446: consent-document rotation through the UI
+
+Qase54 and Qase55 keep their original IDs and history. They are mapped to
+`auth/consent_document_rotation.yaml` and `assistant/consent_document_rotation.yaml`.
+The full flows were executed separately on an owned API34 google_apis x86_64 Pixel6, native1080×2400/dpi420,
+MSK, animations0, Maestro2.11.0, through stock `scripts/e2e.sh --flow ABS --no-build` with a real1800s
+process-group deadline and no native/full-suite run. Q54 passed348.626s on source
+`e80d681073385b5eb4a5b74972448da897126333` in [LOCAL run78](https://app.qase.io/run/PLAINFIN/dashboard/78).
+Q55 passed360.281s on `7cbb056e62379087f98dc4f21a4fe2dcb70086a3` in
+[LOCAL run80](https://app.qase.io/run/PLAINFIN/dashboard/80). The APK runtime was identical in both:
+SHA256 `5b99abbf1f2a9d414d27f08925cef957b5165f116a6cbd88ab5ca666d22d19fa`.
+The first Q55 attempt failed157.749s because the action container was a clipped strip below the error;
+[run79](https://app.qase.io/run/PLAINFIN/dashboard/79) is retained. Scroll targets now require the visible
+button text child, while assertions/probes/deadlines are unchanged. The later mock-only tag and documentation/
+shard-duration updates do not change the exercised flow bodies or APK runtime. These are focused LOCAL
+results, not full post-merge UI acceptance. The dedicated emulator was stopped after the tests.
+
+To avoid assigning a median duration to these longer new flows, their successful local durations rounded
+up to349s/361s seed `e2e-durations.json`, explicitly marked LOCAL/provisional. Existing CI samples and the
+2400s timeout remain unchanged; replace these two estimates from successful main CI when available.
+
+`MockConsentScenarios` uses the existing in-process APIs, with independent publication and document replies.
+It limits request evidence and held reads to 128, exposes only counts/version sequences/key cardinality,
+and reports overflow rather than returning a misleading truncated success. No phone, token or raw key is
+included in snapshots or the control UI. The control parser is included only in mockE2e; it validates the
+whole consent command before mutation, preserves omitted settings, and does not retry failed predicates.
+Process recreation/clear-state resets fixtures. These controls do not model real client process death.
+
+Qase54 uses ordinary Phone/Call/Register screens, pd-1/pd-2/pd-3 and a synthetic new number. Offline,
+same-version and held reads retain the old Start prohibition; repeated taps allow one GET in flight.
+A 30-second synthetic GET429/false wait survives Home/return, then explicit restart clears both choices
+and performs a new read without sending the number. The second Start uses pd-2 and a different key.
+The configured 60-second verification delay keeps the accepted call pending while pd-3 is published;
+changing the delay after opening a stream would not shorten that captured wait. Register still sends pd-2
+without a second document read or checkbox. A separate clean Register-refusal branch restarts Phone.
+Exact deadline invariants and lost local evidence remain independent JVM checks.
+
+Qase55 uses ordinary UI sign-in and a draft, with zero synthetic network latency before the assistant GET;
+held responses provide deterministic concurrency independently from elapsed delays. Phase A checks
+outdated PUT, offline and same-version reads, held duplicate taps, new-version tick reset and an explicit
+PUT of version2; the draft and five-question quota remain and no Ask is sent. Phase B is a separate clean
+original-refusal context: GET429/retryable:false remains forbidden after its captured three-second wait.
+The existing four-second config overlay separates observations, but the elapsed predicate checks the
+actual receipt; elapsed time alone never grants retry permission. The stale initial-GET interleaving is
+covered by `AiConsentViewModelTest`, not claimed as an executed step of this UI case.

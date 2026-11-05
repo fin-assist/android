@@ -31,7 +31,7 @@ class MockPhoneConsentTest {
         assertEquals(acceptedAt, receipt.consentAcceptedAt); assertEquals(acceptedAt, receipt.ageConfirmedAt)
         assertNull(receipt.accountId)
         clock.at = clock.at.plusSeconds(5)
-        api.personalDataConsentVersion = "new-version"
+        backend.consents.publish(ConsentType.PERSONAL_DATA, "new-version")
         assertEquals(verification.verificationToken, api.startPhoneVerification(key, body).verificationToken)
         assertEquals(1, api.consentReceipts.size)
         assertEquals(ErrorCodes.IDEMPOTENCY_CONFLICT, assertFailsWith<AppError.Api> {
@@ -53,7 +53,7 @@ class MockPhoneConsentTest {
         assertEquals(1, api.consentReceipts.size)
     }
     @Test fun `new Start after version rotation needs the new document instead of old profile consent`() = runTest {
-        api.personalDataConsentVersion = "new"
+        backend.consents.publish(ConsentType.PERSONAL_DATA, "new")
         assertEquals(ErrorCodes.CONSENT_OUTDATED, assertFailsWith<AppError.Api> { api.startPhoneVerification(IdempotencyKey.random(), body) }.code)
         api.startPhoneVerification(IdempotencyKey.random(), body.copy(pdConsentVersion = "new"))
         assertEquals("new", api.consentReceipts.single().request.pdConsentVersion)

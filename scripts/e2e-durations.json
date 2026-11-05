@@ -1,5 +1,5 @@
 {
-  "_comment": "Seconds per Maestro flow on the CI emulator for scripts/e2e-shards.py. Successful JUnit samples from UI tests run42004117157 (main52aa2b3a), plus successful shard3 console durations before its2400s timeout. Failed/aborted samples are not measurements. Refresh: python3 scripts/e2e-shards.py durations build/e2e/maestro-report.xml; the three unmeasured/failed paths retain successful samples from baseline41986816591 (Qase73=208s, refresh=219s, history_period=67s). Qase73 UI setup changes in FIN-444 are not a new CI measurement.",
+  "_comment": "Seconds per Maestro flow for scripts/e2e-shards.py. Existing entries use CI emulator measurements. Successful JUnit samples from UI tests run42004117157 (main52aa2b3a), plus successful shard3 console durations before its2400s timeout. Failed/aborted samples are not measurements. Refresh: python3 scripts/e2e-shards.py durations build/e2e/maestro-report.xml; the three unmeasured/failed paths retain successful samples from baseline41986816591 (Qase73=208s, refresh=219s, history_period=67s). Qase73 UI setup changes in FIN-444 are not a new CI measurement. FIN-446: the two new consent_document_rotation flows use provisional successful LOCAL API34/Pixel6/Maestro2.11 JUnit measurements (Q54 sourceE80/run78=348.626s rounded349; Q55 source7cbb/run80=360.281s rounded361), not CI measurements. Refresh them from the first successful main UI run; all previous samples and the 2400s shard timeout are unchanged.",
   "flows": {
     ".maestro/flows/analytics/all_time.yaml": 138,
     ".maestro/flows/analytics/block_unavailable.yaml": 42,
@@ -27,6 +27,7 @@
     ".maestro/flows/assistant/answer_retry.yaml": 75,
     ".maestro/flows/assistant/ask_question.yaml": 53,
     ".maestro/flows/assistant/chip_after_statements_deleted.yaml": 65,
+    ".maestro/flows/assistant/consent_document_rotation.yaml": 361,
     ".maestro/flows/assistant/daily_limit.yaml": 94,
     ".maestro/flows/assistant/late_enable.yaml": 78,
     ".maestro/flows/assistant/nothing_found_charged.yaml": 55,
@@ -39,6 +40,7 @@
     ".maestro/flows/assistant/tab_consent_in_profile.yaml": 61,
     ".maestro/flows/auth/call_expired.yaml": 54,
     ".maestro/flows/auth/call_stream_rate_limited.yaml": 85,
+    ".maestro/flows/auth/consent_document_rotation.yaml": 349,
     ".maestro/flows/auth/phone_confirmation_gates.yaml": 65,
     ".maestro/flows/auth/phone_consent_recovery.yaml": 77,
     ".maestro/flows/auth/phone_restart.yaml": 65,

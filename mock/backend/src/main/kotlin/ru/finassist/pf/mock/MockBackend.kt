@@ -62,6 +62,7 @@ class MockBackend(
 ) {
     val scope = CoroutineScope(SupervisorJob() + dispatcher)
     val mutex = Mutex()
+    val consents = MockConsentScenarios(this)
     private val injectedErrors = MutableStateFlow(0)
     /** Cumulative: clearing the scenario does not erase evidence of an accidental resend. */
     val injectedErrorCount: StateFlow<Int> = injectedErrors.asStateFlow()

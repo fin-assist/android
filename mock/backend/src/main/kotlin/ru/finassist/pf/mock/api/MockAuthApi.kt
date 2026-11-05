@@ -44,7 +44,6 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
     )
     /** In-process server-side evidence, separate from profile and verification working state. */
     internal val consentReceipts = mutableListOf<ConsentReceipt>()
-    internal var personalDataConsentVersion: String = MockBackend.CONSENT_VERSION_PD
 
     private class Verification(val receipt: ConsentReceipt, val createdAt: OffsetDateTime, val expiresAt: OffsetDateTime) {
         val phone get() = receipt.request.phone
@@ -64,6 +63,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
     }
 
     override suspend fun startPhoneVerification(key: IdempotencyKey, request: StartPhoneVerificationRequest): PhoneVerification {
+        backend.consents.recordStart(request.pdConsentVersion, key.value)
         val phone = request.phone
         backend.simulateNetwork()
         if (!PHONE.matches(phone)) {
@@ -80,7 +80,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
             if (!request.ageConfirmed) throw backend.apiError(ErrorCodes.VALIDATION_ERROR, 400,
                 details = listOf(AppError.FieldError("age_confirmed", "REQUIRED", "Подтвердите возраст 14+")))
             if (!request.pdConsentAccepted) throw backend.apiError(ErrorCodes.CONSENT_REQUIRED, 403)
-            if (request.pdConsentVersion != personalDataConsentVersion) throw backend.apiError(ErrorCodes.CONSENT_OUTDATED, 422)
+            if (request.pdConsentVersion != backend.consents.publishedVersion(ConsentType.PERSONAL_DATA)) throw backend.apiError(ErrorCodes.CONSENT_OUTDATED, 422)
             backend.maybeInjectError(MockErrorOperation.PHONE_START)
             val now = backend.now()
             val token = secret("vt_")
@@ -156,6 +156,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
     }
 
     override suspend fun register(key: IdempotencyKey, request: RegisterRequest): RegisterResponse {
+        backend.consents.recordRegister(request.pdConsentVersion)
         backend.simulateNetwork()
         return backend.idempotent("auth.register:${key.value}", request = request) {
             backend.mutex.withLock {
@@ -164,6 +165,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
                 if (!backend.now().isBefore(checkNotNull(verification.verifiedAt).plusMinutes(15))) {
                     throw backend.unauthorizedError(ErrorCodes.TOKEN_EXPIRED)
                 }
+                backend.consents.rejectRegisterIfConfigured()
                 if (!request.pdConsentAccepted) throw backend.apiError(ErrorCodes.CONSENT_REQUIRED, 403)
                 if (request.pdConsentVersion != verification.receipt.request.pdConsentVersion) throw backend.apiError(ErrorCodes.CONSENT_OUTDATED, 422)
                 val phone = verification.phone
@@ -194,14 +196,7 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         backend.mutex.withLock { refreshTokens.remove(refreshToken) }
     }
 
-    override suspend fun getConsentDocument(type: ConsentType): ConsentDocument {
-        backend.simulateNetwork()
-        return when (type) {
-            ConsentType.PERSONAL_DATA -> ConsentDocument(type, personalDataConsentVersion, "Согласие на обработку персональных данных", "https://example.ru/legal/pd-consent/$personalDataConsentVersion")
-            ConsentType.ASSISTANT -> ConsentDocument(type, MockBackend.CONSENT_VERSION_ASSISTANT, "Согласие на передачу данных помощнику", "https://example.ru/legal/assistant-consent/${MockBackend.CONSENT_VERSION_ASSISTANT}")
-            ConsentType.UNKNOWN -> throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
-        }
-    }
+    override suspend fun getConsentDocument(type: ConsentType): ConsentDocument = backend.consents.readDocument(type)
 
     private companion object {
         val PHONE = Regex("""^\+7\d{10}$""")
