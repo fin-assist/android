@@ -4,9 +4,13 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.model.ImportNoticeCode
+import ru.finassist.pf.core.api.model.ChangeCategoryRequest
+import ru.finassist.pf.core.api.model.OperationKind
 import ru.finassist.pf.core.api.model.OperationsQuery
 import ru.finassist.pf.core.api.model.PeriodTypeCode
+import ru.finassist.pf.core.api.model.SystemCategories
 import ru.finassist.pf.core.api.model.TransferMode
+import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.mock.api.MockAnalyticsApi
 import ru.finassist.pf.mock.api.MockOperationsApi
 import ru.finassist.pf.mock.api.MockStatementsApi
@@ -16,7 +20,9 @@ import java.io.File
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -31,6 +37,92 @@ class E2eStatementsTest {
     private class FixedClock(private val at: OffsetDateTime) : Clock {
         override fun now() = at
         override val zone: ZoneId = Clock.MOSCOW
+    }
+
+    @Test
+    fun `refund UI fixture separates income from refunds and exposes exact category effects`() = runBlocking {
+        val backend = testBackend(TestClock("2026-10-08T12:00:00+03:00"))
+        val doc = OfxParser.parse(read("refund-categories.ofx"))
+        assertEquals(4, doc.transactions.size)
+        assertTrue(doc.unreadLines.isEmpty())
+        backend.load(doc, "refund-categories.ofx")
+        val operations = MockOperationsApi(backend)
+        val automatic = backend.ledger.all.single { it.fitId == "fin442-refund-auto-400" }
+        val manual = backend.ledger.all.single { it.fitId == "fin442-refund-manual-300" }
+        val automaticDetails = operations.getOperation(automatic.id, automatic.occurredAt.toString())
+        assertEquals(SystemCategories.REFUND, automaticDetails.categoryId)
+        assertEquals("возврат · Маркетплейсы", automaticDetails.note)
+        assertEquals("Уменьшает расходы «Маркетплейсы» в сентябре", automaticDetails.noteDetails)
+        val incoming = operations.getOperation(manual.id, manual.occurredAt.toString())
+        assertEquals("Пополнения", incoming.categoryName)
+        assertNull(incoming.note)
+        val before = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+        assertEquals(90_000L, before.tiles!!.expense.value!!.minor)
+        assertEquals(30_000L, before.tiles!!.income.value!!.minor)
+
+        val response = operations.changeCategory(manual.id, ChangeCategoryRequest(SystemCategories.REFUND, manual.occurredAt.toString()))
+        assertNull(response.replacedId)
+        val changed = response.items.single()
+        assertEquals(manual.id, changed.id)
+        assertTrue(changed.isCategoryManual)
+        assertEquals("возврат · Рестораны", changed.note)
+        assertEquals("Уменьшает расходы «Рестораны» в сентябре", changed.noteDetails)
+        assertEquals(changed, operations.getOperation(changed.id, changed.occurredAt.toString()))
+        val after = backend.analytics.analytics(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)
+        assertEquals(60_000L, after.tiles!!.expense.value!!.minor)
+        assertEquals(0L, after.tiles!!.income.value!!.minor)
+    }
+
+    @Test
+    fun `own-transfer UI fixture gives the expense category to the debit`() = runBlocking {
+        assertSplitFixture(100_000L, "cat_restaurants", OperationKind.EXPENSE)
+    }
+
+    @Test
+    fun `own-transfer UI fixture gives the income category to the credit`() = runBlocking {
+        assertSplitFixture(200_000L, "cat_salary", OperationKind.INCOME)
+    }
+
+    @Test
+    fun `a category for both directions splits the UI fixture onto the debit`() = runBlocking {
+        assertSplitFixture(100_000L, "cat_cash", OperationKind.EXPENSE)
+    }
+
+    private suspend fun assertSplitFixture(amountMinor: Long, categoryId: String, chosenKind: OperationKind) {
+        val backend = testBackend(TestClock("2026-10-08T12:00:00+03:00"))
+        val doc = OfxParser.parse(read("own-transfer-split.ofx"))
+        assertEquals(4, doc.transactions.size)
+        assertEquals(2, doc.accounts.size)
+        assertTrue(doc.unreadLines.isEmpty())
+        backend.load(doc, "own-transfer-split.ofx")
+        val operations = MockOperationsApi(backend)
+        val before = operations.listOperations(OperationsQuery(allTime = true)).items
+        assertEquals(2, before.size)
+        assertTrue(before.all { it.kind == OperationKind.OWN_TRANSFER })
+        val pair = before.single { it.amount.minor == amountMinor }
+        val response = operations.changeCategory(pair.id, ChangeCategoryRequest(categoryId, pair.occurredAt.toString()))
+        assertEquals(pair.id, response.replacedId)
+        assertEquals(setOf(OperationKind.EXPENSE, OperationKind.INCOME), response.items.map { it.kind }.toSet())
+        val chosen = response.items.single { it.kind == chosenKind }
+        val other = response.items.single { it.kind != chosenKind }
+        assertEquals(categoryId, chosen.categoryId)
+        assertTrue(chosen.isCategoryManual)
+        assertEquals("cat_transfers", other.categoryId)
+        assertFalse(other.isCategoryManual)
+        for (item in response.items) {
+            assertEquals(amountMinor, item.amount.minor)
+            assertNull(item.fromAccount)
+            assertNull(item.toAccount)
+            assertEquals(item, operations.getOperation(item.id, item.occurredAt.toString()))
+        }
+        val after = operations.listOperations(OperationsQuery(allTime = true)).items
+        assertEquals(3, after.size)
+        assertFalse(after.any { it.id == pair.id })
+        assertEquals(response.items.map { it.id }.toSet(), after.filter { it.amount.minor == amountMinor }.map { it.id }.toSet())
+        // The exact file is safe to re-import: the user's split must not silently form a pair again.
+        backend.load(doc, "own-transfer-split.ofx")
+        assertEquals(response.items.map { it.id }.toSet(), operations.listOperations(OperationsQuery(allTime = true)).items
+            .filter { it.amount.minor == amountMinor }.map { it.id }.toSet())
     }
 
     @Test

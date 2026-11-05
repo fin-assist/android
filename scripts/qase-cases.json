@@ -85,6 +85,8 @@
     ".maestro/flows/operations/source_time_zone.yaml": 86,
     ".maestro/flows/statements/source_time_zone.yaml": 87,
     ".maestro/flows/analytics/unknown_mutation_recovery.yaml": 89,
-    ".maestro/flows/analytics/regular_post_commit_retry.yaml": 91
+    ".maestro/flows/analytics/regular_post_commit_retry.yaml": 91,
+    ".maestro/flows/operations/refund_category.yaml": 92,
+    ".maestro/flows/operations/own_transfer_split.yaml": 93
   }
 }
