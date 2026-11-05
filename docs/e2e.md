@@ -1471,3 +1471,18 @@ preloading 1969 operations took 35.5 s, beyond the service sign-in's 30 s deadli
 phases now use the existing positive `auth.phone.document` readiness condition (at most 60 s), then
 `login.yaml` through the UI. This completes passcode setup normally; shared helpers, authentication
 deadlines and analytics assertions are unchanged. The failed setup attempt remains separate evidence.
+
+The same CI run exhausted shard 3's 2400 s deadline. Its remaining flows could not finish after emulator
+shutdown, and raw Maestro folders containing `?` then prevented artifact upload. Successful samples from
+that run and three successful samples from baseline41986816591 now cover all 77 flow durations. The
+four-shard model is 1865/1865/1842/1864 s, including the existing native reserve; Qase73 retains its last
+successful CI measurement because its new UI setup has not been measured on CI yet. These estimates
+are scheduling inputs, not a full-run acceptance result.
+
+The coordinator now starts the existing shard runner in its own process group. On the unchanged 2400 s
+deadline or termination, it sends TERM, allows at most 10 s for report flushing, then kills the entire
+remaining group, even if the shell exited first. Only after writers stop does it finish the existing
+`maestro-output.tgz` archive and remove the raw per-flow directory. A timeout or nonzero verdict stays
+failed. Regression checks use real subprocesses, a TERM-resistant descendant and unsafe-name evidence;
+they also check external termination and preservation of an already packed archive. Workflow triggers,
+permissions, cache identities, artifact scope and application runtime are unchanged.
