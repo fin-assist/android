@@ -112,7 +112,11 @@ tags:
       id: "assistant.answer.failed"
     timeout: 15000
 - assertVisible: ".*[Оо]сталось 5 из 5.*"
+# FIN-450 owner decision: the refused draft lives until this nested chat is closed.
+# History survives re-entry; the previous editable draft is not restored after a full Back.
 - assertVisible:
+    id: "ds.chat.input"
+- assertNotVisible:
     id: "ds.chat.input"
     text: "Krabsbir"
 # Re-opened history must retain the earlier error as well as the newest one visible above.

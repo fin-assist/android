@@ -2951,12 +2951,12 @@
                 },
                 {
                   "path": ".maestro/flows/assistant/off_topic_limit.yaml",
-                  "line": 121,
+                  "line": 125,
                   "detail": "Scroll back to the original question, proving earlier history remains."
                 },
                 {
                   "path": ".maestro/flows/assistant/off_topic_limit.yaml",
-                  "line": 132,
+                  "line": 136,
                   "detail": "Five current OFF_TOPIC questions/answers survive; refused sixth creates no new history."
                 },
                 {
@@ -2986,79 +2986,54 @@
               "note": ""
             },
             {
-              "requirement": "Исходный черновик Krabsbir сохранён после настоящего Back и нового входа (широкое постусловие)",
+              "requirement": "Прежний черновик Krabsbir не восстановлен после полного Back и повторного открытия",
               "evidence": [
                 {
                   "path": ".maestro/flows/assistant/off_topic_limit.yaml",
                   "line": 117,
-                  "detail": "Authored exact input assertion remains; static navigation analysis predicts failure, so its presence is not successful coverage."
+                  "detail": "The actual editable input is present after full Back/re-entry."
                 },
                 {
-                  "path": "feature/assistant/impl/src/main/kotlin/ru/finassist/pf/feature/assistant/impl/di/AssistantModule.kt",
-                  "line": 35,
-                  "detail": "Nested Chat Back delegates to navigator.back; the flow actually leaves this entry."
-                },
-                {
-                  "path": "core/navigation/src/main/kotlin/ru/finassist/pf/core/navigation/Navigation.kt",
-                  "line": 44,
-                  "detail": "Normal Back pops rather than saves the nested back-stack entry."
-                },
-                {
-                  "path": "feature/assistant/impl/src/main/kotlin/ru/finassist/pf/feature/assistant/impl/ui/ChatScreen.kt",
-                  "line": 85,
-                  "detail": "Default Chat VM is scoped to the current navigation entry."
-                },
-                {
-                  "path": "feature/assistant/impl/src/main/kotlin/ru/finassist/pf/feature/assistant/impl/ui/ChatViewModel.kt",
-                  "line": 140,
-                  "detail": "A new VM starts with a new empty draft state; no session/parent draft store restores a popped nested chat."
+                  "path": ".maestro/flows/assistant/off_topic_limit.yaml",
+                  "line": 119,
+                  "detail": "The previous Krabsbir draft is absent specifically from the editable input; history matches cannot satisfy this check."
                 }
               ],
-              "status": "gap",
-              "note": "Actual Back destroys the entry-scoped draft VM; reentry creates an empty draft. The new assertion has not been executed. Live canonical review: [FIN-223](https://finassist.youtrack.cloud/issue/FIN-223) requires question text/history retained when Ask/Retry is refused; [FIN-375](https://finassist.youtrack.cloud/issue/FIN-375) confirms Krabsbir/5-of-5 at that refusal, with no nested reentry lifetime promise; [FIN-397](https://finassist.youtrack.cloud/issue/FIN-397) explicitly retains draft during saved bottom-tab switches. Confluence [Состав MVP](https://finassist.atlassian.net/wiki/spaces/PF/pages/5242881/MVP), live v10, requires server history and preservation on voice cancellation/error; [Решения ревью «Основные экраны»](https://finassist.atlassian.net/wiki/spaces/PF/pages/11370516), live v3, defines normal Back navigation but no popped nested-chat draft lifetime. These sources do not settle the broad final Q49 postcondition. Owner question is pending: persist after nested Back/reentry versus retain only at refusal. No production change or Qase narrowing is authorized yet."
+              "status": "fixed",
+              "note": "Owner decision 06.11.2026, recorded in Confluence11370516 v4 and existing Qase49. The broader original postcondition is superseded explicitly, not silently narrowed to match code. Actual history/quota checks remain; UI execution is pending."
             }
           ]
         }
       ],
       "postconditions": [
         {
-          "requirement": "Черновик сохранён в финальном состоянии после выхода и нового входа",
+          "requirement": "При отказе текст сохранён до закрытия чата; после полного Back прежний черновик не восстановлен",
           "evidence": [
             {
               "path": ".maestro/flows/assistant/off_topic_limit.yaml",
+              "line": 93,
+              "detail": "Input-scoped Krabsbir remains after the weekly refusal."
+            },
+            {
+              "path": ".maestro/flows/assistant/off_topic_limit.yaml",
               "line": 117,
-              "detail": "Authored post-reentry assertion is retained pending owner decision; it is not marked fixed."
+              "detail": "The actual editable input is present after full Back/re-entry."
             },
             {
-              "path": "feature/assistant/impl/src/main/kotlin/ru/finassist/pf/feature/assistant/impl/di/AssistantModule.kt",
-              "line": 35,
-              "detail": "Nested Chat Back delegates to navigator.back; the flow actually leaves this entry."
-            },
-            {
-              "path": "core/navigation/src/main/kotlin/ru/finassist/pf/core/navigation/Navigation.kt",
-              "line": 44,
-              "detail": "Normal Back pops rather than saves the nested back-stack entry."
-            },
-            {
-              "path": "feature/assistant/impl/src/main/kotlin/ru/finassist/pf/feature/assistant/impl/ui/ChatScreen.kt",
-              "line": 85,
-              "detail": "Default Chat VM is scoped to the current navigation entry."
-            },
-            {
-              "path": "feature/assistant/impl/src/main/kotlin/ru/finassist/pf/feature/assistant/impl/ui/ChatViewModel.kt",
-              "line": 140,
-              "detail": "A new VM starts with a new empty draft state; no session/parent draft store restores a popped nested chat."
+              "path": ".maestro/flows/assistant/off_topic_limit.yaml",
+              "line": 119,
+              "detail": "The previous Krabsbir draft is absent specifically from the editable input; history matches cannot satisfy this check."
             }
           ],
-          "status": "gap",
-          "note": "Static implementation mismatch with the broad final postcondition; preservation at the weekly refusal itself is separately covered in step3. Live canonical review: [FIN-223](https://finassist.youtrack.cloud/issue/FIN-223) requires question text/history retained when Ask/Retry is refused; [FIN-375](https://finassist.youtrack.cloud/issue/FIN-375) confirms Krabsbir/5-of-5 at that refusal, with no nested reentry lifetime promise; [FIN-397](https://finassist.youtrack.cloud/issue/FIN-397) explicitly retains draft during saved bottom-tab switches. Confluence [Состав MVP](https://finassist.atlassian.net/wiki/spaces/PF/pages/5242881/MVP), live v10, requires server history and preservation on voice cancellation/error; [Решения ревью «Основные экраны»](https://finassist.atlassian.net/wiki/spaces/PF/pages/11370516), live v3, defines normal Back navigation but no popped nested-chat draft lifetime. These sources do not settle the broad final Q49 postcondition. Owner question is pending: persist after nested Back/reentry versus retain only at refusal. No production change or Qase narrowing is authorized yet."
+          "status": "fixed",
+          "note": "Latest owner decision defines the draft lifetime. Frozen source retains the original wording; effective_source and publication.json show the authorized clarification."
         },
         {
           "requirement": "История сохранена после выхода и нового входа",
           "evidence": [
             {
               "path": ".maestro/flows/assistant/off_topic_limit.yaml",
-              "line": 132,
+              "line": 136,
               "detail": "Current questions/answers5, all terminal OFF_TOPIC."
             },
             {
@@ -3068,12 +3043,12 @@
             },
             {
               "path": "app/src/mockE2e/kotlin/ru/finassist/pf/e2e/E2eRequestControl.kt",
-              "line": 33,
+              "line": 32,
               "detail": "An unequal exact count fails the config overlay; it is not a fixture assignment."
             }
           ],
           "status": "fixed",
-          "note": "Actual current history counts plus reopened earlier/current error UI observations; independent of the unresolved draft lifetime."
+          "note": "Actual current history counts plus reopened earlier/current error UI observations; independent of clearing the closed chat draft."
         },
         {
           "requirement": "Дневной остаток не изменён недельным отказом",
@@ -3104,22 +3079,59 @@
           "id": "Q49-D2",
           "requirement": "Черновик/история после нового входа",
           "before": "Global Krabsbir could match history, Back could merely hide keyboard; original earlier error unobserved.",
-          "fix": "Input-scoped refusal draft, real navigation and earlier/current history checks are authored; retaining the draft after popped nested reentry is unresolved.",
-          "status": "gap",
+          "fix": "Keep the refusal-time draft assertion; after full Back require the input present without the previous draft, while earlier/current history and quota remain verified.",
+          "status": "fixed",
           "files": [
             ".maestro/flows/assistant/off_topic_limit.yaml"
           ],
-          "notes": "The former fixed claim was incorrect: normal Back removes the VM carrying the draft. The authored reopened-draft assertion remains unchanged and is expected to expose this mismatch. Live canonical review: [FIN-223](https://finassist.youtrack.cloud/issue/FIN-223) requires question text/history retained when Ask/Retry is refused; [FIN-375](https://finassist.youtrack.cloud/issue/FIN-375) confirms Krabsbir/5-of-5 at that refusal, with no nested reentry lifetime promise; [FIN-397](https://finassist.youtrack.cloud/issue/FIN-397) explicitly retains draft during saved bottom-tab switches. Confluence [Состав MVP](https://finassist.atlassian.net/wiki/spaces/PF/pages/5242881/MVP), live v10, requires server history and preservation on voice cancellation/error; [Решения ревью «Основные экраны»](https://finassist.atlassian.net/wiki/spaces/PF/pages/11370516), live v3, defines normal Back navigation but no popped nested-chat draft lifetime. These sources do not settle the broad final Q49 postcondition. Owner question is pending: persist after nested Back/reentry versus retain only at refusal. No production change or Qase narrowing is authorized yet."
+          "notes": "Owner resolved the scope on 06.11.2026: do not retain after full nested Back/re-entry for now. Canonical decision is in Confluence 11370516 v4 and Qase49. No production storage/lifecycle change; UI execution remains pending."
         }
       ],
       "limitations": [
         "Static per-clause audit, not a proof over unlisted scenarios. Baseline Qase85 execution belongs to967f4559, not these modified flows.",
         "MockE2e in-process backend and closed control links are the declared environment. Config probes pause/resume Activity; inserted only where this boundary preserves intended UI state.",
-        "Q49 reopened draft/final draft postcondition is an explicit unresolved gap pending the owner lifetime decision. The flow retains its authored assertion; runtime success is not claimed. Live canonical review: [FIN-223](https://finassist.youtrack.cloud/issue/FIN-223) requires question text/history retained when Ask/Retry is refused; [FIN-375](https://finassist.youtrack.cloud/issue/FIN-375) confirms Krabsbir/5-of-5 at that refusal, with no nested reentry lifetime promise; [FIN-397](https://finassist.youtrack.cloud/issue/FIN-397) explicitly retains draft during saved bottom-tab switches. Confluence [Состав MVP](https://finassist.atlassian.net/wiki/spaces/PF/pages/5242881/MVP), live v10, requires server history and preservation on voice cancellation/error; [Решения ревью «Основные экраны»](https://finassist.atlassian.net/wiki/spaces/PF/pages/11370516), live v3, defines normal Back navigation but no popped nested-chat draft lifetime. These sources do not settle the broad final Q49 postcondition. Owner question is pending: persist after nested Back/reentry versus retain only at refusal. No production change or Qase narrowing is authorized yet."
+        "The 06.11.2026 decision concerns full nested Chat Back/re-entry; saved bottom-tab state and consent round trips keep their existing guarantees. New assertions are authored, not device-accepted."
       ],
       "verification": {
-        "static_review": "Per-clause review found a real Back/reentry draft-lifetime mismatch. History/quota and refusal-time draft checks are separately evidenced; reopened/final draft remains gap pending owner decision. Original Qase source text and flow assertions are unchanged.",
+        "static_review": "All source clauses accounted for; the ambiguous postcondition was resolved by the owner and explicitly corrected in Qase, with frozen/effective source and publication history. Draft retention on refusal and history/quota after re-entry remain independent assertions; production behavior unchanged.",
         "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+      },
+      "effective_source": {
+        "preconditions": "Сборка mockE2e; очищенное состояние, быстрый вход, чат помощника из аналитики.",
+        "postconditions": "При отказе недельного лимита черновик сохраняется до закрытия чата. После полного выхода кнопкой «Назад» и повторного открытия прежний черновик не восстанавливается. История ошибок сохранена; дневной остаток не был изменён отказом недельного лимита.",
+        "steps": [
+          {
+            "position": 1,
+            "action": "Задать вопрос о погоде, выдать согласие помощнику.; после принятия согласия отдельно нажать отправку сохранённого черновика",
+            "expected_result": "OFF_TOPIC, нет кнопки новой генерации; дневной остаток 5/5.",
+            "data": null
+          },
+          {
+            "position": 2,
+            "action": "Повторить ещё четыре новых вопроса о погоде, каждый раз дожидаясь завершения.",
+            "expected_result": "Каждый результат OFF_TOPIC; дневной остаток не списан.",
+            "data": null
+          },
+          {
+            "position": 3,
+            "action": "Отправить финансовый вопрос Krabsbir.",
+            "expected_result": "Отказ «Слишком много запросов. Попробуйте позже»; текст черновика сохранён, дневной остаток 5/5, неудачные результаты видны в истории, кнопки повтора нет.",
+            "data": null
+          },
+          {
+            "position": 4,
+            "action": "Выйти из чата и открыть снова.",
+            "expected_result": "История ошибок сохранена; дневной остаток 5/5. Прежний черновик Krabsbir после полного выхода и повторного открытия чата не восстановлен.",
+            "data": null
+          }
+        ]
+      },
+      "owner_decision": {
+        "date": "2026-11-06",
+        "decision": "Пока не сохранять неотправленный вопрос после полного Back и повторного открытия вложенного чата. При отказе до выхода текст остаётся.",
+        "source": "https://finassist.atlassian.net/wiki/spaces/PF/pages/11370516",
+        "version": 4,
+        "issue": "FIN-450"
       }
     },
     {
