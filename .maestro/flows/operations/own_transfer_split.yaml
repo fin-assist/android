@@ -6,14 +6,15 @@ tags:
 ---
 - runFlow: ../../subflows/clear_state.yaml
 # A successful document read proves the seeded mock backend is ready. Fixture loading must not
-# consume fast_login's separate phone-verification budget (46 s was observed on a cold local AVD).
+# consume the UI consent-loading budget (46 s was observed on a cold local AVD).
 - launchApp:
     stopApp: false
 - extendedWaitUntil:
     visible:
       id: "auth.phone.document"
     timeout: 60000
-- runFlow: ../../subflows/fast_login.yaml
+# Use the normal UI setup: launching before the service sign-in can retain PfApp's setup layer.
+- runFlow: ../../subflows/login.yaml
 # Replace the seeded year with two known pairs; each amount identifies one pair, then exactly two sides.
 - tapOn:
     id: "ds.tab.profile"

@@ -1434,9 +1434,11 @@ reported as executed UI steps. Execution status, source and environment evidence
 and the linked Qase runs. Local execution follows the owner-permission rule above. Qase8 and Qase38
 retain their existing scope and result history.
 
-The local FIN-442 execution exposed a setup boundary: loading the bundled 1969-operation ledger took
-46 s on a cold AVD, while the existing fast sign-in budgets 30 s for authentication. The two new flows
-first launch the app and wait at most 60 s for `auth.phone.document`, rendered only after a successful
-backend document read. That proves the seeded backend is ready before the unchanged fast sign-in runs
-in the same process. This is an observable startup prerequisite, not a sleep or an authentication retry;
-existing login and financial assertion timeouts, shared helpers and runtime code are unchanged.
+The local FIN-442 execution exposed two setup boundaries. Loading the bundled 1969-operation ledger
+can exceed the sign-in helper's 30 s budget (46.242 s observed). These two flows first launch the app
+and wait at most 60 s for `auth.phone.document`, rendered only after a successful backend document
+read. With the app already open, service sign-in can leave `PfApp`'s first-run setup layer visible even
+after the hook saves the passcode. Both flows therefore use the existing `login.yaml` UI path, including
+passcode setup and its completion callback. Shared helpers, authentication deadlines and financial
+assertions are unchanged. Preserved local attempt reports and final execution evidence are linked in
+[PR #273](https://github.com/fin-assist/android/pull/273).
