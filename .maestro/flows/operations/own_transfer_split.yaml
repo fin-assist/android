@@ -1,0 +1,412 @@
+appId: ru.finassist.pf.mock.e2e
+name: Смена категории разделяет пару собственных переводов на две операции
+tags:
+  - operations
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+# Replace the seeded year with two known pairs; each amount identifies one pair, then exactly two sides.
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.row"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.delete"
+    index: 0
+- tapOn:
+    id: "ds.dialog.confirm"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history.empty"
+    timeout: 10000
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- scrollUntilVisible:
+    element:
+      id: "e2e.picker.own-transfer-split.ofx"
+- tapOn:
+    id: "e2e.picker.own-transfer-split.ofx"
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- assertNotVisible:
+    id: "statements.result.unread"
+- scrollUntilVisible:
+    element:
+      id: "statements.result.done"
+- tapOn:
+    id: "statements.result.done"
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- tapOn:
+    id: "operations.feed.search"
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.initial"
+    timeout: 10000
+
+# 1000 RUB: an expense category goes to the debit.
+- tapOn:
+    id: "operations.search.input"
+- inputText: "1000"
+- hideKeyboard
+- extendedWaitUntil:
+    visible: "Найдена 1 операция"
+    timeout: 10000
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Перевод между счетами"
+      - text: '1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- tapOn:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Перевод между счетами"
+      - text: '1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- extendedWaitUntil:
+    visible:
+      text: "Перевод между счетами"
+      childOf:
+        id: "operations.detail.title"
+    timeout: 10000
+- assertVisible: "Перевод"
+- assertVisible: '1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertVisible: '10\.09\.2026, 10:00'
+- scrollUntilVisible:
+    element: "Счёт списания"
+- assertVisible: "Счёт списания"
+- assertVisible: "Текущий ··1111"
+- scrollUntilVisible:
+    element: "Счёт зачисления"
+- assertVisible: "Счёт зачисления"
+- assertVisible: "Накопительный ··2222"
+- scrollUntilVisible:
+    element:
+      id: "operations.detail.category"
+      containsDescendants:
+        - text: "Между своими счетами"
+    direction: UP
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: "Между своими счетами"
+- tapOn:
+    id: "operations.detail.category"
+- extendedWaitUntil:
+    visible:
+      id: "operations.category.search"
+    timeout: 5000
+- assertVisible: "Если это не перевод себе, разделим его на списание и зачисление: выбранная категория — подходящей стороне, другой — категория банка"
+- scrollUntilVisible:
+    element:
+      id: "operations.category.option"
+      containsDescendants:
+        - text: "Рестораны"
+- tapOn:
+    id: "operations.category.option"
+    containsDescendants:
+      - text: "Рестораны"
+- assertVisible:
+    id: "operations.detail.save"
+    enabled: true
+- tapOn:
+    id: "operations.detail.save"
+- extendedWaitUntil:
+    visible: "Перевод разделили на две операции"
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible:
+      id: "operations.category.search"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "Себе в другой банк"
+      childOf:
+        id: "operations.detail.title"
+    timeout: 10000
+- assertVisible: "Списание"
+- assertVisible: '−1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertVisible: '10\.09\.2026, 10:00'
+- scrollUntilVisible:
+    element:
+      id: "operations.detail.category"
+      containsDescendants:
+        - text: "Рестораны"
+    direction: UP
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: "Рестораны"
+      - text: "Вы выбрали сами"
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible: "Найдено 2 операции"
+    timeout: 10000
+# Two positive row oracles plus the exact count rule out retaining the old pair alongside a new side.
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Себе в другой банк"
+      - text: '−1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Себе из другого банка"
+      - text: '\+1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertNotVisible: "Перевод между счетами"
+# Reopen this exact side: it keeps its own timestamp and the category assigned by its direction.
+- tapOn:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Себе в другой банк"
+      - text: '−1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- extendedWaitUntil:
+    visible:
+      text: "Себе в другой банк"
+      childOf:
+        id: "operations.detail.title"
+    timeout: 10000
+- assertVisible: "Списание"
+- assertVisible: '−1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertVisible: '10\.09\.2026, 10:00'
+- scrollUntilVisible:
+    element:
+      id: "operations.detail.category"
+      containsDescendants:
+        - text: "Рестораны"
+    direction: UP
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: "Рестораны"
+      - text: "Вы выбрали сами"
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible: "Найдено 2 операции"
+    timeout: 10000
+# Reopen this exact side: it keeps its own timestamp and the category assigned by its direction.
+- tapOn:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Себе из другого банка"
+      - text: '\+1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- extendedWaitUntil:
+    visible:
+      text: "Себе из другого банка"
+      childOf:
+        id: "operations.detail.title"
+    timeout: 10000
+- assertVisible: "Зачисление"
+- assertVisible: '\+1[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertVisible: '11\.09\.2026, 11:00'
+- scrollUntilVisible:
+    element:
+      id: "operations.detail.category"
+      containsDescendants:
+        - text: "Переводы"
+    direction: UP
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: "Переводы"
+- assertNotVisible: "Вы выбрали сами"
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible: "Найдено 2 операции"
+    timeout: 10000
+- assertNotVisible: "Перевод между счетами"
+
+# 2000 RUB: an income-only category goes to the credit.
+- tapOn:
+    id: "operations.search.input"
+- eraseText
+- inputText: "2000"
+- hideKeyboard
+- extendedWaitUntil:
+    visible: "Найдена 1 операция"
+    timeout: 10000
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Перевод между счетами"
+      - text: '2[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- tapOn:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Перевод между счетами"
+      - text: '2[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- extendedWaitUntil:
+    visible:
+      text: "Перевод между счетами"
+      childOf:
+        id: "operations.detail.title"
+    timeout: 10000
+- assertVisible: "Перевод"
+- assertVisible: '2[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertVisible: '20\.09\.2026, 12:00'
+- scrollUntilVisible:
+    element: "Счёт списания"
+- assertVisible: "Счёт списания"
+- assertVisible: "Текущий ··1111"
+- scrollUntilVisible:
+    element: "Счёт зачисления"
+- assertVisible: "Счёт зачисления"
+- assertVisible: "Накопительный ··2222"
+- scrollUntilVisible:
+    element:
+      id: "operations.detail.category"
+      containsDescendants:
+        - text: "Между своими счетами"
+    direction: UP
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: "Между своими счетами"
+- tapOn:
+    id: "operations.detail.category"
+- extendedWaitUntil:
+    visible:
+      id: "operations.category.search"
+    timeout: 5000
+- assertVisible: "Если это не перевод себе, разделим его на списание и зачисление: выбранная категория — подходящей стороне, другой — категория банка"
+- scrollUntilVisible:
+    element:
+      id: "operations.category.option"
+      containsDescendants:
+        - text: "Зарплата"
+- tapOn:
+    id: "operations.category.option"
+    containsDescendants:
+      - text: "Зарплата"
+- assertVisible:
+    id: "operations.detail.save"
+    enabled: true
+- tapOn:
+    id: "operations.detail.save"
+- extendedWaitUntil:
+    visible: "Перевод разделили на две операции"
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible:
+      id: "operations.category.search"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: "Себе из другого банка"
+      childOf:
+        id: "operations.detail.title"
+    timeout: 10000
+- assertVisible: "Зачисление"
+- assertVisible: '\+2[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertVisible: '21\.09\.2026, 13:00'
+- scrollUntilVisible:
+    element:
+      id: "operations.detail.category"
+      containsDescendants:
+        - text: "Зарплата"
+    direction: UP
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: "Зарплата"
+      - text: "Вы выбрали сами"
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible: "Найдено 2 операции"
+    timeout: 10000
+# Two positive row oracles plus the exact count rule out retaining the old pair alongside a new side.
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Себе в другой банк"
+      - text: '−2[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Себе из другого банка"
+      - text: '\+2[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertNotVisible: "Перевод между счетами"
+# Reopen this exact side: it keeps its own timestamp and the category assigned by its direction.
+- tapOn:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Себе в другой банк"
+      - text: '−2[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- extendedWaitUntil:
+    visible:
+      text: "Себе в другой банк"
+      childOf:
+        id: "operations.detail.title"
+    timeout: 10000
+- assertVisible: "Списание"
+- assertVisible: '−2[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertVisible: '20\.09\.2026, 12:00'
+- scrollUntilVisible:
+    element:
+      id: "operations.detail.category"
+      containsDescendants:
+        - text: "Переводы"
+    direction: UP
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: "Переводы"
+- assertNotVisible: "Вы выбрали сами"
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible: "Найдено 2 операции"
+    timeout: 10000
+# Reopen this exact side: it keeps its own timestamp and the category assigned by its direction.
+- tapOn:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Себе из другого банка"
+      - text: '\+2[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- extendedWaitUntil:
+    visible:
+      text: "Себе из другого банка"
+      childOf:
+        id: "operations.detail.title"
+    timeout: 10000
+- assertVisible: "Зачисление"
+- assertVisible: '\+2[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertVisible: '21\.09\.2026, 13:00'
+- scrollUntilVisible:
+    element:
+      id: "operations.detail.category"
+      containsDescendants:
+        - text: "Зарплата"
+    direction: UP
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: "Зарплата"
+      - text: "Вы выбрали сами"
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible: "Найдено 2 операции"
+    timeout: 10000
+- assertNotVisible: "Перевод между счетами"
