@@ -2,6 +2,10 @@ import importlib.util
 import json
 import os
 import re
+import signal
+import sys
+import tarfile
+import time
 from pathlib import Path
 import subprocess
 import tempfile
@@ -184,7 +188,7 @@ class CleanAvdCacheTest(unittest.TestCase):
         with patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'assert_clean'), \
              patch.object(cache, 'cache_key', return_value='key'), patch.object(cache, 'assert_snapshot_loaded'), \
              patch.object(cache, 'boot_id'), patch.object(cache, 'META', self.root / 'meta.json'), \
-             patch.object(cache.subprocess, 'run', return_value=subprocess.CompletedProcess([], 17)), \
+             patch.object(cache, 'run_tests', return_value=17), \
              patch('sys.argv', ['e2e-cache.py', 'test', '--shard', '2/4']):
             (self.root / 'meta.json').write_text('{}')
             cache.write({'key': 'key', 'marks': {}})
@@ -199,7 +203,7 @@ class CleanAvdCacheTest(unittest.TestCase):
     def test_direct_cold_path_keeps_real_failure_red_without_snapshot_validation(self):
         with patch.object(cache, 'STATE', self.root / 'direct-state.json'), patch.object(cache, 'assert_clean'), \
              patch.object(cache, 'cache_key') as key, patch.object(cache, 'assert_snapshot_loaded') as loaded, \
-             patch.object(cache.subprocess, 'run', return_value=subprocess.CompletedProcess([], 19)), \
+             patch.object(cache, 'run_tests', return_value=19), \
              patch('sys.argv', ['e2e-cache.py', 'test', '--direct-cold', '--shard', '1/4']):
             cache.write({'marks': {}})
             with self.assertRaises(SystemExit) as result:
@@ -361,6 +365,119 @@ class CleanAvdCacheTest(unittest.TestCase):
             (image / 'source.properties').unlink()
             with self.assertRaises(FileNotFoundError):
                 cache.fingerprint()
+
+
+class ShardProcessTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.old_cwd = Path.cwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, self.old_cwd)
+        (self.root / 'scripts').mkdir()
+
+    def script(self, body):
+        path = self.root / 'scripts/e2e.sh'
+        path.write_text('#!' + sys.executable + '\n' + body)
+        path.chmod(0o755)
+
+    def test_timeout_stops_term_resistant_descendant_before_archiving_unsafe_paths(self):
+        child = """import os, signal, time
+from pathlib import Path
+folder = Path('build/e2e/maestro/forgot?')
+def terminated(_signal, _frame):
+    (folder / 'term?.json').write_text('termination evidence')
+signal.signal(signal.SIGTERM, terminated)
+Path('child.ready').write_text(str(os.getpid()))
+while True:
+    (folder / 'commands.json').write_text(str(time.monotonic()))
+    time.sleep(0.02)
+"""
+        self.script("""import os, subprocess, sys, time
+from pathlib import Path
+folder = Path('build/e2e/maestro/forgot?')
+folder.mkdir(parents=True)
+(folder / 'commands.json').write_text('partial')
+Path('parent.pid').write_text(str(os.getpid()))
+subprocess.Popen([sys.executable, '-c', %r])
+while True: time.sleep(0.02)
+""" % child)
+        started = time.monotonic()
+        try:
+            with self.assertRaises(subprocess.TimeoutExpired):
+                cache.run_tests('3/4', timeout=1, grace=0.2)
+            self.assertLess(time.monotonic() - started, 4)
+            self.assertFalse(Path('build/e2e/maestro').exists())
+            with tarfile.open('build/e2e/maestro-output.tgz') as stream:
+                self.assertIn('maestro/forgot?/commands.json', stream.getnames())
+                self.assertEqual(b'termination evidence', stream.extractfile('maestro/forgot?/term?.json').read())
+            for name in ('parent.pid', 'child.ready'):
+                pid = int(Path(name).read_text())
+                status = subprocess.run(['ps', '-p', str(pid), '-o', 'stat='], capture_output=True, text=True, timeout=2)
+                self.assertTrue(not status.stdout.strip() or status.stdout.strip().startswith('Z'), status.stdout)
+        finally:
+            # A failing regression must not leave the old implementation's child behind.
+            for name in ('parent.pid', 'child.ready'):
+                if Path(name).exists():
+                    try:
+                        os.kill(int(Path(name).read_text()), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+
+    def test_failed_shard_keeps_exit_status_and_archives_remaining_evidence(self):
+        self.script("""from pathlib import Path
+p = Path('build/e2e/maestro/name?/commands.json')
+p.parent.mkdir(parents=True)
+p.write_text('failed command')
+raise SystemExit(17)
+""")
+        self.assertEqual(17, cache.run_tests('2/4', timeout=2))
+        self.assertFalse(Path('build/e2e/maestro').exists())
+        with tarfile.open('build/e2e/maestro-output.tgz') as stream:
+            self.assertEqual(b'failed command', stream.extractfile('maestro/name?/commands.json').read())
+
+    def test_sigterm_of_coordinator_stops_shard_and_archives_evidence(self):
+        self.script("""import os, signal, time
+from pathlib import Path
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+p = Path('build/e2e/maestro/name?/commands.json')
+p.parent.mkdir(parents=True)
+p.write_text('interrupted command')
+Path('parent.pid').write_text(str(os.getpid()))
+while True: time.sleep(0.02)
+""")
+        module = Path(cache.__file__).resolve()
+        code = ("import importlib.util; s=importlib.util.spec_from_file_location('cache', " + repr(str(module)) +
+                "); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); m.run_tests('3/4', timeout=30, grace=0.2)")
+        process = subprocess.Popen([sys.executable, '-c', code], start_new_session=True)
+        try:
+            deadline = time.monotonic() + 3
+            while not Path('parent.pid').exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue(Path('parent.pid').exists())
+            os.kill(process.pid, signal.SIGTERM)
+            self.assertEqual(143, process.wait(timeout=3))
+            self.assertFalse(Path('build/e2e/maestro').exists())
+            with tarfile.open('build/e2e/maestro-output.tgz') as stream:
+                self.assertEqual(b'interrupted command', stream.extractfile('maestro/name?/commands.json').read())
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+            if Path('parent.pid').exists():
+                try:
+                    os.kill(int(Path('parent.pid').read_text()), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    def test_no_raw_output_keeps_existing_archive(self):
+        p = Path('build/e2e/maestro-output.tgz')
+        p.parent.mkdir(parents=True)
+        p.write_bytes(b'archive already created by e2e.sh')
+        self.script('raise SystemExit(0)\n')
+        self.assertEqual(0, cache.run_tests('1/4', timeout=2))
+        self.assertEqual(b'archive already created by e2e.sh', p.read_bytes())
 
 
 class DisposableCiAdbKeyTest(unittest.TestCase):

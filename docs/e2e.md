@@ -673,7 +673,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `operations/refund_category` (mock-only) | automatic refund card and explicit refund category for an ordinary credit; synthetic September expense/income 900/+300 RUB → 600/0 RUB, target explanation and retained row/details after reopening (Qase92, FIN-442); execution evidence in PR #273 |
 | `operations/own_transfer_split` (mock-only) | two known own-transfer pairs: expense category goes to debit, income category to credit; split notice, exact search count 1→2, signed rows, each side's own timestamp/category after reopening (Qase93, FIN-442); execution evidence in PR #273 |
 | `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast and opens the history explanation in its help sheet; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month through its option container and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; follow-up not executed (previous run failed) |
-| `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month (Qase73, FIN-391); updated for FIN-427 after failed run 41819133288; follow-up not executed |
+| `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month; deferred Year response after a refused in-flight dismissal scrolls to the selected year text itself (Qase73, FIN-391/444); execution evidence in FIN-444 |
 | `analytics/period_controls` (common) | Month/All-time hide rolling choices; Quarter/Year expose only their right-aligned choice; tapping the selected calendar segment exits its rolling period; All-time removes the whole period row across tab navigation (Qase80, FIN-416); authored, not executed |
 | `analytics/rolling_periods` (mock-only) | rolling year/quarter anchored to statement coverage, exact ranges, no forecast, failed singleton switch and explicit exact retry, transfer-mode preservation, clipped edge point → full calendar month, independent remembered calendar selection; Qase76 (FIN-411); authored, not executed |
 | `analytics/chart_month_selection` (mock-only) | whole-column selection including zero expenses, exact month/year, selected state and retained transfer mode/scroll; failed switch and explicit retry (Qase74, FIN-398); authored, not executed |
@@ -1455,3 +1455,34 @@ Qase93 navigates the long unfiltered directory in two observable steps: scroll t
 then to Salary inside that section, each with Maestro's existing 20 s default. A single scroll across
 the whole directory exhausted that navigation budget on the local Pixel6. No financial assertion is
 removed, and the ordinary path still traverses the expense categories where FIN-443 reproduced.
+
+### FIN-444: post-merge UI evidence and selected-year visibility
+
+The main `52aa2b3` run [42004117157](https://github.com/fin-assist/android/actions/runs/42004117157)
+passed the new refund and own-transfer split flows. Qase73 stopped at its final year assertion: only a
+20 px fragment of `ds.period.pick` was visible, so scrolling to the container did not reveal its title.
+The flow now scrolls to the exact `2026` text inside the picker before the existing assertion. The
+failed-period retry, deferred selection, independent command error and exact single-request check
+are preserved, with their existing deadlines. Qase run72 retains the original incomplete/failing CI
+result; focused local verification is recorded separately in FIN-444.
+
+The focused local Qase73 attempt also reproduced the cold-start setup boundary documented for FIN-442:
+preloading 1969 operations took 35.5 s, beyond the service sign-in's 30 s deadline. Both clean-start
+phases now use the existing positive `auth.phone.document` readiness condition (at most 60 s), then
+`login.yaml` through the UI. This completes passcode setup normally; shared helpers, authentication
+deadlines and analytics assertions are unchanged. The failed setup attempt remains separate evidence.
+
+The same CI run exhausted shard 3's 2400 s deadline. Its remaining flows could not finish after emulator
+shutdown, and raw Maestro folders containing `?` then prevented artifact upload. Successful samples from
+that run and three successful samples from baseline41986816591 now cover all 77 flow durations. The
+four-shard model is 1865/1865/1842/1864 s, including the existing native reserve; Qase73 retains its last
+successful CI measurement because its new UI setup has not been measured on CI yet. These estimates
+are scheduling inputs, not a full-run acceptance result.
+
+The coordinator now starts the existing shard runner in its own process group. On the unchanged 2400 s
+deadline or termination, it sends TERM, allows at most 10 s for report flushing, then kills the entire
+remaining group, even if the shell exited first. Only after writers stop does it finish the existing
+`maestro-output.tgz` archive and remove the raw per-flow directory. A timeout or nonzero verdict stays
+failed. Regression checks use real subprocesses, a TERM-resistant descendant and unsafe-name evidence;
+they also check external termination and preservation of an already packed archive. Workflow triggers,
+permissions, cache identities, artifact scope and application runtime are unchanged.
