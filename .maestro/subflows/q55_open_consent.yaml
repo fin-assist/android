@@ -1,0 +1,42 @@
+# Qase55 starts each independent refusal context with the normal sign-in screens.
+appId: ru.finassist.pf.mock.e2e
+---
+- runFlow: clear_state.yaml
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 60000
+- runFlow: login.yaml
+- runFlow:
+    file: config.yaml
+    env:
+      LINK: "pfe2e://config?network_delay_ms=0&consent_type=assistant&consent_publish=1&consent_document=current&consent_read=ready&expect_consent_reads=0&expect_consent_grants="
+- tapOn:
+    id: "ds.tab.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Kaspersky"
+- hideKeyboard
+- tapOn:
+    id: "ds.chat.send"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+    direction: DOWN
+- assertVisible:
+    id: "assistant.consent.checkbox"
+    checked: false
+- runFlow:
+    file: config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_reads=1&expect_consent_active=0&expect_consent_grants="

@@ -1,0 +1,232 @@
+appId: ru.finassist.pf.mock.e2e
+name: Помощник — новая версия согласия, независимое чтение и запрет старого PUT
+tags:
+  - assistant
+  - mock-only
+---
+# FIN-446 / Qase55. Phase A: recover through explicit document reads and a fresh tick.
+# Exact mock request probes supplement the visible form; they do not change client state.
+- runFlow: ../../subflows/q55_open_consent.yaml
+- tapOn:
+    id: "assistant.consent.checkbox"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&consent_publish=2&consent_read=offline"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+    direction: DOWN
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      text: "[\\s\\S]*Не получилось загрузить документ согласия[\\s\\S]*"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+    direction: DOWN
+- assertVisible:
+    id: "assistant.consent.submit"
+    enabled: true
+- assertVisible: "Обновить документ"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_reads=2&expect_consent_active=0&expect_consent_grants=1"
+
+# Re-ticking the rejected document cannot send its PUT. The action still reads only.
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+    direction: UP
+- assertVisible:
+    id: "assistant.consent.checkbox"
+    checked: true
+- tapOn:
+    id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&consent_document=1&consent_read=ready&expect_consent_reads=2&expect_consent_grants=1"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+    direction: DOWN
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent.submit"
+      enabled: true
+    timeout: 10000
+- assertVisible: "Обновить документ"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_reads=3&expect_consent_active=0&expect_consent_grants=1&consent_read=held"
+
+# The next GET is held at the mock boundary. Double tap must produce one in-flight read,
+# no parallel GET and no repeated PUT. Release is explicit, without a timing sleep.
+- doubleTapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent.submit"
+      enabled: false
+    timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_reads=4&expect_consent_active=1&expect_consent_max_active=1&expect_consent_grants=1"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&consent_read=ready&consent_release=true"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent.submit"
+      enabled: true
+    timeout: 10000
+- assertVisible: "Обновить документ"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_reads=4&expect_consent_active=0&expect_consent_max_active=1&expect_consent_grants=1&consent_document=current"
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.consent.submit"
+      enabled: true
+    timeout: 10000
+- assertNotVisible: "Обновить документ"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+    direction: UP
+- assertVisible:
+    id: "assistant.consent.checkbox"
+    checked: false
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_reads=5&expect_consent_active=0&expect_consent_grants=1"
+
+# Loading version2 clears the old tick, but does not grant consent or submit the draft.
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+    direction: DOWN
+- tapOn:
+    id: "assistant.consent.submit"
+- scrollUntilVisible:
+    element:
+      text: "Без согласия помощник не сможет ответить"
+    direction: UP
+- assertVisible: "Без согласия помощник не сможет ответить"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_reads=5&expect_consent_grants=1"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+    direction: UP
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+    direction: DOWN
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.chat"
+    timeout: 10000
+- assertVisible: "Kaspersky"
+- assertVisible:
+    id: "ds.chat.send"
+    enabled: true
+- assertNotVisible:
+    id: "assistant.question"
+- assertVisible: ".*[Оо]сталось 5 из 5.*"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_reads=5&expect_consent_active=0&expect_consent_grants=1,2"
+- assertNotVisible:
+    id: "assistant.question"
+
+# Phase B is an independent original-request refusal. retryable:false does not become
+# retryable when Retry-After expires; Phase A's recovery must not imply otherwise.
+- runFlow: ../../subflows/q55_open_consent.yaml
+- tapOn:
+    id: "assistant.consent.checkbox"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&consent_publish=2&consent_read=rate_limited&consent_retry_s=3"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+    direction: DOWN
+- tapOn:
+    id: "assistant.consent.submit"
+- extendedWaitUntil:
+    visible:
+      text: "Слишком много запросов. Попробуйте позже"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+    direction: DOWN
+- assertVisible:
+    id: "assistant.consent.submit"
+    enabled: false
+- assertVisible: "Обновить документ"
+- doubleTapOn:
+    id: "assistant.consent.submit"
+# The standard config overlay takes longer than the fixture's three-second wait.
+# The second probe also checks the mock's captured monotonic deadline has elapsed.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_reads=2&expect_consent_active=0&expect_consent_grants=1&consent_read=ready&consent_document=current"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_wait_elapsed=true&expect_consent_reads=2&expect_consent_active=0&expect_consent_grants=1"
+- assertVisible:
+    id: "assistant.consent.submit"
+    enabled: false
+- doubleTapOn:
+    id: "assistant.consent.submit"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.checkbox"
+    direction: UP
+- tapOn:
+    id: "assistant.consent.checkbox"
+- tapOn:
+    id: "assistant.consent.checkbox"
+- scrollUntilVisible:
+    element:
+      id: "assistant.consent.submit"
+    direction: DOWN
+- assertVisible:
+    id: "assistant.consent.submit"
+    enabled: false
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_wait_elapsed=true&expect_consent_reads=2&expect_consent_active=0&expect_consent_grants=1"
+- assertNotVisible:
+    id: "assistant.chat"
+
+# The out-of-order initial GET race is covered separately by AiConsentViewModelTest;
+# this UI case does not claim to execute that internal scheduling interleaving.
