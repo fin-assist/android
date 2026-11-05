@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<?OFX OFXHEADER="200" VERSION="202" SECURITY="NONE" OLDFILEUID="NONE" NEWFILEUID="NONE"?>
+<OFX>
+  <SIGNONMSGSRSV1>
+    <SONRS>
+      <STATUS>
+        <CODE>0</CODE>
+        <SEVERITY>INFO</SEVERITY>
+      </STATUS>
+      <DTSERVER>20261007120000.000[+3:MSK]</DTSERVER>
+      <LANGUAGE>RUS</LANGUAGE>
+    </SONRS>
+  </SIGNONMSGSRSV1>
+  <BANKMSGSRSV1>
+    <STMTTRNRS>
+      <TRNUID>0</TRNUID>
+      <STATUS>
+        <CODE>0</CODE>
+        <SEVERITY>INFO</SEVERITY>
+      </STATUS>
+      <STMTRS>
+        <CURDEF>RUB</CURDEF>
+        <BANKACCTFROM>
+          <BANKID>T-BANK</BANKID>
+          <ACCTID>OB$1$fin442-refund</ACCTID>
+          <ACCTTYPE>CHECKING</ACCTTYPE>
+        </BANKACCTFROM>
+        <BANKTRANLIST>
+          <DTSTART>20260901000000.000[+3:MSK]</DTSTART>
+          <DTEND>20260930235959.000[+3:MSK]</DTEND>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20260903120000.000[+3:MSK]</DTPOSTED>
+            <TRNAMT>-1000.00</TRNAMT>
+            <FITID>fin442-refund-purchase-1000</FITID>
+            <NAME>Refund Shop</NAME>
+            <MEMO>Маркетплейсы</MEMO>
+            <CURRENCY>
+              <CURSYM>RUB</CURSYM>
+              <CURRATE>1.0</CURRATE>
+            </CURRENCY>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>CREDIT</TRNTYPE>
+            <DTPOSTED>20260905120000.000[+3:MSK]</DTPOSTED>
+            <TRNAMT>400.00</TRNAMT>
+            <FITID>fin442-refund-auto-400</FITID>
+            <NAME>Refund Shop</NAME>
+            <MEMO>Пополнения</MEMO>
+            <CURRENCY>
+              <CURSYM>RUB</CURSYM>
+              <CURRATE>1.0</CURRATE>
+            </CURRENCY>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20260910120000.000[+3:MSK]</DTPOSTED>
+            <TRNAMT>-300.00</TRNAMT>
+            <FITID>fin442-refund-purchase-300</FITID>
+            <NAME>Dinner Shop</NAME>
+            <MEMO>Рестораны</MEMO>
+            <CURRENCY>
+              <CURSYM>RUB</CURSYM>
+              <CURRATE>1.0</CURRATE>
+            </CURRENCY>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>CREDIT</TRNTYPE>
+            <DTPOSTED>20260912120000.000[+3:MSK]</DTPOSTED>
+            <TRNAMT>300.00</TRNAMT>
+            <FITID>fin442-refund-manual-300</FITID>
+            <NAME>Manual Credit</NAME>
+            <MEMO>Пополнения</MEMO>
+            <CURRENCY>
+              <CURSYM>RUB</CURSYM>
+              <CURRATE>1.0</CURRATE>
+            </CURRENCY>
+          </STMTTRN>
+        </BANKTRANLIST>
+      </STMTRS>
+    </STMTTRNRS>
+  </BANKMSGSRSV1>
+</OFX>
