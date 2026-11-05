@@ -2,13 +2,7 @@ package ru.finassist.pf.feature.assistant.impl.ui
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
-import android.os.Bundle
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,13 +32,15 @@ internal class VoiceInput(
  * The system service decides whether its recognition stays offline. Only its final text enters the draft.
  */
 @Composable
-internal fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
+internal fun rememberVoiceInput(factoryOverride: VoiceRecognizerFactory? = null, onResult: (String) -> Unit): VoiceInput {
     val context = LocalContext.current
     val view = LocalView.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val result by rememberUpdatedState(onResult)
+    val defaultFactory = remember(context) { AndroidVoiceRecognizerFactory(context) }
+    val factory by rememberUpdatedState(factoryOverride ?: defaultFactory)
     val session = remember { VoiceSession() }
-    val recognizer = remember { mutableStateOf<SpeechRecognizer?>(null) }
+    val recognizer = remember { mutableStateOf<VoiceRecognizer?>(null) }
     val activeId = remember { mutableStateOf<Int?>(null) }
     val permissionId = remember { mutableStateOf<Int?>(null) }
     val onDeviceFailed = remember { mutableStateOf(false) }
@@ -60,45 +56,35 @@ internal fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
     }
     fun listen(id: Int) {
         if (!session.accepts(id)) return
-        val onDevice = !onDeviceFailed.value && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+        val onDevice = !onDeviceFailed.value && factory.isOnDeviceAvailable()
         try {
-            val speech = if (onDevice) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-                else if (SpeechRecognizer.isRecognitionAvailable(context)) SpeechRecognizer.createSpeechRecognizer(context)
-                else {
-                    session.fail(id, VoiceFailure.UNAVAILABLE)
-                    return
-                }
-            recognizer.value = speech
-            speech.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
+            if (!onDevice && !factory.isSystemAvailable()) {
+                session.fail(id, VoiceFailure.UNAVAILABLE)
+                return
+            }
+            val speech = factory.create(onDevice, object : VoiceRecognizerListener {
+                override fun ready() {
                     if (session.ready(id)) view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                 }
-                override fun onRmsChanged(rmsdB: Float) = session.level(id, rmsdB)
-                override fun onEndOfSpeech() { session.finish(id) }
-                override fun onResults(results: Bundle?) {
+                override fun level(rmsDb: Float) = session.level(id, rmsDb)
+                override fun end() { session.finish(id) }
+                override fun results(text: String?) {
                     if (!session.accepts(id)) return
-                    val text = session.result(id, results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull())
+                    val recognized = session.result(id, text)
                     release()
-                    text?.let(result)
+                    recognized?.let(result)
                 }
-                override fun onError(error: Int) {
+                override fun error(code: Int) {
                     if (!session.accepts(id)) return
-                    val failure = voiceFailure(error)
+                    val failure = voiceFailure(code)
                     // A service may exist without a Russian model. Offer the system provider on the next attempt.
                     if (fallsBackToSystem(onDevice, failure)) onDeviceFailed.value = true
                     session.fail(id, failure)
                     release()
                 }
-                override fun onBeginningOfSpeech() = Unit
-                override fun onBufferReceived(buffer: ByteArray?) = Unit
-                override fun onPartialResults(partialResults: Bundle?) = Unit
-                override fun onEvent(eventType: Int, params: Bundle?) = Unit
             })
-            speech.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-                .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true))
+            recognizer.value = speech
+            speech.start()
         } catch (error: RuntimeException) {
             val failure = voiceFailure(error)
             if (fallsBackToSystem(onDevice, failure)) onDeviceFailed.value = true
@@ -138,7 +124,7 @@ internal fun rememberVoiceInput(onResult: (String) -> Unit): VoiceInput {
         finish = {
             activeId.value?.let { id ->
                 if (session.finish(id)) {
-                    try { recognizer.value?.stopListening() } catch (_: RuntimeException) {
+                    try { recognizer.value?.stop() } catch (_: RuntimeException) {
                         session.fail(id, VoiceFailure.RECOGNITION)
                         release()
                     }
