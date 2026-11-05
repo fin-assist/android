@@ -77,7 +77,7 @@ tags:
 - inputText: "1000"
 - hideKeyboard
 - extendedWaitUntil:
-    visible: "Найдена 1 операция"
+    visible: 'Найдена 1[\s\u00A0\u202F]операция'
     timeout: 10000
 - assertVisible:
     id: "operations.row"
@@ -167,7 +167,7 @@ tags:
 - tapOn:
     id: "ds.back"
 - extendedWaitUntil:
-    visible: "Найдено 2 операции"
+    visible: 'Найдено 2[\s\u00A0\u202F]операции'
     timeout: 10000
 # Two positive row oracles plus the exact count rule out retaining the old pair alongside a new side.
 - assertVisible:
@@ -210,7 +210,7 @@ tags:
 - tapOn:
     id: "ds.back"
 - extendedWaitUntil:
-    visible: "Найдено 2 операции"
+    visible: 'Найдено 2[\s\u00A0\u202F]операции'
     timeout: 10000
 # Reopen this exact side: it keeps its own timestamp and the category assigned by its direction.
 - tapOn:
@@ -241,7 +241,7 @@ tags:
 - tapOn:
     id: "ds.back"
 - extendedWaitUntil:
-    visible: "Найдено 2 операции"
+    visible: 'Найдено 2[\s\u00A0\u202F]операции'
     timeout: 10000
 - assertNotVisible: "Перевод между счетами"
 
@@ -252,7 +252,7 @@ tags:
 - inputText: "2000"
 - hideKeyboard
 - extendedWaitUntil:
-    visible: "Найдена 1 операция"
+    visible: 'Найдена 1[\s\u00A0\u202F]операция'
     timeout: 10000
 - assertVisible:
     id: "operations.row"
@@ -342,7 +342,7 @@ tags:
 - tapOn:
     id: "ds.back"
 - extendedWaitUntil:
-    visible: "Найдено 2 операции"
+    visible: 'Найдено 2[\s\u00A0\u202F]операции'
     timeout: 10000
 # Two positive row oracles plus the exact count rule out retaining the old pair alongside a new side.
 - assertVisible:
@@ -385,7 +385,7 @@ tags:
 - tapOn:
     id: "ds.back"
 - extendedWaitUntil:
-    visible: "Найдено 2 операции"
+    visible: 'Найдено 2[\s\u00A0\u202F]операции'
     timeout: 10000
 # Reopen this exact side: it keeps its own timestamp and the category assigned by its direction.
 - tapOn:
@@ -416,6 +416,6 @@ tags:
 - tapOn:
     id: "ds.back"
 - extendedWaitUntil:
-    visible: "Найдено 2 операции"
+    visible: 'Найдено 2[\s\u00A0\u202F]операции'
     timeout: 10000
 - assertNotVisible: "Перевод между счетами"
