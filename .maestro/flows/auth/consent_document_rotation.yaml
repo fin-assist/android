@@ -51,11 +51,12 @@ tags:
       id: "auth.phone.submit"
 - tapOn:
     id: "auth.phone.submit"
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       text: "(?s)Не получилось загрузить документ согласия.*Проверьте интернет.*"
       childOf:
         id: "ds.error.error"
+    direction: UP
     timeout: 10000
 - scrollUntilVisible:
     element:
@@ -241,13 +242,14 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?consent_type=personal_data&consent_publish=pd-3&call_delay_ms=0&expect_consent_reads=6&expect_consent_starts=pd-1,pd-2&expect_consent_start_keys=2&expect_consent_registers="
+      LINK: "pfe2e://config?consent_type=personal_data&consent_publish=pd-3&expect_consent_reads=6&expect_consent_starts=pd-1,pd-2&expect_consent_start_keys=2&expect_consent_registers="
 
 # Register uses the accepted Start's pd-2 even though pd-3 is now current.
+# The existing stream captured the configured 60-second verification delay when it opened.
 - extendedWaitUntil:
     visible:
       id: "auth.consent"
-    timeout: 15000
+    timeout: 75000
 - assertNotVisible:
     id: "auth.consent.checkbox"
 - assertNotVisible:
