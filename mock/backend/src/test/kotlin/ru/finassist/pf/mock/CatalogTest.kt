@@ -32,6 +32,18 @@ class CatalogTest {
     }
 
     @Test
+    fun `bank spelling aliases resolve to one category in the public directory`() {
+        val nbsp = catalog.bankCategory("Ремонт и\u00a0мебель")
+        val space = catalog.bankCategory("Ремонт и мебель")
+        assertEquals("cat_repair", nbsp.id)
+        assertEquals(nbsp.id, space.id)
+        val directory = catalog.categories
+        assertEquals(directory.size, directory.map { it.id }.toSet().size)
+        assertEquals(listOf(catalog.byId(nbsp.id)), directory.filter { it.id == nbsp.id })
+        assertEquals("cat_salary", directory.single { it.name == "Зарплата" }.id)
+    }
+
+    @Test
     fun `a second name with the same slug gets the next free id`() {
         val first = catalog.bankCategory("Кафе!")
         val second = catalog.bankCategory("Кафе?")

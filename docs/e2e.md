@@ -1442,3 +1442,11 @@ after the hook saves the passcode. Both flows therefore use the existing `login.
 passcode setup and its completion callback. Shared helpers, authentication deadlines and financial
 assertions are unchanged. Preserved local attempt reports and final execution evidence are linked in
 [PR #273](https://github.com/fin-assist/android/pull/273).
+
+The Qase93 run also exposed FIN-443: scrolling the unfiltered category list toward Income crashed on
+`Расходы-cat_repair`, because the mock directory included two spelling aliases (NBSP/space) with the
+same ID. `Catalog.categories` now returns one entry per ID, keeping the first registered category and
+both bank-name lookups. It preserves category IDs, kinds and financial assignments. `CatalogTest`
+reproduces the duplicate-ID failure before the fix and checks both aliases, directory uniqueness and
+the retained Salary category. Qase93 keeps its ordinary scroll to Salary, so the crash is not bypassed
+with a search query. This is a mock-backend correction; shared UI helpers and control hooks are unchanged.
