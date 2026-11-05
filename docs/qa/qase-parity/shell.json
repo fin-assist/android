@@ -4466,7 +4466,7 @@
                 {
                   "path": ".maestro/flows/auth/call_stream_rate_limited.yaml",
                   "line": 35,
-                  "detail": "id: \"ru.finassist.pf.mock.e2e:id/e2e_stream_rate_limited\""
+                  "detail": "text: \"e2e.stream.rate_limited=.*\""
                 },
                 {
                   "path": ".maestro/flows/auth/call_stream_rate_limited.yaml",

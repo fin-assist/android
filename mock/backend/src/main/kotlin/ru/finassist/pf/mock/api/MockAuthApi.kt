@@ -103,8 +103,8 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
                     // The mock and client use the same shifted clock. expires_in is rounded down; allow only
                     // the direct in-process response handoff's one-second minute-boundary interval.
                     setOf(0L, 1L).map { handoff ->
-                        sentAt.plusSeconds(left + handoff).atZone(java.time.ZoneId.systemDefault())
-                            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm", java.util.Locale.ROOT))
+                        val time = sentAt.plusSeconds(left + handoff).atZone(java.time.ZoneId.systemDefault())
+                        time.hour.toString().padStart(2, '0') + ":" + time.minute.toString().padStart(2, '0')
                     }.toSet(),
                 )
             }

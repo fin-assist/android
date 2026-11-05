@@ -32,7 +32,7 @@ tags:
     element:
       id: "auth.phone.submit"
 - assertNotVisible:
-    id: "ru.finassist.pf.mock.e2e:id/e2e_stream_rate_limited"
+    text: "e2e.stream.rate_limited=.*"
 - tapOn:
     id: "auth.phone.submit"
 - extendedWaitUntil:
