@@ -75,6 +75,11 @@ tags:
             enabled: true
           timeout: 20000
       - assertVisible: ".*[Оо]сталось 5 из 5.*"
+# All five terminal outcomes must actually be OFF_TOPIC, not stale visible errors.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=6&expect_assistant_questions=5&expect_assistant_answers=5&expect_assistant_off_topics=5"
 - tapOn:
     id: "ds.chat.input"
 - inputText: "Krabsbir"
@@ -85,13 +90,21 @@ tags:
       id: "assistant.chat.send_failed"
     timeout: 20000
 - assertVisible: "Слишком много запросов[.] Попробуйте позже"
-- assertVisible: "Krabsbir"
+- assertVisible:
+    id: "ds.chat.input"
+    text: "Krabsbir"
 - assertVisible: ".*[Оо]сталось 5 из 5.*"
 - assertVisible:
     id: "assistant.answer.failed"
 - assertNotVisible:
     id: "assistant.answer.failed.retry"
-- pressKey: back
+- hideKeyboard
+- tapOn:
+    id: "ds.back"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.ask"
+    timeout: 10000
 - tapOn:
     id: "analytics.ask"
 - extendedWaitUntil:
@@ -99,3 +112,21 @@ tags:
       id: "assistant.answer.failed"
     timeout: 15000
 - assertVisible: ".*[Оо]сталось 5 из 5.*"
+- assertVisible:
+    id: "ds.chat.input"
+    text: "Krabsbir"
+# Re-opened history must retain the earlier error as well as the newest one visible above.
+- scrollUntilVisible:
+    element:
+      text: "What is the weather today[?]"
+      childOf:
+        id: "assistant.question"
+    direction: UP
+- assertVisible:
+    id: "assistant.answer.failed"
+- assertNotVisible:
+    id: "assistant.answer.failed.retry"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=7&expect_assistant_questions=5&expect_assistant_answers=5&expect_assistant_off_topics=5"

@@ -130,7 +130,8 @@ internal fun DetailContent(
                             rows.forEachIndexed { i, row ->
                                 PfDataRow(
                                     row.label, row.value, sublabel = row.sublabel, divider = i < rows.lastIndex,
-                                    modifier = row.spoken?.let { spoken -> Modifier.semantics { contentDescription = "${row.label}: $spoken" } } ?: Modifier,
+                                    modifier = (row.spoken?.let { spoken -> Modifier.semantics { contentDescription = "${row.label}: $spoken" } } ?: Modifier)
+                                        .then(if (row.label == "Категория банка") Modifier.testTag("operations.detail.statement.category") else Modifier),
                                 )
                             }
                         }

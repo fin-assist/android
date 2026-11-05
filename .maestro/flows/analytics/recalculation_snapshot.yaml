@@ -196,7 +196,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?expect_error_requests=1&error_operation=off&analytics_recalculating_responses=0"
+      LINK: "pfe2e://config?expect_error_requests=1&expect_analytics_dismiss_requests=1&error_operation=off&analytics_recalculating_responses=0"
 - assertVisible: "Не удалось обновить показатели.*"
 - tapOn:
     id: "analytics.retry"
@@ -224,4 +224,4 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?expect_error_requests=1"
+      LINK: "pfe2e://config?expect_error_requests=1&expect_analytics_dismiss_requests=1"

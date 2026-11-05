@@ -41,13 +41,10 @@ tags:
     visible:
       id: "statements.upload.busy"
     timeout: 10000
-# A pause on the screen: the upload is accepted (50 ms), the stream drops after its first event and is re-opened within
-# 1 s by the app's own loop, which gets the first 429. The marker id never appears; this is a bounded wait, not a sync.
+# Wait for the actual first 429 on the active UI before checking counts or backgrounding.
 - extendedWaitUntil:
-    visible:
-      id: "e2e.never"
-    timeout: 3000
-    optional: true
+    visible: "e2e.stream.rate_limited=1"
+    timeout: 10000
 # The first 429 is already given. Returning from this link must not skip its wait.
 - runFlow:
     file: ../../subflows/config.yaml
@@ -85,3 +82,7 @@ tags:
     timeout: 45000
 - assertVisible:
     id: "statements.result.new"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_stream_reopen_after_deadline=true"

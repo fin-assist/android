@@ -1,0 +1,263 @@
+{
+  "group": "shell",
+  "baseline": "967f4559bd6cf4db568ca760105828bbc4bb0a9a",
+  "publication": "Proposals only; root validates canonical sources and publishes. All original values preserved here and shell.json.",
+  "proposals": [
+    {
+      "case_id": 1,
+      "field": "preconditions",
+      "before": "Синтетическая сборка mockE2e. FIN-365: перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа; обе отметки изначально сняты. Автотесты обновлены, новый UI-прогон не выполнялся.",
+      "proposed": "Синтетическая сборка mockE2e. FIN-365: перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа; обе отметки изначально сняты.",
+      "status": "pending_root_validation",
+      "reason": "История выполнения не является предусловием. Исходные строки сохраняются в source audit; перед публикацией переносить историю в description, не удалять. Root указал baseline Qase85 Passed на967f4559; FIN450 edits не исполнялись.",
+      "evidence": [
+        "https://app.qase.io/run/PF/dashboard/85",
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 3,
+      "field": "preconditions",
+      "before": "Сборка mockE2e, clear_state и launchApp. До действий на телефоне установить pfe2e://config?call_delay_ms=60000: mock-звонок приходит через минуту, чтобы успеть проверить экран и нажать «Изменить номер». Первоначально 14+ и согласие ПДн сняты; поле телефона недоступно до возраста. Документ personal_data загружен. Существующий тестовый номер 916 123-45-67. В шагах отдельно подтвердить обе отметки; не считать их уже включёнными в предусловии. Настройка сбрасывается clear_state следующего сценария. FIN-436: уточнено дополнение R5, UI заново не запускался.",
+      "proposed": "Сборка mockE2e, clear_state и launchApp. До действий на телефоне установить pfe2e://config?call_delay_ms=60000: mock-звонок приходит через минуту, чтобы успеть проверить экран и нажать «Изменить номер». Первоначально 14+ и согласие ПДн сняты; поле телефона недоступно до возраста. Документ personal_data загружен. Существующий тестовый номер 916 123-45-67. В шагах отдельно подтвердить обе отметки; не считать их уже включёнными в предусловии. Настройка сбрасывается clear_state следующего сценария.",
+      "status": "pending_root_validation",
+      "reason": "История выполнения не является предусловием. Исходные строки сохраняются в source audit; перед публикацией переносить историю в description, не удалять. Root указал baseline Qase85 Passed на967f4559; FIN450 edits не исполнялись.",
+      "evidence": [
+        "https://app.qase.io/run/PF/dashboard/85",
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 4,
+      "field": "preconditions",
+      "before": "Сборка mockE2e; очистить данные приложения и mock-состояние. ДО запуска входа установить pfe2e://config?flag.auth.registration=false, затем launchApp(stopApp=false), сохранив процесс, поднятый control link. Встроенный существующий номер 916 123-45-67; новый номер 900 222-33-44; тестовый PIN 1234. При каждом входе независимо подтвердить исходно снятые 14+ и ПДн из загруженного документа. Флаг false действует до конца сценария; следующий сценарий начинается с clear_state. FIN-436: настройка перенесена из существующего flow; нового UI-прогона нет.",
+      "proposed": "Сборка mockE2e; очистить данные приложения и mock-состояние. ДО запуска входа установить pfe2e://config?flag.auth.registration=false, затем launchApp(stopApp=false), сохранив процесс, поднятый control link. Встроенный существующий номер 916 123-45-67; новый номер 900 222-33-44; тестовый PIN 1234. При каждом входе независимо подтвердить исходно снятые 14+ и ПДн из загруженного документа. Флаг false действует до конца сценария; следующий сценарий начинается с clear_state.",
+      "status": "pending_root_validation",
+      "reason": "История выполнения не является предусловием. Исходные строки сохраняются в source audit; перед публикацией переносить историю в description, не удалять. Root указал baseline Qase85 Passed на967f4559; FIN450 edits не исполнялись.",
+      "evidence": [
+        "https://app.qase.io/run/PF/dashboard/85",
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 35,
+      "field": "preconditions",
+      "before": "Сборка mockE2e, clear_state и обычный launchApp. Сначала дождаться экрана телефона, успешного GET документа personal_data и отдельно подтвердить исходно снятые 14+ и ПДн. Только ПОСЛЕ этой подготовки включить pfe2e://config?maintenance=unknown&maintenance_retry_after=600. Повторный helper confirm_phone сохраняет уже включённые отметки. Номер 916 123-45-67; конец техработ неизвестен, Retry-After 600 секунд — тестовая настройка. Следующий сценарий начинает clear_state. FIN-436: уточнён порядок существующей фикстуры, новый UI-прогон не выполнялся.",
+      "proposed": "Сборка mockE2e, clear_state и обычный launchApp. Сначала дождаться экрана телефона, успешного GET документа personal_data и отдельно подтвердить исходно снятые 14+ и ПДн. Только ПОСЛЕ этой подготовки включить pfe2e://config?maintenance=unknown&maintenance_retry_after=600. Повторный helper confirm_phone сохраняет уже включённые отметки. Номер 916 123-45-67; конец техработ неизвестен, Retry-After 600 секунд — тестовая настройка. Следующий сценарий начинает clear_state.",
+      "status": "pending_root_validation",
+      "reason": "История выполнения не является предусловием. Исходные строки сохраняются в source audit; перед публикацией переносить историю в description, не удалять. Root указал baseline Qase85 Passed на967f4559; FIN450 edits не исполнялись.",
+      "evidence": [
+        "https://app.qase.io/run/PF/dashboard/85",
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 41,
+      "field": "preconditions",
+      "before": "Сборка mockE2e, clear_state и launchApp. На экране телефона ДО Start установить pfe2e://config?call_delay_ms=600000&call_ttl_ms=15000; звонок не может подтвердиться в пределах короткой заявки. Отдельно подтвердить исходно снятые 14+ и ПДн; номер 916 123-45-67. 15 секунд — только ускоренная mock-фикстура; продуктовый срок ожидания не меняется (5 минут). После проверки истечения вернуть call_ttl_ms=300000, сохранив задержку звонка. FIN-436: настройки перенесены из существующего flow, нового UI-прогона нет.",
+      "proposed": "Сборка mockE2e, clear_state и launchApp. На экране телефона ДО Start установить pfe2e://config?call_delay_ms=600000&call_ttl_ms=15000; звонок не может подтвердиться в пределах короткой заявки. Отдельно подтвердить исходно снятые 14+ и ПДн; номер 916 123-45-67. 15 секунд — только ускоренная mock-фикстура; продуктовый срок ожидания не меняется (5 минут). После проверки истечения вернуть call_ttl_ms=300000, сохранив задержку звонка.",
+      "status": "pending_root_validation",
+      "reason": "История выполнения не является предусловием. Исходные строки сохраняются в source audit; перед публикацией переносить историю в description, не удалять. Root указал baseline Qase85 Passed на967f4559; FIN450 edits не исполнялись.",
+      "evidence": [
+        "https://app.qase.io/run/PF/dashboard/85",
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 43,
+      "field": "preconditions",
+      "before": "Синтетическая сборка mockE2e. FIN-365: перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа; обе отметки изначально сняты. Автотесты обновлены, новый UI-прогон не выполнялся.",
+      "proposed": "Синтетическая сборка mockE2e. FIN-365: перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа; обе отметки изначально сняты.",
+      "status": "pending_root_validation",
+      "reason": "История выполнения не является предусловием. Исходные строки сохраняются в source audit; перед публикацией переносить историю в description, не удалять. Root указал baseline Qase85 Passed на967f4559; FIN450 edits не исполнялись.",
+      "evidence": [
+        "https://app.qase.io/run/PF/dashboard/85",
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 44,
+      "field": "preconditions",
+      "before": "Синтетическая сборка mockE2e. FIN-365: перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа; обе отметки изначально сняты. Автотесты обновлены, новый UI-прогон не выполнялся.",
+      "proposed": "Синтетическая сборка mockE2e. FIN-365: перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа; обе отметки изначально сняты.",
+      "status": "pending_root_validation",
+      "reason": "История выполнения не является предусловием. Исходные строки сохраняются в source audit; перед публикацией переносить историю в description, не удалять. Root указал baseline Qase85 Passed на967f4559; FIN450 edits не исполнялись.",
+      "evidence": [
+        "https://app.qase.io/run/PF/dashboard/85",
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 57,
+      "field": "preconditions",
+      "before": null,
+      "proposed": "mockE2e, clear_state и обычный launchApp. Текущий personal_data документ загружен, обе отметки изначально сняты; синтетический существующий номер9161234567. Перед Start call_delay_ms=60000, чтобы успеть вернуться через «Изменить номер».",
+      "status": "pending_root_validation",
+      "reason": "Заполнить отсутствующее предусловие существующей воспроизводимой test boundary; бизнес-ожидания не меняются.",
+      "evidence": [
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 58,
+      "field": "preconditions",
+      "before": null,
+      "proposed": "mockE2e, чистое состояние; offline=true до запуска Phone. Управление только pfe2e://config; existing synthetic9161234567, PIN1234. Сначала явно восстановить документ, затем независимо симулировать ошибку Start.",
+      "status": "pending_root_validation",
+      "reason": "Заполнить отсутствующее предусловие существующей воспроизводимой test boundary; бизнес-ожидания не меняются.",
+      "evidence": [
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 59,
+      "field": "preconditions",
+      "before": null,
+      "proposed": "mockE2e, чистое состояние; existing synthetic9161234567 и PIN1234. Два подтверждения включаются явно; phone_start возвращает terminal_failure. Ошибка снимается только после явного restart; точные reads/Start/key counts проверяются control.",
+      "status": "pending_root_validation",
+      "reason": "Заполнить отсутствующее предусловие существующей воспроизводимой test boundary; бизнес-ожидания не меняются.",
+      "evidence": [
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 66,
+      "field": "preconditions",
+      "before": null,
+      "proposed": "mockE2eAndroidTest, Compose host ui-test-manifest. ProfileContent public state renderer с cached profile, искусственная AppError.Offline и local reader VPN. Состояния заменяются в тесте, callback чтения возвращает обновлённый номер; реальный API/VM не участвует.",
+      "status": "pending_root_validation",
+      "reason": "Заполнить отсутствующее предусловие существующей воспроизводимой test boundary; бизнес-ожидания не меняются.",
+      "evidence": [
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 67,
+      "field": "preconditions",
+      "before": null,
+      "proposed": "mockE2eAndroidTest, Compose host ui-test-manifest. HistoryContent public state renderer с cached upload, искусственная AppError.Offline и local reader VPN. Состояния заменяются в тесте, callback чтения возвращает восстановленную загрузку; реальный API/VM не участвует.",
+      "status": "pending_root_validation",
+      "reason": "Заполнить отсутствующее предусловие существующей воспроизводимой test boundary; бизнес-ожидания не меняются.",
+      "evidence": [
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 7,
+      "field": "steps.2.expected_result",
+      "before": "«Придумайте новый код»",
+      "proposed": "«Введите новый код-пароль»",
+      "status": "validated_figma_pending_root",
+      "reason": "Сверка quote UI-copy; код не принят за источник истины. Q7step2 напрямую подтверждён live Figma; остальные границы указаны в status/evidence.",
+      "evidence": [
+        "https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv/?node-id=10-462",
+        "Figma text60:142: Введите новый код-пароль"
+      ]
+    },
+    {
+      "case_id": 7,
+      "field": "steps.4.expected_result",
+      "before": "«Коды не совпали…», новый код вводится заново",
+      "proposed": "«Коды не совпадают…», новый код вводится заново",
+      "status": "validated_figma_shared_prefix_pending_root",
+      "reason": "Сверка quote UI-copy; код не принят за источник истины. Q7step2 напрямую подтверждён live Figma; остальные границы указаны в status/evidence.",
+      "evidence": [
+        "https://www.figma.com/design/u8paWRq6KAT73UJ1x2jXLv/?node-id=10-419",
+        "Figma setup-mismatch text60:106; отдельного change-mismatch frame в MVP нет"
+      ]
+    },
+    {
+      "case_id": 1,
+      "field": "steps.1.expected_result",
+      "before": "Экран звонка; мок через пару секунд «получает звонок»",
+      "proposed": "Экран звонка; синтетический callbacknumber и «Позвонить» видны. Mock подтверждает звонок через6секунд (call_delay_ms=6000).",
+      "status": "pending_root_validation",
+      "reason": "Удержание Call6s делает шаг наблюдаемым, сохраняет автоматическое подтверждение mock.",
+      "evidence": [
+        ".maestro/flows/auth/sign_in_existing_user.yaml"
+      ]
+    },
+    {
+      "case_id": 43,
+      "field": "steps.1.expected_result",
+      "before": "Экран звонка с номером для звонка; плашки «Нет сети — не можем дождаться звонка» нет",
+      "proposed": "Экран звонка с номером для звонка; сообщение ошибки связи и плашка offline отсутствуют.",
+      "status": "pending_root_canonical_validation",
+      "reason": "В Qase процитирован legacy-текст. Новый flow проверяет и legacy, и текущие connection/offline states; точную копию перед правкой согласовать с действующей error presentation спецификацией.",
+      "evidence": [
+        ".maestro/flows/offline/stream_drops.yaml",
+        "feature/auth/impl/src/main/kotlin/ru/finassist/pf/feature/auth/impl/ui/AuthScreens.kt"
+      ]
+    },
+    {
+      "case_id": 54,
+      "field": "preconditions",
+      "before": "mockE2e из PR276; чистое состояние в каждой из двух независимых фаз, синтетический новый номер +79160000054. Управление только mockE2e pfe2e://config: personal_data опубликован pd-1, документ current/ready; задержка звонка 60000ms в первой фазе, чтобы после принятого Start опубликовать pd-3. Версия проверки сервера и версия ответа GET независимы. Document-read 429: retryable:false, Retry-After 30s; HELD отпускается явно. Новый UI-flow и mapping используют прежний ID54; stage не требуется.",
+      "proposed": "mockE2e; чистое состояние в каждой из двух независимых фаз, синтетический новый номер +79160000054. Управление только mockE2e pfe2e://config: personal_data опубликован pd-1, документ current/ready; задержка звонка 60000ms в первой фазе, чтобы после принятого Start опубликовать pd-3. Версия проверки сервера и версия ответа GET независимы. Document-read 429: retryable:false, Retry-After 30s; HELD отпускается явно. Новый UI-flow и mapping используют прежний ID54; stage не требуется.",
+      "status": "pending_root_validation",
+      "reason": "PR276 уже merged: номер PR является provenance, не отдельным build requirement. Сохранить ссылку/историю в description.",
+      "evidence": [
+        "https://github.com/fin-assist/android/pull/276"
+      ]
+    },
+    {
+      "case_id": 77,
+      "field": "description",
+      "before": "FIN-389 / PR241. Native PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport. Общая строгая геометрическая проверка54 сочетаний: высота640/720/760dp, fontScale1/1.5/2, system insets24/24 и48/48dp, обычная и последняя попытка unlock + подтверждение удаления. Без performScrollTo/ручного scroll. Дополнительно font/viewport меняются при том же длинном error. Действия —6 representative cases, все3modes приfont1/insets24 иfont2/insets48. Maestro не отличает частично обрезанный текст от полного.",
+      "proposed": "FIN-389 / PR241. Native PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport. Общая строгая геометрическая проверка54 сочетаний: высота640/720/760dp, fontScale1/1.5/2, system insets24/24 и48/48dp, обычная и последняя попытка unlock + подтверждение удаления. Без performScrollTo/ручного scroll. Дополнительно font/viewport меняются при том же длинном error. Действия —6 representative cases, все3modes приfont1/insets24 иfont2/insets48. Maestro не отличает частично обрезанный текст от полного.\nFIN450: исходный дефект FIN389 воспроизведён на API35; это требование сохранено. Штатный CI на API34 не является API35 acceptance. Нужен отдельный разрешённый native-прогон на API35.",
+      "status": "pending_root_validation",
+      "reason": "Не подменять исходную среду воспроизведения фактической CI-средой.",
+      "evidence": [
+        "https://finassist.youtrack.cloud/issue/FIN-389",
+        ".github/workflows/e2e.yml:36"
+      ]
+    },
+    {
+      "case_id": 78,
+      "field": "description",
+      "before": "FIN-389 / PR241. Native PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont. Portrait360×640dp, fontScale2, status/nav48/48dp. Setup NEW/REPEAT, Change OLD/NEW/REPEAT, Unlock иConfirm безerror. Проверкаавтоматического initial раскрытия dots; manual ScrollBy выполняется только ПОСЛЕ всех visibilityassertions для отдельной проверки сохранения пользовательской прокрутки.",
+      "proposed": "FIN-389 / PR241. Native PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont. Portrait360×640dp, fontScale2, status/nav48/48dp. Setup NEW/REPEAT, Change OLD/NEW/REPEAT, Unlock иConfirm безerror. Проверкаавтоматического initial раскрытия dots; manual ScrollBy выполняется только ПОСЛЕ всех visibilityassertions для отдельной проверки сохранения пользовательской прокрутки.\nFIN450: исходный дефект FIN389 воспроизведён на API35; это требование сохранено. Штатный CI на API34 не является API35 acceptance. Нужен отдельный разрешённый native-прогон на API35.",
+      "status": "pending_root_validation",
+      "reason": "Не подменять исходную среду воспроизведения фактической CI-средой.",
+      "evidence": [
+        "https://finassist.youtrack.cloud/issue/FIN-389",
+        ".github/workflows/e2e.yml:36"
+      ]
+    },
+    {
+      "case_id": 79,
+      "field": "description",
+      "before": "FIN-389 / PR241. Native PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag. Реальные down+moveBy безup сохраняют pointer между recompositions; изменение VerticalScrollAxisRange.value до state change подтверждает активный drag. Ошибка меняет measured range при удерживаемом пальце, Default auto-scroll уступает UserInput. После stationary sample+up следующий range должен раскрываться. Production hooks и прямого доступа к MutatorMutex нет.",
+      "proposed": "FIN-389 / PR241. Native PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag. Реальные down+moveBy безup сохраняют pointer между recompositions; изменение VerticalScrollAxisRange.value до state change подтверждает активный drag. Ошибка меняет measured range при удерживаемом пальце, Default auto-scroll уступает UserInput. После stationary sample+up следующий range должен раскрываться. Production hooks и прямого доступа к MutatorMutex нет.\nFIN450: исходный дефект FIN389 воспроизведён на API35; это требование сохранено. Штатный CI на API34 не является API35 acceptance. Нужен отдельный разрешённый native-прогон на API35.",
+      "status": "pending_root_validation",
+      "reason": "Не подменять исходную среду воспроизведения фактической CI-средой.",
+      "evidence": [
+        "https://finassist.youtrack.cloud/issue/FIN-389",
+        ".github/workflows/e2e.yml:36"
+      ]
+    },
+    {
+      "case_id": 79,
+      "field": "steps.4.expected_result",
+      "before": "Общаястрогая geometry-проверка error/dots/all digits/delete/footer проходит автоматически. Наplaincollect df2a1da8 шаг3падает; наcollectLatest проходит.",
+      "proposed": "Общаястрогая geometry-проверка error/dots/all digits/delete/footer проходит автоматически.",
+      "status": "pending_root_validation",
+      "reason": "Перенести исторический mutation-результат в description; обязательная строгая geometry проверка остаётся. Новое выполнение mutation не проводилось.",
+      "evidence": [
+        "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 34,
+      "field": "steps.2.action",
+      "before": "Сохранять техработы включёнными не менее 20 секунд (5 подтверждений control по 4 секунды).",
+      "proposed": "Сохранять техработы включёнными не менее40секунд (10подтвержденийcontrol по4секунды). Проверить точныеPDreads2 иmaintenanceprobes1 после обоих15-секундныхдедлайнов.",
+      "status": "pending_root_validation",
+      "reason": "Исходные20секунд не доходили до нового15sdeadline после первого отказа и не доказывали отсутствие второго автоматического цикла.40s усиливают ту же гарантию; originalsource сохранён.",
+      "evidence": [
+        ".maestro/flows/availability/maintenance.yaml",
+        "mock/backend/src/main/kotlin/ru/finassist/pf/mock/MockUiEvidence.kt"
+      ]
+    }
+  ]
+}

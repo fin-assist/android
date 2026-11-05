@@ -72,8 +72,8 @@ class MapTest(unittest.TestCase):
 
     def test_same_case_twice_keeps_the_worst_result(self):
         passed = qase.TestResult("k", "k", "passed", 1)
-        failed = qase.TestResult("k", "k", "failed", 2, message="m")
-        payload, _ = qase.map_results([passed, failed, passed], {"k": 5})
+        failed = qase.TestResult("native-companion", "native-companion", "failed", 2, message="m")
+        payload, _ = qase.map_results([passed, failed, passed], {"k": 5, "native-companion": 5})
         self.assertEqual(payload, [{"case_id": 5, "status": "failed", "time_ms": 2, "comment": "m"}])
 
     def test_failure_carries_comment_and_stacktrace(self):
@@ -219,9 +219,18 @@ class CaseMapTest(unittest.TestCase):
                 stale.append(key)
         self.assertEqual(stale, [], "these instrumented tests were renamed or removed: update scripts/qase-cases.json")
 
-    def test_case_ids_are_unique(self):
-        ids = list(self.cases.values())
-        self.assertEqual(len(ids), len(set(ids)))
+    def test_case_ids_are_unique_except_declared_complementary_ui_checks(self):
+        by_case = {}
+        for key, case_id in self.cases.items():
+            by_case.setdefault(case_id, set()).add(key)
+        duplicates = {case_id: keys for case_id, keys in by_case.items() if len(keys) > 1}
+        self.assertEqual(duplicates, {17: {
+            ".maestro/flows/profile/theme_and_logout.yaml",
+            "ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette",
+        }, 84: {
+            ".maestro/flows/statements/download_period.yaml",
+            "ru.finassist.pf.StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser",
+        }})
 
 
 if __name__ == "__main__":

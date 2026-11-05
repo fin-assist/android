@@ -18,7 +18,10 @@ tags:
     notVisible:
       id: "profile.theme.dark"
     timeout: 5000
-- assertVisible: "Тёмная"
+- assertVisible:
+    id: "profile.theme"
+    containsDescendants:
+      - text: "Тёмная"
 
 # Logout: «Отмена» keeps the session, «Выйти» returns to the phone screen with a notice.
 - scrollUntilVisible:

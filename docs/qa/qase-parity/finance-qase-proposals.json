@@ -1,0 +1,74 @@
+{
+  "group": "finance",
+  "baseline": "967f4559bd6cf4db568ca760105828bbc4bb0a9a",
+  "publication": "Proposals only; root must validate original/current Qase and publish. No case changed by this agent.",
+  "proposals": [
+    {
+      "case_id": 8,
+      "field": "steps[0].expected_result",
+      "original": "Карточка операции с названием и блоком «Дата и время»; запрос деталей передаёт occurred_at строки.",
+      "proposed": "Карточка операции с названием и датой/временем операции в основном блоке; запрос деталей передаёт occurred_at строки.",
+      "reason": "The current UI renders the exact operation date/time in the hero, without a literal «Дата и время» heading. Preserve the timestamp and exact transport equality; clarify obsolete layout wording only.",
+      "evidence": [
+        {
+          "path": "feature/operations/impl/src/main/kotlin/ru/finassist/pf/feature/operations/impl/ui/DetailScreen.kt",
+          "line": 198,
+          "detail": "Hero shows numericDateTime, no separate literal date/time heading."
+        },
+        {
+          "path": ".maestro/flows/operations/feed_and_detail.yaml",
+          "line": 22,
+          "detail": "Exact seeded date/time visible and exact transport witness required at23."
+        }
+      ]
+    },
+    {
+      "case_id": 86,
+      "field": "preconditions",
+      "original": null,
+      "proposed": "Сборка mockE2e, очищенные данные и fast_login существующим синтетическим аккаунтом. Часы закреплены на 08.10.2026 12:00 Europe/Moscow; предзагружена только bundled fixture.ofx. Неподдерживаемый/поддерживаемый пояс ответа задаётся закрытыми controls response_time_zone=unsupported|default; это не смена пояса профиля и не fault injection в stage.",
+      "reason": "Source has no preconditions despite depending on an isolated synthetic ledger, clock, source-zone fault controls and known Krabsbir query. Make existing actual setup explicit, without changing expected behavior.",
+      "evidence": [
+        {
+          "path": ".maestro/flows/operations/source_time_zone.yaml",
+          "line": 7,
+          "detail": "Clear state then fast_login; unsupported/default controls at11/27 and55/77."
+        },
+        {
+          "path": "app/build.gradle.kts",
+          "line": 161,
+          "detail": "Pinned clock."
+        },
+        {
+          "path": "app/src/mockE2e/kotlin/ru/finassist/pf/e2e/E2eModule.kt",
+          "line": 24,
+          "detail": "Only bundled fixture asset."
+        }
+      ]
+    },
+    {
+      "case_id": 76,
+      "field": "preconditions",
+      "original": "Сборка mockE2e; fast_login; тестовая выписка успешно загружена штатным сценарием. Текущая дата закреплена 08.10.2026, пояс профиля Europe/Moscow.",
+      "proposed": "Сборка mockE2e; очищенные данные, fast_login существующим синтетическим аккаунтом со стандартной предзагруженной bundled fixture.ofx. Дата закреплена 08.10.2026, пояс профиля Europe/Moscow. Успешный UI-импорт проверяется отдельными кейсами; этот кейс проверяет rolling-периоды на готовых данных.",
+      "reason": "Flow uses standard preload via fast_login, not an actual UI-import scenario. Clarify the setup boundary rather than certifying the generic «загружена штатным сценарием» as an import test. Rolling coverage/selection/retained-state requirements stay unchanged.",
+      "evidence": [
+        {
+          "path": ".maestro/flows/analytics/rolling_periods.yaml",
+          "line": 7,
+          "detail": "Only clear_state/fast_login before analytics; no picker/import."
+        },
+        {
+          "path": ".maestro/subflows/fast_login.yaml",
+          "line": 9,
+          "detail": "Existing account sign-in and ready feed/rows."
+        },
+        {
+          "path": "app/src/mockE2e/kotlin/ru/finassist/pf/e2e/E2eModule.kt",
+          "line": 24,
+          "detail": "Dedicated E2E preload asset list."
+        }
+      ]
+    }
+  ]
+}

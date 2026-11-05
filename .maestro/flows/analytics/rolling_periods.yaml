@@ -25,11 +25,22 @@ tags:
     timeout: 15000
 - assertVisible: "Последние 12 месяцев"
 - assertVisible:
+    id: "ds.segment.2"
+    checked: true
+- assertVisible:
+    id: "analytics.period.rolling_year"
+    checked: true
+- assertNotVisible:
+    id: "analytics.period.rolling_quarter"
+- assertVisible:
     id: "analytics.tile.expense"
 - assertNotVisible:
     id: "analytics.tile.forecast"
 - assertVisible:
     id: "ds.period.prev"
+    enabled: false
+- assertVisible:
+    id: "ds.period.next"
     enabled: false
 - tapOn:
     id: "analytics.transfers"
@@ -63,6 +74,10 @@ tags:
     id: "analytics.period.rolling_quarter"
     checked: false
 - assertVisible: "Без переводов"
+- assertVisible:
+    text: "IV квартал 2026"
+    childOf:
+      id: "ds.period.pick"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -81,6 +96,12 @@ tags:
     visible: "(?s).*2.июля.*1.октября.2026.*"
     timeout: 15000
 - assertVisible: "Последние 3 месяца"
+- assertVisible:
+    id: "analytics.period.rolling_quarter"
+    checked: true
+- assertVisible:
+    id: "ds.segment.1"
+    checked: true
 - assertVisible: "Без переводов"
 - scrollUntilVisible:
     element:
@@ -103,6 +124,10 @@ tags:
 - assertVisible:
     id: "ds.segment.0"
     checked: true
+- assertNotVisible:
+    id: "analytics.period.rolling_year"
+- assertNotVisible:
+    id: "analytics.period.rolling_quarter"
 - assertVisible: "Без переводов"
 - tapOn:
     id: "ds.segment.2"

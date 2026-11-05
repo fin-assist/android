@@ -20,6 +20,8 @@ tags:
       id: "ds.period.pick"
 - assertVisible:
     id: "analytics.ask"
+    containsDescendants:
+      - text: "Спросите о своих финансах"
 - tapOn:
     id: "ds.period.prev"
 - extendedWaitUntil:
@@ -67,6 +69,9 @@ tags:
       childOf:
         id: "ds.period.pick"
     timeout: 10000
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
 - tapOn:
     id: "ds.segment.1"
 - extendedWaitUntil:
@@ -224,19 +229,27 @@ tags:
     id: "analytics.transfers"
     checked: true
 
-# A category opens the operations it is made of.
+# Choose a named seeded category so the search's filter can be checked independently.
 - scrollUntilVisible:
     element:
       id: "analytics.expense_category"
+      containsDescendants:
+        - text: "Рестораны"
 - tapOn:
     id: "analytics.expense_category"
-    index: 0
+    containsDescendants:
+      - text: "Рестораны"
 - extendedWaitUntil:
     visible:
       id: "operations.search"
     timeout: 10000
 - assertVisible:
     id: "operations.row"
+- assertVisible:
+    id: "operations.search.chip.category"
+    checked: true
+    containsDescendants:
+      - text: "Рестораны"
 - tapOn:
     id: "ds.back"
 - assertVisible:

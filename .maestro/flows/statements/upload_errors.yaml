@@ -48,6 +48,7 @@ tags:
     visible:
       id: "statements.upload.error.wrong_format"
     timeout: 15000
+- assertVisible: "Это файл TXT, а нужен OFX"
 
 - tapOn:
     id: "statements.upload.pick_another"
@@ -75,3 +76,7 @@ tags:
 - scrollUntilVisible:
     element:
       id: "statements.upload.pick"
+- assertVisible:
+    id: "statements.upload"
+- assertNotVisible:
+    id: "e2e.picker"

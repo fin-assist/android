@@ -1,0 +1,35 @@
+[
+  {
+    "case_id": 72,
+    "field": "preconditions",
+    "before": "mockE2e с test orchestrator clearPackageData: RECORD_AUDIO ещё не выдано. Нативный Compose test activity; настоящий запрос Android permission, подменены только финансовые API.",
+    "after": "mockE2e на API34 со штатным Test Orchestrator clearPackageData: RECORD_AUDIO ещё не выдано. Нативный Compose test activity; настоящий запрос Android permission в en-US или ru-RU (неподдерживаемая локаль не пропускается молча). Финансовые API контролируемые; test-only fail-closed наблюдатель VoiceRecognizerFactory считает и запрещает любые обращения к recognition до выдачи разрешения. Сам системный диалог и его отказ не подменяются.",
+    "reason": "Q72 now independently checks actual permission kind and zero recognizer access instead of relying on static permission branch/default hardware absence.",
+    "evidence": [
+      {
+        "path": "app/src/androidTestMock/kotlin/ru/finassist/pf/VoicePermissionTest.kt",
+        "line": 66,
+        "detail": "Negative recognition witness."
+      },
+      {
+        "path": "app/src/androidTestMock/kotlin/ru/finassist/pf/VoicePermissionTest.kt",
+        "line": 132,
+        "detail": "Actual OS message type, EN/RU fixture."
+      }
+    ]
+  },
+  {
+    "case_id": 55,
+    "field": "preconditions",
+    "before": "mockE2e из PR276; каждая фаза начинается с clear_state и обычного UI-входа существующего синтетического пользователя. Перед открытием согласия: assistant опубликован1, GET current/ready, network_delay_ms=0; черновик Kaspersky, согласие ещё не выдано, лимит5. Раздельное управление опубликованной/возвращаемой версией; HELD GET освобождается явно. Во второй фазе GET429 имеет retryable:false и Retry-After3s. Счётчики содержат только безопасные версии/числа, без ПДн/ключей/токенов.",
+    "after": "mockE2e со сценариями FIN-446 (PR276 или содержащая их более новая сборка); каждая фаза начинается с clear_state и обычного UI-входа существующего синтетического пользователя. Перед открытием согласия: assistant опубликован1, GET current/ready, network_delay_ms=0; черновик Kaspersky, согласие ещё не выдано, лимит5. Раздельное управление опубликованной/возвращаемой версией; HELD GET освобождается явно. Во второй фазе GET429 имеет retryable:false и Retry-After3s. Счётчики содержат только безопасные версии/числа, без ПДн/ключей/токенов.",
+    "reason": "The current audited main contains PR276; case should identify the required capabilities rather than require an obsolete PR-only APK. All document/version/refusal requirements are retained.",
+    "evidence": [
+      {
+        "path": ".maestro/subflows/q55_open_consent.yaml",
+        "line": 15,
+        "detail": "Existing FIN446 fixture setup, reused by both independent phases."
+      }
+    ]
+  }
+]

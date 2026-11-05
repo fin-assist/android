@@ -45,7 +45,13 @@ tags:
     visible:
       id: "statements.history"
     timeout: 10000
-- assertVisible: "1–30.сентября · 1.операция"
+- assertVisible:
+    id: "statements.history.row"
+    index: 0
+    containsDescendants:
+      - text: "^zz-history-period\\.ofx$"
+      - text: "1–30.сентября · 1.операция"
+
 - scrollUntilVisible:
     element:
       id: "statements.history.upload"
@@ -74,7 +80,13 @@ tags:
     visible:
       id: "statements.history"
     timeout: 10000
-- assertVisible: "25.сентября · 1.операция"
+- assertVisible:
+    id: "statements.history.row"
+    index: 0
+    containsDescendants:
+      - text: "^zz-history-fallback\\.ofx$"
+      - text: "25.сентября · 1.операция"
+
 - scrollUntilVisible:
     element:
       id: "statements.history.upload"
@@ -114,4 +126,14 @@ tags:
     visible:
       id: "statements.history"
     timeout: 10000
-- assertVisible: "^0.операций$"
+- assertVisible:
+    id: "statements.history.row"
+    index: 0
+    containsDescendants:
+      - text: "^zz-history-empty\\.ofx$"
+      - text: "^0.операций$"
+- assertNotVisible:
+    text: ".+ · 0.операций"
+    childOf:
+      id: "statements.history.row"
+      index: 0

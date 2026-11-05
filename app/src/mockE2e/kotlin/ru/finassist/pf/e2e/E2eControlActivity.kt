@@ -144,10 +144,18 @@ class E2eControlActivity : ComponentActivity() {
             .associateWith { uri?.getQueryParameters(it).orEmpty() }
         var unmet = E2eConsentControl(backend.consents).apply(consentParameters)
         if (unmet != null) return unmet
+        val requestParameters = uri?.queryParameterNames.orEmpty().filter { E2eRequestControl.isParameter(it) }
+            .associateWith { uri?.getQueryParameters(it).orEmpty() }
+        if ("expect_statement_pending_key_retained" in requestParameters) {
+            backend.uiEvidence.retainedUploadKey(keys.pendingKey(octoberUploadAction())?.value)
+        }
+        unmet = E2eRequestControl(backend).apply(requestParameters)
+        if (unmet != null) return unmet
         uri?.queryParameterNames.orEmpty().forEach { name ->
             val value = uri?.getQueryParameter(name).orEmpty()
             when {
                 name in consentParameters -> Unit // validated and applied together above
+                name in requestParameters -> Unit // closed read-only evidence checks above
                 name == "flags" && value == "reset" -> overrides.clear()
                 name.startsWith(FLAG_PREFIX) -> {
                     val flag = Flag.byKey(name.removePrefix(FLAG_PREFIX))
@@ -195,21 +203,8 @@ class E2eControlActivity : ComponentActivity() {
                 name == "pending_upload_fixture" -> {
                     if (value != "october") unmet = "unknown pending upload fixture"
                     else {
-                        val digest = MessageDigest.getInstance("SHA-256")
-                        assets.open("e2e/statements/october.ofx").use { input ->
-                            val buffer = ByteArray(8192)
-                            while (true) {
-                                val read = input.read(buffer)
-                                if (read < 0) break
-                                digest.update(buffer, 0, read)
-                            }
-                        }
-                        val hash = MessageDigest.getInstance("SHA-256").apply {
-                            update(digest.digest())
-                            update("october.ofx".toByteArray(Charsets.UTF_8))
-                        }.digest().joinToString("") { "%02x".format(it) }
                         // No elapsed clock: intentionally no proof of age, as with a restored legacy record.
-                        keys.keyFor("statements.upload:$hash")
+                        backend.uiEvidence.restoredUploadKey(keys.keyFor(octoberUploadAction()).value)
                     }
                 }
                 name == "expect_uploads" -> {
@@ -241,6 +236,24 @@ class E2eControlActivity : ComponentActivity() {
             unmet = "post-commit failure requires analytics_dismiss"
         }
         return unmet
+    }
+
+    /** Closed bundled fixture only; raw user paths/content cannot be supplied through this control. */
+    private fun octoberUploadAction(): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        assets.open("e2e/statements/october.ofx").use { input ->
+            val buffer = ByteArray(8192)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        val hash = MessageDigest.getInstance("SHA-256").apply {
+            update(digest.digest())
+            update("october.ofx".toByteArray(Charsets.UTF_8))
+        }.digest().joinToString("") { "%02x".format(it) }
+        return "statements.upload:$hash"
     }
 
     private companion object {

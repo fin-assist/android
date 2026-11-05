@@ -32,19 +32,33 @@ tags:
     visible:
       id: "assistant.consent"
     timeout: 10000
-# FIN-366: disclose the actual scope and limits before consent is given.
+# FIN-366: assert both the disclosed text and its included/excluded group.
+- scrollUntilVisible:
+    element:
+      text: "Передаём"
+- assertVisible: "Передаём"
 - scrollUntilVisible:
     element:
       text: "Ваш вопрос и историю диалога"
-- assertVisible: "Ваш вопрос и историю диалога"
+- assertVisible:
+    id: "assistant.consent.included.item"
+    text: "Ваш вопрос и историю диалога"
+- scrollUntilVisible:
+    element:
+      text: "Не передаём"
+- assertVisible: "Не передаём"
 - scrollUntilVisible:
     element:
       text: "Номер телефона из аккаунта"
-- assertVisible: "Номер телефона из аккаунта"
+- assertVisible:
+    id: "assistant.consent.excluded.item"
+    text: "Номер телефона из аккаунта"
 - scrollUntilVisible:
     element:
       text: "Файлы выписок"
-- assertVisible: "Файлы выписок"
+- assertVisible:
+    id: "assistant.consent.excluded.item"
+    text: "Файлы выписок"
 - scrollUntilVisible:
     element:
       text: ".*полного обезличивания это не гарантирует.*"
@@ -72,6 +86,14 @@ tags:
     timeout: 10000
 - assertNotVisible:
     id: "assistant.question"
+- assertVisible:
+    id: "ds.chat.input"
+    text: "Krabsbir"
+    enabled: true
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=1&expect_assistant_questions=0&expect_assistant_answers=0"
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:
@@ -92,6 +114,11 @@ tags:
 - assertVisible:
     id: "assistant.answer.chip.analytics"
 
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=2&expect_assistant_questions=1&expect_assistant_answers=1"
+
 # The operations chip opens search scoped to the answer.
 - tapOn:
     id: "assistant.answer.chip.operations"
@@ -108,6 +135,8 @@ tags:
     id: "operations.search.chip.scope"
 - assertVisible:
     id: "operations.row"
+    containsDescendants:
+      - text: "Krabsbir"
 - tapOn:
     id: "ds.back"
 - assertVisible:

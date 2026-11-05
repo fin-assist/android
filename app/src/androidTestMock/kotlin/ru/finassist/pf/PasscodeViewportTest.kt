@@ -105,9 +105,15 @@ class PasscodeViewportTest {
                         assertEquals("$context keypad must not move when the error appears", keypadBefore,
                             compose.onNodeWithTag("ds.numpad.0").getUnclippedBoundsInRoot())
                         if (viewportHeight == 640 && ((scale == 1f && inset == 24) || (scale == 2f && inset == 48))) {
+                            val before = compose.runOnIdle { Triple(digits, deletes, forgot) }
                             compose.onNodeWithTag("ds.numpad.9").performClick()
                             compose.onNodeWithTag("ds.numpad.delete").performClick()
                             compose.onNodeWithTag(footerTag(screen)).performClick()
+                            compose.runOnIdle {
+                                assertEquals("$context digit callback", before.first + 1, digits)
+                                assertEquals("$context delete callback", before.second + 1, deletes)
+                                assertEquals("$context recovery callback", before.third + 1, forgot)
+                            }
                             checkedActions++
                         }
                         checked++
@@ -136,6 +142,7 @@ class PasscodeViewportTest {
         var density = 1f
         var backs = 0
         var forgot = 0
+        var deletes = 0
         compose.setContent {
             density = LocalDensity.current.density
             CompositionLocalProvider(
@@ -147,7 +154,7 @@ class PasscodeViewportTest {
                 PfTheme(darkTheme = false) {
                     Box(Modifier.requiredSize(360.dp, 640.dp).testTag("test.viewport")) {
                         val onDigit: (Int) -> Unit = { entered.value += it.toString() }
-                        val onDelete: () -> Unit = { entered.value = entered.value.dropLast(1) }
+                        val onDelete: () -> Unit = { deletes++; entered.value = entered.value.dropLast(1) }
                         when (mode.value) {
                             0, 1 -> PasscodeSetupContent(
                                 PasscodeEntryUiState(if (mode.value == 0) EnterStep.NEW else EnterStep.REPEAT, entered.value),
@@ -172,6 +179,7 @@ class PasscodeViewportTest {
         }
         for (screen in 0..6) {
             compose.runOnIdle { mode.value = screen; entered.value = "" }
+            val callbacksBefore = compose.runOnIdle { Triple(backs, forgot, deletes) }
             val extras = buildList {
                 if (screen in 2..4 || screen == 6) add("ds.back")
                 if (screen == 5) add("applock.unlock.forgot")
@@ -186,6 +194,11 @@ class PasscodeViewportTest {
             compose.onNodeWithTag("ds.passcode.dots").assertContentDescriptionEquals("Код-пароль: введено 0 из 4 цифр")
             if ("ds.back" in extras) compose.onNodeWithTag("ds.back").performClick()
             if (screen >= 5) compose.onNodeWithTag(footerTag(if (screen == 5) 0 else 2)).performClick()
+            compose.runOnIdle {
+                assertEquals("$context delete callback", callbacksBefore.third + 1, deletes)
+                assertEquals("$context back callback", callbacksBefore.first + if ("ds.back" in extras) 1 else 0, backs)
+                assertEquals("$context recovery callback", callbacksBefore.second + if (screen >= 5) 1 else 0, forgot)
+            }
         }
         compose.runOnIdle { assertEquals(4, backs); assertEquals(2, forgot) }
 

@@ -21,5 +21,8 @@ tags:
 - assertVisible: "Эта версия больше не поддерживается"
 - assertVisible:
     id: "availability.update.button"
+- assertVisible: "Обновить"
 - assertVisible:
     id: "availability.update.support"
+- assertVisible: "Написать в поддержку"
+- assertNotVisible: ".*(RuStore|Google Play|App Store|AppGallery|Galaxy Store).*"

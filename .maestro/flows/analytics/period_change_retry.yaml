@@ -30,6 +30,11 @@ tags:
       childOf:
         id: "ds.period.pick"
     timeout: 10000
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible:
+    id: "analytics.block.tiles"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -70,7 +75,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?error_operation=off"
+      LINK: "pfe2e://config?error_operation=off&expect_analytics_dismiss_requests=1"
 # Resume is not consent to retry the failed target, nor to replace its notice with a refresh of the old month.
 # The content retained its scroll at regular payments. Bring the complete period controls back into view.
 - scrollUntilVisible:
@@ -178,4 +183,4 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?network_delay_ms=0&error_operation=off&expect_error_requests=1"
+      LINK: "pfe2e://config?network_delay_ms=0&error_operation=off&expect_error_requests=1&expect_analytics_dismiss_requests=1"

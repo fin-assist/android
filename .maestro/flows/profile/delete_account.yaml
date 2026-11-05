@@ -28,6 +28,7 @@ tags:
 # FIN-389: the error must coexist with the dots, keypad and recovery action.
 - assertVisible:
     id: "ds.passcode.dots"
+- assertVisible: "Код-пароль: введено 4 из 4 цифр"
 - assertVisible:
     id: "ds.numpad.0"
 - assertVisible:
@@ -42,6 +43,7 @@ tags:
 - extendedWaitUntil:
     visible: "Удалить аккаунт?"
     timeout: 10000
+- assertVisible: "Удалим аккаунт, выписки вместе с файлами, операции и ваши правки категорий, историю вопросов помощнику\\. Восстановить их будет нельзя\\."
 # While the request runs, the dialog is «Удаляем…» and neither «Отмена» nor Back closes it: the deletion is
 # already sent, closing would only hide its outcome (FIN-64). A slow backend keeps that state up for 6 s.
 - runFlow:
@@ -53,6 +55,9 @@ tags:
 - extendedWaitUntil:
     visible: "Удаляем…"
     timeout: 5000
+- assertVisible:
+    id: "ds.dialog.cancel"
+    enabled: false
 - pressKey: Back
 - assertVisible:
     id: "ds.dialog"

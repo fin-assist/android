@@ -24,6 +24,7 @@ import java.time.YearMonth
 import ru.finassist.pf.core.api.model.FieldErrorCodes
 import ru.finassist.pf.core.common.time.parseApiDateTime
 import java.time.temporal.ChronoUnit
+import java.time.format.DateTimeFormatter
 
 /** Feed, search, details and category change (api.md 4–5). */
 class MockOperationsApi(private val backend: MockBackend) : OperationsApi, CategoriesApi {
@@ -115,23 +116,28 @@ class MockOperationsApi(private val backend: MockBackend) : OperationsApi, Categ
     }
 
     override suspend fun getOperation(id: String, occurredAt: String): OperationDetails {
+        backend.uiEvidence.detailRequest()
         backend.simulateNetwork()
         backend.requireSession()
         validateOccurredAt(occurredAt)
         val record = views.record(id) ?: throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
-        return views.details(record)
+        return views.details(record).also {
+            backend.uiEvidence.details(id, occurredAt, it.occurredAt.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+        }
     }
 
     /** What a category change can alter: the category, refund target and pair of every operation. */
     private fun categoryState() = backend.ledger.all.associate { it.id to Triple(it.category.id, it.refundTarget?.id, it.pairId) }
 
     override suspend fun changeCategory(id: String, request: ChangeCategoryRequest): ChangeCategoryResponse {
+        backend.uiEvidence.categoryRequest()
         backend.simulateNetwork()
         backend.requireSession()
         validateOccurredAt(request.occurredAt)
         return backend.mutex.withLock {
             // 404 before 422 (api.md, «Ошибки»): an operation that is not there is not found, whatever the category.
             views.record(id) ?: throw backend.apiError(ErrorCodes.NOT_FOUND, 404)
+            backend.uiEvidence.category(id, request.occurredAt)
             val category = backend.catalog.byId(request.categoryId) ?: throw backend.apiError(ErrorCodes.CATEGORY_NOT_ASSIGNABLE, 422)
             val before = categoryState()
             val (items, replaced) = try {

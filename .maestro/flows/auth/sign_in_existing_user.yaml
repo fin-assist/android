@@ -5,7 +5,45 @@ tags:
   - auth
 ---
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/login.yaml
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: false
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: false
+# Keep the transient Call screen observable rather than letting the login helper skip directly to PIN.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_delay_ms=6000"
+- runFlow:
+    file: ../../subflows/sign_in.yaml
+    env:
+      PHONE: "9161234567"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 10000
+- assertVisible:
+    id: "auth.call.dial"
+- runFlow: ../../subflows/set_passcode.yaml
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 40000
+- assertVisible:
+    id: "operations.row"
 
 # The fixture statement is already there: the feed has rows; all three tabs open.
 - assertVisible:

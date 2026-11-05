@@ -72,6 +72,12 @@ tags:
 - assertVisible:
     id: "statements.history.unread"
 - assertVisible: "Не прочитали 2.строки"
+- assertVisible:
+    id: "statements.history.row"
+    index: 0
+    containsDescendants:
+      - text: "^unread-same-line\\.ofx$"
+      - text: "Не прочитали 2.строки"
 - tapOn:
     id: "statements.history.unread"
 - extendedWaitUntil:
@@ -83,17 +89,20 @@ tags:
 - assertNotVisible: ".*Остальные операции загружены.*"
 # Both physical numbers AND reasons must appear twice; adding reason to the key alone would still collide.
 - assertVisible:
-    text: "Строка 31 · дата не прочитана"
+    id: "statements.unread.line"
     index: 0
+    containsDescendants:
+      - text: "Строка 31 · дата не прочитана"
+      - text: "нет даты"
 - assertVisible:
-    text: "Строка 31 · дата не прочитана"
+    id: "statements.unread.line"
     index: 1
-- assertVisible:
-    text: "нет даты"
-    index: 0
-- assertVisible:
-    text: "нет даты"
-    index: 1
+    containsDescendants:
+      - text: "Строка 31 · дата не прочитана"
+      - text: "нет даты"
+- assertNotVisible:
+    id: "statements.unread.line"
+    index: 2
 - assertVisible:
     id: "statements.unread.report"
 - back

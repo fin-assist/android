@@ -52,14 +52,26 @@ tags:
       id: "operations.feed"
     timeout: 10000
 - assertVisible: "(?iu)вчера"
-- assertVisible: "Без описания"
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Без описания"
 - tapOn: "Без описания"
 # The tag is on the header row, the title on a child node: id and text are checked apart (FIN-70).
 - extendedWaitUntil:
     visible:
       id: "operations.detail.title"
     timeout: 10000
-- assertVisible: "Без описания"
+- assertVisible:
+    id: "operations.detail.title"
+    containsDescendants:
+      - text: "Без описания"
+# The exact fixture timestamp/amount binds the placeholder to the 7 October debit, not another row.
+- assertVisible: "07\\.10\\.2026, 09:15"
+- assertVisible: "−250[ \u00a0\u202f]₽"
 # No description in the statement: no «Описание в выписке» row; the bank's category is still there.
 - assertNotVisible: "Описание в выписке"
-- assertVisible: "Фастфуд"
+- assertVisible:
+    id: "operations.detail.statement.category"
+    containsDescendants:
+      - text: "(?s).*Категория банка.*Фастфуд.*"

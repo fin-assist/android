@@ -61,6 +61,11 @@ tags:
 - assertVisible: "Не получилось ответить. Вопрос не потрачен"
 - assertVisible: ".*[Оо]сталось 5 из 5.*"
 
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=2&expect_assistant_retries=0&expect_assistant_questions=1&expect_assistant_answers=1"
+
 # Отзываем согласие через настоящий профиль; чтение прежних ответов остаётся доступным.
 - tapOn:
     id: "ds.back"
@@ -94,6 +99,10 @@ tags:
     visible:
       id: "assistant.consent"
     timeout: 10000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=2&expect_assistant_retries=1&expect_assistant_retry_keys=1&expect_assistant_retry_targets=1&expect_assistant_questions=1&expect_assistant_answers=1"
 - scrollUntilVisible:
     element:
       id: "assistant.consent.checkbox"
@@ -140,3 +149,7 @@ tags:
     id: "assistant.answer.failed"
 - assertVisible: ".*операций «Kaspersky» не нашли.*"
 - assertVisible: ".*[Оо]сталось 4 из 5.*"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=2&expect_assistant_retries=2&expect_assistant_retry_keys=1&expect_assistant_retry_targets=1&expect_assistant_questions=1&expect_assistant_answers=1"

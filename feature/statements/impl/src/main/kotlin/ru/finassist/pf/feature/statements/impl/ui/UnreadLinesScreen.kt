@@ -228,7 +228,7 @@ internal fun UnreadLinesContent(
 @Composable
 private fun UnreadLineRow(title: String, reason: String, divider: Boolean) {
     Column {
-        Column(Modifier.fillMaxWidth().padding(vertical = PfTheme.dimens.space3)) {
+        Column(Modifier.fillMaxWidth().padding(vertical = PfTheme.dimens.space3).testTag("statements.unread.line")) {
             Text(title, style = PfTheme.type.body.copy(fontFeatureSettings = "tnum"), color = PfTheme.colors.text)
             Text(reason, style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
         }

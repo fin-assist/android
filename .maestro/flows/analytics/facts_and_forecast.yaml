@@ -110,6 +110,10 @@ tags:
 - assertVisible: "Прогноз расходов на год"
 - scrollUntilVisible:
     element:
+      text: "(?s).*ноябрь 2025.*сентябрь 2026.*"
+- assertVisible: "(?s).*ноябрь 2025.*сентябрь 2026.*"
+- scrollUntilVisible:
+    element:
       text: "(?s).*Неполные месяцы.*октябрь 2025.*октябрь 2026.*"
 - assertVisible: "(?s).*независимо от выбранного года.*"
 - tapOn:

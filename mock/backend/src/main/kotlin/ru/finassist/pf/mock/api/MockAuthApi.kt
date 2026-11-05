@@ -95,6 +95,20 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         // `expires_in` is computed on every send, a replay by the same key included (api.md 1.1): floor, not below 0.
         val sentAt = backend.now().toInstant()
         val left = java.time.Duration.between(sentAt, stored.expiresAt.toInstant()).seconds.coerceAtLeast(0)
+        backend.mutex.withLock {
+            verifications[stored.verificationToken]?.let { verification ->
+                backend.uiEvidence.phoneResult(
+                    java.time.Duration.between(verification.createdAt, verification.expiresAt).seconds.toInt(),
+                    stored.expiresAt.toInstant().toEpochMilli(),
+                    // The mock and client use the same shifted clock. expires_in is rounded down; allow only
+                    // the direct in-process response handoff's one-second minute-boundary interval.
+                    setOf(0L, 1L).map { handoff ->
+                        sentAt.plusSeconds(left + handoff).atZone(java.time.ZoneId.systemDefault())
+                            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm", java.util.Locale.ROOT))
+                    }.toSet(),
+                )
+            }
+        }
         return stored.copy(
             expiresIn = left.toInt(), serverTime = sentAt,
             responseTiming = ResponseTiming(serverDate = sentAt, receivedElapsedMillis = backend.elapsedClock?.nowMillis()),
@@ -196,7 +210,10 @@ class MockAuthApi(private val backend: MockBackend) : AuthApi {
         backend.mutex.withLock { refreshTokens.remove(refreshToken) }
     }
 
-    override suspend fun getConsentDocument(type: ConsentType): ConsentDocument = backend.consents.readDocument(type)
+    override suspend fun getConsentDocument(type: ConsentType): ConsentDocument {
+        if (type == ConsentType.PERSONAL_DATA) backend.uiEvidence.personalDataRead(backend.elapsedClock?.nowMillis())
+        return backend.consents.readDocument(type)
+    }
 
     private companion object {
         val PHONE = Regex("""^\+7\d{10}$""")

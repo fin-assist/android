@@ -9,6 +9,11 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -34,6 +39,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import ru.finassist.pf.e2e.E2eDocumentPickerActivity
+import ru.finassist.pf.e2e.E2eControlActivity
+import org.junit.Assert.assertTrue
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -80,6 +87,7 @@ class StatementPickerTest {
 
         intended(hasComponent(E2eDocumentPickerActivity::class.java.name))
         compose.waitForTag("statements.result", timeoutMs = 30_000)
+        compose.onNodeWithTag("statements.result").assertIsDisplayed()
     }
 
     @Test
@@ -91,6 +99,9 @@ class StatementPickerTest {
         compose.waitForTag("statements.download_period.from")
         compose.onNodeWithTag("statements.download_period.from").performTextReplacement("2026-09-01")
         compose.onNodeWithTag("statements.download_period.to").performTextReplacement("2026-09-30")
+        compose.onNodeWithTag("statements.download_period.from").assertTextEquals("2026-09-01")
+        compose.onNodeWithTag("statements.download_period.to").assertTextEquals("2026-09-30")
+        compose.onNodeWithTag("statements.download_period.confirm").assertIsEnabled()
         intending(hasAction(Intent.ACTION_VIEW)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null))
         compose.onNodeWithTag("statements.download_period.confirm").performClick()
         val expected = "https://www.tbank-online.com/mybank/api/operations/timeline/public/legacy/v1/export_operations" +
@@ -99,8 +110,42 @@ class StatementPickerTest {
         intended(allOf(hasAction(Intent.ACTION_VIEW), hasData(expected)))
     }
 
+    /** Maestro checks calendar/input behavior; this companion asserts the observable no-browser boundary. */
+    @Test
+    fun failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser() {
+        signInWithExistingAccount()
+        compose.onNodeWithTag("operations.feed.upload_new").performClick()
+        compose.waitForTag("statements.upload.download_period")
+        compose.onNodeWithTag("statements.upload.download_period").performScrollTo().performClick()
+        compose.onNodeWithTag("statements.download_period.day.2026-10-01").performClick()
+        compose.onNodeWithTag("statements.download_period.day.2026-10-08").performClick()
+        compose.onNodeWithTag("statements.download_period.from").assertTextEquals("2026-10-01")
+        compose.onNodeWithTag("statements.download_period.to").assertTextEquals("2026-10-08")
+        compose.onNodeWithTag("statements.download_period.confirm").assertIsEnabled()
+        // Capture a regression too: no real browser may open even if the client incorrectly emits ACTION_VIEW.
+        intending(hasAction(Intent.ACTION_VIEW)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null))
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            compose.activity.startActivity(Intent(compose.activity, E2eControlActivity::class.java)
+                .setData(Uri.parse("pfe2e://config?offline=true")))
+        }
+        compose.waitForTag("e2e.config.applied")
+        compose.waitUntil(10_000) { !compose.hasTag("e2e.config.applied") }
+        compose.onNodeWithTag("statements.download_period.confirm").assertIsDisplayed().performClick()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithTag("ds.error.error").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Не удаётся подключиться к серверу", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("statements.download_period.from").assertTextEquals("2026-10-01")
+        compose.onNodeWithTag("statements.download_period.to").assertTextEquals("2026-10-08")
+        compose.onNodeWithTag("statements.download_period.confirm").assertIsEnabled()
+        assertTrue("An unsuccessful download preparation must not launch a browser",
+            Intents.getIntents().none { it.action == Intent.ACTION_VIEW })
+    }
+
     private fun signInWithExistingAccount() {
         compose.waitForTag("auth.phone.document")
+        compose.onNodeWithTag("auth.phone.age").performScrollTo().assertIsOff()
+        compose.onNodeWithTag("auth.phone.consent").performScrollTo().assertIsOff()
         compose.onNodeWithTag("auth.phone.age").performScrollTo().performClick()
         compose.onNodeWithTag("auth.phone.consent").performScrollTo().performClick()
         compose.waitForTag("auth.phone.input")
@@ -124,6 +169,7 @@ class StatementPickerTest {
             compose.onNodeWithTag("applock.biometric_offer.skip").performClick()
         }
         compose.waitForTag("operations.feed.upload_new", timeoutMs = 30_000)
+        compose.onNodeWithTag("operations.feed").assertIsDisplayed()
     }
 
     private fun enterCode() = PASSCODE.forEach { d -> compose.onNodeWithTag("ds.numpad.$d").performClick() }

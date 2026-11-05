@@ -26,6 +26,15 @@ tags:
     checked: false
 - tapOn:
     id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: true
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: false
 - scrollUntilVisible:
     element:
       id: "auth.phone.submit"
@@ -46,6 +55,15 @@ tags:
       id: "auth.phone.consent"
 - tapOn:
     id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: false
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: true
 - scrollUntilVisible:
     element:
       id: "auth.phone.submit"

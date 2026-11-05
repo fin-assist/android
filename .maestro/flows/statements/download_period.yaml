@@ -23,6 +23,39 @@ tags:
 - tapOn:
     id: "statements.download_period.day.2026-10-08"
 - assertVisible:
+    id: "statements.download_period.day.2026-10-01"
+    selected: true
+- assertVisible:
+    id: "statements.download_period.day.2026-10-02"
+    selected: true
+- assertVisible:
+    id: "statements.download_period.day.2026-10-03"
+    selected: true
+- assertVisible:
+    id: "statements.download_period.day.2026-10-04"
+    selected: true
+- assertVisible:
+    id: "statements.download_period.day.2026-10-05"
+    selected: true
+- assertVisible:
+    id: "statements.download_period.day.2026-10-06"
+    selected: true
+- assertVisible:
+    id: "statements.download_period.day.2026-10-07"
+    selected: true
+- assertVisible:
+    id: "statements.download_period.day.2026-10-08"
+    selected: true
+- assertVisible:
+    id: "statements.download_period.day.2026-10-09"
+    enabled: false
+- assertVisible:
+    id: "statements.download_period.from"
+    text: "2026-10-01"
+- assertVisible:
+    id: "statements.download_period.to"
+    text: "2026-10-08"
+- assertVisible:
     id: "statements.download_period.confirm"
     enabled: true
 - tapOn:

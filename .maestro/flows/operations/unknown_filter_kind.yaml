@@ -40,3 +40,24 @@ tags:
     id: "operations.search.chip.scope"
 - assertVisible: "Как на «Аналитике».*"
 - assertNotVisible: "Зачисление кэшбэка"
+# This exact September credit is a discriminating oracle even when it starts below the viewport.
+# Retaining the unknown expense kind excludes it; removing that one analytics scope finds it.
+- tapOn:
+    id: "operations.search.input"
+- inputText: "1085.80"
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: "operations.search.empty"
+    timeout: 10000
+# Query edits retain the chip-row offset; reuse the already revealed scope.
+- tapOn:
+    id: "operations.search.chip.scope"
+- extendedWaitUntil:
+    visible: 'Найдена 1[\s\u00A0\u202F]операция'
+    timeout: 10000
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Зачисление кэшбэка"
+      - text: '\+1[\s\u00A0\u202F]085,80[\s\u00A0\u202F]₽'

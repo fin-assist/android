@@ -34,6 +34,10 @@ tags:
 - assertVisible:
     id: "ds.segment.2"
     checked: true
+- assertVisible:
+    id: "analytics.period.rolling_year"
+    rightOf:
+      id: "ds.segment.0"
 # The selected calendar segment is the exit from its rolling period.
 - tapOn:
     id: "ds.segment.2"
@@ -64,6 +68,10 @@ tags:
 - assertVisible:
     id: "ds.segment.1"
     checked: true
+- assertVisible:
+    id: "analytics.period.rolling_quarter"
+    rightOf:
+      id: "ds.segment.0"
 - tapOn:
     id: "ds.segment.1"
 - extendedWaitUntil:
@@ -105,6 +113,14 @@ tags:
     checked: true
 - assertNotVisible:
     id: "ds.period.pick"
+- assertNotVisible:
+    id: "ds.period.prev"
+- assertNotVisible:
+    id: "ds.period.next"
+- assertNotVisible:
+    id: "analytics.period.rolling_year"
+- assertNotVisible:
+    id: "analytics.period.rolling_quarter"
 - swipe:
     from:
       id: "analytics.period.types"

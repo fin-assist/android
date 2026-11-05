@@ -25,6 +25,11 @@ tags:
     id: "ds.back"
 - assertVisible:
     id: "assistant.consent.reopen"
+- assertVisible:
+    id: "ds.chat.input"
+    text: "Kaspersky"
+- assertNotVisible:
+    id: "assistant.question"
 - tapOn:
     id: "ds.tab.profile"
 - scrollUntilVisible:
@@ -49,6 +54,7 @@ tags:
 - extendedWaitUntil:
     visible:
       id: "ds.tab.profile"
+      selected: true
     timeout: 10000
 - tapOn:
     id: "ds.tab.assistant"
@@ -62,6 +68,10 @@ tags:
     id: "assistant.consent.reopen"
 - assertNotVisible:
     id: "assistant.question"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=1&expect_assistant_questions=0&expect_assistant_answers=0"
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:
@@ -69,3 +79,7 @@ tags:
       id: "assistant.answer"
     timeout: 20000
 - assertVisible: ".*[Оо]сталось 4 из 5.*"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=2&expect_assistant_questions=1&expect_assistant_answers=1"

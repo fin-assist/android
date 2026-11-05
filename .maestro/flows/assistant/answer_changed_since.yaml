@@ -52,7 +52,7 @@ tags:
       id: "assistant.answer"
     timeout: 20000
 # A fresh answer: nothing changed since it was calculated.
-- assertVisible: "По вашим операциям.*"
+- assertVisible: "По вашим операциям.*· посчитано .+"
 - assertNotVisible: "С тех пор.*"
 
 # Change the category of an operation.
@@ -77,25 +77,47 @@ tags:
     visible:
       id: "operations.category.search"
     timeout: 5000
+# Pick a known category and retain its expected name; the first category may already be Restaurants.
+- evalScript: ${output.changedCategory = "Рестораны"}
+- scrollUntilVisible:
+    element:
+      id: "operations.category.option"
+      containsDescendants:
+        - text: "Рестораны"
 - tapOn:
     id: "operations.category.option"
-    index: 1
-# The first options may include the current category: then «Сохранить» stays disabled, take another one.
+    containsDescendants:
+      - text: "Рестораны"
 - runFlow:
     when:
       visible:
         id: "operations.detail.save"
         enabled: false
     commands:
+      - evalScript: ${output.changedCategory = "Супермаркеты"}
+      - scrollUntilVisible:
+          element:
+            id: "operations.category.option"
+            containsDescendants:
+              - text: "Супермаркеты"
+          direction: UP
       - tapOn:
           id: "operations.category.option"
-          index: 2
+          containsDescendants:
+            - text: "Супермаркеты"
+- assertVisible:
+    id: "operations.detail.save"
+    enabled: true
 - tapOn:
     id: "operations.detail.save"
 - extendedWaitUntil:
     notVisible:
       id: "operations.category.search"
     timeout: 10000
+- assertVisible:
+    id: "operations.detail.category"
+    containsDescendants:
+      - text: ${output.changedCategory}
 - tapOn:
     id: "ds.back"
 

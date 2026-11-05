@@ -24,15 +24,19 @@ tags:
     id: "availability.maintenance.check"
     enabled: false
 
-# Each control acknowledgement is visible for 4 seconds. Keep maintenance enabled for at least 20 seconds:
-# the one automatic probe receives a fresh refusal, which must not start another automatic loop.
+# Each acknowledgement is visible for 4 seconds. Forty seconds covers both the first 15-second deadline
+# and the fresh refusal's next 15-second deadline. Exact reads prove that the fresh refusal did not poll again.
 - repeat:
-    times: 5
+    times: 10
     commands:
       - runFlow:
           file: ../../subflows/config.yaml
           env:
             LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=15"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&expect_consent_reads=2&expect_maintenance_probes=1&expect_maintenance_probe_after_deadline=true"
 
 # End maintenance, then wait for the fresh refusal's original deadline before the manual check.
 - runFlow:
@@ -54,6 +58,10 @@ tags:
     visible:
       id: "operations.feed"
     timeout: 15000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&expect_consent_reads=3&expect_maintenance_probes=2&expect_maintenance_probe_after_deadline=true"
 
 # A new maintenance episode receives its own one-shot automatic probe.
 - runFlow:
@@ -74,3 +82,7 @@ tags:
     notVisible:
       id: "availability.maintenance"
     timeout: 40000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?consent_type=personal_data&expect_consent_reads=4&expect_maintenance_probes=3&expect_maintenance_probe_after_deadline=true"

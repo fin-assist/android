@@ -42,16 +42,16 @@ tags:
     visible:
       id: "statements.upload.busy"
     timeout: 10000
-# Let the first snapshot/drop/open reach 429, then enable maintenance. Returning cannot skip that original wait.
+# Observe the actual 429 receipt before maintenance; elapsed time alone cannot establish this interleaving.
 - extendedWaitUntil:
-    visible:
-      id: "e2e.never"
-    timeout: 3000
-    optional: true
+    visible: "e2e.stream.rate_limited=1"
+    timeout: 15000
+- assertVisible:
+    id: "statements.upload.busy"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?maintenance=30&maintenance_retry_after=15"
+      LINK: "pfe2e://config?expect_stream_rate_limited_exact=1&maintenance=30&maintenance_retry_after=15"
 - extendedWaitUntil:
     visible:
       id: "availability.maintenance"
@@ -86,3 +86,21 @@ tags:
     notVisible: "Разбираем…"
     timeout: 15000
 - assertVisible: "october.ofx"
+- assertVisible:
+    id: "statements.history.row"
+    index: 0
+    containsDescendants:
+      - text: "Загружено .*"
+- assertVisible:
+    id: "statements.history.row"
+    index: 1
+    containsDescendants:
+      - text: "Загружено .*"
+- assertNotVisible:
+    id: "statements.history.row"
+    index: 2
+- assertNotVisible: "Не получилось разобрать операции в файле"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_uploads=2&expect_stream_rate_limited_exact=1&expect_stream_reopen_after_deadline=true&expect_maintenance_probes=1&expect_maintenance_probe_after_deadline=true&consent_type=personal_data&expect_consent_reads=2"

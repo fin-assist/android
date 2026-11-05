@@ -15,7 +15,15 @@ tags:
     timeout: 10000
 - assertVisible:
     id: "operations.detail.title"
+    containsDescendants:
+      - text: "Пополнение брокерского счета"
 - assertVisible: "Из выписки"
+# The timestamp is visible in the hero, not only present in the transport request.
+- assertVisible: '30\.09\.2026, 17:53'
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_operation_details_requests=1&expect_operation_details_timestamp_exact=true"
 
 # Category picker: choose another category and save.
 - tapOn:
@@ -44,6 +52,10 @@ tags:
       id: "operations.category.search"
     timeout: 10000
 - assertVisible: "Вы выбрали сами"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_category_requests=1&expect_category_timestamp_exact=true"
 
 - tapOn:
     id: "ds.back"
@@ -59,6 +71,11 @@ tags:
       id: "operations.detail"
     timeout: 10000
 - assertVisible: "Вы выбрали сами"
+- assertVisible: '30\.09\.2026, 17:53'
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_operation_details_requests=2&expect_operation_details_timestamp_exact=true&expect_category_requests=1&expect_category_timestamp_exact=true"
 - tapOn:
     id: "ds.back"
 - assertVisible:

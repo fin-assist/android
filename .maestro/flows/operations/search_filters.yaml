@@ -22,12 +22,20 @@ tags:
     visible:
       id: "operations.search.empty"
     timeout: 10000
+- assertVisible: "По запросу ничего не найдено"
+- assertVisible:
+    id: "operations.search.reset"
 - tapOn:
     id: "operations.search.reset"
 - extendedWaitUntil:
     visible:
       id: "operations.search.initial"
     timeout: 10000
+
+- assertNotVisible:
+    id: "operations.search.input"
+    text: "Zzqqxx"
+- assertVisible: "Магазин, категория или сумма"
 
 # A merchant from the fixture statement (ASCII: Maestro types it reliably on any emulator).
 - tapOn:
@@ -38,7 +46,7 @@ tags:
     visible:
       id: "operations.search.count"
     timeout: 10000
-- assertVisible: "Найдено.*"
+- assertVisible: 'Найдено 27[\s\u00A0\u202F]операций'
 - assertVisible:
     id: "operations.row"
 
@@ -54,6 +62,10 @@ tags:
     checked: true
 - assertVisible:
     id: "operations.search.chip.reset"
+    below:
+      id: "operations.search.chip.kind"
+    leftOf:
+      id: "operations.search.chip.kind"
 
 # Amount sheet.
 - tapOn:
@@ -73,6 +85,34 @@ tags:
 - extendedWaitUntil:
     visible:
       id: "operations.search.count"
+    timeout: 10000
+
+# All 27 matching debits satisfy 100–100000. A restrictive second bound is a positive
+# discriminator that proves applying an amount actually re-queries rather than retaining old results.
+- assertVisible: 'Найдено 27[\s\u00A0\u202F]операций'
+- tapOn:
+    id: "operations.search.chip.amount"
+- tapOn:
+    id: "operations.search.amount.to"
+- eraseText
+- inputText: "500"
+- hideKeyboard
+- tapOn:
+    id: "operations.search.amount.apply"
+- extendedWaitUntil:
+    visible: 'Найдено 6[\s\u00A0\u202F]операций'
+    timeout: 10000
+- tapOn:
+    id: "operations.search.chip.amount"
+- tapOn:
+    id: "operations.search.amount.to"
+- eraseText
+- inputText: "100000"
+- hideKeyboard
+- tapOn:
+    id: "operations.search.amount.apply"
+- extendedWaitUntil:
+    visible: 'Найдено 27[\s\u00A0\u202F]операций'
     timeout: 10000
 
 # FIN-416: reset is below the row and stays visible at either scroll edge.
@@ -100,6 +140,13 @@ tags:
     id: "operations.search.chip.kind"
     checked: false
 
+- assertVisible:
+    id: "operations.search.input"
+    text: "Krabsbir"
+- extendedWaitUntil:
+    visible: 'Найдено 27[\s\u00A0\u202F]операций'
+    timeout: 10000
+
 # Period: all time.
 - swipe:
     from:
@@ -110,6 +157,9 @@ tags:
 - tapOn:
     id: "operations.search.period.all"
 - assertVisible: "За всё время"
+- extendedWaitUntil:
+    visible: 'Найдено 28[\s\u00A0\u202F]операций'
+    timeout: 10000
 
 # A result opens its card; back returns to the results.
 - tapOn:

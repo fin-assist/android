@@ -55,7 +55,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?analytics_pending_responses=0"
+      LINK: "pfe2e://config?analytics_pending_responses=0&expect_statement_upload_requests=1&expect_statement_delete_requests=0"
 # Returning from the control activity must not silently retry the timed-out preparation.
 - assertVisible:
     id: "analytics.preparation_timeout"
@@ -70,3 +70,7 @@ tags:
 - assertNotVisible:
     id: "analytics.empty"
 - assertVisible: "Октябрь 2026"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_statement_upload_requests=1&expect_statement_delete_requests=0"

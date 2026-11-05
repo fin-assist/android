@@ -84,3 +84,31 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?error_operation=off"
+- scrollUntilVisible:
+    element:
+      id: "profile.theme"
+- tapOn:
+    id: "profile.theme"
+- tapOn:
+    id: "profile.theme.light"
+- extendedWaitUntil:
+    notVisible:
+      id: "profile.theme.light"
+    timeout: 5000
+- assertVisible:
+    id: "profile.theme"
+    containsDescendants:
+      - text: "Светлая"
+- assertNotVisible:
+    id: "ds.error.warning"
+- assertNotVisible:
+    id: "ds.error.error"
+# Postcondition: failed/successful theme writes preserve the authenticated operations list.
+- tapOn:
+    id: "ds.tab.operations"
+- extendedWaitUntil:
+    visible:
+      id: "operations.row"
+    timeout: 20000
+- assertNotVisible:
+    id: "auth.phone"

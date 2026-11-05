@@ -57,6 +57,8 @@ tags:
       id: "assistant.answer.failed"
     timeout: 20000
 - assertVisible: "Не получилось ответить. Вопрос не потрачен"
+- assertVisible:
+    id: "assistant.answer.failed.retry"
 - assertVisible: ".*[Оо]сталось 5 из 5.*"
 
 # FIN-75: the next answer is fine; a double tap on «Повторить» while the first request is on its way (1.5 s latency)
@@ -72,8 +74,19 @@ tags:
     visible:
       id: "assistant.answer"
     timeout: 20000
+- assertVisible:
+    id: "assistant.answer"
+    index: 0
+- assertNotVisible:
+    id: "assistant.answer"
+    index: 1
 - assertNotVisible:
     id: "assistant.answer.failed"
 - assertNotVisible:
     id: "assistant.chat.send_failed"
 - assertVisible: ".*[Оо]сталось 4 из 5.*"
+# Observe the real mock API boundary, not only a visible answer or the quota.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=2&expect_assistant_retries=1&expect_assistant_retry_keys=1&expect_assistant_retry_targets=1&expect_assistant_questions=1&expect_assistant_answers=1"

@@ -58,6 +58,9 @@ tags:
 - tapOn:
     id: "statements.result.done"
 
+- assertVisible:
+    id: "operations.feed"
+
 # The feed: the banner, its date is the statement's end. The day and the month are joined by a no-break space.
 - extendedWaitUntil:
     visible:
@@ -74,3 +77,7 @@ tags:
       id: "analytics.stale"
     timeout: 15000
 - assertVisible: "Данные в приложении по 20.сентября — с тех пор прошло больше двух недель"
+- assertVisible:
+    id: "analytics.stale"
+    above:
+      id: "ds.period.pick"
