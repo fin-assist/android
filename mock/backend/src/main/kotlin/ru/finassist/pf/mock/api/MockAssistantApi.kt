@@ -91,7 +91,7 @@ class MockAssistantApi(private val backend: MockBackend) : AssistantApi {
 
     private fun checkConsentAndLimit() {
         checkOffTopicLimit()
-        if (backend.profile.assistantConsent?.granted != true) throw backend.apiError(ErrorCodes.CONSENT_REQUIRED, 403)
+        if (backend.profile.assistantConsent?.needsRenewal != false) throw backend.apiError(ErrorCodes.CONSENT_REQUIRED, 403)
         if (remaining() <= 0) throw backend.apiError(ErrorCodes.LIMIT_EXCEEDED, 403, resetsAt = resetsAt())
     }
 

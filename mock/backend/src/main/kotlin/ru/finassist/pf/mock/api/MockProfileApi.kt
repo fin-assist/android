@@ -25,9 +25,14 @@ class MockProfileApi(private val backend: MockBackend, private val tokenStore: T
 
     override suspend fun getProfile(): Profile {
         backend.simulateNetwork()
-        backend.requireSession()
-        checkCapturedOwner()
-        return backend.profile
+        return backend.mutex.withLock {
+            backend.requireSession()
+            checkCapturedOwner()
+            val current = backend.consents.publishedVersion(ConsentType.ASSISTANT)
+            backend.profile.copy(consents = backend.profile.consents.map {
+                if (it.type == ConsentType.ASSISTANT) it.copy(currentVersion = current) else it
+            })
+        }
     }
 
     override suspend fun updateProfile(update: ProfileUpdate): Profile {
@@ -50,23 +55,27 @@ class MockProfileApi(private val backend: MockBackend, private val tokenStore: T
     }
 
     override suspend fun grantAssistantConsent(grant: AssistantConsentGrant): Profile {
+        backend.consents.recordGrant(grant.version)
         backend.simulateNetwork()
         backend.requireSession()
-        if (grant.version != MockBackend.CONSENT_VERSION_ASSISTANT) throw backend.apiError(ErrorCodes.CONSENT_OUTDATED, 422)
         return backend.mutex.withLock {
+            val current = backend.consents.publishedVersion(ConsentType.ASSISTANT)
+            if (grant.version != current) throw backend.apiError(ErrorCodes.CONSENT_OUTDATED, 422)
             backend.profile = backend.profile.withConsent(
-                Consent(ConsentType.ASSISTANT, granted = true, version = grant.version, currentVersion = MockBackend.CONSENT_VERSION_ASSISTANT),
+                Consent(ConsentType.ASSISTANT, granted = true, version = grant.version, currentVersion = current),
             )
+            backend.consents.granted(grant.version)
             backend.profile
         }
     }
 
     override suspend fun revokeAssistantConsent() {
         backend.simulateNetwork()
+        val current = backend.consents.publishedVersion(ConsentType.ASSISTANT)
         backend.requireSession()
         backend.mutex.withLock {
             backend.profile = backend.profile.withConsent(
-                Consent(ConsentType.ASSISTANT, granted = false, version = null, currentVersion = MockBackend.CONSENT_VERSION_ASSISTANT),
+                Consent(ConsentType.ASSISTANT, granted = false, version = null, currentVersion = current),
             )
         }
     }
