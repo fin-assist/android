@@ -358,6 +358,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   Lifecycle stop/background/navigation cancels the active session; final text appends to the draft and never sends a question.
   Assistant consent gates sending, not typing or dictating a draft; microphone retry follows the same availability as its composer button.
   On-device models are preferred; the system speech service is the fallback and decides whether it stays offline.
+  `VoiceRecognizerFactory` isolates the platform callbacks; production uses `AndroidVoiceRecognizerFactory`.
+  Qase69 injects a fake only from the native test APK while retaining the actual input/session, screen and chat VM.
+  This proves simulated recognition UI behavior, not microphone/audio quality or the installed system service.
 - Disabled `PfTextField` states use muted tokens and a lock icon; the caller explains how to enable input.
 - The Analytics screen is composed by the server (FIN-4): blocks of the catalog (api.md «Блоки») drawn by the renderers of
   `core/blocks`; texts of blocks come from the server (in `mock` — `AnalyticsServerTexts`). A new primitive is a renderer in
@@ -378,7 +381,7 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
     Renaming a tag means updating `.maestro/`.
   - A new or renamed test also updates its Qase case, `scripts/qase-cases.json` and the coverage table in
     docs/e2e.md («Qase», «Coverage»).
-  - Not automatable on the emulator (biometrics, voice, a bug that does not reproduce there): add it to «Not
+  - Not automatable on the emulator (biometrics, real speech/audio integration, a bug that does not reproduce there): add it to «Not
     covered yet» in docs/e2e.md and say so in the PR. The reason must be technical — what the emulator or the mock
     cannot do — not the effort.
   - CI runs UI tests after the merge to `main`, never on a PR by itself: a new or changed flow is first run there,

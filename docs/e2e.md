@@ -743,7 +743,8 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
 | `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; existing «Повторить» after recovery (Qase19, FIN-396) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
-| native `VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion` | actual ChatScreen/VoiceInput requests RECORD_AUDIO → real system denial through UiAutomation → clear permission notice → close → original draft, quota=5 and Ask=0 (Qase72, FIN-404); authored, compiled only; no speech service needed |
+| native `VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion` | actual ChatScreen/VoiceInput requests RECORD_AUDIO → real system denial through UiAutomation → clear permission notice → close → original draft, quota=5 and Ask=0 (Qase72, FIN-404); no speech service needed; focused local execution tracked in PR #277 / Qase |
+| native `VoiceDictationTest#dictationEventsPreserveDraftAndRequireExplicitSend` | actual ChatScreen/VoiceInput/VoiceSession/VM with test-only platform callbacks: prepare/ready/level/finish/result, draft/no auto-Ask, cancel/Back/ON_STOP/late events, errors/fallback/repeated actions and edited explicit send after a controlled consent-result handoff (Qase69, FIN-449); focused local execution tracked in PR #277 / Qase |
 | native `PasscodeViewportTest#wrongCodeFitsUnlockAndDeletionOnSmallViewport` | wrong PIN: full error/dots, keypad and recovery action at 360×640 dp (FIN-389, [Qase77](https://app.qase.io/case/PLAINFIN-77)); native geometry complements Maestro cases 5/18 |
 | native `PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont` | setup NEW/REPEAT, change OLD/NEW/REPEAT, unlock/confirm without error at 360×640 dp / font2 / insets48+48: automatic dots visibility, first digit/delete/back/footer; user scroll survives unchanged-range recomposition ([Qase78](https://app.qase.io/case/PLAINFIN-78), FIN-389) |
 | native `PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag` | real held down/move gesture spans error recomposition; later range/error still auto-reveal after UserInput cancellation, with drag/range/no-clamping preconditions ([Qase79](https://app.qase.io/case/PLAINFIN-79), FIN-389) |
@@ -764,19 +765,20 @@ offline Retry and recovery through resume followed by explicit Send instead. The
 pending text, exactly two Ask attempts and reuse of the original idempotency key. The foreground online-Retry
 path still needs UI coverage with controllable connectivity that does not pause Chat.
 
-Not covered yet: voice input ([PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69), manual, FIN-404: the CI emulator has no controlled Russian speech/audio or deterministic recognition-service fixture;
-Maestro cannot produce recognizer callbacks). The preparation → actual `onReadyForSpeech`
-→ listening/level → recognition/error panel, finish/cancel/back/background and on-device-to-system
-retry need a device with that service. Permission refusal is separately covered by native `VoicePermissionTest`
-([PLAINFIN-72](https://app.qase.io/case/PLAINFIN-72)) using the real system dialog and actual ChatScreen/VoiceInput without starting a recognizer; it preserves the draft,
-keeps the quota and asserts no Ask. Service-unavailable cannot be asserted solely from an absent ru-RU model:
-`isRecognitionAvailable` may still find another installed system provider, so provider availability remains a device check. Cancellation and errors retain the original draft; successful final text is
-appended and requires manual sending. `VoiceSessionTest` covers callback order, cancellation/late callbacks,
-repeated actions, silence/errors and sound levels; `VoiceRecognitionErrorsTest` covers Android error-code/exception mapping
-and on-device-only fallback policy. `VoiceInputRememberTest` runs the actual composable with Robolectric's
-recognizer shadow: forced recomposition preserves the handle and commands, and a final result calls the latest
-onResult. This checks wiring without real audio or a service. `ChatViewModelBehaviourTest` covers append/length bounds and
-absence of an automatic Ask; `ChatDesignCheckTest` renders all panel states and dark listening.
+Dictation UI behavior is authored in native `VoiceDictationTest` /
+[PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69) (FIN-449), using deterministic platform callbacks while retaining
+the actual screen, input/session and chat VM. Focused native execution is tracked in [PR #277](https://github.com/fin-assist/android/pull/277) and Qase; each attempt is retained. Maestro cannot inject those
+callbacks through the existing control Activity without pausing the chat and triggering cancellation.
+Permission refusal remains separately covered by native `VoicePermissionTest` /
+[PLAINFIN-72](https://app.qase.io/case/PLAINFIN-72) using the actual Android dialog and default production recognizer path.
+The hardware part of the old Qase69 is preserved as Manual
+[PLAINFIN-94](https://app.qase.io/case/PLAINFIN-94): microphone/audio quality, installed ru-RU model, real system
+recognition/fallback and perceived haptic. Simulated callbacks do not confirm those integrations.
+Service-unavailable cannot be inferred solely from an absent ru-RU model: `isRecognitionAvailable` may still find
+another provider. `VoiceSessionTest`, `VoiceRecognitionErrorsTest`, `VoiceInputRememberTest`, the new
+`VoiceInputBoundaryTest` and `VoiceRecognizerTest` independently cover session ordering, error policy, platform
+options, final-only text, recomposition and lifecycle/resource cleanup. `ChatViewModelBehaviourTest` covers append/length
+bounds and no automatic Ask; `ChatDesignCheckTest` retains existing panel-state fixtures.
 Biometrics (needs an enrolled
 fingerprint), custom date ranges in search,
 links inside a sentence — the registration terms and privacy policy, «Как мы защищаем данные», «разобрать» and
@@ -1562,3 +1564,34 @@ original-refusal context: GET429/retryable:false remains forbidden after its cap
 The existing four-second config overlay separates observations, but the elapsed predicate checks the
 actual receipt; elapsed time alone never grants retry permission. The stale initial-GET interleaving is
 covered by `AiConsentViewModelTest`, not claimed as an executed step of this UI case.
+
+
+### FIN-449: simulated dictation through the real client UI
+
+[Qase69](https://app.qase.io/case/PLAINFIN-69) keeps its ID and history, with one mapped native method
+`VoiceDictationTest#dictationEventsPreserveDraftAndRequireExplicitSend`. A fake recognizer is compiled only into
+`androidTestMock`; the production `ChatScreen` has an optional factory parameter whose default uses the existing
+Android behavior. No Hilt override, new exported component, control-link command, HTTP fixture or runtime test flag
+was introduced. `VoiceInput`, its session guard, permission launcher, lifecycle cancellation, fallback policy and
+`ChatViewModel` are real. The Android adapter retains the previous SDK guard, ru-RU/free-form/offline-preference
+request and final-only recognition callback. Robolectric exercises the default wrapper and the real composable.
+
+Native Compose dependency injection is needed here: opening the existing config Activity would cause ON_STOP and
+cancel a session before a recognition event could reach it. The test grants RECORD_AUDIO for its own app, renders
+three synthetic earlier question/answer pairs and supplies ready/level/end/results/errors directly on the UI
+thread. All waits are bounded; no audio service or microphone capture is needed. Test Orchestrator's existing
+clearPackageData isolates this grant from Qase72's real permission-denial scenario.
+
+The scenario checks preparing before ready, visible listening/progress, recognizing before final text, editable
+append without Ask/quota use, explicit cancel, Back and actual ActivityScenario ON_STOP/RESUMED with late events,
+including old callbacks during a replacement session. Two queued OnClick actions from the same semantics node
+exercise duplicate input before the next composition frame; only one recognizer/stop is permitted. Silence and
+permission errors retain on-device preference, model/service failures select the system provider on the next
+explicit attempt, and unavailable services show the existing error. Only the final edited Send may accept one
+question and decrement quota. A denied first attempt observes the real chat's request to open consent; the
+subsequent navigation-result handoff is controlled, and its arrival must not send automatically. The actual
+ConsentScreen journey remains Qase12 and is not claimed as executed here.
+
+Focused local executions of the new native method and Qase72 are recorded in PR #277 / Qase, with the exact source and APK hashes. The first Q69 run reached the final cleared-field check but its assertion also included placeholder text; the check now compares EditableText independently and confirms the VM draft is empty. Real speech/audio integration, actual installed model/provider
+behavior and felt haptic remain the separate Manual Qase94, without a fabricated Passed result. Qase72 and the
+existing native tests remain in the normal suite. Production recognition behavior and HTTP contracts are unchanged.

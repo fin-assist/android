@@ -83,6 +83,7 @@ fun ChatScreen(
     consentResult: State<String?>,
     onConsentResultConsumed: () -> Unit,
     vm: ChatViewModel = hiltViewModel(),
+    speechRecognitionFactory: VoiceRecognizerFactory? = null,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val clock = LocalPfClock.current
@@ -105,7 +106,7 @@ fun ChatScreen(
             vm.onConsentGranted()
         }
     }
-    val voice = rememberVoiceInput(onResult = vm::appendVoiceText)
+    val voice = rememberVoiceInput(factoryOverride = speechRecognitionFactory, onResult = vm::appendVoiceText)
     val voiceState by voice.state.collectAsStateWithLifecycle()
     BackHandler(voiceState.active, onBack = voice.cancel)
     LaunchedEffect(state.sending, state.generating, state.limitExhausted, state.offline) {
