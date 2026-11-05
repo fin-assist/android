@@ -187,10 +187,11 @@ tags:
 - scrollUntilVisible:
     element:
       id: "auth.phone.submit"
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: "auth.phone.restart"
       enabled: true
+    direction: DOWN
     timeout: 60000
 - assertVisible:
     id: "auth.phone.document_refresh"
