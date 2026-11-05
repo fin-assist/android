@@ -18,6 +18,10 @@ tags:
     notVisible:
       id: "profile.theme.dark"
     timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: "profile.theme"
+    centerElement: true
 - assertVisible:
     id: "profile.theme"
     containsDescendants:

@@ -1,0 +1,563 @@
+{
+  "scope": "Only owner-authorized8components/6cases; no full suite, no DesignCheck, no Q60.",
+  "budget": {
+    "started_epoch": 1793917430.0,
+    "deadline_epoch": 1793920130.0,
+    "deadline_utc": "2026-11-05T23:08:50Z",
+    "scope": [
+      "Q49",
+      "Q17 Maestro+native",
+      "Q84 Maestro+native",
+      "Q77/Q78/Q79 nativeAPI35"
+    ],
+    "permission": "Owner explicitly allows only necessary local autotests; agrees proposed8components/45min",
+    "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829 (base; local UI fixes pending push)",
+    "local_head": "39b21b571f4e8647c377a75819b82eef43c1a043",
+    "tree": "0779b38b5dc72e690d1509debb39eeb6d030819c",
+    "previous_tree": "97df4c931bbd321d813e8e725650195553ba15e8"
+  },
+  "environments": {
+    "34": {
+      "api": 34,
+      "device": "emulator-5590",
+      "avd": "Fin438Pixel6API34",
+      "command": [
+        "/Users/aleksandravtomonov/Library/Android/sdk/emulator/emulator",
+        "-avd",
+        "Fin438Pixel6API34",
+        "-port",
+        "5590",
+        "-no-window",
+        "-no-snapshot",
+        "-no-audio",
+        "-no-boot-anim",
+        "-gpu",
+        "swiftshader_indirect",
+        "-cores",
+        "4",
+        "-memory",
+        "4096",
+        "-camera-back",
+        "none",
+        "-camera-front",
+        "none",
+        "-timezone",
+        "Europe/Moscow",
+        "-read-only"
+      ],
+      "sdk": "34",
+      "abi": "x86_64",
+      "timezone": "Europe/Moscow",
+      "size": "Physical size: 1080x2400",
+      "density": "Physical density: 420"
+    },
+    "35": {
+      "api": 35,
+      "device": "emulator-5592",
+      "avd": "Fin450Pixel6API35",
+      "command": [
+        "/Users/aleksandravtomonov/Library/Android/sdk/emulator/emulator",
+        "-avd",
+        "Fin450Pixel6API35",
+        "-port",
+        "5592",
+        "-no-window",
+        "-no-snapshot",
+        "-no-audio",
+        "-no-boot-anim",
+        "-gpu",
+        "swiftshader_indirect",
+        "-cores",
+        "4",
+        "-memory",
+        "4096",
+        "-camera-back",
+        "none",
+        "-camera-front",
+        "none",
+        "-timezone",
+        "Europe/Moscow"
+      ],
+      "sdk": "35",
+      "abi": "x86_64",
+      "timezone": "Europe/Moscow",
+      "size": "Physical size: 1080x2400",
+      "density": "Physical density: 420"
+    }
+  },
+  "attempts": [
+    {
+      "attempt": "native34-attempt-1",
+      "finished_utc": "2026-11-05T22:34:49.864163+00:00",
+      "exit": 1,
+      "results": [
+        {
+          "name": "darkChoiceChangesTheRenderedProfilePalette",
+          "class": "ru.finassist.pf.ProfileThemePaletteTest",
+          "seconds": "39.249",
+          "status": "failed",
+          "message": "java.lang.AssertionError: Assert failed: The component is not displayed!\nat androidx.compose.ui.test.AssertionsKt.assertIsDisplayed(Assertions.kt:34)\nat ru.finassist.pf.ProfileThemePaletteTest.selectTheme(ProfileThemePaletteTest.kt:45)\nat ru.finassist.pf.ProfileThemePaletteTest.darkChoiceChangesTheRenderedProfilePalette(ProfileThemePaletteTest.kt:35)\n"
+        },
+        {
+          "name": "failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser",
+          "class": "ru.finassist.pf.StatementPickerTest",
+          "seconds": "13.955",
+          "status": "failed",
+          "message": "java.lang.AssertionError: no node with tag auth.phone.document after 10000 ms; semantics tree is in logcat (PfTest); main thread: slowest reply 609 ms\nat ru.finassist.pf.StatementPickerTest.waitUntilTagged(StatementPickerTest.kt:211)\nat ru.finassist.pf.StatementPickerTest.waitForTag(StatementPickerTest.kt:194)\nat ru.finassist.pf.StatementPickerTest.waitForTag$default(StatementPickerTest.kt:193)\nat ru.finassist.pf.StatementPickerTest.signInWithExistingAccount(StatementPickerTest.kt:146)\nat ru.finassist.pf.StatementPickerTest.failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser(StatementPickerTest.kt:116)\n... 55 trimmed\nCaused by: androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms\nat androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)\nat androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)\nat ru.finassist.pf.StatementPickerTest.waitUntilTagged(StatementPickerTest.kt:203)\n... 60 more\n"
+        }
+      ],
+      "provenance": {
+        "local_head": "455f9dbf47e6741fa719eff899f5c2afd4aab930",
+        "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829",
+        "tree": "97df4c931bbd321d813e8e725650195553ba15e8",
+        "command": [
+          "./gradlew",
+          "-I",
+          "/private/tmp/fin438-central-mirror.gradle",
+          ":app:connectedMockE2eAndroidTest",
+          "-Pandroid.testInstrumentationRunnerArguments.class=ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette,ru.finassist.pf.StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser",
+          "--no-daemon",
+          "--console=plain"
+        ],
+        "api": 34,
+        "device": "emulator-5590",
+        "timeout_seconds": 900,
+        "started_utc": "2026-11-05T22:32:41Z",
+        "global_deadline_utc": "2026-11-05T23:08:50Z",
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "a9406b1cdc9cb5a3b377d128a1c929d99efb5b3bff29e17b84316dde4d29fb66",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "46f096061ba2f8167f5f6ac70e36d093be58f8e6a1d5fce78557025cdee8f826",
+        "maestro": "2.11.0",
+        "sdk": "34",
+        "viewport": "Physical size: 1080x2400",
+        "density": "Physical density: 420"
+      },
+      "result_sha256": "33bc142851ac04a9d086a1aaba6a8949e13d9d9410c700d8d1dbb2fbe9a4f771"
+    },
+    {
+      "attempt": "native34-attempt-2",
+      "finished_utc": "2026-11-05T22:58:33.565581+00:00",
+      "exit": 1,
+      "results": [
+        {
+          "name": "darkChoiceChangesTheRenderedProfilePalette",
+          "class": "ru.finassist.pf.ProfileThemePaletteTest",
+          "seconds": "37.918",
+          "status": "passed",
+          "message": ""
+        },
+        {
+          "name": "failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser",
+          "class": "ru.finassist.pf.StatementPickerTest",
+          "seconds": "37.608",
+          "status": "failed",
+          "message": "java.lang.IllegalStateException: No compose hierarchies found in the app. Possible reasons include: (1) the Activity that calls setContent did not launch; (2) setContent was not called; (3) setContent was called before the ComposeTestRule ran. If setContent is called by the Activity, make sure the Activity is launched after the ComposeTestRule runs\nat androidx.compose.ui.test.TestContext.getAllSemanticsNodes$ui_test_release(TestOwner.kt:87)\nat androidx.compose.ui.test.TestContext.getAllSemanticsNodes$ui_test_release$default(TestOwner.kt:81)\nat androidx.compose.ui.test.SemanticsNodeInteractionCollection.fetchSemanticsNodes(SemanticsNodeInteraction.kt:256)\nat androidx.compose.ui.test.SemanticsNodeInteractionCollection.fetchSemanticsNodes$default(SemanticsNodeInteraction.kt:249)\nat ru.finassist.pf.StatementPickerTest.hasTag(StatementPickerTest.kt:186)\nat ru.finassist.pf.StatementPickerTest.waitUntilTagged$lambda$12(StatementPickerTest.kt:203)\nat ru.finassist.pf.StatementPickerTest.$r8$lambda$pjgWjwvqkG8z5p3bRwXVrbGYJTU(Unknown Source:0)\nat ru.finassist.pf.StatementPickerTest$$ExternalSyntheticLambda5.invoke(D8$$SyntheticClass:0)\nat androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:434)\nat androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)\nat ru.finassist.pf.StatementPickerTest.waitUntilTagged(StatementPickerTest.kt:203)\nat ru.finassist.pf.StatementPickerTest.waitForTag(StatementPickerTest.kt:194)\nat ru.finassist.pf.StatementPickerTest.waitForTag$default(StatementPickerTest.kt:193)\nat ru.finassist.pf.StatementPickerTest.failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser(StatementPickerTest.kt:131)\n"
+        }
+      ],
+      "provenance": {
+        "local_head": "8048d923548e19c52067bf1ace63c6ac378f1481",
+        "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829 (base; local UI fixes pending push)",
+        "tree": "f6638fe049277da384163eff7839a897fc8bd262",
+        "command": [
+          "./gradlew",
+          "-I",
+          "/private/tmp/fin438-central-mirror.gradle",
+          ":app:connectedMockE2eAndroidTest",
+          "-Pandroid.testInstrumentationRunnerArguments.class=ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette,ru.finassist.pf.StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser",
+          "--no-daemon",
+          "--console=plain"
+        ],
+        "api": 34,
+        "device": "emulator-5590",
+        "timeout_seconds": 762.9800319671631,
+        "started_utc": "2026-11-05T22:56:07Z",
+        "global_deadline_utc": "2026-11-05T23:08:50Z",
+        "selected_source_sha256": {
+          "app/src/androidTestMock/kotlin/ru/finassist/pf/ProfileThemePaletteTest.kt": "539bfba6898e1b610cfddd5d3a83bcddeef2398589f7a9d1fb074edf73d72545",
+          "app/src/androidTestMock/kotlin/ru/finassist/pf/StatementPickerTest.kt": "1d05c5b1ab4756d6138c982d1c4ea8fd7f1060ae6b1e71d08568df1321cea093"
+        },
+        "working_tree_status": "",
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "a9406b1cdc9cb5a3b377d128a1c929d99efb5b3bff29e17b84316dde4d29fb66",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "ea83eb586cda604371ffa3b61f2d085e114555e2508f617c13dfe73af23e83a9",
+        "maestro": "2.11.0",
+        "sdk": "34",
+        "viewport": "Physical size: 1080x2400",
+        "density": "Physical density: 420"
+      },
+      "result_sha256": "cce7916e1d67ba27761f08e58a815c23c03846a7346b83da9cc52bead7bd2ff0"
+    },
+    {
+      "attempt": "native35-attempt-1",
+      "finished_utc": "2026-11-05T23:10:02.630551+00:00",
+      "exit": 124,
+      "results": [
+        {
+          "name": "wrongCodeFitsUnlockAndDeletionOnSmallViewport",
+          "class": "ru.finassist.pf.PasscodeViewportTest",
+          "seconds": "33.242",
+          "status": "passed",
+          "message": ""
+        },
+        {
+          "name": "errorFreePasscodeFamilyShowsDotsAtLargeFont",
+          "class": "ru.finassist.pf.PasscodeViewportTest",
+          "seconds": "0",
+          "status": "blocked",
+          "message": "Started at23:08:32 UTC; interrupted at agreed23:08:50 deadline. No completion status. Zero duration denotes unavailable completed-test duration."
+        },
+        {
+          "name": "rangeObserverSurvivesHeldUserDrag",
+          "class": "ru.finassist.pf.PasscodeViewportTest",
+          "seconds": "0",
+          "status": "blocked",
+          "message": "Only test enumeration, actual method not started before the global45min deadline."
+        }
+      ],
+      "provenance": {
+        "local_head": "39b21b571f4e8647c377a75819b82eef43c1a043",
+        "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829 (base; local UI fixes pending push)",
+        "tree": "0779b38b5dc72e690d1509debb39eeb6d030819c",
+        "command": [
+          "./gradlew",
+          "-I",
+          "/private/tmp/fin438-central-mirror.gradle",
+          ":app:connectedMockE2eAndroidTest",
+          "-Pandroid.testInstrumentationRunnerArguments.class=ru.finassist.pf.PasscodeViewportTest",
+          "--no-daemon",
+          "--console=plain"
+        ],
+        "api": 35,
+        "device": "emulator-5592",
+        "timeout_seconds": 183.7986969947815,
+        "started_utc": "2026-11-05T23:05:46Z",
+        "global_deadline_utc": "2026-11-05T23:08:50Z",
+        "selected_source_sha256": {
+          "app/src/androidTestMock/kotlin/ru/finassist/pf/PasscodeViewportTest.kt": "05a2a90405d78d3ad6595ff46a865e24ee243ef9ef8a312dc678b81a53b03d72"
+        },
+        "working_tree_status": "",
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "a9406b1cdc9cb5a3b377d128a1c929d99efb5b3bff29e17b84316dde4d29fb66",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "d2756a3c2b2cec15fcb90e7d9828fb3cd350cfd52f7bca73752875fa2eb2996f",
+        "maestro": "2.11.0",
+        "sdk": "35",
+        "viewport": "Physical size: 1080x2400",
+        "density": "Physical density: 420"
+      },
+      "result_sha256": "c27cadfb7ad5a806a5473e8bab8f40173fe3c53940b9f95e4d3a000747c92859"
+    },
+    {
+      "attempt": "native84-attempt-3",
+      "finished_utc": "2026-11-05T23:03:54.738812+00:00",
+      "exit": 0,
+      "results": [
+        {
+          "name": "failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser",
+          "class": "ru.finassist.pf.StatementPickerTest",
+          "seconds": "41.2",
+          "status": "passed",
+          "message": ""
+        }
+      ],
+      "provenance": {
+        "local_head": "39b21b571f4e8647c377a75819b82eef43c1a043",
+        "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829 (base; local UI fixes pending push)",
+        "tree": "0779b38b5dc72e690d1509debb39eeb6d030819c",
+        "command": [
+          "./gradlew",
+          "-I",
+          "/private/tmp/fin438-central-mirror.gradle",
+          ":app:connectedMockE2eAndroidTest",
+          "-Pandroid.testInstrumentationRunnerArguments.class=ru.finassist.pf.StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser",
+          "--no-daemon",
+          "--console=plain"
+        ],
+        "api": 34,
+        "device": "emulator-5590",
+        "timeout_seconds": 402.259733915329,
+        "started_utc": "2026-11-05T23:02:07Z",
+        "global_deadline_utc": "2026-11-05T23:08:50Z",
+        "selected_source_sha256": {
+          "app/src/androidTestMock/kotlin/ru/finassist/pf/ProfileThemePaletteTest.kt": "539bfba6898e1b610cfddd5d3a83bcddeef2398589f7a9d1fb074edf73d72545",
+          "app/src/androidTestMock/kotlin/ru/finassist/pf/StatementPickerTest.kt": "dab951c1e2e26d8ccff2d93dbb32ec3cc01d38ae7456b2b108c1a8f59792bd4d"
+        },
+        "working_tree_status": "",
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "a9406b1cdc9cb5a3b377d128a1c929d99efb5b3bff29e17b84316dde4d29fb66",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "d2756a3c2b2cec15fcb90e7d9828fb3cd350cfd52f7bca73752875fa2eb2996f",
+        "maestro": "2.11.0",
+        "sdk": "34",
+        "viewport": "Physical size: 1080x2400",
+        "density": "Physical density: 420"
+      },
+      "result_sha256": "208668df228739a027f22f31b4c649f48f67973703b3feb1697266d04a72feca"
+    },
+    {
+      "attempt": "q17-attempt-1",
+      "finished_utc": "2026-11-05T22:49:39.155731+00:00",
+      "exit": 0,
+      "results": [
+        {
+          "name": "Профиль — тема и выход из аккаунта",
+          "class": "Профиль — тема и выход из аккаунта",
+          "seconds": "75.184",
+          "status": "passed",
+          "message": ""
+        }
+      ],
+      "provenance": {
+        "local_head": "8048d923548e19c52067bf1ace63c6ac378f1481",
+        "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829 (base; local UI fixes pending push)",
+        "tree": "f6638fe049277da384163eff7839a897fc8bd262",
+        "command": [
+          "bash",
+          "scripts/e2e.sh",
+          "--no-build",
+          "--flow",
+          "/Users/aleksandravtomonov/.codex/.chatgpt-projects/g-p-6aafbc7216b88191b8f5ac52cd531a41/android-qase-parity/.maestro/flows/profile/theme_and_logout.yaml"
+        ],
+        "api": 34,
+        "device": "emulator-5590",
+        "timeout_seconds": 900,
+        "started_utc": "2026-11-05T22:47:42Z",
+        "global_deadline_utc": "2026-11-05T23:08:50Z",
+        "selected_source_sha256": {
+          ".maestro/flows/profile/theme_and_logout.yaml": "e89e5b1c26bb2973d64b345a962e3336c0785954ff4b61aff85f4cd8f8a15e62"
+        },
+        "working_tree_status": "",
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "a9406b1cdc9cb5a3b377d128a1c929d99efb5b3bff29e17b84316dde4d29fb66",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "ea83eb586cda604371ffa3b61f2d085e114555e2508f617c13dfe73af23e83a9",
+        "maestro": "2.11.0",
+        "sdk": "34",
+        "viewport": "Physical size: 1080x2400",
+        "density": "Physical density: 420"
+      },
+      "result_sha256": "62ef8f7c534341f32ef354e44afbee4e8c2cf6aadd398881b610dbb08a08e242"
+    },
+    {
+      "attempt": "q49-attempt-1",
+      "finished_utc": "2026-11-05T22:31:54.765281+00:00",
+      "exit": 1,
+      "results": [
+        {
+          "name": "OFF_TOPIC — недельная блокировка сохраняет черновик и дневной остаток",
+          "class": "OFF_TOPIC — недельная блокировка сохраняет черновик и дневной остаток",
+          "seconds": "60.064",
+          "status": "failed",
+          "message": "Assertion is false: id: e2e.config.applied is visible"
+        }
+      ],
+      "provenance": {
+        "local_head": "455f9dbf47e6741fa719eff899f5c2afd4aab930",
+        "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829",
+        "tree": "97df4c931bbd321d813e8e725650195553ba15e8",
+        "command": [
+          "bash",
+          "scripts/e2e.sh",
+          "--no-build",
+          "--flow",
+          "/Users/aleksandravtomonov/.codex/.chatgpt-projects/g-p-6aafbc7216b88191b8f5ac52cd531a41/android-qase-parity/.maestro/flows/assistant/off_topic_limit.yaml"
+        ],
+        "api": 34,
+        "device": "emulator-5590",
+        "timeout_seconds": 900,
+        "started_utc": "2026-11-05T22:28:31Z",
+        "global_deadline_utc": "2026-11-05T23:08:50Z",
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "a9406b1cdc9cb5a3b377d128a1c929d99efb5b3bff29e17b84316dde4d29fb66",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "46f096061ba2f8167f5f6ac70e36d093be58f8e6a1d5fce78557025cdee8f826",
+        "maestro": "2.11.0",
+        "sdk": "34",
+        "viewport": "Physical size: 1080x2400",
+        "density": "Physical density: 420"
+      },
+      "result_sha256": "3daf712c9de81c47a513a9e75479db1068c9024009062a0208d81f4d9a258ad7"
+    },
+    {
+      "attempt": "q49-attempt-2",
+      "finished_utc": "2026-11-05T22:41:27.791090+00:00",
+      "exit": 1,
+      "results": [
+        {
+          "name": "OFF_TOPIC — недельная блокировка сохраняет черновик и дневной остаток",
+          "class": "OFF_TOPIC — недельная блокировка сохраняет черновик и дневной остаток",
+          "seconds": "218.279",
+          "status": "failed",
+          "message": "Element not found: Id matching regex: ds.back"
+        }
+      ],
+      "provenance": {
+        "local_head": "455f9dbf47e6741fa719eff899f5c2afd4aab930",
+        "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829",
+        "tree": "97df4c931bbd321d813e8e725650195553ba15e8",
+        "command": [
+          "bash",
+          "scripts/e2e.sh",
+          "--no-build",
+          "--flow",
+          "/Users/aleksandravtomonov/.codex/.chatgpt-projects/g-p-6aafbc7216b88191b8f5ac52cd531a41/android-qase-parity/.maestro/flows/assistant/off_topic_limit.yaml"
+        ],
+        "api": 34,
+        "device": "emulator-5590",
+        "timeout_seconds": 900,
+        "started_utc": "2026-11-05T22:37:07Z",
+        "global_deadline_utc": "2026-11-05T23:08:50Z",
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "a9406b1cdc9cb5a3b377d128a1c929d99efb5b3bff29e17b84316dde4d29fb66",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "46f096061ba2f8167f5f6ac70e36d093be58f8e6a1d5fce78557025cdee8f826",
+        "maestro": "2.11.0",
+        "sdk": "34",
+        "viewport": "Physical size: 1080x2400",
+        "density": "Physical density: 420"
+      },
+      "result_sha256": "dd478bf5bc6660375691dee2b6a0309df794b179ebcdd97407aa9d4d2ab101a6"
+    },
+    {
+      "attempt": "q49-attempt-3",
+      "finished_utc": "2026-11-05T22:47:24.692437+00:00",
+      "exit": 0,
+      "results": [
+        {
+          "name": "OFF_TOPIC — недельная блокировка сохраняет черновик и дневной остаток",
+          "class": "OFF_TOPIC — недельная блокировка сохраняет черновик и дневной остаток",
+          "seconds": "211.451",
+          "status": "passed",
+          "message": ""
+        }
+      ],
+      "provenance": {
+        "local_head": "d38bccf7a40eeff7b59c8f2d3b7eacf0a59a791a",
+        "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829 (base; local UI fixes pending push)",
+        "tree": "f44870fb77c9ae7557790d5d34218b682659aebc",
+        "command": [
+          "bash",
+          "scripts/e2e.sh",
+          "--no-build",
+          "--flow",
+          "/Users/aleksandravtomonov/.codex/.chatgpt-projects/g-p-6aafbc7216b88191b8f5ac52cd531a41/android-qase-parity/.maestro/flows/assistant/off_topic_limit.yaml"
+        ],
+        "api": 34,
+        "device": "emulator-5590",
+        "timeout_seconds": 900,
+        "started_utc": "2026-11-05T22:43:11Z",
+        "global_deadline_utc": "2026-11-05T23:08:50Z",
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "a9406b1cdc9cb5a3b377d128a1c929d99efb5b3bff29e17b84316dde4d29fb66",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "ea83eb586cda604371ffa3b61f2d085e114555e2508f617c13dfe73af23e83a9",
+        "maestro": "2.11.0",
+        "sdk": "34",
+        "viewport": "Physical size: 1080x2400",
+        "density": "Physical density: 420"
+      },
+      "result_sha256": "2b28b502480922693e7ce791260af0805318c524b52905123d169fa79b2f3864"
+    },
+    {
+      "attempt": "q84-attempt-2",
+      "finished_utc": "2026-11-05T22:56:05.206277+00:00",
+      "exit": 1,
+      "results": [
+        {
+          "name": "Скачать выписку за выбранный период — границы и ошибка сети",
+          "class": "Скачать выписку за выбранный период — границы и ошибка сети",
+          "seconds": "84.722",
+          "status": "failed",
+          "message": "Assertion is false: id: statements.download_period.day.2026-10-01, selected is visible"
+        }
+      ],
+      "provenance": {
+        "local_head": "8048d923548e19c52067bf1ace63c6ac378f1481",
+        "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829 (base; local UI fixes pending push)",
+        "tree": "f6638fe049277da384163eff7839a897fc8bd262",
+        "command": [
+          "bash",
+          "scripts/e2e.sh",
+          "--no-build",
+          "--flow",
+          "/Users/aleksandravtomonov/.codex/.chatgpt-projects/g-p-6aafbc7216b88191b8f5ac52cd531a41/android-qase-parity/.maestro/flows/statements/download_period.yaml"
+        ],
+        "api": 34,
+        "device": "emulator-5590",
+        "timeout_seconds": 892.6815941333771,
+        "started_utc": "2026-11-05T22:53:57Z",
+        "global_deadline_utc": "2026-11-05T23:08:50Z",
+        "selected_source_sha256": {
+          ".maestro/flows/statements/download_period.yaml": "55aa2cdf188bd8ad3a799e7724c617ad8e1934a3016cf8948ae421fd4fa04e30"
+        },
+        "working_tree_status": "",
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "a9406b1cdc9cb5a3b377d128a1c929d99efb5b3bff29e17b84316dde4d29fb66",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "ea83eb586cda604371ffa3b61f2d085e114555e2508f617c13dfe73af23e83a9",
+        "maestro": "2.11.0",
+        "sdk": "34",
+        "viewport": "Physical size: 1080x2400",
+        "density": "Physical density: 420"
+      },
+      "result_sha256": "9db109663f8a098965c99bcaf0fd3aee8d95d925183e85867ce76c0545cef6a7"
+    },
+    {
+      "attempt": "q84-attempt-3",
+      "finished_utc": "2026-11-05T23:02:07.412206+00:00",
+      "exit": 0,
+      "results": [
+        {
+          "name": "Скачать выписку за выбранный период — границы и ошибка сети",
+          "class": "Скачать выписку за выбранный период — границы и ошибка сети",
+          "seconds": "171.408",
+          "status": "passed",
+          "message": ""
+        }
+      ],
+      "provenance": {
+        "local_head": "4a2f3df6e44a7f32c889706fec30a0b0ead46279",
+        "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829 (base; local UI fixes pending push)",
+        "tree": "00becf58ebcfa4c66540380aba450b7c6ff0e13b",
+        "command": [
+          "bash",
+          "scripts/e2e.sh",
+          "--no-build",
+          "--flow",
+          "/Users/aleksandravtomonov/.codex/.chatgpt-projects/g-p-6aafbc7216b88191b8f5ac52cd531a41/android-qase-parity/.maestro/flows/statements/download_period.yaml"
+        ],
+        "api": 34,
+        "device": "emulator-5590",
+        "timeout_seconds": 616.184907913208,
+        "started_utc": "2026-11-05T22:58:33Z",
+        "global_deadline_utc": "2026-11-05T23:08:50Z",
+        "selected_source_sha256": {
+          ".maestro/flows/statements/download_period.yaml": "02c9d6973bf9c540b0e3bf1169b44ad1e142488eec9cc8a2ac3fd58ebf914c41"
+        },
+        "working_tree_status": "",
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "a9406b1cdc9cb5a3b377d128a1c929d99efb5b3bff29e17b84316dde4d29fb66",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "ea83eb586cda604371ffa3b61f2d085e114555e2508f617c13dfe73af23e83a9",
+        "maestro": "2.11.0",
+        "sdk": "34",
+        "viewport": "Physical size: 1080x2400",
+        "density": "Physical density: 420"
+      },
+      "result_sha256": "de50b782c93b56475b1782c779ebbf112eee6edb1c2ed85ff90b421cbc38711c"
+    }
+  ],
+  "preparation_failure": {
+    "attempt": "q84-attempt-1",
+    "test_started": false,
+    "reason": "Sandbox denied chmod of installed Maestro dependency during --version; repeated authorized command with escalation before UI test started."
+  },
+  "qase_runs": [
+    86,
+    87,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93
+  ],
+  "original45min_budget": {
+    "started_epoch": 1793917430.0,
+    "deadline_epoch": 1793920130.0,
+    "deadline_utc": "2026-11-05T23:08:50Z",
+    "scope": [
+      "Q49",
+      "Q17 Maestro+native",
+      "Q84 Maestro+native",
+      "Q77/Q78/Q79 nativeAPI35"
+    ],
+    "permission": "Owner explicitly allows only necessary local autotests; agrees proposed8components/45min",
+    "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829 (base; local UI fixes pending push)",
+    "local_head": "39b21b571f4e8647c377a75819b82eef43c1a043",
+    "tree": "0779b38b5dc72e690d1509debb39eeb6d030819c",
+    "previous_tree": "97df4c931bbd321d813e8e725650195553ba15e8"
+  }
+}

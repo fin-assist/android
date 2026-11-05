@@ -42,7 +42,7 @@ class ProfileThemePaletteTest {
         waitFor(option)
         compose.onNodeWithTag(option).performClick()
         compose.waitUntil(WAIT_MS) { compose.onAllNodesWithTag(option).fetchSemanticsNodes().isEmpty() }
-        compose.onNodeWithText(label).assertIsDisplayed()
+        compose.onNodeWithText(label).performScrollTo().assertIsDisplayed()
     }
 
     private fun assertBackground(expected: Int) {

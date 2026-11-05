@@ -24,28 +24,28 @@ tags:
     id: "statements.download_period.day.2026-10-08"
 - assertVisible:
     id: "statements.download_period.day.2026-10-01"
-    selected: true
+    checked: true
 - assertVisible:
     id: "statements.download_period.day.2026-10-02"
-    selected: true
+    checked: true
 - assertVisible:
     id: "statements.download_period.day.2026-10-03"
-    selected: true
+    checked: true
 - assertVisible:
     id: "statements.download_period.day.2026-10-04"
-    selected: true
+    checked: true
 - assertVisible:
     id: "statements.download_period.day.2026-10-05"
-    selected: true
+    checked: true
 - assertVisible:
     id: "statements.download_period.day.2026-10-06"
-    selected: true
+    checked: true
 - assertVisible:
     id: "statements.download_period.day.2026-10-07"
-    selected: true
+    checked: true
 - assertVisible:
     id: "statements.download_period.day.2026-10-08"
-    selected: true
+    checked: true
 - assertVisible:
     id: "statements.download_period.day.2026-10-09"
     enabled: false

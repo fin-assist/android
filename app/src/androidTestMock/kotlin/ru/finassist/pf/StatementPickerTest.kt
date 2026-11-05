@@ -143,7 +143,7 @@ class StatementPickerTest {
     }
 
     private fun signInWithExistingAccount() {
-        compose.waitForTag("auth.phone.document")
+        compose.waitForTag("auth.phone.document", timeoutMs = DOCUMENT_READY_MS)
         compose.onNodeWithTag("auth.phone.age").performScrollTo().assertIsOff()
         compose.onNodeWithTag("auth.phone.consent").performScrollTo().assertIsOff()
         compose.onNodeWithTag("auth.phone.age").performScrollTo().performClick()
@@ -183,7 +183,7 @@ class StatementPickerTest {
     }
 
     private fun SemanticsNodeInteractionsProvider.hasTag(tag: String) =
-        onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+        onAllNodesWithTag(tag).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
 
     /**
      * Waits for [tag]. On timeout the error carries what the screen showed (semantics tree in logcat, tag `PfTest`)
@@ -266,6 +266,8 @@ class StatementPickerTest {
         runCatching { waitUntil(waitMs) { hasTag(tag) } }.isSuccess
 
     private companion object {
+        /** Initial OFX preload precedes the document response; action assertions retain their own deadlines. */
+        const val DOCUMENT_READY_MS = 60_000L
         /** `MockConfig.existingPhone` without +7. */
         const val EXISTING_PHONE = "9161234567"
         const val PASSCODE = "1234"

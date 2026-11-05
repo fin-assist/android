@@ -98,7 +98,7 @@ tags:
     id: "assistant.answer.failed"
 - assertNotVisible:
     id: "assistant.answer.failed.retry"
-- hideKeyboard
+# The failed send already retired the IME. hideKeyboard would press Back and pop this chat.
 - tapOn:
     id: "ds.back"
 - extendedWaitUntil:

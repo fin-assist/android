@@ -4596,12 +4596,12 @@
                 {
                   "path": ".maestro/flows/statements/download_period.yaml",
                   "line": 27,
-                  "detail": "selected: true"
+                  "detail": "checked: true (Android export of selected Compose day)"
                 },
                 {
                   "path": ".maestro/flows/statements/download_period.yaml",
                   "line": 48,
-                  "detail": "selected: true"
+                  "detail": "checked: true (Android export of selected Compose day)"
                 },
                 {
                   "path": ".maestro/flows/statements/download_period.yaml",
@@ -4846,7 +4846,7 @@
       ],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Локальный разрешённый точечный прогон 06.11.2026: фактические попытки, API, source/APK hashes и Qase runs — execution.json. Полный UI-набор FIN-450 не выполнялся."
       },
       "additional_test_keys": [
         "ru.finassist.pf.StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser"

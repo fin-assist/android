@@ -2137,12 +2137,12 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/profile/theme_and_logout.yaml",
-                  "line": 23,
+                  "line": 27,
                   "detail": "containsDescendants:"
                 },
                 {
                   "path": ".maestro/flows/profile/theme_and_logout.yaml",
-                  "line": 24,
+                  "line": 28,
                   "detail": "text: \"Тёмная\""
                 }
               ],
@@ -2183,12 +2183,12 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/profile/theme_and_logout.yaml",
-              "line": 31,
+              "line": 35,
               "detail": "id: \"profile.logout\""
             },
             {
               "path": ".maestro/flows/profile/theme_and_logout.yaml",
-              "line": 33,
+              "line": 37,
               "detail": "id: \"ds.dialog.cancel\""
             }
           ],
@@ -2198,7 +2198,7 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/profile/theme_and_logout.yaml",
-                  "line": 35,
+                  "line": 39,
                   "detail": "id: \"profile.screen\""
                 }
               ],
@@ -2212,12 +2212,12 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/profile/theme_and_logout.yaml",
-              "line": 37,
+              "line": 41,
               "detail": "id: \"profile.logout\""
             },
             {
               "path": ".maestro/flows/profile/theme_and_logout.yaml",
-              "line": 39,
+              "line": 43,
               "detail": "id: \"ds.dialog.confirm\""
             }
           ],
@@ -2227,17 +2227,17 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/profile/theme_and_logout.yaml",
-                  "line": 42,
+                  "line": 46,
                   "detail": "id: \"auth.phone\""
                 },
                 {
                   "path": ".maestro/flows/profile/theme_and_logout.yaml",
-                  "line": 45,
+                  "line": 49,
                   "detail": "id: \"auth.phone.notice\""
                 },
                 {
                   "path": ".maestro/flows/profile/theme_and_logout.yaml",
-                  "line": 46,
+                  "line": 50,
                   "detail": "Вы вышли из аккаунта.*"
                 }
               ],
@@ -2263,11 +2263,11 @@
         }
       ],
       "limitations": [
-        "Native companion выполняет реальную MainActivity/UI-авторизацию и смену темы; pixel oracle пока только написан, не исполнялся. Он не подменяет PfTheme или preferences."
+        "Native companion использует реальную MainActivity/UI-авторизацию, preferences и PfApp; пиксели сравниваются с независимыми ожидаемыми цветами. Приёмка кейса требует Maestro и native вместе."
       ],
       "verification": {
         "static_review": "Сопоставлены исходные предусловия, все действия и ожидаемые результаты со setup/helpers/fixture и конкретными assertions; строки относятся к FIN-450 shell edits.",
-        "execution": "Базовый Qase85:90/90Passed на967f4559. Изменённые FIN-450 tests не запускались; UI/native/Maestro/DesignCheck исполнения не разрешены этому агенту."
+        "execution": "Локальный разрешённый точечный прогон 06.11.2026: фактические попытки, API, source/APK hashes и Qase runs — execution.json. Полный UI-набор FIN-450 не выполнялся."
       },
       "additional_test_keys": [
         "ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette"
@@ -7833,10 +7833,20 @@
               "path": ".github/workflows/e2e.yml",
               "line": 36,
               "detail": "AVD_API: 34"
+            },
+            {
+              "path": "docs/qa/qase-parity/execution.json",
+              "line": 81,
+              "detail": "Actual dedicated emulator SDK35."
+            },
+            {
+              "path": "docs/qa/qase-parity/execution.json",
+              "line": 194,
+              "detail": "Actual method result and provenance; enumeration excluded."
             }
           ],
-          "status": "gap",
-          "note": "FIN389 исходно воспроизведён на API35. Условие API35 сохранено; требуется отдельная native acceptance на API35 после разрешения пользователя."
+          "status": "covered",
+          "note": "API35 подтверждён отдельным разрешённым native прогоном; фактический instrumentation stream/JUnit и provenance учтены в execution.json."
         }
       ],
       "steps": [
@@ -8076,7 +8086,7 @@
       ],
       "verification": {
         "static_review": "Сопоставлены исходные предусловия, все действия и ожидаемые результаты со setup/helpers/fixture и конкретными assertions; строки относятся к FIN-450 shell edits.",
-        "execution": "Базовый Qase85:90/90Passed на967f4559. Изменённые FIN-450 tests не запускались; UI/native/Maestro/DesignCheck исполнения не разрешены этому агенту."
+        "execution": "Локальный разрешённый точечный прогон 06.11.2026: фактические попытки, API, source/APK hashes и Qase runs — execution.json. Полный UI-набор FIN-450 не выполнялся."
       }
     },
     {
@@ -8335,7 +8345,7 @@
       ],
       "verification": {
         "static_review": "Сопоставлены исходные предусловия, все действия и ожидаемые результаты со setup/helpers/fixture и конкретными assertions; строки относятся к FIN-450 shell edits.",
-        "execution": "Базовый Qase85:90/90Passed на967f4559. Изменённые FIN-450 tests не запускались; UI/native/Maestro/DesignCheck исполнения не разрешены этому агенту."
+        "execution": "Локальный разрешённый точечный прогон 06.11.2026: фактические попытки, API, source/APK hashes и Qase runs — execution.json. Полный UI-набор FIN-450 не выполнялся."
       }
     },
     {
@@ -8659,7 +8669,7 @@
       ],
       "verification": {
         "static_review": "Сопоставлены исходные предусловия, все действия и ожидаемые результаты со setup/helpers/fixture и конкретными assertions; строки относятся к FIN-450 shell edits.",
-        "execution": "Базовый Qase85:90/90Passed на967f4559. Изменённые FIN-450 tests не запускались; UI/native/Maestro/DesignCheck исполнения не разрешены этому агенту."
+        "execution": "Локальный разрешённый точечный прогон 06.11.2026: фактические попытки, API, source/APK hashes и Qase runs — execution.json. Полный UI-набор FIN-450 не выполнялся."
       }
     }
   ]
