@@ -6,7 +6,14 @@ tags:
   - mock-only
 ---
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/fast_login.yaml
+# Keep fixture loading outside sign-in and complete passcode setup through the existing UI path.
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 60000
+- runFlow: ../../subflows/login.yaml
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
@@ -109,7 +116,14 @@ tags:
 
 # Selection during an unfinished command is deferred and resumed even when that command is refused.
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/fast_login.yaml
+# Keep fixture loading outside sign-in and complete passcode setup through the existing UI path.
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 60000
+- runFlow: ../../subflows/login.yaml
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:
