@@ -682,7 +682,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/regular_block_update` (mock-only) | successful PUT removes RBC and promotes the third visible payment row before a ready GET; seven seconds in the same card retain that row without RBC across marked GET polls; bounded polling pauses with September retained, then explicit Retry permits ready GET; separate unknown offline result retains RBC until explicit PUT retry (Qase81, FIN-416/427/436). Its case-level Passed covers these UI observations only; JVM version/context checks and backend post-commit/durable delivery are separate |
 | `analytics/regular_post_commit_retry` (mock-only) | post-commit retryable 500 keeps the original card and unknown warning; persistent fault plus exactly one injected failure excludes a hidden retry; fault recovery/resume retains RBC until another explicit row action; complete PUT block changes 5188/6/«Ещё 3»1599 RUB to 3688/5/«Ещё 2»599 RUB and promotes tablet while ready GET remains withheld (Qase91, FIN-438); focused local API34/Pixel6/Maestro2.11.0 pass in PR #271 |
 | `analytics/unknown_mutation_recovery` (mock-only) | forbidden 500 → explicit read with retained unknown warning and no PUT; Offline → uncached Year or upload deletion → reachable recovery outside the missing snapshot, delayed GET shows preparation before data/empty; unknown in-flight PUT rolls an unperformed selection back, then the same segment tap works; Qase89 (FIN-416/427); re-locate the RBC action after offline resume; follow-up to failed run 41844441379, not executed |
-| `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
+| `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); FIN-441 fully exposes endpoints before selection; execution evidence is recorded in PR #272 |
 | `analytics/source_zone_and_session` (mock-only) | unsupported source-zone notice survives an offline retry over cached data, supported response recovery, logout/new login with marked response prepares without old financial blocks (Qase88, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
@@ -1404,3 +1404,13 @@ the workflow-pinned Maestro2.11.0 and a 900 s process deadline. The runtime APK 
 from main `f962ddf0`; this repair changes only YAML and documentation. Earlier local failures
 and the original CI/Qase run59 remain recorded; these focused local passes are not a full
 post-merge UI-suite result.
+
+### FIN-441: reveal chart endpoints before selecting them
+
+In [UI run 41977584876](https://github.com/fin-assist/android/actions/runs/41977584876), Qase83 reached
+January 2000 but the repeat stopped while the point was only partly visible at the LazyRow edge.
+Its tagged bounds were x35–128, while the actual visible content started at x98; Maestro tapped
+the tagged centre x81 outside that viewport, so the month remained unselected. One final drag
+toward each history edge now exposes its endpoint before selection. Both 400-gesture ceilings,
+the covered-zero/checked assertions, retained January selection during reverse paging and final
+October selection remain unchanged. This repair changes no runtime, fixtures or timeouts.
