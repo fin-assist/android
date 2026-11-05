@@ -144,10 +144,13 @@ tags:
     visible:
       id: "analytics.period.rolling_year"
     timeout: 60000
-# The Year response preserves the body scroll offset; its period header can be above the viewport.
+# The response preserves the body offset. A clipped picker can be visible without its title;
+# scroll to the expected year itself before asserting the completed selection.
 - scrollUntilVisible:
     element:
-      id: "ds.period.pick"
+      text: "2026"
+      childOf:
+        id: "ds.period.pick"
     direction: UP
 - assertVisible:
     text: "2026"
