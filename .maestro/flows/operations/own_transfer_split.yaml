@@ -298,7 +298,9 @@ tags:
       id: "operations.category.search"
     timeout: 5000
 - assertVisible: "Если это не перевод себе, разделим его на списание и зачисление: выбранная категория — подходящей стороне, другой — категория банка"
+# Traverse the long unfiltered expense section within the unchanged 20 s scroll budget.
 - scrollUntilVisible:
+    speed: 60
     element:
       id: "operations.category.option"
       containsDescendants:
