@@ -1450,3 +1450,8 @@ both bank-name lookups. It preserves category IDs, kinds and financial assignmen
 reproduces the duplicate-ID failure before the fix and checks both aliases, directory uniqueness and
 the retained Salary category. Qase93 keeps its ordinary scroll to Salary, so the crash is not bypassed
 with a search query. This is a mock-backend correction; shared UI helpers and control hooks are unchanged.
+
+Qase93 navigates the long unfiltered directory in two observable steps: scroll to the Income heading,
+then to Salary inside that section, each with Maestro's existing 20 s default. A single scroll across
+the whole directory exhausted that navigation budget on the local Pixel6. No financial assertion is
+removed, and the ordinary path still traverses the expense categories where FIN-443 reproduced.
