@@ -5,7 +5,14 @@ tags:
   - mock-only
 ---
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/fast_login.yaml
+# Keep cold fixture loading outside sign-in, then complete the existing UI setup.
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 60000
+- runFlow: ../../subflows/login.yaml
 # Replace the preloaded year through the public UI with synthetic history spanning 2000–2026.
 - tapOn:
     id: "ds.tab.profile"
@@ -90,9 +97,12 @@ tags:
       id: "analytics.expense.monthly.point.2000-01"
       checked: true
     timeout: 10000
+# A clipped picker can be visible while its title is above the viewport.
 - scrollUntilVisible:
     element:
-      id: "ds.period.pick"
+      text: "Январь 2000"
+      childOf:
+        id: "ds.period.pick"
     direction: UP
 - assertVisible:
     text: "Январь 2000"
@@ -122,9 +132,12 @@ tags:
     duration: 300
 - assertVisible:
     id: "analytics.expense.monthly.point.2026-10"
+# A clipped picker can be visible while its title is above the viewport.
 - scrollUntilVisible:
     element:
-      id: "ds.period.pick"
+      text: "Январь 2000"
+      childOf:
+        id: "ds.period.pick"
     direction: UP
 - assertVisible:
     text: "Январь 2000"
@@ -141,9 +154,12 @@ tags:
       id: "analytics.expense.monthly.point.2026-10"
       checked: true
     timeout: 10000
+# A clipped picker can be visible while its title is above the viewport.
 - scrollUntilVisible:
     element:
-      id: "ds.period.pick"
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
     direction: UP
 - assertVisible:
     text: "Октябрь 2026"

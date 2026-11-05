@@ -684,7 +684,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/regular_block_update` (mock-only) | successful PUT removes RBC and promotes the third visible payment row before a ready GET; seven seconds in the same card retain that row without RBC across marked GET polls; bounded polling pauses with September retained, then explicit Retry permits ready GET; separate unknown offline result retains RBC until explicit PUT retry (Qase81, FIN-416/427/436). Its case-level Passed covers these UI observations only; JVM version/context checks and backend post-commit/durable delivery are separate |
 | `analytics/regular_post_commit_retry` (mock-only) | post-commit retryable 500 keeps the original card and unknown warning; persistent fault plus exactly one injected failure excludes a hidden retry; fault recovery/resume retains RBC until another explicit row action; complete PUT block changes 5188/6/«Ещё 3»1599 RUB to 3688/5/«Ещё 2»599 RUB and promotes tablet while ready GET remains withheld (Qase91, FIN-438); focused local API34/Pixel6/Maestro2.11.0 pass in PR #271 |
 | `analytics/unknown_mutation_recovery` (mock-only) | forbidden 500 → explicit read with retained unknown warning and no PUT; Offline → uncached Year or upload deletion → reachable recovery outside the missing snapshot, delayed GET shows preparation before data/empty; unknown in-flight PUT rolls an unperformed selection back, then the same segment tap works; Qase89 (FIN-416/427); re-locate the RBC action after offline resume; follow-up to failed run 41844441379, not executed |
-| `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); FIN-441 fully exposes endpoints before selection; execution evidence is recorded in PR #272 |
+| `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); FIN-441 fully exposes endpoints before selection; FIN-445 brings the exact selected month title into view at all three return points; execution evidence is recorded in FIN-445 |
 | `analytics/source_zone_and_session` (mock-only) | unsupported source-zone notice survives an offline retry over cached data, supported response recovery, logout/new login with marked response prepares without old financial blocks (Qase88, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
@@ -1486,3 +1486,18 @@ remaining group, even if the shell exited first. Only after writers stop does it
 failed. Regression checks use real subprocesses, a TERM-resistant descendant and unsafe-name evidence;
 they also check external termination and preservation of an already packed archive. Workflow triggers,
 permissions, cache identities, artifact scope and application runtime are unchanged.
+
+### FIN-445: bring the selected month title fully into view
+
+The full post-merge run [42017241060](https://github.com/fin-assist/android/actions/runs/42017241060)
+finished all four shards within 2400 s and published all four artifacts. Qase73 passed; the complete
+Qase run75 contains 86/87 Passed. Its only failure is Qase83's final October header check. The chart's
+October point was already checked; `ds.period.pick` exposed only a lower fragment under the fixed
+header and had no visible text child. Scrolling to that container therefore stopped too early.
+
+All three returns to the period header now scroll to the exact expected month text inside the picker
+(January2000, January2000, October2026). The selected-point and independent header assertions remain,
+as do the complete 2000–2026 traversal in both directions, 400-gesture bounds and the endpoint-revealing
+swipes of FIN-441. Cold setup reuses the positive document readiness and existing UI login already
+used by Qase73/92/93. Shared helpers, application runtime, assertion deadlines and financial expectations
+are unchanged. Single-flow Qase83 execution is recorded separately; run75 keeps its original failure.
