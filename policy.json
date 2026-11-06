@@ -136,19 +136,6 @@
     {
       "description": "FIN-211: recovery of an automatically failed dependency family",
       "matchPackageNames": [
-        "gradle"
-      ],
-      "matchDatasources": [
-        "gradle-version"
-      ],
-      "recreateWhen": "always",
-      "matchJsonata": [
-        "newMajor = 9"
-      ]
-    },
-    {
-      "description": "FIN-211: recovery of an automatically failed dependency family",
-      "matchPackageNames": [
         "com.squareup.okhttp3:mockwebserver"
       ],
       "matchDatasources": [
@@ -261,6 +248,19 @@
       "recreateWhen": "always",
       "matchJsonata": [
         "newMajor = 44"
+      ]
+    },
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "gradle"
+      ],
+      "matchDatasources": [
+        "gradle-version"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 9"
       ]
     },
     {
@@ -848,6 +848,23 @@
       "additionalBranchPrefix": "fin211-retry-288-",
       "matchJsonata": [
         "newDigest = \"sha512-4/23p6T6v7qcSgrjigBcfopRFGWLAPRznFe2wgrduk+JpareCDxJ7MWR65w09YJpz/+IwpR+FGaDEnrkHfYUaQ==\""
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "gradle"
+      ],
+      "matchDatasources": [
+        "gradle-version"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-289-",
+      "matchNewValue": "/^9\\.9\\.0$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
       ]
     }
   ]
