@@ -36,7 +36,7 @@ tags:
 - assertVisible:
     id: "operations.search.chip.period"
     containsDescendants:
-      - text: "1.сентября.*30.сентября"
+      - text: '^1–30[\s\u00A0\u202F]сентября$'
 # The selection chip comes last in the chip row and starts off screen (FIN-101): bring it in.
 - swipe:
     from:
@@ -70,7 +70,7 @@ tags:
 - assertVisible:
     id: "operations.search.chip.period"
     containsDescendants:
-      - text: "1.сентября.*30.сентября"
+      - text: '^1–30[\s\u00A0\u202F]сентября$'
 # The selection chip comes last in the chip row and starts off screen (FIN-101): bring it in.
 - swipe:
     from:
@@ -106,7 +106,7 @@ tags:
 - assertVisible:
     id: "operations.search.chip.period"
     containsDescendants:
-      - text: "1.сентября.*30.сентября"
+      - text: '^1–30[\s\u00A0\u202F]сентября$'
 # The selection chip comes last in the chip row and starts off screen (FIN-101): bring it in.
 - swipe:
     from:

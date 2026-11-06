@@ -1,0 +1,197 @@
+{
+  "issue": "FIN-450",
+  "scope": [
+    15,
+    23,
+    36,
+    41
+  ],
+  "tested_head": "d391243cbec29ddfcee41e7f3add77fc3591bab5",
+  "tested_tree": "b4b65cfb7e5f309643d45a3180aec5da7b253c4d",
+  "apk_sha256": "a9406b1cdc9cb5a3b377d128a1c929d99efb5b3bff29e17b84316dde4d29fb66",
+  "environment": {
+    "api": 34,
+    "maestro": "2.11.0",
+    "device": "emulator-5590",
+    "viewport": "1080x2400",
+    "density": 420
+  },
+  "budget": {
+    "started_utc": "2026-11-06T07:56:15.115630+00:00",
+    "deadline_utc": "2026-11-06T08:21:15Z",
+    "seconds": 1500
+  },
+  "attempts": [
+    {
+      "case_id": 15,
+      "attempt": 1,
+      "exit": 0,
+      "results": [
+        {
+          "name": "Загрузка — CSV, не выписка, другой банк",
+          "class": "Загрузка — CSV, не выписка, другой банк",
+          "seconds": "99.819",
+          "status": "passed",
+          "message": ""
+        }
+      ],
+      "started_utc": "2026-11-06T08:02:45Z",
+      "qase_run": 96,
+      "flow_sha256": {
+        ".maestro/flows/statements/upload_errors.yaml": "1cfd9117329b6674a9123e585552311d8c99ea4b4ae61d9aa5a2a0c5bad8fa67"
+      },
+      "report_sha256": {
+        "e2e/maestro-report.xml": "9f70de407035a356b3457692f2dce38716c74f52f043e865a0d63b4ec081be0c"
+      }
+    },
+    {
+      "case_id": 23,
+      "attempt": 1,
+      "exit": 1,
+      "results": [
+        {
+          "name": "Загрузка — операция без описания принимается и видна в ленте как «Без описания»",
+          "class": "Загрузка — операция без описания принимается и видна в ленте как «Без описания»",
+          "seconds": "58.684",
+          "status": "failed",
+          "message": "Assertion is false: id: e2e.config.applied is visible"
+        }
+      ],
+      "started_utc": "2026-11-06T08:00:47Z",
+      "qase_run": 96,
+      "flow_sha256": {
+        ".maestro/flows/statements/upload_no_description.yaml": "c3f1e0820873669ff083d93f49ec4def0e058780fa06aa008be0c941a061ebbb"
+      },
+      "report_sha256": {
+        "e2e/maestro-report.xml": "f0fd45e40a137dcbb7fe1aa64d523b55a8f61d62b6aae57c24b55a4913ed60e1"
+      }
+    },
+    {
+      "case_id": 23,
+      "attempt": 2,
+      "exit": 0,
+      "results": [
+        {
+          "name": "Загрузка — операция без описания принимается и видна в ленте как «Без описания»",
+          "class": "Загрузка — операция без описания принимается и видна в ленте как «Без описания»",
+          "seconds": "81.925",
+          "status": "passed",
+          "message": ""
+        }
+      ],
+      "started_utc": "2026-11-06T08:12:36Z",
+      "qase_run": 97,
+      "flow_sha256": {
+        ".maestro/flows/statements/upload_no_description.yaml": "c3f1e0820873669ff083d93f49ec4def0e058780fa06aa008be0c941a061ebbb"
+      },
+      "report_sha256": {
+        "e2e/maestro-report.xml": "9e795505c7ef12c355c98a532244f85d3f40cf111857c79350708bd28ef6a60e"
+      }
+    },
+    {
+      "case_id": 36,
+      "attempt": 1,
+      "exit": 0,
+      "results": [
+        {
+          "name": "Аналитика — карточки наблюдений открывают свои операции",
+          "class": "Аналитика — карточки наблюдений открывают свои операции",
+          "seconds": "124.306",
+          "status": "passed",
+          "message": ""
+        }
+      ],
+      "started_utc": "2026-11-06T08:05:44Z",
+      "qase_run": 96,
+      "flow_sha256": {
+        ".maestro/flows/analytics/cards_open_search.yaml": "2a03301d5f01b78459112c049441ced2649b27cb62f3ebeac84eaa75fd44d080"
+      },
+      "report_sha256": {
+        "e2e/maestro-report.xml": "24338fe4075214d62d9232e630839379066f63dfe9171d17f30c0173f5337d8f"
+      }
+    },
+    {
+      "case_id": 41,
+      "attempt": 1,
+      "exit": 1,
+      "results": [
+        {
+          "name": "Время на звонок вышло и «Позвонить ещё раз»",
+          "class": "Время на звонок вышло и «Позвонить ещё раз»",
+          "seconds": "57.937",
+          "status": "failed",
+          "message": "Assertion is false: id: auth.phone.document is visible"
+        }
+      ],
+      "started_utc": "2026-11-06T07:58:16Z",
+      "qase_run": 96,
+      "flow_sha256": {
+        ".maestro/flows/auth/call_expired.yaml": "bbfee9634d3073bf4873bc5145390e3134bc7a0821ea3187421a86779d9514c3"
+      },
+      "report_sha256": {
+        "e2e/maestro-report.xml": "c3021e52cea72af1a67bc72372dc935012a3fb1afe42410deeb138c31d5daa3c"
+      }
+    },
+    {
+      "case_id": 41,
+      "attempt": 2,
+      "exit": 0,
+      "results": [
+        {
+          "name": "Время на звонок вышло и «Позвонить ещё раз»",
+          "class": "Время на звонок вышло и «Позвонить ещё раз»",
+          "seconds": "84.185",
+          "status": "passed",
+          "message": ""
+        }
+      ],
+      "started_utc": "2026-11-06T08:10:30Z",
+      "qase_run": 97,
+      "flow_sha256": {
+        ".maestro/flows/auth/call_expired.yaml": "bbfee9634d3073bf4873bc5145390e3134bc7a0821ea3187421a86779d9514c3"
+      },
+      "report_sha256": {
+        "e2e/maestro-report.xml": "a9220cb3ed5c0933a8c21dbfe027f81ed6f32b75774ca0b239f99418e35778f3"
+      }
+    }
+  ],
+  "latest_results": {
+    "15": {
+      "status": "passed",
+      "attempt": 1,
+      "qase_run": 96
+    },
+    "23": {
+      "status": "passed",
+      "attempt": 2,
+      "qase_run": 97
+    },
+    "36": {
+      "status": "passed",
+      "attempt": 1,
+      "qase_run": 96
+    },
+    "41": {
+      "status": "passed",
+      "attempt": 2,
+      "qase_run": 97
+    }
+  },
+  "qase_runs": [
+    {
+      "id": 96,
+      "url": "https://app.qase.io/run/PLAINFIN/dashboard/96",
+      "passed": 2,
+      "failed": 2
+    },
+    {
+      "id": 97,
+      "url": "https://app.qase.io/run/PLAINFIN/dashboard/97",
+      "passed": 2,
+      "failed": 0
+    }
+  ],
+  "initial_failures": "Q41: legal document remained loading before patched HH:mm checks; Q23: setup configuration receipt absent before bank-category assertions. Cold bootstrap latency observed. Both retries used unchanged source, APK and timeouts; first failures remain recorded.",
+  "emulator_stopped": true,
+  "full_suite_rerun": false
+}

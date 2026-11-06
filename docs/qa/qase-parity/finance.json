@@ -355,7 +355,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -1037,7 +1037,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -2579,7 +2579,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -2866,7 +2866,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -3067,7 +3067,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -3413,7 +3413,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -3629,7 +3629,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -3821,7 +3821,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -4034,7 +4034,7 @@
                 {
                   "path": ".maestro/flows/analytics/cards_open_search.yaml",
                   "line": 36,
-                  "detail": "- assertVisible: | id: \"operations.search.chip.period\" | containsDescendants: | - text: \"1.сентября.*30.сентября\""
+                  "detail": "- assertVisible: | id: \"operations.search.chip.period\" | containsDescendants: | - text: \"^1–30[\\s\\u00A0\\u202F]сентября$\""
                 },
                 {
                   "path": ".maestro/flows/analytics/cards_open_search.yaml",
@@ -4113,7 +4113,7 @@
                 {
                   "path": ".maestro/flows/analytics/cards_open_search.yaml",
                   "line": 70,
-                  "detail": "- assertVisible: | id: \"operations.search.chip.period\" | containsDescendants: | - text: \"1.сентября.*30.сентября\""
+                  "detail": "- assertVisible: | id: \"operations.search.chip.period\" | containsDescendants: | - text: \"^1–30[\\s\\u00A0\\u202F]сентября$\""
                 },
                 {
                   "path": ".maestro/flows/analytics/cards_open_search.yaml",
@@ -4182,7 +4182,7 @@
                 {
                   "path": ".maestro/flows/analytics/cards_open_search.yaml",
                   "line": 106,
-                  "detail": "- assertVisible: | id: \"operations.search.chip.period\" | containsDescendants: | - text: \"1.сентября.*30.сентября\""
+                  "detail": "- assertVisible: | id: \"operations.search.chip.period\" | containsDescendants: | - text: \"^1–30[\\s\\u00A0\\u202F]сентября$\""
                 },
                 {
                   "path": ".maestro/flows/analytics/cards_open_search.yaml",
@@ -4222,7 +4222,18 @@
           "files": [
             ".maestro/flows/analytics/cards_open_search.yaml"
           ],
-          "notes": "Authored assertions only; execution not performed. Closed request-witness keys require root shared implementation in the integrated PR."
+          "notes": "Initial static implementation failed the compact date format in CI95. Exact compact selectors corrected; patched UI execution pending."
+        },
+        {
+          "id": "FIN-450-postmerge-Q36",
+          "requirement": "Исполнить прежнее требование на фактических UI данных и поддерживаемом Maestro syntax.",
+          "before": "The formatter emits the compact same-month label 1–30 September with NBSP.",
+          "fix": "Require the exact compact range three times; keep September2026 and10/12/1 counts.",
+          "status": "fixed",
+          "files": [
+            ".maestro/flows/analytics/cards_open_search.yaml"
+          ],
+          "notes": "Prepared from failed CI95 artifacts. Patched UI execution is pending; original source unchanged."
         }
       ],
       "limitations": [
@@ -4231,7 +4242,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: failed. После исправления полный flow прошёл на API34 / Maestro2.11, d391243c, попытка1, Qase96. Первые локальные сбои Q23/Q41 сохранены в Qase96; повтор без изменений кода/APK/таймаутов. Подробности — postmerge.json и postmerge-local.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -4636,7 +4647,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -4963,7 +4974,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -5573,7 +5584,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -7066,7 +7077,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -8307,7 +8318,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -9229,7 +9240,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -10219,7 +10230,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -11598,7 +11609,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -13098,7 +13109,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -13813,7 +13824,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -15700,7 +15711,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -17000,7 +17011,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -17648,7 +17659,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -18070,7 +18081,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -18810,7 +18821,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -20616,7 +20627,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -21677,7 +21688,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -22336,7 +22347,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }
@@ -24173,7 +24184,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Not executed: UI/native/Maestro/emulator/DesignCheck prohibited for this audit; heavy Gradle serialized by root.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }

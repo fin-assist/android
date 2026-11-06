@@ -48,7 +48,12 @@ tags:
     visible:
       id: "statements.upload.error.wrong_format"
     timeout: 15000
-- assertVisible: "Это файл TXT, а нужен OFX"
+# The fixture supplies a safe user_message; the filename-based reason is only the client fallback.
+- assertVisible:
+    id: "statements.upload.error.wrong_format"
+    containsDescendants:
+      - text: "Загрузите выписку в формате OFX"
+      - text: "notes[.]txt"
 
 - tapOn:
     id: "statements.upload.pick_another"

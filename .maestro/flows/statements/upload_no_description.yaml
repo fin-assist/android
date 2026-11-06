@@ -74,4 +74,5 @@ tags:
 - assertVisible:
     id: "operations.detail.statement.category"
     containsDescendants:
-      - text: "(?s).*Категория банка.*Фастфуд.*"
+      - text: "Категория банка"
+      - text: "Фастфуд"

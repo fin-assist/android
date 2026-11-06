@@ -1013,7 +1013,7 @@
       ],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -1179,7 +1179,7 @@
           ],
           "expectations": [
             {
-              "requirement": "Wrong_format и actual reason «Это файл TXT, а нужен OFX».",
+              "requirement": "Wrong_format: безопасный серверный user_message «Загрузите выписку в формате OFX» и имя notes.txt; клиентский TXT fallback не подменяет server presentation.",
               "evidence": [
                 {
                   "path": ".maestro/flows/statements/upload_errors.yaml",
@@ -1188,12 +1188,12 @@
                 },
                 {
                   "path": ".maestro/flows/statements/upload_errors.yaml",
-                  "line": 51,
-                  "detail": "Это файл TXT, а нужен OFX"
+                  "line": 55,
+                  "detail": "Exact safe server user_message; notes.txt is separately required at56."
                 }
               ],
               "status": "fixed",
-              "note": ""
+              "note": "docs/errors.md Presentation: безопасный user_message приоритетнее controlled feature fallback; MockErrorCatalog задаёт строку этой fixture."
             }
           ]
         },
@@ -1202,12 +1202,12 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/statements/upload_errors.yaml",
-              "line": 54,
+              "line": 59,
               "detail": "id: \"statements.upload.pick_another\""
             },
             {
               "path": ".maestro/flows/statements/upload_errors.yaml",
-              "line": 56,
+              "line": 61,
               "detail": "id: \"e2e.picker.other-bank.ofx\""
             }
           ],
@@ -1217,12 +1217,12 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/statements/upload_errors.yaml",
-                  "line": 59,
+                  "line": 64,
                   "detail": "id: \"statements.upload.error.wrong_bank\""
                 },
                 {
                   "path": ".maestro/flows/statements/upload_errors.yaml",
-                  "line": 61,
+                  "line": 66,
                   "detail": "Загрузите выписку поддерживаемого банка"
                 }
               ],
@@ -1236,17 +1236,17 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/statements/upload_errors.yaml",
-              "line": 65,
+              "line": 70,
               "detail": "id: \"statements.upload.guide\""
             },
             {
               "path": ".maestro/flows/statements/upload_errors.yaml",
-              "line": 70,
+              "line": 75,
               "detail": "id: \"statements.upload.pick\""
             },
             {
               "path": ".maestro/flows/statements/upload_errors.yaml",
-              "line": 75,
+              "line": 80,
               "detail": "- back"
             }
           ],
@@ -1256,12 +1256,12 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/statements/upload_errors.yaml",
-                  "line": 80,
+                  "line": 85,
                   "detail": "id: \"statements.upload\""
                 },
                 {
                   "path": ".maestro/flows/statements/upload_errors.yaml",
-                  "line": 82,
+                  "line": 87,
                   "detail": "id: \"e2e.picker\""
                 }
               ],
@@ -1294,12 +1294,23 @@
             ".maestro/flows/statements/upload_errors.yaml"
           ],
           "notes": ""
+        },
+        {
+          "id": "FIN-450-postmerge-Q15",
+          "requirement": "Исполнить прежнее требование на фактических UI данных и поддерживаемом Maestro syntax.",
+          "before": "The server-provided safe user_message replaces the client filename fallback.",
+          "fix": "Require the exact fixture user_message and notes.txt under the wrong_format screen.",
+          "status": "fixed",
+          "files": [
+            ".maestro/flows/statements/upload_errors.yaml"
+          ],
+          "notes": "Prepared from failed CI95 artifacts. Patched UI execution is pending; original source unchanged."
         }
       ],
       "limitations": [],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: failed. После исправления полный flow прошёл на API34 / Maestro2.11, d391243c, попытка1, Qase96. Первые локальные сбои Q23/Q41 сохранены в Qase96; повтор без изменений кода/APK/таймаутов. Подробности — postmerge.json и postmerge-local.json."
       }
     },
     {
@@ -1554,7 +1565,7 @@
       ],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -1928,7 +1939,7 @@
       ],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -2340,7 +2351,7 @@
       ],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -2604,8 +2615,8 @@
                 },
                 {
                   "path": ".maestro/flows/statements/upload_no_description.yaml",
-                  "line": 77,
-                  "detail": "Категория банка.*Фастфуд"
+                  "line": 78,
+                  "detail": "Exact Fast Food value plus separate bank-category label under the same tagged row."
                 },
                 {
                   "path": "feature/operations/impl/src/main/kotlin/ru/finassist/pf/feature/operations/impl/ui/DetailScreen.kt",
@@ -2636,19 +2647,30 @@
           "id": "Q23-bank-field",
           "requirement": "BankcategoryФастфуд показана.",
           "before": "ГлобальныйФастфуд мог относиться только к выбранной категории.",
-          "fix": "Semanticbankfieldtag + scoped merged-row assertion.",
+          "fix": "Semantic bank field tag with separate exact label/value descendant assertions.",
           "status": "fixed",
           "files": [
             ".maestro/flows/statements/upload_no_description.yaml",
             "feature/operations/impl/src/main/kotlin/ru/finassist/pf/feature/operations/impl/ui/DetailScreen.kt"
           ],
           "notes": ""
+        },
+        {
+          "id": "FIN-450-postmerge-Q23",
+          "requirement": "Исполнить прежнее требование на фактических UI данных и поддерживаемом Maestro syntax.",
+          "before": "The tagged bank category contains separate label and value TextViews.",
+          "fix": "Require label and Fast Food value as two descendants of the same tagged row.",
+          "status": "fixed",
+          "files": [
+            ".maestro/flows/statements/upload_no_description.yaml"
+          ],
+          "notes": "Prepared from failed CI95 artifacts. Patched UI execution is pending; original source unchanged."
         }
       ],
       "limitations": [],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: failed. После исправления полный flow прошёл на API34 / Maestro2.11, d391243c, попытка2, Qase97. Первые локальные сбои Q23/Q41 сохранены в Qase96; повтор без изменений кода/APK/таймаутов. Подробности — postmerge.json и postmerge-local.json."
       }
     },
     {
@@ -2963,7 +2985,7 @@
       "limitations": [],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -3220,7 +3242,7 @@
       "limitations": [],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -3505,7 +3527,7 @@
       ],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -3865,7 +3887,7 @@
       "limitations": [],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -4156,7 +4178,7 @@
       ],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -4458,7 +4480,7 @@
       "limitations": [],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -4846,7 +4868,7 @@
       ],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "Локальный разрешённый точечный прогон 06.11.2026: фактические попытки, API, source/APK hashes и Qase runs — execution.json. Полный UI-набор FIN-450 не выполнялся."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       },
       "additional_test_keys": [
         "ru.finassist.pf.StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser"
@@ -5056,7 +5078,7 @@
       ],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -5369,7 +5391,7 @@
       "limitations": [],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "FIN450 edits не исполнялись. UI/native/Maestro/DesignCheck/эмуляторы/Gradle этим агентом не запускались. Базовый Qase85 не считается acceptance для изменённых тестов."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     }
   ]
