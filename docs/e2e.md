@@ -587,8 +587,15 @@ Timing predicates are supplemental to the visible wait/recovery and JVM retry-st
 claim access to the client's private deadline fields.
 
 FIN-450's full clause audit is in [qa/qase-parity](qa/qase-parity/). Its original source snapshot and
-newly authored checks are distinguished from baseline Qase85 execution. The FIN-450 UI/native changes
-have not yet been executed. Qase77–79 retain API35 as specified; normal API34 CI is not API35 acceptance.
+newly authored checks are distinguished from baseline Qase85 execution. The full post-merge run on
+`f072ba67` is [Qase98](https://app.qase.io/run/PLAINFIN/dashboard/98): 79/79 Maestro and12/13 native,
+89/90 cases Passed. Its sole failure is Qase17's native palette companion. After revealing the stable
+theme row before the exact-label wait, both required Qase17 components passed locally on API34 in
+[Qase100](https://app.qase.io/run/PLAINFIN/dashboard/100); initial local failures remain in Qase99.
+The original15min deadline was respected, emulator stopped, and no full-suite local rerun occurred. Actual results and report hashes: [postmerge-283.json](qa/qase-parity/postmerge-283.json).
+Historical authored/not-executed notes below describe the original changes; current FIN-450 execution is in
+that report. Qase77–79 retain separate API35 acceptance in [execution.json](qa/qase-parity/execution.json);
+normal API34 CI is not API35 acceptance.
 Qase17 retains its Maestro flow and adds `ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette`
 for the actual MainActivity's rendered light/dark palette. Both map to Qase17; the reporter keeps their worst
 result when both components are present. If any mapped component is missing, an otherwise passing case is
@@ -596,8 +603,8 @@ reported Skipped with the missing test named; a reported failure stays Failed. A
 identify its limited scope in the description and cannot establish a full-case Passed by itself.
 Qase84 likewise combines its Maestro calendar/input/error flow with
 `StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser`, which intercepts ACTION_VIEW
-and asserts zero browser launches after offline download preparation. This native companion is authored,
-not executed. Both components are required for complete case acceptance.
+and asserts zero browser launches after offline download preparation. Both Qase84 components passed in
+Qase98. Both components are required for complete case acceptance.
 
 ## Test tags
 
@@ -771,7 +778,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `statements/download_period` (mock-only) | inclusive calendar selection, invalid/reversed/future bounds, network failure retains dates and offers explicit retry; Qase84 (FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `StatementPickerTest#opensTheServerUrlForSelectedInclusiveDates` | exact server download URL handed to browser for 1–30 September; native Espresso-Intents because Maestro cannot inspect destination; Qase85; authored, not executed |
 | `StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser` | actual MainActivity calendar, retained 1–8 October after offline preparation, enabled Retry and no ACTION_VIEW; native companion to the Maestro Qase84 flow; authored, not executed |
-| `ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette` | actual MainActivity Profile, explicit Light then Dark choices, rendered gutter pixels match independent light/dark palette values; native companion to the Maestro Qase17 preference/logout flow; authored, not executed |
+| `ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette` | actual MainActivity Profile, explicit Light then Dark choices, rendered gutter pixels match independent light/dark palette values; Qase17 native companion; Qase98 Failed while finding Light label; stable-row scroll + bounded exact-label wait passed with the Maestro companion in Qase100; first local failures preserved in Qase99 |
 | `operations/source_time_zone` (mock-only) | unsupported IANA metadata above verified feed/search cache; stale notice and explicit supported recovery; Qase86; updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `statements/source_time_zone` (mock-only) | unsupported import config and complete result; explicit supported recovery; Qase87; authored, not executed |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
