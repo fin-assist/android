@@ -1,0 +1,46 @@
+{
+  "issue": "FIN-450",
+  "merge_sha": "f072ba67a012bcb78565b32abc36b97d8b89450d",
+  "workflow": "https://github.com/fin-assist/android/actions/runs/42188007491",
+  "qase_run": 98,
+  "qase_url": "https://app.qase.io/run/PLAINFIN/dashboard/98",
+  "environment": "CI mockE2e API34",
+  "observed": {
+    "maestro": {
+      "passed": 79,
+      "failed": 0,
+      "total": 79
+    },
+    "native": {
+      "passed": 12,
+      "failed": 1,
+      "total": 13
+    },
+    "cases": {
+      "passed": 89,
+      "failed": 1,
+      "total": 90
+    }
+  },
+  "failed_case": {
+    "case_id": 17,
+    "native_test": "ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette",
+    "failure": "performScrollTo(): expected exactly1text node Светлая, found0; ProfileThemePaletteTest.kt45",
+    "cause": "Closing the theme sheet precedes asynchronous preference publication; waiting for the sheet to disappear does not prove that the profile row has the new label.",
+    "fix": "Wait for exactly one selected label with existing WAIT_MS10s before unchanged scroll/display and independent pixel assertions.",
+    "patched_ui_acceptance": "not run; requires separate owner permission"
+  },
+  "fixed_cases_from_pr283": [
+    15,
+    23,
+    36,
+    41
+  ],
+  "report_sha256": {
+    "shard1/maestro-report.xml": "3b8a1b9938a14111a369f94c7317d07fda5610030c443016cda46e48cbad034a",
+    "shard3/maestro-report.xml": "d4c224d81b09c99552a67c9510b2b0541b0c1b42f61ba9350aad45ac2791b19d",
+    "shard4/maestro-report.xml": "de5745e2b0476815e7fe2e035d651f3fabd91c492e88399103d3606b432b5892",
+    "shard2/maestro-report.xml": "8d9f14c1ea1359d1a455d7f17e7c785b3277506808503bd6d4313739ea7922e7",
+    "shard1/native/connected/e2e/flavors/mock/TEST-emulator-5554 - 14-_app-mock.xml": "e8da6c234f24a63bb043af6d102a2c9ed6cbb08f0ffbbc957fa07f256b305f30"
+  }
+}

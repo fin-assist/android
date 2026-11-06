@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -42,6 +43,8 @@ class ProfileThemePaletteTest {
         waitFor(option)
         compose.onNodeWithTag(option).performClick()
         compose.waitUntil(WAIT_MS) { compose.onAllNodesWithTag(option).fetchSemanticsNodes().isEmpty() }
+        // The sheet closes before the preference flow publishes the selected theme to the profile row.
+        compose.waitUntil(WAIT_MS) { compose.onAllNodesWithText(label).fetchSemanticsNodes().size == 1 }
         compose.onNodeWithText(label).performScrollTo().assertIsDisplayed()
     }
 

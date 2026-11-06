@@ -2127,7 +2127,7 @@
             },
             {
               "path": "app/src/androidTestMock/kotlin/ru/finassist/pf/ProfileThemePaletteTest.kt",
-              "line": 35,
+              "line": 36,
               "detail": "selectTheme(\"dark\""
             }
           ],
@@ -2154,22 +2154,22 @@
               "evidence": [
                 {
                   "path": "app/src/androidTestMock/kotlin/ru/finassist/pf/ProfileThemePaletteTest.kt",
-                  "line": 34,
+                  "line": 35,
                   "detail": "assertBackground(LIGHT_BACKGROUND)"
                 },
                 {
                   "path": "app/src/androidTestMock/kotlin/ru/finassist/pf/ProfileThemePaletteTest.kt",
-                  "line": 36,
+                  "line": 37,
                   "detail": "assertBackground(DARK_BACKGROUND)"
                 },
                 {
                   "path": "app/src/androidTestMock/kotlin/ru/finassist/pf/ProfileThemePaletteTest.kt",
-                  "line": 53,
+                  "line": 56,
                   "detail": "upper profile gutter"
                 },
                 {
                   "path": "app/src/androidTestMock/kotlin/ru/finassist/pf/ProfileThemePaletteTest.kt",
-                  "line": 54,
+                  "line": 57,
                   "detail": "lower profile gutter"
                 }
               ],
@@ -2267,7 +2267,7 @@
       ],
       "verification": {
         "static_review": "Сопоставлены исходные предусловия, все действия и ожидаемые результаты со setup/helpers/fixture и конкретными assertions; строки относятся к FIN-450 shell edits.",
-        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json. Более поздний полный Qase98 на main f072ba67: Failed в native palette companion до ожидания label Светлая; Maestro-часть Passed. Исправление ожидания label пока не запускалось; postmerge-283.json."
       },
       "additional_test_keys": [
         "ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette"
