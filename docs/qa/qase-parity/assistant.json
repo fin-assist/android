@@ -488,7 +488,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -790,7 +790,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -1271,7 +1271,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -1484,7 +1484,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -1743,7 +1743,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -2021,7 +2021,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -2233,7 +2233,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -2483,7 +2483,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -2680,7 +2680,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -3094,7 +3094,7 @@
       ],
       "verification": {
         "static_review": "All source clauses accounted for; the ambiguous postcondition was resolved by the owner and explicitly corrected in Qase, with frozen/effective source and publication history. Draft retention on refusal and history/quota after re-entry remain independent assertions; production behavior unchanged.",
-        "execution": "Локальный разрешённый точечный прогон 06.11.2026: фактические попытки, API, source/APK hashes и Qase runs — execution.json. Полный UI-набор FIN-450 не выполнялся."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       },
       "effective_source": {
         "preconditions": "Сборка mockE2e; очищенное состояние, быстрый вход, чат помощника из аналитики.",
@@ -3422,7 +3422,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -3932,7 +3932,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -4357,7 +4357,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -4549,7 +4549,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -4848,7 +4848,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -5182,7 +5182,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -5945,7 +5945,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     },
     {
@@ -6209,7 +6209,7 @@
       ],
       "verification": {
         "static_review": "Every source step and expected-result clause is mapped to actual actions/assertions/setup. Original Qase text is preserved in source; shared root runtime witnesses are explicit evidence.",
-        "execution": "No UI/native/Maestro/DesignCheck execution under FIN450. Historical baseline execution is not acceptance of these changed assertions; separately authorized execution remains necessary."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
       }
     }
   ]
