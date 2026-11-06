@@ -32,6 +32,9 @@ tags:
     direction: LEFT
 - assertVisible:
     id: "operations.search.chip.scope"
+- assertVisible:
+    id: "operations.search.chip.kind"
+    checked: true
 # Without «Только расходы» the scope still applies (FIN-164, docs/calc.md section 6, example 21): a single
 # transfer to self — «Себе в другой банк» 6 000 ₽ on 27 September, the only September operation of that amount —
 # is not found, as the Analytics figure does not count it.
@@ -69,3 +72,7 @@ tags:
     timeout: 10000
 - assertVisible:
     id: "operations.row"
+    containsDescendants:
+      - text: "Себе в другой банк"
+      - text: '−6[\s\u00A0\u202F]000[\s\u00A0\u202F]₽'
+- assertVisible: 'Найдена 1[\s\u00A0\u202F]операция'

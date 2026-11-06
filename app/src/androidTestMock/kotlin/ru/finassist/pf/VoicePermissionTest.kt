@@ -43,6 +43,9 @@ import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.core.tracking.NoopTracker
 import ru.finassist.pf.feature.assistant.impl.ui.ChatScreen
 import ru.finassist.pf.feature.assistant.impl.ui.ChatViewModel
+import ru.finassist.pf.feature.assistant.impl.ui.VoiceRecognizer
+import ru.finassist.pf.feature.assistant.impl.ui.VoiceRecognizerFactory
+import ru.finassist.pf.feature.assistant.impl.ui.VoiceRecognizerListener
 import java.time.OffsetDateTime
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -57,6 +60,18 @@ class VoicePermissionTest {
         // The orchestrator's clearPackageData gives every native test a fresh runtime-permission state.
         assertEquals(PackageManager.PERMISSION_DENIED, ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO))
         val asks = AtomicInteger()
+        val recognitionTouches = AtomicInteger()
+        // The permission dialog remains Android's. Any consultation of recognition before a grant
+        // fails this test instead of silently relying on the device lacking a speech service.
+        val recognition = object : VoiceRecognizerFactory {
+            private fun unexpected(): Nothing {
+                recognitionTouches.incrementAndGet()
+                throw AssertionError("Recognition must not be consulted before microphone permission is granted")
+            }
+            override fun isOnDeviceAvailable(): Boolean = unexpected()
+            override fun isSystemAvailable(): Boolean = unexpected()
+            override fun create(onDevice: Boolean, listener: VoiceRecognizerListener): VoiceRecognizer = unexpected()
+        }
         val now = OffsetDateTime.parse("2026-10-08T12:00:00+03:00")
         val clock = object : Clock {
             override fun now() = now
@@ -94,7 +109,7 @@ class VoicePermissionTest {
                     CompositionLocalProvider(LocalPfClock provides clock) {
                         ChatScreen(onBack = {}, onOpenConsent = { error("Dictation must not request assistant consent") },
                             onOpenSearch = {}, onOpenAnalytics = {}, consentResult = mutableStateOf(null),
-                            onConsentResultConsumed = {}, vm = vm)
+                            onConsentResultConsumed = {}, vm = vm, speechRecognitionFactory = recognition)
                     }
                 }
             }
@@ -109,6 +124,13 @@ class VoicePermissionTest {
                     .firstOrNull()
                 deny != null
             }
+            val permissionText = listOf("com.android.permissioncontroller", "com.google.android.permissioncontroller")
+                .flatMap { pkg -> automation.rootInActiveWindow
+                    ?.findAccessibilityNodeInfosByViewId("$pkg:id/permission_message").orEmpty() }
+                .joinToString(" ") { it.text?.toString().orEmpty() }
+            assertTrue("Expected the real microphone request (en-US/ru-RU fixture)",
+                Regex("record audio|microphone|записывать аудио|микрофон", RegexOption.IGNORE_CASE).containsMatchIn(permissionText))
+            compose.runOnIdle { assertEquals("No recognizer before the permission reply", 0, recognitionTouches.get()) }
             assertTrue("The system permission denial must be clicked", deny!!.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             compose.waitUntil(10_000) {
                 compose.onAllNodesWithTag("assistant.voice.error", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
@@ -122,6 +144,8 @@ class VoicePermissionTest {
                 assertEquals(DRAFT, vm.state.value.draft)
                 assertEquals(5, vm.state.value.limit?.remaining)
                 assertEquals(0, asks.get())
+                assertEquals("No recognizer after denial", 0, recognitionTouches.get())
+                assertEquals(PackageManager.PERMISSION_DENIED, ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO))
             }
         } finally {
             automation.serviceInfo = automation.serviceInfo.apply { flags = originalFlags }

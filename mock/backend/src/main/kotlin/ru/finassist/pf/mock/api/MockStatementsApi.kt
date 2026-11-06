@@ -126,6 +126,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     }
 
     override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted {
+        backend.uiEvidence.upload(key.value)
         backend.simulateNetwork()
         backend.requireSession()
         // api.md «Идемпотентность», 3.2: 413 FILE_TOO_LARGE comes before the key is looked at and is never stored
@@ -389,6 +390,7 @@ class MockStatementsApi(private val backend: MockBackend) : StatementsApi {
     }
 
     override suspend fun deleteStatement(uploadId: String) {
+        backend.uiEvidence.delete()
         backend.simulateNetwork()
         backend.requireSession()
         val upload = backend.uploads.firstOrNull { it.id == uploadId } ?: return

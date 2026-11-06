@@ -51,6 +51,8 @@ tags:
       id: "assistant.chat"
     timeout: 10000
 - assertVisible: "Kaspersky"
+- assertNotVisible:
+    id: "assistant.question"
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:
@@ -85,7 +87,16 @@ tags:
     id: "assistant.chat"
 - assertNotVisible:
     id: "assistant.question"
+# Typing a marker and checking the complete value proves the root draft was empty,
+# independent of the nested chat's Kaspersky draft, without matching a placeholder.
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Root draft"
+- assertVisible:
+    id: "ds.chat.input"
+    text: "Root draft"
+- hideKeyboard
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?flag.assistant=true"
+      LINK: "pfe2e://config?flag.assistant=true&expect_assistant_asks=1&expect_assistant_questions=0&expect_assistant_answers=0"

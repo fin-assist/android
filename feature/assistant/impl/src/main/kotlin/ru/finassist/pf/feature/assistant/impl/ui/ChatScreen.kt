@@ -455,6 +455,8 @@ internal const val GENERIC_ANSWER_ERROR = "Не получилось ответ�
 
 /** Test tags of the assistant screens (UI tests in `.maestro/`, convention in docs/e2e.md). */
 internal object AssistantTags {
+    const val CONSENT_INCLUDED_ITEM = "assistant.consent.included.item"
+    const val CONSENT_EXCLUDED_ITEM = "assistant.consent.excluded.item"
     const val CONSENT_BODY = "assistant.consent.body"
     const val CONSENT_REOPEN = "assistant.consent.reopen"
     const val RECOVERY = "assistant.chat.recovery"

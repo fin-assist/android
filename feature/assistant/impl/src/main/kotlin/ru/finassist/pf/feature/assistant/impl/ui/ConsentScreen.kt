@@ -250,11 +250,12 @@ fun AiConsentContent(
                     DataList(
                         "Передаём", PfIcons.CHECK, PfTheme.colors.accent,
                         listOf("Суммы, даты и категории операций", "Описания операций, включая имена получателей переводов", "Ваш вопрос и историю диалога"),
+                        AssistantTags.CONSENT_INCLUDED_ITEM,
                     )
                     Spacer(Modifier.height(d.space4))
                     PfDivider()
                     Spacer(Modifier.height(d.space4))
-                    DataList("Не передаём", PfIcons.X, PfTheme.colors.textMuted, listOf("Номер телефона из аккаунта", "Файлы выписок"))
+                    DataList("Не передаём", PfIcons.X, PfTheme.colors.textMuted, listOf("Номер телефона из аккаунта", "Файлы выписок"), AssistantTags.CONSENT_EXCLUDED_ITEM)
                 }
                 Spacer(Modifier.height(d.space3))
                 Text(
@@ -304,14 +305,14 @@ fun AiConsentContent(
 
 /** «Передаём» / «Не передаём»: a heading and 20 dp-icon items 8 dp apart. */
 @Composable
-private fun DataList(title: String, icon: String, tint: Color, items: List<String>) {
+private fun DataList(title: String, icon: String, tint: Color, items: List<String>, itemTag: String) {
     val d = PfTheme.dimens
     Text(title, style = PfTheme.type.bodyStrong, color = PfTheme.colors.text, modifier = Modifier.semantics { heading() })
     Column(Modifier.padding(top = d.space2), verticalArrangement = Arrangement.spacedBy(d.space2)) {
         items.forEach { item ->
             Row(horizontalArrangement = Arrangement.spacedBy(d.space3), verticalAlignment = Alignment.Top) {
                 PfIcon(icon, contentDescription = null, size = d.iconMd, tint = tint)
-                Text(item, style = PfTheme.type.body, color = PfTheme.colors.text)
+                Text(item, style = PfTheme.type.body, color = PfTheme.colors.text, modifier = Modifier.testTag(itemTag))
             }
         }
     }

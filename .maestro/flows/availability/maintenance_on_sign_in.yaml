@@ -34,3 +34,4 @@ tags:
     timeout: 15000
 - assertVisible: "Идут технические работы"
 - assertVisible: "Пока не знаем, когда закончим"
+- assertNotVisible: "Закончим примерно.*"

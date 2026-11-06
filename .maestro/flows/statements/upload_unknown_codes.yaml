@@ -46,3 +46,5 @@ tags:
 # The unknown locked feature: its server text, whichever of the coverage notices carries it.
 - scrollUntilVisible:
     element: ".*Новая метрика — нужно 6 полных месяцев\\..*"
+- assertVisible: "Часть аналитики пока закрыта"
+- assertVisible: ".*Новая метрика — нужно 6 полных месяцев\\..*"

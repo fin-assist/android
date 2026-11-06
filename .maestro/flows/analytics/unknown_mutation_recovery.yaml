@@ -54,7 +54,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?expect_error_requests=1"
+      LINK: "pfe2e://config?expect_error_requests=1&expect_analytics_dismiss_requests=1"
 
 # An uncached period loses the row button; recovery stays outside financial content.
 - runFlow: ../../subflows/clear_state.yaml
@@ -115,6 +115,7 @@ tags:
     id: "analytics.updating"
 - assertNotVisible:
     id: "analytics.empty"
+- assertNotVisible: "Загрузите выписку.*"
 - extendedWaitUntil:
     visible:
       text: "2026"
@@ -124,6 +125,11 @@ tags:
 - assertVisible: "Результат изменения не подтверждён"
 - assertVisible: "Аналитика загружается отдельно.*"
 - assertNotVisible: "Убрали из регулярных платежей"
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_analytics_dismiss_requests=1"
 
 # Confirmed deletion invalidates the financial cache but does not settle the unknown command.
 - runFlow: ../../subflows/clear_state.yaml
@@ -203,6 +209,7 @@ tags:
     id: "analytics.updating"
 - assertNotVisible:
     id: "analytics.empty"
+- assertNotVisible: "Загрузите выписку.*"
 - extendedWaitUntil:
     visible:
       id: "analytics.empty"
@@ -210,6 +217,11 @@ tags:
 - assertVisible: "Результат изменения не подтверждён"
 - assertVisible: "Аналитика загружается отдельно.*"
 - assertNotVisible: "Убрали из регулярных платежей"
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_analytics_dismiss_requests=1&expect_statement_upload_requests=0&expect_statement_delete_requests=1"
 
 # An unknown completion rolls an unperformed selection back to the shown month, without a hidden GET.
 - runFlow: ../../subflows/clear_state.yaml
@@ -279,4 +291,4 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?expect_error_requests=1"
+      LINK: "pfe2e://config?expect_error_requests=1&expect_analytics_dismiss_requests=1"

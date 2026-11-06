@@ -68,6 +68,8 @@ class ConnectionFailureHintTest {
             val internetText = if (showNotice) "${ProfileTexts.CONSENT_NOT_REVOKED}\n$INTERNET_HINT" else INTERNET_HINT
             compose.onNodeWithText(internetText, useUnmergedTree = true).assertIsDisplayed()
             compose.onNodeWithText(VPN_HINT, substring = true, useUnmergedTree = true).assertDoesNotExist()
+            compose.onNodeWithText(TITLE, useUnmergedTree = true).assertIsDisplayed()
+            compose.runOnIdle { assertEquals(if (showNotice) 2 else 1, retries) }
         }
         compose.runOnIdle { assertEquals(2, retries) }
     }

@@ -379,6 +379,14 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
     `app/src/androidTestMock` only for what Maestro cannot drive (system pickers, intents, permissions).
   - Tag the root, the controls and the checked states (`<feature>.<screen>[.<element>]`, shared components `ds.*`).
     Renaming a tag means updating `.maestro/`.
+  - Qase semantic parity evidence lives in `docs/qa/qase-parity/`: preserve the audited source text, account
+    for every precondition/step/postcondition, and distinguish UI assertions from JVM/mock observations.
+    `MockUiEvidence` and mockE2e's `E2eRequestControl` expose bounded counts/closed predicates of actual API
+    attempts, never user text, keys or IDs. Keep visible UI oracles alongside these supplemental checks.
+    Qase17 combines Maestro preference/logout coverage and a native rendered-palette check; Qase84 combines
+    Maestro calendar/input coverage and a native no-browser-on-error check. Their reported result is the worst
+    component result. Do not add another duplicate map ID without explaining its components.
+    A pass requires all mapped components in the report; a partial pass is Skipped with missing components named.
   - A new or renamed test also updates its Qase case, `scripts/qase-cases.json` and the coverage table in
     docs/e2e.md («Qase», «Coverage»).
   - Not automatable on the emulator (biometrics, real speech/audio integration, a bug that does not reproduce there): add it to «Not

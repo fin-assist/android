@@ -16,6 +16,15 @@ tags:
     timeout: 15000
 - scrollUntilVisible:
     element:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    direction: UP
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- scrollUntilVisible:
+    element:
       text: "^0[ \u00a0\u202f]₽$"
       childOf:
         id: "analytics.tile.income"
@@ -35,6 +44,15 @@ tags:
     visible:
       id: "statements.history.row"
     timeout: 10000
+
+- assertVisible:
+    id: "statements.history.row"
+    index: 0
+    containsDescendants:
+      - text: "^fixture\\.ofx$"
+- assertNotVisible:
+    id: "statements.history.row"
+    index: 1
 
 # October on top of the preloaded year: three new operations.
 - scrollUntilVisible:
@@ -74,6 +92,15 @@ tags:
     timeout: 10000
 - tapOn:
     id: "ds.tab.analytics"
+- scrollUntilVisible:
+    element:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    direction: UP
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
 - scrollUntilVisible:
     element:
       text: "^[+]1[ \u00a0\u202f]200[ \u00a0\u202f]₽$"
@@ -141,6 +168,27 @@ tags:
       id: "statements.history"
     timeout: 10000
 
+- assertVisible:
+    id: "statements.history.row"
+    index: 2
+- assertNotVisible:
+    id: "statements.history.row"
+    index: 3
+- assertVisible:
+    id: "statements.history.row"
+    index: 0
+    containsDescendants:
+      - text: "^october\\.ofx$"
+- assertVisible:
+    id: "statements.history.row"
+    index: 1
+    containsDescendants:
+      - text: "^october\\.ofx$"
+- assertVisible:
+    id: "statements.history.row"
+    containsDescendants:
+      - text: "^fixture\\.ofx$"
+
 # The duplicate result and upload count do not prove ledger deduplication.
 # Verify the exact three operations and unchanged income before deleting either source.
 - back
@@ -170,6 +218,16 @@ tags:
       index: 2
     timeout: 15000
 
+- assertVisible:
+    id: "statements.history.row"
+    index: 0
+    containsDescendants:
+      - text: "^october\\.ofx$"
+- assertVisible:
+    id: "statements.history.row"
+    containsDescendants:
+      - text: "^fixture\\.ofx$"
+
 # One October source still owns all three records; deleting its duplicate must not remove them.
 - back
 - tapOn:
@@ -191,6 +249,12 @@ tags:
       id: "statements.history.row"
       index: 1
     timeout: 15000
+- assertVisible:
+    id: "statements.history.row"
+    index: 0
+    containsDescendants:
+      - text: "^fixture\\.ofx$"
+- assertNotVisible: "october.ofx"
 - back
 - tapOn:
     id: "ds.tab.analytics"
@@ -276,6 +340,8 @@ tags:
     notVisible:
       id: "statements.history.row"
     timeout: 15000
+- assertVisible:
+    id: "statements.history.empty"
 - back
 - tapOn:
     id: "ds.tab.analytics"
@@ -298,6 +364,8 @@ tags:
     visible:
       id: "statements.upload"
     timeout: 10000
+- assertNotVisible:
+    id: "statements.history"
 - scrollUntilVisible:
     element:
       id: "statements.upload.download"

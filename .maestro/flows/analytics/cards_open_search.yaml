@@ -18,6 +18,10 @@ tags:
     visible: "Сентябрь 2026"
     timeout: 10000
 
+- scrollUntilVisible:
+    element: "Подписки и регулярные платежи"
+- assertVisible: "Подписки и регулярные платежи"
+
 # «Мелкие частые траты» opens its first group — the category «Фастфуд» of September — as a selection: the search
 # shows the group's name on the «как на Аналитике» chip and the operations it is made of (docs/calc.md, section 5).
 # Scroll to the title itself, the node the tap goes to: Maestro measures visibility on bounds already clipped by the
@@ -29,6 +33,10 @@ tags:
     visible:
       id: "operations.search.count"
     timeout: 10000
+- assertVisible:
+    id: "operations.search.chip.period"
+    containsDescendants:
+      - text: "1.сентября.*30.сентября"
 # The selection chip comes last in the chip row and starts off screen (FIN-101): bring it in.
 - swipe:
     from:
@@ -37,6 +45,11 @@ tags:
 - assertVisible:
     id: "operations.search.chip.scope"
 - assertVisible: "Фастфуд.*✕"
+- assertVisible: 'Найдено 10[\s\u00A0\u202F]операций'
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Яндекс Еда"
 - assertVisible:
     id: "operations.row"
 - tapOn:
@@ -54,12 +67,21 @@ tags:
     visible:
       id: "operations.search.count"
     timeout: 10000
+- assertVisible:
+    id: "operations.search.chip.period"
+    containsDescendants:
+      - text: "1.сентября.*30.сентября"
 # The selection chip comes last in the chip row and starts off screen (FIN-101): bring it in.
 - swipe:
     from:
       id: "operations.search.chip.category"
     direction: LEFT
 - assertVisible: "Пятёрочка.*✕"
+- assertVisible: 'Найдено 12[\s\u00A0\u202F]операций'
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Пятёрочка"
 - assertVisible:
     id: "operations.row"
 - tapOn:
@@ -81,11 +103,20 @@ tags:
     visible:
       id: "operations.search.count"
     timeout: 10000
+- assertVisible:
+    id: "operations.search.chip.period"
+    containsDescendants:
+      - text: "1.сентября.*30.сентября"
 # The selection chip comes last in the chip row and starts off screen (FIN-101): bring it in.
 - swipe:
     from:
       id: "operations.search.chip.category"
     direction: LEFT
 - assertVisible: "РБК.*✕"
+- assertVisible: 'Найдена 1[\s\u00A0\u202F]операция'
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "РБК"
 - assertVisible:
     id: "operations.row"

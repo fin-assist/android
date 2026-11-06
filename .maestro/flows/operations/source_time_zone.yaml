@@ -6,6 +6,8 @@ tags:
 ---
 - runFlow: ../../subflows/clear_state.yaml
 - runFlow: ../../subflows/fast_login.yaml
+- assertVisible: "Пополнение брокерского счета"
+- assertVisible: "30.сентября"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -20,6 +22,8 @@ tags:
 - assertVisible: "Показаны ранее загруженные данные. Они могут быть неактуальны"
 - assertVisible:
     id: "operations.row"
+- assertVisible: "Пополнение брокерского счета"
+- assertVisible: "30.сентября"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -29,6 +33,8 @@ tags:
 - extendedWaitUntil:
     notVisible: "Устройство не поддерживает часовой пояс этих данных"
     timeout: 10000
+- assertNotVisible: "Показаны ранее загруженные данные. Они могут быть неактуальны"
+- assertVisible: "Пополнение брокерского счета"
 - tapOn:
     id: "operations.feed.search"
 - tapOn:
@@ -39,6 +45,13 @@ tags:
     visible:
       id: "operations.row"
     timeout: 10000
+- assertVisible: 'Найдено 27[\s\u00A0\u202F]операций'
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Krabsbir"
+      - text: "28.сентября"
+      - text: '−362,39[\s\u00A0\u202F]₽'
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -51,6 +64,16 @@ tags:
     visible: "Устройство не поддерживает часовой пояс этих данных"
     timeout: 10000
 - assertVisible: "Показаны ранее загруженные данные. Они могут быть неактуальны"
+- assertVisible: 'Найдено 27[\s\u00A0\u202F]операций'
+- assertVisible:
+    id: "operations.search.input"
+    text: "Krabsbir"
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Krabsbir"
+      - text: "28.сентября"
+      - text: '−362,39[\s\u00A0\u202F]₽'
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -60,3 +83,11 @@ tags:
 - extendedWaitUntil:
     notVisible: "Устройство не поддерживает часовой пояс этих данных"
     timeout: 10000
+- assertNotVisible: "Показаны ранее загруженные данные. Они могут быть неактуальны"
+- assertVisible: 'Найдено 27[\s\u00A0\u202F]операций'
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "Krabsbir"
+      - text: "28.сентября"
+      - text: '−362,39[\s\u00A0\u202F]₽'

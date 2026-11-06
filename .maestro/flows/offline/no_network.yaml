@@ -19,6 +19,9 @@ tags:
 - assertVisible: "Не удаётся подключиться к серверу"
 - assertVisible: "Проверьте интернет и попробуйте ещё раз"
 - assertNotVisible: "Попробуйте отключить VPN и повторить подключение"
+- assertVisible:
+    id: "analytics.retry"
+    enabled: true
 - tapOn:
     id: "ds.tab.profile"
 - extendedWaitUntil:
@@ -28,6 +31,9 @@ tags:
 - assertVisible: "Не удаётся подключиться к серверу"
 - assertVisible: "Проверьте интернет и попробуйте ещё раз"
 
+- assertVisible:
+    id: "profile.retry"
+    enabled: true
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -44,6 +50,9 @@ tags:
     visible:
       id: "profile.phone"
     timeout: 15000
+- assertNotVisible:
+    id: "profile.offline"
+- assertNotVisible: "Проверьте интернет и попробуйте ещё раз"
 - tapOn:
     id: "ds.tab.analytics"
 - runFlow:
@@ -57,3 +66,6 @@ tags:
     visible:
       id: "analytics.block.tiles"
     timeout: 15000
+- assertNotVisible:
+    id: "analytics.offline"
+- assertNotVisible: "Не удаётся подключиться к серверу"

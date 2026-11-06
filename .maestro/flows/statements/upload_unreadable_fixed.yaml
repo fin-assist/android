@@ -55,6 +55,12 @@ tags:
     visible:
       id: "statements.history.unread"
     timeout: 10000
+- assertVisible:
+    id: "statements.history.row"
+    containsDescendants:
+      - text: "^unreadable\\.ofx$"
+      - text: "Не прочитали 2.строки"
+
 - scrollUntilVisible:
     element:
       id: "statements.history.upload"
@@ -75,6 +81,8 @@ tags:
     visible:
       id: "statements.result"
     timeout: 20000
+- assertVisible:
+    id: "statements.result.new"
 - back
 - extendedWaitUntil:
     visible:
@@ -90,6 +98,11 @@ tags:
       id: "statements.history"
     timeout: 10000
 # The pinned date of the e2e build is 8 October; the date and the month are joined by a no-break space.
+- assertVisible:
+    id: "statements.history.row"
+    containsDescendants:
+      - text: "^unreadable\\.ofx$"
+      - text: "Строки дочитаны в загрузке от 8.октября"
 - assertVisible:
     id: "statements.history.resolved"
 - assertVisible: "Строки дочитаны в загрузке от 8.октября"

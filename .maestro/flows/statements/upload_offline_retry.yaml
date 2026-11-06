@@ -34,11 +34,19 @@ tags:
 - extendedWaitUntil:
     visible: "Если файл не скачивается"
     timeout: 5000
+- assertVisible: "Скачайте выписку вручную в кабинете Т-Банка"
+- assertVisible: ".*Версия для ПК.*"
+- assertVisible: "Откройте «Операции» и выберите период — лучше год"
+- assertVisible: "Нажмите значок загрузки и выберите «Скачать в OFX». Счета — все, «Без переводов» не включайте"
+- assertVisible: "Выберите скачанный файл в нашем приложении"
 - tapOn:
     id: "statements.upload.fallback.ok"
 - extendedWaitUntil:
     notVisible: "Если файл не скачивается"
     timeout: 5000
+
+- assertVisible:
+    id: "statements.upload"
 
 # Without the network the file is not sent: the guide stays with a notice and «Повторить».
 - runFlow:
@@ -66,6 +74,15 @@ tags:
       id: "statements.upload.send_offline"
 - assertVisible:
     id: "statements.upload.send_retry"
+    enabled: true
+- assertVisible:
+    id: "statements.upload"
+- assertNotVisible: ".*Попробуйте отключить VPN.*"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_statement_upload_requests=1&expect_statement_upload_keys=1"
+
 
 # Back online, «Повторить» sends the same file and the result opens.
 - runFlow:
@@ -83,3 +100,7 @@ tags:
     timeout: 20000
 - assertVisible:
     id: "statements.result.new"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_statement_upload_requests=2&expect_statement_upload_keys=1"

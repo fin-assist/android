@@ -81,12 +81,16 @@ tags:
       id: "assistant.chat"
     timeout: 10000
 - assertVisible: "Kaspersky"
+- assertVisible:
+    id: "ds.tab.assistant"
+    selected: true
 - assertNotVisible:
     id: "assistant.question"
 - setOrientation: PORTRAIT
 - extendedWaitUntil:
     visible:
       id: "ds.tab.assistant"
+      selected: true
     timeout: 10000
 - assertVisible: "Kaspersky"
 - assertNotVisible:
@@ -131,6 +135,10 @@ tags:
 - assertNotVisible:
     id: "assistant.question"
 - assertVisible: ".*[Оо]сталось 5 из 5.*"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=1&expect_assistant_questions=0&expect_assistant_answers=0"
 - tapOn:
     id: "ds.chat.send"
 - extendedWaitUntil:
@@ -152,9 +160,13 @@ tags:
     index: 1
 - assertVisible:
     id: "assistant.answer"
+    index: 0
+- assertNotVisible:
+    id: "assistant.answer"
+    index: 1
 - assertVisible: ".*[Оо]сталось 4 из 5.*"
 # Reset only after navigating through Consent and saving/restoring the tab under the false live flag.
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?flag.assistant=true"
+      LINK: "pfe2e://config?flag.assistant=true&expect_assistant_asks=2&expect_assistant_questions=1&expect_assistant_answers=1"

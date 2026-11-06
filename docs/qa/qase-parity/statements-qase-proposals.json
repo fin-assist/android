@@ -1,0 +1,89 @@
+{
+  "group": "statements",
+  "baseline": "967f4559bd6cf4db568ca760105828bbc4bb0a9a",
+  "publication": "Proposals only: root validates and publishes; original source preserved.",
+  "proposals": [
+    {
+      "case_id": 14,
+      "field": "preconditions",
+      "before": "Сборка mockE2e, clear_state и fast_login существующим синтетическим пользователем; стандартная fixture.ofx уже загружена, «сейчас»=08.10.2026, Europe/Moscow. Исходная фикстура покрывает октябрь, но его операций ещё нет. october.ofx содержит ровно 3 операции на одном счёте: Поступление — 6 октября, +1 200 ₽; Яндекс Такси — 5 октября, −389 ₽; Пятёрочка — 3 октября, −754 ₽. Доход октября +1 200 ₽, расход 1 143 ₽. После повторной загрузки существуют preload и два October-источника. FIN-436: усиленный flow подготовлен в отдельной ветке/PR; дополнительные UI assertions ещё не выполнялись и до merge не находятся в main.",
+      "proposed": "Сборка mockE2e, clear_state и fast_login существующим синтетическим пользователем; стандартная fixture.ofx уже загружена, «сейчас»=08.10.2026, Europe/Moscow. Исходная фикстура покрывает октябрь, но его операций ещё нет. october.ofx содержит ровно 3 операции на одном счёте: Поступление — 6 октября, +1 200 ₽; Яндекс Такси — 5 октября, −389 ₽; Пятёрочка — 3 октября, −754 ₽. Доход октября +1 200 ₽, расход 1 143 ₽. После повторной загрузки существуют preload и два October-источника.",
+      "status": "pending_root_validation",
+      "reason": "История прежней подготовки не является предусловием. Старый текст сохранить в description/history; root уже подтвердил baseline Qase85 Passed на967f4559, текущий FIN450 не запускался.",
+      "evidence": [
+        "https://app.qase.io/run/PF/dashboard/85",
+        "docs/qa/qase-parity/statements.json"
+      ]
+    },
+    {
+      "case_id": 16,
+      "field": "preconditions",
+      "before": "Синтетическая сборка mockE2e. FIN-365: перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа; обе отметки изначально сняты. Автотесты обновлены, новый UI-прогон не выполнялся.",
+      "proposed": "Синтетическая сборка mockE2e. FIN-365: перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа; обе отметки изначально сняты.",
+      "status": "pending_root_validation",
+      "reason": "История прежней подготовки не является предусловием. Старый текст сохранить в description/history; root уже подтвердил baseline Qase85 Passed на967f4559, текущий FIN450 не запускался.",
+      "evidence": [
+        "https://app.qase.io/run/PF/dashboard/85",
+        "docs/qa/qase-parity/statements.json"
+      ]
+    },
+    {
+      "case_id": 85,
+      "field": "preconditions",
+      "before": null,
+      "proposed": "mockE2eAndroidTest, реальная MainActivity и orchestrator clearPackageData. Синтетический существующий9161234567/PIN1234; дата08.10.2026, profile/source Europe/Moscow. Оба14+/PD исходноoff и подтверждаются отдельно; downloadURL выдаётin-process mockAPI, Espresso-Intents перехватывает ACTION_VIEW, реальный банк/браузер не запускается.",
+      "status": "pending_root_validation",
+      "reason": "Заполнить отсутствующую воспроизводимую nativeUIboundary; сохранить ожидание exactserverURL.",
+      "evidence": [
+        "app/src/androidTestMock/kotlin/ru/finassist/pf/StatementPickerTest.kt",
+        ".github/workflows/e2e.yml",
+        "app/build.gradle.kts"
+      ]
+    },
+    {
+      "case_id": 87,
+      "field": "preconditions",
+      "before": null,
+      "proposed": "mockE2e, clear_state и fast_login существующим синтетическим пользователем; fixture.ofx предзагружена. response_time_zone=unsupported возвращает формально корректный Area/Future_City вне deviceTZDB; actualbackend profilezone не меняется. Для восстановления вернутьdefault и явно повторить чтение. Импортируется bundled october.ofx; stage и реальные timezoneнастройки устройства не нужны.",
+      "status": "pending_root_validation",
+      "reason": "Заполнить отсутствующее предусловие; указать именно response metadatafixture, а не реальную смену профиля/системного пояса.",
+      "evidence": [
+        ".maestro/flows/statements/source_time_zone.yaml",
+        "mock/backend/src/main/kotlin/ru/finassist/pf/mock/api/MockStatementsApi.kt"
+      ]
+    },
+    {
+      "case_id": 84,
+      "field": "description",
+      "before": ".maestro/flows/statements/download_period.yaml. Сценарий упал в run 41819133288.\n\nFIN-427: исправления после run 41819133288 подготовлены; повторный UI-прогон не выполнялся. Статические проверки не являются результатом выполнения кейса.",
+      "proposed": ".maestro/flows/statements/download_period.yaml. Сценарий упал в run 41819133288.\n\nFIN-427: исправления после run 41819133288 подготовлены; повторный UI-прогон не выполнялся. Статические проверки не являются результатом выполнения кейса.\nFIN450: no-browser при offline дополнительно проверяет native StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser; Maestro покрывает calendar/input/error, native companion перехватывает ACTION_VIEW. Изменённый native companion написан, не запускался.",
+      "status": "pending_root_validation",
+      "reason": "Уточнить границу доказательства усиленныхtests, не менять бизнес-ожидания и не выдавать authoring за execution.",
+      "evidence": [
+        "docs/qa/qase-parity/statements.json"
+      ]
+    },
+    {
+      "case_id": 21,
+      "field": "description",
+      "before": "Автотест: `.maestro/flows/statements/upload_offline_retry.yaml`\n\nFIN-396: общий заголовок ошибки соединения дополняет исход «Файл не загружен» и локальную интернет/VPN-подсказку. При повторе сохраняется тот же файл и исходный retry/idempotency-контекст. Изменённый flow написан, UI-прогон не выполнялся.",
+      "proposed": "Автотест: `.maestro/flows/statements/upload_offline_retry.yaml`\n\nFIN-396: общий заголовок ошибки соединения дополняет исход «Файл не загружен» и локальную интернет/VPN-подсказку. При повторе сохраняется тот же файл и исходный retry/idempotency-контекст. Изменённый flow написан, UI-прогон не выполнялся.\nFIN450: после offline и явногоRetry контролируется2фактических uploadAPI-entry с1уникальнымkey; этоотдельно от количестваcompleteduploads.",
+      "status": "pending_root_validation",
+      "reason": "Уточнить границу доказательства усиленныхtests, не менять бизнес-ожидания и не выдавать authoring за execution.",
+      "evidence": [
+        "docs/qa/qase-parity/statements.json"
+      ]
+    },
+    {
+      "case_id": 51,
+      "field": "description",
+      "before": "FIN-223. .maestro/flows/statements/upload_restored_key.yaml написан, не запускался. Закрытый mockE2e control создаёт запись неизвестного возраста для october.ofx; это имитация восстановленного ключа, а не реальная смерть процесса. Счётчик upload подтверждает отсутствие отправки до нового намерения.",
+      "proposed": "FIN-223. .maestro/flows/statements/upload_restored_key.yaml написан, не запускался. Закрытый mockE2e control создаёт запись неизвестного возраста для october.ofx; это имитация восстановленного ключа, а не реальная смерть процесса. Счётчик upload подтверждает отсутствие отправки до нового намерения.\nFIN450: до явного нового действия uploadAPI-entry0/key0 и persistedpendingUUIDнеизменён; после действия API-entry1/key1 и новыйUUIDотличается отseeded. RawUUIDневыдаётся черезcontrol.",
+      "status": "pending_root_validation",
+      "reason": "Уточнить границу доказательства усиленныхtests, не менять бизнес-ожидания и не выдавать authoring за execution.",
+      "evidence": [
+        "docs/qa/qase-parity/statements.json"
+      ]
+    }
+  ]
+}

@@ -73,7 +73,9 @@ tags:
     visible:
       id: "assistant.chat.send_failed"
     timeout: 20000
-- assertVisible: "Krabsbir"
+- assertVisible:
+    id: "ds.chat.input"
+    text: "Krabsbir"
 - assertVisible: ".*[Оо]сталось 5 из 5.*"
 # This control link backgrounds and resumes the chat, and waits longer than Retry-After: 3.
 - runFlow:

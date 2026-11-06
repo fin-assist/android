@@ -17,6 +17,8 @@ tags:
       childOf:
         id: "ds.error.error"
     timeout: 20000
+- assertNotVisible:
+    id: "auth.phone.document"
 - scrollUntilVisible:
     element:
       id: "auth.phone.submit"
@@ -59,6 +61,18 @@ tags:
     text: "(?s)Не получилось отправить номер.*Проверьте интернет.*"
     childOf:
       id: "ds.error.error"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+- assertVisible:
+    id: "auth.phone.age"
+    checked: true
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: true
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -69,3 +83,9 @@ tags:
 - tapOn:
     id: "auth.phone.submit"
 - runFlow: ../../subflows/set_passcode.yaml
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 40000
+- assertNotVisible:
+    id: "auth.consent"

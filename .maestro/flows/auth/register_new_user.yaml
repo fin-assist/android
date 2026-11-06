@@ -39,9 +39,19 @@ tags:
       id: "auth.phone"
     timeout: 15000
 - runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?call_delay_ms=6000"
+- runFlow:
     file: ../../subflows/sign_in.yaml
     env:
       PHONE: "9001112233"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 10000
+- assertVisible:
+    id: "auth.call.dial"
 
 # The consent was received on the phone step; registration never asks for it again.
 - extendedWaitUntil:

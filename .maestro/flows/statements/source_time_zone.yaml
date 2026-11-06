@@ -19,6 +19,12 @@ tags:
 - extendedWaitUntil:
     visible: "Устройство не поддерживает часовой пояс этих данных"
     timeout: 10000
+- assertNotVisible:
+    id: "statements.upload.loaded"
+- assertNotVisible:
+    id: "statements.upload.download_period"
+- assertNotVisible:
+    id: "statements.upload.pick"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -46,6 +52,15 @@ tags:
 - extendedWaitUntil:
     visible: "Устройство не поддерживает часовой пояс этих данных"
     timeout: 10000
+- assertNotVisible:
+    id: "statements.result.new"
+- assertNotVisible:
+    id: "statements.result.no_new"
+- assertNotVisible:
+    id: "statements.result.empty"
+- assertNotVisible:
+    id: "statements.result.unread"
+- assertNotVisible: "Все операции.*"
 - runFlow:
     file: ../../subflows/config.yaml
     env:

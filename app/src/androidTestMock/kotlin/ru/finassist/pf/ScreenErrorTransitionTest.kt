@@ -82,6 +82,7 @@ class ScreenErrorTransitionTest {
         compose.onNodeWithText(RETRY, useUnmergedTree = true).assertIsDisplayed().performClick()
         compose.onNodeWithTag("profile.phone").assertTextEquals("+7 916 000-00-02")
         compose.onNodeWithText(TITLE, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("Не получилось обновить профиль", substring = true, useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText(THEME_OUTCOME, substring = true, useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText(RETRY, useUnmergedTree = true).assertDoesNotExist()
         compose.runOnIdle { assertEquals(1, retries); assertEquals(0, themeWrites) }
@@ -123,6 +124,7 @@ class ScreenErrorTransitionTest {
         compose.onNodeWithText("restored.ofx", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithText("before.ofx", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText(TITLE, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("Не получилось загрузить историю", substring = true, useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText(DELETE_OUTCOME, substring = true, useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText(RETRY, useUnmergedTree = true).assertDoesNotExist()
         compose.runOnIdle { assertEquals(1, retries); assertEquals(0, deleteWrites) }

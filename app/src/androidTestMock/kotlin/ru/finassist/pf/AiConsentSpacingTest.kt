@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -37,7 +38,7 @@ class AiConsentSpacingTest {
                 PfTheme {
                     Box(Modifier.fillMaxWidth().height(640.dp)) {
                         AiConsentContent(
-                            AiConsentUiState(error = "Без согласия помощник не сможет ответить", formError = formError.value),
+                            AiConsentUiState(error = CHECKBOX_ERROR, formError = formError.value),
                             onBack = {}, onAccepted = {}, onOpenDocument = {}, onGrant = {},
                         )
                     }
@@ -46,8 +47,10 @@ class AiConsentSpacingTest {
         }
         compose.onNodeWithTag("assistant.consent.submit").assertIsNotDisplayed()
         assertMinimumGap()
-        compose.runOnIdle { formError.value = "Не получилось сохранить согласие" }
+        assertErrorInsideMeasuredBody(CHECKBOX_ERROR)
+        compose.runOnIdle { formError.value = FORM_ERROR }
         assertMinimumGap()
+        assertErrorInsideMeasuredBody(FORM_ERROR)
     }
 
     private fun assertMinimumGap() {
@@ -57,5 +60,16 @@ class AiConsentSpacingTest {
         body.assertIsDisplayed()
         val gap = button.getUnclippedBoundsInRoot().top - body.getUnclippedBoundsInRoot().bottom
         assertTrue("Expected at least 24 dp after the complete consent/error block, got $gap", gap >= 24.dp)
+    }
+
+    private fun assertErrorInsideMeasuredBody(text: String) {
+        val error = compose.onNodeWithText(text).assertIsDisplayed().getUnclippedBoundsInRoot()
+        val body = compose.onNodeWithTag("assistant.consent.body").getUnclippedBoundsInRoot()
+        assertTrue("The measured body must include the visible error", error.top >= body.top && error.bottom <= body.bottom)
+    }
+
+    private companion object {
+        const val CHECKBOX_ERROR = "Без согласия помощник не сможет ответить"
+        const val FORM_ERROR = "Не получилось сохранить согласие"
     }
 }

@@ -65,8 +65,12 @@ tags:
     visible:
       id: "assistant.answer.failed"
     timeout: 20000
+- assertVisible: "Не получилось ответить[.] Вопрос не потрачен"
+- assertVisible:
+    id: "assistant.answer.failed.retry"
 - assertVisible: ".*[Оо]сталось 5 из 5.*"
-- tapOn: "Повторить"
+- tapOn:
+    id: "assistant.answer.failed.retry"
 
 # The new answer replaces the failed one and is counted «без переводов», like the question.
 - extendedWaitUntil:
@@ -79,3 +83,8 @@ tags:
 - scrollUntilVisible:
     element: ".*· без переводов"
     direction: DOWN
+# Observe the real mock API boundary, not only a visible answer or the quota.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=2&expect_assistant_retries=1&expect_assistant_retry_keys=1&expect_assistant_retry_targets=1&expect_assistant_questions=1&expect_assistant_answers=1"

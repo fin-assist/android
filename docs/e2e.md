@@ -553,6 +553,52 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   instead (`useTestStorageService`). The system picker contract that the native test used to check on `mockDebug`
   is now a Robolectric test (`PickStatementDocumentTest`): on the e2e build the picker is `E2eDocumentPickerActivity`.
 
+### Supplemental observations of actual mock requests (FIN-450)
+
+UI assertions remain the oracle for visible behaviour. `MockUiEvidence`, in the mock backend only,
+records actual API entry attempts before offline/consent/error checks. `E2eRequestControl` in mockE2e
+compares closed `pfe2e://config` expectations with that witness. The control never calls a financial
+API to produce the expected result. A repeated failed call counts even when history and quota remain unchanged.
+
+| Control | Observation |
+|---|---|
+| `expect_assistant_asks`, `_ask_keys`, `_retries`, `_retry_keys`, `_retry_targets` | attempted Ask/Retry calls and distinct private keys/targets; only counts are returned |
+| `expect_assistant_questions`, `_answers`, `_off_topics` | actual stored history; replaced answers excluded |
+| `expect_statement_upload_requests`, `_upload_keys`, `_delete_requests` | actual API attempts, including offline failures; preloading is not a client upload request |
+| `expect_operation_details_requests`, `expect_category_requests` | actual details/category attempts |
+| `expect_operation_details_timestamp_exact`, `expect_category_timestamp_exact` | full ISO offset timestamp equals the ledger details or the last actual details response for the same operation; no truncation of seconds/offset/subseconds |
+| `expect_phone_ttl_seconds`, `expect_phone_fresh_deadline` | actual verification lifetime and advancement of the returned deadline after a second Start |
+| `expect_phone_wait_hhmm=HH:mm` | clock label copied from the actual Call screen, compared with the last response's rounded `expires_in` in the device zone; the direct in-process handoff is bounded to one second at a minute boundary |
+| `expect_maintenance_probes`, `expect_maintenance_probe_after_deadline` | actual personal-data probe entries relative to the latest observed maintenance refusal |
+| `expect_stream_reopen_after_deadline` | every actual stream opening after a 429 occurs at/after that refusal's captured elapsed deadline, even after future refusals are removed |
+| `expect_analytics_dismiss_requests` | all actual dismiss attempts; separate from the injected-failure counter |
+| `expect_statement_pending_key_retained`, `expect_statement_upload_key_fresh` | Qase51's closed bundled fixture retains its unknown-age UUID until explicit restart, then uploads using another UUID |
+
+Counts accept one integer in 0–128 (phone TTL: 0–3600), predicates only `true`, phone labels only `00:00`–`23:59`. Unknown names in
+these namespaces, duplicate values, overflow or unobserved predicates fail closed with `e2e.config.unmet`.
+Private sets/maps are bounded to 128 entries and 256 characters per key. Controls expose no raw keys,
+request targets, user text or timestamps. Clear-state/process recreation resets the witness. The seeded-key
+retention check reads `IdempotencyKeys.pendingKey`; it cannot create or renew a pending key. These are
+same-process mock observations, not evidence of real server survival after application death.
+
+The control activity pauses/resumes the app. Place observations after the relevant visible assertions and
+avoid inserting them where lifecycle changes would alter the scenario (in particular active dictation).
+Timing predicates are supplemental to the visible wait/recovery and JVM retry-state tests; they do not
+claim access to the client's private deadline fields.
+
+FIN-450's full clause audit is in [qa/qase-parity](qa/qase-parity/). Its original source snapshot and
+newly authored checks are distinguished from baseline Qase85 execution. The FIN-450 UI/native changes
+have not yet been executed. Qase77–79 retain API35 as specified; normal API34 CI is not API35 acceptance.
+Qase17 retains its Maestro flow and adds `ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette`
+for the actual MainActivity's rendered light/dark palette. Both map to Qase17; the reporter keeps their worst
+result when both components are present. If any mapped component is missing, an otherwise passing case is
+reported Skipped with the missing test named; a reported failure stays Failed. A focused component run must
+identify its limited scope in the description and cannot establish a full-case Passed by itself.
+Qase84 likewise combines its Maestro calendar/input/error flow with
+`StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser`, which intercepts ACTION_VIEW
+and asserts zero browser launches after offline download preparation. This native companion is authored,
+not executed. Both components are required for complete case acceptance.
+
 ## Test tags
 
 Maestro finds elements by id; in Compose the id is `Modifier.testTag`, exposed as a resource id by
@@ -709,7 +755,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `assistant/ask_question` (smoke) | disclosure of question/history, account-phone/file exclusion and masking limits → consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search (Qase12, FIN-366) |
 | `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
 | `assistant/off_topic` | a question not about finances (`weather`): the server's OFF_TOPIC text, no «Повторить» (`retryable: false`), still 5 of 5; the next question is answered, 4 of 5 — FIN-160 |
-| `assistant/off_topic_limit` | five terminal OFF_TOPIC outcomes reach the rolling limit; a refused sixth question keeps its draft, history and 5/5 daily quota; history remains readable — FIN-223, Qase 49 |
+| `assistant/off_topic_limit` | five terminal OFF_TOPIC outcomes reach the rolling limit; a refused sixth question keeps its draft until the nested chat is closed. After full Back/re-entry the previous editable draft is absent, history remains readable and daily quota is 5/5 (owner decision 06.11.2026, FIN-450); Qase49 |
 | `errors/request_retry_false` | a REST refusal with retryable=false is not resent on resume or after its wait; corrected input is a new action and a later failed result can separately allow RetryAnswer — FIN-223, Qase 50 |
 | `errors/server_messages` | profile theme mutations show an unknown ordinary server message, unknown-severity error styling and safe malformed/legacy fallbacks without diagnostics — FIN-223, Qase 48 |
 | `assistant/nothing_found_charged` | a merchant with no operations over the covered six months of the answer (`Kaspersky`, only in March): «…операций «Kaspersky» не нашли», an answer, not a refund — 4 of 5 (it used to stay 5 of 5); only a lock or no data over the period is refunded — FIN-136 |
@@ -724,6 +770,8 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
 | `statements/download_period` (mock-only) | inclusive calendar selection, invalid/reversed/future bounds, network failure retains dates and offers explicit retry; Qase84 (FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `StatementPickerTest#opensTheServerUrlForSelectedInclusiveDates` | exact server download URL handed to browser for 1–30 September; native Espresso-Intents because Maestro cannot inspect destination; Qase85; authored, not executed |
+| `StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser` | actual MainActivity calendar, retained 1–8 October after offline preparation, enabled Retry and no ACTION_VIEW; native companion to the Maestro Qase84 flow; authored, not executed |
+| `ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette` | actual MainActivity Profile, explicit Light then Dark choices, rendered gutter pixels match independent light/dark palette values; native companion to the Maestro Qase17 preference/logout flow; authored, not executed |
 | `operations/source_time_zone` (mock-only) | unsupported IANA metadata above verified feed/search cache; stale notice and explicit supported recovery; Qase86; updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `statements/source_time_zone` (mock-only) | unsupported import config and complete result; explicit supported recovery; Qase87; authored, not executed |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |

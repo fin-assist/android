@@ -26,6 +26,11 @@ tags:
     visible:
       id: "auth.phone.restart"
     timeout: 10000
+- assertNotVisible:
+    id: "auth.call"
+- assertVisible:
+    id: "auth.phone.submit"
+    enabled: false
 - scrollUntilVisible:
     element:
       id: "auth.phone.restart"
@@ -53,7 +58,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?error_operation=off&expect_error_requests=1"
+      LINK: "pfe2e://config?error_operation=off&expect_error_requests=1&consent_type=personal_data&expect_consent_reads=2&expect_consent_starts=2026-09-28&expect_consent_start_keys=1"
 - runFlow: ../../subflows/confirm_phone.yaml
 - scrollUntilVisible:
     element:
@@ -61,3 +66,11 @@ tags:
 - tapOn:
     id: "auth.phone.submit"
 - runFlow: ../../subflows/set_passcode.yaml
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 40000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_error_requests=1&consent_type=personal_data&expect_consent_reads=2&expect_consent_starts=2026-09-28,2026-09-28&expect_consent_start_keys=2&expect_consent_registers="

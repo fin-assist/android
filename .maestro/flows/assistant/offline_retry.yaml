@@ -57,6 +57,7 @@ tags:
       id: "ds.chat.input"
       enabled: true
     timeout: 20000
+- assertVisible: ".*[Оо]сталось 4 из 5.*"
 
 # Keep the draft before the control activity pauses Chat. Resume reads history and hides the composer on failure.
 - tapOn:
@@ -66,7 +67,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?offline=true"
+      LINK: "pfe2e://config?offline=true&expect_assistant_asks=2&expect_assistant_questions=1&expect_assistant_answers=1"
 - extendedWaitUntil:
     visible:
       id: "ds.chat.offline"
@@ -124,7 +125,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?offline=false"
+      LINK: "pfe2e://config?offline=false&expect_assistant_asks=4&expect_assistant_questions=1&expect_assistant_answers=1"
 - extendedWaitUntil:
     visible:
       id: "ds.chat.input"
@@ -154,3 +155,8 @@ tags:
 - assertVisible: ".*[Оо]сталось 3 из 5.*"
 - assertNotVisible:
     id: "assistant.chat.send_failed"
+# Two failed offline POST intents were counted before networking; online resume cannot add another.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_assistant_asks=5&expect_assistant_questions=2&expect_assistant_answers=2"

@@ -93,14 +93,16 @@ def parse_report(xml_text: str) -> list[TestResult]:
 
 
 def map_results(results: list[TestResult], cases: dict[str, int]) -> tuple[list[dict], list[TestResult]]:
-    """Qase result payloads for mapped tests (one per case, the worst one), and the tests that have no case."""
+    """Worst mapped result per case; a pass also requires every mapped component to be present."""
     by_case: dict[int, dict] = {}
+    observed: dict[int, set[str]] = {}
     unmapped = []
     for r in results:
         case_id = cases.get(r.key)
         if case_id is None:
             unmapped.append(r)
             continue
+        observed.setdefault(case_id, set()).add(r.key)
         item = {"case_id": case_id, "status": r.status, "time_ms": r.time_ms}
         if r.message:
             item["comment"] = r.message
@@ -109,6 +111,12 @@ def map_results(results: list[TestResult], cases: dict[str, int]) -> tuple[list[
         kept = by_case.get(case_id)
         if kept is None or SEVERITY[item["status"]] > SEVERITY[kept["status"]]:
             by_case[case_id] = item
+    for case_id, item in by_case.items():
+        missing = {key for key, mapped_id in cases.items() if mapped_id == case_id} - observed[case_id]
+        if missing and item["status"] == "passed":
+            item["status"] = "skipped"
+            detail = "Incomplete UI case; not run: " + ", ".join(sorted(missing))
+            item["comment"] = item.get("comment", "") + ("\n" if item.get("comment") else "") + detail
     return list(by_case.values()), unmapped
 
 

@@ -67,14 +67,14 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?expect_error_requests=1"
+      LINK: "pfe2e://config?expect_error_requests=1&expect_analytics_dismiss_requests=1"
 - assertVisible:
     id: "analytics.unknown_mutation"
 - assertNotVisible: "Убрали из регулярных платежей"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?error_operation=off&expect_error_requests=1"
+      LINK: "pfe2e://config?error_operation=off&expect_error_requests=1&expect_analytics_dismiss_requests=1"
 # Recovery/resume itself must neither resend the command nor announce that it succeeded.
 - assertVisible:
     id: "analytics.unknown_mutation"
@@ -113,3 +113,7 @@ tags:
 - assertNotVisible:
     id: "analytics.unknown_mutation"
 - assertNotVisible: "Результат изменения не подтверждён"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_analytics_dismiss_requests=2"

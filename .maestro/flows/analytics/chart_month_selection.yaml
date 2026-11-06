@@ -83,6 +83,28 @@ tags:
     timeout: 10000
 - assertNotVisible:
     id: "analytics.ask"
+# Check the calendar target and its actual zero value, then deliberately return to the chart.
+- scrollUntilVisible:
+    element:
+      id: "analytics.ask"
+    direction: UP
+- assertVisible:
+    text: "Октябрь 2026"
+    childOf:
+      id: "ds.period.pick"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible:
+    id: "analytics.tile.expense"
+    containsDescendants:
+      - text: '^0[\s\u00A0\u202F]₽$'
+- scrollUntilVisible:
+    element:
+      id: "analytics.expense.monthly.point.2026-10"
+    centerElement: true
+- assertNotVisible:
+    id: "analytics.ask"
 # A failed month-to-month request retains October and offers an explicit retry of September.
 - runFlow:
     file: ../../subflows/config.yaml

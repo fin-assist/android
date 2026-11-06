@@ -66,9 +66,9 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?analytics_recalculating_responses=0"
-- scrollUntilVisible:
-    element:
-      id: "analytics.retry"
+- assertVisible:
+    id: "analytics.retry"
+    enabled: true
 - assertVisible: "Не удалось обновить показатели\\. Показаны данные до изменений"
 - tapOn:
     id: "analytics.retry"
@@ -91,6 +91,11 @@ tags:
 - scrollUntilVisible:
     element: "Не подписка — планшет.*"
 - assertNotVisible: "РБК"
+
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_analytics_dismiss_requests=1"
 
 # An offline result is unknown. Returning online and a read cannot claim this write succeeded.
 - runFlow: ../../subflows/clear_state.yaml
@@ -131,7 +136,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?offline=false"
+      LINK: "pfe2e://config?offline=false&expect_analytics_dismiss_requests=1"
 - scrollUntilVisible:
     element:
       id: "analytics.unknown_mutation"
@@ -142,9 +147,20 @@ tags:
 - scrollUntilVisible:
     element: "Не подписка — РБК"
 - assertVisible: "РБК"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_analytics_dismiss_requests=1"
 # A fresh successful PUT, not a GET, settles the unknown result.
 - tapOn: "Не подписка — РБК"
 - extendedWaitUntil:
     notVisible: "Не подписка — РБК"
     timeout: 10000
+- scrollUntilVisible:
+    element: "Не подписка — планшет.*"
 - assertNotVisible: "РБК"
+- assertNotVisible: "Не подписка — РБК"
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_analytics_dismiss_requests=2"

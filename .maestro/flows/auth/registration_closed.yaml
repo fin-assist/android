@@ -50,3 +50,5 @@ tags:
     visible:
       id: "operations.feed"
     timeout: 20000
+- assertVisible:
+    id: "operations.row"

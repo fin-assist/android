@@ -3,6 +3,7 @@ package ru.finassist.pf
 import android.Manifest
 import android.content.pm.PackageManager
 import android.speech.SpeechRecognizer
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
@@ -18,6 +19,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
@@ -60,6 +63,7 @@ import ru.finassist.pf.core.designsystem.theme.LocalPfClock
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.core.tracking.NoopTracker
 import ru.finassist.pf.feature.assistant.impl.ui.ChatScreen
+import ru.finassist.pf.feature.assistant.impl.ui.ChatItem
 import ru.finassist.pf.feature.assistant.impl.ui.ChatViewModel
 import ru.finassist.pf.feature.assistant.impl.ui.VoiceRecognizer
 import ru.finassist.pf.feature.assistant.impl.ui.VoiceRecognizerFactory
@@ -133,6 +137,7 @@ class VoiceDictationTest {
         val recognizer = recognizers.latest
         compose.runOnIdle { recognizer.listener.ready(); recognizer.listener.ready() }
         assertPhase("listening", "Говорите, я слушаю")
+        compose.runOnIdle { assertEquals("Repeated ready must retain one recognizer", count + 1, recognizers.instances.size) }
         compose.runOnIdle { recognizer.listener.level(-20f) }
         assertLevel(0f)
         compose.runOnIdle { recognizer.listener.level(30f) }
@@ -174,7 +179,17 @@ class VoiceDictationTest {
         compose.onNodeWithTag(MIC).performClick()
         val backed = recognizers.latest
         assertPhase("preparing", "Подготавливаем микрофон…")
-        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        // The active panel removes the composer. Observe actual IME retirement, then send
+        // an OS Back key rather than invoking the app's dispatcher directly.
+        compose.waitUntil(10_000) {
+            var imeVisible = true
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                imeVisible = ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
+                    ?.isVisible(WindowInsetsCompat.Type.ime()) ?: true
+            }
+            !imeVisible
+        }
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         compose.runOnIdle {
             assertEquals(0, backNavigations)
             assertEquals(1, backed.destroys)
@@ -182,6 +197,7 @@ class VoiceDictationTest {
         }
         compose.onNodeWithTag("assistant.voice.panel").assertDoesNotExist()
         assertDraft(VOICE_DRAFT)
+        assertNoVoiceSubmission()
 
         compose.onNodeWithTag(MIC).performClick()
         val backgrounded = recognizers.latest
@@ -206,20 +222,26 @@ class VoiceDictationTest {
         compose.runOnIdle { recognizers.latest.listener.error(SpeechRecognizer.ERROR_SPEECH_TIMEOUT) }
         assertPhase("error", "Не удалось расслышать речь")
         assertDraft(VOICE_DRAFT)
+        assertNoVoiceSubmission()
         compose.onNodeWithTag("assistant.voice.retry").performClick()
         compose.runOnIdle { assertTrue("Silence must not select the system fallback", recognizers.latest.onDevice) }
         compose.runOnIdle { recognizers.latest.listener.error(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) }
         assertPhase("error", "Нужен доступ к микрофону")
+        assertDraft(VOICE_DRAFT)
+        assertNoVoiceSubmission()
         compose.onNodeWithTag("assistant.voice.retry").performClick()
         compose.runOnIdle { assertTrue("Permission refusal must not change the provider", recognizers.latest.onDevice) }
         compose.runOnIdle { recognizers.latest.listener.error(SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE) }
         assertPhase("error", "Не получилось распознать речь")
         assertDraft(VOICE_DRAFT)
+        assertNoVoiceSubmission()
         compose.onNodeWithTag("assistant.voice.retry").performClick()
         compose.runOnIdle { assertFalse("A failed on-device model selects the system provider next", recognizers.latest.onDevice) }
         assertPhase("preparing", "Подготавливаем микрофон…")
         compose.runOnIdle { recognizers.latest.listener.error(SpeechRecognizer.ERROR_SERVER) }
         assertPhase("error", "Не получилось распознать речь")
+        assertDraft(VOICE_DRAFT)
+        assertNoVoiceSubmission()
         compose.onNodeWithTag("assistant.voice.retry").performClick()
         compose.runOnIdle { assertFalse(recognizers.latest.onDevice) }
         compose.onNodeWithTag("assistant.voice.cancel").performClick()
@@ -230,6 +252,7 @@ class VoiceDictationTest {
         assertPhase("error", "Распознавание речи недоступно")
         compose.runOnIdle { assertEquals(before, recognizers.instances.size) }
         assertDraft(VOICE_DRAFT)
+        assertNoVoiceSubmission()
         compose.runOnIdle { recognizers.systemAvailable = true }
         compose.onNodeWithTag("assistant.voice.retry").performClick()
         assertPhase("preparing", "Подготавливаем микрофон…")
@@ -247,6 +270,8 @@ class VoiceDictationTest {
             assertEquals(listOf(EDITED), api.attempts)
             assertTrue(api.accepted.isEmpty())
             assertEquals(5, vm.state.value.limit?.remaining)
+            assertEquals(ORIGINAL_QUESTION_IDS,
+                vm.state.value.items.filterIsInstance<ChatItem.Question>().map { it.id })
         }
         // Only the navigation-result handoff is simulated here; Qase12 owns the actual consent-screen journey.
         compose.runOnIdle { api.hasConsent = true; consentResult.value = "true" }
@@ -262,6 +287,8 @@ class VoiceDictationTest {
             assertEquals(listOf(EDITED, EDITED), api.attempts)
             assertEquals(listOf(EDITED), api.accepted)
             assertEquals(4, vm.state.value.limit?.remaining)
+            assertEquals(ORIGINAL_QUESTION_IDS + "voice-new-q",
+                vm.state.value.items.filterIsInstance<ChatItem.Question>().map { it.id })
         }
     }
 
@@ -269,6 +296,8 @@ class VoiceDictationTest {
         assertTrue(api.attempts.isEmpty())
         assertTrue(api.accepted.isEmpty())
         assertEquals(5, vm.state.value.limit?.remaining)
+        assertEquals(ORIGINAL_QUESTION_IDS,
+            vm.state.value.items.filterIsInstance<ChatItem.Question>().map { it.id })
     }
 
     private fun assertDraft(expected: String) {
@@ -293,6 +322,7 @@ class VoiceDictationTest {
     }
 
     private companion object {
+        val ORIGINAL_QUESTION_IDS = listOf("voice-old-q1", "voice-old-q2", "voice-old-q3")
         const val INPUT = "ds.chat.input"
         const val MIC = "ds.chat.voice"
         const val DRAFT = "Мои расходы"

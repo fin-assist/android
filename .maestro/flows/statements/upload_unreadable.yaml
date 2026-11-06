@@ -40,8 +40,10 @@ tags:
     visible:
       id: "statements.result.empty"
     timeout: 20000
+- assertVisible: "В выписке нет операций"
 - assertVisible:
     id: "statements.result.unread"
+- assertVisible: ".*Подробнее.*"
 # The count is joined to the noun with a no-break space: any single character between them.
 - assertVisible: "2.строки не прочитали — их нет в суммах.*"
 
@@ -64,6 +66,12 @@ tags:
     visible:
       id: "statements.history"
     timeout: 10000
+- assertVisible:
+    id: "statements.history.row"
+    index: 0
+    containsDescendants:
+      - text: "^unreadable\\.ofx$"
+      - text: "Не прочитали 2.строки"
 # The newest upload is on top; the fixture statement has no unread lines, so this is the only such link.
 # The tag is on the link's container, its text on a child node: id and text are checked apart (FIN-70).
 - assertVisible:
@@ -76,15 +84,23 @@ tags:
       id: "statements.unread"
     timeout: 10000
 # Nothing of the file was read: the intro has no «Остальные операции загружены».
-- assertVisible: "В файле .* эти строки не прочитали — их нет в суммах\\."
+- assertVisible: "В файле unreadable\\.ofx эти строки не прочитали — их нет в суммах\\."
 - assertNotVisible: ".*Остальные операции загружены.*"
 # Line numbers of the two <STMTTRN> blocks in unreadable.ofx; the date and the month are joined by a no-break space.
-- assertVisible: "Строка 31 · дата не прочитана"
-- assertVisible: "нет даты"
-- assertVisible: "Строка 38 · 5.октября"
-- assertVisible: "не распознали сумму"
+- assertVisible: "Непрочитанные строки"
+- assertVisible:
+    id: "statements.unread.line"
+    containsDescendants:
+      - text: "Строка 31 · дата не прочитана"
+      - text: "нет даты"
+- assertVisible:
+    id: "statements.unread.line"
+    containsDescendants:
+      - text: "Строка 38 · 5.октября"
+      - text: "не распознали сумму"
 - assertVisible:
     id: "statements.unread.report"
+- assertVisible: "Сообщить нам"
 - back
 - extendedWaitUntil:
     visible:

@@ -169,7 +169,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?consent_type=assistant&expect_consent_reads=5&expect_consent_active=0&expect_consent_grants=1,2"
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_reads=5&expect_consent_active=0&expect_consent_grants=1,2&expect_assistant_asks=1&expect_assistant_retries=0&expect_assistant_questions=0&expect_assistant_answers=0"
 - assertNotVisible:
     id: "assistant.question"
 
@@ -215,7 +215,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?consent_type=assistant&expect_consent_wait_elapsed=true&expect_consent_reads=2&expect_consent_active=0&expect_consent_grants=1"
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_wait_elapsed=true&expect_consent_reads=2&expect_consent_active=0&expect_consent_grants=1&expect_assistant_asks=1&expect_assistant_retries=0&expect_assistant_questions=0&expect_assistant_answers=0"
 - assertVisible:
     id: "assistant.consent.submit"
     enabled: false
@@ -241,7 +241,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?consent_type=assistant&expect_consent_wait_elapsed=true&expect_consent_reads=2&expect_consent_active=0&expect_consent_grants=1"
+      LINK: "pfe2e://config?consent_type=assistant&expect_consent_wait_elapsed=true&expect_consent_reads=2&expect_consent_active=0&expect_consent_grants=1&expect_assistant_asks=1&expect_assistant_retries=0&expect_assistant_questions=0&expect_assistant_answers=0"
 - assertNotVisible:
     id: "assistant.chat"
 

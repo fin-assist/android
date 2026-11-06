@@ -20,8 +20,17 @@ tags:
 - scrollUntilVisible:
     element:
       id: "analytics.block.e2e_unknown"
-- assertVisible: "Карта расходов по районам — обновите приложение, чтобы её увидеть"
+- assertVisible:
+    id: "analytics.block.e2e_unknown"
+    below:
+      id: "analytics.block.tiles"
+    containsDescendants:
+      - text: "Карта расходов по районам — обновите приложение, чтобы её увидеть"
 - scrollUntilVisible:
     element:
       id: "analytics.block.e2e_locked"
-- assertVisible: ".*Откроется, когда подключите второй банк.*"
+- assertVisible:
+    id: "analytics.block.e2e_locked"
+    containsDescendants:
+      - text: "Сравнение банков"
+      - text: "Откроется, когда подключите второй банк"

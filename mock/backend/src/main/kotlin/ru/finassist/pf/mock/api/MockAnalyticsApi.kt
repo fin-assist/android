@@ -108,6 +108,7 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
     }
 
     override suspend fun dismissRegularPayment(id: String, date: PeriodKey, transferMode: TransferMode): AnalyticsBlockUpdate {
+        backend.uiEvidence.dismiss()
         backend.simulateNetwork()
         backend.requireSession()
         if (!date.isCalendar || date.type != PeriodType.MONTH || !PeriodKey.isValid(date.value)) invalidField("date")

@@ -136,6 +136,7 @@ class MockBackend(
     var deferAnalyticsCalculation = false
     val dataChanges = DataChanges { calculation.calculateNow() }
     val assistant = AssistantStore(dataChanges)
+    val uiEvidence = MockUiEvidence()
 
     /** `Idempotency-Key` → cached response for the endpoints api.md marks idempotent. */
     val idempotency = HashMap<String, Stored>()
@@ -200,6 +201,7 @@ class MockBackend(
     private fun checkAvailability() {
         val c = config
         if (c.maintenance) {
+            uiEvidence.maintenanceRefusal(elapsedClock?.nowMillis(), c.maintenanceRetryAfterSeconds.toLong())
             val error = maintenanceError(c.maintenanceUntil, c.maintenanceRetryAfterSeconds)
             gate.maintenance(c.maintenanceUntil, c.maintenanceRetryAfterSeconds, now(), response = error.response)
             throw error
@@ -229,6 +231,7 @@ class MockBackend(
      * opening still open when maintenance starts ends at its next event without it, like a drop.
      */
     fun <T> droppable(stream: Flow<T>, isTerminal: (T) -> Boolean): Flow<T> = flow {
+        uiEvidence.streamOpening(elapsedClock?.nowMillis())
         // Before the stream starts, as an HTTP answer (api.md «SSE»: a re-open during maintenance gets 503).
         checkAvailability()
         takeRateLimit()?.let { throw it }
@@ -261,6 +264,7 @@ class MockBackend(
         config = config.copy(streamRateLimits = left - 1)
         val seconds = config.streamRetrySeconds
         streamRateLimited.value += 1
+        uiEvidence.streamRefusal(elapsedClock?.nowMillis(), seconds)
         rateLimitedError(retryAt = now().plusSeconds(seconds), retryAfterSeconds = seconds, requestRetryable = true)
     }
 
