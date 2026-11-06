@@ -1310,7 +1310,7 @@
       "limitations": [],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: failed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json. Исправленный flow после этого падения ещё не запускался; offline/JVM-проверки не заменяют UI-приёмку."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: failed. После исправления полный flow прошёл на API34 / Maestro2.11, d391243c, попытка1, Qase96. Первые локальные сбои Q23/Q41 сохранены в Qase96; повтор без изменений кода/APK/таймаутов. Подробности — postmerge.json и postmerge-local.json."
       }
     },
     {
@@ -2670,7 +2670,7 @@
       "limitations": [],
       "verification": {
         "static_review": "Сверены все исходные условия, действия, ожидаемые результаты и используемые helper/fixture/backend boundaries; citations относятся к FIN450 edits. Новые shared witnesses цитируют integration-копию root.",
-        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: failed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json. Исправленный flow после этого падения ещё не запускался; offline/JVM-проверки не заменяют UI-приёмку."
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: failed. После исправления полный flow прошёл на API34 / Maestro2.11, d391243c, попытка2, Qase97. Первые локальные сбои Q23/Q41 сохранены в Qase96; повтор без изменений кода/APK/таймаутов. Подробности — postmerge.json и postmerge-local.json."
       }
     },
     {

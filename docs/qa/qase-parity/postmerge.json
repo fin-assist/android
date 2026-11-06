@@ -488,7 +488,7 @@
       "cause": "The server-provided safe user_message replaces the client filename fallback.",
       "fix": "Require the exact fixture user_message and notes.txt under the wrong_format screen.",
       "source_sha256": "1cfd9117329b6674a9123e585552311d8c99ea4b4ae61d9aa5a2a0c5bad8fa67",
-      "ui_acceptance": "pending owner permission for this patched flow"
+      "ui_acceptance": "passed: API34, attempt1, Qase96, tested d391243c; see postmerge-local.json"
     },
     {
       "case_id": 23,
@@ -496,7 +496,7 @@
       "cause": "The tagged bank category contains separate label and value TextViews.",
       "fix": "Require label and Fast Food value as two descendants of the same tagged row.",
       "source_sha256": "c3f1e0820873669ff083d93f49ec4def0e058780fa06aa008be0c941a061ebbb",
-      "ui_acceptance": "pending owner permission for this patched flow"
+      "ui_acceptance": "passed: API34, attempt2, Qase97, tested d391243c; see postmerge-local.json"
     },
     {
       "case_id": 36,
@@ -504,7 +504,7 @@
       "cause": "The formatter emits the compact same-month label 1–30 September with NBSP.",
       "fix": "Require the exact compact range three times; keep September2026 and10/12/1 counts.",
       "source_sha256": "2a03301d5f01b78459112c049441ced2649b27cb62f3ebeac84eaa75fd44d080",
-      "ui_acceptance": "pending owner permission for this patched flow"
+      "ui_acceptance": "passed: API34, attempt1, Qase96, tested d391243c; see postmerge-local.json"
     },
     {
       "case_id": 41,
@@ -512,9 +512,10 @@
       "cause": "A dollar end-anchor inside an inline expression makes Maestro2.11 skip evaluation, leaving undefined in the control URL.",
       "fix": "Use slice(-5) with a strict HH:mm guard; preserve TTL15→300, two distinct starts/keys and response-time witnesses.",
       "source_sha256": "bbfee9634d3073bf4873bc5145390e3134bc7a0821ea3187421a86779d9514c3",
-      "ui_acceptance": "pending owner permission for this patched flow"
+      "ui_acceptance": "passed: API34, attempt2, Qase97, tested d391243c; see postmerge-local.json"
     }
   ],
-  "patched_flows_executed": false,
-  "validation": "Actual captured hierarchy/formatters/error presentation plus real Maestro2.11 Env/GraalJS JVM validation (2880 valid clocks and16 invalid inputs); this is not patched UI acceptance."
+  "patched_flows_executed": true,
+  "validation": "Actual captured hierarchy/formatters/error presentation plus real Maestro2.11 Env/GraalJS JVM validation (2880 valid clocks and16 invalid inputs); this is not patched UI acceptance.",
+  "patched_ui_acceptance": "postmerge-local.json: all4latest flows passed on API34; original run95 remains86/90, not overwritten."
 }
