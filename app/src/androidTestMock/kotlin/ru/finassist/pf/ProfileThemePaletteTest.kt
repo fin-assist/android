@@ -43,7 +43,8 @@ class ProfileThemePaletteTest {
         waitFor(option)
         compose.onNodeWithTag(option).performClick()
         compose.waitUntil(WAIT_MS) { compose.onAllNodesWithTag(option).fetchSemanticsNodes().isEmpty() }
-        // The sheet closes before the preference flow publishes the selected theme to the profile row.
+        // Reveal the stable row before querying its value; sheet closure precedes preference publication.
+        compose.onNodeWithTag("profile.theme").performScrollTo()
         compose.waitUntil(WAIT_MS) { compose.onAllNodesWithText(label).fetchSemanticsNodes().size == 1 }
         compose.onNodeWithText(label).performScrollTo().assertIsDisplayed()
     }
