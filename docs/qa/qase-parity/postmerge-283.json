@@ -26,9 +26,9 @@
     "case_id": 17,
     "native_test": "ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette",
     "failure": "performScrollTo(): expected exactly1text node Светлая, found0; ProfileThemePaletteTest.kt45",
-    "cause": "Closing the theme sheet precedes asynchronous preference publication; waiting for the sheet to disappear does not prove that the profile row has the new label.",
-    "fix": "Wait for exactly one selected label with existing WAIT_MS10s before unchanged scroll/display and independent pixel assertions.",
-    "patched_ui_acceptance": "not run; requires separate owner permission"
+    "cause": "The test queried the selected text before ensuring that the stable theme row was revealed and its asynchronous preference value was observable. Waiting for the label alone also failed locally; revealing profile.theme before that wait passed.",
+    "fix": "Reveal stable profile.theme with performScrollTo, then wait for exactly1selected label within existing10s, followed by unchanged display and independent pixel assertions.",
+    "patched_ui_acceptance": "Qase100: both native43.091s and Maestro75.837s Passed on ae792e93, API34; q17-local.json preserves initial Failed Qase99."
   },
   "fixed_cases_from_pr283": [
     15,

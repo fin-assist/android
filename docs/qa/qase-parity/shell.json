@@ -2164,12 +2164,12 @@
                 },
                 {
                   "path": "app/src/androidTestMock/kotlin/ru/finassist/pf/ProfileThemePaletteTest.kt",
-                  "line": 56,
+                  "line": 57,
                   "detail": "upper profile gutter"
                 },
                 {
                   "path": "app/src/androidTestMock/kotlin/ru/finassist/pf/ProfileThemePaletteTest.kt",
-                  "line": 57,
+                  "line": 58,
                   "detail": "lower profile gutter"
                 }
               ],
@@ -2267,7 +2267,7 @@
       ],
       "verification": {
         "static_review": "Сопоставлены исходные предусловия, все действия и ожидаемые результаты со setup/helpers/fixture и конкретными assertions; строки относятся к FIN-450 shell edits.",
-        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json. Более поздний полный Qase98 на main f072ba67: Failed в native palette companion до ожидания label Светлая; Maestro-часть Passed. Исправление ожидания label пока не запускалось; postmerge-283.json."
+        "execution": "Полный Qase95 на main a9aeb67: Passed. Более поздний полный Qase98 на f072ba67: Failed в native palette companion; Maestro Passed. Локальные первые попытки ca79e5c сохранены Failed в Qase99. После явной прокрутки стабильной строки и ожидания label на ae792e93 обе части Q17 прошли в Qase100: native43.091с и Maestro75.837с, API34, исходный лимит15мин соблюдён, эмулятор остановлен. postmerge-283.json и q17-local.json; нового полного90-case прогона не было."
       },
       "additional_test_keys": [
         "ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette"

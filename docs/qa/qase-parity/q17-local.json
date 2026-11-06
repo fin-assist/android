@@ -1,0 +1,133 @@
+{
+  "issue": "FIN-450",
+  "case_id": 17,
+  "budget": {
+    "started_utc": "2026-11-06T09:23:56.548083+00:00",
+    "deadline_utc": "2026-11-06T09:38:56.548083+00:00"
+  },
+  "scope": "Q17 only:profile/theme_and_logout and ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette",
+  "environment": "dedicated API34 emulator-5590,1080x2400,dpi420,Europe/Moscow,Maestro2.11.0",
+  "attempts": [
+    {
+      "component": "q17",
+      "attempt": 1,
+      "head": "ca79e5c1d23189d7cd313062f769e11feb19a71d",
+      "tree": "e71a6cbfafe4e801110fa124947a949067cd74fb",
+      "started_utc": "2026-11-06T09:26:01Z",
+      "result_written_epoch": 1793957344.5236623,
+      "exit": 1,
+      "results": [
+        {
+          "name": "Профиль — тема и выход из аккаунта",
+          "class": "Профиль — тема и выход из аккаунта",
+          "seconds": "63.146",
+          "status": "failed",
+          "message": "Assertion is false: id: e2e.config.applied is visible"
+        }
+      ],
+      "source_sha256": {
+        ".maestro/flows/profile/theme_and_logout.yaml": "e89e5b1c26bb2973d64b345a962e3336c0785954ff4b61aff85f4cd8f8a15e62"
+      },
+      "apk_sha256": {
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "fd657f8781d03d95ed6dca59dae2abb369a50a27651bba33298ada1039e6e107",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "0439cd0b2e4761899a468703e77235d598e7e74b396c2f0095110203a9ede0bd"
+      },
+      "report_sha256": {
+        "e2e/maestro-report.xml": "25420b1dcc5d541f76646c3c9dce58971c6402c21334951b451a03532fc4ed3c"
+      }
+    },
+    {
+      "component": "native17",
+      "attempt": 1,
+      "head": "ca79e5c1d23189d7cd313062f769e11feb19a71d",
+      "tree": "e71a6cbfafe4e801110fa124947a949067cd74fb",
+      "started_utc": "2026-11-06T09:29:04Z",
+      "result_written_epoch": 1793957482.5612447,
+      "exit": 1,
+      "results": [
+        {
+          "name": "darkChoiceChangesTheRenderedProfilePalette",
+          "class": "ru.finassist.pf.ProfileThemePaletteTest",
+          "seconds": "48.854",
+          "status": "failed",
+          "message": "androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms\nat androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:441)\nat androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:306)\nat ru.finassist.pf.ProfileThemePaletteTest.selectTheme(ProfileThemePaletteTest.kt:47)\nat ru.finassist.pf.ProfileThemePaletteTest.darkChoiceChangesTheRenderedProfilePalette(ProfileThemePaletteTest.kt:34)\n"
+        }
+      ],
+      "source_sha256": {
+        "app/src/androidTestMock/kotlin/ru/finassist/pf/ProfileThemePaletteTest.kt": "524dae4087ed2f00b2d238c7e082dd5793b7b89613403f8c6a6cca9659e97957"
+      },
+      "apk_sha256": {
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "fd657f8781d03d95ed6dca59dae2abb369a50a27651bba33298ada1039e6e107",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "0439cd0b2e4761899a468703e77235d598e7e74b396c2f0095110203a9ede0bd"
+      },
+      "report_sha256": {
+        "native-results/connected/e2e/flavors/mock/TEST-Fin438Pixel6API34(AVD) - 14-_app-mock.xml": "95c04c07b4b07f3e93cda7ec9897d14b102e01aaad4816e55d4bbc0d6c053b49"
+      }
+    },
+    {
+      "component": "q17",
+      "attempt": 2,
+      "head": "ae792e939f3d59d97aa21056efd77efc5187adfc",
+      "tree": "642d04b5018327528db1c621e9b70188a09aed8d",
+      "started_utc": "2026-11-06T09:36:48Z",
+      "result_written_epoch": 1793957925.334075,
+      "exit": 0,
+      "results": [
+        {
+          "name": "Профиль — тема и выход из аккаунта",
+          "class": "Профиль — тема и выход из аккаунта",
+          "seconds": "75.837",
+          "status": "passed",
+          "message": ""
+        }
+      ],
+      "source_sha256": {
+        ".maestro/flows/profile/theme_and_logout.yaml": "e89e5b1c26bb2973d64b345a962e3336c0785954ff4b61aff85f4cd8f8a15e62"
+      },
+      "apk_sha256": {
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "fd657f8781d03d95ed6dca59dae2abb369a50a27651bba33298ada1039e6e107",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "5e1d57b62689ee9534aadc099fabf9f17c1d24b4ce25bcd5d18ab85cc5915b41"
+      },
+      "report_sha256": {
+        "e2e/maestro-report.xml": "06e2ffadf24815fd177ab130c2addd608fba189e8f263cc6b7df5b8c1bba5b36"
+      }
+    },
+    {
+      "component": "native17",
+      "attempt": 2,
+      "head": "ae792e939f3d59d97aa21056efd77efc5187adfc",
+      "tree": "642d04b5018327528db1c621e9b70188a09aed8d",
+      "started_utc": "2026-11-06T09:34:51Z",
+      "result_written_epoch": 1793957807.91056,
+      "exit": 0,
+      "results": [
+        {
+          "name": "darkChoiceChangesTheRenderedProfilePalette",
+          "class": "ru.finassist.pf.ProfileThemePaletteTest",
+          "seconds": "43.091",
+          "status": "passed",
+          "message": ""
+        }
+      ],
+      "source_sha256": {
+        "app/src/androidTestMock/kotlin/ru/finassist/pf/ProfileThemePaletteTest.kt": "e64e11106e2012b2f8877d7c63a99c25d9e91e59584c83a83a9dd8123159add2"
+      },
+      "apk_sha256": {
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "fd657f8781d03d95ed6dca59dae2abb369a50a27651bba33298ada1039e6e107",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "5e1d57b62689ee9534aadc099fabf9f17c1d24b4ce25bcd5d18ab85cc5915b41"
+      },
+      "report_sha256": {
+        "native-results/connected/e2e/flavors/mock/TEST-Fin438Pixel6API34(AVD) - 14-_app-mock.xml": "9d58d358194299e52b701b503333af26c2040291d7d2e0088087ddb81f0c1184"
+      }
+    }
+  ],
+  "latest_case_status": "passed",
+  "both_required_components_present": true,
+  "qase_runs": [
+    99,
+    100
+  ],
+  "first_failures_preserved": true,
+  "emulator_stopped": true,
+  "full_suite_rerun": false
+}
