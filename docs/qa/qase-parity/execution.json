@@ -1,20 +1,18 @@
 {
-  "scope": "Only owner-authorized8components/6cases; no full suite, no DesignCheck, no Q60.",
+  "scope": "Owner-authorized8components/6cases within45min, then explicitly approved15min exclusivelyQ78/Q79. No full suite, no DesignCheck, no Q60.",
   "budget": {
-    "started_epoch": 1793917430.0,
-    "deadline_epoch": 1793920130.0,
-    "deadline_utc": "2026-11-05T23:08:50Z",
+    "started_epoch": 1793943216.1637702,
+    "deadline_epoch": 1793944116.1637702,
+    "deadline_utc": "2026-11-06T05:48:36Z",
     "scope": [
-      "Q49",
-      "Q17 Maestro+native",
-      "Q84 Maestro+native",
-      "Q77/Q78/Q79 nativeAPI35"
+      "Q78 nativeAPI35",
+      "Q79 nativeAPI35"
     ],
-    "permission": "Owner explicitly allows only necessary local autotests; agrees proposed8components/45min",
-    "remote_head": "cae7453c93666a780f5b37d09f0b98a5d9027829 (base; local UI fixes pending push)",
-    "local_head": "39b21b571f4e8647c377a75819b82eef43c1a043",
-    "tree": "0779b38b5dc72e690d1509debb39eeb6d030819c",
-    "previous_tree": "97df4c931bbd321d813e8e725650195553ba15e8"
+    "permission": "Owner said Продолжай after request for additional15min exclusivelyQ78/Q79",
+    "remote_head": "b4b6a97501c7d772e4b8c7ec3b13ccab9cffa11b",
+    "local_head": "034f7ddf6136fd41c832fec6286b1801355faaf7",
+    "tree": "688af589cd4f2c60e10767afbdef9a3d1c626457",
+    "previous_budget": "budget-45min.json"
   },
   "environments": {
     "34": {
@@ -88,7 +86,7 @@
   "attempts": [
     {
       "attempt": "native34-attempt-1",
-      "finished_utc": "2026-11-05T22:34:49.864163+00:00",
+      "result_recorded_utc": "2026-11-05T22:34:49.864163+00:00",
       "exit": 1,
       "results": [
         {
@@ -135,7 +133,7 @@
     },
     {
       "attempt": "native34-attempt-2",
-      "finished_utc": "2026-11-05T22:58:33.565581+00:00",
+      "result_recorded_utc": "2026-11-05T22:58:33.565581+00:00",
       "exit": 1,
       "results": [
         {
@@ -187,7 +185,7 @@
     },
     {
       "attempt": "native35-attempt-1",
-      "finished_utc": "2026-11-05T23:10:02.630551+00:00",
+      "result_recorded_utc": "2026-11-05T23:10:02.630551+00:00",
       "exit": 124,
       "results": [
         {
@@ -241,11 +239,65 @@
         "viewport": "Physical size: 1080x2400",
         "density": "Physical density: 420"
       },
-      "result_sha256": "c27cadfb7ad5a806a5473e8bab8f40173fe3c53940b9f95e4d3a000747c92859"
+      "result_sha256": "c27cadfb7ad5a806a5473e8bab8f40173fe3c53940b9f95e4d3a000747c92859",
+      "evidence_format": "Partial AndroidJUnitRunner instrumentation stream; Gradle was terminated at global deadline, so no completed JUnit XML was emitted. Code0 for Q77; Q78 only code1; Q79 has no actual start. Test enumeration is not execution.",
+      "instrumentation_log_sha256": "30e133042469ded7ace8ee5047c93e45bebac98a0b0bd360d15829f19cf74d7b",
+      "collector_note": "After emulator shutdown, final adb logcat timed out; UTP-captured per-test logcat and test-results.log were already preserved."
+    },
+    {
+      "attempt": "native35_remaining-attempt-2",
+      "result_recorded_utc": "2026-11-06T05:37:44.058147+00:00",
+      "exit": 0,
+      "results": [
+        {
+          "name": "errorFreePasscodeFamilyShowsDotsAtLargeFont",
+          "class": "ru.finassist.pf.PasscodeViewportTest",
+          "seconds": "20.618",
+          "status": "passed",
+          "message": ""
+        },
+        {
+          "name": "rangeObserverSurvivesHeldUserDrag",
+          "class": "ru.finassist.pf.PasscodeViewportTest",
+          "seconds": "10.285",
+          "status": "passed",
+          "message": ""
+        }
+      ],
+      "provenance": {
+        "local_head": "034f7ddf6136fd41c832fec6286b1801355faaf7",
+        "remote_head": "b4b6a97501c7d772e4b8c7ec3b13ccab9cffa11b",
+        "tree": "688af589cd4f2c60e10767afbdef9a3d1c626457",
+        "command": [
+          "./gradlew",
+          "-I",
+          "/private/tmp/fin438-central-mirror.gradle",
+          ":app:connectedMockE2eAndroidTest",
+          "-Pandroid.testInstrumentationRunnerArguments.class=ru.finassist.pf.PasscodeViewportTest#errorFreePasscodeFamilyShowsDotsAtLargeFont,ru.finassist.pf.PasscodeViewportTest#rangeObserverSurvivesHeldUserDrag",
+          "--no-daemon",
+          "--console=plain"
+        ],
+        "api": 35,
+        "device": "emulator-5592",
+        "timeout_seconds": 844.1238582134247,
+        "started_utc": "2026-11-06T05:34:32Z",
+        "global_deadline_utc": "2026-11-06T05:48:36Z",
+        "selected_source_sha256": {
+          "app/src/androidTestMock/kotlin/ru/finassist/pf/PasscodeViewportTest.kt": "05a2a90405d78d3ad6595ff46a865e24ee243ef9ef8a312dc678b81a53b03d72"
+        },
+        "working_tree_status": "",
+        "app/build/outputs/apk/mock/e2e/app-mock-e2e.apk": "a9406b1cdc9cb5a3b377d128a1c929d99efb5b3bff29e17b84316dde4d29fb66",
+        "app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk": "d2756a3c2b2cec15fcb90e7d9828fb3cd350cfd52f7bca73752875fa2eb2996f",
+        "maestro": "2.11.0",
+        "sdk": "35",
+        "viewport": "Physical size: 1080x2400",
+        "density": "Physical density: 420"
+      },
+      "result_sha256": "8037df88df39c0bd5a206e149acf9a62383fe5683f7e63cd5a29317ca1e57dd6"
     },
     {
       "attempt": "native84-attempt-3",
-      "finished_utc": "2026-11-05T23:03:54.738812+00:00",
+      "result_recorded_utc": "2026-11-05T23:03:54.738812+00:00",
       "exit": 0,
       "results": [
         {
@@ -290,7 +342,7 @@
     },
     {
       "attempt": "q17-attempt-1",
-      "finished_utc": "2026-11-05T22:49:39.155731+00:00",
+      "result_recorded_utc": "2026-11-05T22:49:39.155731+00:00",
       "exit": 0,
       "results": [
         {
@@ -332,7 +384,7 @@
     },
     {
       "attempt": "q49-attempt-1",
-      "finished_utc": "2026-11-05T22:31:54.765281+00:00",
+      "result_recorded_utc": "2026-11-05T22:31:54.765281+00:00",
       "exit": 1,
       "results": [
         {
@@ -370,7 +422,7 @@
     },
     {
       "attempt": "q49-attempt-2",
-      "finished_utc": "2026-11-05T22:41:27.791090+00:00",
+      "result_recorded_utc": "2026-11-05T22:41:27.791090+00:00",
       "exit": 1,
       "results": [
         {
@@ -408,7 +460,7 @@
     },
     {
       "attempt": "q49-attempt-3",
-      "finished_utc": "2026-11-05T22:47:24.692437+00:00",
+      "result_recorded_utc": "2026-11-05T22:47:24.692437+00:00",
       "exit": 0,
       "results": [
         {
@@ -446,7 +498,7 @@
     },
     {
       "attempt": "q84-attempt-2",
-      "finished_utc": "2026-11-05T22:56:05.206277+00:00",
+      "result_recorded_utc": "2026-11-05T22:56:05.206277+00:00",
       "exit": 1,
       "results": [
         {
@@ -488,7 +540,7 @@
     },
     {
       "attempt": "q84-attempt-3",
-      "finished_utc": "2026-11-05T23:02:07.412206+00:00",
+      "result_recorded_utc": "2026-11-05T23:02:07.412206+00:00",
       "exit": 0,
       "results": [
         {
@@ -542,7 +594,8 @@
     90,
     91,
     92,
-    93
+    93,
+    94
   ],
   "original45min_budget": {
     "started_epoch": 1793917430.0,
@@ -559,5 +612,38 @@
     "local_head": "39b21b571f4e8647c377a75819b82eef43c1a043",
     "tree": "0779b38b5dc72e690d1509debb39eeb6d030819c",
     "previous_tree": "97df4c931bbd321d813e8e725650195553ba15e8"
+  },
+  "initial_api35_environment": {
+    "api": 35,
+    "device": "emulator-5592",
+    "avd": "Fin450Pixel6API35",
+    "command": [
+      "/Users/aleksandravtomonov/Library/Android/sdk/emulator/emulator",
+      "-avd",
+      "Fin450Pixel6API35",
+      "-port",
+      "5592",
+      "-no-window",
+      "-no-snapshot",
+      "-no-audio",
+      "-no-boot-anim",
+      "-gpu",
+      "swiftshader_indirect",
+      "-cores",
+      "4",
+      "-memory",
+      "4096",
+      "-camera-back",
+      "none",
+      "-camera-front",
+      "none",
+      "-timezone",
+      "Europe/Moscow"
+    ],
+    "sdk": "35",
+    "abi": "x86_64",
+    "timezone": "Europe/Moscow",
+    "size": "Physical size: 1080x2400",
+    "density": "Physical density: 420"
   }
 }

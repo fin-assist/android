@@ -7836,12 +7836,12 @@
             },
             {
               "path": "docs/qa/qase-parity/execution.json",
-              "line": 81,
+              "line": 79,
               "detail": "Actual dedicated emulator SDK35."
             },
             {
               "path": "docs/qa/qase-parity/execution.json",
-              "line": 194,
+              "line": 192,
               "detail": "Actual method result and provenance; enumeration excluded."
             }
           ],
@@ -8142,10 +8142,20 @@
               "path": ".github/workflows/e2e.yml",
               "line": 36,
               "detail": "AVD_API: 34"
+            },
+            {
+              "path": "docs/qa/qase-parity/execution.json",
+              "line": 79,
+              "detail": "Actual dedicated emulator SDK35."
+            },
+            {
+              "path": "docs/qa/qase-parity/execution.json",
+              "line": 253,
+              "detail": "Actual method result and provenance; enumeration excluded."
             }
           ],
-          "status": "gap",
-          "note": "FIN389 исходно воспроизведён на API35. Условие API35 сохранено; требуется отдельная native acceptance на API35 после разрешения пользователя."
+          "status": "covered",
+          "note": "API35 подтверждён отдельным разрешённым native прогоном; фактический instrumentation stream/JUnit и provenance учтены в execution.json."
         }
       ],
       "steps": [
@@ -8407,10 +8417,20 @@
               "path": ".github/workflows/e2e.yml",
               "line": 36,
               "detail": "AVD_API: 34"
+            },
+            {
+              "path": "docs/qa/qase-parity/execution.json",
+              "line": 79,
+              "detail": "Actual dedicated emulator SDK35."
+            },
+            {
+              "path": "docs/qa/qase-parity/execution.json",
+              "line": 260,
+              "detail": "Actual method result and provenance; enumeration excluded."
             }
           ],
-          "status": "gap",
-          "note": "FIN389 исходно воспроизведён на API35. Условие API35 сохранено; требуется отдельная native acceptance на API35 после разрешения пользователя."
+          "status": "covered",
+          "note": "API35 подтверждён отдельным разрешённым native прогоном; фактический instrumentation stream/JUnit и provenance учтены в execution.json."
         },
         {
           "requirement": "Confirm portrait360x640,font2,status/nav48; initialMaximum>0 иvalue=max.",
@@ -8665,7 +8685,7 @@
       "postconditions": [],
       "discrepancies": [],
       "limitations": [
-        "Требуется отдельная API35 acceptance. Исторический mutation результат не перепроверялся; текущий test предназначен ловить observer cancellation."
+        "API35 подтверждён отдельным native прогоном; исторический mutation результат не повторялся."
       ],
       "verification": {
         "static_review": "Сопоставлены исходные предусловия, все действия и ожидаемые результаты со setup/helpers/fixture и конкретными assertions; строки относятся к FIN-450 shell edits.",
