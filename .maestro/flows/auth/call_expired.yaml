@@ -45,9 +45,12 @@ tags:
 - assertVisible:
     id: "auth.call.wait"
     text: ".*Ждём звонок до [0-2][0-9]:[0-5][0-9]"
+# Maestro 2.11 skips inline expressions containing an internal dollar sign (including a regex end anchor).
+# Copy the already asserted HH:mm suffix and validate it before passing it to the server witness.
 - copyTextFrom:
     id: "auth.call.wait"
-- evalScript: ${output.firstWait = maestro.copiedText.match(/([0-2][0-9]:[0-5][0-9])$/)[1]}
+- evalScript: ${output.firstWait = maestro.copiedText.slice(-5)}
+- assertTrue: ${output.firstWait.length === 5 && /^(?:[01][0-9]|2[0-3]):[0-5][0-9]/.test(output.firstWait)}
 - runFlow:
     file: ../../subflows/config.yaml
     env:
@@ -85,7 +88,8 @@ tags:
 - assertNotVisible: "Время на звонок вышло"
 - copyTextFrom:
     id: "auth.call.wait"
-- evalScript: ${output.newWait = maestro.copiedText.match(/([0-2][0-9]:[0-5][0-9])$/)[1]}
+- evalScript: ${output.newWait = maestro.copiedText.slice(-5)}
+- assertTrue: ${output.newWait.length === 5 && /^(?:[01][0-9]|2[0-3]):[0-5][0-9]/.test(output.newWait)}
 - runFlow:
     file: ../../subflows/config.yaml
     env:
