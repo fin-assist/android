@@ -823,7 +823,8 @@ The ordinary offline transfer-mode refusal and explicit retry are authored in `a
 (Qase96), including preservation across config/resume; this flow has not been run.
 `AnalyticsViewModelTest` covers false/wait, repeated selection, explicit retry, refresh/resume and changed
 contexts. `ChatViewModelBehaviourTest` covers close/offline after failed/complete/unknown snapshots,
-terminal text/quota/retry permission, pause/resume and REST refusal without another POST.
+terminal text/quota/retry permission, pause/resume and REST refusal without another POST; interleaved
+Ask/Retry and LIMIT_EXCEEDED responses must keep their newer quota when an older terminal event is recovered.
 No production hooks or UI executions were added for these timing boundaries.
 
 Not covered yet (FIN-40, FIN-415): tapping «Повторить» for a pending Ask after connectivity returns while
