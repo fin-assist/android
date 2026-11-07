@@ -812,6 +812,16 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
 
+Not covered yet (FIN-452, FIN-453): a refused Analytics GET specifically after selecting another transfer mode,
+including its exact `Retry-After` boundary, and an answer connection lost between a final-status `snapshot`
+and the following `done` / `error`. The existing closed error controls do not target Analytics GET (only
+`analytics_dismiss`), and the mock stream-drop control does not split a completed snapshot from its terminal
+metadata. Maestro cannot inject these transport boundaries through the current in-process server.
+`AnalyticsViewModelTest` covers false/wait, repeated selection, explicit retry, refresh/resume and changed
+contexts. `ChatViewModelBehaviourTest` covers close/offline after failed/complete/unknown snapshots,
+terminal text/quota/retry permission, pause/resume and REST refusal without another POST.
+No production hooks or UI executions were added for these timing boundaries.
+
 Not covered yet (FIN-40, FIN-415): tapping «Повторить» for a pending Ask after connectivity returns while
 Chat stays in the foreground. The mock control link pauses Chat; its online resume reads history and clears the
 offline notice before Maestro can tap Retry. The current mock has no Ask-only offline fixture, so Qase20 covers

@@ -352,7 +352,7 @@ class ChatViewModelBehaviourTest {
         api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", status = AnswerStatus.GENERATING)), hasOlder = false)
         api.script(
             "a1",
-            events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Готово")), emptyList()))),
+            events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Готово")), emptyList())), done(remaining = 4)),
         )
         val vm = newVm()
         assertEquals(listOf("a1"), api.streamOpens)
@@ -367,7 +367,7 @@ class ChatViewModelBehaviourTest {
             listOf(question("q1"), answer("a1").copy(currency = "USD"), question("q2"), answer("a2", status = AnswerStatus.GENERATING)),
             hasOlder = false,
         )
-        api.script("a2", events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Готово")), emptyList(), currency = "EUR"))))
+        api.script("a2", events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Готово")), emptyList(), currency = "EUR")), done(remaining = 4)))
         val vm = newVm()
         assertEquals("USD", vm.answerItem("a1").currency)
         assertEquals("EUR", vm.answerItem("a2").currency)
@@ -1359,6 +1359,120 @@ class ChatViewModelBehaviourTest {
 
     // ---- the answer stream ----
 
+    @Test fun `a failed snapshot followed by clean close reopens until the error metadata arrives`() =
+        recoverSnapshot(AnswerStatus.FAILED, offline = false)
+
+    @Test fun `a failed snapshot followed by a network drop reopens until the error metadata arrives`() =
+        recoverSnapshot(AnswerStatus.FAILED, offline = true)
+
+    @Test fun `a complete snapshot followed by clean close reopens until done updates the quota`() =
+        recoverSnapshot(AnswerStatus.COMPLETE, offline = false)
+
+    @Test fun `a complete snapshot followed by a network drop reopens until done updates the quota`() =
+        recoverSnapshot(AnswerStatus.COMPLETE, offline = true)
+
+    @Test fun `an unknown snapshot status is shown as failed but does not replace the terminal event`() =
+        recoverSnapshot(AnswerStatus.UNKNOWN, offline = false)
+
+    private fun recoverSnapshot(status: AnswerStatus, offline: Boolean) {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val snapshot = AnswerEvent.Snapshot(AnswerSnapshotEvent(status,
+            if (status == AnswerStatus.COMPLETE) listOf(text("Ответ")) else emptyList(), emptyList()))
+        val terminal = if (status == AnswerStatus.COMPLETE) done(remaining = 5, charged = false)
+            else AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "model failed", remainingLimit = 5,
+                text = "Попробуйте ещё раз", retryable = true))
+        api.script("a1", flow {
+            emit(snapshot)
+            if (offline) throw AppError.Offline()
+        }, events(snapshot, terminal))
+        val vm = newVm()
+        assertEquals(status.effective, vm.answerItem("a1").status)
+        assertFalse(vm.answerItem("a1").retryable, "a snapshot cannot authorize RetryAnswer")
+        assertEquals(4, vm.state.value.knownRemaining, "only the terminal event supplies the new quota")
+        advance(499)
+        assertEquals(1, api.streamOpens.size, "a drop retains the normal backoff")
+        advance(501)
+        assertEquals(listOf("a1", "a1"), api.streamOpens)
+        assertEquals(5, vm.state.value.knownRemaining)
+        if (status != AnswerStatus.COMPLETE) {
+            assertEquals("Попробуйте ещё раз", vm.answerItem("a1").errorText)
+            assertTrue(vm.answerItem("a1").retryable)
+        } else {
+            assertEquals(listOf(text("Ответ")), vm.answerItem("a1").blocks)
+            assertTrue(Events.ASSISTANT_ANSWER_DONE in tracker.names())
+        }
+        vm.pauseStreams()
+        vm.resumeStreams()
+        advance(60_000)
+        assertEquals(2, api.streamOpens.size, "a received terminal event ends transport recovery")
+        assertTrue(api.asks.isEmpty())
+        assertTrue(api.retries.isEmpty(), "recovering a stream must never create another generation")
+    }
+
+    @Test fun `a final-status snapshot paused before error resumes its unfinished stream once`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val snapshot = AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.FAILED, emptyList(), emptyList()))
+        api.script("a1", flow { emit(snapshot); awaitCancellation() },
+            events(snapshot, AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "model failed", 5,
+                text = "Можно повторить", retryable = true))))
+        val vm = newVm()
+        vm.pauseStreams()
+        advance(60_000)
+        assertEquals(1, api.streamOpens.size, "backgrounding cancels the transport")
+        vm.resumeStreams()
+        vm.resumeStreams()
+        assertEquals(listOf("a1", "a1"), api.streamOpens)
+        assertEquals("Можно повторить", vm.answerItem("a1").errorText)
+        assertTrue(vm.answerItem("a1").retryable)
+        assertEquals(5, vm.state.value.knownRemaining)
+        api.retryOutcomes += RetryResponse("replacement", remainingLimit = 4)
+        api.script("replacement", events(done(remaining = 4)))
+        vm.retry("a1")
+        vm.pauseStreams()
+        vm.resumeStreams()
+        assertEquals(listOf("a1", "a1", "replacement"), api.streamOpens, "a replaced answer stays retired")
+        assertEquals(1, api.retries.size)
+        assertTrue(api.asks.isEmpty())
+    }
+
+    @Test fun `an unfinished complete snapshot resumes to receive done after cancellation`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val snapshot = AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList()))
+        api.script("a1", flow { emit(snapshot); awaitCancellation() }, events(snapshot, done(remaining = 5, charged = false)))
+        val vm = newVm()
+        assertEquals(4, vm.state.value.knownRemaining)
+        vm.pauseStreams()
+        advance(60_000)
+        assertEquals(1, api.streamOpens.size)
+        vm.resumeStreams()
+        assertEquals(2, api.streamOpens.size)
+        assertEquals(5, vm.state.value.knownRemaining)
+        vm.pauseStreams()
+        vm.resumeStreams()
+        assertEquals(2, api.streamOpens.size)
+        assertTrue(api.asks.isEmpty())
+        assertTrue(api.retries.isEmpty())
+    }
+
+    @Test fun `a refused reopening after a final-status snapshot stays forbidden on resume`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val snapshot = AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.FAILED, emptyList(), emptyList()))
+        api.script("a1", events(snapshot), flow { throw AppError.Api("FUTURE_STREAM_POLICY", 429,
+            response = ErrorResponseInfo("FUTURE_STREAM_POLICY", 429, requestRetryable = false)) })
+        val vm = newVm()
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED)), hasOlder = false)
+        advance(1_000)
+        assertEquals(2, api.streamOpens.size)
+        vm.pauseStreams()
+        vm.resumeStreams()
+        advance(60_000)
+        vm.resumeStreams()
+        assertEquals(2, api.streamOpens.size, "pending terminal metadata cannot lift a REST prohibition")
+        assertEquals(false, vm.state.value.streamRetryable)
+        assertTrue(api.asks.isEmpty())
+        assertTrue(api.retries.isEmpty())
+    }
+
     @Test fun `a dropped stream is re-opened with backoff and the snapshot restores the answer`() {
         api.askOutcomes += askResponse("a1")
         api.script(
@@ -1367,7 +1481,7 @@ class ChatViewModelBehaviourTest {
             flow { throw AppError.Server(502) },
             // Closed without a terminal event (server restart): still generating.
             emptyFlow(),
-            events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList()))),
+            events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList())), done(remaining = 3)),
         )
         val vm = newVm()
         sendQuestion(vm)
@@ -1420,7 +1534,7 @@ class ChatViewModelBehaviourTest {
             limited(),
             // The next opening after the retained wait gets a fresh 429 with its own wait.
             limited(),
-            tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList())))),
+            tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList())), done(remaining = 3))),
         )
         val vm = newVm()
         sendQuestion(vm)
@@ -1462,7 +1576,7 @@ class ChatViewModelBehaviourTest {
             tracked(flow { throw AppError.Server(503) }),
             limited(),
             limited(),
-            tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList())))),
+            tracked(events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Ответ")), emptyList())), done(remaining = 3))),
         )
         val vm = newVm()
         sendQuestion(vm)
