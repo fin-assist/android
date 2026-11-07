@@ -316,7 +316,8 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   (`period.data_to` is inclusive; a complete `range.to` is exclusive), in the displayed response source zone.
   A failed period type or key change retains its exact request behind an explicit, separately gated Retry.
   Resume does not replace that notice or submit the target. Repeating the segment, picker/navigation key or
-  chart target uses the same gate; payment action errors keep a separate presentation.
+  chart target and failed transfer-mode selection use the same gate; payment action errors keep a separate
+  presentation.
   A changed context retires the failed period request.
   Same/finer request keys remain valid; the mock rejects coarse-to-fine keys with canonical validation errors.
 - Analytics monthly chart points select the exact server-provided month key (FIN-398); the whole column,
@@ -353,6 +354,8 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   survive page changes. Source-zone/revision/context mismatch rejects a page; an expired cursor refreshes the
   current selection once, then uses an explicit retry without a loop. Response source zones own calendar labels.
   Block/tile `help_text` opens a scrollable info sheet without replacing main content or concise lock reasons.
+- Assistant SSE (FIN-453): a final-status snapshot does not replace `done` / `error`. Reopen dropped streams
+  until terminal metadata arrives, including after pause/resume; never create another question to recover a stream.
 - Voice dictation (FIN-404): `VoiceInput` adapts Android recognition, `VoiceSession` rejects stale callbacks,
   and `VoicePanel` shows preparation, actual readiness, sound level and recognition/errors at the composer.
   Lifecycle stop/background/navigation cancels the active session; final text appends to the draft and never sends a question.
@@ -557,7 +560,9 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
   `feature/applock`), never in plain preferences, files, `BuildConfig`, resources or source; no real keys or tokens
   in the repository.
 - Network: HTTPS only, no cleartext exceptions, no custom `TrustManager` / `HostnameVerifier` that weakens checks;
-  auth headers not logged. Certificate pinning (FIN-121) only through the generated `pin-set` of `prod`: at least two
+  auth headers not logged. Debug HTTP diagnostics log only an allowlisted method and numeric status (or `failed`);
+  never URL/path/query, request/response headers/bodies or exception messages. Certificate pinning (FIN-121) only
+  through the generated `pin-set` of `prod`: at least two
   pins, an `expiration`, no `trust-anchors` / `debug-overrides`; pin failures reported without URL, host or
   certificate data.
 - Untrusted input — the OFX file the user picks (read and uploaded by the app, parsed today by the fake backend
