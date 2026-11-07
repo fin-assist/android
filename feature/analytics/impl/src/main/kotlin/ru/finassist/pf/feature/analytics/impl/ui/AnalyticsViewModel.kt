@@ -493,7 +493,7 @@ class AnalyticsViewModel @Inject constructor(
                 // The refusal belongs to the failed params, not the different period restored on screen.
                 // Keep its explanation until the user requests that restored context; never retry automatically.
                 if (requested != Triple(period, date, transferMode)) retryGate.clear()
-                val failedSwitch = _state.value.data != null && (requested.first != period || requested.second != date)
+                val failedSwitch = _state.value.data != null && requested != Triple(period, date, transferMode)
                 if (failedSwitch) {
                     failedPeriodRequest = requested
                     periodChangeRetryGate.record(e)
@@ -621,6 +621,10 @@ class AnalyticsViewModel @Inject constructor(
 
     override fun setTransferMode(mode: TransferMode) {
         _state.update { it.copy(sheet = null) }
+        if (failedPeriodRequest == Triple(period, date, mode)) {
+            retryPeriodChange()
+            return
+        }
         if (mode == transferMode) return
         clearRestriction()
         transferMode = mode

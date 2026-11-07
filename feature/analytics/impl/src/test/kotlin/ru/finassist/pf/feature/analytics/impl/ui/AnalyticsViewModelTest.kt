@@ -1427,6 +1427,104 @@ class AnalyticsViewModelTest {
         assertEquals(3, api.requests.size)
     }
 
+    @Test fun `a failed transfer selection preserves its refusal across repeat selection refresh and resume`() {
+        val original = data()
+        api.answers += original
+        api.answers += refused()
+        api.answers += original
+        val vm = opened()
+        vm.setTransferMode(TransferMode.WITHOUT)
+        val failure = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        assertEquals(original, vm.state.value.data)
+        assertEquals(TransferMode.WITH, vm.currentTransferMode())
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.setTransferMode(TransferMode.WITHOUT)
+        vm.retryPeriodChange()
+        vm.onResume(null)
+        assertEquals(2, api.requests.size)
+        vm.refresh()
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH), api.requests.last())
+        assertEquals(failure, vm.state.value.periodChangeErrorPresentation)
+        vm.setTransferMode(TransferMode.WITHOUT)
+        vm.retryPeriodChange()
+        assertEquals(3, api.requests.size, "refreshing the shown mode does not correct the refused target")
+        assertEquals(original, vm.state.value.data)
+    }
+
+    @Test fun `a failed transfer selection preserves the exact Retry-After boundary`() {
+        val original = data()
+        api.answers += original
+        api.answers += AppError.RateLimited(null, 3, ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "RATE_LIMITED", 429, requestRetryable = true,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = scheduler.currentTime)))
+        api.answers += data(mode = TransferMode.WITHOUT)
+        val vm = opened()
+        vm.setTransferMode(TransferMode.WITHOUT)
+        scheduler.advanceTimeBy(2_999)
+        scheduler.runCurrent()
+        vm.setTransferMode(TransferMode.WITHOUT)
+        vm.retryPeriodChange()
+        vm.onResume(null)
+        assertEquals(2, api.requests.size)
+        assertEquals(original, vm.state.value.data)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        assertTrue(vm.state.value.periodChangeRetryReady)
+        vm.onResume(null)
+        assertEquals(2, api.requests.size, "an elapsed deadline never submits the target automatically")
+        vm.setTransferMode(TransferMode.WITHOUT)
+        assertEquals(3, api.requests.size)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITHOUT), api.requests.last())
+        assertEquals(TransferMode.WITHOUT, vm.state.value.data?.params?.transferMode)
+        assertFalse(vm.state.value.periodChangeFailed)
+    }
+
+    @Test fun `an allowed retry of a failed transfer selection keeps the exact target`() {
+        val original = data()
+        api.answers += original
+        api.answers += AppError.Server(500)
+        api.answers += data(mode = TransferMode.WITHOUT)
+        val vm = opened()
+        vm.setTransferMode(TransferMode.WITHOUT)
+        assertEquals(original, vm.state.value.data)
+        assertTrue(vm.state.value.periodChangeFailed)
+        assertTrue(vm.state.value.periodChangeRetryReady)
+        vm.retryPeriodChange()
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITHOUT), api.requests.last())
+        assertEquals(TransferMode.WITHOUT, vm.currentTransferMode())
+        vm.retryPeriodChange()
+        assertEquals(3, api.requests.size)
+    }
+
+    @Test fun `a changed date retires a failed transfer target`() {
+        api.answers += data()
+        api.answers += refused()
+        api.answers += data(date = "2026-08")
+        val vm = opened()
+        vm.setTransferMode(TransferMode.WITHOUT)
+        vm.goTo(PeriodKey("2026-08"))
+        assertEquals(3, api.requests.size)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-08"), TransferMode.WITH), api.requests.last())
+        assertFalse(vm.state.value.periodChangeFailed)
+        vm.retryPeriodChange()
+        assertEquals(3, api.requests.size)
+    }
+
+    @Test fun `a data change retires a failed transfer target without replaying it`() {
+        api.answers += data()
+        api.answers += refused()
+        api.answers += data()
+        val vm = opened()
+        vm.setTransferMode(TransferMode.WITHOUT)
+        operations.categoryChanges.tryEmit(Unit)
+        assertEquals(3, api.requests.size)
+        assertEquals(Request(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH), api.requests.last())
+        assertFalse(vm.state.value.periodChangeFailed)
+        vm.retryPeriodChange()
+        assertEquals(3, api.requests.size)
+    }
+
     @Test fun `a changed transfer mode is a new request context after a refusal`() {
         api.answers += data()
         api.answers += refused()
