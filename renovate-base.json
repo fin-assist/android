@@ -33,45 +33,6 @@
         "org.jetbrains.kotlin:compose-compiler-gradle-plugin"
       ],
       "automerge": false
-    },
-    {
-      "description": "FIN-456: update shared controller action, tests and local source together",
-      "matchPackageNames": [
-        "fin-assist/go-ci",
-        "fin-assist/go-ci/**"
-      ],
-      "groupName": "FinAssist shared Renovate controller",
-      "groupSlug": "finassist-shared-renovate",
-      "pinDigests": true
-    }
-  ],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "description": "FIN-456: keep controller action and test source revision together",
-      "managerFilePatterns": [
-        ".github/workflows/renovate-policy-tests.yml"
-      ],
-      "matchStrings": [
-        "\\bsource-revision:\\s*['\"]?(?<currentDigest>[0-9a-f]{40})['\"]?"
-      ],
-      "depNameTemplate": "fin-assist/go-ci",
-      "packageNameTemplate": "fin-assist/go-ci",
-      "datasourceTemplate": "github-digest",
-      "currentValueTemplate": "main"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/\\.github\\/renovate-source\\.json$/"
-      ],
-      "matchStrings": [
-        "\"revision\"\\s*:\\s*\"(?<currentDigest>[0-9a-f]{40})\""
-      ],
-      "depNameTemplate": "fin-assist/go-ci",
-      "datasourceTemplate": "github-digest",
-      "packageNameTemplate": "fin-assist/go-ci",
-      "currentValueTemplate": "main"
     }
   ]
 }

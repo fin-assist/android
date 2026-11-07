@@ -41,9 +41,7 @@
 1. Bootstrap generated ветки до мержа `renovate.json` (исходные правила вынесены в `renovate-base.json`, generated preset подключён после них): `GITHUB_REPOSITORY=fin-assist/<repo> RENOVATE_POLICY_TOKEN=<credential> python3 -I .finassist-ci/<revision>/common/renovate/renovate_policy.py --root "$PWD" --bootstrap`. Существующая ветка никогда не перезаписывается. Секрет передавать через окружение без записи значения в историю команд.
 Целевая активная release-ветка должна содержать проверенный `renovate-base.json`. В release, созданные до внедрения FIN-211, перенести этот baseline до активации: отсутствие файла останавливает весь контроллер до любых generated writes с явным сообщением об имени ветки и файла.
 
-2. Слить PR реализации по явной команде владельца. Проверить CI и оба review; затем установить строгие защиты на main/release с сохранением всех существующих правил. В `controllerLogin` записать login владельца fine-grained PAT (сейчас `avtomon`). GitHub App installation token эта реализация не поддерживает: ему нужны отдельная identity-проверка и push allowance. До завершения setup можно временно отключить controller workflow через `gh workflow disable renovate-policy.yml`; после защиты/credential снова включить через `gh workflow enable renovate-policy.yml`. При включённом workflow неготовые guards дают видимую ошибку даже при выключенном lifecycle: безопасная синхронизация baseline/цели ещё невозможна, это не успешный no-op.
-3. Использовать `RENOVATE_POLICY_TOKEN` (fine-grained PAT владельца, чей login совпадает с `controllerLogin`); в текущей установке уже существующий organization secret, новый токен не нужен. Требуемые права на целевые репозитории: Contents, Pull requests, Issues, Actions, Workflows — write; Administration, Commit statuses — read; Metadata — read. Check-runs читает отдельный `GITHUB_TOKEN` с `checks: read`; этот токен не используется для mutations. Не давать bypass. `GITHUB_TOKEN` запрещён для merge: он не запускает необходимые post-merge workflows.
-4. По явному решению владельца используется уже добавленный organization secret `RENOVATE_POLICY_TOKEN`: его текущая доступность подтверждена metadata во всех 14 репозиториях организации, включая bank-bff/infra без Renovate. Сохраняется существующая настройка; контроллер внедряется только в 12 репозиториев с Renovate. Сужение Selected repositories до этих 12 возможно отдельным решением владельца и не блокирует текущую работу. Новый PAT, копирование по репозиториям или перенос в environment secrets не требуются. Controller job остаётся привязан к Environment `renovate-policy` с custom deployment branch policy ровно `main`, тип branch. Важно: это ограничивает данный job, но organization secret доступен и другим workflows выбранного репозитория, включая workflow из feature-ветки при наличии write-доступа. Владелец явно принял эту границу доверия; environment-only secret остаётся возможным отдельным усилением, не условием работы. `allow_auto_merge` остаётся выключенным. После проверки hosted preset, прав токена и branch protections установить `RENOVATE_POLICY_ENABLED=true`.
+2. Слить PR реализации по явной команде владельца. Проверить CI и оба review; затем установить строгие защиты на main/release с сохранением всех существующих правил. В `controllerLogin` записать login владельца fine-grained PAT (сейчас `avtomon`). GitHub App installation token эта реализация не поддерживает: ему нужны отдельная identity-проверка и push allowance. До завершения setup сохраняйте `RENOVATE_POLICY_ENABLED` отличным от точного `true`: permissionless gate завершает работу до Environment, credential и baseline/target sync. Права и включение остаются отдельными действиями владельца; существующие проверки не ослабляются.
 
 Права Automation не ослабляют обычные PR. Токены Claude и чтения Go modules для этой задачи не переиспользуются. Доступ к org secrets может требовать отдельной организации/авторизации; отсутствие доступа не повод печатать значения секретов.
 
@@ -59,7 +57,11 @@
 
 Проверка опубликованных refs настоящим resolver: `RENOVATE_RUNTIME=<temporary npm prefix> node .finassist-ci/<revision>/common/renovate/verify_renovate_presets.mjs "$PWD"`; ограничить процесс 180 секундами. Для повышения API-лимита можно передать отдельный read credential в `RENOVATE_TOKEN`; код его не выводит.
 
-При `RENOVATE_POLICY_ENABLED` не равном `true` контроллер синхронизирует baseline и цель, затем заканчивает работу без чтения PR и без merge/retry/close. Для config sync тоже требуется доступный этому job `RENOVATE_POLICY_TOKEN` (в текущей настройке organization secret); отсутствие секрета — видимая ошибка workflow.
+При `RENOVATE_POLICY_ENABLED`, не равном точному `true`, непривилегированный gate
+останавливает controller до Environment, credentials и любых API-запросов: baseline/target sync,
+merge/retry/close не выполняются. Hosted Renovate продолжает читать активный `renovate.json`;
+новые source-pin managers не зависят от включения контроллера. Явный bootstrap выполняется
+отдельно владельцем и всегда требует credential, не включая автоматизацию.
 
 Разрешённые обновления GitHub Actions тоже могут сливаться после проверки подписанных Renovate commits и обязательного CI. Это доверие к установленному Renovate и разрешённым обновлениям зависимостей: обновлённый action затем выполняется в default branch с её credentials. Main-only Environment ограничивает controller job; выбранный organization secret не изолирован от других workflows выбранных репозиториев. Обновлённый dependency action в main также остаётся доверенным кодом.
 
@@ -96,3 +98,15 @@ Runtime runner того же source вызывается с явными дан�
 Обновление или откат возвращает manifest, все action refs/test inputs и matching bootstrap вместе.
 Сначала source-коммит проходит ревью и merge с сохранением его identity; squash/rebase требует
 repin итогового SHA и нового CI/review. Перенос не меняет credentials, protections или activation.
+
+FIN-456: правила обновления shared source находятся также в активном `renovate.json`: manifest, action refs и `source-revision` обновляются одной группой даже при выключенном write-контроллере, когда baseline из `renovate-policy` ещё не синхронизирован. Остальные baseline-правила сохраняются.
+
+## Active source-pin managers (FIN-456)
+
+Новые `source-revision` inputs policy tests, `revision` сервисного release caller и
+source manifest специализированных проектов извлекаются managers из активного
+`renovate.json`. Они работают без включения write-controller и без baseline sync.
+Добавлены только новые source inputs; прежние FIN-372 managers и группировки остаются
+на своих исходных местах. `renovate-base.json` побайтно сохраняет содержимое до миграции;
+старые правила не дублируются в root при объединении preset-массивов. Generated presets,
+receipts, state и флаг активации этим исправлением не меняются.
