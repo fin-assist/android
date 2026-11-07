@@ -357,6 +357,8 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   Block/tile `help_text` opens a scrollable info sheet without replacing main content or concise lock reasons.
 - Assistant SSE (FIN-453): a final-status snapshot does not replace `done` / `error`. Reopen dropped streams
   until terminal metadata arrives, including after pause/resume; never create another question to recover a stream.
+  A definitive stream refusal reconciles history once and retires pending terminal recovery unless a one-shot
+  maintenance correction is armed; resume must not repeatedly reload a confirmed final history answer.
 - Voice dictation (FIN-404): `VoiceInput` adapts Android recognition, `VoiceSession` rejects stale callbacks,
   and `VoicePanel` shows preparation, actual readiness, sound level and recognition/errors at the composer.
   Lifecycle stop/background/navigation cancels the active session; final text appends to the draft and never sends a question.
