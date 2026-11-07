@@ -20,10 +20,11 @@ internal class NetworkStack(
     val crashReporter: RecordingCrashReporter = RecordingCrashReporter(),
     val gate: ServiceGate = ServiceGate(),
     val version: ClientVersion = ClientVersion("0.2.7", 41),
+    logging: Boolean = false,
 ) {
     private val baseUrl = NetworkModule.baseUrl(server.url("/").toString())
     val tlsFailures: TlsFailureReporter = NetworkModule.tlsFailures(crashReporter)
-    val plain: OkHttpClient = NetworkModule.plainClient(logging = false, tlsFailures = tlsFailures, version = version, gate = gate, clock = SystemClock(), elapsedClock = ru.finassist.pf.core.common.time.ElapsedClock { System.nanoTime() / 1_000_000 })
+    val plain: OkHttpClient = NetworkModule.plainClient(logging = logging, tlsFailures = tlsFailures, version = version, gate = gate, clock = SystemClock(), elapsedClock = ru.finassist.pf.core.common.time.ElapsedClock { System.nanoTime() / 1_000_000 })
     val client: OkHttpClient = NetworkModule.client(plain, baseUrl, tokenStore, tlsFailures, ru.finassist.pf.core.common.time.ElapsedClock { System.nanoTime() / 1_000_000 })
     val sseClient: OkHttpClient = NetworkModule.sseClient(client)
     private val retrofit: Retrofit = NetworkModule.retrofit(client, baseUrl)

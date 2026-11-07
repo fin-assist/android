@@ -22,6 +22,8 @@ import ru.finassist.pf.mock.api.MockStatementsApi
 import ru.finassist.pf.mock.api.UploadBody
 import ru.finassist.pf.mock.domain.AnalyticsEngine
 import ru.finassist.pf.mock.ofx.UnreadLine
+import ru.finassist.pf.mock.ofx.OfxCheck
+import ru.finassist.pf.mock.ofx.OfxParser
 import java.io.File
 import java.time.OffsetDateTime
 import kotlin.test.assertEquals
@@ -57,6 +59,77 @@ class MockStatementsApiTest {
 
     private suspend fun MockStatementsApi.await(uploadId: String): List<ImportEvent> =
         withTimeout(10_000) { streamProgress(uploadId).toList() }
+
+    @Test
+    fun `OFX amounts retain half up rounding at representable boundaries`() {
+        val amounts = listOf(
+            "92233720368547758.07" to Long.MAX_VALUE,
+            "-92233720368547758.07" to Long.MAX_VALUE,
+            "92233720368547758.074" to Long.MAX_VALUE,
+            "-92233720368547758.074" to Long.MAX_VALUE,
+            "92233720368547758.064" to 9_223_372_036_854_775_806L,
+            "0.0049" to 0L,
+            "-0.0049" to 0L,
+            "0.005" to 1L,
+            "-0.005" to 1L,
+            "1.234" to 123L,
+            "-1.235" to 124L,
+            "0" to 0L,
+            "1E-2147483647" to 0L,
+            "-1E-2147483647" to 0L,
+            "0E+2147483647" to 0L,
+        )
+        for ((raw, minor) in amounts) {
+            val parsed = OfxParser.parse(ofx(line("value", "20260905120000", raw)))
+            assertTrue(parsed.unreadLines.isEmpty(), raw)
+            val transaction = parsed.transactions.single()
+            assertEquals(minor, transaction.amountMinor, raw)
+            assertEquals(raw.startsWith("-"), transaction.isDebit, raw)
+        }
+    }
+
+    @Test
+    fun `unrepresentable OFX amounts become unread lines without losing valid neighbours`() {
+        val rejected = listOf(
+            "92233720368547758.08", "-92233720368547758.08",
+            "92233720368547758.075", "-92233720368547758.075",
+            "1E+2147483647", "-1E+2147483647", "not-an-amount",
+        )
+        for (raw in rejected) {
+            val text = ofx(
+                line("before", "20260904120000", "-100.50"),
+                line("invalid", "20260905120000", raw),
+                line("after", "20260906120000", "20.005"),
+            )
+            assertEquals(OfxCheck.Ok, OfxParser.check(text), raw)
+            val parsed = OfxParser.parse(text)
+            assertEquals(listOf("before", "after"), parsed.transactions.map { it.fitId }, raw)
+            assertEquals(listOf(10_050L, 2_001L), parsed.transactions.map { it.amountMinor }, raw)
+            val unread = parsed.unreadLines.single()
+            assertEquals("bad_amount", unread.reason, raw)
+            assertEquals("invalid", unread.fitId, raw)
+            assertEquals("40817810000000001111", unread.accountId, raw)
+            assertEquals(dt("2026-09-05T12:00:00+03:00"), unread.date, raw)
+            assertEquals(text.lines().indexOfFirst { "<FITID>invalid</FITID>" in it } + 1, unread.lineNumber, raw)
+        }
+    }
+
+    @Test
+    fun `an upload with an overflowing amount completes and exposes the bad amount line`() = runBlocking<Unit> {
+        val backend = testBackend(clock)
+        val api = MockStatementsApi(backend)
+        val text = File("../../app/src/mockE2e/assets/e2e/statements/amount-overflow.ofx").readText()
+        val accepted = api.uploadStatement(key("overflow"), file("amount-overflow.ofx", text))
+        val result = assertIs<ImportEvent.Complete>(api.await(accepted.uploadId).last()).result
+        assertEquals(1, result.newCount)
+        assertEquals(1, result.unreadCount)
+        assertEquals(listOf("fin454-valid"), backend.ledger.all.map { it.fitId })
+        assertEquals(10_050L, backend.ledger.all.single().amountMinor)
+        val unread = api.listUnreadLines(accepted.uploadId).lines.single()
+        assertEquals(UnreadReason.BAD_AMOUNT, unread.reason)
+        assertEquals("не распознали сумму", unread.reasonName)
+        assertEquals(7, unread.lineNumber)
+    }
 
     @Test
     fun `a valid file is imported in the background and the progress stream ends with the result`() = runBlocking<Unit> {

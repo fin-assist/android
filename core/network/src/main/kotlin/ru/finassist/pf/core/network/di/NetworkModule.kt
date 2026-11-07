@@ -9,7 +9,6 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import ru.finassist.pf.core.api.AnalyticsApi
@@ -35,6 +34,7 @@ import ru.finassist.pf.core.network.AuthService
 import ru.finassist.pf.core.network.HttpAnalyticsApi
 import ru.finassist.pf.core.network.HttpAssistantApi
 import ru.finassist.pf.core.network.HttpAuthApi
+import ru.finassist.pf.core.network.HttpDiagnosticsInterceptor
 import ru.finassist.pf.core.network.HttpOperationsApi
 import ru.finassist.pf.core.network.HttpPfApi
 import ru.finassist.pf.core.network.HttpProfileApi
@@ -93,7 +93,7 @@ internal object NetworkModule {
         .addInterceptor(ServiceGateInterceptor(gate, clock, elapsedClock))
         // Network interceptor: runs per attempt (auth retry, redirect), so every attempt gets a fresh X-Request-Id.
         .addNetworkInterceptor(RequestIdInterceptor())
-        .apply { if (logging) addInterceptor(HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BASIC)) }
+        .apply { if (logging) addInterceptor(HttpDiagnosticsInterceptor()) }
         .build()
 
     /** One reporter for every client and stream: each kind of refusal is reported once per process. */
