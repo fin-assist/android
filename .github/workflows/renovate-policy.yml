@@ -13,14 +13,31 @@ concurrency:
   group: renovate-policy-controller
   cancel-in-progress: false
 jobs:
-  reconcile:
+  gate:
     if: github.ref == 'refs/heads/main'
+    permissions: {}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      enabled: ${{ steps.activation.outputs.enabled }}
+    steps:
+      - id: activation
+        env:
+          RENOVATE_POLICY_ENABLED: ${{ vars.RENOVATE_POLICY_ENABLED }}
+        run: |
+          if [ "$RENOVATE_POLICY_ENABLED" = true ]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          fi
+  reconcile:
+    needs: gate
+    if: github.ref == 'refs/heads/main' && needs.gate.outputs.enabled == 'true'
     environment: renovate-policy
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      # Always execute reviewed code from the default branch. Never checkout a PR
-      # or download artifacts/caches produced by an untrusted CI run.
+      # Only trusted main configuration is read; all executable policy comes from the pinned action.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
@@ -29,8 +46,9 @@ jobs:
         with:
           python-version: '3.15'
       - name: Reconcile Renovate PRs
-        env:
-          RENOVATE_POLICY_ENABLED: ${{ vars.RENOVATE_POLICY_ENABLED }}
-          GITHUB_READ_TOKEN: ${{ github.token }}
-          RENOVATE_POLICY_TOKEN: ${{ secrets.RENOVATE_POLICY_TOKEN }}
-        run: timeout 540s python3 scripts/renovate_policy.py
+        uses: fin-assist/go-ci/.github/actions/renovate-policy@95a0cbed8dadfc450e598c118f1aac81698b128b # main
+        with:
+          enabled: ${{ needs.gate.outputs.enabled }}
+          repository-root: ${{ github.workspace }}
+          read-token: ${{ github.token }}
+          token: ${{ secrets.RENOVATE_POLICY_TOKEN }}

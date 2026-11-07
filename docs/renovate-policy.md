@@ -38,7 +38,7 @@
 
 ## Подготовка и включение
 
-1. Bootstrap generated ветки до мержа `renovate.json` (исходные правила вынесены в `renovate-base.json`, generated preset подключён после них): `GITHUB_REPOSITORY=fin-assist/<repo> RENOVATE_POLICY_TOKEN=<credential> python3 scripts/renovate_policy.py --bootstrap`. Существующая ветка никогда не перезаписывается. Секрет передавать через окружение без записи значения в историю команд.
+1. Bootstrap generated ветки до мержа `renovate.json` (исходные правила вынесены в `renovate-base.json`, generated preset подключён после них): `GITHUB_REPOSITORY=fin-assist/<repo> RENOVATE_POLICY_TOKEN=<credential> python3 -I .finassist-ci/<revision>/common/renovate/renovate_policy.py --root "$PWD" --bootstrap`. Существующая ветка никогда не перезаписывается. Секрет передавать через окружение без записи значения в историю команд.
 Целевая активная release-ветка должна содержать проверенный `renovate-base.json`. В release, созданные до внедрения FIN-211, перенести этот baseline до активации: отсутствие файла останавливает весь контроллер до любых generated writes с явным сообщением об имени ветки и файла.
 
 2. Слить PR реализации по явной команде владельца. Проверить CI и оба review; затем установить строгие защиты на main/release с сохранением всех существующих правил. В `controllerLogin` записать login владельца fine-grained PAT (сейчас `avtomon`). GitHub App installation token эта реализация не поддерживает: ему нужны отдельная identity-проверка и push allowance. До завершения setup можно временно отключить controller workflow через `gh workflow disable renovate-policy.yml`; после защиты/credential снова включить через `gh workflow enable renovate-policy.yml`. При включённом workflow неготовые guards дают видимую ошибку даже при выключенном lifecycle: безопасная синхронизация baseline/цели ещё невозможна, это не успешный no-op.
@@ -49,15 +49,15 @@
 
 ## Проверки
 
-`python3 -m unittest discover -s scripts -p 'test_renovate*.py'` проверяет выбор ветки, SHA/attempt freshness, identity, одиночный повтор, успешный повтор, закрытие с quarantine, дубликаты и ошибки. Запускать с process timeout; workflow использует 60 секунд. Изменения касаются автоматизации, пользовательские сценарии Android не меняются.
+`python3 -m unittest discover -s scripts -p 'test_renovate_shared.py'` проверяет manifest и action pins, затем вызывает общий policy/lifecycle/CLI/gate набор из закреплённого source. Shared Python suite ограничен90s; локальный shim —120s. Внешний process timeout обязателен. Изменение касается автоматизации репозитория.
 
-Дополнительный contract fixture использует настоящий Renovate из `scripts/renovate-runtime/package.json` и lock (исходная проверка `44.176.2`), а не свою копию его алгоритмов: `scripts/test_renovate_runtime.mjs`. На Node24 выполнить `(cd scripts/renovate-runtime && npm ci --ignore-scripts --no-audit --no-fund)` с timeout600 секунд; package.json и integrity lock закрепляют Renovate и транзитивные зависимости. Затем `RENOVATE_RUNTIME=$PWD/scripts/renovate-runtime node --experimental-test-module-mocks scripts/test_renovate_runtime.mjs`. Обязательно ограничить процесс 90 секундами. Fixture вызывает production `quarantine_rules`, actual branchify/processBranch и Dashboard renderer/parser; внешние network/mutation endpoints заменены фейками. Hosted App execution и очистка stale веток остаются отдельным этапом активации. Контроллер сам ветки не удаляет; обычный lifecycle Renovate может очищать свои старые ветки. Оба настоящих runtime fixture, включая `scripts/test_renovate_metadata_runtime.mjs`, выполняются обязательным CI job `Renovate runtime contract` с закреплённой версией и process timeouts.
+Настоящий Renovate и integrity транзитивных зависимостей закреплены в `scripts/renovate-runtime/package.json`/`package-lock.json`; версия не дублируется в командах. Используйте Node из текущего workflow/manifest. Установку `(cd scripts/renovate-runtime && npm ci --ignore-scripts --no-audit --no-fund)` ограничьте process timeout600s. Затем запускайте общий runner из проверенного cache: `python3 -I .finassist-ci/<revision>/common/renovate/test.py --root "$PWD" --mode runtime --runtime "$PWD/scripts/renovate-runtime" --source-revision <revision>`. Он сам задаёт пути к config, manifest и controller, запускает все три fixtures с timeout90s каждый и проверяет actual grouping/recovery/digests, metadata и совместное извлечение immutable source pins. Внешние mutation/network adapters заменены фейками. Native RE2 install выключен: JavaScript RegExp fallback явно сообщается и не доказывает hosted RE2/загрузку presets. Hosted App execution и обычная очистка веток Renovate проверяются отдельно; сам controller ветки не удаляет.
 
 Официальные источники: [preset и ref](https://docs.renovatebot.com/config-presets/), [шаблоны metadata](https://docs.renovatebot.com/templates/), [закрытые major/group PR](https://docs.renovatebot.com/key-concepts/pull-requests/), [Dashboard](https://docs.renovatebot.com/key-concepts/dashboard/), [config](https://docs.renovatebot.com/configuration-options/), [merge REST API](https://docs.github.com/en/rest/pulls/pulls#merge-a-pull-request).
 
 Опубликованные presets: [config-only ветка](https://github.com/fin-assist/android/tree/renovate-policy).
 
-Проверка опубликованных refs настоящим resolver: `RENOVATE_RUNTIME=<temporary npm prefix> node scripts/verify_renovate_presets.mjs`; ограничить процесс 180 секундами. Для повышения API-лимита можно передать отдельный read credential в `RENOVATE_TOKEN`; код его не выводит.
+Проверка опубликованных refs настоящим resolver: `RENOVATE_RUNTIME=<temporary npm prefix> node .finassist-ci/<revision>/common/renovate/verify_renovate_presets.mjs "$PWD"`; ограничить процесс 180 секундами. Для повышения API-лимита можно передать отдельный read credential в `RENOVATE_TOKEN`; код его не выводит.
 
 При `RENOVATE_POLICY_ENABLED` не равном `true` контроллер синхронизирует baseline и цель, затем заканчивает работу без чтения PR и без merge/retry/close. Для config sync тоже требуется доступный этому job `RENOVATE_POLICY_TOKEN` (в текущей настройке organization secret); отсутствие секрета — видимая ошибка workflow.
 
@@ -74,3 +74,25 @@ Install scripts отключены намеренно: в этом fixture от�
 Версия проверочного Renovate задаётся единожды в scripts/renovate-runtime/package.json и integrity lock; fixtures сверяют загруженную версию с этим manifest, не с отдельной жёсткой строкой. Обновление dependency не отключено: при несовместимости внутренних APIs сам fixture закономерно требует исправления, остальные политики группировки не меняются. Если несовместимое обновление fixture входит в общую группу, два failure приведут к закрытию и exact quarantine всех её участников, включая независимые Go/Actions updates. Владелец исправляет fixture и явно одобряет проверенный набор через Dashboard; отдельная группа или исключение зависимости здесь не вводятся. Локальный node_modules исключён из git.
 
 Обычный failed-value gate действует только при отсутствующем/null newDigest, а tag-scoped digest recovery — только при существующем ненулевом newDigest. Эти два fixed JSONata predicates строго allowlisted. Recovery/quarantine имеют разные identities и recovery всегда применяется раньше: закрытый переход на tag18 не скрывает будущий исправленный digest того же tag после ручного обновления базы. Нормальный failed tag и точный failed digest сохраняют независимые approval gates.
+
+## Общий контроллер Renovate (FIN-456)
+
+Production-код и lifecycle/runtime-регрессии поставляет immutable `fin-assist/go-ci`.
+Единый source pin этого репозитория — `.github/renovate-source.json` (`revision`); action refs обоих workflows
+и `source-revision` test steps должны совпадать с ним. Config, baseline, runtime package/lock,
+state и receipts остаются данными репозитория. После exact activation gate controller job
+читает только main data и запускает pinned action, не scripts потребителя с policy token.
+
+В командах `<revision>` означает полный SHA из manifest, а `<consumer>` — корень checkout.
+До передачи mutation credential подготовьте и проверьте cache read-only командой
+`python3 -m unittest discover -s scripts -p 'test_renovate_shared.py'` с внешним process timeout.
+Она использует побайтно совпадающий bootstrap с проверкой raw cache integrity; тесты не получают
+`RENOVATE_POLICY_TOKEN`. После этого явный bootstrap выполняется кодом source:
+`GITHUB_REPOSITORY=fin-assist/android python3 -I .finassist-ci/<revision>/common/renovate/renovate_policy.py --root "$PWD" --bootstrap`.
+Credential передаётся через окружение; bootstrap не включает автоматизацию и не перезаписывает ветку.
+
+Runtime runner того же source вызывается с явными данными и pin:
+`python3 -I .finassist-ci/<revision>/common/renovate/test.py --root "$PWD" --mode runtime --runtime "$PWD/scripts/renovate-runtime" --source-revision <revision>`.
+Обновление или откат возвращает manifest, все action refs/test inputs и matching bootstrap вместе.
+Сначала source-коммит проходит ревью и merge с сохранением его identity; squash/rebase требует
+repin итогового SHA и нового CI/review. Перенос не меняет credentials, protections или activation.

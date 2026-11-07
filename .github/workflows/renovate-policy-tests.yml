@@ -9,15 +9,20 @@ jobs:
   policy-tests:
     name: Renovate policy tests
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.15'
-      - run: timeout 60s python3 -m unittest discover -s scripts -p 'test_renovate*.py'
+      - name: Verify the shared controller and consumer contract
+        uses: fin-assist/go-ci/.github/actions/renovate-policy-tests@95a0cbed8dadfc450e598c118f1aac81698b128b # main
+        with:
+          mode: policy
+          repository-root: ${{ github.workspace }}
+          source-revision: 95a0cbed8dadfc450e598c118f1aac81698b128b
 
   runtime-contract:
     name: Renovate runtime contract
@@ -26,21 +31,22 @@ jobs:
     env:
       LOG_LEVEL: error
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.15'
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '26'
-      - name: Set locked runtime location
-        run: echo "RENOVATE_RUNTIME=$GITHUB_WORKSPACE/scripts/renovate-runtime" >> "$GITHUB_ENV"
       - name: Install pinned Renovate without install scripts
         working-directory: scripts/renovate-runtime
         run: timeout 600s npm ci --ignore-scripts --no-audit --no-fund
-      - name: Verify Renovate grouping, retries and digests
-        run: timeout 90s node --experimental-test-module-mocks scripts/test_renovate_runtime.mjs
-      - name: Verify signed commit and PR metadata rendering
-        run: timeout 90s node --experimental-test-module-mocks scripts/test_renovate_metadata_runtime.mjs
+      - name: Verify the shared runtime contract against the local lock
+        uses: fin-assist/go-ci/.github/actions/renovate-policy-tests@95a0cbed8dadfc450e598c118f1aac81698b128b # main
+        with:
+          mode: runtime
+          repository-root: ${{ github.workspace }}
+          runtime-path: ${{ github.workspace }}/scripts/renovate-runtime
+          source-revision: 95a0cbed8dadfc450e598c118f1aac81698b128b
