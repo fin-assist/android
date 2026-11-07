@@ -361,6 +361,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   maintenance correction is armed; resume must not repeatedly reload a confirmed final history answer.
   Recovered terminal metadata belongs to its original quota revision: an old answer must not overwrite quota
   confirmed by a newer Ask/Retry or LIMIT_EXCEEDED response, or clear/replace a newer stream's error.
+  A terminal from another revision invalidates an in-flight quota read and requests a coalesced, gated limit
+  reconciliation; this also preserves live refunds from concurrently generating answers. Stream recovery
+  clears its own error presentation.
 - Voice dictation (FIN-404): `VoiceInput` adapts Android recognition, `VoiceSession` rejects stale callbacks,
   and `VoicePanel` shows preparation, actual readiness, sound level and recognition/errors at the composer.
   Lifecycle stop/background/navigation cancels the active session; final text appends to the draft and never sends a question.
