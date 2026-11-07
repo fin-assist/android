@@ -6,7 +6,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okhttp3.Authenticator
-import okhttp3.logging.HttpLoggingInterceptor
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -56,7 +55,7 @@ class NetworkModuleTest {
 
     @Test
     fun `logging is added only when enabled`() {
-        val logging = assertIs<HttpLoggingInterceptor>(
+        assertIs<HttpDiagnosticsInterceptor>(
             NetworkModule.plainClient(
                 logging = true,
                 tlsFailures = TlsFailureReporter(RecordingCrashReporter()),
@@ -65,7 +64,6 @@ class NetworkModuleTest {
                 clock = ru.finassist.pf.core.common.time.SystemClock(),
             ).interceptors.last(),
         )
-        assertEquals(HttpLoggingInterceptor.Level.BASIC, logging.level)
     }
 
     @Test
