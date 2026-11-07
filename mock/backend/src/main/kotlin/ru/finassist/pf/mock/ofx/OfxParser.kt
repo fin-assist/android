@@ -78,6 +78,9 @@ object OfxParser {
     private val TRN_BLOCK = Regex("<STMTTRN>(.*?)</STMTTRN>", RegexOption.DOT_MATCHES_ALL)
     private val BANK_ID = Regex("<BANKID>([^<]*)")
     private val OFX_DATE = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
+    private val HALF_KOPECK = BigDecimal("0.005")
+    // HALF_UP would round this exclusive boundary to Long.MAX_VALUE + 1 kopecks.
+    private val MAX_ROUNDABLE_AMOUNT = BigDecimal("92233720368547758.075")
 
     /** Cheap checks done before parsing, in the order the backend does them (api.md 3.2). */
     fun check(text: String): OfxCheck {
@@ -125,19 +128,20 @@ object OfxParser {
                 val f = fields(trn.groupValues[1])
                 val date = f["DTPOSTED"]?.let(::parseDate)
                 val amount = f["TRNAMT"]?.let { runCatching { BigDecimal(it.trim()) }.getOrNull() }
+                val amountMinor = amount?.let(::minorUnits)
                 val name = f["NAME"]?.trim()
                 val fitId = f["FITID"]?.trim()?.ifEmpty { null }
                 fun unreadLine(date: OffsetDateTime?, reason: String) = UnreadLine(lineNumber, date, reason, account.id, fitId)
                 when {
                     date == null -> unread += unreadLine(null, if (f["DTPOSTED"] == null) "no_date" else "bad_date")
-                    amount == null -> unread += unreadLine(date, "bad_amount")
+                    amount == null || amountMinor == null -> unread += unreadLine(date, "bad_amount")
                     fitId == null -> unread += unreadLine(date, "truncated")
                     else -> transactions += OfxTransaction(
                         accountId = account.id,
                         fitId = fitId,
                         isDebit = amount.signum() < 0 || f["TRNTYPE"]?.trim().equals("DEBIT", ignoreCase = true),
                         postedAt = date,
-                        amountMinor = amount.abs().movePointRight(2).setScale(0, java.math.RoundingMode.HALF_UP).longValueExact(),
+                        amountMinor = amountMinor,
                         // No description does not make a line unread (FIN-67): the operation keeps an empty title.
                         name = unescape(name.orEmpty()),
                         memo = unescape(f["MEMO"]?.trim().orEmpty()),
@@ -152,6 +156,14 @@ object OfxParser {
 
     private fun fields(block: String): Map<String, String> =
         TAG.findAll(block).associate { it.groupValues[1] to it.groupValues[2].trim() }
+
+    /** Bounds before scaling also avoid expanding attacker-controlled exponents into huge integers. */
+    private fun minorUnits(amount: BigDecimal): Long? {
+        val absolute = amount.abs()
+        if (absolute >= MAX_ROUNDABLE_AMOUNT) return null
+        if (absolute < HALF_KOPECK) return 0
+        return absolute.movePointRight(2).setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
+    }
 
     /** `20260930175338.000[+3:MSK]` → OffsetDateTime; missing zone → Moscow. */
     fun parseDate(raw: String): OffsetDateTime? = runCatching {
