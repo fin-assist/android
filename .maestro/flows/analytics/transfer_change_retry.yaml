@@ -1,0 +1,176 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — явный повтор смены режима переводов после потери сети
+# Mock-only: the existing offline control rejects Analytics GET without a production hook.
+tags:
+  - analytics
+  - mock-only
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      text: "Октябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 15000
+- tapOn:
+    id: "ds.period.prev"
+- extendedWaitUntil:
+    visible:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    timeout: 15000
+# Capture the actual ready expense, rather than reusing unrelated design-check golden values.
+- scrollUntilVisible:
+    element:
+      text: '^[1-9][0-9\s\u00A0\u202F]*(,[0-9]{2})?[\s\u00A0\u202F]₽$'
+      childOf:
+        id: "analytics.tile.expense"
+    centerElement: true
+- copyTextFrom:
+    text: '^[1-9][0-9\s\u00A0\u202F]*(,[0-9]{2})?[\s\u00A0\u202F]₽$'
+    childOf:
+      id: "analytics.tile.expense"
+- evalScript: ${output.readyExpense = maestro.copiedText}
+- scrollUntilVisible:
+    element:
+      id: "analytics.ask"
+    direction: UP
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible:
+    text: "С переводами"
+    childOf:
+      id: "analytics.transfers"
+- assertVisible:
+    id: "analytics.transfers"
+    checked: false
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=true"
+- tapOn:
+    id: "analytics.transfers"
+- tapOn:
+    id: "analytics.transfers.without"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.period.retry"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "analytics.ask"
+    direction: UP
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible:
+    text: "С переводами"
+    childOf:
+      id: "analytics.transfers"
+- assertVisible:
+    id: "analytics.transfers"
+    checked: false
+- assertVisible:
+    id: "analytics.period.retry"
+- assertNotVisible:
+    id: "analytics.offline"
+- scrollUntilVisible:
+    element:
+      text: '^[1-9][0-9\s\u00A0\u202F]*(,[0-9]{2})?[\s\u00A0\u202F]₽$'
+      childOf:
+        id: "analytics.tile.expense"
+    centerElement: true
+- copyTextFrom:
+    text: '^[1-9][0-9\s\u00A0\u202F]*(,[0-9]{2})?[\s\u00A0\u202F]₽$'
+    childOf:
+      id: "analytics.tile.expense"
+- assertTrue: ${maestro.copiedText === output.readyExpense}
+# The config activity pauses/resumes Analytics; resume must not submit the saved target.
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?offline=false"
+- scrollUntilVisible:
+    element:
+      id: "analytics.ask"
+    direction: UP
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible:
+    text: "С переводами"
+    childOf:
+      id: "analytics.transfers"
+- assertVisible:
+    id: "analytics.transfers"
+    checked: false
+- assertVisible:
+    id: "analytics.period.retry"
+- assertNotVisible:
+    id: "analytics.offline"
+- scrollUntilVisible:
+    element:
+      text: '^[1-9][0-9\s\u00A0\u202F]*(,[0-9]{2})?[\s\u00A0\u202F]₽$'
+      childOf:
+        id: "analytics.tile.expense"
+    centerElement: true
+- copyTextFrom:
+    text: '^[1-9][0-9\s\u00A0\u202F]*(,[0-9]{2})?[\s\u00A0\u202F]₽$'
+    childOf:
+      id: "analytics.tile.expense"
+- assertTrue: ${maestro.copiedText === output.readyExpense}
+- scrollUntilVisible:
+    element:
+      id: "analytics.period.retry"
+    centerElement: true
+- tapOn:
+    id: "analytics.period.retry"
+- extendedWaitUntil:
+    visible:
+      text: "Без переводов"
+      childOf:
+        id: "analytics.transfers"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "analytics.ask"
+    direction: UP
+- assertVisible:
+    text: "Сентябрь 2026"
+    childOf:
+      id: "ds.period.pick"
+- assertVisible:
+    id: "ds.segment.0"
+    checked: true
+- assertVisible:
+    text: "Без переводов"
+    childOf:
+      id: "analytics.transfers"
+- assertVisible:
+    id: "analytics.transfers"
+    checked: true
+- assertNotVisible:
+    id: "analytics.period.retry"
+- assertNotVisible:
+    id: "ds.error.info"
+- assertNotVisible:
+    id: "ds.error.warning"
+- assertNotVisible:
+    id: "ds.error.error"

@@ -738,6 +738,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `operations/own_transfer_split` (mock-only) | two known own-transfer pairs: expense category goes to debit, income category to credit; split notice, exact search count 1→2, signed rows, each side's own timestamp/category after reopening (Qase93, FIN-442); execution evidence in PR #273 |
 | `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast and opens the history explanation in its help sheet; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month through its option container and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; follow-up not executed (previous run failed) |
 | `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month; deferred Year response after a refused in-flight dismissal scrolls to the selected year text itself (Qase73, FIN-391/444); execution evidence in FIN-444 |
+| `analytics/transfer_change_retry` (mock-only) | offline transfer-mode switch preserves September/Month, WITH and the observed ready expense; restoring connectivity through config/resume preserves the notice and old mode; explicit target Retry commits WITHOUT and removes the error (Qase96, FIN-452); authored only, UI not run |
 | `analytics/period_controls` (common) | Month/All-time hide rolling choices; Quarter/Year expose only their right-aligned choice; tapping the selected calendar segment exits its rolling period; All-time removes the whole period row across tab navigation (Qase80, FIN-416); authored, not executed |
 | `analytics/rolling_periods` (mock-only) | rolling year/quarter anchored to statement coverage, exact ranges, no forecast, failed singleton switch and explicit exact retry, transfer-mode preservation, clipped edge point → full calendar month, independent remembered calendar selection; Qase76 (FIN-411); authored, not executed |
 | `analytics/chart_month_selection` (mock-only) | whole-column selection including zero expenses, exact month/year, selected state and retained transfer mode/scroll; failed switch and explicit retry (Qase74, FIN-398); authored, not executed |
@@ -813,11 +814,13 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
 
-Not covered yet (FIN-452, FIN-453): a refused Analytics GET specifically after selecting another transfer mode,
-including its exact `Retry-After` boundary, and an answer connection lost between a final-status `snapshot`
+Not covered yet (FIN-452, FIN-453): an Analytics GET refusal with `retryable:false` after selecting another
+transfer mode, its exact `Retry-After` boundary, and an answer connection lost between a final-status `snapshot`
 and the following `done` / `error`. The existing closed error controls do not target Analytics GET (only
 `analytics_dismiss`), and the mock stream-drop control does not split a completed snapshot from its terminal
 metadata. Maestro cannot inject these transport boundaries through the current in-process server.
+The ordinary offline transfer-mode refusal and explicit retry are authored in `analytics/transfer_change_retry`
+(Qase96), including preservation across config/resume; this flow has not been run.
 `AnalyticsViewModelTest` covers false/wait, repeated selection, explicit retry, refresh/resume and changed
 contexts. `ChatViewModelBehaviourTest` covers close/offline after failed/complete/unknown snapshots,
 terminal text/quota/retry permission, pause/resume and REST refusal without another POST.
