@@ -1463,12 +1463,92 @@ class ChatViewModelBehaviourTest {
         api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED)), hasOlder = false)
         advance(1_000)
         assertEquals(2, api.streamOpens.size)
+        val reconciledReads = api.listCalls.size
+        assertEquals(2, reconciledReads, "a terminal transport refusal reconciles history once")
         vm.pauseStreams()
         vm.resumeStreams()
         advance(60_000)
         vm.resumeStreams()
         assertEquals(2, api.streamOpens.size, "pending terminal metadata cannot lift a REST prohibition")
+        assertEquals(reconciledReads, api.listCalls.size, "a failed history answer must not reload on every stream resume")
         assertEquals(false, vm.state.value.streamRetryable)
+        assertTrue(api.asks.isEmpty())
+        assertTrue(api.retries.isEmpty())
+    }
+
+    @Test fun `a final-status snapshot ending in 404 reconciles history only once`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val snapshot = AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.FAILED, emptyList(), emptyList()))
+        api.script("a1", events(snapshot), flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404) })
+        val vm = newVm()
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED)), hasOlder = false)
+        advance(1_000)
+        assertEquals(2, api.streamOpens.size)
+        assertEquals(2, api.listCalls.size)
+        vm.pauseStreams()
+        vm.resumeStreams()
+        advance(60_000)
+        vm.resumeStreams()
+        assertEquals(2, api.streamOpens.size, "an unavailable stream stays retired after history confirms failed")
+        assertEquals(2, api.listCalls.size)
+        assertTrue(api.asks.isEmpty())
+        assertTrue(api.retries.isEmpty())
+    }
+
+    @Test fun `an armed maintenance correction retains final-status terminal recovery across pause`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val snapshot = AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.FAILED, emptyList(), emptyList()))
+        val refusedAt = mutableListOf<Long>()
+        api.script("a1", events(snapshot), flow {
+            refusedAt += dispatcher.scheduler.currentTime
+            throw AppError.Maintenance(null, 15, ErrorResponseInfo("MAINTENANCE", 503, requestRetryable = false,
+                timing = ResponseTiming(receivedElapsedMillis = dispatcher.scheduler.currentTime)))
+        }, events(snapshot, AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "model failed", 5,
+            text = "Можно повторить", retryable = true))))
+        val vm = newVm()
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED)), hasOlder = false)
+        advance(1_000)
+        assertEquals(2, api.streamOpens.size)
+        assertEquals(2, api.listCalls.size)
+        vm.resumeStreams()
+        advance(4_000)
+        vm.pauseStreams()
+        vm.resumeStreams()
+        advance(refusedAt.single() + 14_999 - dispatcher.scheduler.currentTime)
+        assertEquals(2, api.streamOpens.size)
+        advance(1)
+        assertEquals(3, api.streamOpens.size, "the armed recovery can still read the missing terminal metadata")
+        assertEquals("Можно повторить", vm.answerItem("a1").errorText)
+        assertTrue(vm.answerItem("a1").retryable)
+        assertEquals(5, vm.state.value.knownRemaining)
+        vm.pauseStreams()
+        vm.resumeStreams()
+        assertEquals(2, api.listCalls.size)
+        assertEquals(3, api.streamOpens.size)
+        assertTrue(api.asks.isEmpty())
+        assertTrue(api.retries.isEmpty())
+    }
+
+    @Test fun `a second maintenance refusal retires final-status recovery after its one correction`() {
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.GENERATING)), hasOlder = false)
+        val snapshot = AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.FAILED, emptyList(), emptyList()))
+        fun refusal() = flow<AnswerEvent> { throw AppError.Maintenance(null, 15,
+            ErrorResponseInfo("MAINTENANCE", 503, requestRetryable = false,
+                timing = ResponseTiming(receivedElapsedMillis = dispatcher.scheduler.currentTime))) }
+        api.script("a1", events(snapshot), refusal(), refusal())
+        val vm = newVm()
+        api.pages[null] = MessagesList(listOf(question("q1"), answer("a1", AnswerStatus.FAILED)), hasOlder = false)
+        advance(1_000)
+        vm.resumeStreams()
+        advance(15_000)
+        assertEquals(3, api.streamOpens.size)
+        assertEquals(3, api.listCalls.size, "the failed one-shot correction reconciles history one final time")
+        vm.pauseStreams()
+        vm.resumeStreams()
+        advance(60_000)
+        vm.resumeStreams()
+        assertEquals(3, api.streamOpens.size)
+        assertEquals(3, api.listCalls.size, "a consumed correction must not retain pending-terminal reloads")
         assertTrue(api.asks.isEmpty())
         assertTrue(api.retries.isEmpty())
     }

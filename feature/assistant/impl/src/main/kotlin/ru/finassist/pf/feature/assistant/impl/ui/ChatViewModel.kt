@@ -665,14 +665,19 @@ class ChatViewModel @Inject constructor(
             // is re-opened by [reopeningStream] — the first event is a full snapshot — until a terminal event or the
             // screen stops.
             var reload = false
+            var recoveryArmed = false
             try {
                 try {
                     // Opening it again after the screen came back is a re-open: a 429 is waited for (api.md «SSE»).
-                    reopeningStream(isTerminal = ::isTerminal, state = reopenStates.getOrPut(answerId) { SseReopenState() }, elapsedClock = elapsedClock, recoverOnceAfter = { ServiceGate.recoveryDeadline(it, elapsedClock) }) {
+                    reopeningStream(isTerminal = ::isTerminal, state = reopenStates.getOrPut(answerId) { SseReopenState() }, elapsedClock = elapsedClock,
+                        recoverOnceAfter = { error -> ServiceGate.recoveryDeadline(error, elapsedClock)?.also { recoveryArmed = true } }) {
                         api.streamAnswer(answerId)
                     }.collect { event -> applyEvent(answerId, event) }
                     _state.update { it.copy(offline = false, streamErrorPresentation = null, streamRetryable = null) }
                 } catch (e: AppError) {
+                    // A definitive transport stop falls back to history once. Only an armed correction may
+                    // retain terminal-metadata recovery; otherwise every resume would reload that history again.
+                    if (!recoveryArmed) pendingTerminals.remove(answerId)
                     // Keep the read/open error separate from a failed answer and its new-attempt permission.
                     _state.update { it.copy(streamErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, streamRetryable = e.requestRetryable) }
                     // Not a drop (404 and the like): the stream will not recover by itself.
