@@ -1359,6 +1359,164 @@ class ChatViewModelBehaviourTest {
 
     // ---- the answer stream ----
 
+    @Test fun `a stale recovered Done keeps the quota of a newer accepted Ask`() =
+        recoverOlderTerminalAfterCommand(retry = false, failed = false, resume = false)
+
+    @Test fun `a stale recovered Error keeps the quota of a newer accepted Ask across resume`() =
+        recoverOlderTerminalAfterCommand(retry = false, failed = true, resume = true)
+
+    @Test fun `a stale recovered Done keeps the quota of a newer accepted RetryAnswer across resume`() =
+        recoverOlderTerminalAfterCommand(retry = true, failed = false, resume = true)
+
+    @Test fun `a stale recovered Error keeps the quota of a newer accepted RetryAnswer`() =
+        recoverOlderTerminalAfterCommand(retry = true, failed = true, resume = false)
+
+    @Test fun `a stale recovered Done cannot override LIMIT_EXCEEDED from a newer Ask`() =
+        recoverOlderTerminalAfterQuotaRefusal(retry = false)
+
+    @Test fun `a stale recovered Error cannot override LIMIT_EXCEEDED from a newer RetryAnswer`() =
+        recoverOlderTerminalAfterQuotaRefusal(retry = true)
+
+    @Test fun `a stale stream completion cannot clear the newer answer stream refusal`() {
+        api.pages[null] = MessagesList(listOf(question("q-old"), answer("old", AnswerStatus.GENERATING)), hasOlder = false)
+        val snapshot = AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Старый ответ")), emptyList()))
+        api.script("old", events(snapshot), events(snapshot, done(remaining = 1)))
+        val vm = newVm()
+        val failure = ErrorPresentation(UserMessage.from("Новый поток недоступен"), ErrorSeverity.WARNING)
+        api.script("new", flow { throw AppError.Api("NEW_STREAM_REFUSED", 429,
+            response = ErrorResponseInfo("NEW_STREAM_REFUSED", 429, presentation = failure, requestRetryable = false)) })
+        api.askOutcomes += askResponse("new", remaining = 0)
+        api.limitResult = limit.copy(remaining = 0)
+        api.pages[null] = MessagesList(listOf(question("q-old"), answer("old"), question("q-new"),
+            answer("new", AnswerStatus.GENERATING)), hasOlder = false)
+        sendQuestion(vm, "Новый вопрос")
+        assertEquals(failure, vm.state.value.streamErrorPresentation)
+        assertEquals(false, vm.state.value.streamRetryable)
+        advance(1_000)
+        assertEquals(2, api.streamOpens.count { it == "old" })
+        assertEquals(failure, vm.state.value.streamErrorPresentation, "the old stream cannot clear a newer refusal")
+        assertEquals(false, vm.state.value.streamRetryable)
+        assertEquals(0, vm.state.value.knownRemaining)
+        assertEquals(1, api.asks.size)
+        assertTrue(api.retries.isEmpty())
+    }
+
+    @Test fun `a stale stream refusal cannot replace the newer answer stream refusal`() {
+        api.pages[null] = MessagesList(listOf(question("q-old"), answer("old", AnswerStatus.GENERATING)), hasOlder = false)
+        val snapshot = AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, emptyList(), emptyList()))
+        val older = ErrorPresentation(UserMessage.from("Старый поток недоступен"))
+        api.script("old", events(snapshot), flow { throw AppError.Api(ErrorCodes.NOT_FOUND, 404,
+            response = ErrorResponseInfo(ErrorCodes.NOT_FOUND, 404, presentation = older)) })
+        val vm = newVm()
+        val newer = ErrorPresentation(UserMessage.from("Новый поток недоступен"), ErrorSeverity.WARNING)
+        api.script("new", flow { throw AppError.Api("NEW_STREAM_REFUSED", 429,
+            response = ErrorResponseInfo("NEW_STREAM_REFUSED", 429, presentation = newer, requestRetryable = false)) })
+        api.askOutcomes += askResponse("new", remaining = 0)
+        api.limitResult = limit.copy(remaining = 0)
+        api.pages[null] = MessagesList(listOf(question("q-old"), answer("old"), question("q-new"),
+            answer("new", AnswerStatus.GENERATING)), hasOlder = false)
+        sendQuestion(vm, "Новый вопрос")
+        assertEquals(newer, vm.state.value.streamErrorPresentation)
+        val history = CompletableDeferred<Unit>()
+        api.listGate = history
+        advance(1_000)
+        assertEquals(2, api.streamOpens.count { it == "old" })
+        assertEquals(newer, vm.state.value.streamErrorPresentation, "an older refusal must not replace the active answer's error")
+        assertEquals(false, vm.state.value.streamRetryable)
+        api.listGate = null
+        history.complete(Unit)
+        assertEquals(newer, vm.state.value.streamErrorPresentation)
+        assertEquals(0, vm.state.value.knownRemaining)
+        assertEquals(1, api.asks.size)
+        assertTrue(api.retries.isEmpty())
+    }
+
+    private fun recoverOlderTerminalAfterQuotaRefusal(retry: Boolean) {
+        api.pages[null] = MessagesList(buildList {
+            add(question("q-old")); add(answer("old", AnswerStatus.GENERATING))
+            if (retry) {
+                add(question("q-retry")); add(answer("retry", AnswerStatus.FAILED, AnswerErrorCode.MODEL_ERROR, retryable = true))
+            }
+        }, hasOlder = false)
+        val snapshot = AnswerEvent.Snapshot(AnswerSnapshotEvent(
+            if (retry) AnswerStatus.FAILED else AnswerStatus.COMPLETE, emptyList(), emptyList()))
+        val terminal = if (retry) AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "old error", 1,
+            text = "Восстановленная ошибка", retryable = true)) else done(remaining = 1)
+        api.script("old", events(snapshot), events(snapshot, terminal))
+        val vm = newVm()
+        val refusal = AppError.Api(ErrorCodes.LIMIT_EXCEEDED, 429,
+            response = ErrorResponseInfo(ErrorCodes.LIMIT_EXCEEDED, 429, requestRetryable = false))
+        if (retry) {
+            api.retryOutcomes += refusal
+            vm.retry("retry")
+        } else {
+            api.askOutcomes += refusal
+            sendQuestion(vm, "Новый вопрос")
+        }
+        assertEquals(0, vm.state.value.knownRemaining)
+        advance(1_000)
+        assertEquals(2, api.streamOpens.count { it == "old" })
+        assertEquals(0, vm.state.value.knownRemaining, "a recorded terminal predates the newer authoritative refusal")
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+        if (retry) {
+            assertEquals("Восстановленная ошибка", vm.answerItem("old").errorText)
+            assertTrue(vm.answerItem("old").retryable)
+        }
+        assertEquals(1, if (retry) api.retries.size else api.asks.size)
+    }
+
+    private fun recoverOlderTerminalAfterCommand(retry: Boolean, failed: Boolean, resume: Boolean) {
+        api.pages[null] = MessagesList(buildList {
+            add(question("q-old")); add(answer("old", AnswerStatus.GENERATING))
+            if (retry) {
+                add(question("q-retry")); add(answer("retry", AnswerStatus.FAILED, AnswerErrorCode.MODEL_ERROR, retryable = true))
+            }
+        }, hasOlder = false)
+        val snapshot = AnswerEvent.Snapshot(AnswerSnapshotEvent(
+            if (failed) AnswerStatus.FAILED else AnswerStatus.COMPLETE,
+            if (failed) emptyList() else listOf(text("Старый ответ")), emptyList()))
+        val terminal = if (failed) AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "old error", 1,
+            text = "Восстановленная ошибка", retryable = true)) else done(remaining = 1)
+        api.script("old", events(snapshot), events(snapshot, terminal))
+        val vm = newVm()
+        val newer = MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
+        api.script("new", newer)
+        if (retry) {
+            api.retryOutcomes += RetryResponse("new", remainingLimit = 0)
+            vm.retry("retry")
+        } else {
+            api.askOutcomes += askResponse("new", remaining = 0)
+            sendQuestion(vm, "Новый вопрос")
+        }
+        assertEquals(0, vm.state.value.knownRemaining)
+        assertEquals(0, vm.state.value.limit?.remaining)
+        if (resume) {
+            vm.pauseStreams()
+            api.script("new", newer)
+            vm.resumeStreams()
+        } else advance(1_000)
+        assertEquals(2, api.streamOpens.count { it == "old" })
+        assertEquals(0, vm.state.value.knownRemaining, "an older terminal replay must not restore spent questions")
+        assertEquals(0, vm.state.value.limit?.remaining)
+        assertTrue(vm.state.value.limitExhausted)
+        if (failed) {
+            assertEquals("Восстановленная ошибка", vm.answerItem("old").errorText)
+            assertTrue(vm.answerItem("old").retryable, "answer metadata still belongs to that answer")
+            newer.tryEmit(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "new error", 1,
+                text = "Новая ошибка", retryable = true)))
+            assertEquals(1, vm.state.value.knownRemaining, "the current answer can legitimately refund a question")
+            assertEquals(1, vm.state.value.limit?.remaining)
+            assertFalse(vm.state.value.limitExhausted)
+        } else {
+            assertEquals(listOf(text("Старый ответ")), vm.answerItem("old").blocks)
+            newer.tryEmit(done(remaining = 0))
+            assertTrue(vm.state.value.limitExhausted, "the composer stays blocked after the new answer finishes")
+        }
+        assertEquals(1, if (retry) api.retries.size else api.asks.size)
+        assertTrue(if (retry) api.asks.isEmpty() else api.retries.isEmpty())
+    }
+
     @Test fun `a failed snapshot followed by clean close reopens until the error metadata arrives`() =
         recoverSnapshot(AnswerStatus.FAILED, offline = false)
 

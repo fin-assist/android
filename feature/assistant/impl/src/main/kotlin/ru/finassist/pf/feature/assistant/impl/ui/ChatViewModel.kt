@@ -156,8 +156,8 @@ class ChatViewModel @Inject constructor(
     private val reopenStates = HashMap<String, SseReopenState>()
 
     private val streams = HashMap<String, Job>()
-    /** A snapshot can show a final status before `done` / `error` supplies quota and retry metadata. */
-    private val pendingTerminals = HashSet<String>()
+    /** An unfinished stream keeps its quota revision across snapshots, drops and pauses. */
+    private val pendingTerminals = HashMap<String, Long>()
     private var wasPresented = false
     private val retryKeys = HashMap<String, IdempotencyKey>()
     private var historyReadRevision = 0L
@@ -403,7 +403,7 @@ class ChatViewModel @Inject constructor(
     }
 
     fun pauseStreams() {
-        streams.values.forEach { it.cancel() }
+        streams.values.toList().forEach { it.cancel() }
         streams.clear()
     }
 
@@ -660,26 +660,33 @@ class ChatViewModel @Inject constructor(
 
     private fun watch(answerId: String) {
         if (streams[answerId]?.isActive == true) return
+        pendingTerminals.getOrPut(answerId) { limitRevision }
         streams[answerId] = viewModelScope.launch {
             // The answer keeps generating on the server; a dropped stream (network, 5xx, closed without `done` / `error`)
             // is re-opened by [reopeningStream] — the first event is a full snapshot — until a terminal event or the
             // screen stops.
             var reload = false
             var recoveryArmed = false
+            var completedQuotaRevision: Long? = null
             try {
                 try {
                     // Opening it again after the screen came back is a re-open: a 429 is waited for (api.md «SSE»).
                     reopeningStream(isTerminal = ::isTerminal, state = reopenStates.getOrPut(answerId) { SseReopenState() }, elapsedClock = elapsedClock,
                         recoverOnceAfter = { error -> ServiceGate.recoveryDeadline(error, elapsedClock)?.also { recoveryArmed = true } }) {
                         api.streamAnswer(answerId)
-                    }.collect { event -> applyEvent(answerId, event) }
-                    _state.update { it.copy(offline = false, streamErrorPresentation = null, streamRetryable = null) }
+                    }.collect { event -> applyEvent(answerId, event)?.let { completedQuotaRevision = it } }
+                    if (completedQuotaRevision == limitRevision) {
+                        _state.update { it.copy(offline = false, streamErrorPresentation = null, streamRetryable = null) }
+                    }
                 } catch (e: AppError) {
+                    val ownsStreamError = pendingTerminals[answerId] == limitRevision
                     // A definitive transport stop falls back to history once. Only an armed correction may
                     // retain terminal-metadata recovery; otherwise every resume would reload that history again.
                     if (!recoveryArmed) pendingTerminals.remove(answerId)
                     // Keep the read/open error separate from a failed answer and its new-attempt permission.
-                    _state.update { it.copy(streamErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, streamRetryable = e.requestRetryable) }
+                    if (ownsStreamError) {
+                        _state.update { it.copy(streamErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, streamRetryable = e.requestRetryable) }
+                    }
                     // Not a drop (404 and the like): the stream will not recover by itself.
                     reload = true
                 }
@@ -697,13 +704,11 @@ class ChatViewModel @Inject constructor(
         else -> false
     }
 
-    private fun applyEvent(answerId: String, event: AnswerEvent) {
-        when (event) {
-            is AnswerEvent.Snapshot -> pendingTerminals.add(answerId)
-            is AnswerEvent.Done, is AnswerEvent.Error -> pendingTerminals.remove(answerId)
-            else -> Unit
-        }
-        if (event is AnswerEvent.Done || event is AnswerEvent.Error) limitRevision++
+    private fun applyEvent(answerId: String, event: AnswerEvent): Long? {
+        // Terminal metadata belongs to its answer, but a replay cannot replace newer quota knowledge
+        // (an accepted command or LIMIT_EXCEEDED). Preserve the original revision across stream resumes.
+        val updateQuota = isTerminal(event) && pendingTerminals.remove(answerId) == limitRevision
+        val updatedQuotaRevision = if (updateQuota) ++limitRevision else null
         updateHistoryState { s ->
         val items = s.items.map { item ->
             if (item !is ChatItem.Answer || item.id != answerId) return@map item
@@ -722,19 +727,20 @@ class ChatViewModel @Inject constructor(
                 is AnswerEvent.Unknown -> item
             }
         }
-        val limit = when (event) {
+        val limit = if (updateQuota) when (event) {
             is AnswerEvent.Done -> s.limit?.copy(remaining = event.event.remainingLimit)
             is AnswerEvent.Error -> s.limit?.copy(remaining = event.event.remainingLimit)
             else -> s.limit
-        }
+        } else s.limit
         if (event is AnswerEvent.Done) tracker.track(Events.ASSISTANT_ANSWER_DONE, mapOf("charged" to event.event.charged.toString()))
         if (event is AnswerEvent.Error) tracker.track(Events.ASSISTANT_ANSWER_FAILED, mapOf("code" to event.event.code.code))
-        s.copy(items = items, limit = limit, knownRemaining = when (event) {
+        s.copy(items = items, limit = limit, knownRemaining = if (updateQuota) when (event) {
             is AnswerEvent.Done -> event.event.remainingLimit
             is AnswerEvent.Error -> event.event.remainingLimit
             else -> s.knownRemaining
-        })
+        } else s.knownRemaining)
         }
+        return updatedQuotaRevision
     }
 
     private fun toItem(m: Message): ChatItem? = when (m.role) {
