@@ -1499,6 +1499,83 @@ class ChatViewModelBehaviourTest {
         assertTrue(api.asks.isEmpty())
     }
 
+    @Test fun `an old terminal after resume cannot replace the next day quota read`() {
+        var currentTime = now
+        val dayClock = object : Clock {
+            override fun now(): OffsetDateTime = currentTime
+            override val zone: ZoneId = Clock.MOSCOW
+        }
+        api.pages[null] = MessagesList(listOf(question("q-old"), answer("old", AnswerStatus.GENERATING)), hasOlder = false)
+        api.limitResult = limit.copy(remaining = 0)
+        val snapshot = AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.COMPLETE, listOf(text("Старый ответ")), emptyList()))
+        lateinit var vm: ChatViewModel
+        var quotaBeforeReplay: Int? = null
+        api.script("old", events(snapshot), flow {
+            quotaBeforeReplay = vm.state.value.knownRemaining
+            emit(snapshot)
+            emit(done(remaining = 0))
+        })
+        vm = ChatViewModel(SavedStateHandle(), api, tracker, dayClock,
+            ElapsedClock { dispatcher.scheduler.currentTime }, profileApi)
+        vm.onResumed()
+        vm.pauseStreams()
+        currentTime = now.plusDays(1)
+        val nextDayLimit = limit.copy(remaining = 5, resetsAt = limit.resetsAt.plusDays(1))
+        var nextDayReads = 0
+        api.limitReply = { nextDayReads++; nextDayLimit }
+        api.pages[null] = MessagesList(listOf(question("q-old"), answer("old")), hasOlder = false)
+        vm.onResumed()
+        assertEquals(5, quotaBeforeReplay, "the next day quota is read before resuming the unfinished stream")
+        assertEquals(5, vm.state.value.knownRemaining, "the previous day's recorded Done must not consume today's quota")
+        assertEquals(nextDayLimit, vm.state.value.limit)
+        assertFalse(vm.state.value.limitExhausted)
+        assertEquals(2, nextDayReads, "a historical terminal reconciles once after the fresh history quota read")
+        assertEquals(2, api.streamOpens.count { it == "old" })
+        assertTrue(api.asks.isEmpty())
+        assertTrue(api.retries.isEmpty())
+    }
+
+    @Test fun `a new answer completion clears a retired stream refusal`() =
+        clearRetiredStreamRefusal(retryable = null)
+
+    @Test fun `a new answer completion clears a retired nonretryable stream refusal`() =
+        clearRetiredStreamRefusal(retryable = false)
+
+    @Test fun `a new answer completion clears a retired refusal after a fresh quota read`() =
+        clearRetiredStreamRefusal(retryable = false, refreshBeforeCompletion = true)
+
+    private fun clearRetiredStreamRefusal(retryable: Boolean?, refreshBeforeCompletion: Boolean = false) {
+        api.pages[null] = MessagesList(listOf(question("q-old"), answer("old", AnswerStatus.GENERATING)), hasOlder = false)
+        val presentation = ErrorPresentation(UserMessage.from("Предыдущий поток недоступен"))
+        api.script("old", flow {
+            api.pages[null] = MessagesList(listOf(question("q-old"), answer("old", AnswerStatus.FAILED)), hasOlder = false)
+            throw AppError.Api(ErrorCodes.NOT_FOUND, 404,
+                response = ErrorResponseInfo(ErrorCodes.NOT_FOUND, 404, presentation = presentation, requestRetryable = retryable))
+        })
+        val vm = newVm()
+        assertEquals(AnswerStatus.FAILED, vm.answerItem("old").status)
+        assertEquals(presentation, vm.state.value.streamErrorPresentation)
+        assertEquals(retryable, vm.state.value.streamRetryable)
+        api.askOutcomes += askResponse("new", remaining = 1)
+        val completion = CompletableDeferred<AnswerEvent>()
+        api.script("new", if (refreshBeforeCompletion) flow { emit(completion.await()) } else events(done(remaining = 1)))
+        sendQuestion(vm, "Новый вопрос")
+        if (refreshBeforeCompletion) {
+            api.limitResult = limit.copy(remaining = 1)
+            api.pages[null] = MessagesList(listOf(question("q-old"), answer("old", AnswerStatus.FAILED),
+                question("q-new"), answer("new", AnswerStatus.GENERATING)), hasOlder = false)
+            vm.refresh()
+            completion.complete(done(remaining = 1))
+        }
+        assertEquals(AnswerStatus.COMPLETE, vm.answerItem("new").status)
+        assertNull(vm.state.value.streamErrorPresentation, "a current success clears a retired owner's refusal")
+        assertNull(vm.state.value.streamRetryable)
+        assertEquals(1, api.streamOpens.count { it == "old" }, "the retired stream is not reopened")
+        assertEquals(1, api.streamOpens.count { it == "new" })
+        assertEquals(1, api.asks.size)
+        assertTrue(api.retries.isEmpty())
+    }
+
     @Test fun `a stale recovered Done keeps the quota of a newer accepted Ask`() =
         recoverOlderTerminalAfterCommand(retry = false, failed = false, resume = false)
 
@@ -1815,6 +1892,7 @@ class ChatViewModelBehaviourTest {
         advance(4_000)
         vm.pauseStreams()
         vm.resumeStreams()
+        api.limitResult = limit.copy(remaining = 5)
         advance(refusedAt.single() + 14_999 - dispatcher.scheduler.currentTime)
         assertEquals(2, api.streamOpens.size)
         advance(1)
