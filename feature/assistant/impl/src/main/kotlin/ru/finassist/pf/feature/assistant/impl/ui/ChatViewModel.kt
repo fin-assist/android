@@ -156,6 +156,8 @@ class ChatViewModel @Inject constructor(
     private val reopenStates = HashMap<String, SseReopenState>()
 
     private val streams = HashMap<String, Job>()
+    /** A snapshot can show a final status before `done` / `error` supplies quota and retry metadata. */
+    private val pendingTerminals = HashSet<String>()
     private var wasPresented = false
     private val retryKeys = HashMap<String, IdempotencyKey>()
     private var historyReadRevision = 0L
@@ -391,12 +393,12 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    /** Re-open streams of answers still generating. */
+    /** Re-open generating answers and snapshots whose terminal metadata has not arrived yet. */
     fun resumeStreams() = watchGenerating(skip = null)
 
     private fun watchGenerating(skip: String?) {
         _state.value.items.filterIsInstance<ChatItem.Answer>()
-            .filter { it.status == AnswerStatus.GENERATING && it.id != skip }
+            .filter { (it.status == AnswerStatus.GENERATING || it.id in pendingTerminals) && it.id != skip }
             .forEach { watch(it.id) }
     }
 
@@ -687,11 +689,15 @@ class ChatViewModel @Inject constructor(
 
     private fun isTerminal(event: AnswerEvent): Boolean = when (event) {
         is AnswerEvent.Done, is AnswerEvent.Error -> true
-        is AnswerEvent.Snapshot -> event.event.status.effective != AnswerStatus.GENERATING
         else -> false
     }
 
     private fun applyEvent(answerId: String, event: AnswerEvent) {
+        when (event) {
+            is AnswerEvent.Snapshot -> pendingTerminals.add(answerId)
+            is AnswerEvent.Done, is AnswerEvent.Error -> pendingTerminals.remove(answerId)
+            else -> Unit
+        }
         if (event is AnswerEvent.Done || event is AnswerEvent.Error) limitRevision++
         updateHistoryState { s ->
         val items = s.items.map { item ->
