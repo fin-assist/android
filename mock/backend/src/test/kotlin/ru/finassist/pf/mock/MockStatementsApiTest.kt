@@ -118,19 +118,17 @@ class MockStatementsApiTest {
     fun `an upload with an overflowing amount completes and exposes the bad amount line`() = runBlocking<Unit> {
         val backend = testBackend(clock)
         val api = MockStatementsApi(backend)
-        val text = ofx(
-            line("valid", "20260904120000", "-100.50"),
-            line("overflow", "20260905120000", "92233720368547758.08"),
-        )
-        val accepted = api.uploadStatement(key("overflow"), file("mixed.ofx", text))
+        val text = File("../../app/src/mockE2e/assets/e2e/statements/amount-overflow.ofx").readText()
+        val accepted = api.uploadStatement(key("overflow"), file("amount-overflow.ofx", text))
         val result = assertIs<ImportEvent.Complete>(api.await(accepted.uploadId).last()).result
         assertEquals(1, result.newCount)
         assertEquals(1, result.unreadCount)
-        assertEquals(listOf("valid"), backend.ledger.all.map { it.fitId })
+        assertEquals(listOf("fin454-valid"), backend.ledger.all.map { it.fitId })
         assertEquals(10_050L, backend.ledger.all.single().amountMinor)
         val unread = api.listUnreadLines(accepted.uploadId).lines.single()
         assertEquals(UnreadReason.BAD_AMOUNT, unread.reason)
         assertEquals("не распознали сумму", unread.reasonName)
+        assertEquals(7, unread.lineNumber)
     }
 
     @Test

@@ -1,0 +1,102 @@
+appId: ru.finassist.pf.mock.e2e
+name: OFX — сумма вне Long становится непрочитанной строкой, валидная операция сохраняется
+tags:
+  - statements
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile.statements"
+    timeout: 10000
+- tapOn:
+    id: "profile.statements"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "statements.history.upload"
+- tapOn:
+    id: "statements.history.upload"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.pick"
+- tapOn:
+    id: "statements.upload.pick"
+- scrollUntilVisible:
+    element:
+      id: "e2e.picker.amount-overflow.ofx"
+- tapOn:
+    id: "e2e.picker.amount-overflow.ofx"
+# Before FIN-454 this small valid OFX throws ArithmeticException before acceptance.
+- extendedWaitUntil:
+    visible:
+      id: "statements.result"
+    timeout: 20000
+- assertVisible:
+    id: "statements.result.new"
+- assertVisible:
+    id: "statements.result.unread"
+- assertVisible: "1.строку не прочитали — их нет в суммах.*"
+- scrollUntilVisible:
+    element:
+      id: "statements.result.history"
+- tapOn:
+    id: "statements.result.history"
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- assertVisible:
+    id: "statements.history.row"
+    index: 0
+    containsDescendants:
+      - text: "^amount-overflow\\.ofx$"
+- tapOn:
+    id: "statements.history.unread"
+- extendedWaitUntil:
+    visible:
+      id: "statements.unread"
+    timeout: 10000
+- assertVisible: ".*Остальные операции загружены.*"
+- assertVisible:
+    id: "statements.unread.line"
+    index: 0
+    containsDescendants:
+      - text: "Строка 7 · 7.октября"
+      - text: "не распознали сумму"
+- assertNotVisible:
+    id: "statements.unread.line"
+    index: 1
+- back
+- extendedWaitUntil:
+    visible:
+      id: "statements.history"
+    timeout: 10000
+- back
+- extendedWaitUntil:
+    visible:
+      id: "profile.screen"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.operations"
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- assertVisible:
+    id: "operations.row"
+    containsDescendants:
+      - text: "OverflowValid"
+- assertNotVisible: "OverflowInvalid"
+- tapOn: "OverflowValid"
+- extendedWaitUntil:
+    visible:
+      id: "operations.detail.title"
+    timeout: 10000
+- assertVisible: "07\\.10\\.2026, 09:15"
+- assertVisible: "−100,50[ \u00a0\u202f]₽"
