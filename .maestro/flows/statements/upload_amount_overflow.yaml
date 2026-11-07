@@ -4,7 +4,14 @@ tags:
   - statements
 ---
 - runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/fast_login.yaml
+# Wait for the seeded backend before starting the normal UI sign-in (FIN-442/444).
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "auth.phone.document"
+    timeout: 60000
+- runFlow: ../../subflows/login.yaml
 - tapOn:
     id: "ds.tab.profile"
 - extendedWaitUntil:

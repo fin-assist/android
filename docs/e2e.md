@@ -702,6 +702,7 @@ flow checks:
 | `applock/unlock`, `applock/forgot_code`, `applock/change_passcode` | the passcode set on the setup screen, then unlocked, forgotten or changed |
 | `profile/delete_account` | the passcode is checked again before the deletion |
 | `analytics/source_zone_and_session` (second login) | logout has already put the live app into passcode setup; `login.yaml` completes setup and its biometric offer before the new Analytics session |
+| `statements/upload_amount_overflow` | cold fixture readiness can exceed the service sign-in budget: wait for `auth.phone.document` (at most 60 s), then complete `login.yaml` through the UI (FIN-454; existing FIN-442/444 setup pattern) |
 
 The other sign-in flows (`auth/*`, `availability/maintenance_on_sign_in`, `offline/stream_drops`) drive the screens
 themselves. Every other flow uses `fast_login.yaml`; a new one does too unless it checks one of the above.
@@ -774,7 +775,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `assistant/answer_changed_since` | after an answer a category is changed, then the statement deleted: the earlier answer in the history shows «С тех пор категории менялись», then «С тех пор данные менялись» (`changed_since` counted at the time of the request) — FIN-135 |
 | `statements/upload_errors` | CSV and another-bank server messages, not a statement; leaving the picker (Qase15, FIN-375) |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
-| `statements/upload_amount_overflow` | a small OFX with one valid debit and one amount beyond Long: one unread `bad_amount` line, history/unread navigation and the unchanged valid operation/date/amount ([Qase95](https://app.qase.io/case/PLAINFIN-95), FIN-454); authored, not run |
+| `statements/upload_amount_overflow` | a small OFX with one valid debit and one amount beyond Long: one unread `bad_amount` line, history/unread navigation and the unchanged valid operation/date/amount ([Qase95](https://app.qase.io/case/PLAINFIN-95), FIN-454); LOCAL Passed 172.089 s on API34/Pixel6/Maestro2.11.0 after explicit cold-backend readiness and UI sign-in, evidence in PR #292; earlier driver/setup failures preserved |
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
 | `statements/download_period` (mock-only) | inclusive calendar selection, invalid/reversed/future bounds, network failure retains dates and offers explicit retry; Qase84 (FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
