@@ -763,7 +763,7 @@ class ChatViewModel @Inject constructor(
             else -> s.knownRemaining
         } else s.knownRemaining)
         }
-        if (terminal && !updateQuota) {
+        if (terminal && (!updateQuota || limitReadPending)) {
             // Concurrent live answers may refund quota, while reopened finals may replay old quota.
             // Only a fresh server read can distinguish them; do not apply this terminal's remainder.
             limitReconciliationPending = true

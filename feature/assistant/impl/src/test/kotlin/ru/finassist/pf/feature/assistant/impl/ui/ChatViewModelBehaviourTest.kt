@@ -1499,7 +1499,13 @@ class ChatViewModelBehaviourTest {
         assertTrue(api.asks.isEmpty())
     }
 
-    @Test fun `an old terminal after resume cannot replace the next day quota read`() {
+    @Test fun `an old terminal after resume cannot replace the next day quota read`() =
+        replayPreviousDayTerminal(holdFreshQuota = false)
+
+    @Test fun `an old terminal during the next day quota read reconciles once after it returns`() =
+        replayPreviousDayTerminal(holdFreshQuota = true)
+
+    private fun replayPreviousDayTerminal(holdFreshQuota: Boolean) {
         var currentTime = now
         val dayClock = object : Clock {
             override fun now(): OffsetDateTime = currentTime
@@ -1522,10 +1528,16 @@ class ChatViewModelBehaviourTest {
         currentTime = now.plusDays(1)
         val nextDayLimit = limit.copy(remaining = 5, resetsAt = limit.resetsAt.plusDays(1))
         var nextDayReads = 0
-        api.limitReply = { nextDayReads++; nextDayLimit }
+        val pendingQuota = CompletableDeferred<AssistantLimit>()
+        api.limitReply = { if (++nextDayReads == 1 && holdFreshQuota) pendingQuota.await() else nextDayLimit }
         api.pages[null] = MessagesList(listOf(question("q-old"), answer("old")), hasOlder = false)
         vm.onResumed()
-        assertEquals(5, quotaBeforeReplay, "the next day quota is read before resuming the unfinished stream")
+        if (holdFreshQuota) {
+            assertEquals(0, quotaBeforeReplay, "the first fresh quota read stays pending while the old terminal arrives")
+            assertEquals(AnswerStatus.COMPLETE, vm.answerItem("old").status)
+            assertEquals(1, nextDayReads, "the quota read remains single-flight until its reply")
+            pendingQuota.complete(nextDayLimit)
+        } else assertEquals(5, quotaBeforeReplay, "the next day quota is read before resuming the unfinished stream")
         assertEquals(5, vm.state.value.knownRemaining, "the previous day's recorded Done must not consume today's quota")
         assertEquals(nextDayLimit, vm.state.value.limit)
         assertFalse(vm.state.value.limitExhausted)
@@ -2395,11 +2407,13 @@ class ChatViewModelBehaviourTest {
         api.script("a1", events)
         val vm = newVm()
         val oldQuota = CompletableDeferred<AssistantLimit>()
-        api.limitReply = { oldQuota.await() }
+        var reads = 0
+        api.limitReply = { if (++reads == 1) oldQuota.await() else limit.copy(remaining = 0) }
         vm.refresh()
         events.tryEmit(done(remaining = 0))
         assertEquals(0, vm.state.value.limit?.remaining)
         oldQuota.complete(limit)
+        assertEquals(2, reads, "the terminal requests one fresh authoritative read")
         assertEquals(0, vm.state.value.limit?.remaining)
         assertTrue(vm.state.value.limitExhausted)
     }
@@ -2431,11 +2445,13 @@ class ChatViewModelBehaviourTest {
         api.script("a1", events)
         val vm = newVm()
         val oldQuota = CompletableDeferred<AssistantLimit>()
-        api.limitReply = { oldQuota.await() }
+        var reads = 0
+        api.limitReply = { if (++reads == 1) oldQuota.await() else limit.copy(remaining = 5) }
         vm.refresh()
         events.tryEmit(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "model", remainingLimit = 5)))
         assertEquals(5, vm.state.value.knownRemaining)
         oldQuota.complete(limit)
+        assertEquals(2, reads, "the terminal requests one fresh authoritative read")
         assertEquals(5, vm.state.value.limit?.remaining)
         assertEquals(5, vm.state.value.knownRemaining)
     }
@@ -2457,16 +2473,16 @@ class ChatViewModelBehaviourTest {
         assertTrue(api.asks.isEmpty())
     }
 
-    @Test fun `metadata reconciliation stops after the second stale quota read until explicit refresh`() {
+    @Test fun `a terminal during metadata reconciliation requests one fresh quota read`() {
         val firstQuota = CompletableDeferred<AssistantLimit>()
         val secondQuota = CompletableDeferred<AssistantLimit>()
-        val explicitQuota = CompletableDeferred<AssistantLimit>()
+        val freshQuota = CompletableDeferred<AssistantLimit>()
         var reads = 0
         api.limitReply = {
             when (++reads) {
                 1 -> firstQuota.await()
                 2 -> secondQuota.await()
-                else -> explicitQuota.await()
+                else -> freshQuota.await()
             }
         }
         val events = kotlinx.coroutines.flow.MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
@@ -2480,15 +2496,15 @@ class ChatViewModelBehaviourTest {
 
         assertTrue(events.tryEmit(done(remaining = 2)))
         secondQuota.complete(limit.copy(remaining = 3))
-        assertEquals(2, reads, "a second stale reply must not trigger a third automatic GET")
+        assertEquals(3, reads, "the terminal invalidates the metadata read and requests one fresh GET")
         assertNull(vm.state.value.limit)
         assertEquals(2, vm.state.value.knownRemaining)
         assertEquals(1, api.asks.size)
 
         vm.refresh()
-        assertEquals(3, reads, "an explicit refresh can request metadata after reconciliation stopped")
+        assertEquals(3, reads, "an explicit refresh cannot duplicate the pending terminal reconciliation")
         assertEquals(2, vm.state.value.knownRemaining)
-        explicitQuota.complete(limit.copy(remaining = 2))
+        freshQuota.complete(limit.copy(remaining = 2))
         assertEquals(2, vm.state.value.limit?.remaining)
         assertEquals(2, vm.state.value.knownRemaining)
         assertFalse(vm.state.value.refreshing)
