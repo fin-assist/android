@@ -157,7 +157,7 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
                     onRetry = ({ vm.refresh() }).takeIf { state.limitRetryReady })
             }
             state.periodChangeErrorPresentation?.takeUnless { state.sourceZoneUnsupported && zonePeriodFailure }?.let { presentation ->
-                ErrorMessage(presentation, "Не удалось изменить параметры аналитики", modifier = Modifier.padding(d.space4),
+                ErrorMessage(presentation, "Не удалось сменить период", modifier = Modifier.padding(d.space4),
                     onRetry = if (state.periodChangeRetryReady) ({ vm.retryPeriodChange() }) else null,
                     retryModifier = Modifier.testTag(AnalyticsTags.PERIOD_RETRY))
             }

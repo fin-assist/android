@@ -332,10 +332,11 @@ class AnalyticsViewModel @Inject constructor(
     override fun retryPeriodChange() {
         val request = failedPeriodRequest ?: return
         if (!periodChangeRetryGate.isReady()) return
+        val typeChanged = request.first != period
         period = request.first
         date = request.second
         transferMode = request.third
-        clearRestriction(periodsChanged = true)
+        clearRestriction(periodsChanged = typeChanged)
         load()
     }
 

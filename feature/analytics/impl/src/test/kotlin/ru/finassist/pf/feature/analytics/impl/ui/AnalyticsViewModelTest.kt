@@ -1497,6 +1497,53 @@ class AnalyticsViewModelTest {
         assertEquals(3, api.requests.size)
     }
 
+    @Test fun `retrying a failed transfer selection preserves a period directory refusal`() {
+        api.answers += data()
+        api.answers += AppError.Server(500)
+        api.answers += data(mode = TransferMode.WITHOUT)
+        val vm = opened()
+        api.periodsFailure = refused()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        api.periodsFailure = null
+        vm.openSheet(AnalyticsSheet.TRANSFERS)
+        vm.setTransferMode(TransferMode.WITHOUT)
+        vm.retryPeriodChange()
+        assertEquals(3, api.requests.size)
+        assertEquals(TransferMode.WITHOUT, vm.currentTransferMode())
+        scheduler.advanceTimeBy(60_000)
+        scheduler.runCurrent()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(1, api.periodRequests.size, "transfer retry cannot lift an independent directory refusal")
+        assertTrue(vm.state.value.periodsFailed)
+        assertFalse(vm.state.value.periodsRetryReady)
+    }
+
+    @Test fun `reselecting failed transfers preserves the original period directory deadline`() {
+        api.answers += data()
+        api.answers += AppError.Server(500)
+        api.answers += data(mode = TransferMode.WITHOUT)
+        val vm = opened()
+        api.periodsFailure = AppError.RateLimited(null, 3, ru.finassist.pf.core.common.error.ErrorResponseInfo(
+            "RATE_LIMITED", 429, requestRetryable = true,
+            timing = ru.finassist.pf.core.common.time.ResponseTiming(receivedElapsedMillis = scheduler.currentTime)))
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        api.periodsFailure = null
+        vm.openSheet(AnalyticsSheet.TRANSFERS)
+        vm.setTransferMode(TransferMode.WITHOUT)
+        vm.setTransferMode(TransferMode.WITHOUT)
+        assertEquals(3, api.requests.size)
+        scheduler.advanceTimeBy(2_999)
+        scheduler.runCurrent()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(1, api.periodRequests.size)
+        assertFalse(vm.state.value.periodsRetryReady)
+        scheduler.advanceTimeBy(1)
+        scheduler.runCurrent()
+        vm.openSheet(AnalyticsSheet.PERIODS)
+        assertEquals(2, api.periodRequests.size, "the original wait expires without being restarted")
+        assertFalse(vm.state.value.periodsFailed)
+    }
+
     @Test fun `a changed date retires a failed transfer target`() {
         api.answers += data()
         api.answers += refused()

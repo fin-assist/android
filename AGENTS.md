@@ -317,7 +317,8 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   A failed period type or key change retains its exact request behind an explicit, separately gated Retry.
   Resume does not replace that notice or submit the target. Repeating the segment, picker/navigation key or
   chart target and failed transfer-mode selection use the same gate; payment action errors keep a separate
-  presentation.
+  presentation. Retrying a key or transfer change preserves the period directory's independent refusal/wait;
+  only a changed period type resets that directory context.
   A changed context retires the failed period request.
   Same/finer request keys remain valid; the mock rejects coarse-to-fine keys with canonical validation errors.
 - Analytics monthly chart points select the exact server-provided month key (FIN-398); the whole column,
