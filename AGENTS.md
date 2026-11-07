@@ -319,6 +319,8 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   chart target and failed transfer-mode selection use the same gate; payment action errors keep a separate
   presentation. Retrying a key or transfer change preserves the period directory's independent refusal/wait;
   only a changed period type resets that directory context.
+  Disabling the transfers filter retires failed non-WITH targets and normalizes queued transfer selections
+  to WITH; compatible period-selection refusals remain intact.
   A changed context retires the failed period request.
   Same/finer request keys remain valid; the mock rejects coarse-to-fine keys with canonical validation errors.
 - Analytics monthly chart points select the exact server-provided month key (FIN-398); the whole column,
@@ -360,7 +362,7 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   A definitive stream refusal reconciles history once and retires pending terminal recovery unless a one-shot
   maintenance correction is armed; resume must not repeatedly reload a confirmed final history answer.
   Recovered terminal metadata belongs to its original quota revision: an old answer must not overwrite quota
-  confirmed by a newer Ask/Retry or LIMIT_EXCEEDED response, or clear/replace a newer stream's error.
+  confirmed by a newer Ask/Retry, LIMIT_EXCEEDED response or accepted quota GET, or clear/replace a newer stream's error.
   A terminal from another revision invalidates an in-flight quota read and requests a coalesced, gated limit
   reconciliation; this also preserves live refunds from concurrently generating answers. Stream recovery
   clears its own error presentation.

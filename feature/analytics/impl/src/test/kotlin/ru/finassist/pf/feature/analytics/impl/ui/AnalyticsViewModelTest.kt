@@ -1544,6 +1544,38 @@ class AnalyticsViewModelTest {
         assertFalse(vm.state.value.periodsFailed)
     }
 
+    @Test fun `disabled transfers retire an incompatible failed selection and reject a stale tap`() {
+        val original = data()
+        api.answers += original
+        api.answers += AppError.Server(500)
+        api.answers += data(mode = TransferMode.WITHOUT)
+        val vm = opened()
+        vm.setTransferMode(TransferMode.WITHOUT)
+        assertTrue(vm.state.value.periodChangeFailed)
+        assertTrue(vm.state.value.periodChangeRetryReady)
+        flags.set(Flag.ANALYTICS_FILTER_TRANSFERS, false)
+        assertFalse(vm.state.value.blocks.transfersFilter)
+        assertFalse(vm.state.value.periodChangeFailed)
+        vm.retryPeriodChange()
+        vm.setTransferMode(TransferMode.WITHOUT)
+        assertEquals(2, api.requests.size, "neither Retry nor a queued hidden-filter tap may resubmit WITHOUT")
+        assertEquals(TransferMode.WITH, vm.currentTransferMode())
+        assertEquals(original, vm.state.value.data)
+    }
+
+    @Test fun `disabled transfers preserve a compatible failed period selection refusal`() {
+        api.answers += data()
+        api.answers += refused()
+        val vm = opened()
+        vm.setPeriodType(PeriodTypeCode.YEAR)
+        val refusal = assertNotNull(vm.state.value.periodChangeErrorPresentation)
+        flags.set(Flag.ANALYTICS_FILTER_TRANSFERS, false)
+        assertEquals(refusal, vm.state.value.periodChangeErrorPresentation)
+        assertFalse(vm.state.value.periodChangeRetryReady)
+        vm.retryPeriodChange()
+        assertEquals(2, api.requests.size, "turning off an unrelated filter cannot lift a period refusal")
+    }
+
     @Test fun `a changed date retires a failed transfer target`() {
         api.answers += data()
         api.answers += refused()

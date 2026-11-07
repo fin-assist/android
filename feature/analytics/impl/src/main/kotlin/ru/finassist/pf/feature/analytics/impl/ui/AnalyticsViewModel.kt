@@ -274,9 +274,12 @@ class AnalyticsViewModel @Inject constructor(
                 _state.update { it.copy(blocks = readBlocks(flags)) }
                 // The transfers filter was switched off remotely: from now on requests use `with` (docs/flags.md).
                 var reload = false
-                if (!_state.value.blocks.transfersFilter && transferMode != TransferMode.WITH) {
-                    transferMode = TransferMode.WITH
-                    reload = true
+                if (!_state.value.blocks.transfersFilter) {
+                    if (failedPeriodRequest?.third?.let { it != TransferMode.WITH } == true) clearPeriodChangeFailure()
+                    if (transferMode != TransferMode.WITH) {
+                        transferMode = TransferMode.WITH
+                        reload = true
+                    }
                 }
                 // A new experiment variant: the server composes the screen anew (FIN-9).
                 if (shownExperiments != null && shownExperiments != experiments) {
@@ -622,14 +625,15 @@ class AnalyticsViewModel @Inject constructor(
 
     override fun setTransferMode(mode: TransferMode) {
         _state.update { it.copy(sheet = null) }
-        if (failedPeriodRequest == Triple(period, date, mode)) {
+        val target = allowedMode(mode)
+        if (failedPeriodRequest == Triple(period, date, target)) {
             retryPeriodChange()
             return
         }
-        if (mode == transferMode) return
+        if (target == transferMode) return
         clearRestriction()
-        transferMode = mode
-        tracker.track(Events.ANALYTICS_TRANSFERS_CHANGED, mapOf("mode" to mode.code))
+        transferMode = target
+        tracker.track(Events.ANALYTICS_TRANSFERS_CHANGED, mapOf("mode" to target.code))
         load()
     }
 
