@@ -1359,6 +1359,146 @@ class ChatViewModelBehaviourTest {
 
     // ---- the answer stream ----
 
+    @Test fun `a concurrent live answer refund reconciles quota after another answer retry completes`() =
+        reconcileConcurrentRefund(holdQuotaRead = false)
+
+    @Test fun `a concurrent live answer refund queues one reconciliation after an older quota read`() =
+        reconcileConcurrentRefund(holdQuotaRead = true)
+
+    @Test fun `concurrent live refunds coalesce into one reconciliation after an older quota read`() =
+        reconcileConcurrentRefund(holdQuotaRead = true, extraRefund = true)
+
+    @Test fun `a concurrent live refund reconciles after the older quota read fails`() =
+        reconcileConcurrentRefund(holdQuotaRead = true, quotaFailure = AppError.Offline())
+
+    @Test fun `a queued live refund reconciliation respects the older quota read endpoint wait`() =
+        reconcileConcurrentRefund(holdQuotaRead = true, quotaFailure = askRefusal(retryable = true), waitForQuotaRetry = true)
+
+    private fun reconcileConcurrentRefund(holdQuotaRead: Boolean, extraRefund: Boolean = false,
+        quotaFailure: AppError? = null, waitForQuotaRetry: Boolean = false) {
+        api.pages[null] = MessagesList(listOf(question("q-live"), answer("live", AnswerStatus.GENERATING),
+            question("q-failed"), answer("failed", AnswerStatus.FAILED, AnswerErrorCode.MODEL_ERROR, retryable = true)), hasOlder = false)
+        val live = MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
+        api.script("live", live)
+        val other = MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
+        if (extraRefund) {
+            api.pages[null] = api.pages.getValue(null).copy(messages = api.pages.getValue(null).messages + answer("other", AnswerStatus.GENERATING))
+            api.script("other", other)
+        }
+        val vm = newVm()
+        api.limitResult = limit.copy(remaining = 0)
+        api.retryOutcomes += RetryResponse("replacement", remainingLimit = 0)
+        api.script("replacement", events(done(remaining = 0)))
+        vm.retry("failed")
+        assertEquals(AnswerStatus.GENERATING, vm.answerItem("live").status)
+        assertEquals(AnswerStatus.COMPLETE, vm.answerItem("replacement").status)
+        assertTrue(vm.state.value.limitExhausted)
+        var quotaReads = 0
+        val oldQuota = CompletableDeferred<AssistantLimit>()
+        val refunded = if (extraRefund) 2 else 1
+        api.limitReply = {
+            if (++quotaReads == 1 && holdQuotaRead) oldQuota.await() else limit.copy(remaining = refunded)
+        }
+        if (holdQuotaRead) {
+            api.pages[null] = MessagesList(listOf(question("q-live"), answer("live", AnswerStatus.GENERATING),
+                question("q-failed"), answer("replacement")) +
+                if (extraRefund) listOf(answer("other", AnswerStatus.GENERATING)) else emptyList(), hasOlder = false)
+            vm.refresh()
+            assertEquals(1, quotaReads)
+        }
+        live.tryEmit(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "live error", 1,
+            text = "Ошибка текущего ответа", retryable = true)))
+        if (extraRefund) other.tryEmit(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "other error", 2,
+            text = "Ещё одна ошибка", retryable = true)))
+        if (holdQuotaRead) {
+            assertEquals(1, quotaReads, "the existing GET stays single-flight")
+            if (quotaFailure == null) oldQuota.complete(limit.copy(remaining = 0)) else oldQuota.completeExceptionally(quotaFailure)
+            if (waitForQuotaRetry) {
+                assertEquals(1, quotaReads, "terminal reconciliation cannot bypass a captured endpoint wait")
+                assertEquals(0, vm.state.value.knownRemaining)
+                api.pages[null] = MessagesList(listOf(question("q-live"), answer("live", AnswerStatus.FAILED,
+                    errorText = "Ошибка текущего ответа", retryable = true), question("q-failed"), answer("replacement")), hasOlder = false)
+                advance(2_999)
+                vm.refresh()
+                assertEquals(1, quotaReads)
+                advance(1)
+                vm.refresh()
+            }
+        }
+        assertEquals(if (holdQuotaRead) 2 else 1, quotaReads, "a concurrent terminal reconciles quota with one fresh authoritative GET")
+        assertEquals(refunded, vm.state.value.knownRemaining)
+        assertEquals(refunded, vm.state.value.limit?.remaining)
+        assertFalse(vm.state.value.limitExhausted)
+        assertEquals(AnswerStatus.FAILED, vm.answerItem("live").status)
+        assertEquals("Ошибка текущего ответа", vm.answerItem("live").errorText)
+        assertEquals(listOf("failed"), api.retries.map { it.second })
+        assertTrue(api.asks.isEmpty())
+    }
+
+    @Test fun `a concurrent live stream refusal remains visible after another answer retry completes`() {
+        api.pages[null] = MessagesList(listOf(question("q-live"), answer("live", AnswerStatus.GENERATING),
+            question("q-failed"), answer("failed", AnswerStatus.FAILED, AnswerErrorCode.MODEL_ERROR, retryable = true)), hasOlder = false)
+        val refusal = CompletableDeferred<Unit>()
+        val presentation = ErrorPresentation(UserMessage.from("Поток текущего ответа недоступен"), ErrorSeverity.WARNING)
+        api.script("live", flow {
+            refusal.await()
+            throw AppError.Api("LIVE_STREAM_REFUSED", 429,
+                response = ErrorResponseInfo("LIVE_STREAM_REFUSED", 429, presentation = presentation, requestRetryable = false))
+        })
+        val vm = newVm()
+        api.limitResult = limit.copy(remaining = 0)
+        api.retryOutcomes += RetryResponse("replacement", remainingLimit = 0)
+        api.script("replacement", events(done(remaining = 0)))
+        vm.retry("failed")
+        api.pages[null] = MessagesList(listOf(question("q-live"), answer("live", AnswerStatus.GENERATING),
+            question("q-failed"), answer("replacement")), hasOlder = false)
+        val readsBefore = api.listCalls.size
+        refusal.complete(Unit)
+        assertEquals(readsBefore + 1, api.listCalls.size)
+        assertEquals(AnswerStatus.GENERATING, vm.answerItem("live").status)
+        assertEquals(presentation, vm.state.value.streamErrorPresentation)
+        assertEquals(false, vm.state.value.streamRetryable)
+        assertEquals(0, vm.state.value.knownRemaining)
+        assertEquals(listOf("failed"), api.retries.map { it.second })
+        assertTrue(api.asks.isEmpty())
+    }
+
+    @Test fun `a recovered concurrent live answer clears its own maintenance refusal`() {
+        api.pages[null] = MessagesList(listOf(question("q-live"), answer("live", AnswerStatus.GENERATING),
+            question("q-failed"), answer("failed", AnswerStatus.FAILED, AnswerErrorCode.MODEL_ERROR, retryable = true)), hasOlder = false)
+        val refusal = CompletableDeferred<Unit>()
+        val presentation = ErrorPresentation(UserMessage.from("Технические работы"))
+        api.script("live", flow {
+            refusal.await()
+            throw AppError.Maintenance(null, 15, ErrorResponseInfo("MAINTENANCE", 503, presentation = presentation,
+                requestRetryable = false, timing = ResponseTiming(receivedElapsedMillis = dispatcher.scheduler.currentTime)))
+        }, events(AnswerEvent.Snapshot(AnswerSnapshotEvent(AnswerStatus.FAILED, emptyList(), emptyList())),
+            AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "live error", 1, text = "Можно повторить", retryable = true))))
+        val vm = newVm()
+        api.limitResult = limit.copy(remaining = 0)
+        api.retryOutcomes += RetryResponse("replacement", remainingLimit = 0)
+        api.script("replacement", events(done(remaining = 0)))
+        vm.retry("failed")
+        api.pages[null] = MessagesList(listOf(question("q-live"), answer("live", AnswerStatus.GENERATING),
+            question("q-failed"), answer("replacement")), hasOlder = false)
+        refusal.complete(Unit)
+        assertEquals(presentation, vm.state.value.streamErrorPresentation)
+        assertEquals(false, vm.state.value.streamRetryable)
+        api.limitResult = limit.copy(remaining = 1)
+        vm.pauseStreams()
+        vm.resumeStreams()
+        advance(14_999)
+        assertEquals(1, api.streamOpens.count { it == "live" })
+        advance(1)
+        assertEquals(2, api.streamOpens.count { it == "live" })
+        assertEquals("Можно повторить", vm.answerItem("live").errorText)
+        assertEquals(1, vm.state.value.knownRemaining)
+        assertNull(vm.state.value.streamErrorPresentation, "a recovered stream clears its own transport refusal")
+        assertNull(vm.state.value.streamRetryable)
+        assertEquals(listOf("failed"), api.retries.map { it.second })
+        assertTrue(api.asks.isEmpty())
+    }
+
     @Test fun `a stale recovered Done keeps the quota of a newer accepted Ask`() =
         recoverOlderTerminalAfterCommand(retry = false, failed = false, resume = false)
 
@@ -1444,6 +1584,7 @@ class ChatViewModelBehaviourTest {
             text = "Восстановленная ошибка", retryable = true)) else done(remaining = 1)
         api.script("old", events(snapshot), events(snapshot, terminal))
         val vm = newVm()
+        api.limitResult = limit.copy(remaining = 0)
         val refusal = AppError.Api(ErrorCodes.LIMIT_EXCEEDED, 429,
             response = ErrorResponseInfo(ErrorCodes.LIMIT_EXCEEDED, 429, requestRetryable = false))
         if (retry) {
@@ -1480,6 +1621,7 @@ class ChatViewModelBehaviourTest {
             text = "Восстановленная ошибка", retryable = true)) else done(remaining = 1)
         api.script("old", events(snapshot), events(snapshot, terminal))
         val vm = newVm()
+        api.limitResult = limit.copy(remaining = 0)
         val newer = MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
         api.script("new", newer)
         if (retry) {
@@ -1503,6 +1645,7 @@ class ChatViewModelBehaviourTest {
         if (failed) {
             assertEquals("Восстановленная ошибка", vm.answerItem("old").errorText)
             assertTrue(vm.answerItem("old").retryable, "answer metadata still belongs to that answer")
+            api.limitResult = limit.copy(remaining = 1)
             newer.tryEmit(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "new error", 1,
                 text = "Новая ошибка", retryable = true)))
             assertEquals(1, vm.state.value.knownRemaining, "the current answer can legitimately refund a question")

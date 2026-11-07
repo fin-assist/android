@@ -156,6 +156,7 @@ class ChatViewModel @Inject constructor(
     private val reopenStates = HashMap<String, SseReopenState>()
 
     private val streams = HashMap<String, Job>()
+    private var streamErrorAnswerId: String? = null
     /** An unfinished stream keeps its quota revision across snapshots, drops and pauses. */
     private val pendingTerminals = HashMap<String, Long>()
     private var wasPresented = false
@@ -163,6 +164,7 @@ class ChatViewModel @Inject constructor(
     private var historyReadRevision = 0L
     private var historyReadPending = false
     private var limitReadPending = false
+    private var limitReconciliationPending = false
     private var limitRevision = 0L
     /** A successful RetryAnswer invalidates snapshots begun before its in-place replacement. */
     private var replacementRevision = 0L
@@ -338,6 +340,7 @@ class ChatViewModel @Inject constructor(
     private suspend fun refreshLimit(reportOffline: Boolean = false, reconcileUnknown: Boolean = true) {
         if (limitReadPending || !limitRetryGate.isReady()) return
         limitReadPending = true
+        limitReconciliationPending = false
         val revision = limitRevision
         var needsMetadata = false
         try {
@@ -350,16 +353,18 @@ class ChatViewModel @Inject constructor(
         } catch (failure: AppError) {
             if (revision != limitRevision) {
                 limitRetryGate.recordEndpointWait(failure)
-                return
+            } else {
+                limitRetryGate.record(failure)
+                if (reportOffline || failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
             }
-            limitRetryGate.record(failure)
-            if (reportOffline || failure !is AppError.Offline) _state.update { it.copy(limitErrorPresentation = failure.presentation) }
         } finally {
             limitReadPending = false
         }
         // An accepted Ask/SSE may arrive before the first quota metadata. Keep its remainder immediately,
         // then obtain metadata with at most one new read; a second stale read waits for a later user refresh.
-        if (needsMetadata && reconcileUnknown) refreshLimit(reportOffline, reconcileUnknown = false)
+        // A terminal arriving during this GET invalidates it and requests one fresh read. Multiple
+        // terminals coalesce; another follow-up needs a new terminal, never just a failed/stale reply.
+        if (limitReconciliationPending || needsMetadata && reconcileUnknown) refreshLimit(reportOffline, reconcileUnknown = false)
     }
 
     /** A saved tab keeps its draft; re-reading on later visits updates history and changed-since markers. */
@@ -675,16 +680,22 @@ class ChatViewModel @Inject constructor(
                         recoverOnceAfter = { error -> ServiceGate.recoveryDeadline(error, elapsedClock)?.also { recoveryArmed = true } }) {
                         api.streamAnswer(answerId)
                     }.collect { event -> applyEvent(answerId, event)?.let { completedQuotaRevision = it } }
-                    if (completedQuotaRevision == limitRevision) {
+                    if (streamErrorAnswerId == answerId || streamErrorAnswerId == null && completedQuotaRevision == limitRevision) {
+                        streamErrorAnswerId = null
                         _state.update { it.copy(offline = false, streamErrorPresentation = null, streamRetryable = null) }
                     }
                 } catch (e: AppError) {
-                    val ownsStreamError = pendingTerminals[answerId] == limitRevision
+                    // A live answer can outlast another answer's Retry. Its definitive refusal is current;
+                    // obsolete final-status metadata recovery must not replace a newer stream's error.
+                    val ownsStreamError = pendingTerminals[answerId] == limitRevision || _state.value.items.any {
+                        it is ChatItem.Answer && it.id == answerId && it.status == AnswerStatus.GENERATING
+                    }
                     // A definitive transport stop falls back to history once. Only an armed correction may
                     // retain terminal-metadata recovery; otherwise every resume would reload that history again.
                     if (!recoveryArmed) pendingTerminals.remove(answerId)
                     // Keep the read/open error separate from a failed answer and its new-attempt permission.
                     if (ownsStreamError) {
+                        streamErrorAnswerId = answerId
                         _state.update { it.copy(streamErrorPresentation = e.presentation.takeUnless { e is AppError.Offline }, streamRetryable = e.requestRetryable) }
                     }
                     // Not a drop (404 and the like): the stream will not recover by itself.
@@ -707,8 +718,9 @@ class ChatViewModel @Inject constructor(
     private fun applyEvent(answerId: String, event: AnswerEvent): Long? {
         // Terminal metadata belongs to its answer, but a replay cannot replace newer quota knowledge
         // (an accepted command or LIMIT_EXCEEDED). Preserve the original revision across stream resumes.
-        val updateQuota = isTerminal(event) && pendingTerminals.remove(answerId) == limitRevision
-        val updatedQuotaRevision = if (updateQuota) ++limitRevision else null
+        val terminal = isTerminal(event)
+        val updateQuota = terminal && pendingTerminals.remove(answerId) == limitRevision
+        val updatedQuotaRevision = if (terminal) ++limitRevision else null
         updateHistoryState { s ->
         val items = s.items.map { item ->
             if (item !is ChatItem.Answer || item.id != answerId) return@map item
@@ -740,7 +752,13 @@ class ChatViewModel @Inject constructor(
             else -> s.knownRemaining
         } else s.knownRemaining)
         }
-        return updatedQuotaRevision
+        if (terminal && !updateQuota) {
+            // Concurrent live answers may refund quota, while reopened finals may replay old quota.
+            // Only a fresh server read can distinguish them; do not apply this terminal's remainder.
+            limitReconciliationPending = true
+            viewModelScope.launch { refreshLimit() }
+        }
+        return updatedQuotaRevision.takeIf { updateQuota }
     }
 
     private fun toItem(m: Message): ChatItem? = when (m.role) {
