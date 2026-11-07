@@ -99,7 +99,12 @@ Runtime runner того же source вызывается с явными дан�
 Сначала source-коммит проходит ревью и merge с сохранением его identity; squash/rebase требует
 repin итогового SHA и нового CI/review. Перенос не меняет credentials, protections или activation.
 
-FIN-456: правила обновления shared source находятся также в активном `renovate.json`: manifest, action refs и `source-revision` обновляются одной группой даже при выключенном write-контроллере, когда baseline из `renovate-policy` ещё не синхронизирован. Остальные baseline-правила сохраняются.
+FIN-456: активный `renovate.json` содержит новые managers для source inputs; action refs
+извлекает штатный `github-actions` manager. Прежние FIN-372 managers manifest/`ci.yml` и
+группировки сохраняют исходное расположение. Там, где они приходят из `base#renovate-policy`,
+совместное обновление зависит от уже опубликованного baseline с этими правилами: новый
+root-manager сам не обновляет `base.json` и не заменяет недостающие preset rules.
+Добавленные в специализированные проекты root manifest/group rules работают непосредственно из root.
 
 ## Active source-pin managers (FIN-456)
 
@@ -110,3 +115,20 @@ source manifest специализированных проектов извле
 на своих исходных местах. `renovate-base.json` побайтно сохраняет содержимое до миграции;
 старые правила не дублируются в root при объединении preset-массивов. Generated presets,
 receipts, state и флаг активации этим исправлением не меняются.
+
+## Пауза и проверка активации (FIN-456)
+
+Флаг `RENOVATE_POLICY_ENABLED` задаётся на уровне repository (либо organization),
+а не Environment. Permissionless gate читает только repo/org значение до входа
+в Environment `renovate-policy`; одноимённая Environment-переменная этим gate
+не поддерживается и не служит стоп-краном. Для паузы меняют именно repo/org флаг.
+
+По сравнению с прежним sync-only режимом выключенного lifecycle синхронизация теперь
+полностью остановлена. Изменение `renovate-base.json` или появление новой release-ветки
+при паузе не обновляет опубликованные baseline/target и не вызывает ошибки guards/token.
+Перед активацией владелец отдельно проверяет фактически опубликованные presets, исходную
+группировку, credential scope и защиты. Явный `--bootstrap` требует credential и создаёт
+только отсутствующую config-only ветку; существующие presets не перезаписывает и automation
+не включает. Если baseline/target изменились во время паузы, их актуализация требует
+отдельного контролируемого действия владельца либо следующего включённого reconciliation;
+выключенный прогон это действие не заменяет. Включение допускает sync и lifecycle вместе.
