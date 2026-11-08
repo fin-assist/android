@@ -1742,4 +1742,6 @@ reuse `reveal_text_up.yaml` with the exact title inside `analytics.regular_payme
 original title assertion and reject an active refresh indicator. The final explicit PUT separately
 reveals its action after the title check. All original commands, waits, financial observations and
 exact dismiss request guards1/2 remain in order; runtime, mapping, fixtures and process budgets do not change.
+The first focused run also exposed the earlier centered upward scroll opening Search from a payment row.
+That reveal now uses the existing bounded `reveal_tag_up.yaml` gutter gesture and its Analytics screen guards.
 Focused execution evidence is recorded in FIN-478 and its PR; the original failed attempt remains in history.

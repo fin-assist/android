@@ -50,10 +50,10 @@ tags:
       - assertNotVisible: "РБК"
 # UI interactions can consume the ten-response poll budget. Observe its bounded pause explicitly;
 # a ready GET is still forbidden, and the PUT block must remain applied throughout.
-- scrollUntilVisible:
-    element:
-      id: "analytics.recalculating"
-    direction: UP
+- runFlow:
+    file: ../../subflows/reveal_tag_up.yaml
+    env:
+      TARGET_ID: "analytics.recalculating"
 - extendedWaitUntil:
     visible: "Не удалось обновить показатели\\. Показаны данные до изменений"
     timeout: 40000
