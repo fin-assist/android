@@ -11,6 +11,11 @@ appId: ru.finassist.pf.mock.e2e
     visible:
       id: "e2e.config.applied"
     timeout: 100000
+- extendedWaitUntil:
+    visible:
+      id: "e2e.config.continue"
+      enabled: true
+    timeout: 100000
 - tapOn:
     id: "e2e.config.continue"
     enabled: true
