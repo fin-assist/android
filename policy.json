@@ -988,7 +988,7 @@
       "dependencyDashboardApproval": true,
       "recreateWhen": "never",
       "groupName": null,
-      "additionalBranchPrefix": "fin211-retry-300-",
+      "additionalBranchPrefix": "fin211-retry-301-",
       "matchNewValue": "/^1\\.78\\.0$/",
       "matchJsonata": [
         "$not($exists(newDigest)) or newDigest = null"
