@@ -468,7 +468,8 @@ while True: time.sleep(0.02)
         try:
             with self.assertRaises(subprocess.TimeoutExpired):
                 cache.run_tests('3/4', timeout=1, grace=0.2)
-            self.assertLess(time.monotonic() - started, 4)
+            # Include the 5 s post-KILL barrier as well as the 1 s timeout and TERM grace.
+            self.assertLess(time.monotonic() - started, 8)
             self.assertFalse(Path('build/e2e/maestro').exists())
             with tarfile.open('build/e2e/maestro-output.tgz') as stream:
                 self.assertIn('maestro/forgot?/commands.json', stream.getnames())
@@ -518,7 +519,7 @@ while True: time.sleep(0.02)
                 time.sleep(0.01)
             self.assertTrue(Path('parent.pid').exists())
             os.kill(process.pid, signal.SIGTERM)
-            self.assertEqual(143, process.wait(timeout=3))
+            self.assertEqual(143, process.wait(timeout=8))
             self.assertFalse(Path('build/e2e/maestro').exists())
             with tarfile.open('build/e2e/maestro-output.tgz') as stream:
                 self.assertEqual(b'interrupted command', stream.extractfile('maestro/name?/commands.json').read())
