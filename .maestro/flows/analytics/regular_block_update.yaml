@@ -130,8 +130,16 @@ tags:
 - extendedWaitUntil:
     visible: "(?s)Не получилось убрать.*"
     timeout: 10000
+# Error notices can clip the retained title while its lower action is already fully visible.
 - scrollUntilVisible:
     element: "Не подписка — РБК"
+- runFlow:
+    file: ../../subflows/reveal_text_up.yaml
+    env:
+      TARGET_TEXT: "РБК"
+      PARENT_ID: "analytics.regular_payments.item"
+- assertNotVisible:
+    id: "ds.refresh.indicator"
 - assertVisible: "РБК"
 - runFlow:
     file: ../../subflows/config.yaml
@@ -146,12 +154,21 @@ tags:
     end: "50%, 65%"
 - scrollUntilVisible:
     element: "Не подписка — РБК"
+- runFlow:
+    file: ../../subflows/reveal_text_up.yaml
+    env:
+      TARGET_TEXT: "РБК"
+      PARENT_ID: "analytics.regular_payments.item"
+- assertNotVisible:
+    id: "ds.refresh.indicator"
 - assertVisible: "РБК"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?expect_analytics_dismiss_requests=1"
 # A fresh successful PUT, not a GET, settles the unknown result.
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
 - tapOn: "Не подписка — РБК"
 - extendedWaitUntil:
     notVisible: "Не подписка — РБК"
