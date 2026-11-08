@@ -1,6 +1,7 @@
 package ru.finassist.pf.feature.analytics.impl.ui
 
 import android.app.Application
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,9 @@ import ru.finassist.pf.core.common.time.DateRange
 import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.common.time.ReportZone
+import ru.finassist.pf.core.blocks.BlockContext
+import ru.finassist.pf.core.blocks.BlockTags
+import ru.finassist.pf.core.blocks.CatalogV1
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import ru.finassist.pf.core.toggles.Experiment
 import ru.finassist.pf.core.toggles.FeatureFlags
@@ -64,7 +68,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Qase82/83/89 companions: real screen and ViewModel, explicit replies and virtual polling time. */
+/**
+ * Qase82/89 connect the real screen to its ViewModel; Qase83 combines VM paging and a catalog chart component.
+ * Explicit replies and virtual polling time keep these obligations independent from emulator gesture timing.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h900dp-mdpi")
@@ -173,14 +180,18 @@ class AnalyticsReliabilityComponentTest {
         api.read = { _, key, _ -> history(key?.value ?: "2026-10") }
         api.pageRead = { cursor -> AnalyticsChartPage(historyBlock(cursor.removePrefix("page:").toInt()), ZONE) }
         val vm = opened(api)
+        val observedMonths = chart(vm).points.map(::month).toMutableSet()
         for (index in 1..5) {
             vm.loadChartPage(older = true)
             scheduler.runCurrent()
             assertNull(vm.state.value.chartError, "page $index must be accepted before the next edge request")
             assertEquals("page:$index", api.cursors.last())
             assertTrue(chart(vm).points.size <= 180, "only three neighbouring pages may remain")
+            observedMonths += chart(vm).points.map(::month)
             assertEquals(PeriodKey("2026-10"), vm.state.value.data?.params?.date, "paging cannot select a month")
         }
+        assertEquals((0 until 322).map { YearMonth.of(2000, 1).plusMonths(it.toLong()).toString() }.toSet(), observedMonths,
+            "every calendar month from January 2000 through October 2026 must be reachable, without gaps")
         assertEquals("2000-01", month(chart(vm).points.first()))
         assertEquals(0.0, chart(vm).points.first().value, "the earliest covered zero must be retained")
         vm.onAction(Block(id = "monthly_chart", type = BlockType.CHART), selection("2000-01")) { error("chart selection stays in Analytics") }
@@ -198,11 +209,26 @@ class AnalyticsReliabilityComponentTest {
         }
         assertNull(chart(vm).highlightIndex, "eviction hides the point without changing the selected period")
         assertEquals("2026-10", month(chart(vm).points.last()))
-        render { vm }
-        compose.onNodeWithText("Январь 2000").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag("analytics.expense.monthly.point.2026-10").performScrollTo().assertIsDisplayed().performClick()
-        compose.onNodeWithTag("analytics.expense.monthly.point.2026-10").assertIsSelected()
-        compose.onNodeWithText("Октябрь 2026").performScrollTo().assertIsDisplayed()
+        // Paging is checked above; this component boundary tests the catalog's actual selection capability.
+        // The Maestro companion retains the real virtualized pager, gestures and period header.
+        compose.setContent {
+            val state by vm.state.collectAsState()
+            val block = assertNotNull(state.chartBlock)
+            PfTheme {
+                Column {
+                    assertNotNull(CatalogV1.registry().prepare(block)).draw(BlockContext(
+                        "RUB", object : BlockTags("pilot") { override fun chart(blockId: String) = "pilot.history" },
+                        onAction = { _, _ -> error("period selection uses its narrow capability") },
+                        sourceZone = ZoneId.of(ZONE),
+                        onSelectAnalyticsPeriod = { source, action ->
+                            vm.onAction(source, action) { error("chart selection stays in Analytics") }
+                        },
+                    ))
+                }
+            }
+        }
+        compose.onNodeWithTag("pilot.history.point.2026-10").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithTag("pilot.history.point.2026-10").assertIsSelected()
         compose.runOnIdle {
             assertEquals(PeriodKey("2026-10"), vm.state.value.data?.params?.date)
             assertEquals(0, api.writes)
@@ -272,7 +298,10 @@ class AnalyticsReliabilityComponentTest {
         compose.onNodeWithTag("ds.segment.0").assertIsOn()
         compose.onNodeWithTag("ds.refresh.indicator").assertDoesNotExist()
         val deferredYear = CompletableDeferred<Analytics>()
-        compose.runOnIdle { api.read = { _, _, _ -> deferredYear.await() } }
+        compose.runOnIdle {
+            var replies = 0
+            api.read = { _, _, _ -> if (replies++ == 0) year else deferredYear.await() }
+        }
         compose.onNodeWithTag("ds.segment.2").performClick()
         compose.onNodeWithTag("analytics.unknown_read_recovery").assertIsDisplayed().performClick()
         compose.onNodeWithTag("analytics.updating").assertIsDisplayed()

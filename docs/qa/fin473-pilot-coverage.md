@@ -11,11 +11,15 @@
 в артефакт `e2e-components` для общего UI/Qase verdict. Результат JVM не является
 результатом исполнения Maestro и наоборот.
 
-Компонентные тесты рисуют настоящий `AnalyticsContent`, подключённый к настоящему
-`AnalyticsViewModel`. API — управляемый fake объявленного интерфейса; задержанные ответы
+Компоненты Q82/89 рисуют настоящий `AnalyticsContent`, подключённый к настоящему
+`AnalyticsViewModel`; Q83 проверяет VM paging и изолированный настоящий catalog chart renderer,
+чей callback выполняет выбор через тот же VM. API — управляемый fake объявленного интерфейса; задержанные ответы
 удерживаются `CompletableDeferred`, polling и `ElapsedClock` используют один
 `TestCoroutineScheduler`. Не используется Android control Activity или реальные sleeps.
 State injection не выдаётся за проверку ViewModel: переходы выполняет реальный ViewModel.
+JVM использует версионированный September golden-response (в нём действие «Не подписка — Спортзал»),
+а сквозной mock-ledger сохраняет РБК и исходные request guards. Это разные синтетические данные,
+не замена требуемых финансовых значений; удержание JVM-снимка проверяется равенством полного ответа.
 
 ## Qase82: готовый снимок во время пересчёта
 
@@ -42,11 +46,16 @@ Mapped JVM method: `qase82RetainedSnapshotsAndRefusedMutation`.
 | Covered zero выбирается и меняет period header | Реальное нажатие 2021-10 → «Октябрь 2021» | Выбор exact 2000-01 через реальный VM action, selected index0 |
 | Обратная загрузка возвращает свежие месяцы после eviction | Реальные обратные жесты до2026-10 | Точные cursors вытесненных страниц2/1/0 (5/4/3 ещё resident); максимум180; selected Jan2000/notes сохраняются, исчезнувший point не становится другим выбранным |
 | Прокрутка не выбирает новый месяц | Header2021-10 сохраняется до нового tap | На каждом page response params остаются2000-01; после eviction highlight отсутствует |
-| Повторный выбор October2026 связан с настоящим renderer/action | Maestro tap, checked:true и header «Октябрь 2026» | Реальный Compose point click → VM GET → selected point и header |
+| Повторный выбор October2026 связан с настоящим renderer/action | Maestro tap, checked:true и header «Октябрь 2026» | Реальный catalog Compose point click → VM GET → selected point и exact params; header остаётся UI oracle Maestro |
 
 Mapped JVM method: `qase83HistoryPagingAndSelection`.
 Исчерпывающий обход страниц проверяет состояние и API, а не утверждает, что JVM выполнила
 322 пользовательских жеста. Сквозной компонент сохраняет настоящий gesture→paging→selection путь.
+Отдельный существующий `mock/backend/.../AnalyticsRevisionContractTest` проверяет настоящего
+mock-производителя: embedded first page, opaque cursor chain по истории2000–сентябрь2026
+и полную обратную цепочку:321месяц, без дублей, точное равенство исходной последовательности.
+Fake API UI-companion не выдаётся за проверку этого производителя. Изолированный renderer JVM
+не выдаётся за Android gesture/paged-layout: этот путь остаётся обязательным Maestro-компонентом.
 
 ## Qase89: неизвестный результат изменения
 
@@ -55,14 +64,14 @@ Mapped JVM method: `qase83HistoryPagingAndSelection`.
 | Terminal PUT error и явное чтение не объявляют успех | Сохранены серверное сообщение, warning, recovery tap, платёж и отсутствие success | Дополнительно warning после каждого held-recovery состояния |
 | GET той же версии не снимает запрет исходного PUT | Сохранены повторный tap и exact1 request guards | Не подменяет сквозную проверку отказа |
 | Ранее не открытый Year без cache имеет recovery вне content | Перенесена отдельная cold-reset ветка | Реальный offline mutation; Year selection; видим recovery; held GET показывает updating без empty/upload; Year появляется только после reply |
-| Удаление источника не подтверждает команду; empty только после GET | Отдельная ветка перенесена; producer UI удаления сохранён в Q83 и других history flows | Настоящий StatementsEvent.UploadDeleted; recovery виден до финансового content; held empty GET показывает preparing, затем empty; warning сохранён |
+| Удаление источника не подтверждает команду; empty только после GET | Сохранена вся отдельная UI-ветка, включая удаление через Историю, exact1 delete/0 uploads и1 PUT | Настоящий StatementsEvent.UploadDeleted; recovery виден до финансового content; held empty GET показывает preparing, затем empty; warning сохранён |
 | Year выбран во время PUT, неизвестный ответ возвращает Month без скрытого GET | Сохранена вся исходная отложенная-selection ветка | PUT удерживается; VM откладывает Year без GET; unknown completion сохраняет September; Month и отсутствие refresh проверены UI |
 | Второй Year tap и явное чтение действительно работают | Сохранены второй tap, recovery, Year header, warning и exact1 guards | Реальный UI второй tap + held GET; Year только после ответа, no extra PUT |
 
 Mapped JVM method: `qase89UnknownReadRecoveryAndDeferredSelection`. В трёх независимых
 компонентных фазах суммарно ровно3 PUT: по одному на сценарий, recovery не добавляет PUT.
-JVM `UploadDeleted` проверяет подписчика события, но не UI производителя; этот путь остаётся
-сквозным в Qase83 и тестах истории/удаления. Сетевой транспорт и сервер не проверяются fake API.
+JVM `UploadDeleted` проверяет подписчика события, но не UI производителя; поэтому исходная
+ветка удаления Qase89 сохранена сквозной вместе с exact request guards. Сетевой транспорт и сервер не проверяются fake API.
 
 ## Проверка исполнения
 
