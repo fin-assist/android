@@ -1738,8 +1738,9 @@ and the pending post-merge verification are recorded in FIN-473 and the PR, not 
 In run42525145892 on6a446179, Qase81's offline PUT produced the required error and retained RBC action,
 but the action's visibility did not establish that the title above it was visible. The scroll returned
 without moving while the title was clipped above the financial body. The two retained-RBC checks now
-reuse `reveal_text_up.yaml` with the exact title inside `analytics.regular_payments.item`, then keep the
-original title assertion and reject an active refresh indicator. The final explicit PUT separately
+use at most three short gutter swipes, guarded by `analytics.screen`, then require the exact title
+inside `analytics.regular_payments.item`, keep the original title assertion and reject an active refresh indicator.
+These two reveals do not use a centered `scrollUntilVisible` gesture. The final explicit PUT separately
 reveals its action after the title check. All original assertions, waits, financial observations and
 exact dismiss request guards1/2 remain in order; runtime, mapping, fixtures and process budgets do not change.
 The first focused run also exposed the earlier centered upward scroll opening Search from a payment row.

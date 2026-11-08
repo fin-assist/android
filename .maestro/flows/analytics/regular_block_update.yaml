@@ -133,11 +133,29 @@ tags:
 # Error notices can clip the retained title while its lower action is already fully visible.
 - scrollUntilVisible:
     element: "Не подписка — РБК"
-- runFlow:
-    file: ../../subflows/reveal_text_up.yaml
-    env:
-      TARGET_TEXT: "РБК"
-      PARENT_ID: "analytics.regular_payments.item"
+# Reveal via the non-clickable gutter; never swipe from a payment row's center.
+- repeat:
+    times: 3
+    while:
+      notVisible:
+        text: "РБК"
+        childOf:
+          id: "analytics.regular_payments.item"
+    commands:
+      - assertVisible:
+          id: "analytics.screen"
+      - swipe:
+          start: "3%, 45%"
+          end: "3%, 55%"
+          duration: 300
+      - assertVisible:
+          id: "analytics.screen"
+- assertVisible:
+    id: "analytics.screen"
+- assertVisible:
+    text: "РБК"
+    childOf:
+      id: "analytics.regular_payments.item"
 - assertNotVisible:
     id: "ds.refresh.indicator"
 - assertVisible: "РБК"
@@ -154,11 +172,29 @@ tags:
     end: "50%, 65%"
 - scrollUntilVisible:
     element: "Не подписка — РБК"
-- runFlow:
-    file: ../../subflows/reveal_text_up.yaml
-    env:
-      TARGET_TEXT: "РБК"
-      PARENT_ID: "analytics.regular_payments.item"
+# Reveal via the non-clickable gutter; never swipe from a payment row's center.
+- repeat:
+    times: 3
+    while:
+      notVisible:
+        text: "РБК"
+        childOf:
+          id: "analytics.regular_payments.item"
+    commands:
+      - assertVisible:
+          id: "analytics.screen"
+      - swipe:
+          start: "3%, 45%"
+          end: "3%, 55%"
+          duration: 300
+      - assertVisible:
+          id: "analytics.screen"
+- assertVisible:
+    id: "analytics.screen"
+- assertVisible:
+    text: "РБК"
+    childOf:
+      id: "analytics.regular_payments.item"
 - assertNotVisible:
     id: "ds.refresh.indicator"
 - assertVisible: "РБК"
