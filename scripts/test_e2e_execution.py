@@ -55,6 +55,22 @@ class ExecutionEvidenceTest(unittest.TestCase):
         self.assertEqual(('budget', 'components'),
                          (execution.read()['category'], execution.read()['phase']))
 
+    def test_initialization_clears_a_previous_attempt_deadline(self):
+        marker = execution.STATE.with_suffix('.deadline')
+        marker.touch()
+        execution.update(initialize=True)
+        self.assertFalse(marker.exists())
+        self.assertEqual(('running', None), (execution.read()['result'], execution.read()['category']))
+
+    def test_finish_124_without_observed_deadline_is_an_ordinary_test_failure(self):
+        execution.update(initialize=True)
+        execution.update(phase='maestro')
+        with patch.object(sys, 'argv', ['e2e_execution.py', 'finish', '124']):
+            execution.main()
+        data = execution.read()
+        self.assertEqual(('test', 'failed', 124), (data['category'], data['result'], data['exit_code']))
+        self.assertNotIn('budget_expired', data)
+
 
 class NativeOnlyRunnerTest(unittest.TestCase):
     def setUp(self):
@@ -192,22 +208,32 @@ raise SystemExit(int(os.environ.get('FAKE_NATIVE_EXIT', '0')))
         self.assertEqual({'app-mock-e2e.apk', 'app-mock-e2e-androidTest.apk'}, set(data['apks']))
 
     def test_full_local_runner_preserves_maestro_failure_through_native_success_and_cleanup(self):
+        self.assert_full_local_runner_failure(17)
+
+    def test_full_local_runner_does_not_infer_a_deadline_from_maestro_exit_124_or_137(self):
+        for code in (124, 137):
+            with self.subTest(code=code):
+                self.assert_full_local_runner_failure(code)
+
+    def assert_full_local_runner_failure(self, code):
         maestro = self.bin / 'maestro'
         maestro.write_text('#!' + sys.executable + '\n' + '''import os, sys
 from pathlib import Path
 with Path(os.environ['CALLS']).open('a') as f: f.write('maestro failed\\n')
-raise SystemExit(17)
+raise SystemExit(int(os.environ['FAKE_MAESTRO_EXIT']))
 ''')
         maestro.chmod(0o755)
         sleep = self.bin / 'sleep'
         sleep.write_text('#!/bin/sh\nexit 0\n')
         sleep.chmod(0o755)
+        self.env['FAKE_MAESTRO_EXIT'] = str(code)
         result = subprocess.run(['bash', 'scripts/e2e.sh', '--no-build'], cwd=self.root,
                                 env=self.env, capture_output=True, text=True, timeout=10)
-        self.assertEqual(17, result.returncode, result.stderr)
+        self.assertEqual(code, result.returncode, result.stderr)
         data = json.loads((self.root / 'build/e2e/execution.json').read_text())
-        self.assertEqual(('failed', 'maestro', 'test', 17),
+        self.assertEqual(('failed', 'maestro', 'test', code),
                          (data['result'], data['phase'], data['category'], data['exit_code']))
+        self.assertNotIn('budget_expired', data)
         failure = next(i for i, event in enumerate(data['events'])
                        if event['phase'] == 'maestro' and event['result'] == 'failed')
         native = next(i for i, event in enumerate(data['events']) if event['phase'] == 'native')

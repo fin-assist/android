@@ -32,6 +32,8 @@ def category(phase):
 
 
 def update(phase=None, result=None, exit_code=None, failure_category=None, initialize=False):
+    if initialize:
+        STATE.with_suffix('.deadline').unlink(missing_ok=True)
     data = read() if not initialize else {
         'schema': 1, 'phase': 'setup', 'category': None, 'result': 'running', 'exit_code': None, 'events': [],
         'identity': {name: os.environ[name] for name in IDENTITY_ENV if name in os.environ},
@@ -95,7 +97,9 @@ def main():
         update(phase=args.value)
     elif args.command == 'identity':
         identity()
-    elif args.command == 'budget':
+    elif args.command == 'budget' or STATE.with_suffix('.deadline').exists():
+        # The coordinator observed TimeoutExpired before signalling the process group. Its separate marker
+        # avoids concurrent receipt writers and distinguishes termination from an ordinary child exit124/137.
         update(result='failed', exit_code=124, failure_category='budget')
     else:
         # Shell exit codes and Actions job statuses have the same fail-closed meaning here.
@@ -103,7 +107,7 @@ def main():
             update(phase='complete', result='passed', exit_code=0)
         else:
             code = int(args.value) if args.value and args.value.isdigit() else 1
-            update(result='failed', exit_code=code, failure_category='budget' if code == 124 else None)
+            update(result='failed', exit_code=code)
 
 
 if __name__ == '__main__':

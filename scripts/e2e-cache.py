@@ -96,6 +96,17 @@ def record_budget_expiry(receipt=Path('build/e2e/execution.json')):
         print('::warning::Could not annotate the process deadline; execution receipt retained for integrity checks')
 
 
+def mark_budget_expiry(receipt=Path('build/e2e/execution.json')):
+    """Tell a terminating shell's EXIT trap why it is stopping, without racing its JSON writer."""
+    marker = receipt.with_suffix('.deadline')
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    except OSError:
+        # Cleanup and raw evidence retention remain mandatory even if storage cannot record the marker.
+        print('::warning::Could not mark the process deadline before termination')
+
+
 def run_command(command, timeout=2400, grace=10, archive_output=False):
     """Stop the whole command group on a real deadline, preserving the first failure and optional UI traces."""
     def interrupted(signum, _frame):
@@ -111,6 +122,10 @@ def run_command(command, timeout=2400, grace=10, archive_output=False):
         except BaseException as error:
             budget_expired = isinstance(error, subprocess.TimeoutExpired)
             archive_ready = False
+            if budget_expired:
+                # A real Bash EXIT trap can run on TERM and otherwise record 143 as a test failure (or 0
+                # as success on some shells). Never write execution.json until all child writers stop.
+                mark_budget_expiry()
             try:
                 os.killpg(process.pid, signal.SIGTERM)
             except ProcessLookupError:

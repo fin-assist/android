@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import signal
 import sys
 import tarfile
@@ -554,6 +555,53 @@ raise SystemExit(17)
         self.assertFalse(Path('build/e2e/maestro').exists())
         with tarfile.open('build/e2e/maestro-output.tgz') as stream:
             self.assertEqual(b'failed command', stream.extractfile('maestro/name?/commands.json').read())
+
+    def bash_exit_trap_deadline(self, earlier_failure=False):
+        helper = Path(cache.__file__).with_name('e2e_execution.py').resolve()
+        python = shlex.quote(sys.executable)
+        receipt = python + ' ' + shlex.quote(str(helper))
+        path = self.root / 'scripts/e2e.sh'
+        path.write_text('#!/bin/bash\nset -e\n' + f'''
+receipt() {{ {receipt} "$@"; }}
+finish() {{
+    local code=$?
+    receipt finish "$code"
+    cp build/e2e/execution.json trap-receipt.json
+    printf finished > trap.finished
+    exit "$code"
+}}
+receipt init
+receipt phase maestro
+trap finish EXIT
+mkdir -p 'build/e2e/maestro/current?'
+printf 'current trace' > 'build/e2e/maestro/current?/commands.json'
+''' + ('receipt finish 17\n' if earlier_failure else '') + '''
+bash -c 'printf "%s" "$$" > child.pid; printf ready > scenario.ready; exec sleep 60'
+''')
+        path.chmod(0o755)
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_prepared_script('2/5', timeout=0.3, grace=5)
+        self.assertEqual('finished', Path('trap.finished').read_text(), 'real Bash EXIT trap did not finish')
+        data = json.loads(Path('build/e2e/execution.json').read_text())
+        expected = ('test', 17) if earlier_failure else ('budget', 124)
+        self.assertEqual(expected, (data['category'], data['exit_code']))
+        self.assertEqual(('maestro', 'failed'), (data['phase'], data['result']))
+        self.assertTrue(data['budget_expired'])
+        # The EXIT trap itself must see the deadline, before the post-barrier coordinator annotation.
+        trapped = json.loads(Path('trap-receipt.json').read_text())
+        self.assertEqual(expected, (trapped['category'], trapped['exit_code']))
+        self.assertFalse(Path('build/e2e/maestro').exists())
+        with tarfile.open('build/e2e/maestro-output.tgz') as archive:
+            self.assertEqual(b'current trace', archive.extractfile('maestro/current?/commands.json').read())
+        status = subprocess.run(['ps', '-p', Path('child.pid').read_text(), '-o', 'stat='],
+                                capture_output=True, text=True, timeout=2)
+        self.assertTrue(not status.stdout.strip() or status.stdout.strip().startswith('Z'), status.stdout)
+
+    def test_bash_exit_trap_records_deadline_before_termination_status(self):
+        self.bash_exit_trap_deadline()
+
+    def test_bash_exit_trap_preserves_assertion_recorded_before_deadline(self):
+        self.bash_exit_trap_deadline(earlier_failure=True)
 
     def test_deadline_during_report_collection_preserves_the_first_assertion_failure(self):
         self.script("""import json, signal, time
