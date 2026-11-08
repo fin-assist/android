@@ -669,6 +669,8 @@ jobs:
               status = json.loads(Path("build/e2e/qase-delivery.json").read_text())
           except (OSError, ValueError):
               status = {}
+          if not isinstance(status, dict):
+              status = {}
           labels = {
               "published": "published", "not_configured": "NOT CONFIRMED (token unavailable)",
               "failed": "NOT CONFIRMED (delivery failed)", "pending": "NOT CONFIRMED (pending)",
