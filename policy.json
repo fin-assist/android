@@ -253,19 +253,6 @@
     {
       "description": "FIN-211: recovery of an automatically failed dependency family",
       "matchPackageNames": [
-        "renovate"
-      ],
-      "matchDatasources": [
-        "npm"
-      ],
-      "recreateWhen": "always",
-      "matchJsonata": [
-        "newMajor = 44"
-      ]
-    },
-    {
-      "description": "FIN-211: recovery of an automatically failed dependency family",
-      "matchPackageNames": [
         "fin-assist/go-ci"
       ],
       "matchDatasources": [
@@ -275,6 +262,19 @@
       "matchNewValue": "/^main$/",
       "matchJsonata": [
         "$exists(newDigest) and newDigest != null"
+      ]
+    },
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "renovate"
+      ],
+      "matchDatasources": [
+        "npm"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 44"
       ]
     },
     {
@@ -959,6 +959,22 @@
       "additionalBranchPrefix": "fin211-retry-296-",
       "matchJsonata": [
         "newDigest = \"2f4431dabb9fc3ebc5085a46ede5f69a23b231c5\""
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "renovate"
+      ],
+      "matchDatasources": [
+        "npm"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-297-",
+      "matchJsonata": [
+        "newDigest = \"sha512-VenROygSiAlbQBdarouesA+3cJCQYoL3QFxA32bTTalTj3sA8lZN04ukzCm4DI+TJCQoL8UevzMPMfT79gUYNA==\""
       ]
     }
   ]
