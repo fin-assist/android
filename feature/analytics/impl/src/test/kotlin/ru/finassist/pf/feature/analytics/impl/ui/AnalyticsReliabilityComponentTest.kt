@@ -132,9 +132,11 @@ class AnalyticsReliabilityComponentTest {
             period = original.period!!.copy(range = range("2026-01", 12)))
         val yearReply = CompletableDeferred<Analytics>()
         compose.runOnIdle {
-            api.read = { _, _, _ -> yearReply.await() }
+            var replies = 0
+            api.read = { _, _, _ -> if (replies++ == 0) marked(year) else yearReply.await() }
             vm.setPeriodType(PeriodTypeCode.YEAR)
         }
+        advance(3_000)
         compose.onNodeWithTag("analytics.updating").assertIsDisplayed()
         compose.onNodeWithTag("analytics.empty").assertDoesNotExist()
         compose.onNodeWithTag("analytics.block.tiles").assertDoesNotExist()
@@ -173,6 +175,8 @@ class AnalyticsReliabilityComponentTest {
         val vm = opened(api)
         for (index in 1..5) {
             vm.loadChartPage(older = true)
+            scheduler.runCurrent()
+            assertNull(vm.state.value.chartError, "page $index must be accepted before the next edge request")
             assertEquals("page:$index", api.cursors.last())
             assertTrue(chart(vm).points.size <= 180, "only three neighbouring pages may remain")
             assertEquals(PeriodKey("2026-10"), vm.state.value.data?.params?.date, "paging cannot select a month")
@@ -185,6 +189,8 @@ class AnalyticsReliabilityComponentTest {
         // Pages 5/4/3 are still resident; the next newer cursor reloads evicted page 2.
         for (index in 2 downTo 0) {
             vm.loadChartPage(older = false)
+            scheduler.runCurrent()
+            assertNull(vm.state.value.chartError, "newer page $index must be accepted")
             assertEquals("page:$index", api.cursors.last())
             assertTrue(chart(vm).points.size <= 180)
             assertEquals(PeriodKey("2000-01"), vm.state.value.data?.params?.date)
@@ -214,7 +220,11 @@ class AnalyticsReliabilityComponentTest {
         }
         val year = original.copy(params = original.params!!.copy(period = PeriodTypeCode.YEAR, date = PeriodKey("2026")),
             period = original.period!!.copy(range = range("2026-01", 12)))
-        compose.runOnIdle { failMutation(); active.setPeriodType(PeriodTypeCode.YEAR) }
+        compose.runOnIdle {
+            failMutation()
+            api.read = { _, _, _ -> year }
+            active.setPeriodType(PeriodTypeCode.YEAR)
+        }
         compose.onNodeWithTag("analytics.unknown_read_recovery").assertIsDisplayed().assertIsEnabled()
         val heldYear = CompletableDeferred<Analytics>()
         compose.runOnIdle { api.read = { _, _, _ -> heldYear.await() } }
