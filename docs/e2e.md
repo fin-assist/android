@@ -6,7 +6,7 @@ Three required suites in post-merge acceptance (FIN-473):
 |---|---|---|---|
 | Maestro | User scenarios end to end: sign-in, passcode, operations, search, analytics, assistant, statements, profile, flags, offline | `.maestro/` | `mockE2e` |
 | Native (Espresso / Compose test) | Platform gaps: picker, permissions, intents | `app/src/androidTestMock/` | independent `mockE2e` emulator job |
-| JVM UI companions | Deterministic Qase82/83/89 state/paging combinations, real screen and ViewModel | `AnalyticsReliabilityComponentTest` | targeted JVM job, no emulator |
+| JVM UI companions | Deterministic Qase82/83/89 state/paging combinations, real ViewModel and Compose renderers | `AnalyticsReliabilityComponentTest` | targeted JVM job, no emulator |
 
 Native tests are for the gaps, not a second copy of the scenarios. When a check needs the platform itself
 (system dialogs, intents, permissions, biometrics), it goes there; everything a user does on our screens goes to
