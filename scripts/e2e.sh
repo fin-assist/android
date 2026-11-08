@@ -181,6 +181,8 @@ if [[ "$NATIVE" == 1 ]]; then
     native=0
     (cd "$ROOT" && ./gradlew :app:connectedMockE2eAndroidTest --console=plain) || native=$?
     [[ "$native" == 0 ]] || receipt finish "$native"
+    # A fresh local run builds the test APK in the connected task; capture it even after a partial/failed suite.
+    receipt identity
     [[ "$status" == 0 ]] && status=$native
     receipt phase reporting
     cp -r "$ROOT/app/build/outputs/androidTest-results" "$OUT/native" 2>/dev/null || true

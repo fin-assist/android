@@ -70,8 +70,28 @@ def wait_for_process_group(process, timeout=5):
         # A zombie leader can still have a live JVM thread (procps marks this with lowercase l).
         if not any(int(group) == process.pid and not (status.startswith('Z') and 'l' not in status)
                    for group, status in members):
+            # The leader may have become a zombie after poll(); reap it before handing the evidence to tar.
+            process.wait(timeout=min(1, remaining))
             return
         time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+
+
+def record_budget_expiry(receipt=Path('build/e2e/execution.json')):
+    """A collection timeout is additional evidence; it must not replace an earlier assertion failure."""
+    if not receipt.is_file():
+        return
+    try:
+        data = json.loads(receipt.read_text())
+        if data.get('result') != 'failed':
+            data.update(category='budget', result='failed', exit_code=124)
+        data['budget_expired'] = True
+        data['budget_expired_at'] = time.time()
+        temporary = receipt.with_suffix('.tmp')
+        temporary.write_text(json.dumps(data, indent=2) + '\n')
+        temporary.replace(receipt)
+    except (OSError, ValueError, TypeError, AttributeError):
+        # Gather rejects the invalid receipt. Preserve the original bytes and still archive the raw trace.
+        print('::warning::Could not annotate the process deadline; execution receipt retained for integrity checks')
 
 
 def run_tests(shard, timeout=2400, grace=10, native_only=False):
@@ -116,11 +136,7 @@ def run_tests(shard, timeout=2400, grace=10, native_only=False):
         signal.signal(signal.SIGTERM, previous)
         if archive_ready:
             if budget_expired:
-                receipt = Path('build/e2e/execution.json')
-                if receipt.is_file():
-                    data = json.loads(receipt.read_text())
-                    data.update(category='budget', result='failed', exit_code=124)
-                    receipt.write_text(json.dumps(data, indent=2) + '\n')
+                record_budget_expiry()
             archive_maestro_output()
 
 

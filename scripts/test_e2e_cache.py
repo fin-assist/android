@@ -491,6 +491,7 @@ while True: time.sleep(0.02)
             self.assertFalse(Path('build/e2e/maestro').exists())
             receipt = json.loads(Path('build/e2e/execution.json').read_text())
             self.assertEqual(('budget', 'failed', 124), (receipt['category'], receipt['result'], receipt['exit_code']))
+            self.assertTrue(receipt['budget_expired'])
             with tarfile.open('build/e2e/maestro-output.tgz') as stream:
                 self.assertIn('maestro/forgot?/commands.json', stream.getnames())
                 self.assertEqual(b'termination evidence', stream.extractfile('maestro/forgot?/term?.json').read())
@@ -518,6 +519,45 @@ raise SystemExit(17)
         self.assertFalse(Path('build/e2e/maestro').exists())
         with tarfile.open('build/e2e/maestro-output.tgz') as stream:
             self.assertEqual(b'failed command', stream.extractfile('maestro/name?/commands.json').read())
+
+    def test_deadline_during_report_collection_preserves_the_first_assertion_failure(self):
+        self.script("""import json, signal, time
+from pathlib import Path
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+folder = Path('build/e2e/maestro/failed?')
+folder.mkdir(parents=True)
+(folder / 'commands.json').write_text('assertion failure before collection')
+Path('build/e2e/execution.json').write_text(json.dumps({
+    'phase': 'maestro', 'category': 'test', 'result': 'failed', 'exit_code': 17,
+}))
+while True: time.sleep(0.02)
+""")
+        with self.assertRaises(subprocess.TimeoutExpired):
+            cache.run_tests('2/5', timeout=0.5, grace=0.1)
+        data = json.loads(Path('build/e2e/execution.json').read_text())
+        self.assertEqual(('maestro', 'test', 'failed', 17),
+                         (data['phase'], data['category'], data['result'], data['exit_code']))
+        self.assertTrue(data['budget_expired'])
+        with tarfile.open('build/e2e/maestro-output.tgz') as archive:
+            self.assertEqual(b'assertion failure before collection',
+                             archive.extractfile('maestro/failed?/commands.json').read())
+
+    def test_invalid_receipt_cannot_prevent_preservation_of_timeout_trace(self):
+        self.script("""import signal, time
+from pathlib import Path
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+folder = Path('build/e2e/maestro/failed?')
+folder.mkdir(parents=True)
+(folder / 'commands.json').write_text('partial trace')
+Path('build/e2e/execution.json').write_text('{invalid')
+while True: time.sleep(0.02)
+""")
+        with self.assertRaises(subprocess.TimeoutExpired):
+            cache.run_tests('2/5', timeout=0.5, grace=0.1)
+        self.assertEqual('{invalid', Path('build/e2e/execution.json').read_text())
+        self.assertFalse(Path('build/e2e/maestro').exists())
+        with tarfile.open('build/e2e/maestro-output.tgz') as archive:
+            self.assertEqual(b'partial trace', archive.extractfile('maestro/failed?/commands.json').read())
 
     def test_sigterm_of_coordinator_stops_shard_and_archives_evidence(self):
         self.script("""import os, signal, time
