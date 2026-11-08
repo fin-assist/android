@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location('e2e_cache', Path(__file__).with_name('e2e-cache.py'))
 cache = importlib.util.module_from_spec(spec)
@@ -365,6 +365,67 @@ class CleanAvdCacheTest(unittest.TestCase):
             (image / 'source.properties').unlink()
             with self.assertRaises(FileNotFoundError):
                 cache.fingerprint()
+
+
+class ShardExitBarrierTest(unittest.TestCase):
+    def run_interrupted(self, observations, archive):
+        process = Mock(pid=12345)
+        process.wait.side_effect = [subprocess.TimeoutExpired('shard', 1), 0]
+        now = [0.0]
+
+        def sleep(seconds):
+            now[0] += seconds
+
+        with patch.object(cache.subprocess, 'Popen', return_value=process), \
+             patch.object(cache.os, 'killpg', side_effect=ProcessLookupError), \
+             patch.object(cache.subprocess, 'run', side_effect=observations) as inspect, \
+             patch.object(cache.time, 'monotonic', side_effect=lambda: now[0]), \
+             patch.object(cache.time, 'sleep', side_effect=sleep), \
+             patch.object(cache, 'archive_maestro_output', side_effect=archive):
+            try:
+                cache.run_tests('1/4', timeout=1, grace=0)
+            finally:
+                self.assertLessEqual(now[0], 5)
+                for call in inspect.call_args_list:
+                    self.assertGreater(call.kwargs['timeout'], 0)
+                    self.assertLessEqual(call.kwargs['timeout'], 5)
+
+    def test_archive_waits_for_descendant_to_leave_d_state(self):
+        states = iter(['12345 D\n67890 R\n', '12345 Z\n67890 D\n'])
+        observed = []
+
+        def inspect(*args, **kwargs):
+            observed.append(next(states))
+            return subprocess.CompletedProcess(args[0], 0, observed[-1])
+
+        def archive():
+            self.assertEqual(2, len(observed), 'archive started before the descendant stopped')
+
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_interrupted(inspect, archive)
+
+    def test_persistent_live_descendant_blocks_archive_with_bounded_failure(self):
+        archive = Mock()
+        with self.assertRaisesRegex(RuntimeError, 'process group'):
+            self.run_interrupted(lambda *a, **kw: subprocess.CompletedProcess(a[0], 0, '12345 D\n'), archive)
+        archive.assert_not_called()
+
+    def test_absent_group_or_only_zombies_can_be_archived(self):
+        for snapshot in ('', '67890 D\n', '12345 Z\n12345 Z+\n67890 R\n'):
+            with self.subTest(snapshot=snapshot):
+                archive = Mock()
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    self.run_interrupted(lambda *a, **kw: subprocess.CompletedProcess(a[0], 0, snapshot), archive)
+                archive.assert_called_once_with()
+
+    def test_process_inspection_failure_blocks_archive(self):
+        for error in (OSError('ps unavailable'), subprocess.TimeoutExpired('ps', 5),
+                      subprocess.CalledProcessError(1, 'ps')):
+            with self.subTest(error=error):
+                archive = Mock()
+                with self.assertRaises(type(error)):
+                    self.run_interrupted(Mock(side_effect=error), archive)
+                archive.assert_not_called()
 
 
 class ShardProcessTest(unittest.TestCase):
