@@ -182,7 +182,8 @@ class AnalyticsReliabilityComponentTest {
         vm.onAction(Block(id = "monthly_chart", type = BlockType.CHART), selection("2000-01")) { error("chart selection stays in Analytics") }
         assertEquals(PeriodKey("2000-01"), vm.state.value.data?.params?.date)
         assertEquals(0, chart(vm).highlightIndex)
-        for (index in 4 downTo 0) {
+        // Pages 5/4/3 are still resident; the next newer cursor reloads evicted page 2.
+        for (index in 2 downTo 0) {
             vm.loadChartPage(older = false)
             assertEquals("page:$index", api.cursors.last())
             assertTrue(chart(vm).points.size <= 180)
