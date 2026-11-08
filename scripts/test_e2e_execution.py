@@ -74,7 +74,7 @@ class NativeOnlyRunnerTest(unittest.TestCase):
         adb.write_text('#!' + sys.executable + '\n' + '''import os, sys
 from pathlib import Path
 with Path(os.environ['CALLS']).open('a') as f: f.write('adb ' + ' '.join(sys.argv[1:]) + '\\n')
-if sys.argv[1:] == ['devices']: print('emulator-5554 device')
+if sys.argv[1:] == ['devices']: print('List of devices attached' if os.environ.get('FAKE_NO_DEVICE') else 'emulator-5554 device')
 elif 'getprop' in sys.argv: print('Europe/Moscow')
 elif sys.argv[1:3] == ['pull', '/sdcard/pf-ui.xml']:
     Path(sys.argv[-1]).write_text('<node resource-id="auth.phone.document"/>')
@@ -85,6 +85,10 @@ elif sys.argv[1] == 'pull': raise SystemExit(1)
         gradle.write_text('#!' + sys.executable + '\n' + '''import os, sys
 from pathlib import Path
 with Path(os.environ['CALLS']).open('a') as f: f.write('gradle ' + ' '.join(sys.argv[1:]) + '\\n')
+if ':app:assembleMockE2e' in sys.argv and os.environ.get('FAKE_BUILD_EXIT'):
+    raise SystemExit(int(os.environ['FAKE_BUILD_EXIT']))
+if os.environ.get('FAKE_NATIVE_EARLY_EXIT'):
+    raise SystemExit(int(os.environ['FAKE_NATIVE_EARLY_EXIT']))
 p = Path('app/build/outputs/androidTest-results/connected/mock/TEST-native.xml')
 p.parent.mkdir(parents=True)
 p.write_text('<testsuite><testcase classname="Native" name="method"/></testsuite>')
@@ -95,6 +99,72 @@ raise SystemExit(int(os.environ.get('FAKE_NATIVE_EXIT', '0')))
 ''')
         gradle.chmod(0o755)
         self.env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ['PATH'], CALLS=str(self.calls))
+
+    def seed_old_payload(self):
+        names = ('build/e2e/maestro/old?/commands.json', 'build/e2e/maestro-log/old.log',
+                 'build/e2e/shots/old.png', 'build/e2e/maestro-output.tgz', 'build/e2e/maestro-output.tmp',
+                 'build/e2e/maestro-report.xml', 'build/e2e/native-report.xml', 'build/e2e/jvm-report.xml',
+                 'build/e2e/preflight-ui.xml', 'build/e2e/preflight.png', 'build/e2e/logcat.txt',
+                 'build/e2e/native/connected/mock/TEST-old.xml', 'build/e2e/native-report/old.html',
+                 'build/e2e/coverage/ec/old.ec', 'build/e2e/native-coverage/old.ec',
+                 'build/e2e/expected-tests.json', 'build/e2e/execution-status.json', 'build/e2e/qase-delivery.json',
+                 'app/build/outputs/androidTest-results/connected/mock/TEST-old.xml',
+                 'app/build/outputs/code_coverage/old.ec', 'app/build/reports/androidTests/old.html',
+                 'build/reports/e2e-coverage/old.xml')
+        paths = [self.root / name for name in names]
+        for path in paths:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('<testsuite><testcase classname="Old" name="passed"/></testsuite>')
+        test_apk = self.root / 'app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk'
+        test_apk.parent.mkdir(parents=True)
+        test_apk.write_bytes(b'cached test APK')
+        return paths
+
+    def assert_old_payload_removed(self, paths):
+        self.assertEqual([], [str(path.relative_to(self.root)) for path in paths if path.exists()])
+        self.assertTrue((self.root / 'app/build/outputs/apk/mock/e2e/app-mock-e2e.apk').is_file())
+        self.assertTrue((self.root / 'app/build/outputs/apk/androidTest/mock/e2e/app-mock-e2e-androidTest.apk').is_file())
+
+    def test_early_device_setup_failure_cannot_leave_previous_pass_xml_or_raw_artifacts(self):
+        paths = self.seed_old_payload()
+        self.env['FAKE_NO_DEVICE'] = '1'
+        result = subprocess.run(['bash', 'scripts/e2e.sh', '--native-only', '--no-build'], cwd=self.root,
+                                env=self.env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(1, result.returncode, result.stderr)
+        self.assert_old_payload_removed(paths)
+        data = json.loads((self.root / 'build/e2e/execution.json').read_text())
+        self.assertEqual(('failed', 'device'), (data['result'], data['category']))
+        self.assertNotIn('gradle ', self.calls.read_text())
+
+    def test_early_build_failure_cleans_payload_but_preserves_current_ci_receipt_and_preparation(self):
+        paths = self.seed_old_payload()
+        out = self.root / 'build/e2e'
+        (out / 'execution.json').write_text(json.dumps({'schema': 1, 'phase': 'setup', 'category': None,
+            'result': 'running', 'exit_code': None, 'events': [], 'identity': {'GITHUB_SHA': 'current-sha'}}))
+        for name in ('preparation.json', 'sdk-cache.json'):
+            (out / name).write_text('current setup telemetry')
+        self.env.update(GITHUB_ACTIONS='true', FAKE_BUILD_EXIT='23')
+        result = subprocess.run(['bash', 'scripts/e2e.sh', '--native-only'], cwd=self.root,
+                                env=self.env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(23, result.returncode, result.stderr)
+        self.assert_old_payload_removed(paths)
+        data = json.loads((out / 'execution.json').read_text())
+        self.assertEqual(('failed', 'setup', 23), (data['result'], data['category'], data['exit_code']))
+        self.assertEqual({'GITHUB_SHA': 'current-sha'}, data['identity'])
+        for name in ('preparation.json', 'sdk-cache.json'):
+            self.assertEqual('current setup telemetry', (out / name).read_text())
+
+    def test_connected_build_failure_cannot_copy_old_native_pass_as_current_evidence(self):
+        paths = self.seed_old_payload()
+        self.env['FAKE_NATIVE_EARLY_EXIT'] = '19'
+        result = subprocess.run(['bash', 'scripts/e2e.sh', '--native-only', '--no-build'], cwd=self.root,
+                                env=self.env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(19, result.returncode, result.stderr)
+        self.assert_old_payload_removed(paths)
+        self.assertFalse((self.root / 'build/e2e/native').exists())
+        data = json.loads((self.root / 'build/e2e/execution.json').read_text())
+        self.assertEqual(('failed', 'native', 'test', 19),
+                         (data['result'], data['phase'], data['category'], data['exit_code']))
 
     def test_native_only_runs_without_maestro_or_maestro_preflight_and_copies_native_report(self):
         result = subprocess.run(['bash', 'scripts/e2e.sh', '--native-only', '--no-build'], cwd=self.root,

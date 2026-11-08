@@ -53,6 +53,14 @@ finish() {
     adb shell settings put global hide_error_dialogs 0 >/dev/null 2>&1 || true
 }
 trap finish EXIT
+# A local checkout can retain outputs from an earlier attempt. Clear test payload before any setup can fail,
+# while retaining this CI job's execution receipt and its SDK/AVD preparation telemetry. Never remove APKs.
+rm -rf "$OUT/maestro" "$OUT/maestro-log" "$OUT/shots" "$OUT/maestro-output.tgz" "$OUT/maestro-output.tmp" \
+    "$OUT/maestro-report.xml" "$OUT/native-report.xml" "$OUT/jvm-report.xml" "$OUT/preflight-ui.xml" \
+    "$OUT/preflight.png" "$OUT/logcat.txt" "$OUT/coverage" "$OUT/native" "$OUT/native-coverage" \
+    "$OUT/native-report" "$OUT/expected-tests.json" "$OUT/execution-status.json" "$OUT/qase-delivery.json" \
+    "$ROOT/app/build/outputs/androidTest-results" "$ROOT/app/build/outputs/code_coverage" \
+    "$ROOT/app/build/reports/androidTests" "$ROOT/build/reports/e2e-coverage"
 receipt phase setup
 
 if [[ "$NATIVE_ONLY" == 1 ]]; then
@@ -98,13 +106,10 @@ receipt phase device
 log "installing $APP_ID"
 adb install -r -t "$APK" >/dev/null
 
-mkdir -p "$OUT"
 adb logcat -c || true
 # Execution data of an earlier run must not count: the device folder is pulled whole after the flows, and
 # :e2eCoverageReport reads every .ec AGP left from the native tests — of this run only.
 adb shell rm -rf "$DEVICE_COVERAGE" >/dev/null 2>&1 || true
-rm -rf "$OUT/coverage" "$OUT/native" "$OUT/native-coverage" "$OUT/native-report" "$OUT/maestro-report.xml" \
-    "$ROOT/app/build/outputs/code_coverage" "$ROOT/build/reports/e2e-coverage"
 
 # A freshly booted CI emulator often shows «Pixel Launcher isn't responding». The dialog takes window focus
 # from the app under test, so every flow and the Espresso test fail. Hide system error dialogs for the run.
