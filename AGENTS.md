@@ -651,3 +651,9 @@ FIN-411 adds rolling_year/rolling_quarter selectors in Analytics and a coverage-
 FIN-416 limits rolling selectors to their Year/Quarter tabs and removes period navigation for all_time; tapping the selected calendar segment exits its rolling period. Qase80 and docs/e2e.md cover these controls. The dismissal client uses complete block updates and retains ready snapshots while recalculating; see the FIN-416 response-update section in docs/e2e.md. The future Temporal saga is tracked in FIN-419.
 
 FIN-448: before publishing the baseline/target, require each configured required check to have exactly one GitHub Actions App15368 binding and explicit no-force-push/no-delete target protection. Check known conflict-free mergeability both initially and immediately before PR mutations; conflicts detected before claims/quarantine leave PRs open without those writes. A claim already persisted before a late conflict remains spent; stop dispatch and retain receipts on redelivery and after mergeability recovers. Preserve the existing red-CI retry flow for known nonconflicting blocked/behind PRs and the stricter green merge states.
+
+## Shared Renovate source (FIN-456)
+
+Controller code and regressions live in immutable `fin-assist/go-ci`; see `docs/renovate-policy.md`.
+Keep the manifest and both workflow action pins equal. Local checks delegate through the unchanged
+verified bootstrap; never restore a local executable controller or run consumer code with its write token.
