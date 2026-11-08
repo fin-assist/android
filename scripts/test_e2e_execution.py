@@ -114,7 +114,10 @@ apk.write_bytes(b'native test APK')
 raise SystemExit(int(os.environ.get('FAKE_NATIVE_EXIT', '0')))
 ''')
         gradle.chmod(0o755)
-        self.env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ['PATH'], CALLS=str(self.calls))
+        # Local-runner cases must reset each attempt even when this test suite itself runs on Actions.
+        # Tests of receipt retention opt back into the CI contract explicitly.
+        self.env = dict(os.environ, GITHUB_ACTIONS='false',
+                        PATH=str(self.bin) + os.pathsep + os.environ['PATH'], CALLS=str(self.calls))
 
     def seed_old_payload(self):
         names = ('build/e2e/maestro/old?/commands.json', 'build/e2e/maestro-log/old.log',

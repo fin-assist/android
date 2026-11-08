@@ -118,3 +118,9 @@ gather→Qase regressions passed, followed by the full408-test suite with a180s 
 
 This follow-up changes only scripts/tests and documentation. Android code, APKs, flows and shared UI helpers
 remain identical to the recorded successful device runs, so those runs were not repeated.
+
+The first follow-up CI exposed a fixture isolation error: the local-runner test inherited
+`GITHUB_ACTIONS=true`, so its second subtest correctly retained the first CI receipt. The fixture now
+explicitly selects local mode; the separate CI receipt-retention test still enables CI mode itself.
+Assertions and runtime behavior are unchanged. Re-running the13 execution tests under an inherited
+`GITHUB_ACTIONS=true` passed (23.417s,90s process deadline); the original failed CI log is retained.
