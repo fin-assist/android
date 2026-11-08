@@ -40,8 +40,8 @@ def write(path, value):
 
 
 def run_metadata(attempt=1, conclusion='success', run_id=42):
-    return {'id': run_id, 'head_sha': SHA, 'run_attempt': attempt, 'repository': {'full_name': REPO},
-            'event': 'push', 'head_branch': 'main', 'name': 'UI tests', 'status': 'completed',
+    return {'id': run_id, 'head_sha': SHA, 'run_attempt': attempt, 'repository': {'full_name': REPO}, 'head_repository': {'full_name': REPO},
+            'event': 'push', 'path': '.github/workflows/e2e.yml', 'head_branch': 'main', 'name': 'UI tests', 'status': 'completed',
             'conclusion': conclusion}
 
 
@@ -191,14 +191,20 @@ class HistoryTest(unittest.TestCase):
     def test_first_and_intermediate_failures_survive_latest_pass_and_duplicate_inputs(self):
         first, middle, last = self.fixture('test'), self.fixture('device', 2), self.fixture('passed', 3)
         runs = [run_metadata(3), run_metadata(1, 'failure'), run_metadata(2, 'cancelled'), run_metadata(1, 'failure')]
-        report = history.history(REPO, runs, {(42, 1): [archive(first), archive(first)], (42, 3): [archive(last)]},
-                                 [artifact_metadata(1) | {'digest': 'sha256:' + history.digest(archive(first))}, artifact_metadata(3) | {'digest': 'sha256:' + history.digest(archive(last))}])
+        report = history.history(REPO, runs, {(42, 1): [archive(first), archive(first)], (42, 2): [archive(middle)], (42, 3): [archive(last)]},
+                                 [artifact_metadata(1) | {'digest': 'sha256:' + history.digest(archive(first))}, artifact_metadata(2) | {'digest': 'sha256:' + history.digest(archive(middle))}, artifact_metadata(3) | {'digest': 'sha256:' + history.digest(archive(last))}])
         self.assertEqual(1, report['selected_runs'])
         self.assertEqual(0, report['first_attempt']['verified_full_pass'])
         self.assertEqual({'failure': 1}, report['first_attempt']['workflow_states'])
         self.assertEqual([1, 2, 3], [r['attempt'] for r in report['attempts']])
         self.assertEqual('cancelled', report['attempts'][1]['workflow_conclusion'])
-        self.assertEqual('legacy_or_missing', report['attempts'][1]['evidence_status'])
+        self.assertEqual('verified', report['attempts'][0]['evidence_status'])
+        self.assertFalse(report['attempts'][0]['application_passed'])
+        self.assertEqual(1, report['attempts'][0]['qase_cases']['failed'])
+        self.assertEqual('verified', report['attempts'][1]['evidence_status'])
+        middle_suite = next(s for s in report['attempts'][1]['suites'] if s['kind'] == 'maestro')
+        self.assertEqual('device', middle_suite['category'])
+        self.assertEqual(1, middle_suite['missing'])
         self.assertTrue(report['attempts'][2]['full_pass'])
         report = history.history(REPO, [run_metadata()], {(42, 1): [archive(first), archive(last)]}, [artifact_metadata()])
         self.assertEqual('conflicting_attempt_input', report['attempts'][0]['error'])
@@ -216,6 +222,35 @@ class HistoryTest(unittest.TestCase):
         self.assertFalse(self.evaluate(files, run)['full_pass'])
         self.change_json(files, 'result.json', lambda x: x['metadata']['job_results'].update(native='failure'))
         self.assertFalse(self.evaluate(files)['full_pass'])
+
+    def test_independent_workflow_and_event_qualify_acceptance_not_artifact_claims(self):
+        for event, path, expected in [('pull_request', '.github/workflows/ci.yml', 'ineligible'),
+                                      ('pull_request', '.github/workflows/e2e.yml', 'ineligible'),
+                                      ('push', '.github/workflows/ci.yml', 'ineligible'),
+                                      ('push', None, 'unknown'),
+                                      (None, '.github/workflows/e2e.yml', 'unknown')]:
+            with self.subTest(event=event, path=path):
+                files = self.fixture()
+                self.change_json(files, 'result.json', lambda x: x['metadata'].update(event_name=event))
+                row = self.evaluate(files, run_metadata() | {'event': event, 'path': path})
+                self.assertEqual('verified', row['evidence_status'])
+                self.assertTrue(row['application_passed'], 'keep canonical observations, not UI acceptance')
+                self.assertEqual({'passed': 2, 'expected': 2}, row['qase_cases'])
+                self.assertFalse(row['full_pass'])
+                self.assertIsNone(row['cohort'])
+                self.assertEqual(expected, row['control_plane']['status'])
+                self.assertEqual(expected + '_control_plane', row['cohort_status'])
+        for head in ({'full_name': 'attacker/android'}, None):
+            row = self.evaluate(self.fixture(), run_metadata() | {'head_repository': head})
+            self.assertTrue(row['application_passed'])
+            self.assertFalse(row['full_pass'])
+            self.assertIsNone(row['cohort'])
+            self.assertEqual('unknown' if head is None else 'ineligible', row['control_plane']['status'])
+        files = self.fixture()
+        self.change_json(files, 'result.json', lambda x: x['metadata'].update(event_name='workflow_dispatch'))
+        row = self.evaluate(files, run_metadata() | {'event': 'workflow_dispatch'})
+        self.assertTrue(row['full_pass'])
+        self.assertEqual('eligible', row['control_plane']['status'])
 
     def test_delivery_is_separate_and_schema_checked(self):
         files = self.fixture()
@@ -283,11 +318,62 @@ class HistoryTest(unittest.TestCase):
             self.change_json(files, f'evidence/{folder}/execution.json', lambda x: x['apks'].pop('app-mock-e2e-androidTest.apk'))
             self.assertEqual('missing_apk_identity', self.evaluate(files)['error'])
 
+    def test_failed_attempt_cannot_attest_observed_results_without_every_suite_receipt(self):
+        for folder in ('e2e-shard-1', 'e2e-native', 'e2e-components'):
+            files = self.fixture('test')
+            files.pop(f'evidence/{folder}/execution.json')
+            self.change_json(files, 'result.json', lambda x: next(s for s in x['suites'] if s['evidence']['execution'] == f'evidence/{folder}/execution.json')['evidence'].update(execution=None))
+            row = self.evaluate(files, run_metadata(conclusion='failure'))
+            self.assertEqual('missing_receipt', row['error'])
+            self.assertEqual('invalid', row['evidence_status'])
+            self.assertNotIn('qase_cases', row, 'unattested observations cannot become current Qase passes')
+
+    def test_every_duplicate_zip_must_match_provider_digest_regardless_of_order(self):
+        files = self.fixture()
+        original = archive(files)
+        other = io.BytesIO()
+        with zipfile.ZipFile(other, 'w', zipfile.ZIP_STORED) as z:
+            for name, data in files.items():
+                z.writestr(name, data)
+        repacked = other.getvalue()
+        self.assertNotEqual(history.digest(original), history.digest(repacked))
+        artifact = artifact_metadata() | {'digest': 'sha256:' + history.digest(original)}
+        for sources in ([original, repacked], [repacked, original]):
+            report = history.history(REPO, [run_metadata()], {(42, 1): sources}, [artifact])
+            self.assertEqual('artifact_digest_mismatch', report['attempts'][0]['error'])
+            self.assertFalse(report['attempts'][0]['full_pass'])
+        report = history.history(REPO, [run_metadata()], {(42, 1): [original, original]}, [artifact])
+        self.assertTrue(report['attempts'][0]['full_pass'])
+
+    def test_broken_deflate_is_one_invalid_row_and_keeps_other_runs(self):
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
+            z.writestr('result.json', '{}')
+        broken = bytearray(out.getvalue())
+        broken[30 + len('result.json')] = 7  # Reserved DEFLATE block type, valid ZIP directory/header.
+        invalid_utf8 = bytearray(out.getvalue())
+        central = invalid_utf8.index(b'PK\x01\x02')
+        invalid_utf8[6:8] = (0x800).to_bytes(2, 'little')
+        invalid_utf8[central + 8:central + 10] = (0x800).to_bytes(2, 'little')
+        invalid_utf8[30] = invalid_utf8[central + 46] = 0xff
+        files = self.fixture()
+        good = archive(files)
+        for malformed in (bytes(broken), bytes(invalid_utf8)):
+            report = history.history(REPO, [run_metadata(), run_metadata(run_id=43)],
+                                     {(42, 1): [good], (43, 1): [malformed]},
+                                     [artifact_metadata() | {'digest': 'sha256:' + history.digest(good)},
+                                      artifact_metadata(run_id=43) | {'digest': 'sha256:' + history.digest(malformed)}])
+            self.assertEqual(2, report['selected_runs'])
+            self.assertTrue(report['attempts'][0]['full_pass'])
+            self.assertEqual('invalid_zip', report['attempts'][1]['error'])
+            self.assertEqual('invalid', report['attempts'][1]['evidence_status'])
+
     def test_canonical_duplicates_unknown_keys_missing_and_unsafe_xml_rejected(self):
         for data in (b'<testsuite><testcase classname="unknown" name="native"/></testsuite>',
                      b'<testsuite/>',
                      b'<testsuite><testcase classname="fixture.NativeTest" name="native"/><testcase classname="fixture.NativeTest" name="native"/></testsuite>',
-                     b'<!DOCTYPE testsuite [<!ENTITY x "payload">]><testsuite/>'):
+                     b'<!DOCTYPE testsuite [<!ENTITY x "payload">]><testsuite/>',
+                     '<!DOCTYPE testsuite [<!ENTITY x "probe">]><testsuite><testcase name="&x;"/></testsuite>'.encode('utf-16-le')):
             files = self.fixture()
             files['native-report.xml'] = data
             reindex(files)
@@ -314,6 +400,39 @@ class HistoryTest(unittest.TestCase):
         self.assertTrue(row['application_passed'])
         self.assertIsNone(row['cohort'])
         self.assertEqual('incomplete_configuration', row['cohort_status'])
+
+    def test_unknown_java_avd_cache_or_receipt_sdk_remains_incomparable(self):
+        for path, change in [
+            ('evidence/e2e-native/execution.json', lambda x: x.update(java_launcher='')),
+            ('evidence/e2e-native/execution.json', lambda x: x.update(java_launcher='unavailable')),
+            ('evidence/e2e-native/execution.json', lambda x: x.pop('sdk_packages')),
+            ('evidence/e2e-native/preparation.json', lambda x: x.pop('cache')),
+        ]:
+            files = self.fixture()
+            self.change_json(files, path, change)
+            row = self.evaluate(files)
+            self.assertTrue(row['application_passed'])
+            self.assertIsNone(row['cohort'])
+            self.assertEqual('incomplete_configuration', row['cohort_status'])
+
+    def test_reconstruction_cannot_bypass_a_provider_record(self):
+        blob = archive(self.fixture())
+        key = (42, 1)
+        artifact = artifact_metadata() | {'digest': 'sha256:' + history.digest(blob)}
+        report = history.history(REPO, [run_metadata()], {key: [blob]}, [artifact], reconstructed=True)
+        self.assertEqual('verified', report['attempts'][0]['evidence_status'])
+        self.assertEqual('github_artifact', report['attempts'][0]['artifact_provenance'])
+        self.assertTrue(report['attempts'][0]['full_pass'])
+        artifact['digest'] = 'sha256:' + 'f' * 64
+        report = history.history(REPO, [run_metadata()], {key: [blob]}, [artifact], reconstructed=True)
+        self.assertEqual('artifact_digest_mismatch', report['attempts'][0]['error'])
+        self.assertFalse(report['attempts'][0]['full_pass'])
+        report = history.history(REPO, [run_metadata()], {key: [blob]}, [], reconstructed=True)
+        self.assertEqual('reconstructed', report['attempts'][0]['evidence_status'])
+        self.assertTrue(report['attempts'][0]['application_passed'])
+        self.assertFalse(report['attempts'][0]['full_pass'])
+        self.assertEqual(0, report['first_attempt']['verified_full_pass'])
+        self.assertEqual(1, report['first_attempt']['reconstructed_application_pass'])
 
     def test_unknown_cache_missing_marks_and_negative_remaining_budget_are_not_guessed(self):
         files = self.fixture()
@@ -376,6 +495,11 @@ class HistoryTest(unittest.TestCase):
         metadata.write_bytes(encoded({'repository': REPO, 'runs': [run_metadata()], 'artifacts': []}))
         result = json.loads(self.run_cli(args + ['--local-reconstruction']))
         self.assertEqual('local_reconstruction', result['attempts'][0]['artifact_provenance'])
+        self.assertEqual('reconstructed', result['attempts'][0]['evidence_status'])
+        self.assertTrue(result['attempts'][0]['application_passed'])
+        self.assertFalse(result['attempts'][0]['full_pass'])
+        self.assertEqual(0, result['first_attempt']['verified_full_pass'])
+        self.assertEqual(1, result['first_attempt']['reconstructed_application_pass'])
         self.assertEqual('ambiguous_artifact_metadata', json.loads(self.run_cli(args))['attempts'][0]['error'])
         text = history.markdown(result)
         self.assertIn('local_reconstruction', text)
@@ -414,7 +538,41 @@ class HistoryTest(unittest.TestCase):
         self.assertEqual([1, 2, 3], [r['attempt'] for r in report['attempts']])
         self.assertEqual(0, report['first_attempt']['verified_full_pass'])
         self.assertTrue(report['attempts'][2]['full_pass'])
+        self.assertEqual('verified', report['attempts'][0]['evidence_status'])
+        self.assertFalse(report['attempts'][0]['application_passed'])
+        self.assertEqual(1, report['attempts'][0]['qase_cases']['failed'])
+        self.assertEqual('verified', report['attempts'][1]['evidence_status'])
+        middle = next(s for s in report['attempts'][1]['suites'] if s['kind'] == 'maestro')
+        self.assertEqual('device', middle['category'])
+        self.assertEqual(1, middle['missing'])
         self.assertFalse(any('evil.invalid' in c for c in calls))
+
+    def test_jobs_request_failure_keeps_latest_and_all_known_attempts(self):
+        for fail_all in (False, True):
+            def get(endpoint, binary=False):
+                if '/workflows/' in endpoint:
+                    return {'workflow_runs': [run_metadata(3)]}
+                if '/artifacts?' in endpoint:
+                    return {'artifacts': []}
+                if '/jobs?' in endpoint:
+                    if fail_all or '/attempts/3/' in endpoint:
+                        raise history.Invalid('api_deadline')
+                    return {'jobs': [], 'total_count': 0}
+                return run_metadata(int(endpoint.rsplit('/', 1)[1]), 'failure')
+            client = history.GitHub(REPO)
+            with patch.object(client, 'get', side_effect=get):
+                report = client.collect('e2e.yml', 'main', 'push', 20, [])
+            self.assertEqual([1, 2, 3], [r['attempt'] for r in report['attempts']])
+            self.assertEqual(1, report['selected_runs'])
+            latest = report['attempts'][-1]
+            self.assertEqual('api_deadline', latest['error'])
+            self.assertEqual('success', latest['workflow_conclusion'], 'retain independent snapshot despite jobs error')
+            self.assertFalse(latest['full_pass'])
+            if fail_all:
+                self.assertTrue(all(r.get('error') == 'api_deadline' for r in report['attempts']))
+        report = history.history(REPO, [run_metadata()], {}, [], errors={(42, 3): 'github_request_failed'})
+        self.assertEqual([1, 2, 3], [r['attempt'] for r in report['attempts']])
+        self.assertEqual('github_request_failed', report['attempts'][-1]['error'])
 
     def test_api_errors_deadline_child_cleanup_output_limits_and_secret_sanitization(self):
         executable = self.root / 'bin/gh'
@@ -425,23 +583,36 @@ class HistoryTest(unittest.TestCase):
             with self.assertRaisesRegex(history.Invalid, '^github_request_failed$'):
                 client.get(f'repos/{REPO}/actions/runs/42')
             late = self.root / 'escaped-child'
-            write(executable, '#!/usr/bin/env python3\nimport subprocess,time\nsubprocess.Popen(["python3","-c",' + repr(f'import time; time.sleep(.7); open({str(late)!r},"w").write("escaped")') + '])\ntime.sleep(60)\n')
-            client.call_seconds = .2
-            started = time.monotonic()
-            with self.assertRaisesRegex(history.Invalid, '^api_deadline$'):
-                client.get(f'repos/{REPO}/actions/runs/42')
-            self.assertLess(time.monotonic() - started, 2)
-            time.sleep(0.8)
-            self.assertFalse(late.exists(), 'deadline must kill descendants, not only the parent')
             ready = self.root / 'child-ready'
-            child = f'import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); open({str(ready)!r},"w").write("ready"); time.sleep(1.3); open({str(late)!r},"w").write("escaped")'
-            write(executable, '#!/usr/bin/env python3\nimport subprocess\nsubprocess.Popen(["python3","-c",' + repr(child) + '])\n')
-            client = history.GitHub(REPO, seconds=5, call_seconds=.6)
-            with self.assertRaisesRegex(history.Invalid, '^api_deadline$'):
-                client.get(f'repos/{REPO}/actions/runs/42')
-            self.assertTrue(ready.exists(), 'the TERM-resistant child must actually start')
-            time.sleep(1.4)
-            self.assertFalse(late.exists(), 'reaped parent must not hide the surviving process group')
+            for resistant in (False, True):
+                ready.unlink(missing_ok=True)
+                child = (f'import signal,time; '
+                         f'signal.signal(signal.SIGTERM,signal.SIG_IGN if {resistant} else signal.SIG_DFL); '
+                         f'open({str(ready)!r},"w").write("ready"); time.sleep(.8); '
+                         f'open({str(late)!r},"w").write("escaped")')
+                write(executable, '#!/usr/bin/env python3\nimport subprocess,time\n'
+                      'subprocess.Popen(["python3","-c",' + repr(child) + '])\n' +
+                      ('' if resistant else 'time.sleep(60)\n'))
+                process = subprocess.Popen(['gh'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                           start_new_session=True)
+                try:
+                    startup_deadline = time.monotonic() + 5
+                    while not ready.exists() and time.monotonic() < startup_deadline:
+                        time.sleep(.01)
+                    self.assertTrue(ready.exists(), 'the child must actually be ready before deadline testing')
+                    if resistant:
+                        self.assertEqual(0, process.wait(timeout=5), 'exercise an already reaped parent')
+                    client = history.GitHub(REPO, seconds=5, call_seconds=.2)
+                    started = time.monotonic()
+                    # Return the real, already-ready owned process; no clock mocking or startup race.
+                    with patch.object(history.subprocess, 'Popen', return_value=process):
+                        with self.assertRaisesRegex(history.Invalid, '^api_deadline$'):
+                            client.get(f'repos/{REPO}/actions/runs/42')
+                    self.assertLess(time.monotonic() - started, 2)
+                    time.sleep(.9)
+                    self.assertFalse(late.exists(), 'deadline must kill descendants even after parent exit')
+                finally:
+                    history.stop_process(process)
             write(executable, '#!/usr/bin/env python3\nprint("x"*100)\n')
             with patch.object(history, 'MAX_FILE', 20):
                 with self.assertRaisesRegex(history.Invalid, '^api_response_too_large$'):

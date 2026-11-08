@@ -8,6 +8,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import lzma
 import math
 import os
 from pathlib import Path
@@ -21,6 +22,7 @@ import time
 from urllib.parse import urlencode
 import xml.etree.ElementTree as ET
 import zipfile
+import zlib
 
 SCHEMA = 1
 MAX_FILE = 8 * 1024 * 1024
@@ -112,7 +114,7 @@ def bundle_files(source):
                     data = archive.read(entry)
                     require(len(data) == entry.file_size, 'zip_size_mismatch')
                     result[entry.filename] = data
-        except (zipfile.BadZipFile, RuntimeError, OSError, EOFError, NotImplementedError):
+        except (zipfile.BadZipFile, zlib.error, lzma.LZMAError, UnicodeError, RuntimeError, OSError, EOFError, NotImplementedError):
             raise Invalid('invalid_zip') from None
     else:
         root = Path(source)
@@ -241,7 +243,7 @@ def canonical_results(files, expected, cases):
     results = []
     for kind in KINDS:
         data = files[f'{kind}-report.xml']
-        require(b'<!DOCTYPE' not in data.upper() and b'<!ENTITY' not in data.upper(), 'unsafe_xml')
+        require(b'\x00' not in data and b'<!DOCTYPE' not in data.upper() and b'<!ENTITY' not in data.upper(), 'unsafe_xml')
         try:
             parsed = module.parse_report(data.decode('utf-8'), 'jvm:' if kind == 'jvm' else '')
         except (ET.ParseError, UnicodeError, RecursionError):
@@ -269,6 +271,7 @@ def cohort_config(meta, suites):
             names += ['MAESTRO_VERSION', 'MAESTRO_SHA256']
         if (any(not isinstance(identity.get(k), str) or not identity[k] for k in names)
                 or not isinstance(receipt.get('java_launcher'), str)
+                or receipt['java_launcher'].strip().casefold() in {'', 'unavailable', 'unknown'}
                 or not HEX64.fullmatch(receipt.get('gradle_daemon_configuration_sha256', ''))
                 or not suite.get('budget_seconds')
                 or suite['kind'] == 'maestro' and not HEX64.fullmatch(identity['MAESTRO_SHA256'])):
@@ -278,11 +281,16 @@ def cohort_config(meta, suites):
                 'budget': suite['budget_seconds']}
         if suite['kind'] != 'jvm':
             packages = sdk.get('packages', {}) if sdk else {}
-            if not prep or not prep.get('boot_mode') or any(
+            if (not prep or not prep.get('boot_mode') or not isinstance(prep.get('cache'), str)
+                    or prep['cache'].strip().casefold() in {'', 'unknown', 'unavailable'}
+                    or not isinstance(receipt.get('sdk_packages'), dict)
+                    or any(not isinstance(receipt['sdk_packages'].get(k), dict)
+                           or not receipt['sdk_packages'][k].get('Pkg.Revision') for k in ('emulator', 'image'))
+                    or any(
                     not isinstance(packages.get(k, {}).get('actual'), dict) or
                     not packages[k]['actual'].get('revision') or
                     not HEX64.fullmatch(packages[k]['actual'].get('source_properties_sha256', ''))
-                    for k in ('emulator', 'image')):
+                    for k in ('emulator', 'image'))):
                 return None
             item.update(boot_mode=prep['boot_mode'], avd_cache=prep.get('cache'),
                         sdk={k: packages[k]['actual'] for k in ('emulator', 'image')},
@@ -291,18 +299,52 @@ def cohort_config(meta, suites):
     return config
 
 
-def inspect_bundle(source, run, repo, artifact, reconstructed=False):
+def control_plane(run, workflow, repo):
+    """Independent API routing qualifies UI acceptance; artifact claims cannot choose this policy."""
+    require(isinstance(workflow, str) and re.fullmatch(r'[A-Za-z0-9_.-]+\.ya?ml', workflow), 'invalid_workflow')
+    expected = f'.github/workflows/{workflow}'
+    event, path = run.get('event'), run.get('path')
+    head_repository = run.get('head_repository')
+    head_repo = head_repository.get('full_name') if isinstance(head_repository, dict) else None
+    event = event if isinstance(event, str) and len(event) <= 200 else None
+    path = path if isinstance(path, str) and len(path) <= 500 else None
+    reasons = []
+    if head_repo is None:
+        reasons.append('unknown_head_repository')
+    elif head_repo != repo:
+        reasons.append('unexpected_head_repository')
+    if event is None:
+        reasons.append('unknown_event')
+    elif event not in {'push', 'workflow_dispatch'}:
+        reasons.append('unsupported_event')
+    if path is None:
+        reasons.append('unknown_workflow_path')
+    elif path != expected:
+        reasons.append('unexpected_workflow_path')
+    status = 'ineligible' if any(r.startswith(('unsupported_', 'unexpected_')) for r in reasons) else 'unknown' if reasons else 'eligible'
+    return {'status': status, 'event': event, 'workflow_path': path,
+            'expected_workflow_path': expected, 'head_repository': head_repo if isinstance(head_repo, str) else None,
+            'reasons': reasons}
+
+
+def provider_zip(source, artifact):
+    require(isinstance(artifact, dict), 'artifact_metadata_missing')
+    provider_digest = artifact.get('digest')
+    require(isinstance(provider_digest, str) and re.fullmatch(r'sha256:[a-f0-9]{64}', provider_digest),
+            'artifact_digest_unavailable')
+    if not isinstance(source, bytes):
+        path = Path(source)
+        require(path.is_file() and not path.is_symlink(), 'provider_requires_zip')
+        require(path.stat().st_size <= MAX_ZIP, 'zip_too_large')
+        source = path.read_bytes()
+    require(len(source) <= MAX_ZIP, 'zip_too_large')
+    require(digest(source) == provider_digest[7:], 'artifact_digest_mismatch')
+    return source
+
+
+def inspect_bundle(source, run, repo, artifact, reconstructed=False, workflow='e2e.yml'):
     if not reconstructed:
-        require(isinstance(artifact, dict), 'artifact_metadata_missing')
-        provider_digest = artifact.get('digest')
-        require(isinstance(provider_digest, str) and re.fullmatch(r'sha256:[a-f0-9]{64}', provider_digest),
-                'artifact_digest_unavailable')
-        if not isinstance(source, bytes):
-            path = Path(source)
-            require(path.is_file() and not path.is_symlink(), 'provider_requires_zip')
-            require(path.stat().st_size <= MAX_ZIP, 'zip_too_large')
-            source = path.read_bytes()
-        require(digest(source) == provider_digest[7:], 'artifact_digest_mismatch')
+        source = provider_zip(source, artifact)
     files = bundle_files(source)
     index = validate_files(files)
     meta = index.get('metadata')
@@ -377,11 +419,11 @@ def inspect_bundle(source, run, repo, artifact, reconstructed=False):
             require(path is None or (path == f'evidence/{folder}/{filename}' and path in files), 'invalid_evidence_path')
             originals[kind] = load_json(files[path]) if path else None
         receipt, prep, sdk = (originals[k] for k in ('execution', 'preparation', 'sdk_cache'))
+        outcome = by_suite[key]
         if receipt is not None:
             validate_receipt(receipt, meta, key[0])
-        elif status['passed']:
+        elif status['passed'] or outcome['passed'] or outcome['failed']:
             raise Invalid('missing_receipt')
-        outcome = by_suite[key]
         if receipt is not None:
             for field in ('phase', 'result', 'exit_code'):
                 require(receipt.get(field) == outcome.get(field), 'receipt_status_mismatch')
@@ -425,17 +467,19 @@ def inspect_bundle(source, run, repo, artifact, reconstructed=False):
         require(delivery['reason'] != 'recorded' and 'qase-delivery.json' not in files, 'invalid_delivery')
     inventory = fingerprint({'expected': expected, 'project': project, 'cases': cases})
     config = cohort_config(meta, sorted(projections, key=lambda s: (s[0]['kind'], s[0]['index'])))
-    cohort = fingerprint({'source_sha': meta['source_sha'], 'inventory': inventory, 'config': config}) if config else None
+    plane = control_plane(run, workflow, repo)
+    cohort = fingerprint({'source_sha': meta['source_sha'], 'inventory': inventory, 'config': config}) if config and plane['status'] == 'eligible' else None
     jobs_ok = all(v == 'success' for v in job_results.values()) and all(
         j.get('conclusion') in {'success', 'skipped', 'neutral'} for j in run.get('jobs', []))
     workflow_ok = run['status'] == 'completed' and run['conclusion'] == 'success' and jobs_ok
     return {'artifact_provenance': 'local_reconstruction' if reconstructed else 'github_artifact',
-            'evidence_status': 'verified', 'problems': status['problems'], 'application_passed': status['passed'],
-            'full_pass': status['passed'] and workflow_ok, 'inventory': inventory,
+            'evidence_status': 'reconstructed' if reconstructed else 'verified', 'problems': status['problems'], 'application_passed': status['passed'],
+            'full_pass': status['passed'] and workflow_ok and plane['status'] == 'eligible' and not reconstructed,
+            'control_plane': plane, 'inventory': inventory,
             'components': dict(Counter(r.status for r in results)) | {'expected': len(results)},
             'qase_cases': dict(mapped) | {'expected': len(set(cases.values()))}, 'qase_delivery': qase_delivery, 'qase_run_id': qase_run_id,
             'qase_run_url': f'https://app.qase.io/run/{project}/dashboard/{qase_run_id}' if qase_run_id else None,
-            'cohort': cohort, 'cohort_status': 'comparable' if cohort else 'incomplete_configuration',
+            'cohort': cohort, 'cohort_status': plane['status'] + '_control_plane' if plane['status'] != 'eligible' else 'comparable' if cohort else 'incomplete_configuration',
             'event': meta.get('event_name'), 'ref': meta.get('ref'), 'schema': index['schema'],
             'job_results': job_results,
             'completeness': {key: sum(s.get(key, 0) for s in outcomes) for key in ('planned', 'passed', 'failed', 'missing', 'skipped', 'unverified')} |
@@ -443,13 +487,14 @@ def inspect_bundle(source, run, repo, artifact, reconstructed=False):
             'suites': sorted(details, key=lambda s: (s['kind'], s['index']))}
 
 
-def attempt_row(run_id, attempt, run, sources, artifacts, repo, error=None, reconstructed=False):
+def attempt_row(run_id, attempt, run, sources, artifacts, repo, error=None, reconstructed=False, workflow='e2e.yml'):
     row = {'run_id': run_id, 'attempt': attempt, 'source_sha': run.get('head_sha') if run else None,
            'workflow_status': run.get('status') if run else 'unavailable',
            'workflow_conclusion': run.get('conclusion') if run else None,
            'url': f'https://github.com/{repo}/actions/runs/{run_id}/attempts/{attempt}',
            'evidence_status': 'legacy_or_missing', 'full_pass': False, 'cohort': None,
-           'cohort_status': 'incomparable', 'qase_delivery': 'unknown'}
+           'cohort_status': 'incomparable', 'qase_delivery': 'unknown',
+           'control_plane': control_plane(run or {}, workflow, repo)}
     try:
         require(error is None, error or 'unavailable')
         require(run is not None, 'missing_attempt_metadata')
@@ -457,8 +502,11 @@ def attempt_row(run_id, attempt, run, sources, artifacts, repo, error=None, reco
             return row
         require(len({digest(json.dumps(validate_files(bundle_files(s)), sort_keys=True).encode()) for s in sources}) == 1,
                 'conflicting_attempt_input')
-        require(reconstructed or len(artifacts) == 1, 'ambiguous_artifact_metadata')
-        row.update(inspect_bundle(sources[0], run, repo, artifacts[0] if artifacts else None, reconstructed))
+        use_reconstruction = reconstructed and not artifacts
+        require(use_reconstruction or len(artifacts) == 1, 'ambiguous_artifact_metadata')
+        if not use_reconstruction:
+            sources = [provider_zip(source, artifacts[0]) for source in sources]
+        row.update(inspect_bundle(sources[0], run, repo, artifacts[0] if artifacts else None, use_reconstruction, workflow))
     except (Invalid, TypeError, KeyError, AttributeError, OverflowError) as exc:
         row.update(evidence_status='unverified' if isinstance(exc, Invalid) and str(exc) == 'artifact_digest_unavailable' else 'invalid',
                    error=str(exc) if isinstance(exc, Invalid) else 'malformed', full_pass=False,
@@ -466,7 +514,7 @@ def attempt_row(run_id, attempt, run, sources, artifacts, repo, error=None, reco
     return row
 
 
-def history(repo, runs, bundles, artifacts, selected=None, errors=None, reconstructed=False):
+def history(repo, runs, bundles, artifacts, selected=None, errors=None, reconstructed=False, workflow='e2e.yml'):
     require(REPO.fullmatch(repo), 'invalid_repository')
     by_key, conflicts = {}, set()
     for run in runs:
@@ -474,11 +522,12 @@ def history(repo, runs, bundles, artifacts, selected=None, errors=None, reconstr
         if key in by_key and by_key[key] != run:
             conflicts.add(key)
         by_key[key] = run
-    selected = sorted(set(selected if selected is not None else (k[0] for k in by_key)))
+    known_keys = set(by_key) | set(bundles) | set(errors or {})
+    selected = sorted(set(selected if selected is not None else (k[0] for k in known_keys)))
     require(len(selected) <= 100, 'too_many_runs')
     rows = []
     for run_id in selected:
-        known = [attempt for rid, attempt in by_key if rid == run_id]
+        known = [attempt for rid, attempt in known_keys if rid == run_id]
         latest = max(known, default=1)
         require(latest <= 100, 'too_many_attempts')
         attempts = sorted(set(range(1, latest + 1)) | {a for rid, a in bundles if rid == run_id})
@@ -488,7 +537,7 @@ def history(repo, runs, bundles, artifacts, selected=None, errors=None, reconstr
             matching = [a for a in artifacts if a.get('name') == f'e2e-result-attempt-{attempt}'
                         and a.get('workflow_run', {}).get('id') == run_id]
             rows.append(attempt_row(run_id, attempt, by_key.get(key), bundles.get(key, []), matching, repo,
-                                    'conflicting_run_metadata' if key in conflicts else (errors or {}).get(key), reconstructed))
+                                    'conflicting_run_metadata' if key in conflicts else (errors or {}).get(key), reconstructed, workflow))
     first = [r for r in rows if r['attempt'] == 1]
     states = Counter(r['workflow_conclusion'] or r['workflow_status'] for r in first)
     cohorts = {}
@@ -497,7 +546,8 @@ def history(repo, runs, bundles, artifacts, selected=None, errors=None, reconstr
             cohorts.setdefault(row['cohort'], []).append({'run_id': row['run_id'], 'attempt': row['attempt'], 'full_pass': row['full_pass']})
     return {'schema': SCHEMA, 'repository': repo, 'selected_runs': len(selected),
             'first_attempt': {'workflow_states': dict(sorted(states.items())),
-                              'verified_full_pass': sum(r['full_pass'] for r in first),
+                              'verified_full_pass': sum(r['full_pass'] and r['evidence_status'] == 'verified' for r in first),
+                              'reconstructed_application_pass': sum(r.get('application_passed', False) and r['evidence_status'] == 'reconstructed' for r in first),
                               'evidence_states': dict(sorted(Counter(r['evidence_status'] for r in first).items()))},
             'attempts': rows, 'cohorts': dict(sorted(cohorts.items()))}
 
@@ -610,12 +660,13 @@ class GitHub:
                 try:
                     run = latest if attempt == latest['run_attempt'] else self.get(f'repos/{self.repo}/actions/runs/{run_id}/attempts/{attempt}')
                     require(validate_run(run, self.repo) == key, 'attempt_metadata_mismatch')
+                    runs.append(run)  # Keep the API attempt even when its subsequent jobs request fails.
                     # Independent job conclusions veto a canonical pass; never infer tests from API success.
                     jobs = self.get(f'repos/{self.repo}/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100')
                     require(isinstance(jobs, dict) and isinstance(jobs.get('jobs'), list) and
                             integer(jobs.get('total_count')) and jobs['total_count'] <= 100, 'invalid_api_jobs')
                     run = dict(run, jobs=jobs['jobs'])
-                    runs.append(run)
+                    runs[-1] = run
                     matching = [a for a in all_artifacts if a.get('name') == f'e2e-result-attempt-{attempt}']
                     if matching:
                         require(len(matching) == 1, 'ambiguous_artifact_metadata')
@@ -626,7 +677,7 @@ class GitHub:
                         bundles[key] = [self.get(f"repos/{self.repo}/actions/artifacts/{artifact['id']}/zip", binary=True)]
                 except Invalid as exc:
                     errors[key] = str(exc)
-        return history(self.repo, runs, bundles, artifacts, selected, errors)
+        return history(self.repo, runs, bundles, artifacts, selected, errors, workflow=workflow)
 
 
 def escape(value):
@@ -636,20 +687,21 @@ def escape(value):
 def markdown(report):
     first = report['first_attempt']
     lines = [f"UI history · {escape(report['repository'])}", '',
-             f"Selected runs: {report['selected_runs']}. Verified complete first-attempt passes: {first['verified_full_pass']}/{report['selected_runs']}.",
+             f"Selected runs: {report['selected_runs']}. Provider-verified complete first-attempt passes: {first['verified_full_pass']}/{report['selected_runs']}.",
+             f"Locally reconstructed first attempts with passing canonical observations: {first['reconstructed_application_pass']} (not provider-verified acceptance).",
              'First-attempt workflow states: ' + escape(json.dumps(first['workflow_states'], sort_keys=True)) + '.',
              'Operational denominator includes unavailable and cancelled runs. This is not a flake-rate estimate.', '',
-             '| Run / attempt | Workflow | Evidence / application | Components / Qase cases | Delivery | Cohort |',
+             '| Run / attempt | Workflow | Evidence / reported application | Components / Qase cases | Delivery | Cohort |',
              '|---|---|---|---|---|---|']
     details = []
     for row in report['attempts']:
         counts = row.get('components', {})
         cases = row.get('qase_cases', {})
         application = 'PASS' if row.get('application_passed') else 'NOT PASS' if 'application_passed' in row else 'unknown'
-        lines.append(f"| [{row['run_id']} / {row['attempt']}]({row['url']}) | {escape(row['workflow_conclusion'] or row['workflow_status'])} | {escape(row['evidence_status'])}: {application}; complete={row['full_pass']} {escape(row.get('error', ''))} | {counts.get('passed', 0)}/{counts.get('expected', '?')} / {cases.get('passed', 0)}/{cases.get('expected', '?')} | {escape(row['qase_delivery'])} | {escape(row['cohort_status'])} {row.get('cohort', '')[:12] if row.get('cohort') else ''} |")
+        lines.append(f"| [{row['run_id']} / {row['attempt']}]({row['url']}) | {escape(row['workflow_conclusion'] or row['workflow_status'])} | {escape(row['evidence_status'])}: {application}; control={escape(row['control_plane']['status'])}; complete={row['full_pass']} {escape(row.get('error', ''))} | {counts.get('passed', 0)}/{counts.get('expected', '?')} / {cases.get('passed', 0)}/{cases.get('expected', '?')} | {escape(row['qase_delivery'])} | {escape(row['cohort_status'])} {row.get('cohort', '')[:12] if row.get('cohort') else ''} |")
         if row.get('qase_run_url'):
             details.append(f"\nQase: [{row['qase_run_id']}]({row['qase_run_url']}).")
-        details.append(f"\n{row['run_id']}/{row['attempt']}: Qase run={row.get('qase_run_id')}; problems={escape(json.dumps(row.get('problems', [])))}; source={row.get('source_sha')}; artifact={row.get('artifact_provenance', 'unknown')}; inventory={row.get('inventory', 'unknown')}.")
+        details.append(f"\n{row['run_id']}/{row['attempt']}: Qase run={row.get('qase_run_id')}; control={escape(json.dumps(row['control_plane'], sort_keys=True))}; problems={escape(json.dumps(row.get('problems', [])))}; source={row.get('source_sha')}; artifact={row.get('artifact_provenance', 'unknown')}; inventory={row.get('inventory', 'unknown')}.")
         for suite in row.get('suites', []):
             details.append(f"\n- {row['run_id']}/{row['attempt']} {suite['kind']} {suite['index']}: cause={escape(suite['category'])}, phase={escape(suite['phase'])}, deadline={suite.get('budget_expired', False)}; failed={suite['failed']}, missing={suite['missing']}, skipped={suite['skipped']}; process={suite['process_seconds']}s, budget={suite['budget_seconds']}s, remaining={suite['remaining_budget_seconds']}s; cache={escape(json.dumps(suite['cache'], sort_keys=True))}; diagnostics={escape(json.dumps(suite['invalid']))}.")
     lines += details
@@ -690,7 +742,7 @@ def main(argv=None):
                 require(match is not None, 'invalid_bundle_argument')
                 key = (int(match[1]), int(match[2]))
                 bundles.setdefault(key, []).append(Path(match[3]))
-            report = history(args.repo, metadata['runs'], bundles, metadata['artifacts'], args.run or None, reconstructed=args.local_reconstruction)
+            report = history(args.repo, metadata['runs'], bundles, metadata['artifacts'], args.run or None, reconstructed=args.local_reconstruction, workflow=args.workflow)
         else:
             require(not args.bundle and not args.local_reconstruction, 'offline_metadata_required')
             report = GitHub(args.repo, args.api_budget).collect(args.workflow, args.branch, args.event, args.limit, args.run)

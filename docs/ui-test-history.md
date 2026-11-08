@@ -15,7 +15,8 @@ python3 scripts/e2e-history.py --run 42506253547 --format json > /tmp/ui-history
 Online selection is bounded to 100 runs. Artifact pagination stops with a visible error after four pages;
 job metadata is bounded to 100 jobs per attempt. Each `gh api --method GET` call has a 20-second deadline,
 with a 180-second total budget (`--api-budget`, maximum 300). A deadline terminates the entire owned process
-group, including children surviving the parent. API errors contain fixed diagnostic codes, never stderr,
+group, including children surviving the parent. Failed jobs/API requests retain the known attempt and its
+independent workflow snapshot; an unavailable latest attempt cannot disappear from the report. API errors contain fixed diagnostic codes, never stderr,
 response bodies, credentials or temporary artifact URLs. Download endpoints are constructed from validated
 repository and numeric artifact IDs; artifact-supplied download URLs are ignored. Exhausting a budget leaves
 selected runs/attempts visible as unavailable, rather than silently dropping them.
@@ -39,9 +40,11 @@ The offline metadata envelope has this shape:
       "run_attempt": 1,
       "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "repository": {"full_name": "fin-assist/android"},
+      "head_repository": {"full_name": "fin-assist/android"},
       "status": "completed",
       "conclusion": "failure",
       "event": "push",
+      "path": ".github/workflows/e2e.yml",
       "head_branch": "main",
       "name": "UI tests",
       "jobs": [{"status": "completed", "conclusion": "failure"}]
@@ -86,8 +89,12 @@ python3 scripts/e2e-history.py --metadata /tmp/github-history.json \
 ```
 
 This still checks the independent run ID, source and attempt. It labels `artifact_provenance` as
-`local_reconstruction` and does not invent a provider artifact. It verifies historical test evidence, not
-publication or acceptance of the new producer workflow. Ordinary mode requires provider metadata.
+`local_reconstruction` and `evidence_status` as `reconstructed`. Canonical observations stay visible,
+but `full_pass` is false and these rows have a separate `reconstructed_application_pass` counter.
+They never enter the provider-verified pass counter. This is historical observation replay, not publication
+or acceptance of the new producer workflow. Reconstruction is permitted only when the attempt has no
+matching provider record. If a record exists, its source and every ZIP digest are checked even with this
+flag; failed provider validation cannot fall back to reconstruction. Ordinary mode requires provider metadata.
 
 Output is deterministic for identical saved inputs: stable sorting, no collection timestamp or local path
 in the report. JSON contains the full retained diagnostics and configuration fingerprints; Markdown gives
@@ -128,14 +135,21 @@ a visible invalid row, never a current pass. A missing provider digest is explic
 
 ## Reading the result
 
-`application_passed` is the canonical gather result. `full_pass` additionally needs a completed successful
+`application_passed` preserves the artifact-reported canonical gather result. It does not establish trusted
+UI acceptance. Independent API `head_repository.full_name` must match the selected repository, `path` must equal the selected `.github/workflows/e2e.yml` (or explicit
+`--workflow` basename), and API `event` must be `push` or `workflow_dispatch`. A PR event or another
+workflow is `control_plane: ineligible`; missing routing metadata is `unknown`. Both keep observations
+visible but cannot qualify for `full_pass` or a comparable cohort. Artifact metadata cannot choose this
+policy, including when its internal hashes and provider ZIP digest are valid.
+
+`full_pass` requires provider-verified evidence and additionally needs a completed successful
 GitHub workflow, successful compact shard/native/components job results and no independently recorded
 failing or unfinished jobs. A workflow failure with passing XML remains a workflow failure. Qase delivery
 is separate: `published` needs the matching mapped case count, zero unmapped cases and a positive Qase
 run ID; no token, a dry run, manual non-publication or publication failure is not delivery success.
 
-The first-attempt operational summary divides verified complete passes by **all selected runs** and lists
-workflow/evidence states. It does not estimate a flake rate. Reruns appear alongside their first and
+The first-attempt operational summary divides provider-verified complete passes by **all selected runs** and lists
+workflow/evidence states. Reconstructed observations have a separate counter. It does not estimate a flake rate. Reruns appear alongside their first and
 intermediate attempts; a later pass does not erase an earlier assertion, setup/device, budget, reporting or
 cancelled result. Per-suite canonical diagnostics, failure/missing/skipped counts, primary cause, phase and
 an additional deadline marker remain visible. An assertion failure followed by deadline expiry keeps both.
@@ -150,7 +164,8 @@ are the available configuration evidence. Do not interpret these groups as proof
 identity.
 
 Process duration is the original `tests-started` → `tests-finished` wall interval, never the sum of JUnit
-durations. Remaining budget is recorded budget minus that duration and can be negative. Missing marks,
+durations. Remaining budget is recorded budget minus that duration and can be negative. Unknown/empty Java, missing receipt SDK revisions or missing AVD cache policy also make cohorts
+incomparable. Missing marks,
 JVM timing absent from older receipts, missing budgets and cache outcomes stay unknown. Cache classes come
 only from the SDK sidecar (`hit-current`, `hit-updated`, `miss`, `preinstalled`); a fast run is not evidence
 of a cache hit. Maestro archive caching is unknown in schema 1. There are no p95, SLO or statistical claims
