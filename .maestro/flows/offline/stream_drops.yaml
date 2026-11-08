@@ -10,12 +10,10 @@ tags:
 # ---- 1.2: the call screen ----
 - runFlow: ../../subflows/clear_state.yaml
 - launchApp
-# The cold mock fixture must finish before configuring and exercising the stream.
-# The phone root is drawn while its initial consent GET still waits for backend readiness.
 - extendedWaitUntil:
     visible:
-      id: "auth.phone.document"
-    timeout: 60000
+      id: "auth.phone"
+    timeout: 20000
 # The call «arrives» after 6 s: two drops and their pauses fit into the wait.
 - runFlow:
     file: ../../subflows/config.yaml

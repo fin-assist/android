@@ -51,6 +51,11 @@ The mockE2e sign-in waits at most 60 s for the existing backend fixture-ready si
 four-second minimum observation dwell stays in place: elapsed-deadline and SSE probes relied on it. An unmet
 predicate has no applied receipt or continue action. These controls remain absent from stage/local/prod.
 
+Ordinary UI sign-in uses the existing `confirm_phone.yaml` consent-document predicate as a bounded 60 s
+preparation step. The phone root can appear while that GET still waits for the cold fixture. Submission and
+its authentication/call deadlines start only afterwards. This helper serves 23 flows; the focused cold SSE
+journey validates the shared wait. Independent earlier guards in other flows are not covered by this change.
+
 `reveal_text_up.yaml` targets fully visible scoped period text instead of a clipped parent container and uses
 a literal upward direction without centering. The Qase82-only `reveal_tag_up.yaml` uses a bounded loop along
 Analytics' noninteractive side padding; the default central gesture had opened a category/operation. It checks
