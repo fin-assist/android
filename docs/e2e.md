@@ -57,6 +57,15 @@ The flows run on four emulators at once (FIN-180), one job per shard, each with 
   (`scripts/test_e2e_shards.py`); `python3 scripts/e2e-shards.py plan --shards 4` prints it. After a run that changed
   the durations a lot, refresh them from the merged report: `python3 scripts/e2e-shards.py durations
   build/e2e/maestro-report.xml` (in the `e2e-reports` artifact).
+- **FIN-465 measurements (2026-11-08).** Shard 1 reserves 300 s for native Gradle configuration, all 13
+  instrumented tests and report copying. The last complete successful sample,
+  [run 42210173741](https://github.com/fin-assist/android/actions/runs/42210173741) (2026-11-06, same native sources),
+  took 193.8 s; the reserve includes at least 50% headroom. The 6/13 progress before the timeout in
+  [run 42461258707](https://github.com/fin-assist/android/actions/runs/42461258707) is incomplete evidence.
+  Flow estimates use the 80 successful JUnit samples from all four shards of that run; failed Qase82 retains its
+  previous successful 233 s estimate. The four-shard forecast is 34.5/35.1/35.0/35.1 min including native reserve.
+  All 81 flows and 13 native tests remain selected; 2400 s test and 45 min job limits are unchanged. These forecasts
+  do not establish UI acceptance: the confirming run must publish complete Maestro and native XML/Qase results.
 - **Build.** Every shard builds the APKs itself (`:app:assembleMockE2e :app:assembleMockE2eAndroidTest`, ~40 s from
   the Gradle build cache): the native tests and `:e2eCoverageReport` need the Gradle build anyway, a separate build
   job would add its time and an artifact round trip before every emulator starts, and outputs from the same build
@@ -1668,3 +1677,17 @@ ConsentScreen journey remains Qase12 and is not claimed as executed here.
 Focused local executions of the new native method and Qase72 are recorded in PR #277 / Qase, with the exact source and APK hashes. The first Q69 run reached the final cleared-field check but its assertion also included placeholder text; the check now compares EditableText independently and confirms the VM draft is empty. Real speech/audio integration, actual installed model/provider
 behavior and felt haptic remain the separate Manual Qase94, without a fabricated Passed result. Qase72 and the
 existing native tests remain in the normal suite. Production recognition behavior and HTTP contracts are unchanged.
+
+### FIN-464: reach the retained unavailable card in Qase82
+
+In [main UI run 42461258707](https://github.com/fin-assist/android/actions/runs/42461258707),
+`analytics/recalculation_snapshot` passed the first ready unavailable response, then stopped after finding only
+the clipped header of `analytics.block.expense_categories` during the next recalculation. The error-card assertion
+failed while the card was below the viewport. The failed screenshot, hierarchy and command trace are preserved in
+the original run; this observation alone does not establish a runtime regression.
+
+The marked-snapshot phase now scrolls to the unavailable text itself, scoped to the expense-categories block, and
+centres that text before asserting it. It still requires the retained error, the absent expense-category chart,
+the bounded stop and explicit retry, recovery to ready, correct period and uninterrupted polling after a refused
+mutation. Qase82, its existing mapping and financial expectations are unchanged. No runtime or timeout changes.
+Focused execution and full post-merge CI evidence are recorded in the PR; authoring this correction is not a pass.

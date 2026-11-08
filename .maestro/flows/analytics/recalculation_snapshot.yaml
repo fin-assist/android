@@ -82,10 +82,18 @@ tags:
     element:
       id: "analytics.recalculating"
 - assertVisible: "Пересчитываем после изменений.*"
+# A lazy block's clipped header can already count as visible while its error card is still below the viewport.
+# Scroll to the retained unavailable text itself, scoped to the affected block.
 - scrollUntilVisible:
     element:
+      text: "Не получилось посчитать.*"
+      childOf:
+        id: "analytics.block.expense_categories"
+    centerElement: true
+- assertVisible:
+    text: "Не получилось посчитать.*"
+    childOf:
       id: "analytics.block.expense_categories"
-- assertVisible: "Не получилось посчитать.*"
 - assertNotVisible:
     id: "analytics.expense_category"
 - scrollUntilVisible:
