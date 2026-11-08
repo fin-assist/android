@@ -171,6 +171,7 @@ class ShardOutcome:
     receipt_required: bool = True
     identity: dict[str, str] = field(default_factory=dict)
     apks: dict[str, str] = field(default_factory=dict)
+    budget_expired: bool = False
     unverified: int = 0
     unverified_results: dict[str, int] = field(default_factory=dict)
 
@@ -186,6 +187,9 @@ def _receipt(directory: Path, outcome: ShardOutcome, required: bool = True) -> N
         receipt = json.loads(path.read_text(encoding="utf-8"))
         phase, category = receipt.get("phase"), receipt.get("category")
         result, code = receipt.get("result"), receipt.get("exit_code")
+        budget_expired = receipt.get("budget_expired", False)
+        if type(budget_expired) is not bool or budget_expired and result != "failed":
+            raise ValueError("invalid budget evidence")
         if receipt.get("schema") != 1 or isinstance(receipt.get("schema"), bool):
             raise ValueError("invalid execution schema")
         if phase not in ("setup", "device", "maestro", "native", "components", "reporting", "complete"):
@@ -219,6 +223,7 @@ def _receipt(directory: Path, outcome: ShardOutcome, required: bool = True) -> N
                         and isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)}
         outcome.result, outcome.exit_code = result, code
         outcome.phase, outcome.category = phase, category
+        outcome.budget_expired = budget_expired
         if result in ("failed", "not_run") and category is None:
             outcome.category = "reporting"
     except (ValueError, OSError, AttributeError, TypeError):
@@ -307,8 +312,10 @@ def _merge_suite(
     label = f"{outcome.kind} suite" if outcome.kind != "maestro" else f"shard {outcome.index}"
     for key in expected:
         if key not in seen:
-            cause = outcome.category or "reporting"
+            cause = "budget" if outcome.budget_expired else outcome.category or "reporting"
             message = f"NOT RUN: {label}; phase={outcome.phase}; cause={cause}; no test result received"
+            if outcome.budget_expired:
+                message += "; deadline_expired=true"
             suite.append(_missing_case(root, key, message))
             outcome.missing += 1
     suite.set("tests", str(outcome.planned))
@@ -486,6 +493,7 @@ def outcomes_markdown(outcomes: list[ShardOutcome]) -> str:
         state = "" if o.reported else " (no report)"
         rows.append(f"| {label}{state} | {o.planned} | {o.passed} | {o.failed} | {o.missing} | "
                     f"{o.skipped} | {len(o.invalid)} | {o.seconds / 60:.1f} min | {o.category or 'none'} / {o.phase}"
+                    + ("; deadline_expired=true" if o.budget_expired else "")
                     + (f"; UNVERIFIED={o.unverified}" if o.unverified else "") + " |")
     return "\n".join(rows)
 

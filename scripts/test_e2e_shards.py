@@ -682,6 +682,66 @@ class StrictResultsTest(unittest.TestCase):
                 self.assertEqual((outcome.passed, outcome.unverified), (1, 0))
                 self.assertEqual(self.qase_payload()[3]['status'], 'passed')
 
+    def test_prior_real_failure_and_later_deadline_are_visible_through_qase(self):
+        self.plan = shards.plan(self.flows, {self.flows[0]: 10, self.flows[1]: 9}, 1)
+        write(self.shard_dir(1) / 'maestro-report.xml', report(self.root, [(self.flows[0], 'Flow 0', 1, True)]))
+        execution_receipt(self.shard_dir(1), phase='maestro', category='test', result='failed', exit_code=1, budget_expired=True)
+        outcomes = self.gather()
+        first = outcomes[0]
+        self.assertEqual((first.failed, first.missing, first.category, first.phase), (1, 1, 'test', 'maestro'))
+        self.assertTrue(first.budget_expired)
+        self.assertIn('test / maestro; deadline_expired=true', shards.outcomes_markdown(outcomes))
+        status = json.loads((self.out / 'execution-status.json').read_text())
+        self.assertEqual(status['suites'][0]['budget_expired'], True)
+        self.assertFalse(status['passed'])
+        cases = self.qase_payload()
+        self.assertEqual(cases[1]['status'], 'failed')
+        self.assertEqual(cases[1]['comment'], 'Assertion is false')
+        self.assertEqual(cases[2]['status'], 'skipped')
+        self.assertIn('cause=budget', cases[2]['comment'])
+        self.assertIn('phase=maestro', cases[2]['comment'])
+        self.assertIn('deadline_expired=true', cases[2]['comment'])
+
+    def test_clean_deadline_keeps_prior_completed_cases_and_marks_missing_as_budget(self):
+        self.plan = shards.plan(self.flows, {self.flows[0]: 10, self.flows[1]: 9}, 1)
+        write(self.shard_dir(1) / 'maestro-report.xml', report(self.root, [(self.flows[0], 'Flow 0', 1, False)]))
+        execution_receipt(self.shard_dir(1), phase='maestro', category='budget', result='failed', exit_code=124, budget_expired=True)
+        outcome = self.gather()[0]
+        self.assertEqual((outcome.passed, outcome.failed, outcome.missing, outcome.category), (1, 0, 1, 'budget'))
+        cases = self.qase_payload()
+        self.assertEqual(cases[1]['status'], 'passed')
+        self.assertEqual(cases[2]['status'], 'skipped')
+        self.assertIn('cause=budget', cases[2]['comment'])
+        self.assertIn('deadline_expired=true', cases[2]['comment'])
+
+    def test_exit_137_without_coordinator_marker_is_not_inferred_as_budget(self):
+        (self.shard_dir(1) / 'maestro-report.xml').unlink()
+        execution_receipt(self.shard_dir(1), phase='maestro', category='test', result='failed', exit_code=137)
+        outcomes = self.gather()
+        first = outcomes[0]
+        self.assertFalse(first.budget_expired)
+        self.assertEqual(first.category, 'test')
+        self.assertNotIn('deadline_expired=true', shards.outcomes_markdown(outcomes))
+        case = self.qase_payload()[1]
+        self.assertEqual(case['status'], 'skipped')
+        self.assertIn('cause=test', case['comment'])
+        self.assertNotIn('cause=budget', case['comment'])
+
+    def test_non_boolean_budget_marker_is_invalid_provenance(self):
+        for value in ('true', 1, None, []):
+            with self.subTest(value=value):
+                execution_receipt(self.native_dir, budget_expired=value)
+                outcome = self.gather()[2]
+                self.assertIn('invalid execution receipt', outcome.invalid)
+                self.assertFalse(outcome.budget_expired)
+                self.assertEqual(self.qase_payload()[3]['status'], 'skipped')
+
+    def test_deadline_marker_cannot_coexist_with_a_passed_execution_receipt(self):
+        execution_receipt(self.native_dir, budget_expired=True)
+        outcome = self.gather()[2]
+        self.assertIn('invalid execution receipt', outcome.invalid)
+        self.assertEqual(self.qase_payload()[3]['status'], 'skipped')
+
 
 if __name__ == "__main__":
     unittest.main()
