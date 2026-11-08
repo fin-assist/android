@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import math
+import os
 import sys
 import tempfile
 import unittest
@@ -27,6 +28,16 @@ def write(path: Path, text: str | bytes = "") -> Path:
     else:
         path.write_text(text, encoding="utf-8")
     return path
+
+
+def execution_receipt(path: Path, **changes) -> Path:
+    data = {
+        'schema': 1, 'phase': 'complete', 'category': None, 'result': 'passed', 'exit_code': 0,
+        'identity': {key: os.environ[key] for key in ('GITHUB_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT') if key in os.environ},
+        'apks': {'app-mock-e2e.apk': '1' * 64, 'app-mock-e2e-androidTest.apk': '2' * 64},
+    }
+    data.update(changes)
+    return write(path / 'execution.json', json.dumps(data))
 
 
 def flow_file(root: Path, flow: str, name: str) -> None:
@@ -144,6 +155,8 @@ class MergeTest(unittest.TestCase):
         self.plan = shards.plan(self.flows, self.durations, 2, native_seconds=0)
         self.assertEqual([s.flows for s in self.plan], [[self.flows[0]], [self.flows[1], self.flows[2]]])
         self.dir = Path(self.tmp.name) / "shards"
+        for index in (1, 2):
+            execution_receipt(self.shard_dir(index))
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -380,6 +393,8 @@ class StrictResultsTest(unittest.TestCase):
             write(self.shard_dir(index) / 'maestro-report.xml', report(self.root, [(flow, f'Flow {index-1}', 1, False)]))
         self.native_report = write(self.native_dir / 'native/connected/TEST-native.xml', self.native_xml())
         self.jvm_report = write(self.jvm_dir / 'TEST-component.xml', self.jvm_xml())
+        for directory in (self.shard_dir(1), self.shard_dir(2), self.native_dir, self.jvm_dir):
+            execution_receipt(directory)
 
     def write_mapping(self):
         write(self.root / 'scripts/qase-cases.json', json.dumps({'cases': self.mapping}))
@@ -476,7 +491,7 @@ class StrictResultsTest(unittest.TestCase):
 
     def test_setup_failure_has_not_run_evidence_without_assertion_failures(self):
         (self.shard_dir(1) / 'maestro-report.xml').unlink()
-        write(self.shard_dir(1) / 'execution.json', json.dumps({'phase': 'setup', 'category': 'setup', 'result': 'failed', 'exit_code': 28}))
+        execution_receipt(self.shard_dir(1), phase='setup', category='setup', result='failed', exit_code=28, apks={})
         outcomes = self.gather()
         first = outcomes[0]
         self.assertEqual((first.missing, first.failed, first.category, first.phase), (1, 0, 'setup', 'setup'))
@@ -507,7 +522,7 @@ class StrictResultsTest(unittest.TestCase):
         self.assertEqual((self.root / 'app/build/outputs/code_coverage/connected/device/coverage.ec').read_bytes(), b'execution')
 
     def test_passing_test_rows_do_not_hide_failed_execution_receipt(self):
-        write(self.native_dir / 'execution.json', json.dumps({'phase': 'reporting', 'category': 'reporting', 'result': 'failed', 'exit_code': 1}))
+        execution_receipt(self.native_dir, phase='reporting', category='reporting', result='failed', exit_code=1)
         outcomes = self.gather()
         self.assertEqual(outcomes[2].passed, 1)
         self.assertIn('native suite: execution failed during reporting', shards.problems(outcomes))
@@ -536,6 +551,54 @@ class StrictResultsTest(unittest.TestCase):
         outcome = self.gather()[0]
         self.assertEqual((outcome.passed, outcome.missing), (0, 1))
         self.assertIn('unknown or wrong-suite test result', outcome.invalid)
+
+    def test_missing_execution_receipt_blocks_passing_xml(self):
+        for directory in (self.shard_dir(1), self.native_dir, self.jvm_dir):
+            with self.subTest(directory=directory):
+                path = directory / 'execution.json'
+                saved = path.read_bytes()
+                path.unlink()
+                outcomes = self.gather()
+                self.assertTrue(any('missing execution receipt' in o.invalid for o in outcomes))
+                self.assertTrue(shards.problems(outcomes))
+                path.write_bytes(saved)
+
+    def test_historical_replay_must_explicitly_disable_receipt_requirement(self):
+        for directory in (self.shard_dir(1), self.shard_dir(2), self.native_dir, self.jvm_dir):
+            (directory / 'execution.json').unlink()
+        outcomes = shards.gather(self.root, self.plan, self.dir, self.out, self.native_dir, self.jvm_dir, receipts_required=False)
+        self.assertEqual(shards.problems(outcomes), [])
+
+    def test_source_and_run_identity_must_match_and_old_successful_attempt_is_allowed(self):
+        from unittest import mock
+        with mock.patch.dict(os.environ, {'GITHUB_SHA': 'current-source', 'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '2'}):
+            for directory in (self.shard_dir(1), self.shard_dir(2), self.native_dir, self.jvm_dir):
+                execution_receipt(directory, identity={'GITHUB_SHA': 'current-source', 'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '1'})
+            self.assertEqual(shards.problems(self.gather()), [])
+            for wrong in ({'GITHUB_SHA': 'old-source'}, {'GITHUB_RUN_ID': '999'}, {'GITHUB_RUN_ATTEMPT': '3'}):
+                identity = {'GITHUB_SHA': 'current-source', 'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '1', **wrong}
+                execution_receipt(self.native_dir, identity=identity)
+                self.assertIn('invalid execution receipt', self.gather()[2].invalid)
+
+    def test_passed_receipt_needs_complete_phase_zero_exit_and_no_failure_cause(self):
+        for changes in ({'schema': 2}, {'phase': 'invalid'}, {'phase': 'native'}, {'exit_code': 1}, {'category': 'test'}):
+            with self.subTest(changes=changes):
+                execution_receipt(self.native_dir, **changes)
+                self.assertIn('invalid execution receipt', self.gather()[2].invalid)
+
+    def test_emulator_receipt_needs_apk_identity_but_jvm_does_not(self):
+        execution_receipt(self.jvm_dir, apks={})
+        self.assertEqual(shards.problems(self.gather()), [])
+        execution_receipt(self.native_dir, apks={})
+        self.assertIn('missing emulator APK identity', self.gather()[2].invalid)
+
+    def test_duplicate_skip_is_preserved_as_worse_than_pass(self):
+        self.native_report.write_text(self.native_xml().replace('</testsuite>', self.native_xml('<skipped/>').split('<testsuite>')[1]))
+        outcome = self.gather()[2]
+        self.assertEqual((outcome.passed, outcome.skipped), (0, 1))
+        self.assertIn('duplicate test result', outcome.invalid)
+        case = next(ET.parse(self.out / 'native-report.xml').getroot().iter('testcase'))
+        self.assertIsNotNone(case.find('skipped'))
 
 
 if __name__ == "__main__":

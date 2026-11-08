@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import shutil
 import statistics
@@ -167,27 +168,58 @@ class ShardOutcome:
     category: str | None = None
     result: str | None = None
     exit_code: int | None = None
+    receipt_required: bool = True
+    identity: dict[str, str] = field(default_factory=dict)
+    apks: dict[str, str] = field(default_factory=dict)
 
 
-def _receipt(directory: Path, outcome: ShardOutcome) -> None:
+def _receipt(directory: Path, outcome: ShardOutcome, required: bool = True) -> None:
+    outcome.receipt_required = required
     path = directory / "execution.json"
     if not path.is_file():
+        if required and outcome.planned:
+            outcome.invalid.append("missing execution receipt")
         return
     try:
         receipt = json.loads(path.read_text(encoding="utf-8"))
         phase, category = receipt.get("phase"), receipt.get("category")
         result, code = receipt.get("result"), receipt.get("exit_code")
-        if result not in ("running", "passed", "failed", "not_run") or (code is not None and (not isinstance(code, int) or isinstance(code, bool))):
+        if receipt.get("schema") != 1 or isinstance(receipt.get("schema"), bool):
+            raise ValueError("invalid execution schema")
+        if phase not in ("setup", "device", "maestro", "native", "components", "reporting", "complete"):
+            raise ValueError("invalid execution phase")
+        if category not in (None, "setup", "device", "test", "budget", "reporting"):
+            raise ValueError("invalid execution category")
+        if result not in ("running", "passed", "failed", "not_run"):
             raise ValueError("invalid execution result")
-        outcome.result = result
-        outcome.exit_code = code
-        if phase in ("setup", "device", "maestro", "native", "components", "reporting", "complete"):
-            outcome.phase = phase
-        if category in ("setup", "device", "test", "budget", "reporting"):
-            outcome.category = category
-        if receipt.get("result") in ("failed", "not_run") and outcome.category is None:
+        if code is not None and (not isinstance(code, int) or isinstance(code, bool)):
+            raise ValueError("invalid execution exit code")
+        if (result == "passed" and (phase != "complete" or code != 0 or category is not None)
+                or result == "failed" and (code is None or code == 0)
+                or result == "running" and code is not None):
+            raise ValueError("inconsistent execution result")
+        identity = receipt.get("identity", {})
+        apks = receipt.get("apks", {})
+        if not isinstance(identity, dict) or not isinstance(apks, dict):
+            raise ValueError("invalid execution identity")
+        for name in ("GITHUB_SHA", "GITHUB_RUN_ID"):
+            if name in os.environ and identity.get(name) != os.environ[name]:
+                raise ValueError("execution source or run mismatch")
+        if "GITHUB_RUN_ATTEMPT" in os.environ:
+            attempt = str(identity.get("GITHUB_RUN_ATTEMPT", ""))
+            if not attempt.isdigit() or not 1 <= int(attempt) <= int(os.environ["GITHUB_RUN_ATTEMPT"]):
+                raise ValueError("execution attempt mismatch")
+        safe_identity = ("GITHUB_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "RUNNER_OS", "RUNNER_ARCH",
+                         "ImageOS", "ImageVersion", "MAESTRO_VERSION", "MAESTRO_SHA256")
+        outcome.identity = {key: identity[key] for key in safe_identity if isinstance(identity.get(key), str)}
+        outcome.apks = {name: value for name, value in apks.items()
+                        if name in ("app-mock-e2e.apk", "app-mock-e2e-androidTest.apk")
+                        and isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)}
+        outcome.result, outcome.exit_code = result, code
+        outcome.phase, outcome.category = phase, category
+        if result in ("failed", "not_run") and category is None:
             outcome.category = "reporting"
-    except (ValueError, OSError, AttributeError):
+    except (ValueError, OSError, AttributeError, TypeError):
         outcome.invalid.append("invalid execution receipt")
 
 
@@ -216,16 +248,20 @@ def _merge_suite(
                 outcome.invalid.append("duplicate test result")
                 # The verdict is invalid regardless; keep any real failure visible in canonical/Qase results.
                 previous = seen[key]
-                if _status(case) == "failed" and _status(previous) != "failed":
-                    setattr(outcome, _status(previous), getattr(outcome, _status(previous)) - 1)
-                    outcome.failed += 1
-                    previous.set("status", "ERROR")
+                severity = {"passed": 0, "skipped": 1, "failed": 2}
+                current_status, previous_status = _status(case), _status(previous)
+                if severity[current_status] > severity[previous_status]:
+                    setattr(outcome, previous_status, getattr(outcome, previous_status) - 1)
+                    setattr(outcome, current_status, getattr(outcome, current_status) + 1)
+                    previous.set("status", "ERROR" if current_status == "failed" else "SKIPPED")
                     skipped = previous.find("skipped")
                     if skipped is not None:
                         previous.remove(skipped)
                     problem = case.find("failure")
                     if problem is None:
                         problem = case.find("error")
+                    if problem is None:
+                        problem = case.find("skipped")
                     if problem is not None:
                         previous.append(problem)
                 continue
@@ -255,6 +291,11 @@ def _merge_suite(
     suite.set("failures", str(outcome.failed))
     suite.set("skipped", str(outcome.skipped + outcome.missing))
     suite.set("time", f"{outcome.seconds:.3f}")
+    if (outcome.receipt_required and outcome.result is not None and outcome.kind in ("maestro", "native")
+            and outcome.passed + outcome.failed + outcome.skipped):
+        expected_apks = {"app-mock-e2e.apk", "app-mock-e2e-androidTest.apk"}
+        if not expected_apks <= set(outcome.apks):
+            outcome.invalid.append("missing emulator APK identity")
     if outcome.invalid:
         outcome.category = "reporting"
     elif outcome.failed and outcome.category is None:
@@ -263,7 +304,9 @@ def _merge_suite(
         outcome.category = "reporting"
 
 
-def merge_reports(root: Path, shards: list[Shard], reports: dict[int, Path | None]) -> tuple[ET.Element, list[ShardOutcome]]:
+def merge_reports(
+    root: Path, shards: list[Shard], reports: dict[int, Path | None], receipts_required: bool = True,
+) -> tuple[ET.Element, list[ShardOutcome]]:
     """Merge only exact expected observations; preserve missing execution separately from assertion failures."""
     merged = ET.Element("testsuites")
     outcomes = []
@@ -273,7 +316,7 @@ def merge_reports(root: Path, shards: list[Shard], reports: dict[int, Path | Non
         report = reports.get(shard.index)
         outcome = ShardOutcome(shard.index, len(shard.flows), reported=False)
         if report is not None:
-            _receipt(report.parent, outcome)
+            _receipt(report.parent, outcome, receipts_required)
         _merge_suite(root, suite, shard.flows, [report] if report is not None and report.is_file() else [], outcome, by_name)
         outcomes.append(outcome)
     return merged, outcomes
@@ -337,11 +380,11 @@ def _copy_tree(source: Path, target: Path) -> bool:
 
 
 def gather(
-    root: Path, shards: list[Shard], shards_dir: Path, out: Path, native_dir: Path | None = None, jvm_dir: Path | None = None,
+    root: Path, shards: list[Shard], shards_dir: Path, out: Path, native_dir: Path | None = None, jvm_dir: Path | None = None, receipts_required: bool = True,
 ) -> list[ShardOutcome]:
     """Write canonical results, a derived manifest and the strict verdict before coverage/Qase publication."""
     dirs = {s.index: shards_dir / SHARD_DIR.format(index=s.index) for s in shards}
-    merged, outcomes = merge_reports(root, shards, {i: d / "maestro-report.xml" for i, d in dirs.items()})
+    merged, outcomes = merge_reports(root, shards, {i: d / "maestro-report.xml" for i, d in dirs.items()}, receipts_required)
     out.mkdir(parents=True, exist_ok=True)
     expected, issues = manifest(root, shards)
     if issues:
@@ -358,7 +401,7 @@ def gather(
         directory = native_dir if native_dir is not None else root / "build" / "e2e-native"
         native = ET.Element("testsuite", {"name": "Native"})
         outcome = ShardOutcome(0, len(expected["native"]), False, kind="native")
-        _receipt(directory, outcome)
+        _receipt(directory, outcome, receipts_required)
         _merge_suite(root, native, expected["native"], sorted((directory / "native").rglob("TEST-*.xml")), outcome)
         outcomes.append(outcome)
         ET.ElementTree(native).write(out / "native-report.xml", encoding="utf-8", xml_declaration=True)
@@ -379,7 +422,7 @@ def gather(
         directory = jvm_dir if jvm_dir is not None else root / "build" / "e2e-components"
         suite = ET.Element("testsuite", {"name": "JVM components"})
         outcome = ShardOutcome(0, len(expected["jvm"]), False, kind="jvm")
-        _receipt(directory, outcome)
+        _receipt(directory, outcome, receipts_required)
         _merge_suite(root, suite, expected["jvm"], sorted(directory.rglob("TEST-*.xml")), outcome)
         outcomes.append(outcome)
         ET.ElementTree(suite).write(out / "jvm-report.xml", encoding="utf-8", xml_declaration=True)
