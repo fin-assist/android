@@ -57,6 +57,8 @@ The flows run on five emulators at once (FIN-465, originally four in FIN-180), o
   (`scripts/test_e2e_shards.py`); `python3 scripts/e2e-shards.py plan --shards 5` prints it. After a run that changed
   the durations a lot, refresh them from the merged report: `python3 scripts/e2e-shards.py durations
   build/e2e/maestro-report.xml` (in the `e2e-reports` artifact).
+  This command only raises known weights. After a verified speedup or flow split, lower a stale maximum through
+  a reviewed manual JSON edit citing the successful run; remove deleted-flow entries with their source change.
 - **FIN-465 measurements (2026-11-08).** Shard 1 reserves 300 s for native Gradle configuration, all 13
   instrumented tests and report copying. The last complete successful sample,
   [run 42210173741](https://github.com/fin-assist/android/actions/runs/42210173741) (2026-11-06, same native sources),
@@ -92,8 +94,8 @@ The flows run on five emulators at once (FIN-465, originally four in FIN-180), o
   — its job failed or timed out before the flows ended — is not lost silently: its flows go into the merged report as
   failures («shard i/n left no Maestro report»), and so does a flow missing from a shard's report. Flows are matched
   to the report by its `file` attribute, or by the flow's `name` when a Maestro version writes none (names are unique,
-  `scripts/test_e2e_shards.py` checks it). Maestro is pinned in the workflow (`MAESTRO_VERSION`): a new version is
-  bumped there and checked with one run.
+  `scripts/test_e2e_shards.py` checks it). Maestro is pinned in the workflow (`MAESTRO_VERSION` and
+  `MAESTRO_SHA256`): update both from the official release and check the new version with one run.
 - **Result.** The run is red when any shard failed, and also when the merged report is not a pass although every job
   was green (a shard's report that never arrived, flows missing or failed — `gather` lists them): the `Reports` job
   fails after it has published everything.

@@ -27,6 +27,9 @@ class InstallMaestroTest(unittest.TestCase):
                         GITHUB_PATH=str(self.path_file), FAKE_ARCHIVE=str(self.archive), FAKE_MODE='success',
                         FAKE_VERSION_CALL=str(self.root / 'version-call'), FAKE_URL=str(self.root / 'url'))
         self.env['PATH'] = str(self.bin) + os.pathsep + self.env['PATH']
+        # Model a clean runner, independent of any analytics settings on the developer's machine.
+        self.env.pop('MAESTRO_CLI_NO_ANALYTICS', None)
+        self.env.pop('MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED', None)
         self.tool('curl', """import os, pathlib, shutil, sys
 pathlib.Path(os.environ['FAKE_URL']).write_text(sys.argv[-1])
 if os.environ['FAKE_MODE'] == 'http-error':
@@ -63,6 +66,9 @@ os.execvp(args[0], args)
                     entry.create_system = 3
                     entry.external_attr = 0o100755 << 16
                     script = '#!/bin/sh\nprintf "%s\\n" "$*" > "$FAKE_VERSION_CALL"\n'
+                    script += ('if [ -z "${MAESTRO_CLI_NO_ANALYTICS:-}" ] || '
+                               '[ "${MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED:-}" != true ]; then\n'
+                               '  printf "Anonymous analytics enabled.\\n\\n"\nfi\n')
                     script += 'printf "%s\\n" "' + version + '"\n'
                     archive.writestr(entry, script)
         if mode == 'no-checksum':
@@ -76,7 +82,7 @@ os.execvp(args[0], args)
         self.assertNotEqual(0, result.returncode)
         self.assertEqual('', self.path_file.read_text(), 'failed setup must not publish a usable CLI path')
 
-    def test_success_checks_pinned_executable_then_publishes_its_path(self):
+    def test_first_run_notice_is_disabled_before_exact_version_check_and_path_publication(self):
         result = self.run_setup()
         self.assertEqual(0, result.returncode, result.stderr)
         cli_dir = Path(self.path_file.read_text().strip())

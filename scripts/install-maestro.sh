@@ -35,7 +35,8 @@ if [[ ! -x "$cli" ]]; then
     echo 'Maestro archive did not contain an executable CLI' >&2
     exit 1
 fi
-version="$(timeout --kill-after=5s 30s "$cli" --version)"
+version="$(MAESTRO_CLI_NO_ANALYTICS=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true \
+    timeout --kill-after=5s 30s "$cli" --version)"
 if [[ "$version" != "$MAESTRO_VERSION" ]]; then
     echo 'Installed Maestro version does not match MAESTRO_VERSION' >&2
     exit 1
