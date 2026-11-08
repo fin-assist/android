@@ -336,8 +336,11 @@ class AnalyticsReliabilityComponentTest {
     private fun chart(vm: AnalyticsViewModel) = assertNotNull(vm.state.value.chartBlock?.decode(ChartData.serializer()))
     private fun month(point: ChartPoint) = YearMonth.from(point.range.from).toString()
     private fun range(key: String, months: Long = 1): DateRange {
-        val start = YearMonth.parse(key).atDay(1).atStartOfDay(ZoneId.of(ZONE)).toOffsetDateTime()
-        return DateRange(start, start.plusMonths(months))
+        val month = YearMonth.parse(key)
+        val zone = ZoneId.of(ZONE)
+        // Source-zone offsets changed in this 27-year history; derive both civil boundaries separately.
+        return DateRange(month.atDay(1).atStartOfDay(zone).toOffsetDateTime(),
+            month.plusMonths(months).atDay(1).atStartOfDay(zone).toOffsetDateTime())
     }
     private fun selection(key: String) = BlockAction(ActionType.SELECT_ANALYTICS_PERIOD, period = PeriodTypeCode.MONTH, date = PeriodKey(key))
 
