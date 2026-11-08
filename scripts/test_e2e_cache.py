@@ -460,6 +460,32 @@ class ShardProcessTest(unittest.TestCase):
         path.write_text('#!' + sys.executable + '\n' + body)
         path.chmod(0o755)
 
+    def run_prepared_script(self, shard, timeout=0.5, grace=0.1):
+        """Start the collection deadline after the fake scenario is prepared, not during Python startup."""
+        real_popen = cache.subprocess.Popen
+        children = []
+
+        def start(args, **kwargs):
+            process = real_popen(args, **kwargs)
+            if args[0] == 'scripts/e2e.sh':
+                children.append(process)
+                deadline = time.monotonic() + 5
+                while not Path('scenario.ready').exists() and time.monotonic() < deadline:
+                    self.assertIsNone(process.poll(), 'fake scenario exited before its readiness marker')
+                    time.sleep(0.01)
+                self.assertTrue(Path('scenario.ready').exists(), 'fake scenario did not become ready within 5s')
+            return process
+
+        try:
+            with patch.object(cache.subprocess, 'Popen', side_effect=start):
+                return cache.run_tests(shard, timeout=timeout, grace=grace)
+        finally:
+            # These two fixtures have one fake process and no descendants. Reap it even if the assertion fails.
+            for process in children:
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=2)
+
     def test_timeout_stops_term_resistant_descendant_before_archiving_unsafe_paths(self):
         child = """import os, signal, time
 from pathlib import Path
@@ -523,6 +549,8 @@ raise SystemExit(17)
     def test_deadline_during_report_collection_preserves_the_first_assertion_failure(self):
         self.script("""import json, signal, time
 from pathlib import Path
+# Deliberately exceed the collection deadline during startup: the marker, not wall time, starts the scenario.
+time.sleep(0.6)
 signal.signal(signal.SIGTERM, signal.SIG_IGN)
 folder = Path('build/e2e/maestro/failed?')
 folder.mkdir(parents=True)
@@ -530,10 +558,11 @@ folder.mkdir(parents=True)
 Path('build/e2e/execution.json').write_text(json.dumps({
     'phase': 'maestro', 'category': 'test', 'result': 'failed', 'exit_code': 17,
 }))
+Path('scenario.ready').write_text('ready')
 while True: time.sleep(0.02)
 """)
         with self.assertRaises(subprocess.TimeoutExpired):
-            cache.run_tests('2/5', timeout=0.5, grace=0.1)
+            self.run_prepared_script('2/5')
         data = json.loads(Path('build/e2e/execution.json').read_text())
         self.assertEqual(('maestro', 'test', 'failed', 17),
                          (data['phase'], data['category'], data['result'], data['exit_code']))
@@ -550,10 +579,11 @@ folder = Path('build/e2e/maestro/failed?')
 folder.mkdir(parents=True)
 (folder / 'commands.json').write_text('partial trace')
 Path('build/e2e/execution.json').write_text('{invalid')
+Path('scenario.ready').write_text('ready')
 while True: time.sleep(0.02)
 """)
         with self.assertRaises(subprocess.TimeoutExpired):
-            cache.run_tests('2/5', timeout=0.5, grace=0.1)
+            self.run_prepared_script('2/5')
         self.assertEqual('{invalid', Path('build/e2e/execution.json').read_text())
         self.assertFalse(Path('build/e2e/maestro').exists())
         with tarfile.open('build/e2e/maestro-output.tgz') as archive:
