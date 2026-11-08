@@ -39,3 +39,4 @@ app/src/local/assets/flags.json
 
 # Local Renovate runtime dependencies
 node_modules/
+.finassist-ci/

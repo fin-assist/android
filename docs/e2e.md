@@ -702,6 +702,7 @@ flow checks:
 | `applock/unlock`, `applock/forgot_code`, `applock/change_passcode` | the passcode set on the setup screen, then unlocked, forgotten or changed |
 | `profile/delete_account` | the passcode is checked again before the deletion |
 | `analytics/source_zone_and_session` (second login) | logout has already put the live app into passcode setup; `login.yaml` completes setup and its biometric offer before the new Analytics session |
+| `statements/upload_amount_overflow` | cold fixture readiness can exceed the service sign-in budget: wait for `auth.phone.document` (at most 60 s), then complete `login.yaml` through the UI (FIN-454; existing FIN-442/444 setup pattern) |
 
 The other sign-in flows (`auth/*`, `availability/maintenance_on_sign_in`, `offline/stream_drops`) drive the screens
 themselves. Every other flow uses `fast_login.yaml`; a new one does too unless it checks one of the above.
@@ -738,6 +739,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `operations/own_transfer_split` (mock-only) | two known own-transfer pairs: expense category goes to debit, income category to credit; split notice, exact search count 1→2, signed rows, each side's own timestamp/category after reopening (Qase93, FIN-442); execution evidence in PR #273 |
 | `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast and opens the history explanation in its help sheet; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month through its option container and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; follow-up not executed (previous run failed) |
 | `analytics/period_change_retry` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month; deferred Year response after a refused in-flight dismissal scrolls to the selected year text itself (Qase73, FIN-391/444); execution evidence in FIN-444 |
+| `analytics/transfer_change_retry` (mock-only) | offline transfer-mode switch preserves September/Month, WITH and the observed ready expense; restoring connectivity through config/resume preserves the notice and old mode; explicit target Retry commits WITHOUT and removes the error; after returning to WITH, disabling the transfer filter retires a new refused WITHOUT target, hides the chip and Retry, and preserves September/Month and the WITH expense (Qase96, FIN-452); authored only, UI not run |
 | `analytics/period_controls` (common) | Month/All-time hide rolling choices; Quarter/Year expose only their right-aligned choice; tapping the selected calendar segment exits its rolling period; All-time removes the whole period row across tab navigation (Qase80, FIN-416); authored, not executed |
 | `analytics/rolling_periods` (mock-only) | rolling year/quarter anchored to statement coverage, exact ranges, no forecast, failed singleton switch and explicit exact retry, transfer-mode preservation, clipped edge point → full calendar month, independent remembered calendar selection; Qase76 (FIN-411); authored, not executed |
 | `analytics/chart_month_selection` (mock-only) | whole-column selection including zero expenses, exact month/year, selected state and retained transfer mode/scroll; failed switch and explicit retry (Qase74, FIN-398); authored, not executed |
@@ -773,6 +775,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `assistant/answer_changed_since` | after an answer a category is changed, then the statement deleted: the earlier answer in the history shows «С тех пор категории менялись», then «С тех пор данные менялись» (`changed_since` counted at the time of the request) — FIN-135 |
 | `statements/upload_errors` | CSV and another-bank server messages, not a statement; leaving the picker (Qase15, FIN-375) |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
+| `statements/upload_amount_overflow` | a small OFX with one valid debit and one amount beyond Long: one unread `bad_amount` line, history/unread navigation and the unchanged valid operation/date/amount ([Qase95](https://app.qase.io/case/PLAINFIN-95), FIN-454); LOCAL Passed 172.089 s on API34/Pixel6/Maestro2.11.0 after explicit cold-backend readiness and UI sign-in, evidence in PR #292; earlier driver/setup failures preserved |
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
 | `statements/upload_unreadable_fixed` | `unreadable.ofx`, then `unreadable-fixed.ofx`: the old upload's row says «Строки дочитаны в загрузке от 8 октября» and has no «Не прочитали» link — FIN-79 |
 | `statements/download_period` (mock-only) | inclusive calendar selection, invalid/reversed/future bounds, network failure retains dates and offers explicit retry; Qase84 (FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
@@ -811,6 +814,21 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
+
+Not covered yet (FIN-452, FIN-453): an Analytics GET refusal with `retryable:false` after selecting another
+transfer mode, its exact `Retry-After` boundary, and an answer connection lost between a final-status `snapshot`
+and the following `done` / `error`. The existing closed error controls do not target Analytics GET (only
+`analytics_dismiss`), and the mock stream-drop control does not split a completed snapshot from its terminal
+metadata. Maestro cannot inject these transport boundaries through the current in-process server.
+The ordinary offline transfer-mode refusal and explicit retry are authored in `analytics/transfer_change_retry`
+(Qase96), including preservation across config/resume; this flow has not been run.
+`AnalyticsViewModelTest` covers false/wait, repeated selection, explicit retry, refresh/resume and changed
+contexts. `ChatViewModelBehaviourTest` covers close/offline after failed/complete/unknown snapshots,
+terminal text/quota/retry permission, pause/resume and REST refusal without another POST; interleaved
+Ask/Retry and LIMIT_EXCEEDED responses must keep their newer quota when an older terminal event is recovered.
+Concurrent live refunds reconcile through the gated quota GET, including an already pending read and coalesced
+terminal invalidations; recovery clears the corresponding stream error.
+No production hooks or UI executions were added for these timing boundaries.
 
 Not covered yet (FIN-40, FIN-415): tapping «Повторить» for a pending Ask after connectivity returns while
 Chat stays in the foreground. The mock control link pauses Chat; its online resume reads history and clears the

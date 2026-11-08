@@ -184,6 +184,8 @@ Tracer (VK, консоль RuStore) собирает крэши, ANR и non-fata
 
 [Политика Renovate](docs/renovate-policy.md) (FIN-211): одна актуальная release/main, автомерж полностью ботских PR после обязательного CI, один повтор красного CI и закрытие с явным повтором через Dependency Dashboard. AndroidX/Compose остаются на ручной проверке. Исходные группировки, ограничения версий и расписания — `renovate-base.json`; generated target и quarantine — ветка `renovate-policy`. Активация требует отдельного токена и строгой защиты веток; по умолчанию выключена.
 
+FIN-456: код контроллера и его регрессии подключены из immutable `fin-assist/go-ci`; локальные config/runtime lock и состояния сохраняются. Команды pinned source и bootstrap с явным consumer root — в [политике Renovate](docs/renovate-policy.md).
+
 ## Профильное ревью (FIN-421)
 
 Перед ревью применяются [профильные навыки](docs/review-skills/README.md) из проверяемой ревизии.

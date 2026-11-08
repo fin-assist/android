@@ -316,7 +316,11 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   (`period.data_to` is inclusive; a complete `range.to` is exclusive), in the displayed response source zone.
   A failed period type or key change retains its exact request behind an explicit, separately gated Retry.
   Resume does not replace that notice or submit the target. Repeating the segment, picker/navigation key or
-  chart target uses the same gate; payment action errors keep a separate presentation.
+  chart target and failed transfer-mode selection use the same gate; payment action errors keep a separate
+  presentation. Retrying a key or transfer change preserves the period directory's independent refusal/wait;
+  only a changed period type resets that directory context.
+  Disabling the transfers filter retires failed non-WITH targets and normalizes queued transfer selections
+  to WITH; compatible period-selection refusals remain intact.
   A changed context retires the failed period request.
   Same/finer request keys remain valid; the mock rejects coarse-to-fine keys with canonical validation errors.
 - Analytics monthly chart points select the exact server-provided month key (FIN-398); the whole column,
@@ -353,6 +357,15 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   survive page changes. Source-zone/revision/context mismatch rejects a page; an expired cursor refreshes the
   current selection once, then uses an explicit retry without a loop. Response source zones own calendar labels.
   Block/tile `help_text` opens a scrollable info sheet without replacing main content or concise lock reasons.
+- Assistant SSE (FIN-453): a final-status snapshot does not replace `done` / `error`. Reopen dropped streams
+  until terminal metadata arrives, including after pause/resume; never create another question to recover a stream.
+  A definitive stream refusal reconciles history once and retires pending terminal recovery unless a one-shot
+  maintenance correction is armed; resume must not repeatedly reload a confirmed final history answer.
+  Recovered terminal metadata belongs to its original quota revision: an old answer must not overwrite quota
+  confirmed by a newer Ask/Retry, LIMIT_EXCEEDED response or accepted quota GET, or clear/replace a newer stream's error.
+  A terminal from another revision invalidates an in-flight quota read and requests a coalesced, gated limit
+  reconciliation; this also preserves live refunds from concurrently generating answers. Stream recovery
+  clears its own error presentation.
 - Voice dictation (FIN-404): `VoiceInput` adapts Android recognition, `VoiceSession` rejects stale callbacks,
   and `VoicePanel` shows preparation, actual readiness, sound level and recognition/errors at the composer.
   Lifecycle stop/background/navigation cancels the active session; final text appends to the draft and never sends a question.
@@ -557,7 +570,9 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
   `feature/applock`), never in plain preferences, files, `BuildConfig`, resources or source; no real keys or tokens
   in the repository.
 - Network: HTTPS only, no cleartext exceptions, no custom `TrustManager` / `HostnameVerifier` that weakens checks;
-  auth headers not logged. Certificate pinning (FIN-121) only through the generated `pin-set` of `prod`: at least two
+  auth headers not logged. Debug HTTP diagnostics log only an allowlisted method and numeric status (or `failed`);
+  never URL/path/query, request/response headers/bodies or exception messages. Certificate pinning (FIN-121) only
+  through the generated `pin-set` of `prod`: at least two
   pins, an `expiration`, no `trust-anchors` / `debug-overrides`; pin failures reported without URL, host or
   certificate data.
 - Untrusted input — the OFX file the user picks (read and uploaded by the app, parsed today by the fake backend
@@ -636,3 +651,9 @@ FIN-411 adds rolling_year/rolling_quarter selectors in Analytics and a coverage-
 FIN-416 limits rolling selectors to their Year/Quarter tabs and removes period navigation for all_time; tapping the selected calendar segment exits its rolling period. Qase80 and docs/e2e.md cover these controls. The dismissal client uses complete block updates and retains ready snapshots while recalculating; see the FIN-416 response-update section in docs/e2e.md. The future Temporal saga is tracked in FIN-419.
 
 FIN-448: before publishing the baseline/target, require each configured required check to have exactly one GitHub Actions App15368 binding and explicit no-force-push/no-delete target protection. Check known conflict-free mergeability both initially and immediately before PR mutations; conflicts detected before claims/quarantine leave PRs open without those writes. A claim already persisted before a late conflict remains spent; stop dispatch and retain receipts on redelivery and after mergeability recovers. Preserve the existing red-CI retry flow for known nonconflicting blocked/behind PRs and the stricter green merge states.
+
+## Shared Renovate source (FIN-456)
+
+Controller code and regressions live in immutable `fin-assist/go-ci`; see `docs/renovate-policy.md`.
+Keep the manifest and both workflow action pins equal. Local checks delegate through the unchanged
+verified bootstrap; never restore a local executable controller or run consumer code with its write token.
