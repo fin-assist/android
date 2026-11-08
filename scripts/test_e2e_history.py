@@ -379,6 +379,18 @@ class HistoryTest(unittest.TestCase):
             reindex(files)
             self.assertIn(self.evaluate(files)['error'], {'canonical_inventory_mismatch', 'unsafe_xml'})
 
+    def test_dtd_and_entity_guards_reject_xml_with_otherwise_matching_inventory(self):
+        dtd = '<!DOCTYPE testsuite><testsuite><testcase classname="fixture.NativeTest" name="native"/></testsuite>'
+        entity = '<!DOCTYPE testsuite [<!ENTITY method "native">]><testsuite><testcase classname="fixture.NativeTest" name="&method;"/></testsuite>'
+        for data in (dtd.encode('utf-8'), entity.encode('utf-8'), entity.encode('utf-16-le')):
+            files = self.fixture()
+            files['native-report.xml'] = data
+            reindex(files)
+            row = self.evaluate(files)
+            self.assertEqual('unsafe_xml', row.get('error'), 'the inventory itself is valid; the XML guard must reject it')
+            self.assertFalse(row['full_pass'])
+            self.assertNotIn('application_passed', row)
+
     def test_cohort_requires_exact_source_inventory_workflow_tools_runner_sdk_not_apk_signing(self):
         base = self.evaluate(self.fixture())
         self.assertIsNotNone(base['cohort'])
@@ -440,6 +452,8 @@ class HistoryTest(unittest.TestCase):
             ('evidence/e2e-native/execution.json', lambda x: x.update(java_launcher='unavailable')),
             ('evidence/e2e-native/execution.json', lambda x: x.pop('sdk_packages')),
             ('evidence/e2e-native/preparation.json', lambda x: x.pop('cache')),
+            ('evidence/e2e-native/preparation.json', lambda x: x.update(cache=['hit'])),
+            ('evidence/e2e-native/preparation.json', lambda x: x.update(cache={})),
         ]:
             files = self.fixture()
             self.change_json(files, path, change)

@@ -282,7 +282,8 @@ def cohort_config(meta, suites):
                 'budget': suite['budget_seconds']}
         if suite['kind'] != 'jvm':
             packages = sdk.get('packages', {}) if sdk else {}
-            if (not prep or not prep.get('boot_mode') or prep.get('cache') not in AVD_CACHE_POLICY
+            if (not prep or not prep.get('boot_mode') or not isinstance(prep.get('cache'), str)
+                    or prep['cache'] not in AVD_CACHE_POLICY
                     or not isinstance(receipt.get('sdk_packages'), dict)
                     or any(not isinstance(receipt['sdk_packages'].get(k), dict)
                            or not receipt['sdk_packages'][k].get('Pkg.Revision') for k in ('emulator', 'image'))
