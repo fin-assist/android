@@ -4,7 +4,7 @@
 # branch («Run workflow») to check a flow or the coverage pipeline before the merge. Details: docs/e2e.md.
 #
 # The flows are split into shards, one emulator each (scripts/e2e-shards.py, docs/e2e.md «Shards in CI»); the
-# native tests run in shard 1. The `reports` job merges what the shards left — whatever they ended with, unless the
+# native tests run on their own fresh emulator and process budget. The `reports` job merges what the shards left — whatever they ended with, unless the
 # run was cancelled — into one Maestro report, one coverage report, one Qase run and the `e2e-reports` artifact.
 name: UI tests
 
@@ -23,7 +23,7 @@ on:
         default: false
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: e2e-${{ github.ref }}${{ inputs.sdk_benchmark && '-sdk-benchmark' || '' }}
@@ -32,6 +32,8 @@ concurrency:
 env:
   # The number of shards; the matrix below lists 1..SHARDS.
   SHARDS: 5
+  MAESTRO_VERSION: 2.11.0
+  MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
   AVD_NAME: pf-e2e
   AVD_API: 34
   AVD_TARGET: google_apis
@@ -53,7 +55,7 @@ jobs:
   shard:
     if: github.event_name != 'workflow_dispatch' || !inputs.sdk_benchmark
     name: Shard ${{ matrix.shard }} (emulator)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       # A failed shard must not cancel the others: their results still count, and the run is red anyway.
@@ -62,6 +64,9 @@ jobs:
         shard: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v7
+
+      - name: Initialize execution evidence
+        run: python3 scripts/e2e_execution.py init
 
       # The split (scripts/e2e-shards.py) and the reports job count on SHARDS; the matrix must list exactly 1..SHARDS.
       - name: Check the shard count
@@ -99,16 +104,37 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' || matrix.shard != 1 }}
 
       - name: Build APKs
-        run: ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest --no-daemon --console=plain
+        timeout-minutes: 10
+        run: |
+          status=0
+          timeout --kill-after=10s 540s ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest --no-daemon --console=plain || status=$?
+          if [ "$status" != 0 ]; then python3 scripts/e2e_execution.py finish "$status"; exit "$status"; fi
+          python3 scripts/e2e_execution.py identity
 
       # Pinned: the reports job matches flows by the JUnit report Maestro writes, so a new version is a deliberate
       # change (bump it here and check one run), not something that arrives with the next run.
+      - name: Restore pinned Maestro archive
+        id: maestro-cache
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/maestro-package
+          key: maestro-archive-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.MAESTRO_VERSION }}-${{ env.MAESTRO_SHA256 }}
+
       - name: Install Maestro
+        id: maestro-install
         timeout-minutes: 6
-        env:
-          MAESTRO_VERSION: 2.11.0
-          MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
         run: bash scripts/install-maestro.sh
+
+      - name: Save verified Maestro archive
+        if: matrix.shard == 1 && steps.maestro-install.outcome == 'success' && steps.maestro-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/maestro-package
+          key: maestro-archive-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.MAESTRO_VERSION }}-${{ env.MAESTRO_SHA256 }}
 
       # SDK caches contain only binaries, never AVD state or adb keys. Prefix restore may select an older
       # revision, so online SDK checks always run before immutable final keys are computed.
@@ -186,6 +212,8 @@ jobs:
         run: |
           python3 scripts/e2e-sdk-cache.py complete
           python3 scripts/e2e-cache.py mark sdk-ready
+          python3 scripts/e2e_execution.py identity
+          python3 scripts/e2e_execution.py phase device
 
       - name: Fingerprint the optional AVD cache
         id: avd-key
@@ -294,7 +322,7 @@ jobs:
         with:
           name: e2e-preparation-${{ matrix.shard }}
           path: build/e2e/preparation.json
-          retention-days: 3
+          retention-days: 14
 
       # Validation, snapshot creation, sealing, or snapshot boot may fail before UI tests start.
       # Retry preparation only. Once e2e.sh starts, an assertion/native-test failure remains a failure.
@@ -353,6 +381,12 @@ jobs:
         if: always()
         run: python3 scripts/e2e-cache.py report
 
+      - name: Finalize execution evidence
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: python3 scripts/e2e_execution.py finish "$JOB_STATUS"
+
       # Whatever the shard ended with: the reports job needs the flows' report, execution data and logs of each one.
       - uses: actions/upload-artifact@v7
         if: always()
@@ -362,16 +396,192 @@ jobs:
           path: |
             build/e2e/
             !build/e2e/maestro/**
-          retention-days: 3
+          retention-days: 14
+
+  native:
+    if: github.event_name != 'workflow_dispatch' || !inputs.sdk_benchmark
+    name: Native (fresh emulator)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: Initialize execution evidence
+        run: python3 scripts/e2e_execution.py init
+
+      # The runner image leaves ~5 GB free; the emulator's userdata partition alone needs more.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+            /usr/local/lib/android/sdk/ndk /usr/local/share/powershell /usr/share/swift
+          df -h /
+
+      # Hardware acceleration for the emulator on GitHub's Linux runners.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+
+      # Every shard builds the APKs itself, mostly from the build cache (~40 s): the native tests and the coverage
+      # report need the Gradle build anyway, and a separate build job would delay every emulator (docs/e2e.md).
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: true
+
+      - name: Build APKs
+        timeout-minutes: 10
+        run: |
+          status=0
+          timeout --kill-after=10s 540s ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest --no-daemon --console=plain || status=$?
+          if [ "$status" != 0 ]; then python3 scripts/e2e_execution.py finish "$status"; exit "$status"; fi
+          python3 scripts/e2e_execution.py identity
+
+      # SDK caches contain only binaries, never AVD state or adb keys. Prefix restore may select an older
+      # revision, so online SDK checks always run before immutable final keys are computed.
+      - name: Select SDK package caches
+        id: sdk-paths
+        run: |
+          python3 scripts/e2e-cache.py mark sdk-start
+          python3 scripts/e2e-sdk-cache.py paths
+
+      - name: Restore emulator SDK package
+        id: sdk-emulator
+        if: steps.sdk-paths.outputs.emulator-restore == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 2
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.sdk-paths.outputs.emulator-path }}
+          key: ${{ steps.sdk-paths.outputs.emulator-prefix }}lookup
+          restore-keys: ${{ steps.sdk-paths.outputs.emulator-prefix }}
+
+      - name: Restore system image SDK package
+        id: sdk-image
+        if: steps.sdk-paths.outputs.image-restore == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 2
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.sdk-paths.outputs.image-path }}
+          key: ${{ steps.sdk-paths.outputs.image-prefix }}lookup
+          restore-keys: ${{ steps.sdk-paths.outputs.image-prefix }}
+
+      - name: Recover missing or failed SDK restores
+        env:
+          EMULATOR_OUTCOME: ${{ steps.sdk-emulator.outcome }}
+          EMULATOR_MATCHED_KEY: ${{ steps.sdk-emulator.outputs.cache-matched-key }}
+          IMAGE_OUTCOME: ${{ steps.sdk-image.outcome }}
+          IMAGE_MATCHED_KEY: ${{ steps.sdk-image.outputs.cache-matched-key }}
+        run: python3 scripts/e2e-sdk-cache.py recover
+
+      - name: Prepare current SDK packages
+        id: sdk-install
+        run: |
+          sdkmanager_path="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          # yes exits on SIGPIPE when sdkmanager has read all answers; only sdkmanager failure matters here.
+          set +o pipefail
+          yes | timeout 120 "$sdkmanager_path" --licenses >/dev/null
+          set -o pipefail
+          timeout 600 "$sdkmanager_path" --install platform-tools emulator "system-images;android-${AVD_API};${AVD_TARGET};${AVD_ARCH}" --channel=0
+          python3 scripts/e2e-sdk-cache.py finalize
+
+      - name: Finish SDK preparation timings
+        run: |
+          python3 scripts/e2e-sdk-cache.py complete
+          python3 scripts/e2e-cache.py mark sdk-ready
+          python3 scripts/e2e_execution.py identity
+          python3 scripts/e2e_execution.py phase device
+
+      - name: Run native UI tests on a fresh cold AVD
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: ${{ env.AVD_API }}
+          target: ${{ env.AVD_TARGET }}
+          arch: ${{ env.AVD_ARCH }}
+          profile: ${{ env.AVD_PROFILE }}
+          cores: ${{ env.AVD_CORES }}
+          ram-size: ${{ env.AVD_RAM }}
+          disk-size: ${{ env.AVD_DISK }}
+          avd-name: ${{ env.AVD_NAME }}
+          disable-animations: ${{ env.AVD_DISABLE_ANIMATIONS }}
+          force-avd-creation: true
+          emulator-options: ${{ env.AVD_OPTIONS }} -no-snapshot-load -no-snapshot-save -wipe-data
+          pre-emulator-launch-script: python3 scripts/e2e-cache.py mark direct-boot-start
+          script: python3 scripts/e2e-cache.py test --direct-cold --native-only
+
+      - name: Emulator preparation timings
+        if: always()
+        run: python3 scripts/e2e-cache.py report
+      - name: Finalize execution evidence
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: python3 scripts/e2e_execution.py finish "$JOB_STATUS"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-native
+          path: build/e2e/
+          retention-days: 14
+
+  components:
+    if: github.event_name != 'workflow_dispatch' || !inputs.sdk_benchmark
+    name: Analytics UI components (JVM)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Initialize execution evidence
+        run: python3 scripts/e2e_execution.py init
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: true
+      - name: Test Analytics UI components
+        run: |
+          python3 scripts/e2e_execution.py identity
+          python3 scripts/e2e_execution.py phase components
+          status=0
+          timeout --kill-after=10s 900s ./gradlew :feature:analytics:impl:testDebugUnitTest --tests '*AnalyticsReliabilityComponentTest' --no-daemon --console=plain || status=$?
+          python3 scripts/e2e_execution.py finish "$status"
+          exit "$status"
+      - name: Finalize component evidence
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          python3 scripts/e2e_execution.py finish "$JOB_STATUS"
+          mkdir -p build/e2e-components
+          cp build/e2e/execution.json build/e2e-components/
+          report=feature/analytics/impl/build/test-results/testDebugUnitTest/TEST-ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest.xml
+          if [ -f "$report" ]; then cp "$report" build/e2e-components/; fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-components
+          path: build/e2e-components/
+          retention-days: 14
 
   reports:
     name: Reports
-    needs: shard
+    needs: [shard, native, components]
     # Also after a failed or timed-out shard: the other shards' results and coverage must not be lost. Not for a
     # cancelled run (a newer merge cancels it): nothing of it goes to Qase, and with fail-fast off a shard is cancelled
     # only together with the run.
     if: ${{ !cancelled() && !inputs.sdk_benchmark }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -392,6 +602,20 @@ jobs:
           pattern: e2e-shard-*
           path: build/e2e-shards
 
+      - name: Download native evidence
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-native
+          path: build/e2e-native
+
+      - name: Download component evidence
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-components
+          path: build/e2e-components
+
       # One Maestro report (a shard without one: its flows as failures), every shard's execution data and the native
       # tests' outputs where :e2eCoverageReport and qase-report.py read them.
       - name: Merge shard reports
@@ -402,41 +626,27 @@ jobs:
             echo
           } >> "$GITHUB_STEP_SUMMARY"
           python3 scripts/e2e-shards.py gather --shards "$SHARDS" --dir build/e2e-shards --out build/e2e \
+            --native-dir build/e2e-native --jvm-dir build/e2e-components \
             --summary "$GITHUB_STEP_SUMMARY" --github-output "$GITHUB_OUTPUT"
 
       # The report does not fail the job: without data it is empty and the summary says so.
       - name: UI test coverage report
         continue-on-error: true
-        run: ./gradlew :e2eCoverageReport --no-daemon --console=plain
+        timeout-minutes: 10
+        run: timeout --kill-after=10s 540s ./gradlew :e2eCoverageReport --no-daemon --console=plain
 
       - name: Test report
         if: always()
         run: |
-          {
-            if [ -f build/e2e/maestro-report.xml ]; then
-              python3 - <<'PY'
-          import xml.etree.ElementTree as ET
-          root = ET.parse("build/e2e/maestro-report.xml").getroot()
-          rows = []
-          for suite in root.iter("testsuite"):
-              for c in suite.iter("testcase"):
-                  failed = c.find("failure") is not None or c.find("error") is not None
-                  rows.append(f"| {'❌' if failed else '✅'} | {c.get('name')} | {suite.get('name')} | {float(c.get('time') or 0):.0f} s |")
-          print("| | Flow | Shard | Time |\n|---|---|---|---|\n" + "\n".join(rows))
-          PY
-            else
-              echo "No merged Maestro report (merging the shards' reports failed)."
-            fi
-            echo
-            python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml || echo "UI test coverage: the summary script failed."
-          } >> "$GITHUB_STEP_SUMMARY"
+          # Gather above is the authoritative result table, including NOT RUN/skipped and setup causes.
+          python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml >> "$GITHUB_STEP_SUMMARY" || echo "UI test coverage: the summary script failed." >> "$GITHUB_STEP_SUMMARY"
 
       # One Qase run per merge to main for all shards (project PLAINFIN, cases in scripts/qase-cases.json). Cancelled
       # runs are not sent — neither a cancelled workflow (a newer merge cancels the run) nor one with a cancelled shard:
       # partial results would read as lost coverage; manual runs of a branch are not either — Qase tracks main.
       # Without the QASE_API_TOKEN secret the script only prints a notice; a Qase outage does not fail the job.
       - name: Send results to Qase
-        if: ${{ !cancelled() && needs.shard.result != 'cancelled' && github.event_name == 'push' }}
+        if: ${{ !cancelled() && needs.shard.result != 'cancelled' && needs.native.result != 'cancelled' && needs.components.result != 'cancelled' && github.event_name == 'push' }}
         continue-on-error: true
         env:
           QASE_API_TOKEN: ${{ secrets.QASE_API_TOKEN }}
@@ -445,7 +655,9 @@ jobs:
             --title "UI tests · ${GITHUB_REF_NAME} · ${GITHUB_SHA::7}" \
             --description "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             build/e2e/maestro-report.xml \
-            'app/build/outputs/androidTest-results/connected/**/TEST-*.xml'
+            'app/build/outputs/androidTest-results/connected/**/TEST-*.xml' \
+            --jvm-reports build/e2e/jvm-report.xml \
+            --delivery-status build/e2e/qase-delivery.json
 
       - uses: actions/upload-artifact@v7
         if: always()
@@ -453,7 +665,14 @@ jobs:
           name: e2e-reports
           path: |
             build/e2e/maestro-report.xml
+            build/e2e/native-report.xml
+            build/e2e/jvm-report.xml
+            build/e2e/execution-status.json
+            build/e2e/expected-tests.json
+            build/e2e/qase-delivery.json
             build/e2e/coverage/
+            build/e2e-native/
+            build/e2e-components/
             build/e2e-shards/
             build/reports/e2e-coverage/
             app/build/outputs/androidTest-results/
@@ -465,13 +684,15 @@ jobs:
       # not a pass although every job was green — a shard's report that never arrived (the download above may fail),
       # flows missing from a report or failed in it.
       - name: Fail if a shard failed or its report is missing
-        if: needs.shard.result != 'success' || steps.merge.outputs.incomplete == 'true'
+        if: needs.shard.result != 'success' || needs.native.result != 'success' || needs.components.result != 'success' || steps.merge.outputs.incomplete == 'true' || steps.merge.outcome != 'success'
         env:
           RESULT: ${{ needs.shard.result }}
+          NATIVE_RESULT: ${{ needs.native.result }}
+          COMPONENT_RESULT: ${{ needs.components.result }}
           PROBLEMS: ${{ steps.merge.outputs.problems }}
         run: |
-          if [ "$RESULT" != "success" ]; then
-            echo "::error::UI tests: at least one shard did not pass (matrix result: $RESULT); see the summary and the e2e-reports artifact"
+          if [ "$RESULT" != "success" ] || [ "$NATIVE_RESULT" != "success" ] || [ "$COMPONENT_RESULT" != "success" ]; then
+            echo "::error::UI tests did not pass: Maestro=$RESULT native=$NATIVE_RESULT components=$COMPONENT_RESULT; see the e2e-reports artifact"
           fi
           if [ -n "$PROBLEMS" ]; then
             echo "::error::UI tests: the merged report is incomplete or failed: $PROBLEMS"

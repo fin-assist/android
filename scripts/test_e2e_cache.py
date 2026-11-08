@@ -218,6 +218,20 @@ class CleanAvdCacheTest(unittest.TestCase):
             key.assert_not_called()
             loaded.assert_not_called()
 
+    def test_native_cold_path_has_its_own_budget_and_failure_is_not_snapshot_retried(self):
+        with patch.object(cache, 'STATE', self.root / 'native-state.json'), patch.object(cache, 'assert_clean'), \
+             patch.object(cache, 'run_tests', return_value=7) as run, \
+             patch('sys.argv', ['e2e-cache.py', 'test', '--direct-cold', '--native-only']):
+            cache.write({'marks': {}})
+            with self.assertRaises(SystemExit) as result:
+                cache.main()
+            self.assertEqual(7, result.exception.code)
+            run.assert_called_once_with(None, timeout=600, native_only=True)
+            self.assertIn('tests-finished', cache.state()['marks'])
+            with patch('sys.argv', ['e2e-cache.py', 'fallback']), patch.object(cache, 'wait_stopped'), patch.object(cache, 'output') as out:
+                cache.main()
+                out.assert_called_once_with('needed', 'false')
+
     def test_preparation_failure_allows_one_cold_attempt(self):
         with patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'assert_clean', side_effect=RuntimeError('dirty')), \
              patch('sys.argv', ['e2e-cache.py', 'test', '--shard', '2/4']):
@@ -463,6 +477,7 @@ from pathlib import Path
 folder = Path('build/e2e/maestro/forgot?')
 folder.mkdir(parents=True)
 (folder / 'commands.json').write_text('partial')
+Path('build/e2e/execution.json').write_text('{"phase":"maestro","result":"running"}')
 Path('parent.pid').write_text(str(os.getpid()))
 subprocess.Popen([sys.executable, '-c', %r])
 while True: time.sleep(0.02)
@@ -474,6 +489,8 @@ while True: time.sleep(0.02)
             # Include the 5 s post-KILL barrier as well as the 1 s timeout and TERM grace.
             self.assertLess(time.monotonic() - started, 8)
             self.assertFalse(Path('build/e2e/maestro').exists())
+            receipt = json.loads(Path('build/e2e/execution.json').read_text())
+            self.assertEqual(('budget', 'failed', 124), (receipt['category'], receipt['result'], receipt['exit_code']))
             with tarfile.open('build/e2e/maestro-output.tgz') as stream:
                 self.assertIn('maestro/forgot?/commands.json', stream.getnames())
                 self.assertEqual(b'termination evidence', stream.extractfile('maestro/forgot?/term?.json').read())
@@ -594,6 +611,29 @@ class DisposableCiAdbKeyTest(unittest.TestCase):
 
 
 class CacheWorkflowSafetyTest(unittest.TestCase):
+    def test_native_has_an_independent_cold_device_and_reports_require_every_suite(self):
+        workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
+        native = workflow.split('\n  native:\n', 1)[1].split('\n  components:\n', 1)[0]
+        self.assertIn('test --direct-cold --native-only', native)
+        self.assertNotIn('Install Maestro', native)
+        self.assertNotIn('matrix.shard', native)
+        self.assertIn('timeout-minutes: 25', native)
+        reports = workflow.split('\n  reports:\n', 1)[1]
+        self.assertIn('needs: [shard, native, components]', reports)
+        self.assertIn("needs.native.result != 'success'", reports)
+        self.assertIn("needs.components.result != 'success'", reports)
+        self.assertIn('name: e2e-native', reports)
+        self.assertIn('--native-dir build/e2e-native --jvm-dir build/e2e-components', reports)
+
+    def test_workflow_keeps_ui_postmerge_only_and_caches_only_checksum_addressed_archive(self):
+        workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
+        self.assertNotIn('pull_request:', workflow)
+        self.assertIn('branches: [main]', workflow)
+        self.assertIn('contents: read', workflow)
+        self.assertIn('maestro-archive-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.MAESTRO_VERSION }}-${{ env.MAESTRO_SHA256 }}', workflow)
+        self.assertIn('path: ${{ runner.temp }}/maestro-package', workflow)
+        self.assertNotIn('restore-keys: maestro', workflow)
+
     def test_shard_upload_excludes_unfinished_raw_output_but_keeps_other_evidence(self):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
         upload = next(block for block in workflow.split('      - uses: actions/upload-artifact@v7')

@@ -74,18 +74,21 @@ def wait_for_process_group(process, timeout=5):
         time.sleep(min(0.05, max(0, deadline - time.monotonic())))
 
 
-def run_tests(shard, timeout=2400, grace=10):
+def run_tests(shard, timeout=2400, grace=10, native_only=False):
     """Keep the shard's deadline, stop its whole process group, then preserve per-flow evidence."""
     def interrupted(signum, _frame):
         raise SystemExit(128 + signum)
 
     previous = signal.signal(signal.SIGTERM, interrupted)
     archive_ready = True
+    budget_expired = False
     try:
-        process = subprocess.Popen(['scripts/e2e.sh', '--no-build', '--shard', shard], start_new_session=True)
+        selection = ['--native-only'] if native_only else ['--shard', shard]
+        process = subprocess.Popen(['scripts/e2e.sh', '--no-build', *selection], start_new_session=True)
         try:
             return process.wait(timeout=timeout)
-        except BaseException:
+        except BaseException as error:
+            budget_expired = isinstance(error, subprocess.TimeoutExpired)
             archive_ready = False
             try:
                 os.killpg(process.pid, signal.SIGTERM)
@@ -112,6 +115,12 @@ def run_tests(shard, timeout=2400, grace=10):
     finally:
         signal.signal(signal.SIGTERM, previous)
         if archive_ready:
+            if budget_expired:
+                receipt = Path('build/e2e/execution.json')
+                if receipt.is_file():
+                    data = json.loads(receipt.read_text())
+                    data.update(category='budget', result='failed', exit_code=124)
+                    receipt.write_text(json.dumps(data, indent=2) + '\n')
             archive_maestro_output()
 
 
@@ -328,6 +337,7 @@ def main():
     parser.add_argument('command', choices=['adb-init', 'key', 'validate', 'snapshot', 'seal', 'test', 'fallback', 'mark', 'report'])
     parser.add_argument('name', nargs='?')
     parser.add_argument('--shard')
+    parser.add_argument('--native-only', action='store_true')
     cold = parser.add_mutually_exclusive_group()
     cold.add_argument('--cold', action='store_true')
     cold.add_argument('--direct-cold', action='store_true')
@@ -400,7 +410,7 @@ def main():
         # The coordinator uses this durable marker to distinguish preparation failure from a real test failure.
         mark('tests-started')
         try:
-            result = run_tests(args.shard)
+            result = run_tests(None, timeout=600, native_only=True) if args.native_only else run_tests(args.shard)
         finally:
             mark('tests-finished')
         raise SystemExit(result)
