@@ -1719,7 +1719,9 @@ Maestro documents optional single-command interactions in its
 
 Qase89 reached the selected Month and retained September financial cards after the unknown mutation
 result, but the period picker was above the viewport after scrolling only to the Year segment and
-showing the notices. Reveal the exact September text inside the picker before asserting it. The
+showing the notices. Reveal the exact September text inside the picker before asserting it, stopping at full visibility
+without centering: extra downward swipes at the top could trigger pull-to-refresh. Require the
+refresh indicator to be absent immediately after scrolling. The
 selected Month, second Year selection, explicit read recovery, unknown-result notice and mutation
 request counts remain required. No runtime, fixture, timeout, Qase mapping or CI scope changes.
 
