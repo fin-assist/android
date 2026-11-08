@@ -259,6 +259,14 @@ tags:
 - extendedWaitUntil:
     visible: "Результат изменения не подтверждён"
     timeout: 30000
+# The new notices shrink the scroll viewport; reveal the exact retained month before checking rollback.
+- scrollUntilVisible:
+    element:
+      text: "Сентябрь 2026"
+      childOf:
+        id: "ds.period.pick"
+    direction: UP
+    centerElement: true
 - assertVisible:
     text: "Сентябрь 2026"
     childOf:
