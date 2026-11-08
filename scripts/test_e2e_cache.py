@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location('e2e_cache', Path(__file__).with_name('e2e-cache.py'))
 cache = importlib.util.module_from_spec(spec)
@@ -367,6 +367,70 @@ class CleanAvdCacheTest(unittest.TestCase):
                 cache.fingerprint()
 
 
+class ShardExitBarrierTest(unittest.TestCase):
+    def run_interrupted(self, observations, archive):
+        process = Mock(pid=12345)
+        process.poll.return_value = 0  # The leader has exited while its descendant remains alive.
+        process.wait.side_effect = [subprocess.TimeoutExpired('shard', 1), 0]
+        now = [0.0]
+
+        def sleep(seconds):
+            now[0] += seconds
+
+        with patch.object(cache.subprocess, 'Popen', return_value=process), \
+             patch.object(cache.os, 'killpg'), \
+             patch.object(cache.subprocess, 'run', side_effect=observations) as inspect, \
+             patch.object(cache.time, 'monotonic', side_effect=lambda: now[0]), \
+             patch.object(cache.time, 'sleep', side_effect=sleep), \
+             patch.object(cache, 'archive_maestro_output', side_effect=archive):
+            try:
+                cache.run_tests('1/4', timeout=1, grace=0)
+            finally:
+                self.assertLessEqual(now[0], 5)
+                for call in inspect.call_args_list:
+                    self.assertGreater(call.kwargs['timeout'], 0)
+                    self.assertLessEqual(call.kwargs['timeout'], 5)
+
+    def test_archive_waits_for_descendant_to_leave_d_state(self):
+        states = iter(['12345 D\n67890 R\n', '12345 Zsl\n', '12345 Z\n67890 D\n'])
+        observed = []
+
+        def inspect(*args, **kwargs):
+            observed.append(next(states))
+            return subprocess.CompletedProcess(args[0], 0, observed[-1])
+
+        def archive():
+            self.assertEqual(3, len(observed), 'archive started before the descendant stopped')
+
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_interrupted(inspect, archive)
+
+    def test_persistent_live_descendant_blocks_archive_with_bounded_failure(self):
+        for status in ('D', 'R', 'S', 'Zl', 'Zsl'):
+            with self.subTest(status=status):
+                archive = Mock()
+                with self.assertRaisesRegex(RuntimeError, 'process group'):
+                    self.run_interrupted(lambda *a, **kw: subprocess.CompletedProcess(a[0], 0, f'12345 {status}\n'), archive)
+                archive.assert_not_called()
+
+    def test_absent_group_or_only_zombies_can_be_archived(self):
+        for snapshot in ('', '67890 D\n', '12345 Z\n12345 Z+\n67890 R\n'):
+            with self.subTest(snapshot=snapshot):
+                archive = Mock()
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    self.run_interrupted(lambda *a, **kw: subprocess.CompletedProcess(a[0], 0, snapshot), archive)
+                archive.assert_called_once_with()
+
+    def test_process_inspection_failure_blocks_archive(self):
+        for error in (OSError('ps unavailable'), subprocess.TimeoutExpired('ps', 5),
+                      subprocess.CalledProcessError(1, 'ps')):
+            with self.subTest(error=error):
+                archive = Mock()
+                with self.assertRaises(type(error)):
+                    self.run_interrupted(Mock(side_effect=error), archive)
+                archive.assert_not_called()
+
+
 class ShardProcessTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -407,7 +471,8 @@ while True: time.sleep(0.02)
         try:
             with self.assertRaises(subprocess.TimeoutExpired):
                 cache.run_tests('3/4', timeout=1, grace=0.2)
-            self.assertLess(time.monotonic() - started, 4)
+            # Include the 5 s post-KILL barrier as well as the 1 s timeout and TERM grace.
+            self.assertLess(time.monotonic() - started, 8)
             self.assertFalse(Path('build/e2e/maestro').exists())
             with tarfile.open('build/e2e/maestro-output.tgz') as stream:
                 self.assertIn('maestro/forgot?/commands.json', stream.getnames())
@@ -457,7 +522,7 @@ while True: time.sleep(0.02)
                 time.sleep(0.01)
             self.assertTrue(Path('parent.pid').exists())
             os.kill(process.pid, signal.SIGTERM)
-            self.assertEqual(143, process.wait(timeout=3))
+            self.assertEqual(143, process.wait(timeout=8))
             self.assertFalse(Path('build/e2e/maestro').exists())
             with tarfile.open('build/e2e/maestro-output.tgz') as stream:
                 self.assertEqual(b'interrupted command', stream.extractfile('maestro/name?/commands.json').read())
@@ -529,6 +594,16 @@ class DisposableCiAdbKeyTest(unittest.TestCase):
 
 
 class CacheWorkflowSafetyTest(unittest.TestCase):
+    def test_shard_upload_excludes_unfinished_raw_output_but_keeps_other_evidence(self):
+        workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
+        upload = next(block for block in workflow.split('      - uses: actions/upload-artifact@v7')
+                      if 'name: e2e-shard-${{ matrix.shard }}' in block)
+        self.assertIn('if: always()', upload)
+        paths = re.search(r'          path: \|\n((?:            .+\n)+)', upload)
+        self.assertIsNotNone(paths, 'upload must retain other reports when raw writers have not stopped')
+        self.assertEqual(['build/e2e/', '!build/e2e/maestro/**'],
+                         [line.strip() for line in paths[1].splitlines()])
+
     def step(self, name):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
         return next(block for block in workflow.split('      - name: ') if block.startswith(name + '\n'))

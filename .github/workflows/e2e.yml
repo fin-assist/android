@@ -358,7 +358,10 @@ jobs:
         if: always()
         with:
           name: e2e-shard-${{ matrix.shard }}
-          path: build/e2e/
+          # Raw output may still have writers after a failed exit check; keep the other reports uploadable.
+          path: |
+            build/e2e/
+            !build/e2e/maestro/**
           retention-days: 3
 
   reports:

@@ -56,17 +56,37 @@ def archive_maestro_output(out=Path('build/e2e')):
         shutil.rmtree(raw)
 
 
+def wait_for_process_group(process, timeout=5):
+    """Require every group member to exit (zombies cannot write) before archiving."""
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError('Shard process group did not stop after SIGKILL; raw evidence retained')
+        process.poll()  # Reap the leader without mistaking its exit for the descendants' exit.
+        result = subprocess.run(['ps', '-eo', 'pgid=,stat='], check=True, capture_output=True,
+                                text=True, timeout=min(1, remaining))
+        members = [line.split() for line in result.stdout.splitlines() if line.strip()]
+        # A zombie leader can still have a live JVM thread (procps marks this with lowercase l).
+        if not any(int(group) == process.pid and not (status.startswith('Z') and 'l' not in status)
+                   for group, status in members):
+            return
+        time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+
+
 def run_tests(shard, timeout=2400, grace=10):
     """Keep the shard's deadline, stop its whole process group, then preserve per-flow evidence."""
     def interrupted(signum, _frame):
         raise SystemExit(128 + signum)
 
     previous = signal.signal(signal.SIGTERM, interrupted)
+    archive_ready = True
     try:
         process = subprocess.Popen(['scripts/e2e.sh', '--no-build', '--shard', shard], start_new_session=True)
         try:
             return process.wait(timeout=timeout)
         except BaseException:
+            archive_ready = False
             try:
                 os.killpg(process.pid, signal.SIGTERM)
             except ProcessLookupError:
@@ -86,11 +106,13 @@ def run_tests(shard, timeout=2400, grace=10):
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
-                process.wait()
+                wait_for_process_group(process)
+                archive_ready = True
             raise
     finally:
         signal.signal(signal.SIGTERM, previous)
-        archive_maestro_output()
+        if archive_ready:
+            archive_maestro_output()
 
 
 def fingerprint():
