@@ -600,6 +600,88 @@ class StrictResultsTest(unittest.TestCase):
         case = next(ET.parse(self.out / 'native-report.xml').getroot().iter('testcase'))
         self.assertIsNotNone(case.find('skipped'))
 
+    def qase_payload(self):
+        spec = importlib.util.spec_from_file_location('qase_provenance', ROOT / 'scripts/qase-report.py')
+        qase = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = qase
+        spec.loader.exec_module(qase)
+        results = []
+        for name, prefix in (('maestro-report.xml', ''), ('native-report.xml', ''), ('jvm-report.xml', 'jvm:')):
+            results.extend(qase.parse_report((self.out / name).read_text(), prefix=prefix))
+        payload, unmapped = qase.map_results(results, self.mapping)
+        self.assertEqual(unmapped, [])
+        return {case['case_id']: case for case in payload}
+
+    def test_unverified_provenance_never_becomes_a_current_pass_in_qase(self):
+        from unittest import mock
+        suites = [(self.shard_dir(1), 1, 0), (self.native_dir, 3, 2), (self.jvm_dir, 1, 3)]
+        with mock.patch.dict(os.environ, {'GITHUB_SHA': 'current-source'}):
+            for directory, case_id, outcome_index in suites:
+                mutations = ['missing', 'malformed', 'wrong_source']
+                if directory != self.jvm_dir:
+                    mutations.append('missing_apk')
+                for mutation in mutations:
+                    with self.subTest(directory=directory, mutation=mutation):
+                        for d in (self.shard_dir(1), self.shard_dir(2), self.native_dir, self.jvm_dir):
+                            execution_receipt(d)
+                        path = directory / 'execution.json'
+                        if mutation == 'missing':
+                            path.unlink()
+                        elif mutation == 'malformed':
+                            path.write_text('{invalid')
+                        elif mutation == 'wrong_source':
+                            execution_receipt(directory, identity={'GITHUB_SHA': 'stale-source'})
+                        else:
+                            execution_receipt(directory, apks={})
+                        outcome = self.gather()[outcome_index]
+                        self.assertEqual((outcome.passed, outcome.failed, outcome.unverified), (0, 0, 1))
+                        self.assertEqual(outcome.unverified_results, {'passed': 1})
+                        case = self.qase_payload()[case_id]
+                        self.assertEqual(case['status'], 'skipped')
+                        self.assertIn('UNVERIFIED', case['comment'])
+                        self.assertIn('raw result passed', case['comment'])
+
+    def test_unverified_raw_failures_keep_diagnostics_without_claiming_current_assertion_failures(self):
+        reports = [(self.shard_dir(1) / 'maestro-report.xml', 1, 0, 'maestro-report.xml'),
+                   (self.native_report, 3, 2, 'native-report.xml'),
+                   (self.jvm_report, 1, 3, 'jvm-report.xml')]
+        for report_path, case_id, outcome_index, canonical_name in reports:
+            with self.subTest(report=report_path):
+                raw = report_path.read_text()
+                parsed = ET.fromstring(raw)
+                ET.SubElement(next(parsed.iter('testcase')), 'failure', {'message': 'raw failure detail'}).text = 'raw failure trace'
+                failed = ET.tostring(parsed, encoding='unicode')
+                report_path.write_text(failed)
+                directory = self.shard_dir(1) if outcome_index == 0 else self.native_dir if outcome_index == 2 else self.jvm_dir
+                receipt = directory / 'execution.json'
+                saved_receipt = receipt.read_text()
+                receipt.write_text('{invalid')
+                outcome = self.gather()[outcome_index]
+                self.assertEqual((outcome.failed, outcome.unverified_results), (0, {'failed': 1}))
+                case = self.qase_payload()[case_id]
+                self.assertEqual(case['status'], 'skipped')
+                self.assertIn('raw result failed', case['comment'])
+                canonical = next(c for c in ET.parse(self.out / canonical_name).getroot().iter('testcase') if c.get('pf-execution') == 'unverified')
+                self.assertIsNone(canonical.find('failure'))
+                self.assertIn('raw failure detail', canonical.find('system-out').text)
+                self.assertIn('raw failure trace', canonical.find('system-out').text)
+                self.assertEqual(report_path.read_text(), failed, 'raw artifact must not be rewritten')
+                receipt.write_text(saved_receipt)
+                report_path.write_text(raw)
+
+    def test_valid_failed_execution_preserves_real_observed_results_in_qase(self):
+        for phase in ('setup', 'reporting'):
+            with self.subTest(phase=phase):
+                execution_receipt(self.native_dir, phase=phase, category=phase, result='failed', exit_code=1)
+                self.native_report.write_text(self.native_xml('<failure message="current failure"/>'))
+                outcome = self.gather()[2]
+                self.assertEqual((outcome.failed, outcome.unverified), (1, 0))
+                self.assertEqual(self.qase_payload()[3]['status'], 'failed')
+                self.native_report.write_text(self.native_xml())
+                outcome = self.gather()[2]
+                self.assertEqual((outcome.passed, outcome.unverified), (1, 0))
+                self.assertEqual(self.qase_payload()[3]['status'], 'passed')
+
 
 if __name__ == "__main__":
     unittest.main()

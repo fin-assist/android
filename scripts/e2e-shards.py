@@ -171,6 +171,8 @@ class ShardOutcome:
     receipt_required: bool = True
     identity: dict[str, str] = field(default_factory=dict)
     apks: dict[str, str] = field(default_factory=dict)
+    unverified: int = 0
+    unverified_results: dict[str, int] = field(default_factory=dict)
 
 
 def _receipt(directory: Path, outcome: ShardOutcome, required: bool = True) -> None:
@@ -280,6 +282,28 @@ def _merge_suite(
             status = _status(case)
             setattr(outcome, status, getattr(outcome, status) + 1)
             outcome.seconds += seconds
+    if (outcome.receipt_required and outcome.result is not None and outcome.kind in ("maestro", "native")
+            and seen):
+        expected_apks = {"app-mock-e2e.apk", "app-mock-e2e-androidTest.apk"}
+        if not expected_apks <= set(outcome.apks):
+            outcome.invalid.append("missing emulator APK identity")
+    provenance_errors = {"missing execution receipt", "invalid execution receipt", "missing emulator APK identity"}
+    unverified_reasons = sorted(provenance_errors.intersection(outcome.invalid))
+    if unverified_reasons:
+        # Keep raw reports in their artifact; unverified observations cannot attest to the current run in Qase.
+        for key, case in seen.items():
+            raw_status = _status(case)
+            outcome.unverified += 1
+            outcome.unverified_results[raw_status] = outcome.unverified_results.get(raw_status, 0) + 1
+            setattr(outcome, raw_status, getattr(outcome, raw_status) - 1)
+            outcome.skipped += 1
+            message = f"UNVERIFIED: {outcome.kind}; raw result {raw_status}; " + "; ".join(unverified_reasons)
+            canonical = _missing_case(root, key, message)
+            canonical.set("pf-execution", "unverified")
+            canonical.set("pf-raw-status", raw_status)
+            ET.SubElement(canonical, "system-out").text = "Raw observation (not current-run evidence):\n" + ET.tostring(case, encoding="unicode")[:8000]
+            suite.remove(case)
+            suite.append(canonical)
     label = f"{outcome.kind} suite" if outcome.kind != "maestro" else f"shard {outcome.index}"
     for key in expected:
         if key not in seen:
@@ -291,11 +315,6 @@ def _merge_suite(
     suite.set("failures", str(outcome.failed))
     suite.set("skipped", str(outcome.skipped + outcome.missing))
     suite.set("time", f"{outcome.seconds:.3f}")
-    if (outcome.receipt_required and outcome.result is not None and outcome.kind in ("maestro", "native")
-            and outcome.passed + outcome.failed + outcome.skipped):
-        expected_apks = {"app-mock-e2e.apk", "app-mock-e2e-androidTest.apk"}
-        if not expected_apks <= set(outcome.apks):
-            outcome.invalid.append("missing emulator APK identity")
     if outcome.invalid:
         outcome.category = "reporting"
     elif outcome.failed and outcome.category is None:
@@ -466,7 +485,8 @@ def outcomes_markdown(outcomes: list[ShardOutcome]) -> str:
         label = o.kind.capitalize() if o.kind != "maestro" else f"{o.index}/{count}"
         state = "" if o.reported else " (no report)"
         rows.append(f"| {label}{state} | {o.planned} | {o.passed} | {o.failed} | {o.missing} | "
-                    f"{o.skipped} | {len(o.invalid)} | {o.seconds / 60:.1f} min | {o.category or 'none'} / {o.phase} |")
+                    f"{o.skipped} | {len(o.invalid)} | {o.seconds / 60:.1f} min | {o.category or 'none'} / {o.phase}"
+                    + (f"; UNVERIFIED={o.unverified}" if o.unverified else "") + " |")
     return "\n".join(rows)
 
 
