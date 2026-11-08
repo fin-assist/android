@@ -48,28 +48,43 @@ run summary lists the shards, the flows and the UI test coverage; reports are in
 
 ### Shards in CI
 
-The flows run on four emulators at once (FIN-180), one job per shard, each with its own emulator:
+The flows run on five emulators at once (FIN-465, originally four in FIN-180), one job per shard:
 
 - **Split.** `scripts/e2e-shards.py` spreads the flows so that the shards take about the same time: longest flow
-  first, to the shard with the least so far, by the durations of the last measured run on CI
+  first, to the shard with the least so far, by conservative maxima of successful measured durations on CI
   (`scripts/e2e-durations.json`; a flow not measured yet counts as the median). Shard 1 also runs the native tests
   and gets fewer flows for them. The split is deterministic and every flow is in exactly one shard
-  (`scripts/test_e2e_shards.py`); `python3 scripts/e2e-shards.py plan --shards 4` prints it. After a run that changed
+  (`scripts/test_e2e_shards.py`); `python3 scripts/e2e-shards.py plan --shards 5` prints it. After a run that changed
   the durations a lot, refresh them from the merged report: `python3 scripts/e2e-shards.py durations
   build/e2e/maestro-report.xml` (in the `e2e-reports` artifact).
+  This command only raises known weights. After a verified speedup or flow split, lower a stale maximum through
+  a reviewed manual JSON edit citing the successful run; remove deleted-flow entries with their source change.
 - **FIN-465 measurements (2026-11-08).** Shard 1 reserves 300 s for native Gradle configuration, all 13
   instrumented tests and report copying. The last complete successful sample,
   [run 42210173741](https://github.com/fin-assist/android/actions/runs/42210173741) (2026-11-06, same native sources),
   took 193.8 s; the reserve includes at least 50% headroom. The 6/13 progress before the timeout in
   [run 42461258707](https://github.com/fin-assist/android/actions/runs/42461258707) is incomplete evidence.
-  Flow estimates use the 80 successful JUnit samples from all four shards of that run; failed Qase82 retains its
-  previous successful 233 s estimate. The four-shard forecast is 34.5/35.1/35.0/35.1 min including native reserve.
-  All 81 flows and 13 native tests remain selected; 2400 s test and 45 min job limits are unchanged. These forecasts
-  do not establish UI acceptance: the confirming run must publish complete Maestro and native XML/Qase results.
+  Updating the four-shard forecast to 34.5/35.1/35.0/35.1 min was insufficient: in
+  [run 42467271555](https://github.com/fin-assist/android/actions/runs/42467271555), shard 3 exhausted 2400 s on its
+  last flow. Qase82 itself passed completely (246 s). Weights now retain maxima of positive successful samples
+  from these two runs; `durations` never lowers a known weight or accepts a failed/nonpositive sample. The
+  interrupted `upload_unknown_codes` sample (31.051 s) retains its successful 43 s estimate. All 81 flows and 13
+  native tests remain selected. The largest comparable successful-flow cohort grew 13.1%; individual growth
+  reached 33.1% and is absorbed by the updated maximum weights. A plan guard adds 20% to aggregate flow time and
+  120 s setup, without multiplying the already padded native reserve. This is an engineering margin based on
+  observed totals, not p95 or a bound on future timings. Five-shard forecasts including native reserve are
+  29.2/29.3/28.6/28.7/29.2 min; stressed totals with setup are 36.1/37.1/36.4/36.4/37.1 min, within the unchanged
+  2400 s test and 45 min job limits. Four shards fail that stress check. Forecasts are not full UI/native acceptance.
 - **Build.** Every shard builds the APKs itself (`:app:assembleMockE2e :app:assembleMockE2eAndroidTest`, ~40 s from
   the Gradle build cache): the native tests and `:e2eCoverageReport` need the Gradle build anyway, a separate build
   job would add its time and an artifact round trip before every emulator starts, and outputs from the same build
   cache are the same classes the JaCoCo report reads.
+- **Pinned Maestro setup (FIN-469).** `scripts/install-maestro.sh` downloads the same versioned official release
+  archive as the upstream installer directly, pinned by the official release SHA256 in the workflow, with bounded
+  curl retries and HTTP failure checks. A checksum mismatch fails before extraction or execution. Archive
+  extraction and `maestro --version` have process deadlines; the setup step has a six-minute cap. An empty or
+  invalid archive, missing executable or wrong version fails before the AVD starts, and its bin directory is added
+  to `GITHUB_PATH` only after validation. No remote bootstrap shell pipe or changes to shell profiles are needed.
 - **Reports.** Each shard uploads its `build/e2e/` as `e2e-shard-<i>` (kept 3 days), whatever its result. The
   `Reports` job runs after all shards, whatever they ended with, unless the run was cancelled (`if: !cancelled()`):
   `e2e-shards.py gather` merges the
@@ -79,8 +94,8 @@ The flows run on four emulators at once (FIN-180), one job per shard, each with 
   — its job failed or timed out before the flows ended — is not lost silently: its flows go into the merged report as
   failures («shard i/n left no Maestro report»), and so does a flow missing from a shard's report. Flows are matched
   to the report by its `file` attribute, or by the flow's `name` when a Maestro version writes none (names are unique,
-  `scripts/test_e2e_shards.py` checks it). Maestro is pinned in the workflow (`MAESTRO_VERSION`): a new version is
-  bumped there and checked with one run.
+  `scripts/test_e2e_shards.py` checks it). Maestro is pinned in the workflow (`MAESTRO_VERSION` and
+  `MAESTRO_SHA256`): update both from the official release and check the new version with one run.
 - **Result.** The run is red when any shard failed, and also when the merged report is not a pass although every job
   was green (a shard's report that never arrived, flows missing or failed — `gather` lists them): the `Reports` job
   fails after it has published everything.
@@ -89,7 +104,7 @@ The flows run on four emulators at once (FIN-180), one job per shard, each with 
 ### Default SDK caching and fresh cold AVD (FIN-378)
 
 Normal pushes to `main` and manual runs with the default inputs restore **SDK packages**, then create a fresh cold
-AVD for each of the four shards. The requested API/profile/cores/RAM/GPU/disk, KVM, test selection, app-data resets,
+AVD for each of the five shards. The requested API/profile/cores/RAM/GPU/disk, KVM, test selection, app-data resets,
 native tests and reports/coverage/Qase stay unchanged. No AVD or adb key is stored in these SDK caches. Both manual
 inputs, `avd_cache` and `sdk_benchmark`, default to `false`; the latter selects the isolated SDK-only experiment.
 
@@ -122,7 +137,7 @@ do not establish a substantial or stable total UI speedup.
 ### Optional clean AVD snapshot cache (FIN-378)
 
 
-Only a manual run with `avd_cache=true` enables this experimental path. The four shard jobs restore independent writable copies of one clean Android API 34 / google_apis / x86_64 /
+Only a manual run with `avd_cache=true` enables this experimental path. The five shard jobs restore independent writable copies of one clean Android API 34 / google_apis / x86_64 /
 Pixel 6 AVD. A cache miss creates a fresh AVD, boots Android, checks that no FinAssist app or test APK is installed,
 and explicitly saves the named `clean` snapshot. This happens before `e2e.sh` installs anything, signs in or imports
 financial fixtures. The action shuts down the emulator; the helper waits for its process to exit and verifies the

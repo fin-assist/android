@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import math
 import sys
 import tempfile
 import unittest
@@ -87,27 +88,32 @@ class PlanTest(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 shards.parse_shard(bad)
 
-    def test_real_flows_split_into_four_shards(self):
+    def test_real_flows_split_into_four_or_five_shards_without_losing_native(self):
         flows = shards.discover_flows(ROOT)
         self.assertTrue(flows)
         self.assertTrue(all(f.startswith(".maestro/flows/") for f in flows))
         self.assertFalse(any("/subflows/" in f for f in flows))
-        planned = shards.plan(flows, shards.load_durations(shards.DURATIONS_FILE), 4)
-        self.assertEqual(sorted(f for s in planned for f in s.flows), flows)
+        for count in (4, 5):
+            planned = shards.plan(flows, shards.load_durations(shards.DURATIONS_FILE), count)
+            self.assertEqual(sorted(f for s in planned for f in s.flows), flows)
+            self.assertEqual([s.index for s in planned if s.native], [1])
 
     def test_native_reserve_covers_measured_full_suite_with_margin(self):
         # FIN-465: successful run 42210173741 spent 194s from starting native Gradle to report copies
         # (13/13, 0 failures). 50% headroom rounds to 300s; 70s left the next run 6/13 at timeout.
         self.assertGreaterEqual(shards.NATIVE_SECONDS, 194 * 1.5)
 
-    def test_real_four_shard_plan_keeps_setup_room_within_2400_seconds(self):
+    def test_real_plan_keeps_observed_flow_variance_and_setup_within_2400_seconds(self):
         flows = shards.discover_flows(ROOT)
-        planned = shards.plan(flows, shards.load_durations(shards.DURATIONS_FILE), 4)
-        self.assertEqual(len(planned), 4)
-        # Preflight + logcat/coverage/report packing also consume the existing 2400s coordinator limit.
-        # This is a forecast on measured successful flows, not proof of a completed UI/native run.
+        planned = shards.plan(flows, shards.load_durations(shards.DURATIONS_FILE), 5)
+        # FIN-465 run 42467271555: largest comparable successful-shard total grew 13.1%.
+        # Individual growth up to 33.1% is absorbed by maximum successful sample weights.
+        # Stress flow time by 20% above those maxima, not a claimed percentile or a per-flow bound.
+        # Native 300s already includes >=50% headroom on the complete measured suite.
         for shard in planned:
-            self.assertLessEqual(shard.seconds + 120, 2400, f"shard {shard.index} leaves no setup margin")
+            native = shards.NATIVE_SECONDS if shard.native else 0
+            stressed = math.ceil((shard.seconds - native) * 1.2) + native + 120
+            self.assertLessEqual(stressed, 2400, f"shard {shard.index} needs {stressed}s including headroom")
 
     def test_flow_names_are_unique(self):
         # Reports are matched to flows by name when Maestro writes no `file` (flow_of): two flows of one name would mix.
@@ -299,7 +305,15 @@ class MergeTest(unittest.TestCase):
 
 
 class DurationsTest(unittest.TestCase):
-    def test_passed_flows_update_failed_keep_their_time(self):
+    def test_junit_skip_without_status_is_not_a_successful_sample(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = write(root / "skipped.xml", '<testsuite><testcase file="' + str(root) +
+                         '/.maestro/flows/a.yaml" time="600"><skipped/></testcase></testsuite>')
+            self.assertEqual(shards.updated_durations({".maestro/flows/a.yaml": 60}, [path]),
+                             {".maestro/flows/a.yaml": 60})
+
+    def test_passed_flows_keep_maximum_failed_keep_their_time(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path = write(root / "r.xml", report(root, [
@@ -308,7 +322,28 @@ class DurationsTest(unittest.TestCase):
                 (".maestro/flows/new.yaml", "N", 0.2, False),
             ]))
             result = shards.updated_durations({".maestro/flows/a.yaml": 60, ".maestro/flows/b.yaml": 70}, [path])
-        self.assertEqual(result, {".maestro/flows/a.yaml": 42, ".maestro/flows/b.yaml": 70, ".maestro/flows/new.yaml": 1})
+        self.assertEqual(result, {".maestro/flows/a.yaml": 60, ".maestro/flows/b.yaml": 70, ".maestro/flows/new.yaml": 1})
+
+    def test_maximum_successful_samples_are_order_independent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            slow = write(root / "slow.xml", report(root, [(".maestro/flows/a.yaml", "A", 91.4, False)]))
+            fast = write(root / "fast.xml", report(root, [(".maestro/flows/a.yaml", "A", 40.2, False)]))
+            for reports in ([slow, fast], [fast, slow]):
+                with self.subTest(reports=reports):
+                    self.assertEqual(shards.updated_durations({".maestro/flows/a.yaml": 60}, reports),
+                                     {".maestro/flows/a.yaml": 91})
+
+    def test_nonpositive_samples_do_not_become_complete_flow_weights(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = write(root / "partial.xml", report(root, [
+                (".maestro/flows/known.yaml", "K", 0, False),
+                (".maestro/flows/unknown.yaml", "U", -1, False),
+                (".maestro/flows/failed.yaml", "F", 31.051, True),
+            ]))
+            self.assertEqual(shards.updated_durations({".maestro/flows/known.yaml": 70}, [path]),
+                             {".maestro/flows/known.yaml": 70})
 
     def test_list_command_prints_the_shard(self):
         with redirect_stdout(io.StringIO()) as out:
