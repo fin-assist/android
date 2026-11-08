@@ -6,8 +6,9 @@
 Эта задача меняет только документацию. Текущий flow, assertions, бюджеты, mapping и runtime сохранены.
 
 **Решение: NO-GO сокращению Qase73 сейчас.** Существующие тесты покрывают отдельные правила,
-но пока не доказывают эквивалентность всей комбинации через настоящие UI callbacks. Допустим следующий
-ограниченный PR с недостающим companion и обязательной связью с Qase73; его реализация не входит в FIN-476.
+но пока не доказывают эквивалентность всей комбинации через настоящие UI callbacks. Предлагается следующий
+ограниченный PR с недостающим companion и обязательной связью с Qase73 **после отдельного решения владельца**
+о расширении именованного пилота. Текущая задача на карту этого расширения не разрешает; реализация не входит в FIN-476.
 Полный Maestro остаётся обязательным до успешной проверки замены и отдельного решения о сокращении.
 
 В [исходном полном прогоне 42506253547](https://github.com/fin-assist/android/actions/runs/42506253547)
@@ -85,7 +86,12 @@ delay without automatic submission`, `a different selection retires a failed tar
 native suite, production seam, sleep или инфраструктура не нужны. Внутри две изолированные фазы:
 
 1. September → реальный Year click → Offline → оба September/Month/tiles oracle и period notice;
-   реальный dismiss click → известный unknown-code API отказ → независимые ошибки;
+   реальный dismiss click → известный unknown-code API отказ → независимые ошибки.
+   Для отказа декодировать wire `ApiError` с `FUTURE_OPERATION_FAILURE`, пользовательским сообщением
+   «Сервис получил новый тип ошибки. Попробуйте позже» и `severity=warning`, затем передать его
+   `presentation`/retryability в `ErrorResponseInfo` у `AppError.Api(..., 422)`, как в `MockErrorCatalog`.
+   Простой `AppError.Api(code, 422)` даст общий fallback и не проверит исходный visible-message oracle.
+   Использовать уже доступные `core/api`/`core/common`, без зависимости feature от `mock/backend`;
    resume без новых запросов; настоящий period Retry с exact triple → Year/header/selected/нет ошибок;
    настоящий Month click → remembered September. На каждом отказе сравнить весь исходный September response,
    включая RUB, source zone, ranges, blocks и суммы; видимые tiles и платёж остаются доступны.
@@ -106,6 +112,8 @@ Fake-компонент доказывает удержание ответа и 
 ради этого среза. Полное равенство fixture не выдаётся за новый расчёт mock-ledger или HTTP acceptance.
 
 ## Ограниченный diff-план следующего PR
+
+После явно зафиксированного решения владельца о расширении пилота на Qase73:
 
 1. Добавить только указанный метод и необходимые request records/controlled replies в существующем
    `AnalyticsReliabilityComponentTest`; не менять production поведение или соседние companions.
@@ -130,6 +138,9 @@ Fake-компонент доказывает удержание ответа и 
 
 Здесь нет обещания убрать второй login или delay20s: они обеспечивают независимую начальную среду и окно
 реальной конкуренции. Замена delay на меньший timeout без доказательства in-flight precondition запрещена.
+`injectedErrorCount` накапливается внутри backend: объединение фаз без `clear_state` сохранило бы первый
+injected отказ, а второй увеличил бы счётчик до2 и нарушил final `expect_error_requests=1`.
+Clean reset пересоздаёт in-process backend; это конкретная причина сохранять независимость обеих фаз.
 Нельзя считать Qase82/89 отдельной заменой этой producer+subscriber комбинации.
 
 ## Проверки и критерии перехода
@@ -137,12 +148,13 @@ Fake-компонент доказывает удержание ответа и 
 В FIN-476 выполнена сверка source/flow/issue; UI, AVD, Gradle, design-check и Actions dispatch/rerun
 не выполняются. Приведённые далее команды — план **будущего implementation PR**, не отчёт об исполнении.
 Все процессы запускаются из корня checkout с реальным process-group deadline.
-Локальный wrapper `/private/tmp/fin473-bounded.py` принимает `SECONDS COMMAND...` и останавливает дочерние
-процессы; на другой машине нужен эквивалентный process-group deadline, один tool yield его не заменяет.
+Используется существующий repository runner `scripts/e2e-cache.py run-command --timeout N -- COMMAND...`:
+он запускает новую process group, по deadline посылает TERM и после grace — KILL всем её процессам.
+Этот же runner уже применён для companions в CI; новый harness не требуется, один tool yield его не заменяет.
 
 ```bash
 # Новый метод + соседние real-VM companions и unit/callback/control regressions, debug и release; 900s.
-python3 /private/tmp/fin473-bounded.py 900 ./gradlew \
+python3 scripts/e2e-cache.py run-command --timeout 900 -- ./gradlew \
   :feature:analytics:impl:testDebugUnitTest \
   --tests '*AnalyticsViewModelTest' --tests '*AnalyticsRetryCallbackTest' \
   --tests '*AnalyticsPeriodControlTest' --tests '*AnalyticsReliabilityComponentTest' \
@@ -152,13 +164,13 @@ python3 /private/tmp/fin473-bounded.py 900 ./gradlew \
   --no-daemon --console=plain
 
 # Existing inventory/report regression tests, без устройства; 120s.
-python3 /private/tmp/fin473-bounded.py 120 python3 -m unittest discover -s scripts -p 'test_qase_report.py'
-python3 /private/tmp/fin473-bounded.py 120 python3 -m unittest discover -s scripts -p 'test_e2e_shards.py'
-python3 /private/tmp/fin473-bounded.py 60 python3 scripts/agent-docs.py --check
+python3 scripts/e2e-cache.py run-command --timeout 120 -- python3 -m unittest discover -s scripts -p 'test_qase_report.py'
+python3 scripts/e2e-cache.py run-command --timeout 120 -- python3 -m unittest discover -s scripts -p 'test_e2e_shards.py'
+python3 scripts/e2e-cache.py run-command --timeout 60 -- python3 scripts/agent-docs.py --check
 
 # ТОЛЬКО после отдельного разрешения UI: owned clean API34 Pixel6, 1800s весь build+flow.
 # Используется absolute --flow; без --no-build, чтобы не принять чужой APK.
-python3 /private/tmp/fin473-bounded.py 1800 scripts/e2e.sh \
+python3 scripts/e2e-cache.py run-command --timeout 1800 -- scripts/e2e.sh \
   --flow "$PWD/.maestro/flows/analytics/period_change_retry.yaml"
 ```
 
