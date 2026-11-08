@@ -233,6 +233,31 @@ class CleanAvdCacheTest(unittest.TestCase):
                 cache.main()
                 out.assert_called_once_with('needed', 'false')
 
+    def test_workflow_configured_process_budget_reaches_the_actual_suite_coordinator(self):
+        for native in (False, True):
+            arguments = ['e2e-cache.py', 'test', '--direct-cold', '--timeout', '731']
+            arguments += ['--native-only'] if native else ['--shard', '1/5']
+            with self.subTest(native=native), patch.object(cache, 'STATE', self.root / 'budget-state.json'), \
+                 patch.object(cache, 'assert_clean'), patch.object(cache, 'run_tests', return_value=0) as run, \
+                 patch('sys.argv', arguments):
+                cache.write({'marks': {}})
+                with self.assertRaises(SystemExit) as result:
+                    cache.main()
+                self.assertEqual(0, result.exception.code)
+                if native:
+                    run.assert_called_once_with(None, timeout=731, native_only=True)
+                else:
+                    run.assert_called_once_with('1/5', timeout=731)
+
+    def test_nonpositive_or_unbounded_suite_budget_is_rejected_before_device_preparation(self):
+        for budget in ('0', '-1', 'nan', 'inf'):
+            with self.subTest(budget=budget), patch.object(cache, 'assert_clean') as prepare, \
+                 patch('sys.argv', ['e2e-cache.py', 'test', '--direct-cold', '--timeout', budget]):
+                with self.assertRaises(SystemExit) as result:
+                    cache.main()
+                self.assertEqual(2, result.exception.code)
+                prepare.assert_not_called()
+
     def test_preparation_failure_allows_one_cold_attempt(self):
         with patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'assert_clean', side_effect=RuntimeError('dirty')), \
              patch('sys.argv', ['e2e-cache.py', 'test', '--shard', '2/4']):
@@ -761,7 +786,10 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         self.assertIn('path: ${{ runner.temp }}/maestro-package', workflow)
         self.assertNotIn('restore-keys: maestro', workflow)
         self.assertEqual(2, workflow.count('run-command --timeout 540 -- ./gradlew :app:assembleMockE2e'))
-        self.assertIn("run-command --timeout 900 -- ./gradlew :feature:analytics:impl:testDebugUnitTest", workflow)
+        self.assertIn('COMPONENT_TEST_SECONDS: 900', workflow)
+        self.assertIn('run-command --timeout "$COMPONENT_TEST_SECONDS" -- ./gradlew :feature:analytics:impl:testDebugUnitTest', workflow)
+        self.assertIn('--jvm-budget-seconds "$COMPONENT_TEST_SECONDS"', workflow)
+        self.assertIn('name: e2e-result-attempt-${{ github.run_attempt }}', workflow)
         self.assertNotIn('timeout --kill-after=10s 900s', workflow)
 
     def test_shard_upload_excludes_unfinished_raw_output_but_keeps_other_evidence(self):
