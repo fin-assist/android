@@ -57,6 +57,15 @@ The flows run on four emulators at once (FIN-180), one job per shard, each with 
   (`scripts/test_e2e_shards.py`); `python3 scripts/e2e-shards.py plan --shards 4` prints it. After a run that changed
   the durations a lot, refresh them from the merged report: `python3 scripts/e2e-shards.py durations
   build/e2e/maestro-report.xml` (in the `e2e-reports` artifact).
+- **FIN-465 measurements (2026-11-08).** Shard 1 reserves 300 s for native Gradle configuration, all 13
+  instrumented tests and report copying. The last complete successful sample,
+  [run 42210173741](https://github.com/fin-assist/android/actions/runs/42210173741) (2026-11-06, same native sources),
+  took 193.8 s; the reserve includes at least 50% headroom. The 6/13 progress before the timeout in
+  [run 42461258707](https://github.com/fin-assist/android/actions/runs/42461258707) is incomplete evidence.
+  Flow estimates use the 80 successful JUnit samples from all four shards of that run; failed Qase82 retains its
+  previous successful 233 s estimate. The four-shard forecast is 34.5/35.1/35.0/35.1 min including native reserve.
+  All 81 flows and 13 native tests remain selected; 2400 s test and 45 min job limits are unchanged. These forecasts
+  do not establish UI acceptance: the confirming run must publish complete Maestro and native XML/Qase results.
 - **Build.** Every shard builds the APKs itself (`:app:assembleMockE2e :app:assembleMockE2eAndroidTest`, ~40 s from
   the Gradle build cache): the native tests and `:e2eCoverageReport` need the Gradle build anyway, a separate build
   job would add its time and an artifact round trip before every emulator starts, and outputs from the same build
