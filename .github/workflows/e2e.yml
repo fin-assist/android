@@ -659,6 +659,27 @@ jobs:
             --jvm-reports build/e2e/jvm-report.xml \
             --delivery-status build/e2e/qase-delivery.json
 
+      - name: Qase delivery status
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          try:
+              status = json.loads(Path("build/e2e/qase-delivery.json").read_text())
+          except (OSError, ValueError):
+              status = {}
+          labels = {
+              "published": "published", "not_configured": "NOT CONFIRMED (token unavailable)",
+              "failed": "NOT CONFIRMED (delivery failed)", "pending": "NOT CONFIRMED (pending)",
+              "dry_run": "NOT PUBLISHED (dry run)", "empty": "NOT PUBLISHED (empty result set)",
+          }
+          print("\nQase delivery: " + labels.get(status.get("result"), "NOT CONFIRMED (no valid status record)"))
+          run_id = status.get("run_id")
+          if status.get("result") == "published" and type(run_id) is int and run_id > 0:
+              print(f"[Qase run {run_id}](https://app.qase.io/run/PLAINFIN/dashboard/{run_id})")
+          PY
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
