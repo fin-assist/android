@@ -1,5 +1,7 @@
 # UI tests (e2e)
 
+Read-only run history and comparable evidence: [UI test history](ui-test-history.md).
+
 Three required suites in post-merge acceptance (FIN-473):
 
 | Layer | What | Where | Build |
