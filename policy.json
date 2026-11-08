@@ -264,6 +264,20 @@
       ]
     },
     {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "fin-assist/go-ci"
+      ],
+      "matchDatasources": [
+        "github-digest"
+      ],
+      "recreateWhen": "always",
+      "matchNewValue": "/^main$/",
+      "matchJsonata": [
+        "$exists(newDigest) and newDigest != null"
+      ]
+    },
+    {
       "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
       "matchPackageNames": [
         "io.github.takahirom.roborazzi:roborazzi-compose"
@@ -929,6 +943,22 @@
       "additionalBranchPrefix": "fin211-retry-295-",
       "matchJsonata": [
         "newDigest = \"sha512-ckeQtVdbDTnMqnVp6dnsDopOANwHeJ4FPH0urwiueVy7VK2t0DBnpI57OZO6DSHCK+q64v43Gv6A3ncSduQuKA==\""
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "fin-assist/go-ci"
+      ],
+      "matchDatasources": [
+        "github-digest"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-296-",
+      "matchJsonata": [
+        "newDigest = \"2f4431dabb9fc3ebc5085a46ede5f69a23b231c5\""
       ]
     }
   ]
