@@ -200,7 +200,7 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   isolation is checked with production sentinel properties, and stage/prod pinning is checked independently. Release preparation and the independent monotonic build number: `docs/releasing.md`.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally (all flows and the native
   tests; `--shard i/n` runs one CI shard), the `UI tests` workflow in CI (after a merge to `main`, or started by hand
-  for a branch; PRs never run them by themselves). CI splits the flows between four emulators
+  for a branch; PRs never run them by themselves). CI splits the flows between five emulators
   (`scripts/e2e-shards.py`, durations in `scripts/e2e-durations.json`) and merges their reports (docs/e2e.md).
   Their coverage: `./gradlew :e2eCoverageReport` after a run, then
   `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml`; the scenario part

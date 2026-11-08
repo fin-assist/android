@@ -652,7 +652,7 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         self.assertIn('-snapshot clean -no-snapshot-save', workflow)
         self.assertIn("steps.fallback.outputs.needed != 'true'", workflow)
         self.assertEqual(1, workflow.count('- name: Run UI tests on a fresh AVD'))
-        self.assertIn('shard: [1, 2, 3, 4]', workflow)
+        self.assertIn('shard: [1, 2, 3, 4, 5]', workflow)
 
 
 if __name__ == '__main__':

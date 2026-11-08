@@ -305,6 +305,14 @@ class MergeTest(unittest.TestCase):
 
 
 class DurationsTest(unittest.TestCase):
+    def test_junit_skip_without_status_is_not_a_successful_sample(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = write(root / "skipped.xml", '<testsuite><testcase file="' + str(root) +
+                         '/.maestro/flows/a.yaml" time="600"><skipped/></testcase></testsuite>')
+            self.assertEqual(shards.updated_durations({".maestro/flows/a.yaml": 60}, [path]),
+                             {".maestro/flows/a.yaml": 60})
+
     def test_passed_flows_keep_maximum_failed_keep_their_time(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

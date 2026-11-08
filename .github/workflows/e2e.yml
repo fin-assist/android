@@ -31,7 +31,7 @@ concurrency:
 
 env:
   # The number of shards; the matrix below lists 1..SHARDS.
-  SHARDS: 4
+  SHARDS: 5
   AVD_NAME: pf-e2e
   AVD_API: 34
   AVD_TARGET: google_apis
@@ -59,7 +59,7 @@ jobs:
       # A failed shard must not cancel the others: their results still count, and the run is red anyway.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v7
 
@@ -104,11 +104,10 @@ jobs:
       # Pinned: the reports job matches flows by the JUnit report Maestro writes, so a new version is a deliberate
       # change (bump it here and check one run), not something that arrives with the next run.
       - name: Install Maestro
+        timeout-minutes: 6
         env:
           MAESTRO_VERSION: 2.11.0
-        run: |
-          curl -Ls "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        run: bash scripts/install-maestro.sh
 
       # SDK caches contain only binaries, never AVD state or adb keys. Prefix restore may select an older
       # revision, so online SDK checks always run before immutable final keys are computed.

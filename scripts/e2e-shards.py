@@ -8,9 +8,9 @@ flows and durations give the same shards on every job and every machine — and 
 shard. The native instrumented tests run in shard 1, so it gets fewer flows.
 
 Usage:
-  python3 scripts/e2e-shards.py plan --shards 4            # the split, as a table
-  python3 scripts/e2e-shards.py list --shard 2/4           # flow files of shard 2 (what scripts/e2e.sh --shard runs)
-  python3 scripts/e2e-shards.py gather --shards 4 --dir build/e2e-shards --out build/e2e
+  python3 scripts/e2e-shards.py plan --shards 5            # the split, as a table
+  python3 scripts/e2e-shards.py list --shard 2/5           # flow files of shard 2 (what scripts/e2e.sh --shard runs)
+  python3 scripts/e2e-shards.py gather --shards 5 --dir build/e2e-shards --out build/e2e
   python3 scripts/e2e-shards.py durations build/e2e/maestro-report.xml   # refresh e2e-durations.json
 
 `gather` reads the reports each shard job uploaded (`<dir>/e2e-shard-<i>/`, the shard's `build/e2e/`) and writes:
@@ -264,7 +264,7 @@ def updated_durations(
     for report in reports:
         for case in ET.parse(report).getroot().iter("testcase"):
             flow = flow_of(case, by_name)
-            if flow and not _failed(case):
+            if flow and not _failed(case) and case.find("skipped") is None:
                 seconds = float(case.get("time") or 0)
                 if seconds > 0:
                     result[flow] = max(result.get(flow, 1), round(seconds))
