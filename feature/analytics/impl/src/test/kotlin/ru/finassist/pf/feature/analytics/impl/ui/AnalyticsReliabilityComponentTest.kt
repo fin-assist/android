@@ -7,11 +7,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelStore
@@ -147,7 +149,7 @@ class AnalyticsReliabilityComponentTest {
             api.mutate = { throw AppError.Api("FUTURE_POLICY", 429,
                 response = ErrorResponseInfo("FUTURE_POLICY", 429, requestRetryable = false)) }
         }
-        compose.onNodeWithText("Не подписка — Спортзал", useUnmergedTree = true).performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Не подписка — Спортзал").performScrollTo().performClick()
         advance(30_000)
         compose.onNodeWithTag("analytics.retry").performScrollTo().assertIsDisplayed().assertIsEnabled()
         compose.runOnIdle {
@@ -256,7 +258,7 @@ class AnalyticsReliabilityComponentTest {
             assertEquals(PeriodKey("2026-09"), active.state.value.data?.params?.date)
         }
         compose.onNodeWithText("Сентябрь 2026").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag("ds.segment.0").assertIsSelected()
+        compose.onNodeWithTag("ds.segment.0").assertIsOn()
         compose.onNodeWithTag("ds.refresh.indicator").assertDoesNotExist()
         val deferredYear = CompletableDeferred<Analytics>()
         compose.runOnIdle { api.read = { _, _, _ -> deferredYear.await() } }
