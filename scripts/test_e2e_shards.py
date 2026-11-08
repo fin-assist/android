@@ -95,6 +95,20 @@ class PlanTest(unittest.TestCase):
         planned = shards.plan(flows, shards.load_durations(shards.DURATIONS_FILE), 4)
         self.assertEqual(sorted(f for s in planned for f in s.flows), flows)
 
+    def test_native_reserve_covers_measured_full_suite_with_margin(self):
+        # FIN-465: successful run 42210173741 spent 194s from starting native Gradle to report copies
+        # (13/13, 0 failures). 50% headroom rounds to 300s; 70s left the next run 6/13 at timeout.
+        self.assertGreaterEqual(shards.NATIVE_SECONDS, 300)
+
+    def test_real_four_shard_plan_keeps_setup_room_within_2400_seconds(self):
+        flows = shards.discover_flows(ROOT)
+        planned = shards.plan(flows, shards.load_durations(shards.DURATIONS_FILE), 4)
+        self.assertEqual(len(planned), 4)
+        # Preflight + logcat/coverage/report packing also consume the existing 2400s coordinator limit.
+        # This is a forecast on measured successful flows, not proof of a completed UI/native run.
+        for shard in planned:
+            self.assertLessEqual(shard.seconds + 120, 2400, f"shard {shard.index} leaves no setup margin")
+
     def test_flow_names_are_unique(self):
         # Reports are matched to flows by name when Maestro writes no `file` (flow_of): two flows of one name would mix.
         flows = shards.discover_flows(ROOT)
@@ -107,7 +121,7 @@ class PlanTest(unittest.TestCase):
         # A new flow works without one (median), but the file should follow the flows: refresh it after a run.
         durations = shards.load_durations(shards.DURATIONS_FILE)
         flows = shards.discover_flows(ROOT)
-        self.assertEqual(sorted(set(durations) - set(flows)), [], "durations of flows that no longer exist")
+        self.assertEqual(set(durations), set(flows), "every current flow needs a successful duration sample")
 
 
 class MergeTest(unittest.TestCase):

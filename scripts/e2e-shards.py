@@ -39,8 +39,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DURATIONS_FILE = ROOT / "scripts" / "e2e-durations.json"
 FLOWS_DIR = ".maestro/flows"
-# The native tests in shard 1: Gradle's configuration plus the tests themselves on the CI emulator (~25 s + ~45 s).
-NATIVE_SECONDS = 70
+# FIN-465: run 42210173741 (2026-11-06, same 13 native tests) took 194s from native Gradle
+# start to copied reports (suite 153s + setup/teardown). Reserve 300s: >=50% headroom, rounded up.
+# Run 42461258707 (2026-11-08) stopped 6/13 at 2400s; that partial run is not a full-suite sample.
+NATIVE_SECONDS = 300
 # Artifact name of a shard in the workflow: `e2e-shard-<i>`; `gather` looks for these folders.
 SHARD_DIR = "e2e-shard-{index}"
 FLOW_NAME = re.compile(r"^name:\s*(.+?)\s*$", re.MULTILINE)
