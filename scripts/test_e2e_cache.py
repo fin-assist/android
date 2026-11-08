@@ -392,7 +392,7 @@ class ShardExitBarrierTest(unittest.TestCase):
                     self.assertLessEqual(call.kwargs['timeout'], 5)
 
     def test_archive_waits_for_descendant_to_leave_d_state(self):
-        states = iter(['12345 D\n67890 R\n', '12345 Z\n67890 D\n'])
+        states = iter(['12345 D\n67890 R\n', '12345 Zsl\n', '12345 Z\n67890 D\n'])
         observed = []
 
         def inspect(*args, **kwargs):
@@ -400,16 +400,18 @@ class ShardExitBarrierTest(unittest.TestCase):
             return subprocess.CompletedProcess(args[0], 0, observed[-1])
 
         def archive():
-            self.assertEqual(2, len(observed), 'archive started before the descendant stopped')
+            self.assertEqual(3, len(observed), 'archive started before the descendant stopped')
 
         with self.assertRaises(subprocess.TimeoutExpired):
             self.run_interrupted(inspect, archive)
 
     def test_persistent_live_descendant_blocks_archive_with_bounded_failure(self):
-        archive = Mock()
-        with self.assertRaisesRegex(RuntimeError, 'process group'):
-            self.run_interrupted(lambda *a, **kw: subprocess.CompletedProcess(a[0], 0, '12345 D\n'), archive)
-        archive.assert_not_called()
+        for status in ('D', 'R', 'S', 'Zl', 'Zsl'):
+            with self.subTest(status=status):
+                archive = Mock()
+                with self.assertRaisesRegex(RuntimeError, 'process group'):
+                    self.run_interrupted(lambda *a, **kw: subprocess.CompletedProcess(a[0], 0, f'12345 {status}\n'), archive)
+                archive.assert_not_called()
 
     def test_absent_group_or_only_zombies_can_be_archived(self):
         for snapshot in ('', '67890 D\n', '12345 Z\n12345 Z+\n67890 R\n'):
@@ -592,6 +594,16 @@ class DisposableCiAdbKeyTest(unittest.TestCase):
 
 
 class CacheWorkflowSafetyTest(unittest.TestCase):
+    def test_shard_upload_excludes_unfinished_raw_output_but_keeps_other_evidence(self):
+        workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
+        upload = next(block for block in workflow.split('      - uses: actions/upload-artifact@v7')
+                      if 'name: e2e-shard-${{ matrix.shard }}' in block)
+        self.assertIn('if: always()', upload)
+        paths = re.search(r'          path: \|\n((?:            .+\n)+)', upload)
+        self.assertIsNotNone(paths, 'upload must retain other reports when raw writers have not stopped')
+        self.assertEqual(['build/e2e/', '!build/e2e/maestro/**'],
+                         [line.strip() for line in paths[1].splitlines()])
+
     def step(self, name):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
         return next(block for block in workflow.split('      - name: ') if block.startswith(name + '\n'))

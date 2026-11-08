@@ -1601,11 +1601,15 @@ they also check external termination and preservation of an already packed archi
 permissions, cache identities, artifact scope and application runtime are unchanged.
 
 FIN-458 adds a bounded 5 s exit check after SIGKILL: the coordinator reaps the leader and
-checks group members with `ps` until none remain or all are zombies. `D` and other live states
-never count as stopped. If the group remains live or inspection fails, the shard fails and
-leaves the raw evidence untouched instead of archiving/removing files with possible writers.
-Deterministic regressions cover delayed `D` → `Z`, a persistent live group, unrelated groups,
-zombie-only/absent groups and inspection errors; the real TERM-resistant descendant test
+checks group members with `ps` until none remain or all are zombies without live threads.
+`D`, other live states and a zombie leader with the procps multi-threaded `l` flag never count
+as stopped. If the group remains live or inspection fails, the shard fails and leaves the raw
+evidence untouched on the runner instead of archiving/removing files with possible writers.
+Shard upload excludes that unfinished raw directory (whose names may be invalid for artifacts),
+so XML, coverage, logs and any already completed archive can still be uploaded. Unfinished raw
+output is not published and remains only on the disposable runner.
+Deterministic regressions cover delayed `D` → `Zsl` → `Z`, a persistent live group, unrelated groups,
+zombie-only/absent groups, inspection errors and the upload exclusion; the real TERM-resistant descendant test
 keeps its immediate exit assertion. The 2400 s shard deadline and 10 s TERM grace are unchanged.
 
 ### FIN-445: bring the selected month title fully into view
