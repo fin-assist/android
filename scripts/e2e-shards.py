@@ -259,13 +259,15 @@ def plan_markdown(shards: list[Shard]) -> str:
 def updated_durations(
     current: dict[str, int], reports: list[Path], by_name: dict[str, str] | None = None,
 ) -> dict[str, int]:
-    """Durations of the passed flows of the reports replace the stored ones; failed flows keep theirs."""
+    """Keep each flow's largest positive successful sample; failed/partial samples do not lower its weight."""
     result = dict(current)
     for report in reports:
         for case in ET.parse(report).getroot().iter("testcase"):
             flow = flow_of(case, by_name)
             if flow and not _failed(case):
-                result[flow] = max(1, round(float(case.get("time") or 0)))
+                seconds = float(case.get("time") or 0)
+                if seconds > 0:
+                    result[flow] = max(result.get(flow, 1), round(seconds))
     return dict(sorted(result.items()))
 
 
