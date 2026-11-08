@@ -62,6 +62,21 @@ class ParseTest(unittest.TestCase):
         self.assertEqual((picks.status, picks.time_ms), ("passed", 21352))
         self.assertEqual(ignored.status, "skipped")
 
+    def test_jvm_prefix_keeps_the_same_class_method_distinct_from_native(self):
+        xml = '<testsuite><testcase classname="example.T" name="checks" time="1"/></testsuite>'
+        self.assertEqual(qase.parse_report(xml)[0].key, 'example.T#checks')
+        self.assertEqual(qase.parse_report(xml, prefix='jvm:')[0].key, 'jvm:example.T#checks')
+
+    def test_not_run_reason_survives_canonical_skipped_xml(self):
+        result = qase.parse_report('<testsuite><testcase classname="T" name="x"><skipped message="NOT RUN: setup"/></testcase></testsuite>')[0]
+        self.assertEqual((result.status, result.message), ('skipped', 'NOT RUN: setup'))
+
+    def test_invalid_duration_does_not_crash_or_report_pass(self):
+        for value in ('NaN', 'Infinity', '-1', 'bad'):
+            with self.subTest(value=value):
+                result = qase.parse_report(f'<testsuite><testcase classname="T" name="x" time="{value}"/></testsuite>')[0]
+                self.assertEqual((result.status, result.time_ms), ('failed', 0))
+
 
 class MapTest(unittest.TestCase):
     def test_unmapped_tests_are_left_out(self):
@@ -99,6 +114,27 @@ class MapTest(unittest.TestCase):
         payload, _ = qase.map_results([failure], {"maestro": 84, "native": 84})
         self.assertEqual(payload, [{"case_id": 84, "status": "failed", "time_ms": 7,
                                    "comment": "browser opened"}])
+
+    def test_entirely_absent_native_case_is_included_as_not_run(self):
+        payload, unmapped = qase.map_results([], {'Native#checks': 82})
+        self.assertEqual(payload, [{'case_id': 82, 'status': 'skipped', 'time_ms': 0,
+                                   'comment': 'Incomplete UI case; not run: Native#checks'}])
+        self.assertEqual(unmapped, [])
+
+    def test_case_with_jvm_companion_requires_both_observations(self):
+        cases = {'flow': 83, 'jvm:Component#checks': 83}
+        flow = qase.TestResult('flow', 'flow', 'passed', 1)
+        companion = qase.TestResult('jvm:Component#checks', 'component', 'passed', 1)
+        partial, _ = qase.map_results([flow], cases)
+        self.assertEqual(partial[0]['status'], 'skipped')
+        complete, _ = qase.map_results([flow, companion], cases)
+        self.assertEqual(complete[0]['status'], 'passed')
+
+    def test_missing_entire_mixed_case_is_one_skipped_case(self):
+        payload, _ = qase.map_results([], {'flow': 89, 'jvm:Component#checks': 89})
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]['status'], 'skipped')
+        self.assertIn('flow, jvm:Component#checks', payload[0]['comment'])
 
 
 class SendTest(unittest.TestCase):
@@ -204,10 +240,37 @@ class MainTest(unittest.TestCase):
 
     def test_missing_reports_are_announced(self):
         out = io.StringIO()
-        with redirect_stdout(out):
+        with redirect_stdout(out), mock.patch.dict(os.environ, {}, clear=True):
             code = qase.main(["/nonexistent/report.xml"])
         self.assertEqual(code, 0)
         self.assertIn("no JUnit reports found", out.getvalue())
+
+    def test_jvm_report_glob_and_delivery_status_do_not_mix_native_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            mapping = root / 'cases.json'
+            mapping.write_text(json.dumps({'project': 'PLAINFIN', 'cases': {'T#checks': 1, 'jvm:T#checks': 1}}))
+            native = root / 'native.xml'
+            jvm = root / 'component.xml'
+            xml = '<testsuite><testcase classname="T" name="checks"/></testsuite>'
+            native.write_text(xml)
+            jvm.write_text(xml)
+            status = root / 'delivery.json'
+            with mock.patch.object(qase, 'CASES_FILE', mapping), mock.patch.object(qase, 'http_request') as request, redirect_stdout(io.StringIO()) as out:
+                code = qase.main([str(native), '--jvm-reports', str(jvm), '--dry-run', '--delivery-status', str(status)])
+            self.assertEqual(code, 0)
+            self.assertIn('"status": "passed"', out.getvalue())
+            self.assertEqual(json.loads(status.read_text())['result'], 'dry_run')
+            request.assert_not_called()
+
+    def test_unconfigured_delivery_is_distinct_from_test_results(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {}, clear=True):
+            status = Path(tmp) / 'delivery.json'
+            code, _, _ = self.run_main('--delivery-status', str(status))
+            self.assertEqual(code, 0)
+            data = json.loads(status.read_text())
+            self.assertEqual(data['result'], 'not_configured')
+            self.assertGreater(data['case_count'], 0)
 
 
 class CaseMapTest(unittest.TestCase):
@@ -231,8 +294,13 @@ class CaseMapTest(unittest.TestCase):
         for key in self.cases:
             if key.startswith(".maestro/"):
                 continue
-            cls, method = key.split("#")
-            path = next(iter(sources.glob(f"androidTest*/kotlin/{cls.replace('.', '/')}.kt")), None)
+            if key.startswith("jvm:"):
+                cls, method = key[4:].split("#")
+                paths = ROOT.glob(f"**/src/test*/kotlin/{cls.replace('.', '/')}.kt")
+            else:
+                cls, method = key.split("#")
+                paths = sources.glob(f"androidTest*/kotlin/{cls.replace('.', '/')}.kt")
+            path = next(iter(paths), None)
             if path is None or f"fun {method}(" not in path.read_text(encoding="utf-8"):
                 stale.append(key)
         self.assertEqual(stale, [], "these instrumented tests were renamed or removed: update scripts/qase-cases.json")
@@ -242,13 +310,23 @@ class CaseMapTest(unittest.TestCase):
         for key, case_id in self.cases.items():
             by_case.setdefault(case_id, set()).add(key)
         duplicates = {case_id: keys for case_id, keys in by_case.items() if len(keys) > 1}
-        self.assertEqual(duplicates, {17: {
+        expected = {17: {
             ".maestro/flows/profile/theme_and_logout.yaml",
             "ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette",
         }, 84: {
             ".maestro/flows/statements/download_period.yaml",
             "ru.finassist.pf.StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser",
-        }})
+        }}
+        pilot_class = 'jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#'
+        pilot = {
+            82: ('.maestro/flows/analytics/recalculation_snapshot.yaml', 'qase82RetainedSnapshotsAndRefusedMutation'),
+            83: ('.maestro/flows/analytics/chart_history_pages.yaml', 'qase83HistoryPagingAndSelection'),
+            89: ('.maestro/flows/analytics/unknown_mutation_recovery.yaml', 'qase89UnknownReadRecoveryAndDeferredSelection'),
+        }
+        for case_id, (flow, method) in pilot.items():
+            if pilot_class + method in self.cases:
+                expected[case_id] = {flow, pilot_class + method}
+        self.assertEqual(duplicates, expected)
 
 
 if __name__ == "__main__":

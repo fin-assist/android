@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import math
+import os
 import sys
 import tempfile
 import unittest
@@ -27,6 +28,16 @@ def write(path: Path, text: str | bytes = "") -> Path:
     else:
         path.write_text(text, encoding="utf-8")
     return path
+
+
+def execution_receipt(path: Path, **changes) -> Path:
+    data = {
+        'schema': 1, 'phase': 'complete', 'category': None, 'result': 'passed', 'exit_code': 0,
+        'identity': {key: os.environ[key] for key in ('GITHUB_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT') if key in os.environ},
+        'apks': {'app-mock-e2e.apk': '1' * 64, 'app-mock-e2e-androidTest.apk': '2' * 64},
+    }
+    data.update(changes)
+    return write(path / 'execution.json', json.dumps(data))
 
 
 def flow_file(root: Path, flow: str, name: str) -> None:
@@ -88,7 +99,7 @@ class PlanTest(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 shards.parse_shard(bad)
 
-    def test_real_flows_split_into_four_or_five_shards_without_losing_native(self):
+    def test_real_flows_split_into_four_or_five_shards_with_native_separate(self):
         flows = shards.discover_flows(ROOT)
         self.assertTrue(flows)
         self.assertTrue(all(f.startswith(".maestro/flows/") for f in flows))
@@ -96,12 +107,13 @@ class PlanTest(unittest.TestCase):
         for count in (4, 5):
             planned = shards.plan(flows, shards.load_durations(shards.DURATIONS_FILE), count)
             self.assertEqual(sorted(f for s in planned for f in s.flows), flows)
-            self.assertEqual([s.index for s in planned if s.native], [1])
+            self.assertEqual([s.index for s in planned if s.native], [])
 
-    def test_native_reserve_covers_measured_full_suite_with_margin(self):
-        # FIN-465: successful run 42210173741 spent 194s from starting native Gradle to report copies
-        # (13/13, 0 failures). 50% headroom rounds to 300s; 70s left the next run 6/13 at timeout.
-        self.assertGreaterEqual(shards.NATIVE_SECONDS, 194 * 1.5)
+    def test_native_suite_does_not_consume_maestro_shard_budget(self):
+        self.assertEqual(shards.NATIVE_SECONDS, 0)
+        planned = shards.plan(self.FLOWS, self.DURATIONS, 3)
+        self.assertEqual(sum(s.seconds for s in planned), sum(self.DURATIONS.values()))
+        self.assertFalse(any(s.native for s in planned))
 
     def test_real_plan_keeps_observed_flow_variance_and_setup_within_2400_seconds(self):
         flows = shards.discover_flows(ROOT)
@@ -137,11 +149,14 @@ class MergeTest(unittest.TestCase):
         self.flows = [".maestro/flows/a/one.yaml", ".maestro/flows/a/two.yaml", ".maestro/flows/b/three.yaml"]
         for flow in self.flows:
             flow_file(self.root, flow, f"Flow {Path(flow).stem}")
+        write(self.root / "scripts/qase-cases.json", json.dumps({"cases": {flow: i + 1 for i, flow in enumerate(self.flows)}}))
         self.durations = {self.flows[0]: 60, self.flows[1]: 50, self.flows[2]: 40}
         # 2 shards, no native weight: [one] and [two, three].
         self.plan = shards.plan(self.flows, self.durations, 2, native_seconds=0)
         self.assertEqual([s.flows for s in self.plan], [[self.flows[0]], [self.flows[1], self.flows[2]]])
         self.dir = Path(self.tmp.name) / "shards"
+        for index in (1, 2):
+            execution_receipt(self.shard_dir(index))
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -168,16 +183,18 @@ class MergeTest(unittest.TestCase):
         second = list(merged.iter("testsuite"))[1]
         self.assertEqual((second.get("tests"), second.get("failures")), ("2", "1"))
 
-    def test_shard_without_report_turns_its_flows_into_failures(self):
+    def test_shard_without_report_marks_not_run_and_keeps_verdict_incomplete(self):
         write(self.shard_dir(1) / "maestro-report.xml", report(self.root, [(self.flows[0], "Flow one", 61, False)]))
         # Shard 2 uploaded only a logcat: the emulator never came up.
         write(self.shard_dir(2) / "logcat.txt", "boot failed")
         outcomes, merged = self.gather()
         self.assertFalse(outcomes[1].reported)
         self.assertEqual(outcomes[1].missing, 2)
-        failed = [c for c in merged.iter("testcase") if c.find("failure") is not None]
+        failed = [c for c in merged.iter("testcase") if c.find("skipped") is not None]
         self.assertEqual(sorted(shards.flow_of(c) for c in failed), sorted([self.flows[1], self.flows[2]]))
-        self.assertIn("shard 2/2 left no Maestro report", failed[0].find("failure").get("message"))
+        self.assertIn("NOT RUN: shard 2", failed[0].find("skipped").get("message"))
+        self.assertEqual(outcomes[1].failed, 0)
+        self.assertTrue(shards.problems(outcomes))
         # Named as Maestro names them, so the summary and Qase show the flow, not a file name.
         self.assertEqual({c.get("name") for c in failed}, {"Flow two", "Flow three"})
 
@@ -185,16 +202,16 @@ class MergeTest(unittest.TestCase):
         write(self.shard_dir(1) / "maestro-report.xml", "<testsuites><testsuite>")  # cut off mid-write
         outcomes, merged = self.gather()
         self.assertEqual([o.reported for o in outcomes], [False, False])
-        self.assertEqual(len([c for c in merged.iter("testcase") if c.find("failure") is not None]), 3)
+        self.assertEqual(len([c for c in merged.iter("testcase") if c.find("skipped") is not None]), 3)
 
-    def test_flow_missing_from_a_report_is_a_failure(self):
+    def test_flow_missing_from_a_report_is_not_run(self):
         write(self.shard_dir(1) / "maestro-report.xml", report(self.root, [(self.flows[0], "Flow one", 61, False)]))
         write(self.shard_dir(2) / "maestro-report.xml", report(self.root, [(self.flows[2], "Flow three", 40, False)]))
         outcomes, merged = self.gather()
         self.assertEqual((outcomes[1].passed, outcomes[1].missing), (1, 1))
-        (lost,) = [c for c in merged.iter("testcase") if c.find("failure") is not None]
+        (lost,) = [c for c in merged.iter("testcase") if c.find("skipped") is not None]
         self.assertEqual(shards.flow_of(lost), self.flows[1])
-        self.assertIn("not in the report of shard 2/2", lost.find("failure").get("message"))
+        self.assertIn("NOT RUN: shard 2", lost.find("skipped").get("message"))
 
     def test_report_without_file_is_matched_by_flow_name(self):
         # A Maestro version without the `file` attribute: the flows still count as run, none turns into «not run».
@@ -228,7 +245,7 @@ class MergeTest(unittest.TestCase):
         results = qase.parse_report((self.root / "build" / "e2e" / "maestro-report.xml").read_text(encoding="utf-8"))
         self.assertEqual(
             sorted((r.key, r.status) for r in results),
-            [(self.flows[0], "passed"), (self.flows[1], "failed"), (self.flows[2], "failed")],
+            [(self.flows[0], "passed"), (self.flows[1], "skipped"), (self.flows[2], "skipped")],
         )
 
     def test_coverage_data_of_every_shard_and_native_results_are_put_in_place(self):
@@ -269,7 +286,7 @@ class MergeTest(unittest.TestCase):
         ]))
         out, summary, _ = self.run_gather()
         self.assertIn("| 1/2 (no report) | 1 | 0 | 0 | 1 |", out)
-        self.assertIn("| 2/2 | 2 | 2 | 0 | 0 | 1.5 min |", summary)
+        self.assertIn("| 2/2 | 2 | 2 | 0 | 0 | 0 | 0 | 1.5 min |", summary)
         self.assertIn("- shard 1/2: no Maestro report received (1 flow(s) not run)", summary)
 
     def test_shard_whose_report_never_arrived_makes_the_outcome_incomplete(self):
@@ -349,6 +366,381 @@ class DurationsTest(unittest.TestCase):
         with redirect_stdout(io.StringIO()) as out:
             self.assertEqual(shards.main(["list", "--shard", "1/1"]), 0)
         self.assertEqual(out.getvalue().split(), shards.discover_flows(ROOT))
+
+
+class StrictResultsTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / 'repo'
+        self.out = self.root / 'build/e2e'
+        self.dir = self.root / 'build/shards'
+        self.native_dir = self.root / 'build/native'
+        self.jvm_dir = self.root / 'build/components'
+        self.flows = ['.maestro/flows/a.yaml', '.maestro/flows/b.yaml']
+        for index, flow in enumerate(self.flows):
+            flow_file(self.root, flow, f'Flow {index}')
+        self.plan = shards.plan(self.flows, {self.flows[0]: 10, self.flows[1]: 9}, 2)
+        self.native = 'example.NativeTest#checksBoundary'
+        self.jvm = 'jvm:example.ComponentTest#checksComponent'
+        write(self.root / 'app/src/androidTestMock/kotlin/example/NativeTest.kt',
+              'package example\nclass NativeTest { @Test fun checksBoundary() {} }')
+        write(self.root / 'feature/example/src/test/kotlin/example/ComponentTest.kt',
+              'package example\nclass ComponentTest { @Test fun checksComponent() {} }')
+        self.mapping = {self.flows[0]: 1, self.flows[1]: 2, self.native: 3, self.jvm: 1}
+        self.write_mapping()
+        for index, flow in enumerate(self.flows, 1):
+            write(self.shard_dir(index) / 'maestro-report.xml', report(self.root, [(flow, f'Flow {index-1}', 1, False)]))
+        self.native_report = write(self.native_dir / 'native/connected/TEST-native.xml', self.native_xml())
+        self.jvm_report = write(self.jvm_dir / 'TEST-component.xml', self.jvm_xml())
+        for directory in (self.shard_dir(1), self.shard_dir(2), self.native_dir, self.jvm_dir):
+            execution_receipt(directory)
+
+    def write_mapping(self):
+        write(self.root / 'scripts/qase-cases.json', json.dumps({'cases': self.mapping}))
+
+    def shard_dir(self, index):
+        return self.dir / f'e2e-shard-{index}'
+
+    @staticmethod
+    def native_xml(inner='', seconds='2'):
+        return f'<testsuite><testcase classname="example.NativeTest" name="checksBoundary" time="{seconds}">{inner}</testcase></testsuite>'
+
+    @staticmethod
+    def jvm_xml(inner=''):
+        return f'<testsuite><testcase classname="example.ComponentTest" name="checksComponent" time="3">{inner}</testcase></testsuite>'
+
+    def gather(self):
+        return shards.gather(self.root, self.plan, self.dir, self.out, self.native_dir, self.jvm_dir)
+
+    def test_exact_maestro_native_jvm_inventory_passes_and_writes_one_manifest(self):
+        outcomes = self.gather()
+        self.assertEqual(shards.problems(outcomes), [])
+        expected = json.loads((self.out / 'expected-tests.json').read_text())
+        self.assertEqual(expected['native'], [self.native])
+        self.assertEqual(expected['jvm'], [self.jvm])
+        status = json.loads((self.out / 'execution-status.json').read_text())
+        self.assertTrue(status['passed'])
+        self.assertEqual([(o.kind, o.passed) for o in outcomes], [('maestro', 1), ('maestro', 1), ('native', 1), ('jvm', 1)])
+        canonical = list((self.root / 'app/build/outputs/androidTest-results').rglob('TEST-*.xml'))
+        self.assertEqual(len(canonical), 1)
+        self.assertEqual(len(list(ET.parse(canonical[0]).getroot().iter('testcase'))), 1)
+
+    def test_native_only_missing_case_is_not_lost_or_counted_as_assertion_failure(self):
+        self.native_report.unlink()
+        outcome = self.gather()[2]
+        self.assertEqual((outcome.passed, outcome.failed, outcome.missing), (0, 0, 1))
+        self.assertTrue(shards.problems([outcome]))
+        case = next(ET.parse(self.out / 'native-report.xml').getroot().iter('testcase'))
+        self.assertEqual(case.get('name'), 'checksBoundary')
+        self.assertIsNotNone(case.find('skipped'))
+        self.assertIn('NOT RUN', case.find('skipped').get('message'))
+
+    def test_jvm_companion_missing_keeps_complete_case_from_passing(self):
+        self.jvm_report.unlink()
+        outcomes = self.gather()
+        self.assertEqual(outcomes[-1].missing, 1)
+        self.assertIn('jvm suite: no jvm report received (1 test(s) not run)', shards.problems(outcomes))
+
+    def test_skipped_native_and_jvm_tests_fail_completeness(self):
+        self.native_report.write_text(self.native_xml('<skipped/>'))
+        self.jvm_report.write_text(self.jvm_xml('<skipped/>'))
+        outcomes = self.gather()
+        self.assertEqual([o.skipped for o in outcomes[-2:]], [1, 1])
+        self.assertFalse(json.loads((self.out / 'execution-status.json').read_text())['passed'])
+
+    def test_skipped_maestro_without_status_is_never_a_pass(self):
+        path = self.shard_dir(1) / 'maestro-report.xml'
+        path.write_text(f'<testsuite><testcase file="{self.root / self.flows[0]}" name="Flow 0"><skipped/></testcase></testsuite>')
+        outcome = self.gather()[0]
+        self.assertEqual((outcome.passed, outcome.skipped), (0, 1))
+        self.assertTrue(shards.problems([outcome]))
+
+    def test_duplicate_result_is_integrity_error_not_extra_coverage(self):
+        for target, xml in [(self.native_report, self.native_xml()), (self.jvm_report, self.jvm_xml())]:
+            target.write_text(xml.replace('</testsuite>', xml.split('<testsuite>')[1]))
+        outcomes = self.gather()
+        for outcome in outcomes[-2:]:
+            self.assertEqual(outcome.passed, 1)
+            self.assertIn('duplicate test result', outcome.invalid)
+        self.assertFalse(json.loads((self.out / 'execution-status.json').read_text())['passed'])
+
+    def test_wrong_shard_result_is_not_accepted_by_its_real_owner(self):
+        first = self.shard_dir(1) / 'maestro-report.xml'
+        first.write_text(report(self.root, [(self.flows[1], 'Flow 1', 1, False)]))
+        outcomes = self.gather()
+        self.assertEqual(outcomes[0].passed, 0)
+        self.assertEqual(outcomes[0].missing, 1)
+        self.assertIn('unknown or wrong-suite test result', outcomes[0].invalid)
+        self.assertTrue(shards.problems(outcomes))
+
+    def test_unknown_native_method_is_rejected_even_with_all_expected_methods(self):
+        self.native_report.write_text(self.native_xml().replace('</testsuite>', '<testcase classname="example.NativeTest" name="unknown"/></testsuite>'))
+        outcome = self.gather()[2]
+        self.assertEqual(outcome.passed, 1)
+        self.assertIn('unknown or wrong-suite test result', outcome.invalid)
+
+    def test_malformed_xml_and_nonfinite_duration_cannot_pass(self):
+        self.native_report.write_text('<testsuite>')
+        self.jvm_report.write_text(self.jvm_xml().replace('time="3"', 'time="NaN"'))
+        outcomes = self.gather()
+        self.assertIn('unreadable or malformed JUnit report', outcomes[-2].invalid)
+        self.assertIn('invalid test duration', outcomes[-1].invalid)
+        self.assertEqual(outcomes[-2].missing, 1)
+        self.assertFalse(json.loads((self.out / 'execution-status.json').read_text())['passed'])
+
+    def test_setup_failure_has_not_run_evidence_without_assertion_failures(self):
+        (self.shard_dir(1) / 'maestro-report.xml').unlink()
+        execution_receipt(self.shard_dir(1), phase='setup', category='setup', result='failed', exit_code=28, apks={})
+        outcomes = self.gather()
+        first = outcomes[0]
+        self.assertEqual((first.missing, first.failed, first.category, first.phase), (1, 0, 'setup', 'setup'))
+        self.assertIn('setup / setup', shards.outcomes_markdown(outcomes))
+        case = next(ET.parse(self.out / 'maestro-report.xml').getroot().iter('testcase'))
+        self.assertIn('cause=setup', case.find('skipped').get('message'))
+
+    def test_bad_execution_receipt_is_not_trusted(self):
+        write(self.native_dir / 'execution.json', '{invalid')
+        outcome = self.gather()[2]
+        self.assertIn('invalid execution receipt', outcome.invalid)
+
+    def test_native_source_method_not_in_map_fails_manifest(self):
+        self.mapping.pop(self.native)
+        self.write_mapping()
+        outcomes = self.gather()
+        self.assertIn('source discovery and Qase component mapping differ', outcomes[0].invalid)
+        self.assertEqual(outcomes[2].planned, 1)
+
+    def test_missing_jvm_source_method_cannot_be_declared_as_covered(self):
+        (self.root / 'feature/example/src/test/kotlin/example/ComponentTest.kt').unlink()
+        outcomes = self.gather()
+        self.assertIn('JVM component source and Qase mapping differ', outcomes[0].invalid)
+
+    def test_coverage_from_native_job_is_preserved(self):
+        write(self.native_dir / 'native-coverage/connected/device/coverage.ec', b'execution')
+        self.gather()
+        self.assertEqual((self.root / 'app/build/outputs/code_coverage/connected/device/coverage.ec').read_bytes(), b'execution')
+
+    def test_passing_test_rows_do_not_hide_failed_execution_receipt(self):
+        execution_receipt(self.native_dir, phase='reporting', category='reporting', result='failed', exit_code=1)
+        outcomes = self.gather()
+        self.assertEqual(outcomes[2].passed, 1)
+        self.assertIn('native suite: execution failed during reporting', shards.problems(outcomes))
+
+    def test_invalid_mapping_is_reported_without_crashing_or_synthesizing_an_invalid_key(self):
+        write(self.root / 'scripts/qase-cases.json', json.dumps({'cases': {'not-a-component': 1}}))
+        outcomes = self.gather()
+        self.assertIn('invalid Qase component mapping', outcomes[0].invalid)
+
+    def test_duplicate_failure_is_preserved_in_canonical_report(self):
+        self.native_report.write_text(self.native_xml().replace('</testsuite>', self.native_xml('<failure message="real failure"/>').split('<testsuite>')[1]))
+        outcome = self.gather()[2]
+        self.assertEqual((outcome.passed, outcome.failed), (0, 1))
+        self.assertIn('duplicate test result', outcome.invalid)
+        case = next(ET.parse(self.out / 'native-report.xml').getroot().iter('testcase'))
+        self.assertIsNotNone(case.find('failure'))
+
+    def test_missing_mapping_cannot_make_expected_test_set_shrink(self):
+        (self.root / 'scripts/qase-cases.json').unlink()
+        outcomes = self.gather()
+        self.assertIn('missing Qase component mapping', outcomes[0].invalid)
+
+    def test_unrelated_explicit_path_cannot_match_by_valid_display_name(self):
+        path = self.shard_dir(1) / 'maestro-report.xml'
+        path.write_text('<testsuite><testcase name="Flow 0" file="unrelated.yaml"/></testsuite>')
+        outcome = self.gather()[0]
+        self.assertEqual((outcome.passed, outcome.missing), (0, 1))
+        self.assertIn('unknown or wrong-suite test result', outcome.invalid)
+
+    def test_missing_execution_receipt_blocks_passing_xml(self):
+        for directory in (self.shard_dir(1), self.native_dir, self.jvm_dir):
+            with self.subTest(directory=directory):
+                path = directory / 'execution.json'
+                saved = path.read_bytes()
+                path.unlink()
+                outcomes = self.gather()
+                self.assertTrue(any('missing execution receipt' in o.invalid for o in outcomes))
+                self.assertTrue(shards.problems(outcomes))
+                path.write_bytes(saved)
+
+    def test_historical_replay_must_explicitly_disable_receipt_requirement(self):
+        for directory in (self.shard_dir(1), self.shard_dir(2), self.native_dir, self.jvm_dir):
+            (directory / 'execution.json').unlink()
+        outcomes = shards.gather(self.root, self.plan, self.dir, self.out, self.native_dir, self.jvm_dir, receipts_required=False)
+        self.assertEqual(shards.problems(outcomes), [])
+
+    def test_source_and_run_identity_must_match_and_old_successful_attempt_is_allowed(self):
+        from unittest import mock
+        with mock.patch.dict(os.environ, {'GITHUB_SHA': 'current-source', 'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '2'}):
+            for directory in (self.shard_dir(1), self.shard_dir(2), self.native_dir, self.jvm_dir):
+                execution_receipt(directory, identity={'GITHUB_SHA': 'current-source', 'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '1'})
+            self.assertEqual(shards.problems(self.gather()), [])
+            for wrong in ({'GITHUB_SHA': 'old-source'}, {'GITHUB_RUN_ID': '999'}, {'GITHUB_RUN_ATTEMPT': '3'}):
+                identity = {'GITHUB_SHA': 'current-source', 'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '1', **wrong}
+                execution_receipt(self.native_dir, identity=identity)
+                self.assertIn('invalid execution receipt', self.gather()[2].invalid)
+
+    def test_passed_receipt_needs_complete_phase_zero_exit_and_no_failure_cause(self):
+        for changes in ({'schema': 2}, {'phase': 'invalid'}, {'phase': 'native'}, {'exit_code': 1}, {'category': 'test'}):
+            with self.subTest(changes=changes):
+                execution_receipt(self.native_dir, **changes)
+                self.assertIn('invalid execution receipt', self.gather()[2].invalid)
+
+    def test_emulator_receipt_needs_apk_identity_but_jvm_does_not(self):
+        execution_receipt(self.jvm_dir, apks={})
+        self.assertEqual(shards.problems(self.gather()), [])
+        execution_receipt(self.native_dir, apks={})
+        self.assertIn('missing emulator APK identity', self.gather()[2].invalid)
+
+    def test_duplicate_skip_is_preserved_as_worse_than_pass(self):
+        self.native_report.write_text(self.native_xml().replace('</testsuite>', self.native_xml('<skipped/>').split('<testsuite>')[1]))
+        outcome = self.gather()[2]
+        self.assertEqual((outcome.passed, outcome.skipped), (0, 1))
+        self.assertIn('duplicate test result', outcome.invalid)
+        case = next(ET.parse(self.out / 'native-report.xml').getroot().iter('testcase'))
+        self.assertIsNotNone(case.find('skipped'))
+
+    def qase_payload(self):
+        spec = importlib.util.spec_from_file_location('qase_provenance', ROOT / 'scripts/qase-report.py')
+        qase = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = qase
+        spec.loader.exec_module(qase)
+        results = []
+        for name, prefix in (('maestro-report.xml', ''), ('native-report.xml', ''), ('jvm-report.xml', 'jvm:')):
+            results.extend(qase.parse_report((self.out / name).read_text(), prefix=prefix))
+        payload, unmapped = qase.map_results(results, self.mapping)
+        self.assertEqual(unmapped, [])
+        return {case['case_id']: case for case in payload}
+
+    def test_unverified_provenance_never_becomes_a_current_pass_in_qase(self):
+        from unittest import mock
+        suites = [(self.shard_dir(1), 1, 0), (self.native_dir, 3, 2), (self.jvm_dir, 1, 3)]
+        with mock.patch.dict(os.environ, {'GITHUB_SHA': 'current-source'}):
+            for directory, case_id, outcome_index in suites:
+                mutations = ['missing', 'malformed', 'wrong_source']
+                if directory != self.jvm_dir:
+                    mutations.append('missing_apk')
+                for mutation in mutations:
+                    with self.subTest(directory=directory, mutation=mutation):
+                        for d in (self.shard_dir(1), self.shard_dir(2), self.native_dir, self.jvm_dir):
+                            execution_receipt(d)
+                        path = directory / 'execution.json'
+                        if mutation == 'missing':
+                            path.unlink()
+                        elif mutation == 'malformed':
+                            path.write_text('{invalid')
+                        elif mutation == 'wrong_source':
+                            execution_receipt(directory, identity={'GITHUB_SHA': 'stale-source'})
+                        else:
+                            execution_receipt(directory, apks={})
+                        outcome = self.gather()[outcome_index]
+                        self.assertEqual((outcome.passed, outcome.failed, outcome.unverified), (0, 0, 1))
+                        self.assertEqual(outcome.unverified_results, {'passed': 1})
+                        case = self.qase_payload()[case_id]
+                        self.assertEqual(case['status'], 'skipped')
+                        self.assertIn('UNVERIFIED', case['comment'])
+                        self.assertIn('raw result passed', case['comment'])
+
+    def test_unverified_raw_failures_keep_diagnostics_without_claiming_current_assertion_failures(self):
+        reports = [(self.shard_dir(1) / 'maestro-report.xml', 1, 0, 'maestro-report.xml'),
+                   (self.native_report, 3, 2, 'native-report.xml'),
+                   (self.jvm_report, 1, 3, 'jvm-report.xml')]
+        for report_path, case_id, outcome_index, canonical_name in reports:
+            with self.subTest(report=report_path):
+                raw = report_path.read_text()
+                parsed = ET.fromstring(raw)
+                ET.SubElement(next(parsed.iter('testcase')), 'failure', {'message': 'raw failure detail'}).text = 'raw failure trace'
+                failed = ET.tostring(parsed, encoding='unicode')
+                report_path.write_text(failed)
+                directory = self.shard_dir(1) if outcome_index == 0 else self.native_dir if outcome_index == 2 else self.jvm_dir
+                receipt = directory / 'execution.json'
+                saved_receipt = receipt.read_text()
+                receipt.write_text('{invalid')
+                outcome = self.gather()[outcome_index]
+                self.assertEqual((outcome.failed, outcome.unverified_results), (0, {'failed': 1}))
+                case = self.qase_payload()[case_id]
+                self.assertEqual(case['status'], 'skipped')
+                self.assertIn('raw result failed', case['comment'])
+                canonical = next(c for c in ET.parse(self.out / canonical_name).getroot().iter('testcase') if c.get('pf-execution') == 'unverified')
+                self.assertIsNone(canonical.find('failure'))
+                self.assertIn('raw failure detail', canonical.find('system-out').text)
+                self.assertIn('raw failure trace', canonical.find('system-out').text)
+                self.assertEqual(report_path.read_text(), failed, 'raw artifact must not be rewritten')
+                receipt.write_text(saved_receipt)
+                report_path.write_text(raw)
+
+    def test_valid_failed_execution_preserves_real_observed_results_in_qase(self):
+        for phase in ('setup', 'reporting'):
+            with self.subTest(phase=phase):
+                execution_receipt(self.native_dir, phase=phase, category=phase, result='failed', exit_code=1)
+                self.native_report.write_text(self.native_xml('<failure message="current failure"/>'))
+                outcome = self.gather()[2]
+                self.assertEqual((outcome.failed, outcome.unverified), (1, 0))
+                self.assertEqual(self.qase_payload()[3]['status'], 'failed')
+                self.native_report.write_text(self.native_xml())
+                outcome = self.gather()[2]
+                self.assertEqual((outcome.passed, outcome.unverified), (1, 0))
+                self.assertEqual(self.qase_payload()[3]['status'], 'passed')
+
+    def test_prior_real_failure_and_later_deadline_are_visible_through_qase(self):
+        self.plan = shards.plan(self.flows, {self.flows[0]: 10, self.flows[1]: 9}, 1)
+        write(self.shard_dir(1) / 'maestro-report.xml', report(self.root, [(self.flows[0], 'Flow 0', 1, True)]))
+        execution_receipt(self.shard_dir(1), phase='maestro', category='test', result='failed', exit_code=1, budget_expired=True)
+        outcomes = self.gather()
+        first = outcomes[0]
+        self.assertEqual((first.failed, first.missing, first.category, first.phase), (1, 1, 'test', 'maestro'))
+        self.assertTrue(first.budget_expired)
+        self.assertIn('test / maestro; deadline_expired=true', shards.outcomes_markdown(outcomes))
+        status = json.loads((self.out / 'execution-status.json').read_text())
+        self.assertEqual(status['suites'][0]['budget_expired'], True)
+        self.assertFalse(status['passed'])
+        cases = self.qase_payload()
+        self.assertEqual(cases[1]['status'], 'failed')
+        self.assertEqual(cases[1]['comment'], 'Assertion is false')
+        self.assertEqual(cases[2]['status'], 'skipped')
+        self.assertIn('cause=budget', cases[2]['comment'])
+        self.assertIn('phase=maestro', cases[2]['comment'])
+        self.assertIn('deadline_expired=true', cases[2]['comment'])
+
+    def test_clean_deadline_keeps_prior_completed_cases_and_marks_missing_as_budget(self):
+        self.plan = shards.plan(self.flows, {self.flows[0]: 10, self.flows[1]: 9}, 1)
+        write(self.shard_dir(1) / 'maestro-report.xml', report(self.root, [(self.flows[0], 'Flow 0', 1, False)]))
+        execution_receipt(self.shard_dir(1), phase='maestro', category='budget', result='failed', exit_code=124, budget_expired=True)
+        outcome = self.gather()[0]
+        self.assertEqual((outcome.passed, outcome.failed, outcome.missing, outcome.category), (1, 0, 1, 'budget'))
+        cases = self.qase_payload()
+        self.assertEqual(cases[1]['status'], 'passed')
+        self.assertEqual(cases[2]['status'], 'skipped')
+        self.assertIn('cause=budget', cases[2]['comment'])
+        self.assertIn('deadline_expired=true', cases[2]['comment'])
+
+    def test_exit_137_without_coordinator_marker_is_not_inferred_as_budget(self):
+        (self.shard_dir(1) / 'maestro-report.xml').unlink()
+        execution_receipt(self.shard_dir(1), phase='maestro', category='test', result='failed', exit_code=137)
+        outcomes = self.gather()
+        first = outcomes[0]
+        self.assertFalse(first.budget_expired)
+        self.assertEqual(first.category, 'test')
+        self.assertNotIn('deadline_expired=true', shards.outcomes_markdown(outcomes))
+        case = self.qase_payload()[1]
+        self.assertEqual(case['status'], 'skipped')
+        self.assertIn('cause=test', case['comment'])
+        self.assertNotIn('cause=budget', case['comment'])
+
+    def test_non_boolean_budget_marker_is_invalid_provenance(self):
+        for value in ('true', 1, None, []):
+            with self.subTest(value=value):
+                execution_receipt(self.native_dir, budget_expired=value)
+                outcome = self.gather()[2]
+                self.assertIn('invalid execution receipt', outcome.invalid)
+                self.assertFalse(outcome.budget_expired)
+                self.assertEqual(self.qase_payload()[3]['status'], 'skipped')
+
+    def test_deadline_marker_cannot_coexist_with_a_passed_execution_receipt(self):
+        execution_receipt(self.native_dir, budget_expired=True)
+        outcome = self.gather()[2]
+        self.assertIn('invalid execution receipt', outcome.invalid)
+        self.assertEqual(self.qase_payload()[3]['status'], 'skipped')
 
 
 if __name__ == "__main__":

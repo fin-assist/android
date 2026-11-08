@@ -3,6 +3,7 @@ package ru.finassist.pf.e2e
 import ru.finassist.pf.core.api.model.StartPhoneVerificationRequest
 
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,7 +39,7 @@ class E2eSignInTest {
     private val lock = FakeAppLock()
     private val started = mutableListOf<TokenPair>()
 
-    private fun signIn(timeoutMs: Long = 30_000) = E2eSignIn(
+    private fun signIn(timeoutMs: Long = 30_000, prepareFixture: suspend () -> Unit = {}, fixtureTimeoutMs: Long = 60_000) = E2eSignIn(
         authApi = auth,
         session = session,
         startSession = { tokens ->
@@ -47,6 +48,8 @@ class E2eSignInTest {
         },
         appLock = lock,
         timeoutMs = timeoutMs,
+        prepareFixture = prepareFixture,
+        fixtureTimeoutMs = fixtureTimeoutMs,
     )
 
     @Test
@@ -141,6 +144,40 @@ class E2eSignInTest {
         lock.unlockOnSet = false
 
         assertEquals("sign-in did not finish in 5000 ms", signIn(timeoutMs = 5_000).signIn("+79161234567", "1234"))
+    }
+
+    @Test
+    fun `cold fixture preparation has its own deadline before authentication starts`() = runTest {
+        auth.events = listOf(PhoneVerificationStatusEvent(VerificationStatus.VERIFIED,
+            isNewUser = false, accessToken = "a", refreshToken = "r"))
+        val result = signIn(timeoutMs = 5_000, prepareFixture = {
+            assertTrue(auth.phones.isEmpty())
+            delay(35_000)
+            assertTrue(auth.phones.isEmpty())
+        }).signIn("+79161234567", "1234")
+        assertNull(result)
+        assertEquals(35_000L, testScheduler.currentTime)
+        assertEquals(listOf("+79161234567"), auth.phones)
+    }
+
+    @Test
+    fun `an unready fixture fails without sending the phone or creating a session`() = runTest {
+        val result = signIn(prepareFixture = { awaitCancellation() }, fixtureTimeoutMs = 7_000)
+            .signIn("+79161234567", "1234")
+        assertEquals("fixture did not finish in 7000 ms", result)
+        assertTrue(auth.phones.isEmpty())
+        assertTrue(started.isEmpty())
+        assertTrue(lock.passcodes.isEmpty())
+    }
+
+    @Test
+    fun `fixture setup does not extend a hanging authentication deadline`() = runTest {
+        auth.hang = true
+        val result = signIn(timeoutMs = 5_000, prepareFixture = { delay(35_000) })
+            .signIn("+79161234567", "1234")
+        assertEquals("sign-in did not finish in 5000 ms", result)
+        assertEquals(40_000L, testScheduler.currentTime)
+        assertTrue(started.isEmpty())
     }
 
     private class FakeAuthApi : AuthApi {

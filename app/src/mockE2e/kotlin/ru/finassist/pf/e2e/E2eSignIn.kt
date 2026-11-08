@@ -3,6 +3,7 @@ package ru.finassist.pf.e2e
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.TokenPair
@@ -32,17 +33,24 @@ class E2eSignIn(
     private val startSession: suspend (TokenPair) -> Unit,
     private val appLock: AppLock,
     private val timeoutMs: Long = TIMEOUT_MS,
+    private val prepareFixture: suspend () -> Unit = {},
+    private val fixtureTimeoutMs: Long = FIXTURE_TIMEOUT_MS,
 ) {
     /** Signs [phone] in and sets [passcode]; returns null on success, otherwise what went wrong (shown to the flow). */
-    suspend fun signIn(phone: String, passcode: String): String? = try {
-        withTimeout(timeoutMs) { attempt(phone, passcode) }
-    } catch (e: TimeoutCancellationException) {
-        "sign-in did not finish in $timeoutMs ms"
-    } catch (e: NoSuchElementException) {
-        "the phone verification stream ended without a result"
-    } catch (e: AppError) {
-        // No message: an error of the fake server may carry request data. Its type is what the flow needs.
-        "sign-in failed: ${e::class.simpleName}"
+    suspend fun signIn(phone: String, passcode: String): String? {
+        // Cold fixture parsing is setup, not part of the phone-verification deadline.
+        val prepared = withTimeoutOrNull(fixtureTimeoutMs) { prepareFixture(); true } ?: false
+        if (!prepared) return "fixture did not finish in $fixtureTimeoutMs ms"
+        return try {
+            withTimeout(timeoutMs) { attempt(phone, passcode) }
+        } catch (e: TimeoutCancellationException) {
+            "sign-in did not finish in $timeoutMs ms"
+        } catch (e: NoSuchElementException) {
+            "the phone verification stream ended without a result"
+        } catch (e: AppError) {
+            // No message: an error of the fake server may carry request data. Its type is what the flow needs.
+            "sign-in failed: ${e::class.simpleName}"
+        }
     }
 
     private suspend fun attempt(phone: String, passcode: String): String? {
@@ -67,5 +75,6 @@ class E2eSignIn(
     private companion object {
         /** The call takes 1.5 s in the e2e build; the rest are a few fake requests and the Keystore. */
         const val TIMEOUT_MS = 30_000L
+        const val FIXTURE_TIMEOUT_MS = 60_000L
     }
 }

@@ -1,10 +1,12 @@
 # Explicit fixture consent and 14+ before any phone submission, including an existing account (FIN-365).
 appId: ru.finassist.pf.mock.e2e
 ---
+# Initial consent GET waits for the cold mock fixture. This is preparation before phone submission,
+# not an extension of authentication, call or stream deadlines (FIN-473).
 - extendedWaitUntil:
     visible:
       id: "auth.phone.document"
-    timeout: 15000
+    timeout: 60000
 - scrollUntilVisible:
     element:
       id: "auth.phone.age"

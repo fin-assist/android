@@ -124,6 +124,40 @@ os.execvp(args[0], args)
         self.assert_rejected(result)
         self.assertEqual(124, result.returncode)
 
+    def test_verified_cache_is_rehashed_and_used_without_a_second_download(self):
+        first = self.run_setup()
+        self.assertEqual(0, first.returncode, first.stderr)
+        (self.root / 'url').unlink()
+        self.path_file.write_text('')
+        # The same pinned archive remains usable even when the upstream download is unavailable.
+        self.env['FAKE_MODE'] = 'http-error'
+        second = subprocess.run(['bash', str(SCRIPT)], env=self.env, capture_output=True, text=True, timeout=5)
+        self.assertEqual(0, second.returncode, second.stderr)
+        self.assertFalse((self.root / 'url').exists())
+        self.assertTrue(Path(self.path_file.read_text().strip(), 'maestro').is_file())
+
+    def test_corrupt_restored_cache_falls_back_to_download_and_is_replaced_only_after_validation(self):
+        first = self.run_setup()
+        self.assertEqual(0, first.returncode, first.stderr)
+        cached = next((self.run_temp / 'maestro-package').glob('*.zip'))
+        cached.write_text('corrupt restored bytes')
+        (self.root / 'url').unlink()
+        self.path_file.write_text('')
+        second = subprocess.run(['bash', str(SCRIPT)], env=self.env, capture_output=True, text=True, timeout=5)
+        self.assertEqual(0, second.returncode, second.stderr)
+        self.assertTrue((self.root / 'url').exists())
+        self.assertEqual(self.env['MAESTRO_SHA256'], hashlib.sha256(cached.read_bytes()).hexdigest())
+
+    def test_bad_restored_cache_and_failed_download_do_not_publish_a_cli(self):
+        self.assertEqual(0, self.run_setup().returncode)
+        cached = next((self.run_temp / 'maestro-package').glob('*.zip'))
+        cached.write_text('corrupt restored bytes')
+        self.path_file.write_text('')
+        self.env['FAKE_MODE'] = 'http-error'
+        result = subprocess.run(['bash', str(SCRIPT)], env=self.env, capture_output=True, text=True, timeout=5)
+        self.assert_rejected(result)
+        self.assertFalse(cached.exists())
+
 
 if __name__ == '__main__':
     unittest.main()

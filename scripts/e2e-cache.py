@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Clean AVD cache guards and preparation measurements for e2e.yml (FIN-378)."""
+"""AVD preparation guards and shared process-group deadlines for e2e.yml (FIN-378/473)."""
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import signal
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import time
 import uuid
@@ -62,7 +64,7 @@ def wait_for_process_group(process, timeout=5):
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise RuntimeError('Shard process group did not stop after SIGKILL; raw evidence retained')
+            raise RuntimeError('Command process group did not stop after SIGKILL; raw evidence retained')
         process.poll()  # Reap the leader without mistaking its exit for the descendants' exit.
         result = subprocess.run(['ps', '-eo', 'pgid=,stat='], check=True, capture_output=True,
                                 text=True, timeout=min(1, remaining))
@@ -70,23 +72,60 @@ def wait_for_process_group(process, timeout=5):
         # A zombie leader can still have a live JVM thread (procps marks this with lowercase l).
         if not any(int(group) == process.pid and not (status.startswith('Z') and 'l' not in status)
                    for group, status in members):
+            # The leader may have become a zombie after poll(); reap it before handing the evidence to tar.
+            process.wait(timeout=min(1, remaining))
             return
         time.sleep(min(0.05, max(0, deadline - time.monotonic())))
 
 
-def run_tests(shard, timeout=2400, grace=10):
-    """Keep the shard's deadline, stop its whole process group, then preserve per-flow evidence."""
+def record_budget_expiry(receipt=Path('build/e2e/execution.json')):
+    """A collection timeout is additional evidence; it must not replace an earlier assertion failure."""
+    if not receipt.is_file():
+        return
+    try:
+        data = json.loads(receipt.read_text())
+        if data.get('result') != 'failed':
+            data.update(category='budget', result='failed', exit_code=124)
+        data['budget_expired'] = True
+        data['budget_expired_at'] = time.time()
+        temporary = receipt.with_suffix('.tmp')
+        temporary.write_text(json.dumps(data, indent=2) + '\n')
+        temporary.replace(receipt)
+    except (OSError, ValueError, TypeError, AttributeError):
+        # Gather rejects the invalid receipt. Preserve the original bytes and still archive the raw trace.
+        print('::warning::Could not annotate the process deadline; execution receipt retained for integrity checks')
+
+
+def mark_budget_expiry(receipt=Path('build/e2e/execution.json')):
+    """Tell a terminating shell's EXIT trap why it is stopping, without racing its JSON writer."""
+    marker = receipt.with_suffix('.deadline')
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    except OSError:
+        # Cleanup and raw evidence retention remain mandatory even if storage cannot record the marker.
+        print('::warning::Could not mark the process deadline before termination')
+
+
+def run_command(command, timeout=2400, grace=10, archive_output=False):
+    """Stop the whole command group on a real deadline, preserving the first failure and optional UI traces."""
     def interrupted(signum, _frame):
         raise SystemExit(128 + signum)
 
     previous = signal.signal(signal.SIGTERM, interrupted)
     archive_ready = True
+    budget_expired = False
     try:
-        process = subprocess.Popen(['scripts/e2e.sh', '--no-build', '--shard', shard], start_new_session=True)
+        process = subprocess.Popen(command, start_new_session=True)
         try:
             return process.wait(timeout=timeout)
-        except BaseException:
+        except BaseException as error:
+            budget_expired = isinstance(error, subprocess.TimeoutExpired)
             archive_ready = False
+            if budget_expired:
+                # A real Bash EXIT trap can run on TERM and otherwise record 143 as a test failure (or 0
+                # as success on some shells). Never write execution.json until all child writers stop.
+                mark_budget_expiry()
             try:
                 os.killpg(process.pid, signal.SIGTERM)
             except ProcessLookupError:
@@ -101,7 +140,7 @@ def run_tests(shard, timeout=2400, grace=10):
                         break
                     time.sleep(min(0.05, max(0, deadline - time.monotonic())))
             finally:
-                # The shell can exit before a resistant Maestro descendant. Kill the group even then.
+                # A launcher can exit before a resistant JVM descendant. Kill the group even then.
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
@@ -112,7 +151,37 @@ def run_tests(shard, timeout=2400, grace=10):
     finally:
         signal.signal(signal.SIGTERM, previous)
         if archive_ready:
-            archive_maestro_output()
+            if budget_expired:
+                record_budget_expiry()
+            if archive_output:
+                archive_maestro_output()
+
+
+def run_tests(shard, timeout=2400, grace=10, native_only=False):
+    """Apply the same process-group coordinator to an emulator suite."""
+    selection = ['--native-only'] if native_only else ['--shard', shard]
+    return run_command(['scripts/e2e.sh', '--no-build', *selection], timeout, grace, archive_output=True)
+
+
+def command_main(arguments):
+    parser = argparse.ArgumentParser(description='Run one command with a real process-group deadline and execution evidence')
+    parser.add_argument('--timeout', type=float, required=True)
+    parser.add_argument('arguments', nargs=argparse.REMAINDER)
+    args = parser.parse_args(arguments)
+    command = args.arguments[1:] if args.arguments[:1] == ['--'] else args.arguments
+    if not math.isfinite(args.timeout) or args.timeout <= 0 or not command:
+        parser.error('a positive finite timeout and a command are required')
+    # CLI execution already places this script's directory on sys.path; no external runtime is installed.
+    from e2e_execution import category, read, update
+    try:
+        result = run_command(command, timeout=args.timeout)
+    except subprocess.TimeoutExpired:
+        update(result='failed', exit_code=124, failure_category='budget')
+        raise SystemExit(124)
+    if result:
+        # 137 (and even a command's own 124) is not proof of a deadline. Only TimeoutExpired above is.
+        update(result='failed', exit_code=result, failure_category=category(read()['phase']))
+    raise SystemExit(result)
 
 
 def fingerprint():
@@ -324,10 +393,13 @@ def wait_stopped():
 
 
 def main():
+    if sys.argv[1:2] == ['run-command']:
+        command_main(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['adb-init', 'key', 'validate', 'snapshot', 'seal', 'test', 'fallback', 'mark', 'report'])
     parser.add_argument('name', nargs='?')
     parser.add_argument('--shard')
+    parser.add_argument('--native-only', action='store_true')
     cold = parser.add_mutually_exclusive_group()
     cold.add_argument('--cold', action='store_true')
     cold.add_argument('--direct-cold', action='store_true')
@@ -400,7 +472,7 @@ def main():
         # The coordinator uses this durable marker to distinguish preparation failure from a real test failure.
         mark('tests-started')
         try:
-            result = run_tests(args.shard)
+            result = run_tests(None, timeout=600, native_only=True) if args.native_only else run_tests(args.shard)
         finally:
             mark('tests-finished')
         raise SystemExit(result)

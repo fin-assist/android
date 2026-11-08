@@ -94,6 +94,9 @@
     ".maestro/flows/analytics/regular_post_commit_retry.yaml": 91,
     ".maestro/flows/operations/refund_category.yaml": 92,
     ".maestro/flows/operations/own_transfer_split.yaml": 93,
-    ".maestro/flows/statements/upload_amount_overflow.yaml": 95
+    ".maestro/flows/statements/upload_amount_overflow.yaml": 95,
+    "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase82RetainedSnapshotsAndRefusedMutation": 82,
+    "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase83HistoryPagingAndSelection": 83,
+    "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase89UnknownReadRecoveryAndDeferredSelection": 89
   }
 }

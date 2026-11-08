@@ -7,8 +7,10 @@ Reads JUnit XML reports — Maestro (`build/e2e/maestro-report.xml`) and the ins
 
 Test keys in the map:
 - a Maestro flow: its path from the repository root, `.maestro/flows/<feature>/<flow>.yaml`;
-- an instrumented test: `<class>#<method>`.
-A test without a case is reported as a warning and left out of the run.
+- an instrumented test: `<class>#<method>`;
+- a targeted JVM UI companion: `jvm:<class>#<method>` (`--jvm-reports`).
+A test without a case is reported as a warning and left out of the run. Every mapped case is represented:
+missing components are Skipped, while the independent strict gather verdict rejects incomplete execution.
 
 Usage:
   QASE_API_TOKEN=… scripts/qase-report.py --title "UI tests · main · abc1234" REPORT [REPORT…]
@@ -23,6 +25,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import math
 import os
 import sys
 import time
@@ -57,36 +60,44 @@ class TestResult:
 def test_key(case: ET.Element) -> str:
     """`.maestro/…` path for a Maestro flow (its `file` attribute is absolute), `<class>#<method>` otherwise."""
     file = case.get("file") or ""
+    if file.startswith(".maestro/"):
+        return file
     marker = "/.maestro/"
     if marker in file:
         return ".maestro/" + file.split(marker, 1)[1]
     return f"{case.get('classname', '')}#{case.get('name', '')}"
 
 
-def parse_report(xml_text: str) -> list[TestResult]:
+def parse_report(xml_text: str, prefix: str = "") -> list[TestResult]:
     results = []
     root = ET.fromstring(xml_text)
     for case in root.iter("testcase"):
         problem = case.find("failure")
         if problem is None:
             problem = case.find("error")
+        skipped = case.find("skipped")
+        diagnostic = problem if problem is not None else skipped
         if problem is not None:
             status = "failed"
-        elif case.find("skipped") is not None:
+        elif skipped is not None or (case.get("status") or "").upper() in ("SKIPPED", "IGNORED"):
             status = "skipped"
         else:
             # Maestro also writes status="ERROR"/"FAILURE" on the testcase itself.
             status = "failed" if (case.get("status") or "SUCCESS").upper() not in ("SUCCESS", "PASSED") else "passed"
         try:
-            time_ms = int(float(case.get("time") or 0) * 1000)
-        except ValueError:
+            seconds = float(case.get("time") or 0)
+            if not math.isfinite(seconds) or seconds < 0:
+                raise ValueError("invalid duration")
+            time_ms = int(seconds * 1000)
+        except (ValueError, OverflowError):
             time_ms = 0
+            status = "failed"
         results.append(TestResult(
-            key=test_key(case),
+            key=prefix + test_key(case),
             name=case.get("name", ""),
             status=status,
             time_ms=time_ms,
-            message=(problem.get("message") or "") if problem is not None else "",
+            message=(diagnostic.get("message") or "") if diagnostic is not None else "",
             trace=((problem.text or "").strip()[:MAX_TRACE]) if problem is not None else "",
         ))
     return results
@@ -111,8 +122,12 @@ def map_results(results: list[TestResult], cases: dict[str, int]) -> tuple[list[
         kept = by_case.get(case_id)
         if kept is None or SEVERITY[item["status"]] > SEVERITY[kept["status"]]:
             by_case[case_id] = item
+    for case_id in sorted(set(cases.values()) - set(by_case)):
+        keys = sorted(key for key, mapped_id in cases.items() if mapped_id == case_id)
+        by_case[case_id] = {"case_id": case_id, "status": "skipped", "time_ms": 0,
+                            "comment": "Incomplete UI case; not run: " + ", ".join(keys)}
     for case_id, item in by_case.items():
-        missing = {key for key, mapped_id in cases.items() if mapped_id == case_id} - observed[case_id]
+        missing = {key for key, mapped_id in cases.items() if mapped_id == case_id} - observed.get(case_id, set())
         if missing and item["status"] == "passed":
             item["status"] = "skipped"
             detail = "Incomplete UI case; not run: " + ", ".join(sorted(missing))
@@ -190,12 +205,27 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--title", default="UI tests")
     parser.add_argument("--description", default="")
     parser.add_argument("--dry-run", action="store_true", help="print the payload, do not call Qase")
+    parser.add_argument("--jvm-reports", action="append", default=[], help="JVM component JUnit glob; keys get jvm: prefix")
+    parser.add_argument("--delivery-status", type=Path, help="write publication status separately from the test verdict")
     args = parser.parse_args(argv)
 
     config = json.loads(CASES_FILE.read_text(encoding="utf-8"))
     files = sorted({f for pattern in args.reports for f in glob.glob(pattern, recursive=True)})
+    jvm_files = sorted({f for pattern in args.jvm_reports for f in glob.glob(pattern, recursive=True)})
     results = [r for f in files for r in parse_report(Path(f).read_text(encoding="utf-8"))]
+    results += [r for f in jvm_files for r in parse_report(Path(f).read_text(encoding="utf-8"), prefix="jvm:")]
+    files += jvm_files
     payload, unmapped = map_results(results, config["cases"])
+
+    def delivery(result: str, run_id: int | None = None) -> None:
+        if args.delivery_status is not None:
+            args.delivery_status.parent.mkdir(parents=True, exist_ok=True)
+            args.delivery_status.write_text(json.dumps({
+                "schema": 1, "result": result, "case_count": len(payload), "unmapped_count": len(unmapped),
+                "run_id": run_id,
+            }, indent=2) + "\n", encoding="utf-8")
+
+    delivery("pending")
     for r in unmapped:
         # GitHub turns this line into a warning annotation on the run.
         print(f"::warning::no Qase case for {r.key} ({r.name}); add it to scripts/qase-cases.json")
@@ -204,21 +234,26 @@ def main(argv: list[str]) -> int:
         print("::notice::no JUnit reports found (the tests did not run or stopped before writing them)")
 
     if not payload:
+        delivery("empty")
         print("qase: nothing to report")
         return 0
     if args.dry_run:
+        delivery("dry_run")
         print(json.dumps({"title": args.title, "results": payload}, ensure_ascii=False, indent=2))
         return 0
     token = os.environ.get("QASE_API_TOKEN", "")
     if not token:
+        delivery("not_configured")
         print("::notice::QASE_API_TOKEN is not set; results are not sent to Qase")
         return 0
     project = config["project"]
     try:
         run_id = send(project, args.title, args.description, payload, http_request(token))
     except QaseError as e:
+        delivery("failed")
         print(f"::error::Qase: {e}")
         return 1
+    delivery("published", run_id)
     print(f"qase: run https://app.qase.io/run/{project}/dashboard/{run_id}")
     return 0
 

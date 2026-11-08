@@ -9,6 +9,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextEquals
@@ -129,6 +130,12 @@ class StatementPickerTest {
                 .setData(Uri.parse("pfe2e://config?offline=true")))
         }
         compose.waitForTag("e2e.config.applied")
+        compose.waitUntil(10_000) {
+            val button = compose.onAllNodesWithTag("e2e.config.continue")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).singleOrNull()
+            button != null && !button.config.contains(SemanticsProperties.Disabled)
+        }
+        compose.onNodeWithTag("e2e.config.continue").assertIsEnabled().performClick()
         compose.waitUntil(10_000) { !compose.hasTag("e2e.config.applied") }
         compose.onNodeWithTag("statements.download_period.confirm").assertIsDisplayed().performClick()
         compose.waitUntil(10_000) {

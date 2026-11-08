@@ -177,6 +177,7 @@ android {
     }
 
     testOptions {
+        unitTests.isIncludeAndroidResources = true
         execution = "ANDROIDX_TEST_ORCHESTRATOR"
     }
 
@@ -257,6 +258,8 @@ dependencies {
 
     // Unit tests of the app's own small classes (src/test): Robolectric gives them a Context.
     testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.compose.ui.test.manifest)
 
     // Native UI tests (src/androidTestMock, run on the mock e2e build): what Maestro cannot drive.
     androidTestImplementation(platform(libs.androidx.compose.bom))

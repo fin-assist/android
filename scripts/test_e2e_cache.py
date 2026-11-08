@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import signal
 import sys
 import tarfile
@@ -217,6 +218,20 @@ class CleanAvdCacheTest(unittest.TestCase):
             self.assertNotIn('fallback-boot-ready', cache.state()['marks'])
             key.assert_not_called()
             loaded.assert_not_called()
+
+    def test_native_cold_path_has_its_own_budget_and_failure_is_not_snapshot_retried(self):
+        with patch.object(cache, 'STATE', self.root / 'native-state.json'), patch.object(cache, 'assert_clean'), \
+             patch.object(cache, 'run_tests', return_value=7) as run, \
+             patch('sys.argv', ['e2e-cache.py', 'test', '--direct-cold', '--native-only']):
+            cache.write({'marks': {}})
+            with self.assertRaises(SystemExit) as result:
+                cache.main()
+            self.assertEqual(7, result.exception.code)
+            run.assert_called_once_with(None, timeout=600, native_only=True)
+            self.assertIn('tests-finished', cache.state()['marks'])
+            with patch('sys.argv', ['e2e-cache.py', 'fallback']), patch.object(cache, 'wait_stopped'), patch.object(cache, 'output') as out:
+                cache.main()
+                out.assert_called_once_with('needed', 'false')
 
     def test_preparation_failure_allows_one_cold_attempt(self):
         with patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'assert_clean', side_effect=RuntimeError('dirty')), \
@@ -446,6 +461,32 @@ class ShardProcessTest(unittest.TestCase):
         path.write_text('#!' + sys.executable + '\n' + body)
         path.chmod(0o755)
 
+    def run_prepared_script(self, shard, timeout=0.5, grace=0.1):
+        """Start the collection deadline after the fake scenario is prepared, not during Python startup."""
+        real_popen = cache.subprocess.Popen
+        children = []
+
+        def start(args, **kwargs):
+            process = real_popen(args, **kwargs)
+            if args[0] == 'scripts/e2e.sh':
+                children.append(process)
+                deadline = time.monotonic() + 5
+                while not Path('scenario.ready').exists() and time.monotonic() < deadline:
+                    self.assertIsNone(process.poll(), 'fake scenario exited before its readiness marker')
+                    time.sleep(0.01)
+                self.assertTrue(Path('scenario.ready').exists(), 'fake scenario did not become ready within 5s')
+            return process
+
+        try:
+            with patch.object(cache.subprocess, 'Popen', side_effect=start):
+                return cache.run_tests(shard, timeout=timeout, grace=grace)
+        finally:
+            # These two fixtures have one fake process and no descendants. Reap it even if the assertion fails.
+            for process in children:
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=2)
+
     def test_timeout_stops_term_resistant_descendant_before_archiving_unsafe_paths(self):
         child = """import os, signal, time
 from pathlib import Path
@@ -463,17 +504,30 @@ from pathlib import Path
 folder = Path('build/e2e/maestro/forgot?')
 folder.mkdir(parents=True)
 (folder / 'commands.json').write_text('partial')
+Path('build/e2e/execution.json').write_text('{"schema":1,"phase":"maestro","result":"running","category":null,"exit_code":null,"events":[]}')
 Path('parent.pid').write_text(str(os.getpid()))
 subprocess.Popen([sys.executable, '-c', %r])
 while True: time.sleep(0.02)
 """ % child)
         started = time.monotonic()
         try:
-            with self.assertRaises(subprocess.TimeoutExpired):
-                cache.run_tests('3/4', timeout=1, grace=0.2)
+            execution_spec = importlib.util.spec_from_file_location('e2e_execution', Path(cache.__file__).with_name('e2e_execution.py'))
+            execution = importlib.util.module_from_spec(execution_spec)
+            execution_spec.loader.exec_module(execution)
+            coordinator = cache.run_command
+            # Keep this real-process regression short while exercising the command CLI's actual deadline handling.
+            def bounded(command, timeout):
+                return coordinator(command, timeout=timeout, grace=0.2, archive_output=True)
+            with patch.dict(sys.modules, {'e2e_execution': execution}), \
+                 patch.object(cache, 'run_command', side_effect=bounded), self.assertRaises(SystemExit) as result:
+                cache.command_main(['--timeout', '1', '--', 'scripts/e2e.sh'])
+            self.assertEqual(124, result.exception.code)
             # Include the 5 s post-KILL barrier as well as the 1 s timeout and TERM grace.
             self.assertLess(time.monotonic() - started, 8)
             self.assertFalse(Path('build/e2e/maestro').exists())
+            receipt = json.loads(Path('build/e2e/execution.json').read_text())
+            self.assertEqual(('budget', 'failed', 124), (receipt['category'], receipt['result'], receipt['exit_code']))
+            self.assertTrue(receipt['budget_expired'])
             with tarfile.open('build/e2e/maestro-output.tgz') as stream:
                 self.assertIn('maestro/forgot?/commands.json', stream.getnames())
                 self.assertEqual(b'termination evidence', stream.extractfile('maestro/forgot?/term?.json').read())
@@ -501,6 +555,96 @@ raise SystemExit(17)
         self.assertFalse(Path('build/e2e/maestro').exists())
         with tarfile.open('build/e2e/maestro-output.tgz') as stream:
             self.assertEqual(b'failed command', stream.extractfile('maestro/name?/commands.json').read())
+
+    def bash_exit_trap_deadline(self, earlier_failure=False):
+        helper = Path(cache.__file__).with_name('e2e_execution.py').resolve()
+        python = shlex.quote(sys.executable)
+        receipt = python + ' ' + shlex.quote(str(helper))
+        path = self.root / 'scripts/e2e.sh'
+        path.write_text('#!/bin/bash\nset -e\n' + f'''
+receipt() {{ {receipt} "$@"; }}
+finish() {{
+    local code=$?
+    receipt finish "$code"
+    cp build/e2e/execution.json trap-receipt.json
+    printf finished > trap.finished
+    exit "$code"
+}}
+receipt init
+receipt phase maestro
+trap finish EXIT
+mkdir -p 'build/e2e/maestro/current?'
+printf 'current trace' > 'build/e2e/maestro/current?/commands.json'
+''' + ('receipt finish 17\n' if earlier_failure else '') + '''
+bash -c 'printf "%s" "$$" > child.pid; printf ready > scenario.ready; exec sleep 60'
+''')
+        path.chmod(0o755)
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_prepared_script('2/5', timeout=0.3, grace=5)
+        self.assertEqual('finished', Path('trap.finished').read_text(), 'real Bash EXIT trap did not finish')
+        data = json.loads(Path('build/e2e/execution.json').read_text())
+        expected = ('test', 17) if earlier_failure else ('budget', 124)
+        self.assertEqual(expected, (data['category'], data['exit_code']))
+        self.assertEqual(('maestro', 'failed'), (data['phase'], data['result']))
+        self.assertTrue(data['budget_expired'])
+        # The EXIT trap itself must see the deadline, before the post-barrier coordinator annotation.
+        trapped = json.loads(Path('trap-receipt.json').read_text())
+        self.assertEqual(expected, (trapped['category'], trapped['exit_code']))
+        self.assertFalse(Path('build/e2e/maestro').exists())
+        with tarfile.open('build/e2e/maestro-output.tgz') as archive:
+            self.assertEqual(b'current trace', archive.extractfile('maestro/current?/commands.json').read())
+        status = subprocess.run(['ps', '-p', Path('child.pid').read_text(), '-o', 'stat='],
+                                capture_output=True, text=True, timeout=2)
+        self.assertTrue(not status.stdout.strip() or status.stdout.strip().startswith('Z'), status.stdout)
+
+    def test_bash_exit_trap_records_deadline_before_termination_status(self):
+        self.bash_exit_trap_deadline()
+
+    def test_bash_exit_trap_preserves_assertion_recorded_before_deadline(self):
+        self.bash_exit_trap_deadline(earlier_failure=True)
+
+    def test_deadline_during_report_collection_preserves_the_first_assertion_failure(self):
+        self.script("""import json, signal, time
+from pathlib import Path
+# Deliberately exceed the collection deadline during startup: the marker, not wall time, starts the scenario.
+time.sleep(0.6)
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+folder = Path('build/e2e/maestro/failed?')
+folder.mkdir(parents=True)
+(folder / 'commands.json').write_text('assertion failure before collection')
+Path('build/e2e/execution.json').write_text(json.dumps({
+    'phase': 'maestro', 'category': 'test', 'result': 'failed', 'exit_code': 17,
+}))
+Path('scenario.ready').write_text('ready')
+while True: time.sleep(0.02)
+""")
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_prepared_script('2/5')
+        data = json.loads(Path('build/e2e/execution.json').read_text())
+        self.assertEqual(('maestro', 'test', 'failed', 17),
+                         (data['phase'], data['category'], data['result'], data['exit_code']))
+        self.assertTrue(data['budget_expired'])
+        with tarfile.open('build/e2e/maestro-output.tgz') as archive:
+            self.assertEqual(b'assertion failure before collection',
+                             archive.extractfile('maestro/failed?/commands.json').read())
+
+    def test_invalid_receipt_cannot_prevent_preservation_of_timeout_trace(self):
+        self.script("""import signal, time
+from pathlib import Path
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+folder = Path('build/e2e/maestro/failed?')
+folder.mkdir(parents=True)
+(folder / 'commands.json').write_text('partial trace')
+Path('build/e2e/execution.json').write_text('{invalid')
+Path('scenario.ready').write_text('ready')
+while True: time.sleep(0.02)
+""")
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_prepared_script('2/5')
+        self.assertEqual('{invalid', Path('build/e2e/execution.json').read_text())
+        self.assertFalse(Path('build/e2e/maestro').exists())
+        with tarfile.open('build/e2e/maestro-output.tgz') as archive:
+            self.assertEqual(b'partial trace', archive.extractfile('maestro/failed?/commands.json').read())
 
     def test_sigterm_of_coordinator_stops_shard_and_archives_evidence(self):
         self.script("""import os, signal, time
@@ -594,6 +738,32 @@ class DisposableCiAdbKeyTest(unittest.TestCase):
 
 
 class CacheWorkflowSafetyTest(unittest.TestCase):
+    def test_native_has_an_independent_cold_device_and_reports_require_every_suite(self):
+        workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
+        native = workflow.split('\n  native:\n', 1)[1].split('\n  components:\n', 1)[0]
+        self.assertIn('test --direct-cold --native-only', native)
+        self.assertNotIn('Install Maestro', native)
+        self.assertNotIn('matrix.shard', native)
+        self.assertIn('timeout-minutes: 25', native)
+        reports = workflow.split('\n  reports:\n', 1)[1]
+        self.assertIn('needs: [shard, native, components]', reports)
+        self.assertIn("needs.native.result != 'success'", reports)
+        self.assertIn("needs.components.result != 'success'", reports)
+        self.assertIn('name: e2e-native', reports)
+        self.assertIn('--native-dir build/e2e-native --jvm-dir build/e2e-components', reports)
+
+    def test_workflow_keeps_ui_postmerge_only_and_caches_only_checksum_addressed_archive(self):
+        workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
+        self.assertNotIn('pull_request:', workflow)
+        self.assertIn('branches: [main]', workflow)
+        self.assertIn('contents: read', workflow)
+        self.assertIn('maestro-archive-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.MAESTRO_VERSION }}-${{ env.MAESTRO_SHA256 }}', workflow)
+        self.assertIn('path: ${{ runner.temp }}/maestro-package', workflow)
+        self.assertNotIn('restore-keys: maestro', workflow)
+        self.assertEqual(2, workflow.count('run-command --timeout 540 -- ./gradlew :app:assembleMockE2e'))
+        self.assertIn("run-command --timeout 900 -- ./gradlew :feature:analytics:impl:testDebugUnitTest", workflow)
+        self.assertNotIn('timeout --kill-after=10s 900s', workflow)
+
     def test_shard_upload_excludes_unfinished_raw_output_but_keeps_other_evidence(self):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
         upload = next(block for block in workflow.split('      - uses: actions/upload-artifact@v7')

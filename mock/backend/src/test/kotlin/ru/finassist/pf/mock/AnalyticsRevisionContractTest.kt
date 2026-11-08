@@ -52,8 +52,8 @@ class AnalyticsRevisionContractTest {
         assertEquals("2026-09", java.time.YearMonth.from(first.points.last().range.from).toString())
         val months = first.points.map { it.range.from }.toMutableList()
         var page = first
-        while (page.page!!.previous != null) {
-            val response = api.getMonthlyChartPage(page.page!!.previous!!)
+        repeat(5) {
+            val response = api.getMonthlyChartPage(assertNotNull(page.page!!.previous))
             assertEquals("Europe/Moscow", response.timeZone)
             val data = response.block.decode(ChartData.serializer())!!
             assertEquals(first.page!!.revision, data.page!!.revision)
@@ -63,11 +63,26 @@ class AnalyticsRevisionContractTest {
             months.addAll(0, data.points.map { it.range.from })
             page = data
         }
+        assertNull(page.page!!.previous)
         assertEquals(321, months.size)
         assertEquals(months.distinct().size, months.size)
         assertEquals("2000-01", java.time.YearMonth.from(months.first()).toString())
-        val next = api.getMonthlyChartPage(page.page!!.next!!).block.decode(ChartData.serializer())!!
-        assertEquals("2001-10", java.time.YearMonth.from(next.points.first().range.from).toString())
+        val returned = page.points.map { it.range.from }.toMutableList()
+        repeat(5) {
+            val response = api.getMonthlyChartPage(assertNotNull(page.page!!.next))
+            val data = response.block.decode(ChartData.serializer())!!
+            assertEquals("Europe/Moscow", response.timeZone)
+            assertEquals(first.page!!.revision, data.page!!.revision)
+            assertTrue(data.points.size in 1..60)
+            assertNull(data.highlightIndex)
+            assertTrue(data.notes.isEmpty())
+            returned.addAll(data.points.map { it.range.from })
+            page = data
+        }
+        assertNull(page.page!!.next)
+        assertEquals(321, returned.size)
+        assertEquals(returned.distinct().size, returned.size)
+        assertEquals(months, returned, "the reverse opaque cursor chain must return every original month exactly once")
     }
 
     @Test fun `cursor validates owner before stale revision and never crosses changed history`() = runBlocking<Unit> {

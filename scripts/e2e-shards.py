@@ -5,19 +5,20 @@ The `UI tests` workflow runs the flows on several emulators at once, one job per
 flow files: the flows are spread so that the shards take about the same time, by the durations measured on CI
 (`scripts/e2e-durations.json`; a flow not measured yet counts as the median). The split is deterministic — the same
 flows and durations give the same shards on every job and every machine — and every flow lands in exactly one
-shard. The native instrumented tests run in shard 1, so it gets fewer flows.
+shard. Native instrumented tests have a separate job and budget (FIN-473).
 
 Usage:
   python3 scripts/e2e-shards.py plan --shards 5            # the split, as a table
   python3 scripts/e2e-shards.py list --shard 2/5           # flow files of shard 2 (what scripts/e2e.sh --shard runs)
-  python3 scripts/e2e-shards.py gather --shards 5 --dir build/e2e-shards --out build/e2e
+  python3 scripts/e2e-shards.py gather --shards 5 --dir build/e2e-shards --out build/e2e \
+      --native-dir build/e2e-native --jvm-dir build/e2e-components
   python3 scripts/e2e-shards.py durations build/e2e/maestro-report.xml   # refresh e2e-durations.json
 
 `gather` reads the reports each shard job uploaded (`<dir>/e2e-shard-<i>/`, the shard's `build/e2e/`) and writes:
 - `<out>/maestro-report.xml` — one JUnit report of all shards. The flows of a shard that left no report, and flows
-  missing from a shard's report, are added as failures: a shard that broke must not read as fewer flows;
+  missing from a shard's report, are added as NOT RUN skips; the strict verdict remains incomplete;
 - `<out>/coverage/ec/` — the JaCoCo execution data of every shard, file names prefixed with the shard;
-- the native tests' results and execution data (shard 1) back where Gradle left them, under `app/build/outputs/`,
+- canonical native results and execution data from `--native-dir` back under `app/build/outputs/`,
   so `:e2eCoverageReport` and `scripts/qase-report.py` read them as after a local run.
 It prints a Markdown status of the shards (also appended to `--summary`).
 
@@ -28,21 +29,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import os
 import re
 import shutil
 import statistics
 import sys
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DURATIONS_FILE = ROOT / "scripts" / "e2e-durations.json"
 FLOWS_DIR = ".maestro/flows"
-# FIN-465: run 42210173741 (2026-11-06, same 13 native tests) took 194s from native Gradle
-# start to copied reports (suite 153s + setup/teardown). Reserve 300s: >=50% headroom, rounded up.
-# Run 42461258707 (2026-11-08) stopped 6/13 at 2400s; that partial run is not a full-suite sample.
-NATIVE_SECONDS = 300
+# Native tests have their own CI job and process budget (FIN-473).
+NATIVE_SECONDS = 0
 # Artifact name of a shard in the workflow: `e2e-shard-<i>`; `gather` looks for these folders.
 SHARD_DIR = "e2e-shard-{index}"
 FLOW_NAME = re.compile(r"^name:\s*(.+?)\s*$", re.MULTILINE)
@@ -80,16 +81,16 @@ def parse_shard(value: str) -> tuple[int, int]:
 
 def plan(flows: list[str], durations: dict[str, int], count: int, native_seconds: int | None = None) -> list[Shard]:
     """
-    Longest flow first, each to the shard that has the least so far (ties: the lower index). Shard 1 starts with the
-    native tests' time. Flows inside a shard keep the path order, so a shard's run reads like the full run.
+    Longest flow first, each to the shard that has the least so far (ties: the lower index). Native execution has
+    no default reserve. An explicit historical reserve is supported for old reports. Paths stay sorted.
     """
     if count < 1:
         raise ValueError("at least one shard")
     known = [durations[f] for f in flows if f in durations]
     default = int(statistics.median(known)) if known else 60
     shards = [Shard(index=i + 1) for i in range(count)]
-    shards[0].native = True
     shards[0].seconds = NATIVE_SECONDS if native_seconds is None else native_seconds
+    shards[0].native = shards[0].seconds > 0
     for flow in sorted(flows, key=lambda f: (-durations.get(f, default), f)):
         target = min(shards, key=lambda s: (s.seconds, s.index))
         target.flows.append(flow)
@@ -117,7 +118,9 @@ def flow_of(case: ET.Element, by_name: dict[str, str] | None = None) -> str | No
     marker = "/.maestro/"
     if marker in file:
         return ".maestro/" + file.split(marker, 1)[1]
-    return (by_name or {}).get(case.get("name") or "")
+    if file.startswith(".maestro/"):
+        return file
+    return (by_name or {}).get(case.get("name") or "") if not file else None
 
 
 def flows_by_name(root: Path, flows: list[str]) -> dict[str, str]:
@@ -126,17 +129,26 @@ def flows_by_name(root: Path, flows: list[str]) -> dict[str, str]:
 
 
 def _failed(case: ET.Element) -> bool:
+    return _status(case) != "passed"
+
+
+def _status(case: ET.Element) -> str:
     if case.find("failure") is not None or case.find("error") is not None:
-        return True
-    return (case.get("status") or "SUCCESS").upper() not in ("SUCCESS", "PASSED")
+        return "failed"
+    if case.find("skipped") is not None or (case.get("status") or "").upper() in ("SKIPPED", "IGNORED"):
+        return "skipped"
+    return "passed" if (case.get("status") or "SUCCESS").upper() in ("SUCCESS", "PASSED") else "failed"
 
 
-def _missing_case(root: Path, flow: str, message: str) -> ET.Element:
-    name = flow_name(root, flow)
-    case = ET.Element("testcase", {
-        "id": name, "name": name, "classname": name, "file": str(root / flow), "time": "0", "status": "ERROR",
-    })
-    ET.SubElement(case, "failure", {"message": message}).text = message
+def _missing_case(root: Path, key: str, message: str) -> ET.Element:
+    if key.startswith(".maestro/"):
+        name = flow_name(root, key)
+        attributes = {"id": name, "name": name, "classname": name, "file": str(root / key)}
+    else:
+        cls, name = key.removeprefix("jvm:").split("#", 1)
+        attributes = {"name": name, "classname": cls}
+    case = ET.Element("testcase", {**attributes, "time": "0", "status": "SKIPPED", "pf-execution": "not-run"})
+    ET.SubElement(case, "skipped", {"message": message}).text = message
     return case
 
 
@@ -149,53 +161,241 @@ class ShardOutcome:
     failed: int = 0
     missing: int = 0
     seconds: float = 0.0
+    skipped: int = 0
+    invalid: list[str] = field(default_factory=list)
+    kind: str = "maestro"
+    phase: str = "reporting"
+    category: str | None = None
+    result: str | None = None
+    exit_code: int | None = None
+    receipt_required: bool = True
+    identity: dict[str, str] = field(default_factory=dict)
+    apks: dict[str, str] = field(default_factory=dict)
+    budget_expired: bool = False
+    unverified: int = 0
+    unverified_results: dict[str, int] = field(default_factory=dict)
 
 
-def merge_reports(root: Path, shards: list[Shard], reports: dict[int, Path | None]) -> tuple[ET.Element, list[ShardOutcome]]:
-    """One `<testsuites>` with a suite per shard; see the module docstring for what counts as a failure."""
+def _receipt(directory: Path, outcome: ShardOutcome, required: bool = True) -> None:
+    outcome.receipt_required = required
+    path = directory / "execution.json"
+    if not path.is_file():
+        if required and outcome.planned:
+            outcome.invalid.append("missing execution receipt")
+        return
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        phase, category = receipt.get("phase"), receipt.get("category")
+        result, code = receipt.get("result"), receipt.get("exit_code")
+        budget_expired = receipt.get("budget_expired", False)
+        if type(budget_expired) is not bool or budget_expired and result != "failed":
+            raise ValueError("invalid budget evidence")
+        if receipt.get("schema") != 1 or isinstance(receipt.get("schema"), bool):
+            raise ValueError("invalid execution schema")
+        if phase not in ("setup", "device", "maestro", "native", "components", "reporting", "complete"):
+            raise ValueError("invalid execution phase")
+        if category not in (None, "setup", "device", "test", "budget", "reporting"):
+            raise ValueError("invalid execution category")
+        if result not in ("running", "passed", "failed", "not_run"):
+            raise ValueError("invalid execution result")
+        if code is not None and (not isinstance(code, int) or isinstance(code, bool)):
+            raise ValueError("invalid execution exit code")
+        if (result == "passed" and (phase != "complete" or code != 0 or category is not None)
+                or result == "failed" and (code is None or code == 0)
+                or result == "running" and code is not None):
+            raise ValueError("inconsistent execution result")
+        identity = receipt.get("identity", {})
+        apks = receipt.get("apks", {})
+        if not isinstance(identity, dict) or not isinstance(apks, dict):
+            raise ValueError("invalid execution identity")
+        for name in ("GITHUB_SHA", "GITHUB_RUN_ID"):
+            if name in os.environ and identity.get(name) != os.environ[name]:
+                raise ValueError("execution source or run mismatch")
+        if "GITHUB_RUN_ATTEMPT" in os.environ:
+            attempt = str(identity.get("GITHUB_RUN_ATTEMPT", ""))
+            if not attempt.isdigit() or not 1 <= int(attempt) <= int(os.environ["GITHUB_RUN_ATTEMPT"]):
+                raise ValueError("execution attempt mismatch")
+        safe_identity = ("GITHUB_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "RUNNER_OS", "RUNNER_ARCH",
+                         "ImageOS", "ImageVersion", "MAESTRO_VERSION", "MAESTRO_SHA256")
+        outcome.identity = {key: identity[key] for key in safe_identity if isinstance(identity.get(key), str)}
+        outcome.apks = {name: value for name, value in apks.items()
+                        if name in ("app-mock-e2e.apk", "app-mock-e2e-androidTest.apk")
+                        and isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)}
+        outcome.result, outcome.exit_code = result, code
+        outcome.phase, outcome.category = phase, category
+        outcome.budget_expired = budget_expired
+        if result in ("failed", "not_run") and category is None:
+            outcome.category = "reporting"
+    except (ValueError, OSError, AttributeError, TypeError):
+        outcome.invalid.append("invalid execution receipt")
+
+
+def _merge_suite(
+    root: Path, suite: ET.Element, expected: list[str], reports: list[Path], outcome: ShardOutcome,
+    by_name: dict[str, str] | None = None,
+) -> None:
+    seen: dict[str, ET.Element] = {}
+    for report in reports:
+        try:
+            parsed = ET.parse(report).getroot()
+            if parsed.tag not in ("testsuite", "testsuites"):
+                raise ValueError("not JUnit")
+        except (ET.ParseError, OSError, ValueError):
+            outcome.invalid.append("unreadable or malformed JUnit report")
+            continue
+        outcome.reported = True
+        for case in parsed.iter("testcase"):
+            key = flow_of(case, by_name) if outcome.kind == "maestro" else f"{case.get('classname', '')}#{case.get('name', '')}"
+            if outcome.kind == "jvm":
+                key = "jvm:" + key
+            if key not in expected:
+                outcome.invalid.append("unknown or wrong-suite test result")
+                continue
+            if key in seen:
+                outcome.invalid.append("duplicate test result")
+                # The verdict is invalid regardless; keep any real failure visible in canonical/Qase results.
+                previous = seen[key]
+                severity = {"passed": 0, "skipped": 1, "failed": 2}
+                current_status, previous_status = _status(case), _status(previous)
+                if severity[current_status] > severity[previous_status]:
+                    setattr(outcome, previous_status, getattr(outcome, previous_status) - 1)
+                    setattr(outcome, current_status, getattr(outcome, current_status) + 1)
+                    previous.set("status", "ERROR" if current_status == "failed" else "SKIPPED")
+                    skipped = previous.find("skipped")
+                    if skipped is not None:
+                        previous.remove(skipped)
+                    problem = case.find("failure")
+                    if problem is None:
+                        problem = case.find("error")
+                    if problem is None:
+                        problem = case.find("skipped")
+                    if problem is not None:
+                        previous.append(problem)
+                continue
+            seen[key] = case
+            if outcome.kind == "maestro":
+                case.set("file", str(root / key))
+            try:
+                seconds = float(case.get("time") or 0)
+                if not math.isfinite(seconds) or seconds < 0:
+                    raise ValueError("invalid duration")
+            except ValueError:
+                outcome.invalid.append("invalid test duration")
+                seconds = 0
+                case.set("time", "0")
+            suite.append(case)
+            status = _status(case)
+            setattr(outcome, status, getattr(outcome, status) + 1)
+            outcome.seconds += seconds
+    if (outcome.receipt_required and outcome.result is not None and outcome.kind in ("maestro", "native")
+            and seen):
+        expected_apks = {"app-mock-e2e.apk", "app-mock-e2e-androidTest.apk"}
+        if not expected_apks <= set(outcome.apks):
+            outcome.invalid.append("missing emulator APK identity")
+    provenance_errors = {"missing execution receipt", "invalid execution receipt", "missing emulator APK identity"}
+    unverified_reasons = sorted(provenance_errors.intersection(outcome.invalid))
+    if unverified_reasons:
+        # Keep raw reports in their artifact; unverified observations cannot attest to the current run in Qase.
+        for key, case in seen.items():
+            raw_status = _status(case)
+            outcome.unverified += 1
+            outcome.unverified_results[raw_status] = outcome.unverified_results.get(raw_status, 0) + 1
+            setattr(outcome, raw_status, getattr(outcome, raw_status) - 1)
+            outcome.skipped += 1
+            message = f"UNVERIFIED: {outcome.kind}; raw result {raw_status}; " + "; ".join(unverified_reasons)
+            canonical = _missing_case(root, key, message)
+            canonical.set("pf-execution", "unverified")
+            canonical.set("pf-raw-status", raw_status)
+            ET.SubElement(canonical, "system-out").text = "Raw observation (not current-run evidence):\n" + ET.tostring(case, encoding="unicode")[:8000]
+            suite.remove(case)
+            suite.append(canonical)
+    label = f"{outcome.kind} suite" if outcome.kind != "maestro" else f"shard {outcome.index}"
+    for key in expected:
+        if key not in seen:
+            cause = "budget" if outcome.budget_expired else outcome.category or "reporting"
+            message = f"NOT RUN: {label}; phase={outcome.phase}; cause={cause}; no test result received"
+            if outcome.budget_expired:
+                message += "; deadline_expired=true"
+            suite.append(_missing_case(root, key, message))
+            outcome.missing += 1
+    suite.set("tests", str(outcome.planned))
+    suite.set("failures", str(outcome.failed))
+    suite.set("skipped", str(outcome.skipped + outcome.missing))
+    suite.set("time", f"{outcome.seconds:.3f}")
+    if outcome.invalid:
+        outcome.category = "reporting"
+    elif outcome.failed and outcome.category is None:
+        outcome.category = "test"
+    elif (outcome.missing or outcome.skipped) and outcome.category is None:
+        outcome.category = "reporting"
+
+
+def merge_reports(
+    root: Path, shards: list[Shard], reports: dict[int, Path | None], receipts_required: bool = True,
+) -> tuple[ET.Element, list[ShardOutcome]]:
+    """Merge only exact expected observations; preserve missing execution separately from assertion failures."""
     merged = ET.Element("testsuites")
     outcomes = []
-    count = len(shards)
     by_name = flows_by_name(root, [f for s in shards for f in s.flows])
     for shard in shards:
-        suite = ET.SubElement(merged, "testsuite", {"name": f"Shard {shard.index}/{count}"})
+        suite = ET.SubElement(merged, "testsuite", {"name": f"Shard {shard.index}/{len(shards)}"})
         report = reports.get(shard.index)
-        outcome = ShardOutcome(shard.index, len(shard.flows), reported=report is not None and report.is_file())
-        seen: set[str] = set()
-        if outcome.reported:
-            try:
-                parsed = ET.parse(report).getroot()
-            except ET.ParseError:
-                outcome.reported = False
-            else:
-                for case in parsed.iter("testcase"):
-                    suite.append(case)
-                    flow = flow_of(case, by_name)
-                    if flow:
-                        seen.add(flow)
-                        # Matched by name: give the case its path, so qase-report.py (keyed by `file`) finds it.
-                        if not flow_of(case):
-                            case.set("file", str(root / flow))
-                    if _failed(case):
-                        outcome.failed += 1
-                    else:
-                        outcome.passed += 1
-                    outcome.seconds += float(case.get("time") or 0)
-        reason = (
-            f"not in the report of shard {shard.index}/{count} (the run stopped before this flow)"
-            if outcome.reported else
-            f"shard {shard.index}/{count} left no Maestro report (the job failed or was stopped before the flows ended)"
-        )
-        for flow in shard.flows:
-            if flow not in seen:
-                suite.append(_missing_case(root, flow, reason))
-                outcome.missing += 1
-        cases = list(suite.iter("testcase"))
-        suite.set("tests", str(len(cases)))
-        suite.set("failures", str(sum(1 for c in cases if _failed(c))))
-        suite.set("time", f"{sum(float(c.get('time') or 0) for c in cases):.1f}")
+        outcome = ShardOutcome(shard.index, len(shard.flows), reported=False)
+        if report is not None:
+            _receipt(report.parent, outcome, receipts_required)
+        _merge_suite(root, suite, shard.flows, [report] if report is not None and report.is_file() else [], outcome, by_name)
         outcomes.append(outcome)
     return merged, outcomes
+
+
+def native_keys(root: Path) -> set[str]:
+    """Discover actual native @Test methods; the case map remains the sole case-ID registry."""
+    found = set()
+    for path in sorted((root / "app" / "src").glob("androidTest*/kotlin/**/*.kt")):
+        text = path.read_text(encoding="utf-8")
+        package = re.search(r"^package\s+([\w.]+)", text, re.MULTILINE)
+        methods = re.findall(r"@Test\b(?:(?!\bfun\b).)*\bfun\s+(\w+)\s*\(", text, re.DOTALL)
+        if methods and package:
+            found.update(f"{package.group(1)}.{path.stem}#{method}" for method in methods)
+    return found
+
+
+def manifest(root: Path, shards: list[Shard]) -> tuple[dict, list[str]]:
+    """Derive the expected test set from source discovery and the existing Qase map, never another registry."""
+    maestro = {flow for shard in shards for flow in shard.flows}
+    native = native_keys(root)
+    path = root / "scripts" / "qase-cases.json"
+    issues = []
+    jvm = set()
+    if path.is_file():
+        try:
+            cases = json.loads(path.read_text(encoding="utf-8"))["cases"]
+            if not isinstance(cases, dict) or any(
+                not isinstance(key, str) or not isinstance(value, int) or isinstance(value, bool) or value < 1
+                or (not key.startswith(".maestro/") and re.fullmatch(r"(?:jvm:)?[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+#\w+", key) is None)
+                for key, value in cases.items()
+            ):
+                raise ValueError("invalid component mapping")
+            mapped = set(cases)
+            jvm = {key for key in mapped if key.startswith("jvm:")}
+            if mapped - jvm != maestro | native:
+                issues.append("source discovery and Qase component mapping differ")
+            native |= {key for key in mapped if not key.startswith((".maestro/", "jvm:"))}
+            for cls in sorted({key[4:].split("#", 1)[0] for key in jvm}):
+                sources = list(root.glob(f"**/src/test*/kotlin/{cls.replace('.', '/')}.kt"))
+                methods = set()
+                for source in sources:
+                    text = source.read_text(encoding="utf-8")
+                    methods.update(re.findall(r"@Test\b(?:(?!\bfun\b).)*\bfun\s+(\w+)\s*\(", text, re.DOTALL))
+                if not sources or {f"jvm:{cls}#{method}" for method in methods} != {key for key in jvm if key.startswith(f"jvm:{cls}#")}:
+                    issues.append("JVM component source and Qase mapping differ")
+        except (ValueError, KeyError, TypeError):
+            issues.append("invalid Qase component mapping")
+    elif native or maestro:
+        issues.append("missing Qase component mapping")
+    if len(flows_by_name(root, sorted(maestro))) != len(maestro):
+        issues.append("duplicate Maestro flow names")
+    return {"schema": 1, "maestro": {str(s.index): s.flows for s in shards}, "native": sorted(native), "jvm": sorted(jvm)}, issues
 
 
 def _copy_tree(source: Path, target: Path) -> bool:
@@ -205,47 +405,96 @@ def _copy_tree(source: Path, target: Path) -> bool:
     return True
 
 
-def gather(root: Path, shards: list[Shard], shards_dir: Path, out: Path) -> list[ShardOutcome]:
-    """Writes the merged report and puts the coverage and native results in place (see the module docstring)."""
+def gather(
+    root: Path, shards: list[Shard], shards_dir: Path, out: Path, native_dir: Path | None = None, jvm_dir: Path | None = None, receipts_required: bool = True,
+) -> list[ShardOutcome]:
+    """Write canonical results, a derived manifest and the strict verdict before coverage/Qase publication."""
     dirs = {s.index: shards_dir / SHARD_DIR.format(index=s.index) for s in shards}
-    merged, outcomes = merge_reports(root, shards, {i: d / "maestro-report.xml" for i, d in dirs.items()})
+    merged, outcomes = merge_reports(root, shards, {i: d / "maestro-report.xml" for i, d in dirs.items()}, receipts_required)
     out.mkdir(parents=True, exist_ok=True)
+    expected, issues = manifest(root, shards)
+    if issues:
+        outcomes[0].invalid.extend(issues)
+        outcomes[0].category = "reporting"
     ET.ElementTree(merged).write(out / "maestro-report.xml", encoding="utf-8", xml_declaration=True)
+    (out / "expected-tests.json").write_text(json.dumps(expected, indent=2) + "\n", encoding="utf-8")
     ec = out / "coverage" / "ec"
     ec.mkdir(parents=True, exist_ok=True)
     for index, directory in dirs.items():
-        # One file per app process of the shard; processes of different emulators may share a name.
         for data in sorted((directory / "coverage" / "ec").glob("*.ec")):
             shutil.copyfile(data, ec / f"shard{index}-{data.name}")
-        # scripts/e2e.sh keeps the native tests' outputs next to the flows' (native/, native-coverage/).
-        _copy_tree(directory / "native", root / "app" / "build" / "outputs" / "androidTest-results")
+    if native_dir is not None or expected["native"]:
+        directory = native_dir if native_dir is not None else root / "build" / "e2e-native"
+        native = ET.Element("testsuite", {"name": "Native"})
+        outcome = ShardOutcome(0, len(expected["native"]), False, kind="native")
+        _receipt(directory, outcome, receipts_required)
+        _merge_suite(root, native, expected["native"], sorted((directory / "native").rglob("TEST-*.xml")), outcome)
+        outcomes.append(outcome)
+        ET.ElementTree(native).write(out / "native-report.xml", encoding="utf-8", xml_declaration=True)
+        # Qase reads this canonical file only: copying raw files here would duplicate every native observation.
+        target = root / "app" / "build" / "outputs" / "androidTest-results" / "connected" / "fin473" / "TEST-integrity.xml"
+        result_dir = root / "app" / "build" / "outputs" / "androidTest-results"
+        if result_dir.is_dir():
+            shutil.rmtree(result_dir)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(out / "native-report.xml", target)
         _copy_tree(directory / "native-coverage", root / "app" / "build" / "outputs" / "code_coverage")
+    else:
+        # Compatibility for gathering historical artifacts that predate the separate native job.
+        for directory in dirs.values():
+            _copy_tree(directory / "native", root / "app" / "build" / "outputs" / "androidTest-results")
+            _copy_tree(directory / "native-coverage", root / "app" / "build" / "outputs" / "code_coverage")
+    if jvm_dir is not None or expected["jvm"]:
+        directory = jvm_dir if jvm_dir is not None else root / "build" / "e2e-components"
+        suite = ET.Element("testsuite", {"name": "JVM components"})
+        outcome = ShardOutcome(0, len(expected["jvm"]), False, kind="jvm")
+        _receipt(directory, outcome, receipts_required)
+        _merge_suite(root, suite, expected["jvm"], sorted(directory.rglob("TEST-*.xml")), outcome)
+        outcomes.append(outcome)
+        ET.ElementTree(suite).write(out / "jvm-report.xml", encoding="utf-8", xml_declaration=True)
+    (out / "execution-status.json").write_text(json.dumps({
+        "schema": 1, "passed": not problems(outcomes), "suites": [asdict(o) for o in outcomes],
+        "problems": problems(outcomes),
+    }, indent=2) + "\n", encoding="utf-8")
     return outcomes
 
 
 def problems(outcomes: list[ShardOutcome]) -> list[str]:
-    """What keeps the merged result from a pass, per shard: the run must be red for each, even if every job was green."""
-    count = len(outcomes)
+    """The expected test set must be complete and successful independently of job exit codes."""
+    count = sum(o.kind == "maestro" for o in outcomes)
     found = []
     for o in outcomes:
+        label = f"{o.kind} suite" if o.kind != "maestro" else f"shard {o.index}/{count}"
+        unit = "test(s)" if o.kind != "maestro" else "flow(s)"
         if not o.reported and o.planned:
-            found.append(f"shard {o.index}/{count}: no Maestro report received ({o.planned} flow(s) not run)")
-            continue
-        if o.missing:
-            found.append(f"shard {o.index}/{count}: {o.missing} flow(s) missing from its report")
+            kind = o.kind if o.kind != "maestro" else "Maestro"
+            found.append(f"{label}: no {kind} report received ({o.planned} {unit} not run)")
+        elif o.missing:
+            found.append(f"{label}: {o.missing} {unit} missing from its report")
         if o.failed:
-            found.append(f"shard {o.index}/{count}: {o.failed} flow(s) failed")
+            found.append(f"{label}: {o.failed} {unit} failed")
+        if o.skipped:
+            found.append(f"{label}: {o.skipped} {unit} skipped")
+        if o.result in ("failed", "not_run") and not (o.failed or o.missing or o.skipped or o.invalid):
+            found.append(f"{label}: execution failed during {o.phase}")
+        if o.result == "running" and not (o.failed or o.missing or o.skipped or o.invalid):
+            found.append(f"{label}: execution did not finish")
+        if o.invalid:
+            found.append(f"{label}: {len(o.invalid)} report integrity error(s)")
     return found
 
 
 def outcomes_markdown(outcomes: list[ShardOutcome]) -> str:
-    rows = ["| Shard | Flows | Passed | Failed | Not run | Flow time |", "|---|---|---|---|---|---|"]
+    rows = ["| Suite | Expected | Passed | Failed | Not run | Skipped | Integrity errors | Time | Cause / phase |",
+            "|---|---|---|---|---|---|---|---|---|"]
+    count = sum(o.kind == "maestro" for o in outcomes)
     for o in outcomes:
+        label = o.kind.capitalize() if o.kind != "maestro" else f"{o.index}/{count}"
         state = "" if o.reported else " (no report)"
-        rows.append(
-            f"| {o.index}/{len(outcomes)}{state} | {o.planned} | {o.passed} | {o.failed} | {o.missing} | "
-            f"{o.seconds / 60:.1f} min |"
-        )
+        rows.append(f"| {label}{state} | {o.planned} | {o.passed} | {o.failed} | {o.missing} | "
+                    f"{o.skipped} | {len(o.invalid)} | {o.seconds / 60:.1f} min | {o.category or 'none'} / {o.phase}"
+                    + ("; deadline_expired=true" if o.budget_expired else "")
+                    + (f"; UNVERIFIED={o.unverified}" if o.unverified else "") + " |")
     return "\n".join(rows)
 
 
@@ -266,7 +515,7 @@ def updated_durations(
             flow = flow_of(case, by_name)
             if flow and not _failed(case) and case.find("skipped") is None:
                 seconds = float(case.get("time") or 0)
-                if seconds > 0:
+                if math.isfinite(seconds) and seconds > 0:
                     result[flow] = max(result.get(flow, 1), round(seconds))
     return dict(sorted(result.items()))
 
@@ -283,6 +532,8 @@ def main(argv: list[str] | None = None) -> int:
     gatherer.add_argument("--shards", type=int, required=True)
     gatherer.add_argument("--dir", type=Path, required=True, help="folder with e2e-shard-<i>/ of every shard")
     gatherer.add_argument("--out", type=Path, required=True)
+    gatherer.add_argument("--native-dir", type=Path, help="separate native artifact with native/ and native-coverage/")
+    gatherer.add_argument("--jvm-dir", type=Path, help="targeted JVM component JUnit artifact")
     gatherer.add_argument("--summary", type=Path, help="append the Markdown status to this file as well")
     gatherer.add_argument(
         "--github-output", type=Path,
@@ -307,7 +558,7 @@ def main(argv: list[str] | None = None) -> int:
         print(plan_markdown(plan(flows, durations, args.shards)))
         return 0
     if args.command == "gather":
-        outcomes = gather(root, plan(flows, durations, args.shards), args.dir, args.out)
+        outcomes = gather(root, plan(flows, durations, args.shards), args.dir, args.out, args.native_dir, args.jvm_dir)
         found = problems(outcomes)
         text = "#### Shards\n\n" + outcomes_markdown(outcomes) + "\n"
         if found:

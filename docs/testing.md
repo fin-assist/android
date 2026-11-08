@@ -9,6 +9,10 @@ checks what:
 | Design check (Robolectric + Roborazzi) | how a screen, state, sheet or dialog looks next to its mockup | `*DesignCheckTest` in feature `:impl` | by hand, `-Ppf.designcheck` (design-check/README.md) |
 | Maestro | user scenarios end to end on the mock build | `.maestro/flows/<feature>/` | emulator; CI only after merges to `main` (docs/e2e.md) |
 | Native instrumented | what Maestro cannot drive: system dialogs, intents, permissions | `app/src/androidTestMock/` | same as Maestro |
+| JVM UI companions (FIN-473 pilot) | exhaustive Qase82/83/89 states and paging through real AnalyticsContent/ViewModel | `AnalyticsReliabilityComponentTest` | ordinary JVM PR tests; targeted post-merge component job also supplies the full UI/Qase verdict |
+
+Maestro, native and targeted JVM companions have independent post-merge execution budgets and strict combined
+result completeness. See [UI reliability](ui-test-reliability.md) and the [pilot obligation map](qa/fin473-pilot-coverage.md).
 
 What a change needs:
 
@@ -39,6 +43,10 @@ convention in both debug and release before merge. Pushes still run `test` for e
 ```
 
 These are host JVM tests; they do not start an emulator or the Maestro/design-check suites.
+
+The app's mockE2e control-receipt tests also use Compose on Robolectric. `:app` includes Android resources
+for unit tests and adds `ui-test-junit4`/`ui-test-manifest` only to test dependencies; production runtime
+manifests remain covered by the existing separation checks.
 
 ## Calculation fixtures
 
@@ -222,7 +230,7 @@ How it is measured:
   (`useTestStorageService`; `clearPackageData` would wipe the app's own directory first) into
   `app/build/outputs/code_coverage/`.
 - In CI the flows run in shards, one emulator each (docs/e2e.md, «Shards in CI»): every shard keeps its data in its
-  `build/e2e/` (the native tests' in `native-coverage/`, shard 1), and the `Reports` job puts all of it back where
+  `build/e2e/` (the native tests' in `native-coverage/`, from the independent native job), and the `Reports` job puts all of it back where
   the report reads it (`scripts/e2e-shards.py gather`: `build/e2e/coverage/ec/shard<i>-<process>.ec` and
   `app/build/outputs/code_coverage/`) before `:e2eCoverageReport` — one report for every shard. The shards and the
   report job build the same commit, mostly from the Gradle build cache; outputs it does not have are compiled
