@@ -400,10 +400,13 @@ def main():
     parser.add_argument('name', nargs='?')
     parser.add_argument('--shard')
     parser.add_argument('--native-only', action='store_true')
+    parser.add_argument('--timeout', type=float, help='process deadline in seconds (default Maestro2400/native600)')
     cold = parser.add_mutually_exclusive_group()
     cold.add_argument('--cold', action='store_true')
     cold.add_argument('--direct-cold', action='store_true')
     args = parser.parse_args()
+    if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
+        parser.error('timeout must be positive finite seconds')
     if args.command == 'adb-init':
         initialize_ci_key()
     elif args.command == 'mark':
@@ -472,7 +475,8 @@ def main():
         # The coordinator uses this durable marker to distinguish preparation failure from a real test failure.
         mark('tests-started')
         try:
-            result = run_tests(None, timeout=600, native_only=True) if args.native_only else run_tests(args.shard)
+            budget = args.timeout if args.timeout is not None else 600 if args.native_only else 2400
+            result = run_tests(None, timeout=budget, native_only=True) if args.native_only else run_tests(args.shard, timeout=budget)
         finally:
             mark('tests-finished')
         raise SystemExit(result)

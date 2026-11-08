@@ -32,6 +32,10 @@ concurrency:
 env:
   # The number of shards; the matrix below lists 1..SHARDS.
   SHARDS: 5
+  # Shared by the actual process coordinator and the compact result's configuration metadata.
+  MAESTRO_TEST_SECONDS: 2400
+  NATIVE_TEST_SECONDS: 600
+  COMPONENT_TEST_SECONDS: 900
   MAESTRO_VERSION: 2.11.0
   MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
   AVD_NAME: pf-e2e
@@ -312,7 +316,7 @@ jobs:
           force-avd-creation: false
           emulator-options: ${{ env.AVD_OPTIONS }} -snapshot clean -no-snapshot-save
           pre-emulator-launch-script: python3 scripts/e2e-cache.py mark test-boot-start
-          script: python3 scripts/e2e-cache.py test --shard ${{ matrix.shard }}/${{ env.SHARDS }}
+          script: python3 scripts/e2e-cache.py test --shard ${{ matrix.shard }}/${{ env.SHARDS }} --timeout "$MAESTRO_TEST_SECONDS"
 
       # Publish tiny sanitized preparation telemetry before a fallback starts, so it is readable while tests run.
       - name: Publish failed snapshot preparation diagnostics
@@ -352,7 +356,7 @@ jobs:
           force-avd-creation: true
           emulator-options: ${{ env.AVD_OPTIONS }} -no-snapshot-load -no-snapshot-save -wipe-data
           pre-emulator-launch-script: python3 scripts/e2e-cache.py mark fallback-boot-start
-          script: python3 scripts/e2e-cache.py test --cold --shard ${{ matrix.shard }}/${{ env.SHARDS }}
+          script: python3 scripts/e2e-cache.py test --cold --shard ${{ matrix.shard }}/${{ env.SHARDS }} --timeout "$MAESTRO_TEST_SECONDS"
 
       - name: Preserve UI test failure
         if: inputs.avd_cache && steps.ui.outcome != 'success' && steps.fallback.outputs.needed != 'true'
@@ -375,7 +379,7 @@ jobs:
           force-avd-creation: true
           emulator-options: ${{ env.AVD_OPTIONS }} -no-snapshot-load -no-snapshot-save -wipe-data
           pre-emulator-launch-script: python3 scripts/e2e-cache.py mark direct-boot-start
-          script: python3 scripts/e2e-cache.py test --direct-cold --shard ${{ matrix.shard }}/${{ env.SHARDS }}
+          script: python3 scripts/e2e-cache.py test --direct-cold --shard ${{ matrix.shard }}/${{ env.SHARDS }} --timeout "$MAESTRO_TEST_SECONDS"
 
       - name: Emulator preparation timings
         if: always()
@@ -516,7 +520,7 @@ jobs:
           force-avd-creation: true
           emulator-options: ${{ env.AVD_OPTIONS }} -no-snapshot-load -no-snapshot-save -wipe-data
           pre-emulator-launch-script: python3 scripts/e2e-cache.py mark direct-boot-start
-          script: python3 scripts/e2e-cache.py test --direct-cold --native-only
+          script: python3 scripts/e2e-cache.py test --direct-cold --native-only --timeout "$NATIVE_TEST_SECONDS"
 
       - name: Emulator preparation timings
         if: always()
@@ -554,7 +558,7 @@ jobs:
           python3 scripts/e2e_execution.py identity
           python3 scripts/e2e_execution.py phase components
           status=0
-          python3 scripts/e2e-cache.py run-command --timeout 900 -- ./gradlew :feature:analytics:impl:testDebugUnitTest --tests '*AnalyticsReliabilityComponentTest' --no-daemon --console=plain || status=$?
+          python3 scripts/e2e-cache.py run-command --timeout "$COMPONENT_TEST_SECONDS" -- ./gradlew :feature:analytics:impl:testDebugUnitTest --tests '*AnalyticsReliabilityComponentTest' --no-daemon --console=plain || status=$?
           python3 scripts/e2e_execution.py finish "$status"
           exit "$status"
       - name: Finalize component evidence
@@ -681,6 +685,28 @@ jobs:
           if status.get("result") == "published" and type(run_id) is int and run_id > 0:
               print(f"[Qase run {run_id}](https://app.qase.io/run/PLAINFIN/dashboard/{run_id})")
           PY
+
+      - name: Package compact UI result
+        id: compact
+        if: always()
+        env:
+          E2E_SHARD_RESULT: ${{ needs.shard.result }}
+          E2E_NATIVE_RESULT: ${{ needs.native.result }}
+          E2E_COMPONENT_RESULT: ${{ needs.components.result }}
+        run: |
+          python3 scripts/e2e-result.py \
+            --maestro-budget-seconds "$MAESTRO_TEST_SECONDS" \
+            --native-budget-seconds "$NATIVE_TEST_SECONDS" \
+            --jvm-budget-seconds "$COMPONENT_TEST_SECONDS"
+
+      - name: Upload compact UI result
+        uses: actions/upload-artifact@v7
+        if: ${{ always() && steps.compact.outcome == 'success' }}
+        with:
+          name: e2e-result-attempt-${{ github.run_attempt }}
+          path: build/e2e-result/
+          if-no-files-found: error
+          retention-days: 14
 
       - uses: actions/upload-artifact@v7
         if: always()
