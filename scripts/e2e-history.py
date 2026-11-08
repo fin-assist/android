@@ -33,6 +33,7 @@ KINDS = ('maestro', 'native', 'jvm')
 PHASES = {'setup', 'device', 'maestro', 'native', 'components', 'reporting', 'complete'}
 CATEGORIES = {'setup', 'device', 'test', 'budget', 'reporting', None}
 RESULTS = {'running', 'passed', 'failed', 'not_run'}
+AVD_CACHE_POLICY = {'disabled': 'disabled', 'hit': 'snapshot', 'miss-or-invalid': 'snapshot'}
 CANONICAL = {'maestro-report.xml', 'native-report.xml', 'jvm-report.xml',
              'execution-status.json', 'expected-tests.json', 'qase-cases.json'}
 PAYLOAD = CANONICAL | {'qase-delivery.json'}
@@ -281,8 +282,7 @@ def cohort_config(meta, suites):
                 'budget': suite['budget_seconds']}
         if suite['kind'] != 'jvm':
             packages = sdk.get('packages', {}) if sdk else {}
-            if (not prep or not prep.get('boot_mode') or not isinstance(prep.get('cache'), str)
-                    or prep['cache'].strip().casefold() in {'', 'unknown', 'unavailable'}
+            if (not prep or not prep.get('boot_mode') or prep.get('cache') not in AVD_CACHE_POLICY
                     or not isinstance(receipt.get('sdk_packages'), dict)
                     or any(not isinstance(receipt['sdk_packages'].get(k), dict)
                            or not receipt['sdk_packages'][k].get('Pkg.Revision') for k in ('emulator', 'image'))
@@ -292,7 +292,7 @@ def cohort_config(meta, suites):
                     not HEX64.fullmatch(packages[k]['actual'].get('source_properties_sha256', ''))
                     for k in ('emulator', 'image'))):
                 return None
-            item.update(boot_mode=prep['boot_mode'], avd_cache=prep.get('cache'),
+            item.update(boot_mode=prep['boot_mode'], avd_cache=AVD_CACHE_POLICY[prep['cache']],
                         sdk={k: packages[k]['actual'] for k in ('emulator', 'image')},
                         receipt_sdk=receipt.get('sdk_packages'))
         config['suites'].append(item)
@@ -435,7 +435,9 @@ def inspect_bundle(source, run, repo, artifact, reconstructed=False, workflow='e
             if start is not None and finish is not None:
                 require(number(start) and number(finish) and finish >= start, 'invalid_process_duration')
                 process = round(finish - start, 3)
-        cache = {'maestro_archive': 'unknown', 'emulator': 'unknown', 'image': 'unknown'}
+        cache = {'maestro_archive': 'unknown', 'emulator': 'unknown', 'image': 'unknown',
+                 'avd': prep.get('cache') if prep and isinstance(prep.get('cache'), str) and len(prep['cache']) <= 100 else 'unknown',
+                 'avd_policy': AVD_CACHE_POLICY.get(prep.get('cache'), 'unknown') if prep and isinstance(prep.get('cache'), str) else 'unknown'}
         if sdk is not None:
             require(isinstance(sdk, dict) and isinstance(sdk.get('packages'), dict), 'invalid_sdk_cache')
             for package in ('emulator', 'image'):
@@ -468,7 +470,7 @@ def inspect_bundle(source, run, repo, artifact, reconstructed=False, workflow='e
     inventory = fingerprint({'expected': expected, 'project': project, 'cases': cases})
     config = cohort_config(meta, sorted(projections, key=lambda s: (s[0]['kind'], s[0]['index'])))
     plane = control_plane(run, workflow, repo)
-    cohort = fingerprint({'source_sha': meta['source_sha'], 'inventory': inventory, 'config': config}) if config and plane['status'] == 'eligible' else None
+    cohort = fingerprint({'source_sha': meta['source_sha'], 'inventory': inventory, 'config': config}) if config and plane['status'] == 'eligible' and not reconstructed else None
     jobs_ok = all(v == 'success' for v in job_results.values()) and all(
         j.get('conclusion') in {'success', 'skipped', 'neutral'} for j in run.get('jobs', []))
     workflow_ok = run['status'] == 'completed' and run['conclusion'] == 'success' and jobs_ok
@@ -479,7 +481,7 @@ def inspect_bundle(source, run, repo, artifact, reconstructed=False, workflow='e
             'components': dict(Counter(r.status for r in results)) | {'expected': len(results)},
             'qase_cases': dict(mapped) | {'expected': len(set(cases.values()))}, 'qase_delivery': qase_delivery, 'qase_run_id': qase_run_id,
             'qase_run_url': f'https://app.qase.io/run/{project}/dashboard/{qase_run_id}' if qase_run_id else None,
-            'cohort': cohort, 'cohort_status': plane['status'] + '_control_plane' if plane['status'] != 'eligible' else 'comparable' if cohort else 'incomplete_configuration',
+            'cohort': cohort, 'cohort_status': 'reconstructed' if reconstructed else plane['status'] + '_control_plane' if plane['status'] != 'eligible' else 'comparable' if cohort else 'incomplete_configuration',
             'event': meta.get('event_name'), 'ref': meta.get('ref'), 'schema': index['schema'],
             'job_results': job_results,
             'completeness': {key: sum(s.get(key, 0) for s in outcomes) for key in ('planned', 'passed', 'failed', 'missing', 'skipped', 'unverified')} |

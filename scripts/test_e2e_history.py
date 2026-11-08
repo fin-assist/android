@@ -401,6 +401,39 @@ class HistoryTest(unittest.TestCase):
         self.assertIsNone(row['cohort'])
         self.assertEqual('incomplete_configuration', row['cohort_status'])
 
+    def test_avd_cache_outcome_does_not_split_the_snapshot_policy_cohort(self):
+        rows = {}
+        for outcome in ('hit', 'miss-or-invalid', 'disabled', 'unknown-outcome'):
+            files = self.fixture()
+            self.change_json(files, 'evidence/e2e-native/preparation.json',
+                             lambda x: x.update(cache=outcome, boot_mode='snapshot-verified'))
+            rows[outcome] = self.evaluate(files)
+        self.assertIsNotNone(rows['hit']['cohort'])
+        self.assertEqual(rows['hit']['cohort'], rows['miss-or-invalid']['cohort'])
+        self.assertNotEqual(rows['hit']['cohort'], rows['disabled']['cohort'])
+        self.assertIsNone(rows['unknown-outcome']['cohort'])
+        for outcome in ('hit', 'miss-or-invalid', 'disabled'):
+            native = next(s for s in rows[outcome]['suites'] if s['kind'] == 'native')
+            self.assertEqual(outcome, native['cache']['avd'])
+            self.assertEqual('disabled' if outcome == 'disabled' else 'snapshot', native['cache']['avd_policy'])
+
+    def test_reconstructed_observations_never_look_like_a_failed_verified_cohort_member(self):
+        original = archive(self.fixture())
+        verified = archive(self.fixture(attempt=2))
+        artifact = artifact_metadata(2) | {'digest': 'sha256:' + history.digest(verified)}
+        report = history.history(REPO, [run_metadata(1), run_metadata(2)],
+                                 {(42, 1): [original], (42, 2): [verified]}, [artifact], reconstructed=True)
+        replay, observed = report['attempts']
+        self.assertTrue(replay['application_passed'])
+        self.assertFalse(replay['full_pass'])
+        self.assertIsNone(replay['cohort'])
+        self.assertEqual('reconstructed', replay['cohort_status'])
+        self.assertTrue(observed['full_pass'])
+        self.assertIsNotNone(observed['cohort'])
+        self.assertEqual([{'run_id': 42, 'attempt': 2, 'full_pass': True}],
+                         report['cohorts'][observed['cohort']])
+        self.assertEqual(1, report['first_attempt']['reconstructed_application_pass'])
+
     def test_unknown_java_avd_cache_or_receipt_sdk_remains_incomparable(self):
         for path, change in [
             ('evidence/e2e-native/execution.json', lambda x: x.update(java_launcher='')),

@@ -91,7 +91,8 @@ python3 scripts/e2e-history.py --metadata /tmp/github-history.json \
 This still checks the independent run ID, source and attempt. It labels `artifact_provenance` as
 `local_reconstruction` and `evidence_status` as `reconstructed`. Canonical observations stay visible,
 but `full_pass` is false and these rows have a separate `reconstructed_application_pass` counter.
-They never enter the provider-verified pass counter. This is historical observation replay, not publication
+They never enter the provider-verified pass counter or comparison cohorts; their cohort status is
+`reconstructed`, so passing observations cannot look like failed verified members. This is historical observation replay, not publication
 or acceptance of the new producer workflow. Reconstruction is permitted only when the attempt has no
 matching provider record. If a record exists, its source and every ZIP digest are checked even with this
 flag; failed provider validation cannot fall back to reconstruction. Ordinary mode requires provider metadata.
@@ -156,7 +157,10 @@ an additional deadline marker remain visible. An assertion failure followed by d
 
 Comparable cohorts require exactly matching source SHA, canonical inventory/Qase fingerprint and known
 configuration: workflow SHA/ref/event, per-suite budget, runner OS/architecture/image version, Java/Gradle,
-Maestro archive/version where applicable, boot mode and SDK package revisions/source-property hashes.
+Maestro archive/version where applicable, boot mode, AVD cache policy and SDK package revisions/source-property hashes.
+The producer reports AVD cache outcomes `hit` and `miss-or-invalid`; both use the `snapshot` policy, while
+`disabled` is a separate policy. Raw outcomes stay in suite details and do not split otherwise identical
+snapshot cohorts. An unrecognised outcome leaves the policy unknown and the run incomparable.
 Different signed APK hashes are recorded but do not split a cohort: independent runners can sign the same
 source differently. Unknown configuration makes a run incomparable, while its test result stays visible.
 AVD arguments are not archived individually in schema 1; exact workflow identity and recorded boot mode
