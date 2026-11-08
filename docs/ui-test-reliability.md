@@ -71,7 +71,10 @@ never described as real server acceptance.
 
 Every test process, including local JVM and scripts checks, has a real deadline that stops its children.
 CI builds and components use the same process-group coordinator as the emulator suites; budget expiry is
-recorded from an observed deadline, not inferred from a child exit code such as 137 or 124.
+recorded from an observed deadline, not inferred from a child exit code such as 137 or 124. Before TERM,
+the coordinator creates a separate deadline marker so an EXIT trap cannot record the forced stop as success
+or an assertion failure. Receipt JSON is annotated only after the process-group barrier. A later deadline
+remains visible in JSON/summary/NOT RUN reasons even when an earlier recorded assertion failure is preserved.
 Before a PR, successfully execute new UI tests and the changed pilot journeys locally; shared helper changes
 also list and execute representative affected journeys. The PR records exact commands, source/APK identity,
 outcomes and limitations. No automatic emulator UI job is added to PR checks, and no e2e label is used.

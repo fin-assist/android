@@ -12,7 +12,8 @@ The base is `release/0.2.20` at `ed17eaa53f9d22af3ba245d0ac1240296aeb890d`.
 | E2eSignInTest | 13 tests, 0 failures/errors/skips |
 | E2eControlReceiptTest | 2 tests, 0 failures/errors/skips |
 | Existing app mockDebug tests | 2 tests, 0 failures/errors/skips |
-| Python scripts suite after all script changes | 398 tests PASS in 48.028 s |
+| Python scripts suite before the review follow-up | 398 tests PASS in 48.028 s |
+| Python scripts suite after the review follow-up | 408 tests PASS in 58.073 s |
 | Nested shared scripts suite | 137 tests, 5 expected skips for another profile |
 | Both mockE2e APKs | assembled successfully |
 | Agent docs / KMP / actionlint1.7.12 / diff checks | PASS; ShellCheck was not installed |
@@ -101,3 +102,19 @@ The full native 13-test suite and the full 81-flow suite were not run locally; t
 manual UI workflow dispatch was used. The new full post-merge workflow and stability series remain unexecuted;
 FIN-464 acceptance still requires the owner's merge decision and main evidence. Independent earlier cold
 guards in Q57/58 are outside the common phone-helper change and are not claimed fixed by this evidence.
+
+## Review follow-up: deadline and Bash EXIT trap
+
+Claude identified a concrete classification race: the shell EXIT trap could record the coordinator's TERM
+as test failure (or success on a shell returning0 from the trap), before post-barrier deadline annotation.
+A real Bash trap regression failed before the fix.
+
+The coordinator now marks observed expiry in a separate file before TERM, avoiding concurrent JSON writers.
+`finish` uses that evidence while preserving an already recorded assertion failure; `init` clears stale markers.
+Final receipt annotation and archival still happen after the process-group barrier. The report carries the
+strict boolean `budget_expired`, shows deadline expiry in the summary and gives missing results a budget reason.
+Ordinary child exit124/137 is not evidence of timeout. Real Bash trap, prior failure, stopped descendants and
+gather→Qase regressions passed, followed by the full408-test suite with a180s external process deadline.
+
+This follow-up changes only scripts/tests and documentation. Android code, APKs, flows and shared UI helpers
+remain identical to the recorded successful device runs, so those runs were not repeated.
