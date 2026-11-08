@@ -107,7 +107,7 @@ jobs:
         timeout-minutes: 10
         run: |
           status=0
-          timeout --kill-after=10s 540s ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest --no-daemon --console=plain || status=$?
+          python3 scripts/e2e-cache.py run-command --timeout 540 -- ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest --no-daemon --console=plain || status=$?
           if [ "$status" != 0 ]; then python3 scripts/e2e_execution.py finish "$status"; exit "$status"; fi
           python3 scripts/e2e_execution.py identity
 
@@ -437,7 +437,7 @@ jobs:
         timeout-minutes: 10
         run: |
           status=0
-          timeout --kill-after=10s 540s ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest --no-daemon --console=plain || status=$?
+          python3 scripts/e2e-cache.py run-command --timeout 540 -- ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest --no-daemon --console=plain || status=$?
           if [ "$status" != 0 ]; then python3 scripts/e2e_execution.py finish "$status"; exit "$status"; fi
           python3 scripts/e2e_execution.py identity
 
@@ -554,7 +554,7 @@ jobs:
           python3 scripts/e2e_execution.py identity
           python3 scripts/e2e_execution.py phase components
           status=0
-          timeout --kill-after=10s 900s ./gradlew :feature:analytics:impl:testDebugUnitTest --tests '*AnalyticsReliabilityComponentTest' --no-daemon --console=plain || status=$?
+          python3 scripts/e2e-cache.py run-command --timeout 900 -- ./gradlew :feature:analytics:impl:testDebugUnitTest --tests '*AnalyticsReliabilityComponentTest' --no-daemon --console=plain || status=$?
           python3 scripts/e2e_execution.py finish "$status"
           exit "$status"
       - name: Finalize component evidence

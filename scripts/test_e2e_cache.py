@@ -503,15 +503,24 @@ from pathlib import Path
 folder = Path('build/e2e/maestro/forgot?')
 folder.mkdir(parents=True)
 (folder / 'commands.json').write_text('partial')
-Path('build/e2e/execution.json').write_text('{"phase":"maestro","result":"running"}')
+Path('build/e2e/execution.json').write_text('{"schema":1,"phase":"maestro","result":"running","category":null,"exit_code":null,"events":[]}')
 Path('parent.pid').write_text(str(os.getpid()))
 subprocess.Popen([sys.executable, '-c', %r])
 while True: time.sleep(0.02)
 """ % child)
         started = time.monotonic()
         try:
-            with self.assertRaises(subprocess.TimeoutExpired):
-                cache.run_tests('3/4', timeout=1, grace=0.2)
+            execution_spec = importlib.util.spec_from_file_location('e2e_execution', Path(cache.__file__).with_name('e2e_execution.py'))
+            execution = importlib.util.module_from_spec(execution_spec)
+            execution_spec.loader.exec_module(execution)
+            coordinator = cache.run_command
+            # Keep this real-process regression short while exercising the command CLI's actual deadline handling.
+            def bounded(command, timeout):
+                return coordinator(command, timeout=timeout, grace=0.2, archive_output=True)
+            with patch.dict(sys.modules, {'e2e_execution': execution}), \
+                 patch.object(cache, 'run_command', side_effect=bounded), self.assertRaises(SystemExit) as result:
+                cache.command_main(['--timeout', '1', '--', 'scripts/e2e.sh'])
+            self.assertEqual(124, result.exception.code)
             # Include the 5 s post-KILL barrier as well as the 1 s timeout and TERM grace.
             self.assertLess(time.monotonic() - started, 8)
             self.assertFalse(Path('build/e2e/maestro').exists())
@@ -703,6 +712,9 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         self.assertIn('maestro-archive-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.MAESTRO_VERSION }}-${{ env.MAESTRO_SHA256 }}', workflow)
         self.assertIn('path: ${{ runner.temp }}/maestro-package', workflow)
         self.assertNotIn('restore-keys: maestro', workflow)
+        self.assertEqual(2, workflow.count('run-command --timeout 540 -- ./gradlew :app:assembleMockE2e'))
+        self.assertIn("run-command --timeout 900 -- ./gradlew :feature:analytics:impl:testDebugUnitTest", workflow)
+        self.assertNotIn('timeout --kill-after=10s 900s', workflow)
 
     def test_shard_upload_excludes_unfinished_raw_output_but_keeps_other_evidence(self):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
