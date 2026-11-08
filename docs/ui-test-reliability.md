@@ -48,8 +48,8 @@ The mockE2e sign-in waits at most 60 s for the existing backend fixture-ready si
 four-second minimum observation dwell stays in place: elapsed-deadline and SSE probes relied on it. An unmet
 predicate has no applied receipt or continue action. These controls remain absent from stage/local/prod.
 
-`reveal_tag.yaml` and `reveal_text.yaml` target the actual action or scoped text, not a clipped parent container.
-They require an explicit direction and full target visibility, without automatic centering that could trigger
+`reveal_tag_up.yaml` and `reveal_text_up.yaml` target the actual action or scoped text, not a clipped parent container.
+They use literal upward direction and full target visibility, without automatic centering that could trigger
 pull-to-refresh at the top of a page. Horizontal charts retain gestures confined to the chart. A helper does not
 replace the financial, request-count, selected-period or forbidden-action assertions following it.
 

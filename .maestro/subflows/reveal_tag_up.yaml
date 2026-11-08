@@ -1,11 +1,11 @@
 # Reveal the actual action/assertion target, not a potentially clipped parent container.
-# env: TARGET_ID, DIRECTION (UP/DOWN). Do not center: near the top it can trigger pull-to-refresh.
+# env: TARGET_ID. Do not center: near the top it can trigger pull-to-refresh.
 appId: ru.finassist.pf.mock.e2e
 ---
 - scrollUntilVisible:
     element:
       id: ${TARGET_ID}
-    direction: ${DIRECTION}
+    direction: UP
     visibilityPercentage: 100
 - assertVisible:
     id: ${TARGET_ID}

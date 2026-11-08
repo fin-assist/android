@@ -661,8 +661,8 @@ were.
   the app once if the phone screen still does not show up.
 - Before a PR, successfully run new UI tests and changed pilot flows locally with a real process deadline;
   shared helper changes list representative affected journeys and their results. No PR emulator UI is enabled.
-- Reveal the actual tag or scoped text through `reveal_tag.yaml` (`TARGET_ID`, `DIRECTION`) or
-  `reveal_text.yaml` (`TARGET_TEXT`, `PARENT_ID`, `DIRECTION`), without centering near pull-to-refresh.
+- Reveal the actual tag or scoped text through `reveal_tag_up.yaml` (`TARGET_ID`) or
+  `reveal_text_up.yaml` (`TARGET_TEXT`, `PARENT_ID`), without centering near pull-to-refresh.
 - Shared steps are in `.maestro/subflows/`: `clear_state`, `config` (env `LINK`), `fast_login`, `login`, `sign_in` (env `PHONE`), `set_passcode`,
   `enter_code` (env `CODE`), `relaunch_and_unlock` (env `CODE`).
 - Wait for screens with `extendedWaitUntil` rather than fixed sleeps; scroll to below-the-fold elements with

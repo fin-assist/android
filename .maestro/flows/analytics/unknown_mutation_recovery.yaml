@@ -189,11 +189,10 @@ tags:
 # Scrolling to the Year segment can leave the picker above the viewport; reveal its exact month.
 # Stop at full visibility: centering a picker near the top could trigger pull-to-refresh (FIN-471).
 - runFlow:
-    file: ../../subflows/reveal_text.yaml
+    file: ../../subflows/reveal_text_up.yaml
     env:
       TARGET_TEXT: "Сентябрь 2026"
       PARENT_ID: "ds.period.pick"
-      DIRECTION: UP
 - assertNotVisible:
     id: "ds.refresh.indicator"
 - assertVisible:

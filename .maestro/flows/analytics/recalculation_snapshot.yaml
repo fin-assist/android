@@ -24,10 +24,10 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?analytics_recalculating_responses=100&failing_blocks=expense_categories"
-- scrollUntilVisible:
-    element:
-      id: "analytics.recalculating"
-    direction: UP
+- runFlow:
+    file: ../../subflows/reveal_tag_up.yaml
+    env:
+      TARGET_ID: "analytics.recalculating"
 - assertVisible: "Пересчитываем после изменений.*"
 - scrollUntilVisible:
     element:
@@ -37,10 +37,10 @@ tags:
     id: "analytics.expense_category"
 - assertNotVisible: "Не получилось посчитать.*"
 # Give the next phase its own full client budget, even if observation consumed the current one.
-- scrollUntilVisible:
-    element:
-      id: "analytics.recalculating"
-    direction: UP
+- runFlow:
+    file: ../../subflows/reveal_tag_up.yaml
+    env:
+      TARGET_ID: "analytics.recalculating"
 - extendedWaitUntil:
     visible: "Не удалось обновить показатели.*"
     timeout: 40000
@@ -64,11 +64,10 @@ tags:
 - assertNotVisible:
     id: "analytics.expense_category"
 - runFlow:
-    file: ../../subflows/reveal_text.yaml
+    file: ../../subflows/reveal_text_up.yaml
     env:
       TARGET_TEXT: "Сентябрь 2026"
       PARENT_ID: "ds.period.pick"
-      DIRECTION: UP
 - assertNotVisible:
     id: "analytics.recalculating"
 
@@ -105,10 +104,10 @@ tags:
     visible: "Не получилось убрать.*"
     timeout: 10000
 - assertVisible: "РБК"
-- scrollUntilVisible:
-    element:
-      id: "analytics.recalculating"
-    direction: UP
+- runFlow:
+    file: ../../subflows/reveal_tag_up.yaml
+    env:
+      TARGET_ID: "analytics.recalculating"
 # Do not open another control activity, pull-refresh or leave the screen before this check:
 # a resume could restart the cancelled poll and hide the original bug. The resumed GETs reach
 # the bounded wait themselves; before the fix the promise remains forever without a Retry link.
@@ -133,11 +132,10 @@ tags:
     timeout: 15000
 # Removing the notice preserves the body offset and can leave the period header above the viewport.
 - runFlow:
-    file: ../../subflows/reveal_text.yaml
+    file: ../../subflows/reveal_text_up.yaml
     env:
       TARGET_TEXT: "Сентябрь 2026"
       PARENT_ID: "ds.period.pick"
-      DIRECTION: UP
 - assertVisible:
     text: "Сентябрь 2026"
     childOf:

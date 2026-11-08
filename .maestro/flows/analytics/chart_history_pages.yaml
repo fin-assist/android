@@ -100,11 +100,10 @@ tags:
     timeout: 10000
 # A clipped picker can be visible while its title is above the viewport.
 - runFlow:
-    file: ../../subflows/reveal_text.yaml
+    file: ../../subflows/reveal_text_up.yaml
     env:
       TARGET_TEXT: "Октябрь 2011"
       PARENT_ID: "ds.period.pick"
-      DIRECTION: UP
 - assertVisible:
     text: "Октябрь 2011"
     childOf:
@@ -135,11 +134,10 @@ tags:
     id: "analytics.expense.monthly.point.2026-10"
 # A clipped picker can be visible while its title is above the viewport.
 - runFlow:
-    file: ../../subflows/reveal_text.yaml
+    file: ../../subflows/reveal_text_up.yaml
     env:
       TARGET_TEXT: "Октябрь 2011"
       PARENT_ID: "ds.period.pick"
-      DIRECTION: UP
 - assertVisible:
     text: "Октябрь 2011"
     childOf:
@@ -157,11 +155,10 @@ tags:
     timeout: 10000
 # A clipped picker can be visible while its title is above the viewport.
 - runFlow:
-    file: ../../subflows/reveal_text.yaml
+    file: ../../subflows/reveal_text_up.yaml
     env:
       TARGET_TEXT: "Октябрь 2026"
       PARENT_ID: "ds.period.pick"
-      DIRECTION: UP
 - assertVisible:
     text: "Октябрь 2026"
     childOf:

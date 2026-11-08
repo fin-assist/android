@@ -1,5 +1,5 @@
 # Scoped text remains a separate assertion from its parent container's visibility.
-# env: TARGET_TEXT, PARENT_ID, DIRECTION (UP/DOWN).
+# env: TARGET_TEXT, PARENT_ID.
 appId: ru.finassist.pf.mock.e2e
 ---
 - scrollUntilVisible:
@@ -7,7 +7,7 @@ appId: ru.finassist.pf.mock.e2e
       text: ${TARGET_TEXT}
       childOf:
         id: ${PARENT_ID}
-    direction: ${DIRECTION}
+    direction: UP
     visibilityPercentage: 100
 - assertVisible:
     text: ${TARGET_TEXT}
