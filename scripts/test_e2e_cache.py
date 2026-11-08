@@ -370,6 +370,7 @@ class CleanAvdCacheTest(unittest.TestCase):
 class ShardExitBarrierTest(unittest.TestCase):
     def run_interrupted(self, observations, archive):
         process = Mock(pid=12345)
+        process.poll.return_value = 0  # The leader has exited while its descendant remains alive.
         process.wait.side_effect = [subprocess.TimeoutExpired('shard', 1), 0]
         now = [0.0]
 
@@ -377,7 +378,7 @@ class ShardExitBarrierTest(unittest.TestCase):
             now[0] += seconds
 
         with patch.object(cache.subprocess, 'Popen', return_value=process), \
-             patch.object(cache.os, 'killpg', side_effect=ProcessLookupError), \
+             patch.object(cache.os, 'killpg'), \
              patch.object(cache.subprocess, 'run', side_effect=observations) as inspect, \
              patch.object(cache.time, 'monotonic', side_effect=lambda: now[0]), \
              patch.object(cache.time, 'sleep', side_effect=sleep), \
