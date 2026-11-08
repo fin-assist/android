@@ -16,6 +16,7 @@ The expected inventory is derived from flow discovery, test source discovery and
 explicit JVM companions. Unprefixed `Class#method` keys remain native, and `.maestro/…` keys remain flows.
 The 92 existing case IDs are preserved. Qase82/83/89 each require both their Maestro and JVM components.
 The assertion-by-assertion transfer is in [the pilot coverage map](qa/fin473-pilot-coverage.md).
+The next candidate is documented in [the Qase73 coverage-preservation plan](qa/fin473-next-slice-qase73.md) (FIN-476); its full Maestro flow remains unchanged pending verified replacement coverage.
 
 ## Evidence and verdict
 
