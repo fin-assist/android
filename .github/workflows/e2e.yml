@@ -55,7 +55,7 @@ jobs:
   shard:
     if: github.event_name != 'workflow_dispatch' || !inputs.sdk_benchmark
     name: Shard ${{ matrix.shard }} (emulator)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     strategy:
       # A failed shard must not cancel the others: their results still count, and the run is red anyway.
@@ -401,7 +401,7 @@ jobs:
   native:
     if: github.event_name != 'workflow_dispatch' || !inputs.sdk_benchmark
     name: Native (fresh emulator)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
@@ -536,7 +536,7 @@ jobs:
   components:
     if: github.event_name != 'workflow_dispatch' || !inputs.sdk_benchmark
     name: Analytics UI components (JVM)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -581,7 +581,7 @@ jobs:
     # cancelled run (a newer merge cancels it): nothing of it goes to Qase, and with fail-fast off a shard is cancelled
     # only together with the run.
     if: ${{ !cancelled() && !inputs.sdk_benchmark }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
