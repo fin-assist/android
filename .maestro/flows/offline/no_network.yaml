@@ -38,14 +38,11 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?offline=false"
-# Back from the control link the profile reloads on resume by itself; «Повторить» only if it is still there.
-- runFlow:
-    when:
-      visible:
-        id: "profile.retry"
-    commands:
-      - tapOn:
-          id: "profile.retry"
+# Resume can finish recovery between a visibility check and the tap (FIN-470).
+# Only the disappearing recovery action is optional; the loaded-state checks stay mandatory.
+- tapOn:
+    id: "profile.retry"
+    optional: true
 - extendedWaitUntil:
     visible:
       id: "profile.phone"
@@ -55,13 +52,9 @@ tags:
 - assertNotVisible: "Проверьте интернет и попробуйте ещё раз"
 - tapOn:
     id: "ds.tab.analytics"
-- runFlow:
-    when:
-      visible:
-        id: "analytics.retry"
-    commands:
-      - tapOn:
-          id: "analytics.retry"
+- tapOn:
+    id: "analytics.retry"
+    optional: true
 - extendedWaitUntil:
     visible:
       id: "analytics.block.tiles"

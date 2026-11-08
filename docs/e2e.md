@@ -823,7 +823,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `availability/maintenance` | The check button is disabled during `Retry-After`; the first automatic probe is refused, then a guarded manual check after the fresh wait opens the app; a new maintenance episode has its own one-shot automatic check — FIN-22, FIN-223 |
 | `availability/maintenance_on_sign_in` | load the consent document and confirm age/PD first, then `maintenance=unknown&maintenance_retry_after=600`; «Продолжить» on the phone screen gets maintenance over sign-in, without an end time (Qase35, FIN-22/436) |
 | `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
-| `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; existing «Повторить» after recovery (Qase19, FIN-396) |
+| `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; enabled retry before recovery; optional recovery tap when resume has not already loaded the screen, followed by mandatory loaded data and no offline state (Qase19, FIN-396/470) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion` | actual ChatScreen/VoiceInput requests RECORD_AUDIO → real system denial through UiAutomation → clear permission notice → close → original draft, quota=5 and Ask=0 (Qase72, FIN-404); no speech service needed; focused local execution tracked in PR #277 / Qase |
 | native `VoiceDictationTest#dictationEventsPreserveDraftAndRequireExplicitSend` | actual ChatScreen/VoiceInput/VoiceSession/VM with test-only platform callbacks: prepare/ready/level/finish/result, draft/no auto-Ask, cancel/Back/ON_STOP/late events, errors/fallback/repeated actions and edited explicit send after a controlled consent-result handoff (Qase69, FIN-449); focused local execution tracked in PR #277 / Qase |
@@ -1706,3 +1706,24 @@ centres that text before asserting it. It still requires the retained error, the
 the bounded stop and explicit retry, recovery to ready, correct period and uninterrupted polling after a refused
 mutation. Qase82, its existing mapping and financial expectations are unchanged. No runtime or timeout changes.
 Focused execution and full post-merge CI evidence are recorded in the PR; authoring this correction is not a pass.
+
+### FIN-470/471: recovery actions and period visibility
+
+In [main UI run 42473581777](https://github.com/fin-assist/android/actions/runs/42473581777)
+(`64648212`), Qase19 reached the healthy Analytics screen between `when.visible` and the
+recovery tap. The hierarchy already contained loaded tiles when the disappearing retry action was
+looked up. Only the recovery taps after `offline=false` are optional; the preceding enabled retry
+checks, connection hints and subsequent loaded-screen/absent-error assertions remain mandatory.
+Maestro documents optional single-command interactions in its
+[conditions guide](https://docs.maestro.dev/maestro-flows/flow-control-and-logic/conditions).
+
+Qase89 reached the selected Month and retained September financial cards after the unknown mutation
+result, but the period picker was above the viewport after scrolling only to the Year segment and
+showing the notices. Reveal the exact September text inside the picker before asserting it, stopping at full visibility
+without centering: extra downward swipes at the top could trigger pull-to-refresh. Require the
+refresh indicator to be absent immediately after scrolling. The
+selected Month, second Year selection, explicit read recovery, unknown-result notice and mutation
+request counts remain required. No runtime, fixture, timeout, Qase mapping or CI scope changes.
+
+Both corrections are authored from the failed run's commands, screenshots and hierarchy. No new
+local UI run was performed; successful execution is still required through normal main UI CI.
