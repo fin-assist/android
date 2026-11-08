@@ -126,7 +126,10 @@ The metadata file is the `metadata` object shown above, **not** an arbitrary Git
 artifacts, verify it against saved/live API run metadata, not receipts alone. Do not claim a newly published CI
 artifact when reconstructing one locally. Missing required canonical files or invalid metadata fail packaging.
 The output is replaced only when empty or recognized as a previous complete compact bundle; unrelated directories
-are refused. Failed reconstruction removes an owned prior bundle so it cannot be uploaded as a stale PASS.
+are refused. Invalid budget values, invalid metadata and failed reconstruction remove an owned prior bundle so
+it cannot be uploaded as a stale PASS. `--help` and CLI syntax errors (unknown options or missing option values)
+leave output untouched. The workflow uploads the compact artifact only after successful packaging, so a failed
+invocation cannot publish any leftover output; full raw Reports still upload on failure.
 
 For offline Qase mapping, read all three canonical XML files with the existing `qase-report.py.parse_report`
 (prefix `jvm:` for JVM), then call its existing `map_results` with the bundled `qase-cases.json["cases"]`.

@@ -789,6 +789,10 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         self.assertIn('COMPONENT_TEST_SECONDS: 900', workflow)
         self.assertIn('run-command --timeout "$COMPONENT_TEST_SECONDS" -- ./gradlew :feature:analytics:impl:testDebugUnitTest', workflow)
         self.assertIn('--jvm-budget-seconds "$COMPONENT_TEST_SECONDS"', workflow)
+        self.assertEqual(3, workflow.count('--shard ${{ matrix.shard }}/${{ env.SHARDS }} --timeout "$MAESTRO_TEST_SECONDS"'))
+        self.assertIn('--native-only --timeout "$NATIVE_TEST_SECONDS"', workflow)
+        self.assertIn('--maestro-budget-seconds "$MAESTRO_TEST_SECONDS"', workflow)
+        self.assertIn('--native-budget-seconds "$NATIVE_TEST_SECONDS"', workflow)
         self.assertIn('name: e2e-result-attempt-${{ github.run_attempt }}', workflow)
         self.assertNotIn('timeout --kill-after=10s 900s', workflow)
 

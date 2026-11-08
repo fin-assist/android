@@ -687,6 +687,7 @@ jobs:
           PY
 
       - name: Package compact UI result
+        id: compact
         if: always()
         env:
           E2E_SHARD_RESULT: ${{ needs.shard.result }}
@@ -700,7 +701,7 @@ jobs:
 
       - name: Upload compact UI result
         uses: actions/upload-artifact@v7
-        if: always()
+        if: ${{ always() && steps.compact.outcome == 'success' }}
         with:
           name: e2e-result-attempt-${{ github.run_attempt }}
           path: build/e2e-result/

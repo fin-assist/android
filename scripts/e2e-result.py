@@ -138,7 +138,10 @@ def package(root, canonical, shards_dir, native_dir, jvm_dir, out, context, budg
 
 
 def positive_seconds(value):
-    seconds = int(value)
+    try:
+        seconds = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError('process budget must be positive seconds') from None
     if seconds <= 0:
         raise argparse.ArgumentTypeError('process budget must be positive seconds')
     return seconds
@@ -154,13 +157,20 @@ def main():
     parser.add_argument('--out', type=Path, default=Path('build/e2e-result'))
     parser.add_argument('--metadata', type=Path, help='explicit schema1 metadata object for offline packaging')
     for kind in ('maestro', 'native', 'jvm'):
-        parser.add_argument(f'--{kind}-budget-seconds', type=positive_seconds)
+        parser.add_argument(f'--{kind}-budget-seconds')
     args = parser.parse_args()
     # Clear stale output before parsing metadata too: a failed invocation must not upload an earlier PASS.
     clear_output(args.out, [args.canonical, args.shards_dir, args.native_dir, args.jvm_dir, args.root / 'scripts'])
+    budgets = {}
+    for kind in ('maestro', 'native', 'jvm'):
+        value = getattr(args, kind + '_budget_seconds')
+        try:
+            budgets[kind] = positive_seconds(value) if value is not None else None
+        except argparse.ArgumentTypeError as error:
+            parser.error(str(error))
     supplied = json.loads(args.metadata.read_text(encoding='utf-8')) if args.metadata else None
     package(args.root, args.canonical, args.shards_dir, args.native_dir, args.jvm_dir, args.out,
-            metadata(os.environ, supplied), {kind: getattr(args, kind + '_budget_seconds') for kind in ('maestro', 'native', 'jvm')})
+            metadata(os.environ, supplied), budgets)
 
 
 if __name__ == '__main__':

@@ -166,6 +166,13 @@ class CompactResultTest(unittest.TestCase):
         self.assertEqual((self.canonical / 'qase-delivery.json').read_bytes(), (self.out / 'qase-delivery.json').read_bytes())
         self.assertTrue(json.loads((self.out / 'execution-status.json').read_text())['passed'])
 
+    def test_push_or_unknown_event_without_delivery_never_becomes_manual_not_published(self):
+        self.generate()
+        for event in ('push', None):
+            with self.subTest(event=event):
+                self.context['event_name'] = event
+                self.assertEqual({'path': None, 'reason': 'not_recorded'}, self.package()['delivery'])
+
     def test_missing_canonical_file_removes_old_bundle_instead_of_republishing_a_pass(self):
         for name in compact.CANONICAL:
             with self.subTest(name=name):
@@ -185,6 +192,45 @@ class CompactResultTest(unittest.TestCase):
                                 cwd=self.root, capture_output=True, timeout=5)
         self.assertNotEqual(0, result.returncode)
         self.assertFalse(self.out.exists())
+
+    def test_invalid_budget_cli_removes_owned_previous_pass_before_value_validation(self):
+        self.generate()
+        for kind in ('maestro', 'native', 'jvm'):
+            for value in ('0', 'not-a-number'):
+                with self.subTest(kind=kind, value=value):
+                    self.package()
+                    result = subprocess.run([sys.executable, compact.__file__, '--out', str(self.out),
+                                             '--' + kind + '-budget-seconds', value],
+                                            cwd=self.root, capture_output=True, text=True, timeout=5)
+                    self.assertEqual(2, result.returncode, result.stderr)
+                    self.assertIn('process budget must be positive seconds', result.stderr)
+                    self.assertFalse(self.out.exists(), 'invalid CLI budget retained the previous PASS bundle')
+
+    def test_help_and_syntax_errors_leave_output_alone_and_foreign_output_is_never_deleted(self):
+        self.generate()
+        self.package()
+        original = (self.out / 'result.json').read_bytes()
+        for arguments, code in ((['--help'], 0), (['--unknown'], 2), (['--maestro-budget-seconds'], 2)):
+            with self.subTest(arguments=arguments):
+                result = subprocess.run([sys.executable, compact.__file__, '--out', str(self.out), *arguments],
+                                        cwd=self.root, capture_output=True, timeout=5)
+                self.assertEqual(code, result.returncode)
+                self.assertEqual(original, (self.out / 'result.json').read_bytes())
+        unrelated = self.root / 'foreign-output'
+        write(unrelated / 'keep', 'keep')
+        result = subprocess.run([sys.executable, compact.__file__, '--out', str(unrelated),
+                                 '--maestro-budget-seconds', '0'], cwd=self.root, capture_output=True, timeout=5)
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual('keep', (unrelated / 'keep').read_text())
+
+    def test_workflow_only_uploads_compact_output_after_successful_packaging_but_keeps_raw_on_failure(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/e2e.yml').read_text()
+        package, upload = workflow.split('      - name: Package compact UI result\n', 1)[1].split('      - name: Upload compact UI result\n', 1)
+        self.assertIn('id: compact', package)
+        compact_upload, raw_upload = upload.split('      - uses: actions/upload-artifact@v7', 1)
+        self.assertIn("if: ${{ always() && steps.compact.outcome == 'success' }}", compact_upload)
+        self.assertIn('if: always()', raw_upload)
+        self.assertIn('name: e2e-reports', raw_upload)
 
     def test_symlink_evidence_cannot_copy_unrelated_files_and_output_cannot_delete_inputs(self):
         self.generate()
@@ -220,6 +266,38 @@ class CompactResultTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'output'):
                     compact.package(self.root, self.canonical, self.shards, self.native, self.jvm, path, self.context, {})
                 self.assertEqual('keep', (path if path.is_file() else path / 'keep').read_text())
+
+    def test_previous_bundle_with_foreign_payload_wrong_schema_or_symlink_is_not_owned(self):
+        self.generate()
+        for mode in ('extra-file', 'unlisted-name', 'traversal', 'schema2', 'symlink'):
+            with self.subTest(mode=mode):
+                self.out = self.root / ('prior-' + mode)
+                self.package()
+                index = self.out / 'result.json'
+                data = json.loads(index.read_text())
+                if mode == 'extra-file':
+                    foreign = self.out / 'notes.txt'
+                    foreign.write_text('keep')
+                elif mode in ('unlisted-name', 'traversal'):
+                    name = 'other.json' if mode == 'unlisted-name' else '../outside'
+                    foreign = self.out / name
+                    foreign.write_text('keep')
+                    data['files'][name] = {'bytes': 4, 'sha256': hashlib.sha256(b'keep').hexdigest()}
+                elif mode == 'schema2':
+                    data['schema'] = 2
+                    foreign = self.out / 'expected-tests.json'
+                else:
+                    foreign = self.root / 'outside-receipt'
+                    foreign.write_text('keep')
+                    link = self.out / 'evidence/e2e-shard-1/execution.json'
+                    link.unlink()
+                    link.symlink_to(foreign)
+                index.write_text(json.dumps(data))
+                kept = foreign.read_bytes()
+                with self.assertRaisesRegex(ValueError, 'unrecognized output'):
+                    self.package()
+                self.assertTrue(index.exists(), 'an unrecognized bundle was removed')
+                self.assertEqual(kept, foreign.read_bytes())
 
 
 if __name__ == '__main__':
