@@ -32,7 +32,6 @@ tags:
 - scrollUntilVisible:
     element:
       id: "analytics.expense_category"
-    centerElement: true
 - assertVisible:
     id: "analytics.expense_category"
 - assertNotVisible: "Не получилось посчитать.*"
