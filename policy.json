@@ -6,19 +6,6 @@
     {
       "description": "FIN-211: recovery of an automatically failed dependency family",
       "matchPackageNames": [
-        "io.github.takahirom.roborazzi:roborazzi-compose"
-      ],
-      "matchDatasources": [
-        "maven"
-      ],
-      "recreateWhen": "always",
-      "matchJsonata": [
-        "newMajor = 1"
-      ]
-    },
-    {
-      "description": "FIN-211: recovery of an automatically failed dependency family",
-      "matchPackageNames": [
         "io.github.takahirom.roborazzi:roborazzi"
       ],
       "matchDatasources": [
@@ -275,6 +262,19 @@
       "recreateWhen": "always",
       "matchJsonata": [
         "newMajor = 44"
+      ]
+    },
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "io.github.takahirom.roborazzi:roborazzi-compose"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 1"
       ]
     },
     {
@@ -975,6 +975,23 @@
       "additionalBranchPrefix": "fin211-retry-297-",
       "matchJsonata": [
         "newDigest = \"sha512-VenROygSiAlbQBdarouesA+3cJCQYoL3QFxA32bTTalTj3sA8lZN04ukzCm4DI+TJCQoL8UevzMPMfT79gUYNA==\""
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "io.github.takahirom.roborazzi:roborazzi-compose"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-300-",
+      "matchNewValue": "/^1\\.78\\.0$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
       ]
     }
   ]
