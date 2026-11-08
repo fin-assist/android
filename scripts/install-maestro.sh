@@ -3,6 +3,7 @@
 set -euo pipefail
 
 : "${MAESTRO_VERSION:?MAESTRO_VERSION must be pinned}"
+: "${MAESTRO_SHA256:?MAESTRO_SHA256 must be pinned}"
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 : "${GITHUB_PATH:?GITHUB_PATH is required}"
 archive="$(mktemp "$RUNNER_TEMP/maestro-download.XXXXXX")"
@@ -16,6 +17,17 @@ if [[ ! -s "$archive" ]]; then
     echo 'Maestro archive download was empty' >&2
     exit 1
 fi
+python3 - "$archive" "$MAESTRO_SHA256" <<'PY'
+import hashlib
+import sys
+
+digest = hashlib.sha256()
+with open(sys.argv[1], 'rb') as archive:
+    for chunk in iter(lambda: archive.read(1024 * 1024), b''):
+        digest.update(chunk)
+if digest.hexdigest() != sys.argv[2]:
+    raise SystemExit('Maestro archive SHA256 mismatch')
+PY
 timeout --kill-after=5s 30s unzip -q "$archive" -d "$install_dir"
 
 cli="$install_dir/maestro/bin/maestro"

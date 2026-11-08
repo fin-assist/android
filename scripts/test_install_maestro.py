@@ -1,4 +1,5 @@
 """FIN-469: exercise pinned archive setup with an isolated provider, no network and no UI."""
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -64,6 +65,11 @@ os.execvp(args[0], args)
                     script = '#!/bin/sh\nprintf "%s\\n" "$*" > "$FAKE_VERSION_CALL"\n'
                     script += 'printf "%s\\n" "' + version + '"\n'
                     archive.writestr(entry, script)
+        if mode == 'no-checksum':
+            self.env.pop('MAESTRO_SHA256', None)
+        else:
+            self.env['MAESTRO_SHA256'] = ('0' * 64 if mode == 'wrong-checksum'
+                                          else hashlib.sha256(self.archive.read_bytes()).hexdigest())
         return subprocess.run(['bash', str(SCRIPT)], env=self.env, capture_output=True, text=True, timeout=5)
 
     def assert_rejected(self, result):
@@ -91,6 +97,13 @@ os.execvp(args[0], args)
 
     def test_wrong_version_is_rejected(self):
         self.assert_rejected(self.run_setup(version='2.12.1'))
+
+    def test_missing_checksum_is_rejected(self):
+        self.assert_rejected(self.run_setup('no-checksum'))
+
+    def test_checksum_mismatch_is_rejected_before_execution(self):
+        self.assert_rejected(self.run_setup('wrong-checksum'))
+        self.assertFalse((self.root / 'version-call').exists())
 
     def test_invalid_archive_is_not_a_successful_install(self):
         self.assert_rejected(self.run_setup('invalid-archive'))

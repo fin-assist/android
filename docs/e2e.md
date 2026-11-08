@@ -78,7 +78,8 @@ The flows run on five emulators at once (FIN-465, originally four in FIN-180), o
   job would add its time and an artifact round trip before every emulator starts, and outputs from the same build
   cache are the same classes the JaCoCo report reads.
 - **Pinned Maestro setup (FIN-469).** `scripts/install-maestro.sh` downloads the same versioned official release
-  archive as the upstream installer directly, with bounded curl retries and HTTP failure checks. Archive
+  archive as the upstream installer directly, pinned by the official release SHA256 in the workflow, with bounded
+  curl retries and HTTP failure checks. A checksum mismatch fails before extraction or execution. Archive
   extraction and `maestro --version` have process deadlines; the setup step has a six-minute cap. An empty or
   invalid archive, missing executable or wrong version fails before the AVD starts, and its bin directory is added
   to `GITHUB_PATH` only after validation. No remote bootstrap shell pipe or changes to shell profiles are needed.

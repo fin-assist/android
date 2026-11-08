@@ -107,6 +107,7 @@ jobs:
         timeout-minutes: 6
         env:
           MAESTRO_VERSION: 2.11.0
+          MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
         run: bash scripts/install-maestro.sh
 
       # SDK caches contain only binaries, never AVD state or adb keys. Prefix restore may select an older
