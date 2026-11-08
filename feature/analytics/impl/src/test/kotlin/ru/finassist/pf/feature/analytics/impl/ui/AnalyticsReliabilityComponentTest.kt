@@ -327,6 +327,9 @@ class AnalyticsReliabilityComponentTest {
     }
 
     private fun opened(api: FakeApi, statements: FakeStatements = FakeStatements()): AnalyticsViewModel {
+        // Independent phases must not leave old API/event consumers attached to the reused fake.
+        stores.forEach(ViewModelStore::clear)
+        stores.clear()
         val vm = AnalyticsViewModel(api, NoAssistant, statements, object : OperationsRepository {
             override val categoryChanges = MutableSharedFlow<Unit>()
         }, NoAssistantFlags, NoTracking, ReportZone { ZoneId.of(ZONE) }, ElapsedClock { scheduler.currentTime }, object : SessionRepository {
