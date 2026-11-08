@@ -6,19 +6,6 @@
     {
       "description": "FIN-211: recovery of an automatically failed dependency family",
       "matchPackageNames": [
-        "io.github.takahirom.roborazzi:roborazzi"
-      ],
-      "matchDatasources": [
-        "maven"
-      ],
-      "recreateWhen": "always",
-      "matchJsonata": [
-        "newMajor = 1"
-      ]
-    },
-    {
-      "description": "FIN-211: recovery of an automatically failed dependency family",
-      "matchPackageNames": [
         "org.jetbrains.kotlin.plugin.serialization:org.jetbrains.kotlin.plugin.serialization.gradle.plugin"
       ],
       "matchDatasources": [
@@ -268,6 +255,19 @@
       "description": "FIN-211: recovery of an automatically failed dependency family",
       "matchPackageNames": [
         "io.github.takahirom.roborazzi:roborazzi-compose"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 1"
+      ]
+    },
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "io.github.takahirom.roborazzi:roborazzi"
       ],
       "matchDatasources": [
         "maven"
@@ -989,6 +989,23 @@
       "recreateWhen": "never",
       "groupName": null,
       "additionalBranchPrefix": "fin211-retry-302-",
+      "matchNewValue": "/^1\\.78\\.0$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "io.github.takahirom.roborazzi:roborazzi"
+      ],
+      "matchDatasources": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-304-",
       "matchNewValue": "/^1\\.78\\.0$/",
       "matchJsonata": [
         "$not($exists(newDigest)) or newDigest = null"
