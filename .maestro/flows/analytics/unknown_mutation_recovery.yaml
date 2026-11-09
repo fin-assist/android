@@ -56,80 +56,7 @@ tags:
     env:
       LINK: "pfe2e://config?expect_error_requests=1&expect_analytics_dismiss_requests=1"
 
-# An uncached period loses the row button; recovery stays outside financial content.
-- runFlow: ../../subflows/clear_state.yaml
-- runFlow: ../../subflows/fast_login.yaml
-- tapOn:
-    id: "ds.tab.analytics"
-- extendedWaitUntil:
-    visible:
-      text: "Октябрь 2026"
-      childOf:
-        id: "ds.period.pick"
-    timeout: 15000
-- tapOn:
-    id: "ds.period.prev"
-- extendedWaitUntil:
-    visible:
-      text: "Сентябрь 2026"
-      childOf:
-        id: "ds.period.pick"
-    timeout: 10000
-- scrollUntilVisible:
-    element: "Не подписка — РБК"
-- runFlow:
-    file: ../../subflows/config.yaml
-    env:
-      LINK: "pfe2e://config?offline=true"
-# Resume inserts a read-error notice, moving the previously located action below the viewport.
-- scrollUntilVisible:
-    element: "Не подписка — РБК"
-    centerElement: true
-- tapOn: "Не подписка — РБК"
-- extendedWaitUntil:
-    visible: "(?s)Не получилось убрать.*"
-    timeout: 10000
-- runFlow:
-    file: ../../subflows/config.yaml
-    env:
-      LINK: "pfe2e://config?offline=false"
-- scrollUntilVisible:
-    element:
-      id: "ds.segment.2"
-    direction: UP
-- tapOn:
-    id: "ds.segment.2"
-- extendedWaitUntil:
-    visible:
-      id: "analytics.unknown_read_recovery"
-    timeout: 10000
-- assertNotVisible:
-    id: "analytics.updating"
-- runFlow:
-    file: ../../subflows/config.yaml
-    env:
-      LINK: "pfe2e://config?network_delay_ms=10000"
-- tapOn:
-    id: "analytics.unknown_read_recovery"
-- assertVisible:
-    id: "analytics.updating"
-- assertNotVisible:
-    id: "analytics.empty"
-- assertNotVisible: "Загрузите выписку.*"
-- extendedWaitUntil:
-    visible:
-      text: "2026"
-      childOf:
-        id: "ds.period.pick"
-    timeout: 20000
-- assertVisible: "Результат изменения не подтверждён"
-- assertVisible: "Аналитика загружается отдельно.*"
-- assertNotVisible: "Убрали из регулярных платежей"
-
-- runFlow:
-    file: ../../subflows/config.yaml
-    env:
-      LINK: "pfe2e://config?expect_analytics_dismiss_requests=1"
+# The companion checks uncached-Year recovery with an explicit held GET reply.
 
 # Confirmed deletion invalidates the financial cache but does not settle the unknown command.
 - runFlow: ../../subflows/clear_state.yaml
@@ -261,12 +188,11 @@ tags:
     timeout: 30000
 # Scrolling to the Year segment can leave the picker above the viewport; reveal its exact month.
 # Stop at full visibility: centering a picker near the top could trigger pull-to-refresh (FIN-471).
-- scrollUntilVisible:
-    element:
-      text: "Сентябрь 2026"
-      childOf:
-        id: "ds.period.pick"
-    direction: UP
+- runFlow:
+    file: ../../subflows/reveal_text_up.yaml
+    env:
+      TARGET_TEXT: "Сентябрь 2026"
+      PARENT_ID: "ds.period.pick"
 - assertNotVisible:
     id: "ds.refresh.indicator"
 - assertVisible:

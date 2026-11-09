@@ -70,4 +70,31 @@ class E2eConsentControlTest {
             assertEquals(MockConsentScenarios.DocumentSettings(), backend.consents.documentSettings(ConsentType.PERSONAL_DATA))
         }
     }
+
+    @Test fun `read mismatches expose safe expected actual and selected consent type in both directions`() = runTest {
+        withControl { control, backend ->
+            val auth = MockAuthApi(backend)
+            auth.getConsentDocument(ConsentType.PERSONAL_DATA)
+            assertEquals("Consent count mismatch: expect_consent_reads type=personal_data expected=2 actual=1",
+                control.apply(command("expect_consent_reads" to "2")))
+            auth.getConsentDocument(ConsentType.PERSONAL_DATA)
+            assertNull(control.apply(command("expect_consent_reads" to "2")))
+            auth.getConsentDocument(ConsentType.PERSONAL_DATA)
+            assertEquals("Consent count mismatch: expect_consent_reads type=personal_data expected=2 actual=3",
+                control.apply(command("expect_consent_reads" to "2")))
+            assertEquals("Consent count mismatch: expect_consent_reads type=assistant expected=1 actual=0",
+                control.apply(mapOf("consent_type" to listOf("assistant"), "expect_consent_reads" to listOf("1"))))
+        }
+    }
+
+    @Test fun `stream recovery fixture is personal data scoped bounded and resettable`() = runTest {
+        withControl { control, _ ->
+            assertNull(control.apply(command("consent_stream_recovery_reads" to "2")))
+            assertNotNull(control.apply(command("consent_stream_recovery_reads" to "-1")))
+            assertNotNull(control.apply(command("consent_stream_recovery_reads" to "129")))
+            assertNotNull(control.apply(command("consent_stream_recovery_reads" to "bad")))
+            assertNotNull(control.apply(mapOf("consent_type" to listOf("assistant"), "consent_stream_recovery_reads" to listOf("2"))))
+            assertNull(control.apply(command("consent_stream_recovery_reads" to "0")))
+        }
+    }
 }

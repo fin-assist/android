@@ -1,20 +1,25 @@
 # UI tests (e2e)
 
-Two layers, both on an emulator or device:
+Read-only run history and comparable evidence: [UI test history](ui-test-history.md).
+
+Three required suites in post-merge acceptance (FIN-473):
 
 | Layer | What | Where | Build |
 |---|---|---|---|
 | Maestro | User scenarios end to end: sign-in, passcode, operations, search, analytics, assistant, statements, profile, flags, offline | `.maestro/` | `mockE2e` |
-| Native (Espresso / Compose test) | What Maestro cannot drive reliably — the system document picker | `app/src/androidTestMock/` | `mockE2e` (`connectedMockE2eAndroidTest`) |
+| Native (Espresso / Compose test) | Platform gaps: picker, permissions, intents | `app/src/androidTestMock/` | independent `mockE2e` emulator job |
+| JVM UI companions | Deterministic Qase82/83/89 state/paging combinations, real ViewModel and Compose renderers | `AnalyticsReliabilityComponentTest` | targeted JVM job, no emulator |
 
 Native tests are for the gaps, not a second copy of the scenarios. When a check needs the platform itself
 (system dialogs, intents, permissions, biometrics), it goes there; everything a user does on our screens goes to
-Maestro. The same split will apply to iOS (XCUITest for the gaps).
+Maestro. The approved FIN-473 pilot combines a shorter journey with a mandatory JVM UI companion;
+[the assertion map](qa/fin473-pilot-coverage.md) preserves every moved obligation. Execution and strict
+acceptance rules are in [UI reliability](ui-test-reliability.md).
 
 ## Running
 
 Prerequisites: an emulator or device with `adb`, [Maestro](https://maestro.dev) on PATH
-(`curl -Ls https://get.maestro.mobile.dev | bash`), JDK 21. Set the emulator time zone to Europe/Moscow
+(use the version pinned in the UI workflow, currently2.11.0), JDK21. Set the emulator time zone to Europe/Moscow
 (Settings → System → Date & time, or `-timezone Europe/Moscow` when starting it).
 
 To reproduce a CI failure locally, use `MAESTRO_VERSION` and the `AVD_API`, `AVD_TARGET`, `AVD_ARCH`
@@ -32,8 +37,8 @@ scripts/e2e.sh --tags smoke
 # One flow while writing it (Maestro Studio helps to find elements: `maestro studio`); --flow may be repeated
 scripts/e2e.sh --no-build --flow "$PWD/.maestro/flows/assistant/ask_question.yaml"
 
-# One shard of the CI split (below): the flows `scripts/e2e-shards.py list --shard 2/4` prints; native tests in 1/n only
-scripts/e2e.sh --shard 2/4
+# One Maestro shard of the CI split (below); native has its own CI job
+scripts/e2e.sh --shard 2/5
 ```
 
 Reports go to `build/e2e/`: JUnit XML, `maestro-output.tgz` (per flow: screenshot and view hierarchy of the failed
@@ -48,58 +53,46 @@ run summary lists the shards, the flows and the UI test coverage; reports are in
 
 ### Shards in CI
 
-The flows run on five emulators at once (FIN-465, originally four in FIN-180), one job per shard:
+Five Maestro-only emulators run a deterministic longest-flow-first split from
+`scripts/e2e-durations.json`; `python3 scripts/e2e-shards.py plan --shards 5` prints the selection.
+Native tests have a separate fresh AVD and budget; the targeted JVM companions are an independent job.
+The reports job waits for all three suites, including failed jobs, and gathers their artifacts.
+A setup failure leaves tests NOT RUN, not failed assertions; incomplete acceptance remains red.
 
-- **Split.** `scripts/e2e-shards.py` spreads the flows so that the shards take about the same time: longest flow
-  first, to the shard with the least so far, by conservative maxima of successful measured durations on CI
-  (`scripts/e2e-durations.json`; a flow not measured yet counts as the median). Shard 1 also runs the native tests
-  and gets fewer flows for them. The split is deterministic and every flow is in exactly one shard
-  (`scripts/test_e2e_shards.py`); `python3 scripts/e2e-shards.py plan --shards 5` prints it. After a run that changed
-  the durations a lot, refresh them from the merged report: `python3 scripts/e2e-shards.py durations
-  build/e2e/maestro-report.xml` (in the `e2e-reports` artifact).
-  This command only raises known weights. After a verified speedup or flow split, lower a stale maximum through
-  a reviewed manual JSON edit citing the successful run; remove deleted-flow entries with their source change.
-- **FIN-465 measurements (2026-11-08).** Shard 1 reserves 300 s for native Gradle configuration, all 13
-  instrumented tests and report copying. The last complete successful sample,
-  [run 42210173741](https://github.com/fin-assist/android/actions/runs/42210173741) (2026-11-06, same native sources),
-  took 193.8 s; the reserve includes at least 50% headroom. The 6/13 progress before the timeout in
-  [run 42461258707](https://github.com/fin-assist/android/actions/runs/42461258707) is incomplete evidence.
-  Updating the four-shard forecast to 34.5/35.1/35.0/35.1 min was insufficient: in
-  [run 42467271555](https://github.com/fin-assist/android/actions/runs/42467271555), shard 3 exhausted 2400 s on its
-  last flow. Qase82 itself passed completely (246 s). Weights now retain maxima of positive successful samples
-  from these two runs; `durations` never lowers a known weight or accepts a failed/nonpositive sample. The
-  interrupted `upload_unknown_codes` sample (31.051 s) retains its successful 43 s estimate. All 81 flows and 13
-  native tests remain selected. The largest comparable successful-flow cohort grew 13.1%; individual growth
-  reached 33.1% and is absorbed by the updated maximum weights. A plan guard adds 20% to aggregate flow time and
-  120 s setup, without multiplying the already padded native reserve. This is an engineering margin based on
-  observed totals, not p95 or a bound on future timings. Five-shard forecasts including native reserve are
-  29.2/29.3/28.6/28.7/29.2 min; stressed totals with setup are 36.1/37.1/36.4/36.4/37.1 min, within the unchanged
-  2400 s test and 45 min job limits. Four shards fail that stress check. Forecasts are not full UI/native acceptance.
-- **Build.** Every shard builds the APKs itself (`:app:assembleMockE2e :app:assembleMockE2eAndroidTest`, ~40 s from
-  the Gradle build cache): the native tests and `:e2eCoverageReport` need the Gradle build anyway, a separate build
-  job would add its time and an artifact round trip before every emulator starts, and outputs from the same build
-  cache are the same classes the JaCoCo report reads.
-- **Pinned Maestro setup (FIN-469).** `scripts/install-maestro.sh` downloads the same versioned official release
-  archive as the upstream installer directly, pinned by the official release SHA256 in the workflow, with bounded
-  curl retries and HTTP failure checks. A checksum mismatch fails before extraction or execution. Archive
-  extraction and `maestro --version` have process deadlines; the setup step has a six-minute cap. An empty or
-  invalid archive, missing executable or wrong version fails before the AVD starts, and its bin directory is added
-  to `GITHUB_PATH` only after validation. No remote bootstrap shell pipe or changes to shell profiles are needed.
-- **Reports.** Each shard uploads its `build/e2e/` as `e2e-shard-<i>` (kept 3 days), whatever its result. The
-  `Reports` job runs after all shards, whatever they ended with, unless the run was cancelled (`if: !cancelled()`):
-  `e2e-shards.py gather` merges the
-  Maestro reports into one `build/e2e/maestro-report.xml` and puts the execution data of every shard and of the
-  native tests where `:e2eCoverageReport` reads them; then the coverage report, the summary, one
-  Qase run and the `e2e-reports` artifact (merged report, coverage, every shard's folder). A shard that left no report
-  — its job failed or timed out before the flows ended — is not lost silently: its flows go into the merged report as
-  failures («shard i/n left no Maestro report»), and so does a flow missing from a shard's report. Flows are matched
-  to the report by its `file` attribute, or by the flow's `name` when a Maestro version writes none (names are unique,
-  `scripts/test_e2e_shards.py` checks it). Maestro is pinned in the workflow (`MAESTRO_VERSION` and
-  `MAESTRO_SHA256`): update both from the official release and check the new version with one run.
-- **Result.** The run is red when any shard failed, and also when the merged report is not a pass although every job
-  was green (a shard's report that never arrived, flows missing or failed — `gather` lists them): the `Reports` job
-  fails after it has published everything.
+Every shard still builds the APK through the existing Gradle build cache. Maestro installation uses a
+SHA256-addressed official ZIP cache with revalidation, fresh extraction and exact-version checks.
+The test/CI limits remain 2400 s / 45 min for Maestro; native has 600 s execution / 25 min job and
+components 900 s execution / 20 min job. These are independent budgets, not test retries.
 
+The expected inventory is derived from source discovery and the existing Qase map. `gather` validates
+Maestro, native and JVM reports for exact presence, no skips, duplicate/unknown/wrong-shard entries,
+and preserves canonical XML plus structured execution status. Evidence includes early setup receipts,
+source/environment identity and APK hashes. Shard and merged evidence is kept for14 days.
+Qase receives the worst result of all required components, including missing native-only/JVM cases.
+See [UI reliability](ui-test-reliability.md) for commands, phase classification and acceptance rules.
+
+The FIN-465 transition from four to five shards (runs42461258707/42467271555) predates this separation.
+Its native300s reserve was a scheduling mitigation; it is no longer charged to Maestro shard1.
+Historical duration samples remain scheduling inputs, not proof of a complete successful run.
+
+### FIN-481: select the maintenance recovery interleaving
+
+Qase46 requires the one automatic personal-data probe, its retained deadline and exactly two document reads
+(fast login plus probe). A concurrent stream may legitimately reopen the gate first and cancel that probe;
+`E2eMaintenanceReadOrderTest` reproduces both orders with the real backend, Auth API, SSE policy, gate and
+availability ViewModel on one virtual clock. The UI fixture opts into `consent_stream_recovery_reads=2`
+when ending maintenance. Only that mock recovery response waits for the actual probe request entry;
+normal streams, active server maintenance and the client policy are unchanged. This does not require the probe
+response to finish before the stream, issue an extra GET, sleep or extend either captured deadline.
+If another response has already ended visible maintenance, a pending fixture wait releases without changing
+its counters, so the strict final packet can diagnose a missing probe rather than leave the upload waiting.
+The real-stack tests also use the e2e 50 ms reply latency: a probe enters, the stream opens the gate, and the
+in-flight probe is cancelled with reads2/probe1 preserved and activeReads0.
+
+The final Qase46 packet remains unchanged: exact consent reads2, probe1, stream429 count1, after-deadline
+witnesses and upload2. Extra or early calls still fail. The barrier defaults off and is cancellable; resetting
+the target to0 releases it. The original UI assertions and waits remain. JVM regression evidence and the
+separate device-execution scope are recorded in FIN-481 and its PR.
 
 ### Default SDK caching and fresh cold AVD (FIN-378)
 
@@ -470,17 +463,17 @@ Every scenario is a test case in Qase, project `PLAINFIN`, suite «UI-автот
 steps and expected results in Russian, marked automated.
 
 - `scripts/qase-cases.json` maps tests to cases: a Maestro flow by its path (`.maestro/flows/<feature>/<flow>.yaml`),
-  an instrumented test by `<class>#<method>`.
+  an instrumented test by `<class>#<method>`, a required JVM companion by `jvm:<class>#<method>`.
 - After a merge to `main` the `UI tests` workflow sends the results as one Qase run
   (`scripts/qase-report.py`: JUnit reports → run → bulk results → complete) — one for all shards, from the merged
   report. The run title is `UI tests · <branch> · <sha>`, its description links the Actions run. Cancelled runs are
   not sent, including a run where a shard was cancelled: its partial results would read as lost coverage. A shard
-  that failed without a report sends its flows as failed (see «Shards in CI»).
+  that failed without a report sends its flows as skipped/NOT RUN with the missing phase named; full acceptance remains red (see «Shards in CI»).
 - Statuses: passed, failed (an assertion `failure` and an unexpected `error` alike: in UI tests the latter is usually
-  an app crash), skipped. A test found in several reports keeps its worst result.
+  an app crash), skipped. A case with several distinct required components keeps its worst result. Duplicate test components are an integrity error; they cannot give a complete PASS.
 - If the results cannot be recorded, the script retries once (429, 5xx, network) and otherwise deletes the empty run.
 - The token is the repository secret `QASE_API_TOKEN`. Without it the step prints a notice and passes; a Qase error
-  does not fail the job either.
+  does not fail the job either. Delivery status is retained separately; an unavailable token/service is not successful publication.
 - Check what would be sent without a token: `scripts/qase-report.py --dry-run build/e2e/maestro-report.xml`.
 
 ## The `e2e` build type
@@ -529,10 +522,12 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
 
 - **Control link.** `pfe2e://config?…` changes state from a flow (`E2eControlActivity`). Open it through the subflow,
   not a bare `openLink`: `runFlow: {file: ../../subflows/config.yaml, env: {LINK: "pfe2e://config?…"}}`. The activity
-  writes the values, shows `e2e.config.applied` and finishes; the subflow waits for that, so a `launchApp` right
-  after cannot cut the writes short. Maestro counts the timeout of every wait from the last interaction (here
-  `openLink`), not from the start of the wait: the wait for the tag to go must cover the wait for it to come (a
-  `sign_in` takes several seconds) plus the 4 s it stays up — `config.yaml` sets both accordingly (FIN-180).
+  writes the values and keeps `e2e.config.applied` until explicit `e2e.config.continue` acknowledgement.
+  The helper wakes for either `e2e.config.applied` or terminal `e2e.config.unmet` within the existing wait,
+  rejects an unmet command before acknowledgement, then still requires the applied receipt. Consent-count
+  mismatches include the selected type and exact expected/actual values (FIN-481).
+  The original minimum4s dwell remains for elapsed-deadline probes; slow drivers no longer miss a disappearing
+  pulse. Cold fixture-ready has its own60s budget before the unchanged30s sign-in deadline (FIN-473).
 
   | Parameter | Effect | Lifetime |
   |---|---|---|
@@ -549,6 +544,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `consent_release=true` | releases currently held reads; subsequent held-mode reads return normally | process |
   | `consent_register_error=outdated\|required\|off` | personal-data scope only: reject Register before creating an account, or restore normal validation | process |
   | `expect_consent_reads`, `expect_consent_active`, `expect_consent_max_active` | exact document request/concurrency counts for the selected type, each 0..128 | instant check |
+  | `consent_stream_recovery_reads=0..128` | mock-only Qase46 phase barrier, personal_data only: while recovering from maintenance, a stream response waits for this many actual document GET entries; sends no GET and changes no client deadline. Default0/off; setting0 releases the wait | process |
   | `expect_consent_starts`, `expect_consent_registers`, `expect_consent_grants` | exact comma-separated attempted version sequence, including failures; an empty value requires zero attempts | instant check |
   | `expect_consent_start_keys=0..128` | exact number of distinct Start keys; no raw key, phone or token is exposed | instant check |
   | `expect_consent_wait_elapsed=true` | requires a real prior document-429 receipt and zero remaining captured wait; missing receipt fails | instant check |
@@ -666,7 +662,9 @@ A PR that adds or changes something the user does or sees covers it in the same 
 | Refactoring that keeps behaviour | none; the existing flows must stay green |
 | Renamed test tag | the flows that use it (search `.maestro/`) |
 
-Maestro is the default. A native test (`app/src/androidTestMock`) covers what Maestro cannot drive — system
+Maestro is the default. FIN-473 explicitly adds required JVM UI companions for Qase82/83/89; these
+may replace exhaustive state/paging steps only through the preserved assertion map and combined verdict.
+A native test (`app/src/androidTestMock`) covers what Maestro cannot drive — system
 pickers, intents, permissions; keep it to that gap. When a scenario cannot run on the emulator (hardware it lacks,
 a bug that does not reproduce there), list it in «Not covered yet» at the end of «Coverage» with the technical
 reason and say so in the PR; «takes long to write» is not a reason.
@@ -686,6 +684,10 @@ were.
   right after `pm clear` Android may still kill a freshly started app process while it removes the old task, and
   the flow waits on a blank window. `clear_state.yaml` pauses for 3 s after the wipe; `sign_in.yaml` relaunches
   the app once if the phone screen still does not show up.
+- Before a PR, successfully run new UI tests and changed pilot flows locally with a real process deadline;
+  shared helper changes list representative affected journeys and their results. No PR emulator UI is enabled.
+- Reveal the actual tag or scoped text through `reveal_tag_up.yaml` (`TARGET_ID`) or
+  `reveal_text_up.yaml` (`TARGET_TEXT`, `PARENT_ID`), without centering near pull-to-refresh.
 - Shared steps are in `.maestro/subflows/`: `clear_state`, `config` (env `LINK`), `fast_login`, `login`, `sign_in` (env `PHONE`), `set_passcode`,
   `enter_code` (env `CODE`), `relaunch_and_unlock` (env `CODE`).
 - Wait for screens with `extendedWaitUntil` rather than fixed sleeps; scroll to below-the-fold elements with
@@ -770,11 +772,11 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state; expense search uses the ASCII query FIN-400 within the inherited 2024–2026 range, checks the single January 2024 debit and retained kind/scope (Qase75, FIN-400/415); follow-up not executed (previous run failed) |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
-| `analytics/recalculation_snapshot` (mock-only) | changed intermediate block retains the whole last-ready snapshot; ready replaces it; bounded recalculation keeps labelled previous data and explicit Retry; uncached Year prepares without showing Month values; active recalculation → targeted dismissal refusal → retained payment → bounded paused read → explicit Retry → ready, with exactly one mutation attempt (Qase82, FIN-416/427); retained category row is observed before the bounded pause and an explicit Retry with a fresh finite recalculation countdown; final month header is revealed after Retry; follow-up to failed run 41855090174, not executed |
-| `analytics/regular_block_update` (mock-only) | successful PUT removes RBC and promotes the third visible payment row before a ready GET; seven seconds in the same card retain that row without RBC across marked GET polls; bounded polling pauses with September retained, then explicit Retry permits ready GET; separate unknown offline result retains RBC until explicit PUT retry (Qase81, FIN-416/427/436). Its case-level Passed covers these UI observations only; JVM version/context checks and backend post-commit/durable delivery are separate |
+| `analytics/recalculation_snapshot` + JVM `AnalyticsReliabilityComponentTest#qase82RetainedSnapshotsAndRefusedMutation` (mock-only) | retained ready/unavailable snapshots, bounded polling and explicit retry, uncached Year preparation, refused mutation independent of polling; real journey retains visible errors/payment and exact request guards; required JVM companion covers transferred exhaustive state combinations (Qase82, FIN-473; see docs/qa/fin473-pilot-coverage.md) |
+| `analytics/regular_block_update` (mock-only) | successful PUT removes RBC and promotes the third visible payment row before a ready GET; seven seconds in the same card retain that row without RBC across marked GET polls; bounded polling pauses with September retained, then explicit Retry permits ready GET; separate unknown offline result retains RBC until explicit PUT retry, revealing the scoped row title after error/read notices before the unchanged assertions (Qase81, FIN-416/427/436/478). Its case-level Passed covers these UI observations only; JVM version/context checks and backend post-commit/durable delivery are separate |
 | `analytics/regular_post_commit_retry` (mock-only) | post-commit retryable 500 keeps the original card and unknown warning; persistent fault plus exactly one injected failure excludes a hidden retry; fault recovery/resume retains RBC until another explicit row action; complete PUT block changes 5188/6/«Ещё 3»1599 RUB to 3688/5/«Ещё 2»599 RUB and promotes tablet while ready GET remains withheld (Qase91, FIN-438); focused local API34/Pixel6/Maestro2.11.0 pass in PR #271 |
-| `analytics/unknown_mutation_recovery` (mock-only) | forbidden 500 → explicit read with retained unknown warning and no PUT; Offline → uncached Year or upload deletion → reachable recovery outside the missing snapshot, delayed GET shows preparation before data/empty; unknown in-flight PUT rolls an unperformed selection back, then the same segment tap works; Qase89 (FIN-416/427); re-locate the RBC action after offline resume; follow-up to failed run 41844441379, not executed |
-| `analytics/chart_history_pages` (mock-only) | synthetic 2000–2026 history crosses more than three page boundaries in both directions; covered zero selects its exact month, scrolling retains selection (Qase83, FIN-416); FIN-441 fully exposes endpoints before selection; FIN-445 brings the exact selected month title into view at all three return points; execution evidence is recorded in FIN-445 |
+| `analytics/unknown_mutation_recovery` + JVM `AnalyticsReliabilityComponentTest#qase89UnknownReadRecoveryAndDeferredSelection` (mock-only) | terminal PUT refusal, explicit read without confirming the unknown result, real upload deletion with no extra upload, deferred Year and second tap; held uncached/empty recovery combinations in required real-screen/ViewModel companion; request guards preserved (Qase89, FIN-473) |
+| `analytics/chart_history_pages` + JVM `AnalyticsReliabilityComponentTest#qase83HistoryPagingAndSelection` (mock-only) | real import2000–2026, gestures throughpage3 to covered-zero2011-10, eviction and reverse reload ofpage0 with retained selection and final October2026 tap/header; exhaustive322-month paging/eviction and renderer→VM zero selection in required companion; actual producer full cursor chains covered by AnalyticsRevisionContractTest (Qase83, FIN-473) |
 | `analytics/source_zone_and_session` (mock-only) | unsupported source-zone notice survives an offline retry over cached data, supported response recovery, logout/new login with marked response prepares without old financial blocks (Qase88, FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `analytics/block_unavailable` | `failing_blocks=expense_categories`: the block shows «Не получилось посчитать», the other blocks stay — FIN-5 |
 | `analytics/unknown_blocks` | `unknown_codes=true`: a block of an unknown type is shown by its text, a card locked for an unknown reason by the server's lock text — FIN-4, FIN-83 |
@@ -805,7 +807,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `statements/download_period` (mock-only) | inclusive calendar selection, invalid/reversed/future bounds, network failure retains dates and offers explicit retry; Qase84 (FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `StatementPickerTest#opensTheServerUrlForSelectedInclusiveDates` | exact server download URL handed to browser for 1–30 September; native Espresso-Intents because Maestro cannot inspect destination; Qase85; authored, not executed |
 | `StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser` | actual MainActivity calendar, retained 1–8 October after offline preparation, enabled Retry and no ACTION_VIEW; native companion to the Maestro Qase84 flow; authored, not executed |
-| `ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette` | actual MainActivity Profile, explicit Light then Dark choices, rendered gutter pixels match independent light/dark palette values; Qase17 native companion; Qase98 Failed while finding Light label; stable-row scroll + bounded exact-label wait passed with the Maestro companion in Qase100; first local failures preserved in Qase99 |
+| `ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette` | actual MainActivity Profile, explicit Light then Dark choices, rendered gutter pixels match independent light/dark palette values; Qase17 native companion; Qase98 Failed while finding Light label; stable-row scroll + bounded exact-label wait passed with the Maestro companion in Qase100; first local failures preserved in Qase99; FIN-480 retains both pixel checks and the exact-label oracle, adds theme-scoped timeout evidence and an atomic initialization regression |
 | `operations/source_time_zone` (mock-only) | unsupported IANA metadata above verified feed/search cache; stale notice and explicit supported recovery; Qase86; updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `statements/source_time_zone` (mock-only) | unsupported import config and complete result; explicit supported recovery; Qase87; authored, not executed |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
@@ -822,7 +824,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `availability/update_required` | `min_version=9.0.0`: the next request gets `CLIENT_VERSION_UNSUPPORTED`, the update screen covers the app — FIN-22 |
 | `availability/maintenance` | The check button is disabled during `Retry-After`; the first automatic probe is refused, then a guarded manual check after the fresh wait opens the app; a new maintenance episode has its own one-shot automatic check — FIN-22, FIN-223 |
 | `availability/maintenance_on_sign_in` | load the consent document and confirm age/PD first, then `maintenance=unknown&maintenance_retry_after=600`; «Продолжить» on the phone screen gets maintenance over sign-in, without an end time (Qase35, FIN-22/436) |
-| `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
+| `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223; FIN-481 selects probe-entry-before-stream-success with a mock-only barrier; exact read/probe/deadline/upload guards remain mandatory |
 | `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; enabled retry before recovery; optional recovery tap when resume has not already loaded the screen, followed by mandatory loaded data and no offline state (Qase19, FIN-396/470) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion` | actual ChatScreen/VoiceInput requests RECORD_AUDIO → real system denial through UiAutomation → clear permission notice → close → original draft, quota=5 and Ask=0 (Qase72, FIN-404); no speech service needed; focused local execution tracked in PR #277 / Qase |
@@ -1600,6 +1602,18 @@ failed. Regression checks use real subprocesses, a TERM-resistant descendant and
 they also check external termination and preservation of an already packed archive. Workflow triggers,
 permissions, cache identities, artifact scope and application runtime are unchanged.
 
+FIN-458 adds a bounded 5 s exit check after SIGKILL: the coordinator reaps the leader and
+checks group members with `ps` until none remain or all are zombies without live threads.
+`D`, other live states and a zombie leader with the procps multi-threaded `l` flag never count
+as stopped. If the group remains live or inspection fails, the shard fails and leaves the raw
+evidence untouched on the runner instead of archiving/removing files with possible writers.
+Shard upload excludes that unfinished raw directory (whose names may be invalid for artifacts),
+so XML, coverage, logs and any already completed archive can still be uploaded. Unfinished raw
+output is not published and remains only on the disposable runner.
+Deterministic regressions cover delayed `D` → `Zsl` → `Z`, a persistent live group, unrelated groups,
+zombie-only/absent groups, inspection errors and the upload exclusion; the real TERM-resistant descendant test
+keeps its immediate exit assertion. The 2400 s shard deadline and 10 s TERM grace are unchanged.
+
 ### FIN-445: bring the selected month title fully into view
 
 The full post-merge run [42017241060](https://github.com/fin-assist/android/actions/runs/42017241060)
@@ -1727,3 +1741,47 @@ request counts remain required. No runtime, fixture, timeout, Qase mapping or CI
 
 Both corrections are authored from the failed run's commands, screenshots and hierarchy. No new
 local UI run was performed; successful execution is still required through normal main UI CI.
+
+### FIN-473: deterministic acceptance and pilot boundaries
+
+The current architecture separates native execution from Maestro and adds the three required JVM UI
+companions to the same92 Qase cases. NOT RUN is distinct from an assertion failure; complete acceptance
+requires exact Maestro/native/JVM inventory and execution provenance. Binary caching, stable configuration
+receipts and fixture-ready setup preserve the original financial/request/consent checks.
+
+The Qase82/83/89 flow bodies are shorter only where the executed companion proves the transferred
+obligation. Qase89 retains the real deletion branch and its no-extra-upload/request-count checks. The
+full obligation map is [FIN-473 pilot coverage](qa/fin473-pilot-coverage.md); runner/receipt rules are in
+[UI reliability](ui-test-reliability.md). Earlier FIN-441/445/464 notes above describe their historical
+flow bodies and failed runs; their evidence is not overwritten by this pilot. Local execution results
+and the pending post-merge verification are recorded in FIN-473 and the PR, not inferred from authoring.
+
+### FIN-478: reveal the retained payment title after error notices
+
+In run42525145892 on6a446179, Qase81's offline PUT produced the required error and retained RBC action,
+but the action's visibility did not establish that the title above it was visible. The scroll returned
+without moving while the title was clipped above the financial body. The two retained-RBC checks now
+use at most three short gutter swipes, guarded by `analytics.screen`, then require the exact title
+inside `analytics.regular_payments.item`, keep the original title assertion and reject an active refresh indicator.
+These two reveals do not use a centered `scrollUntilVisible` gesture. The final explicit PUT separately
+reveals its action after the title check. All original assertions, waits, financial observations and
+exact dismiss request guards1/2 remain in order; runtime, mapping, fixtures and process budgets do not change.
+The first focused run also exposed the earlier centered upward scroll opening Search from a payment row.
+That reveal now uses the existing bounded `reveal_tag_up.yaml` gutter gesture and its Analytics screen guards.
+Focused execution evidence is recorded in FIN-478 and its PR; the original failed attempt remains in history.
+
+
+### FIN-480: preserve the local theme during initial profile synchronization
+
+The profile becomes visible before its initial theme synchronization finishes. An unset preference snapshot
+captured before an explicit Light choice could arrive afterwards and overwrite the choice with the server's
+System theme. `ProfileViewModelTest` holds that snapshot across the real ViewModel/AppPreferences path;
+`AppPreferencesTest` covers server initialization and concurrent choices against the real DataStore.
+Initialization now checks for an absent choice inside the same DataStore edit that writes the default.
+
+The Qase17 native companion keeps its exact label count, the original 10 s wait and both rendered Light/Dark
+pixel checks. On a label timeout it records the last count, current preference, theme-row merged/unmerged
+semantics and bounds, and the two gutter samples. The bounded preference diagnostic is separate from the
+unchanged label wait. Other Profile content is excluded from the diagnostic log. Source, executed checks and
+device-proof limits are recorded in FIN-480 and its PR; the original CI snapshot did not contain the failed
+node count, so its exact UI state cannot be reconstructed.

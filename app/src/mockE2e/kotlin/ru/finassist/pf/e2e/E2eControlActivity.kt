@@ -5,11 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.NonCancellable
@@ -20,7 +16,6 @@ import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.storage.IdempotencyKeys
 import java.security.MessageDigest
-import ru.finassist.pf.core.designsystem.components.pfTestRoot
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.toggles.FlagOverrides
 import ru.finassist.pf.feature.applock.api.AppLock
@@ -84,9 +79,8 @@ import javax.inject.Inject
  * Backend values live until the process dies: set them after `launchApp`.
  *
  * The values are written before the activity shows anything (with `sign_in`, the sign-in finishes first, too); then
- * it shows [TAG_APPLIED] for a moment and finishes. Flows open the link through `.maestro/subflows/config.yaml`,
- * which waits for the tag to come and go: a `launchApp` right after a bare `openLink` could destroy this activity
- * mid-write and drop the remaining values.
+ * it shows [TAG_APPLIED] until the flow explicitly acknowledges it. The existing four-second observation dwell
+ * remains for elapsed-deadline probes; it no longer limits how long Maestro can observe the receipt.
  */
 @AndroidEntryPoint
 class E2eControlActivity : ComponentActivity() {
@@ -122,19 +116,17 @@ class E2eControlActivity : ComponentActivity() {
             session = session,
             startSession = { tokens -> sessionImpl.start(userId = null, tokens = tokens, registered = false) },
             appLock = appLock,
+            prepareFixture = { backend.ready.await() },
         )
         return signIn.signIn(phone = backend.config.existingPhone, passcode = E2E_PASSCODE)
     }
 
     private fun show(unmet: String?) {
+        val canContinue = mutableStateOf(false)
         setContent {
-            if (unmet == null) {
-                Box(Modifier.fillMaxSize().pfTestRoot().testTag(TAG_APPLIED)) { Text("pfe2e: applied") }
-            } else {
-                Box(Modifier.fillMaxSize().pfTestRoot().testTag(TAG_UNMET)) { Text("pfe2e: $unmet") }
-            }
+            E2eControlReceipt(unmet, canContinue.value, onAcknowledge = { finish() })
         }
-        window.decorView.postDelayed({ finish() }, VISIBLE_MS)
+        window.decorView.postDelayed({ canContinue.value = true }, VISIBLE_MS)
     }
 
     /** Applies the values; returns what an `expect_*` check did not find, or null. */
@@ -256,7 +248,7 @@ class E2eControlActivity : ComponentActivity() {
         return "statements.upload:$hash"
     }
 
-    private companion object {
+    internal companion object {
         const val TAG = "PfE2e"
         const val FLAG_PREFIX = "flag."
         const val SIGN_IN = "sign_in"
@@ -267,7 +259,7 @@ class E2eControlActivity : ComponentActivity() {
         const val TAG_APPLIED = "e2e.config.applied"
         /** Shown instead of [TAG_APPLIED] when an `expect_*` check fails. */
         const val TAG_UNMET = "e2e.config.unmet"
-        /** Long enough for Maestro to catch the tag between its hierarchy polls, even on a slow CI emulator. */
+        /** Preserve the observation dwell used by existing elapsed-deadline probes; the receipt then persists. */
         const val VISIBLE_MS = 4000L
     }
 }

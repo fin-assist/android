@@ -68,13 +68,14 @@ tags:
     centerElement: true
 - assertVisible:
     id: "analytics.expense.monthly.point.2026-10"
-# Stop on the actual month, not an assumed distance per gesture. The 400-gesture ceiling allows
-# at least one gesture per covered month (322 months), plus page-boundary settling, and still fails a stuck chart.
+# The initial server page covers 2021-11..2026-10. Reach page 3 so page 0 is evicted,
+# then the reverse journey must exercise the real newer-edge request as well as older paging.
+# The companion covers the exhaustive 2000..2026 traversal, eviction and reverse reloads without hundreds of gestures.
 - repeat:
-    times: 400
+    times: 250
     while:
       notVisible:
-        id: "analytics.expense.monthly.point.2000-01"
+        id: "analytics.expense.monthly.point.2011-10"
     commands:
       - swipe:
           from:
@@ -88,33 +89,32 @@ tags:
     direction: RIGHT
     duration: 300
 - assertVisible:
-    id: "analytics.expense.monthly.point.2000-01"
-# A covered zero is a complete selectable month, even in the earliest page.
+    id: "analytics.expense.monthly.point.2011-10"
+# A covered zero from page 3 is a complete selectable month.
 - tapOn:
-    id: "analytics.expense.monthly.point.2000-01"
+    id: "analytics.expense.monthly.point.2011-10"
 - extendedWaitUntil:
     visible:
-      id: "analytics.expense.monthly.point.2000-01"
+      id: "analytics.expense.monthly.point.2011-10"
       checked: true
     timeout: 10000
 # A clipped picker can be visible while its title is above the viewport.
-- scrollUntilVisible:
-    element:
-      text: "Январь 2000"
-      childOf:
-        id: "ds.period.pick"
-    direction: UP
+- runFlow:
+    file: ../../subflows/reveal_text_up.yaml
+    env:
+      TARGET_TEXT: "Октябрь 2011"
+      PARENT_ID: "ds.period.pick"
 - assertVisible:
-    text: "Январь 2000"
+    text: "Октябрь 2011"
     childOf:
       id: "ds.period.pick"
 - scrollUntilVisible:
     element:
       id: "analytics.block.monthly_chart"
     centerElement: true
-# Reload evicted recent pages in the opposite direction; scrolling does not select another month.
+# Reload the evicted newest page through real reverse gestures without changing the selected period.
 - repeat:
-    times: 400
+    times: 250
     while:
       notVisible:
         id: "analytics.expense.monthly.point.2026-10"
@@ -133,14 +133,13 @@ tags:
 - assertVisible:
     id: "analytics.expense.monthly.point.2026-10"
 # A clipped picker can be visible while its title is above the viewport.
-- scrollUntilVisible:
-    element:
-      text: "Январь 2000"
-      childOf:
-        id: "ds.period.pick"
-    direction: UP
+- runFlow:
+    file: ../../subflows/reveal_text_up.yaml
+    env:
+      TARGET_TEXT: "Октябрь 2011"
+      PARENT_ID: "ds.period.pick"
 - assertVisible:
-    text: "Январь 2000"
+    text: "Октябрь 2011"
     childOf:
       id: "ds.period.pick"
 - scrollUntilVisible:
@@ -155,12 +154,11 @@ tags:
       checked: true
     timeout: 10000
 # A clipped picker can be visible while its title is above the viewport.
-- scrollUntilVisible:
-    element:
-      text: "Октябрь 2026"
-      childOf:
-        id: "ds.period.pick"
-    direction: UP
+- runFlow:
+    file: ../../subflows/reveal_text_up.yaml
+    env:
+      TARGET_TEXT: "Октябрь 2026"
+      PARENT_ID: "ds.period.pick"
 - assertVisible:
     text: "Октябрь 2026"
     childOf:

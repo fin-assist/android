@@ -50,10 +50,10 @@ tags:
       - assertNotVisible: "РБК"
 # UI interactions can consume the ten-response poll budget. Observe its bounded pause explicitly;
 # a ready GET is still forbidden, and the PUT block must remain applied throughout.
-- scrollUntilVisible:
-    element:
-      id: "analytics.recalculating"
-    direction: UP
+- runFlow:
+    file: ../../subflows/reveal_tag_up.yaml
+    env:
+      TARGET_ID: "analytics.recalculating"
 - extendedWaitUntil:
     visible: "Не удалось обновить показатели\\. Показаны данные до изменений"
     timeout: 40000
@@ -130,8 +130,34 @@ tags:
 - extendedWaitUntil:
     visible: "(?s)Не получилось убрать.*"
     timeout: 10000
+# Error notices can clip the retained title while its lower action is already fully visible.
 - scrollUntilVisible:
     element: "Не подписка — РБК"
+# Reveal via the non-clickable gutter; never swipe from a payment row's center.
+- repeat:
+    times: 3
+    while:
+      notVisible:
+        text: "РБК"
+        childOf:
+          id: "analytics.regular_payments.item"
+    commands:
+      - assertVisible:
+          id: "analytics.screen"
+      - swipe:
+          start: "3%, 45%"
+          end: "3%, 55%"
+          duration: 300
+      - assertVisible:
+          id: "analytics.screen"
+- assertVisible:
+    id: "analytics.screen"
+- assertVisible:
+    text: "РБК"
+    childOf:
+      id: "analytics.regular_payments.item"
+- assertNotVisible:
+    id: "ds.refresh.indicator"
 - assertVisible: "РБК"
 - runFlow:
     file: ../../subflows/config.yaml
@@ -146,12 +172,39 @@ tags:
     end: "50%, 65%"
 - scrollUntilVisible:
     element: "Не подписка — РБК"
+# Reveal via the non-clickable gutter; never swipe from a payment row's center.
+- repeat:
+    times: 3
+    while:
+      notVisible:
+        text: "РБК"
+        childOf:
+          id: "analytics.regular_payments.item"
+    commands:
+      - assertVisible:
+          id: "analytics.screen"
+      - swipe:
+          start: "3%, 45%"
+          end: "3%, 55%"
+          duration: 300
+      - assertVisible:
+          id: "analytics.screen"
+- assertVisible:
+    id: "analytics.screen"
+- assertVisible:
+    text: "РБК"
+    childOf:
+      id: "analytics.regular_payments.item"
+- assertNotVisible:
+    id: "ds.refresh.indicator"
 - assertVisible: "РБК"
 - runFlow:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?expect_analytics_dismiss_requests=1"
 # A fresh successful PUT, not a GET, settles the unknown result.
+- scrollUntilVisible:
+    element: "Не подписка — РБК"
 - tapOn: "Не подписка — РБК"
 - extendedWaitUntil:
     notVisible: "Не подписка — РБК"

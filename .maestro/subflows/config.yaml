@@ -1,20 +1,30 @@
 # Opens the e2e control link and waits until it is applied (docs/e2e.md, «Control link»).
-# The control activity writes the values, shows `e2e.config.applied` for a moment and finishes; waiting for the tag
-# to come and go keeps the next step (often `launchApp`) from cutting the writes short.
+# The receipt persists until explicitly acknowledged; a slow driver cannot miss a four-second pulse.
+# The original minimum dwell remains for elapsed-time probes before the continue action is enabled.
+# An unmet receipt is terminal: preserve its diagnostic in the failure instead of waiting for an impossible applied.
 # env: LINK — the whole link, e.g. "pfe2e://config?flag.auth.registration=false".
 #
-# Both timeouts count from `openLink`, not from the start of each wait: Maestro deducts the time since the last
-# interaction (`adjustedToLatestInteraction` in its Orchestra). The tag comes after the values are applied — with
-# `sign_in`, after a sign-in of several seconds — and stays up for 4 s (E2eControlActivity.VISIBLE_MS), so the wait
-# for it to go covers the whole first wait plus those 4 s. With 10 s it ran out mid-way after a sign-in (FIN-180).
+# Cold fixture preparation (60 s) completes before the unchanged sign-in deadline (30 s).
 appId: ru.finassist.pf.mock.e2e
 ---
 - openLink: ${LINK}
 - extendedWaitUntil:
     visible:
-      id: "e2e.config.applied"
-    timeout: 40000
+      id: "e2e.config.applied|e2e.config.unmet"
+    timeout: 100000
+- assertNotVisible:
+    id: "e2e.config.unmet"
+- assertVisible:
+    id: "e2e.config.applied"
+- extendedWaitUntil:
+    visible:
+      id: "e2e.config.continue"
+      enabled: true
+    timeout: 100000
+- tapOn:
+    id: "e2e.config.continue"
+    enabled: true
 - extendedWaitUntil:
     notVisible:
       id: "e2e.config.applied"
-    timeout: 50000
+    timeout: 10000

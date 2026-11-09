@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import signal
 import sys
 import tarfile
@@ -10,7 +11,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location('e2e_cache', Path(__file__).with_name('e2e-cache.py'))
 cache = importlib.util.module_from_spec(spec)
@@ -218,6 +219,45 @@ class CleanAvdCacheTest(unittest.TestCase):
             key.assert_not_called()
             loaded.assert_not_called()
 
+    def test_native_cold_path_has_its_own_budget_and_failure_is_not_snapshot_retried(self):
+        with patch.object(cache, 'STATE', self.root / 'native-state.json'), patch.object(cache, 'assert_clean'), \
+             patch.object(cache, 'run_tests', return_value=7) as run, \
+             patch('sys.argv', ['e2e-cache.py', 'test', '--direct-cold', '--native-only']):
+            cache.write({'marks': {}})
+            with self.assertRaises(SystemExit) as result:
+                cache.main()
+            self.assertEqual(7, result.exception.code)
+            run.assert_called_once_with(None, timeout=600, native_only=True)
+            self.assertIn('tests-finished', cache.state()['marks'])
+            with patch('sys.argv', ['e2e-cache.py', 'fallback']), patch.object(cache, 'wait_stopped'), patch.object(cache, 'output') as out:
+                cache.main()
+                out.assert_called_once_with('needed', 'false')
+
+    def test_workflow_configured_process_budget_reaches_the_actual_suite_coordinator(self):
+        for native in (False, True):
+            arguments = ['e2e-cache.py', 'test', '--direct-cold', '--timeout', '731']
+            arguments += ['--native-only'] if native else ['--shard', '1/5']
+            with self.subTest(native=native), patch.object(cache, 'STATE', self.root / 'budget-state.json'), \
+                 patch.object(cache, 'assert_clean'), patch.object(cache, 'run_tests', return_value=0) as run, \
+                 patch('sys.argv', arguments):
+                cache.write({'marks': {}})
+                with self.assertRaises(SystemExit) as result:
+                    cache.main()
+                self.assertEqual(0, result.exception.code)
+                if native:
+                    run.assert_called_once_with(None, timeout=731, native_only=True)
+                else:
+                    run.assert_called_once_with('1/5', timeout=731)
+
+    def test_nonpositive_or_unbounded_suite_budget_is_rejected_before_device_preparation(self):
+        for budget in ('0', '-1', 'nan', 'inf'):
+            with self.subTest(budget=budget), patch.object(cache, 'assert_clean') as prepare, \
+                 patch('sys.argv', ['e2e-cache.py', 'test', '--direct-cold', '--timeout', budget]):
+                with self.assertRaises(SystemExit) as result:
+                    cache.main()
+                self.assertEqual(2, result.exception.code)
+                prepare.assert_not_called()
+
     def test_preparation_failure_allows_one_cold_attempt(self):
         with patch.object(cache, 'STATE', self.root / 'state.json'), patch.object(cache, 'assert_clean', side_effect=RuntimeError('dirty')), \
              patch('sys.argv', ['e2e-cache.py', 'test', '--shard', '2/4']):
@@ -367,6 +407,70 @@ class CleanAvdCacheTest(unittest.TestCase):
                 cache.fingerprint()
 
 
+class ShardExitBarrierTest(unittest.TestCase):
+    def run_interrupted(self, observations, archive):
+        process = Mock(pid=12345)
+        process.poll.return_value = 0  # The leader has exited while its descendant remains alive.
+        process.wait.side_effect = [subprocess.TimeoutExpired('shard', 1), 0]
+        now = [0.0]
+
+        def sleep(seconds):
+            now[0] += seconds
+
+        with patch.object(cache.subprocess, 'Popen', return_value=process), \
+             patch.object(cache.os, 'killpg'), \
+             patch.object(cache.subprocess, 'run', side_effect=observations) as inspect, \
+             patch.object(cache.time, 'monotonic', side_effect=lambda: now[0]), \
+             patch.object(cache.time, 'sleep', side_effect=sleep), \
+             patch.object(cache, 'archive_maestro_output', side_effect=archive):
+            try:
+                cache.run_tests('1/4', timeout=1, grace=0)
+            finally:
+                self.assertLessEqual(now[0], 5)
+                for call in inspect.call_args_list:
+                    self.assertGreater(call.kwargs['timeout'], 0)
+                    self.assertLessEqual(call.kwargs['timeout'], 5)
+
+    def test_archive_waits_for_descendant_to_leave_d_state(self):
+        states = iter(['12345 D\n67890 R\n', '12345 Zsl\n', '12345 Z\n67890 D\n'])
+        observed = []
+
+        def inspect(*args, **kwargs):
+            observed.append(next(states))
+            return subprocess.CompletedProcess(args[0], 0, observed[-1])
+
+        def archive():
+            self.assertEqual(3, len(observed), 'archive started before the descendant stopped')
+
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_interrupted(inspect, archive)
+
+    def test_persistent_live_descendant_blocks_archive_with_bounded_failure(self):
+        for status in ('D', 'R', 'S', 'Zl', 'Zsl'):
+            with self.subTest(status=status):
+                archive = Mock()
+                with self.assertRaisesRegex(RuntimeError, 'process group'):
+                    self.run_interrupted(lambda *a, **kw: subprocess.CompletedProcess(a[0], 0, f'12345 {status}\n'), archive)
+                archive.assert_not_called()
+
+    def test_absent_group_or_only_zombies_can_be_archived(self):
+        for snapshot in ('', '67890 D\n', '12345 Z\n12345 Z+\n67890 R\n'):
+            with self.subTest(snapshot=snapshot):
+                archive = Mock()
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    self.run_interrupted(lambda *a, **kw: subprocess.CompletedProcess(a[0], 0, snapshot), archive)
+                archive.assert_called_once_with()
+
+    def test_process_inspection_failure_blocks_archive(self):
+        for error in (OSError('ps unavailable'), subprocess.TimeoutExpired('ps', 5),
+                      subprocess.CalledProcessError(1, 'ps')):
+            with self.subTest(error=error):
+                archive = Mock()
+                with self.assertRaises(type(error)):
+                    self.run_interrupted(Mock(side_effect=error), archive)
+                archive.assert_not_called()
+
+
 class ShardProcessTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -381,6 +485,32 @@ class ShardProcessTest(unittest.TestCase):
         path = self.root / 'scripts/e2e.sh'
         path.write_text('#!' + sys.executable + '\n' + body)
         path.chmod(0o755)
+
+    def run_prepared_script(self, shard, timeout=0.5, grace=0.1):
+        """Start the collection deadline after the fake scenario is prepared, not during Python startup."""
+        real_popen = cache.subprocess.Popen
+        children = []
+
+        def start(args, **kwargs):
+            process = real_popen(args, **kwargs)
+            if args[0] == 'scripts/e2e.sh':
+                children.append(process)
+                deadline = time.monotonic() + 5
+                while not Path('scenario.ready').exists() and time.monotonic() < deadline:
+                    self.assertIsNone(process.poll(), 'fake scenario exited before its readiness marker')
+                    time.sleep(0.01)
+                self.assertTrue(Path('scenario.ready').exists(), 'fake scenario did not become ready within 5s')
+            return process
+
+        try:
+            with patch.object(cache.subprocess, 'Popen', side_effect=start):
+                return cache.run_tests(shard, timeout=timeout, grace=grace)
+        finally:
+            # These two fixtures have one fake process and no descendants. Reap it even if the assertion fails.
+            for process in children:
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=2)
 
     def test_timeout_stops_term_resistant_descendant_before_archiving_unsafe_paths(self):
         child = """import os, signal, time
@@ -399,16 +529,30 @@ from pathlib import Path
 folder = Path('build/e2e/maestro/forgot?')
 folder.mkdir(parents=True)
 (folder / 'commands.json').write_text('partial')
+Path('build/e2e/execution.json').write_text('{"schema":1,"phase":"maestro","result":"running","category":null,"exit_code":null,"events":[]}')
 Path('parent.pid').write_text(str(os.getpid()))
 subprocess.Popen([sys.executable, '-c', %r])
 while True: time.sleep(0.02)
 """ % child)
         started = time.monotonic()
         try:
-            with self.assertRaises(subprocess.TimeoutExpired):
-                cache.run_tests('3/4', timeout=1, grace=0.2)
-            self.assertLess(time.monotonic() - started, 4)
+            execution_spec = importlib.util.spec_from_file_location('e2e_execution', Path(cache.__file__).with_name('e2e_execution.py'))
+            execution = importlib.util.module_from_spec(execution_spec)
+            execution_spec.loader.exec_module(execution)
+            coordinator = cache.run_command
+            # Keep this real-process regression short while exercising the command CLI's actual deadline handling.
+            def bounded(command, timeout):
+                return coordinator(command, timeout=timeout, grace=0.2, archive_output=True)
+            with patch.dict(sys.modules, {'e2e_execution': execution}), \
+                 patch.object(cache, 'run_command', side_effect=bounded), self.assertRaises(SystemExit) as result:
+                cache.command_main(['--timeout', '1', '--', 'scripts/e2e.sh'])
+            self.assertEqual(124, result.exception.code)
+            # Include the 5 s post-KILL barrier as well as the 1 s timeout and TERM grace.
+            self.assertLess(time.monotonic() - started, 8)
             self.assertFalse(Path('build/e2e/maestro').exists())
+            receipt = json.loads(Path('build/e2e/execution.json').read_text())
+            self.assertEqual(('budget', 'failed', 124), (receipt['category'], receipt['result'], receipt['exit_code']))
+            self.assertTrue(receipt['budget_expired'])
             with tarfile.open('build/e2e/maestro-output.tgz') as stream:
                 self.assertIn('maestro/forgot?/commands.json', stream.getnames())
                 self.assertEqual(b'termination evidence', stream.extractfile('maestro/forgot?/term?.json').read())
@@ -437,6 +581,96 @@ raise SystemExit(17)
         with tarfile.open('build/e2e/maestro-output.tgz') as stream:
             self.assertEqual(b'failed command', stream.extractfile('maestro/name?/commands.json').read())
 
+    def bash_exit_trap_deadline(self, earlier_failure=False):
+        helper = Path(cache.__file__).with_name('e2e_execution.py').resolve()
+        python = shlex.quote(sys.executable)
+        receipt = python + ' ' + shlex.quote(str(helper))
+        path = self.root / 'scripts/e2e.sh'
+        path.write_text('#!/bin/bash\nset -e\n' + f'''
+receipt() {{ {receipt} "$@"; }}
+finish() {{
+    local code=$?
+    receipt finish "$code"
+    cp build/e2e/execution.json trap-receipt.json
+    printf finished > trap.finished
+    exit "$code"
+}}
+receipt init
+receipt phase maestro
+trap finish EXIT
+mkdir -p 'build/e2e/maestro/current?'
+printf 'current trace' > 'build/e2e/maestro/current?/commands.json'
+''' + ('receipt finish 17\n' if earlier_failure else '') + '''
+bash -c 'printf "%s" "$$" > child.pid; printf ready > scenario.ready; exec sleep 60'
+''')
+        path.chmod(0o755)
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_prepared_script('2/5', timeout=0.3, grace=5)
+        self.assertEqual('finished', Path('trap.finished').read_text(), 'real Bash EXIT trap did not finish')
+        data = json.loads(Path('build/e2e/execution.json').read_text())
+        expected = ('test', 17) if earlier_failure else ('budget', 124)
+        self.assertEqual(expected, (data['category'], data['exit_code']))
+        self.assertEqual(('maestro', 'failed'), (data['phase'], data['result']))
+        self.assertTrue(data['budget_expired'])
+        # The EXIT trap itself must see the deadline, before the post-barrier coordinator annotation.
+        trapped = json.loads(Path('trap-receipt.json').read_text())
+        self.assertEqual(expected, (trapped['category'], trapped['exit_code']))
+        self.assertFalse(Path('build/e2e/maestro').exists())
+        with tarfile.open('build/e2e/maestro-output.tgz') as archive:
+            self.assertEqual(b'current trace', archive.extractfile('maestro/current?/commands.json').read())
+        status = subprocess.run(['ps', '-p', Path('child.pid').read_text(), '-o', 'stat='],
+                                capture_output=True, text=True, timeout=2)
+        self.assertTrue(not status.stdout.strip() or status.stdout.strip().startswith('Z'), status.stdout)
+
+    def test_bash_exit_trap_records_deadline_before_termination_status(self):
+        self.bash_exit_trap_deadline()
+
+    def test_bash_exit_trap_preserves_assertion_recorded_before_deadline(self):
+        self.bash_exit_trap_deadline(earlier_failure=True)
+
+    def test_deadline_during_report_collection_preserves_the_first_assertion_failure(self):
+        self.script("""import json, signal, time
+from pathlib import Path
+# Deliberately exceed the collection deadline during startup: the marker, not wall time, starts the scenario.
+time.sleep(0.6)
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+folder = Path('build/e2e/maestro/failed?')
+folder.mkdir(parents=True)
+(folder / 'commands.json').write_text('assertion failure before collection')
+Path('build/e2e/execution.json').write_text(json.dumps({
+    'phase': 'maestro', 'category': 'test', 'result': 'failed', 'exit_code': 17,
+}))
+Path('scenario.ready').write_text('ready')
+while True: time.sleep(0.02)
+""")
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_prepared_script('2/5')
+        data = json.loads(Path('build/e2e/execution.json').read_text())
+        self.assertEqual(('maestro', 'test', 'failed', 17),
+                         (data['phase'], data['category'], data['result'], data['exit_code']))
+        self.assertTrue(data['budget_expired'])
+        with tarfile.open('build/e2e/maestro-output.tgz') as archive:
+            self.assertEqual(b'assertion failure before collection',
+                             archive.extractfile('maestro/failed?/commands.json').read())
+
+    def test_invalid_receipt_cannot_prevent_preservation_of_timeout_trace(self):
+        self.script("""import signal, time
+from pathlib import Path
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+folder = Path('build/e2e/maestro/failed?')
+folder.mkdir(parents=True)
+(folder / 'commands.json').write_text('partial trace')
+Path('build/e2e/execution.json').write_text('{invalid')
+Path('scenario.ready').write_text('ready')
+while True: time.sleep(0.02)
+""")
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_prepared_script('2/5')
+        self.assertEqual('{invalid', Path('build/e2e/execution.json').read_text())
+        self.assertFalse(Path('build/e2e/maestro').exists())
+        with tarfile.open('build/e2e/maestro-output.tgz') as archive:
+            self.assertEqual(b'partial trace', archive.extractfile('maestro/failed?/commands.json').read())
+
     def test_sigterm_of_coordinator_stops_shard_and_archives_evidence(self):
         self.script("""import os, signal, time
 from pathlib import Path
@@ -457,7 +691,7 @@ while True: time.sleep(0.02)
                 time.sleep(0.01)
             self.assertTrue(Path('parent.pid').exists())
             os.kill(process.pid, signal.SIGTERM)
-            self.assertEqual(143, process.wait(timeout=3))
+            self.assertEqual(143, process.wait(timeout=8))
             self.assertFalse(Path('build/e2e/maestro').exists())
             with tarfile.open('build/e2e/maestro-output.tgz') as stream:
                 self.assertEqual(b'interrupted command', stream.extractfile('maestro/name?/commands.json').read())
@@ -529,6 +763,49 @@ class DisposableCiAdbKeyTest(unittest.TestCase):
 
 
 class CacheWorkflowSafetyTest(unittest.TestCase):
+    def test_native_has_an_independent_cold_device_and_reports_require_every_suite(self):
+        workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
+        native = workflow.split('\n  native:\n', 1)[1].split('\n  components:\n', 1)[0]
+        self.assertIn('test --direct-cold --native-only', native)
+        self.assertNotIn('Install Maestro', native)
+        self.assertNotIn('matrix.shard', native)
+        self.assertIn('timeout-minutes: 25', native)
+        reports = workflow.split('\n  reports:\n', 1)[1]
+        self.assertIn('needs: [shard, native, components]', reports)
+        self.assertIn("needs.native.result != 'success'", reports)
+        self.assertIn("needs.components.result != 'success'", reports)
+        self.assertIn('name: e2e-native', reports)
+        self.assertIn('--native-dir build/e2e-native --jvm-dir build/e2e-components', reports)
+
+    def test_workflow_keeps_ui_postmerge_only_and_caches_only_checksum_addressed_archive(self):
+        workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
+        self.assertNotIn('pull_request:', workflow)
+        self.assertIn('branches: [main]', workflow)
+        self.assertIn('contents: read', workflow)
+        self.assertIn('maestro-archive-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.MAESTRO_VERSION }}-${{ env.MAESTRO_SHA256 }}', workflow)
+        self.assertIn('path: ${{ runner.temp }}/maestro-package', workflow)
+        self.assertNotIn('restore-keys: maestro', workflow)
+        self.assertEqual(2, workflow.count('run-command --timeout 540 -- ./gradlew :app:assembleMockE2e'))
+        self.assertIn('COMPONENT_TEST_SECONDS: 900', workflow)
+        self.assertIn('run-command --timeout "$COMPONENT_TEST_SECONDS" -- ./gradlew :feature:analytics:impl:testDebugUnitTest', workflow)
+        self.assertIn('--jvm-budget-seconds "$COMPONENT_TEST_SECONDS"', workflow)
+        self.assertEqual(3, workflow.count('--shard ${{ matrix.shard }}/${{ env.SHARDS }} --timeout "$MAESTRO_TEST_SECONDS"'))
+        self.assertIn('--native-only --timeout "$NATIVE_TEST_SECONDS"', workflow)
+        self.assertIn('--maestro-budget-seconds "$MAESTRO_TEST_SECONDS"', workflow)
+        self.assertIn('--native-budget-seconds "$NATIVE_TEST_SECONDS"', workflow)
+        self.assertIn('name: e2e-result-attempt-${{ github.run_attempt }}', workflow)
+        self.assertNotIn('timeout --kill-after=10s 900s', workflow)
+
+    def test_shard_upload_excludes_unfinished_raw_output_but_keeps_other_evidence(self):
+        workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
+        upload = next(block for block in workflow.split('      - uses: actions/upload-artifact@v7')
+                      if 'name: e2e-shard-${{ matrix.shard }}' in block)
+        self.assertIn('if: always()', upload)
+        paths = re.search(r'          path: \|\n((?:            .+\n)+)', upload)
+        self.assertIsNotNone(paths, 'upload must retain other reports when raw writers have not stopped')
+        self.assertEqual(['build/e2e/', '!build/e2e/maestro/**'],
+                         [line.strip() for line in paths[1].splitlines()])
+
     def step(self, name):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
         return next(block for block in workflow.split('      - name: ') if block.startswith(name + '\n'))

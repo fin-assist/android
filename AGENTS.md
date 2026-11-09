@@ -57,7 +57,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Tokens, preferences, idempotency keys | `core/storage`; `EncryptedTokenStore` atomically maintains `authSessionEpoch` (new login rotates, refresh retains) |
 | Silent background profile-zone sync (FIN-345) | `feature/profile/impl/…/data/TimeZoneChecker.kt`, `ZoneSyncStateStore.kt`, `BootCounter.kt`; independent durable GET/PATCH advice and boot-bound waits — `docs/errors.md` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md` (mockups: Figma, exported by `design-check/export.py`), `*DesignCheckTest.kt` in feature `:impl` modules |
-| UI tests: Maestro flows, e2e build hooks (sign-in without the screens — `E2eSignIn`), native gaps, shards in CI, Qase; default SDK package cache + fresh cold AVD, opt-in snapshot (`avd_cache`), SDK-only experiment (`sdk_benchmark`) | `docs/e2e.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/e2e-shards.py`, `scripts/qase-*`; `scripts/e2e-sdk-cache.py`, `scripts/e2e-cache.py`, `scripts/sdk-preparation-benchmark.py` |
+| UI tests: Maestro shards, independent native suite, deterministic JVM companions, strict result inventory and Qase; compact attempt result; mockE2e control receipts; SDK package cache + fresh cold AVD, opt-in snapshot | `docs/e2e.md`, `docs/ui-test-reliability.md`, `docs/ui-test-result.md`; `.maestro/`, `app/src/mockE2e/`, `app/src/androidTestMock/`, `scripts/e2e-*`, `scripts/qase-*`; `docs/qa/fin473-pilot-coverage.md` |
 | Bounded local adb/Maestro transport comparison on an owned disposable AVD (FIN-390) | `docs/adb-transport.md`; `scripts/adb-transport.py` (fixed diagnostic repetitions, explicit serial/AVD, private evidence; no product-result retries or server mutations) |
 | Read-only live SSE 429 marker, mockE2e only (FIN-380) | `app/src/mockE2e/…/E2eStreamProbe.kt`; wait for `e2e.stream.rate_limited=1` before opening a control link or checking absence of errors; `docs/e2e.md` |
 | Multiplatform readiness of `:core:api` and `:mock:backend`: rule, JVM-only inventory, check | `docs/kmp-readiness.md`; `scripts/check-kmp-ready.py`, `scripts/kmp-baseline.json` |
@@ -201,7 +201,8 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally (all flows and the native
   tests; `--shard i/n` runs one CI shard), the `UI tests` workflow in CI (after a merge to `main`, or started by hand
   for a branch; PRs never run them by themselves). CI splits the flows between five emulators
-  (`scripts/e2e-shards.py`, durations in `scripts/e2e-durations.json`) and merges their reports (docs/e2e.md).
+  (`scripts/e2e-shards.py`, durations in `scripts/e2e-durations.json`), runs native tests in an independent
+  emulator job and collects the targeted JVM companions before validating all results (docs/ui-test-reliability.md).
   Their coverage: `./gradlew :e2eCoverageReport` after a run, then
   `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml`; the scenario part
   (`python3 scripts/ui-coverage.py summary`) needs no device (docs/testing.md).
@@ -390,6 +391,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   existing screen (the design check covers them), logic without UI (unit tests), a refactoring that keeps behaviour.
   - Maestro by default: extend the feature's flow or add one under `.maestro/flows/<feature>/`. A native test in
     `app/src/androidTestMock` only for what Maestro cannot drive (system pickers, intents, permissions).
+    FIN-473's approved Qase82/83/89 pilot also uses mandatory JVM Compose companions for exhaustive state/paging
+    combinations while retaining the real end-to-end boundaries. Preserve its assertion map and both components;
+    this exception does not permit dropping UI coverage or replacing unrelated journeys with state-only tests.
   - Tag the root, the controls and the checked states (`<feature>.<screen>[.<element>]`, shared components `ds.*`).
     Renaming a tag means updating `.maestro/`.
   - Qase semantic parity evidence lives in `docs/qa/qase-parity/`: preserve the audited source text, account
@@ -400,14 +404,17 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
     Maestro calendar/input coverage and a native no-browser-on-error check. Their reported result is the worst
     component result. Do not add another duplicate map ID without explaining its components.
     A pass requires all mapped components in the report; a partial pass is Skipped with missing components named.
+    FIN-473 adds `jvm:Class#method` companion keys for Qase82/83/89 to the same map and validates exact native,
+    JVM and Maestro inventories. Missing/skipped/duplicate/unknown results cannot establish full acceptance.
   - A new or renamed test also updates its Qase case, `scripts/qase-cases.json` and the coverage table in
     docs/e2e.md («Qase», «Coverage»).
   - Not automatable on the emulator (biometrics, real speech/audio integration, a bug that does not reproduce there): add it to «Not
     covered yet» in docs/e2e.md and say so in the PR. The reason must be technical — what the emulator or the mock
     cannot do — not the effort.
-  - CI runs UI tests after the merge to `main`, never on a PR by itself: a new or changed flow is first run there,
-    unless it was run locally with `scripts/e2e.sh` or the owner started the `UI tests` workflow for the branch by
-    hand. Say in the PR whether the flows were run and how.
+  - CI runs emulator UI tests after the merge to `main`, never on a PR by itself. New UI tests must pass locally
+    before the PR. FIN-473 also requires focused local execution of changed pilot flows and representative
+    journeys affected by its shared helpers; record the selection and results. Other existing-flow local runs
+    and manual `UI tests` dispatch still need the applicable owner authorization. No e2e label on a PR.
 - Document in moderation: KDoc on public `:api` interfaces, comments where logic is non-obvious
   (accounting rules, idempotency, animation), not on every method.
 

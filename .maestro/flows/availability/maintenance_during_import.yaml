@@ -62,7 +62,9 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?maintenance=off&stream_rate_limits=0"
+      # Select the probe-entry-first interleaving: another successful request may otherwise legitimately reopen
+      # the gate first and cancel the probe. This mock-only response barrier sends no request of its own.
+      LINK: "pfe2e://config?maintenance=off&stream_rate_limits=0&consent_type=personal_data&consent_stream_recovery_reads=2"
 - extendedWaitUntil:
     notVisible:
       id: "availability.maintenance"

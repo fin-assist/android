@@ -1,0 +1,26 @@
+# Analytics-only upward reveal (currently Qase82); env: TARGET_ID.
+# The centered default gesture can activate an expense row on a busy emulator (FIN-473).
+# The screen's verticalScroll encloses its horizontal padding; x=3% is inside that scroll
+# surface but outside clickable cards/rows. A bounded loop never navigates to recover a miss.
+appId: ru.finassist.pf.mock.e2e
+---
+- assertVisible:
+    id: "analytics.screen"
+- repeat:
+    times: 15
+    while:
+      notVisible:
+        id: ${TARGET_ID}
+    commands:
+      - assertVisible:
+          id: "analytics.screen"
+      - swipe:
+          start: "3%, 35%"
+          end: "3%, 60%"
+          duration: 300
+      - assertVisible:
+          id: "analytics.screen"
+- assertVisible:
+    id: ${TARGET_ID}
+- assertNotVisible:
+    id: "ds.refresh.indicator"

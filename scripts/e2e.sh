@@ -6,9 +6,10 @@
 #   scripts/e2e.sh                       # everything
 #   scripts/e2e.sh --tags smoke          # only Maestro flows tagged `smoke` (no native tests)
 #   scripts/e2e.sh --flow .maestro/flows/auth/register_new_user.yaml   # --flow may be repeated
-#   scripts/e2e.sh --shard 2/4           # one shard of the flows (scripts/e2e-shards.py); native tests in 1/n only
+#   scripts/e2e.sh --shard 2/5           # one Maestro shard; native suite runs separately in CI
 #   scripts/e2e.sh --no-build            # reuse the APK built last time
 #   scripts/e2e.sh --no-native           # skip the instrumented tests
+#   scripts/e2e.sh --native-only         # native suite only, no Maestro installation or flow preflight
 #
 # Needs: adb with one device attached, Maestro on PATH (https://maestro.dev), JDK 21 for Gradle.
 # Reports: build/e2e/ (JUnit XML, Maestro screenshots and logs of failed flows, JaCoCo execution data of the
@@ -29,6 +30,7 @@ FLOWS=()
 SHARD=""
 BUILD=1
 NATIVE=1
+NATIVE_ONLY=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --tags) TAGS="$2"; NATIVE=0; shift 2 ;;
@@ -36,18 +38,40 @@ while [[ $# -gt 0 ]]; do
         --shard) SHARD="$2"; shift 2 ;;
         --no-build) BUILD=0; shift ;;
         --no-native) NATIVE=0; shift ;;
+        --native-only) NATIVE_ONLY=1; shift ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
 
 log() { printf '[e2e] %s\n' "$*"; }
+mkdir -p "$OUT"
+receipt() { python3 "$ROOT/scripts/e2e_execution.py" "$@"; }
+if [[ "${GITHUB_ACTIONS:-}" != true || ! -f "$OUT/execution.json" ]]; then receipt init; fi
+finish() {
+    local code=$?
+    receipt finish "$code"
+    adb shell settings put global hide_error_dialogs 0 >/dev/null 2>&1 || true
+}
+trap finish EXIT
+# A local checkout can retain outputs from an earlier attempt. Clear test payload before any setup can fail,
+# while retaining this CI job's execution receipt and its SDK/AVD preparation telemetry. Never remove APKs.
+rm -rf "$OUT/maestro" "$OUT/maestro-log" "$OUT/shots" "$OUT/maestro-output.tgz" "$OUT/maestro-output.tmp" \
+    "$OUT/maestro-report.xml" "$OUT/native-report.xml" "$OUT/jvm-report.xml" "$OUT/preflight-ui.xml" \
+    "$OUT/preflight.png" "$OUT/logcat.txt" "$OUT/coverage" "$OUT/native" "$OUT/native-coverage" \
+    "$OUT/native-report" "$OUT/expected-tests.json" "$OUT/execution-status.json" "$OUT/qase-delivery.json" \
+    "$ROOT/app/build/outputs/androidTest-results" "$ROOT/app/build/outputs/code_coverage" \
+    "$ROOT/app/build/reports/androidTests" "$ROOT/build/reports/e2e-coverage"
+receipt phase setup
 
-if [[ -n "$SHARD" ]]; then
+if [[ "$NATIVE_ONLY" == 1 ]]; then
+    [[ -z "$SHARD" && -z "$TAGS" && ${#FLOWS[@]} -eq 0 && "$NATIVE" == 1 ]] || { log "--native-only cannot combine with flow/shard/tags/no-native"; exit 2; }
+elif [[ -n "$SHARD" ]]; then
     [[ ${#FLOWS[@]} -eq 0 ]] || { log "--shard and --flow do not combine"; exit 2; }
     # The split is deterministic (durations in scripts/e2e-durations.json): every job computes the same shards.
     shard_flows="$(python3 "$ROOT/scripts/e2e-shards.py" list --shard "$SHARD")" || { log "bad --shard $SHARD"; exit 2; }
     mapfile -t FLOWS <<< "$shard_flows"
-    [[ "${SHARD%%/*}" == 1 ]] || NATIVE=0
+    # CI native has its own fresh device and deadline; a shard always contains Maestro only.
+    NATIVE=0
     if [[ ${#FLOWS[@]} -eq 0 || -z "${FLOWS[0]}" ]]; then
         log "shard $SHARD has no flows"
         FLOWS=()
@@ -60,7 +84,10 @@ elif [[ ${#FLOWS[@]} -eq 0 ]]; then
 fi
 
 command -v adb >/dev/null || { log "adb is not on PATH"; exit 1; }
-command -v maestro >/dev/null || { log "maestro is not on PATH: curl -Ls https://get.maestro.mobile.dev | bash"; exit 1; }
+if [[ "$NATIVE_ONLY" == 0 ]]; then
+    command -v maestro >/dev/null || { log "maestro is not on PATH: use scripts/install-maestro.sh"; exit 1; }
+fi
+receipt phase device
 [[ "$(adb devices | grep -c -w device)" -ge 1 ]] || { log "no device attached (adb devices)"; exit 1; }
 
 # The flows assume Moscow time: periods and «today» are computed in the device zone.
@@ -69,30 +96,30 @@ if [[ "$(adb shell getprop persist.sys.timezone | tr -d '\r')" != "Europe/Moscow
 fi
 
 if [[ "$BUILD" == 1 ]]; then
+    receipt phase setup
     log "building the mock e2e APK"
     (cd "$ROOT" && ./gradlew :app:assembleMockE2e --console=plain)
 fi
+receipt identity
+receipt phase device
 
 log "installing $APP_ID"
 adb install -r -t "$APK" >/dev/null
 
-mkdir -p "$OUT"
 adb logcat -c || true
 # Execution data of an earlier run must not count: the device folder is pulled whole after the flows, and
 # :e2eCoverageReport reads every .ec AGP left from the native tests — of this run only.
 adb shell rm -rf "$DEVICE_COVERAGE" >/dev/null 2>&1 || true
-rm -rf "$OUT/coverage" "$OUT/native" "$OUT/native-coverage" "$OUT/native-report" "$OUT/maestro-report.xml" \
-    "$ROOT/app/build/outputs/code_coverage" "$ROOT/build/reports/e2e-coverage"
 
 # A freshly booted CI emulator often shows «Pixel Launcher isn't responding». The dialog takes window focus
 # from the app under test, so every flow and the Espresso test fail. Hide system error dialogs for the run.
 adb shell settings put global hide_error_dialogs 1 || true
-# Restored on exit: on a developer's own device the setting must not stay behind.
-trap 'adb shell settings put global hide_error_dialogs 0 >/dev/null 2>&1 || true' EXIT
+# Restored by finish(): on a developer's own device the setting must not stay behind.
 adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
 
 # Preflight: cold start and dump the UI hierarchy. If test tags do not show up as resource-id here, every
 # flow would fail on its first step — the dump says why in one file instead of eighteen failures.
+if [[ "$NATIVE_ONLY" == 0 ]]; then
 preflight_ok=0
 for attempt in 1 2 3; do
     adb shell am force-stop "$APP_ID"
@@ -130,8 +157,11 @@ maestro_args=(test "${FLOWS[@]}" --format junit --output "$OUT/maestro-report.xm
 log "maestro ${maestro_args[*]}"
 status=0
 if [[ ${#FLOWS[@]} -gt 0 ]]; then
+    receipt phase maestro
     (cd "$OUT/shots" && maestro "${maestro_args[@]}") || status=$?
+    [[ "$status" == 0 ]] || receipt finish "$status"
 fi
+receipt phase reporting
 adb logcat -d > "$OUT/logcat.txt" 2>/dev/null || true
 # JaCoCo execution data of every app process the flows started; `collect` keeps the newest complete file of each.
 # Never fails the run: coverage is a number next to the results, not a result.
@@ -145,13 +175,21 @@ fi
 if [[ -d "$OUT/maestro" ]]; then
     tar -czf "$OUT/maestro-output.tgz" -C "$OUT" maestro && rm -rf "$OUT/maestro"
 fi
+else
+    status=0
+fi
 
 if [[ "$NATIVE" == 1 ]]; then
+    receipt phase native
     log "native instrumented tests (mock e2e build)"
     # The first failure decides the exit code: the Maestro status is kept if both fail.
     native=0
     (cd "$ROOT" && ./gradlew :app:connectedMockE2eAndroidTest --console=plain) || native=$?
+    [[ "$native" == 0 ]] || receipt finish "$native"
+    # A fresh local run builds the test APK in the connected task; capture it even after a partial/failed suite.
+    receipt identity
     [[ "$status" == 0 ]] && status=$native
+    receipt phase reporting
     cp -r "$ROOT/app/build/outputs/androidTest-results" "$OUT/native" 2>/dev/null || true
     # Execution data of the native tests: kept with the reports, so a shard's artifact carries it (e2e-shards.py gather).
     cp -r "$ROOT/app/build/outputs/code_coverage" "$OUT/native-coverage" 2>/dev/null || true
