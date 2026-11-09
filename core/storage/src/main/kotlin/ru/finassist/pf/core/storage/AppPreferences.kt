@@ -26,6 +26,11 @@ class AppPreferences @Inject constructor(private val dataStore: DataStore<Prefer
         dataStore.edit { it[KEY_THEME] = theme }
     }
 
+    /** Adopt a server default only if no local choice exists, within the same edit transaction. */
+    suspend fun initializeTheme(theme: String) {
+        dataStore.edit { prefs -> if (prefs[KEY_THEME] == null) prefs[KEY_THEME] = theme }
+    }
+
     /** Random UUID generated on first access; survives sign-out, not reinstall. */
     suspend fun deviceId(): String {
         val existing = dataStore.data.first()[KEY_DEVICE_ID]

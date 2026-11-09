@@ -807,7 +807,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `statements/download_period` (mock-only) | inclusive calendar selection, invalid/reversed/future bounds, network failure retains dates and offers explicit retry; Qase84 (FIN-416); updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `StatementPickerTest#opensTheServerUrlForSelectedInclusiveDates` | exact server download URL handed to browser for 1–30 September; native Espresso-Intents because Maestro cannot inspect destination; Qase85; authored, not executed |
 | `StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser` | actual MainActivity calendar, retained 1–8 October after offline preparation, enabled Retry and no ACTION_VIEW; native companion to the Maestro Qase84 flow; authored, not executed |
-| `ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette` | actual MainActivity Profile, explicit Light then Dark choices, rendered gutter pixels match independent light/dark palette values; Qase17 native companion; Qase98 Failed while finding Light label; stable-row scroll + bounded exact-label wait passed with the Maestro companion in Qase100; first local failures preserved in Qase99 |
+| `ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette` | actual MainActivity Profile, explicit Light then Dark choices, rendered gutter pixels match independent light/dark palette values; Qase17 native companion; Qase98 Failed while finding Light label; stable-row scroll + bounded exact-label wait passed with the Maestro companion in Qase100; first local failures preserved in Qase99; FIN-480 retains both pixel checks and the exact-label oracle, adds theme-scoped timeout evidence and an atomic initialization regression |
 | `operations/source_time_zone` (mock-only) | unsupported IANA metadata above verified feed/search cache; stale notice and explicit supported recovery; Qase86; updated for FIN-427 after failed run 41819133288; follow-up not executed |
 | `statements/source_time_zone` (mock-only) | unsupported import config and complete result; explicit supported recovery; Qase87; authored, not executed |
 | `statements/upload_history_period` | statement period wider than operations → 1–30 September; no DTSTART/DTEND → operation day; empty file without a period → empty result, system Back → Operations, Profile → upload history → count without a date label (FIN-198, FIN-209) |
@@ -1769,3 +1769,19 @@ exact dismiss request guards1/2 remain in order; runtime, mapping, fixtures and 
 The first focused run also exposed the earlier centered upward scroll opening Search from a payment row.
 That reveal now uses the existing bounded `reveal_tag_up.yaml` gutter gesture and its Analytics screen guards.
 Focused execution evidence is recorded in FIN-478 and its PR; the original failed attempt remains in history.
+
+
+### FIN-480: preserve the local theme during initial profile synchronization
+
+The profile becomes visible before its initial theme synchronization finishes. An unset preference snapshot
+captured before an explicit Light choice could arrive afterwards and overwrite the choice with the server's
+System theme. `ProfileViewModelTest` holds that snapshot across the real ViewModel/AppPreferences path;
+`AppPreferencesTest` covers server initialization and concurrent choices against the real DataStore.
+Initialization now checks for an absent choice inside the same DataStore edit that writes the default.
+
+The Qase17 native companion keeps its exact label count, the original 10 s wait and both rendered Light/Dark
+pixel checks. On a label timeout it records the last count, current preference, theme-row merged/unmerged
+semantics and bounds, and the two gutter samples. The bounded preference diagnostic is separate from the
+unchanged label wait. Other Profile content is excluded from the diagnostic log. Source, executed checks and
+device-proof limits are recorded in FIN-480 and its PR; the original CI snapshot did not contain the failed
+node count, so its exact UI state cannot be reconstructed.

@@ -1,5 +1,7 @@
 package ru.finassist.pf
 
+import android.util.Log
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -14,7 +16,11 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.printToString
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -45,7 +51,34 @@ class ProfileThemePaletteTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodesWithTag(option).fetchSemanticsNodes().isEmpty() }
         // Reveal the stable row before querying its value; sheet closure precedes preference publication.
         compose.onNodeWithTag("profile.theme").performScrollTo()
-        compose.waitUntil(WAIT_MS) { compose.onAllNodesWithText(label).fetchSemanticsNodes().size == 1 }
+        var lastCount = -1
+        try {
+            compose.waitUntil(WAIT_MS) {
+                compose.onAllNodesWithText(label).fetchSemanticsNodes().size.also { lastCount = it } == 1
+            }
+        } catch (failure: ComposeTimeoutException) {
+            // Only the theme row is logged: the rest of Profile contains personal information.
+            val diagnostics = buildString {
+                append("theme=$value label=$label lastMergedCount=$lastCount")
+                append(" preference=" + runCatching {
+                    runBlocking { withTimeout(1000) { compose.activity.preferences.theme.first() } }
+                }.fold({ it }, { it.javaClass.simpleName }))
+                for (unmerged in listOf(false, true)) {
+                    append("\n" + runCatching {
+                        val count = compose.onAllNodesWithText(label, useUnmergedTree = unmerged).fetchSemanticsNodes().size
+                        val rows = compose.onAllNodesWithTag("profile.theme", useUnmergedTree = unmerged)
+                        val nodes = rows.fetchSemanticsNodes()
+                        "unmerged=$unmerged labelCount=$count themeRows=${nodes.size} " +
+                            nodes.map { it.boundsInRoot }.toString() +
+                            if (nodes.size == 1) "\n" + rows[0].printToString() else ""
+                    }.getOrElse { "diagnostics unavailable: ${it.javaClass.simpleName}" })
+                }
+                append("\nprofileGutter=" + runCatching { profileBackground() }
+                    .fold({ it.toString() }, { it.javaClass.simpleName }))
+            }
+            Log.e("PfTestTheme", diagnostics)
+            throw AssertionError("Theme label count did not reach one within $WAIT_MS ms; $diagnostics", failure)
+        }
         compose.onNodeWithText(label).performScrollTo().assertIsDisplayed()
     }
 

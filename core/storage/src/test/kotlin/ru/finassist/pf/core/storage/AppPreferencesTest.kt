@@ -10,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -47,6 +48,36 @@ class AppPreferencesTest {
             prefs.setTheme("system")
             assertEquals("system", awaitItem())
         }
+    }
+
+    @Test
+    fun `server theme initializes only an absent preference`() = runBlocking {
+        val prefs = AppPreferences(dataStore)
+        assertNull(prefs.theme.first())
+
+        prefs.initializeTheme("system")
+        assertEquals("system", prefs.theme.first())
+        prefs.initializeTheme("dark")
+        assertEquals("system", prefs.theme.first())
+
+        prefs.setTheme("light")
+        prefs.initializeTheme("dark")
+        assertEquals("light", prefs.theme.first())
+        prefs.setTheme("dark")
+        prefs.initializeTheme("system")
+        assertEquals("dark", prefs.theme.first())
+    }
+
+    @Test
+    fun `concurrent server initialization cannot replace an explicit theme choice`() = runBlocking {
+        val prefs = AppPreferences(dataStore)
+        listOf(
+            async(Dispatchers.IO) { prefs.initializeTheme("system") },
+            async(Dispatchers.IO) { prefs.setTheme("light") },
+            async(Dispatchers.IO) { prefs.initializeTheme("dark") },
+        ).awaitAll()
+
+        assertEquals("light", prefs.theme.first())
     }
 
     @Test

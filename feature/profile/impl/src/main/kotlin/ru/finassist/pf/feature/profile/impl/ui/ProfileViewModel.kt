@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.api.AssistantApi
@@ -264,7 +263,7 @@ class ProfileViewModel @Inject constructor(
      * have changed on the server since the start of the process.
      */
     private suspend fun syncFromServer(p: Profile, origin: TimeZoneChecker.Observation?) {
-        if (preferences.theme.first() == null) preferences.setTheme(p.theme.name.lowercase())
+        preferences.initializeTheme(p.theme.name.lowercase())
         zoneChecker.observed(p, origin)
     }
 

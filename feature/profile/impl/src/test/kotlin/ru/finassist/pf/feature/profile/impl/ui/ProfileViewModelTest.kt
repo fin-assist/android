@@ -1,6 +1,9 @@
 package ru.finassist.pf.feature.profile.impl.ui
 
 import androidx.lifecycle.SavedStateHandle
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.emptyPreferences
 import kotlinx.coroutines.launch
 import ru.finassist.pf.feature.assistant.api.AssistantRoutes
 import ru.finassist.pf.feature.profile.impl.di.collectAssistantConsentResults
@@ -14,6 +17,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -80,7 +87,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * [AppPreferences] is a final class, so the tests use a real one over a temp-file DataStore.
+ * The real [AppPreferences] uses a temp-file DataStore, with controlled snapshot delivery for the race regression.
  * The device time zone is pinned to Moscow, so a profile in another zone differs from the device.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -236,7 +243,7 @@ class ProfileViewModelTest {
         TimeZoneChecker(profileApi, session, tempPendingStore(session), FakeClock(), FakeDeviceZone(MOSCOW), reportZone, tempKnownStore(session), tempZoneSyncStore(session), { 0L }, { 1 })
     }
 
-    private fun vm() = ProfileViewModel(profileApi, statementsApi, assistant, preferences, session, statements, flags, tracker, appLock, zoneChecker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
+    private fun vm(preferences: AppPreferences = this.preferences) = ProfileViewModel(profileApi, statementsApi, assistant, preferences, session, statements, flags, tracker, appLock, zoneChecker, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
 
     private fun loaded() = vm().apply { load() }
 
@@ -529,6 +536,48 @@ class ProfileViewModelTest {
         val vm = loaded()
         assertEquals("light", localTheme())
         assertEquals(Theme.LIGHT, vm.state.value.theme)
+    }
+
+    @Test fun `a delayed initial preference snapshot cannot overwrite an explicit theme choice`() {
+        val store = DelayedSnapshotDataStore()
+        val preferences = AppPreferences(store)
+        val vm = vm(preferences)
+        profileApi.profile = profile(theme = Theme.SYSTEM)
+        // The profile is published before initial theme synchronization observes its first snapshot.
+        store.holdNextSnapshot = true
+        vm.load()
+        store.holdNextSnapshot = false
+        assertEquals(profileApi.profile, vm.state.value.profile)
+        vm.setTheme(Theme.LIGHT)
+        assertEquals(Theme.LIGHT, vm.state.value.theme)
+        println("initial theme snapshot held=${store.snapshotCaptured.isCompleted}")
+        store.releaseSnapshot.complete(Unit)
+        println("preference commits=${store.commits.map { it.asMap() }}")
+        assertEquals("light", runBlocking { preferences.theme.first() }, "late initialization must preserve the explicit local choice")
+        assertEquals(Theme.LIGHT, vm.state.value.theme)
+    }
+
+    /** Captures a valid read snapshot, then delays its delivery while a separate writer commits. */
+    private class DelayedSnapshotDataStore : DataStore<Preferences> {
+        private val values = MutableStateFlow<Preferences>(emptyPreferences())
+        private val writes = Mutex()
+        val commits = mutableListOf<Preferences>()
+        var holdNextSnapshot = false
+        val snapshotCaptured = CompletableDeferred<Unit>()
+        val releaseSnapshot = CompletableDeferred<Unit>()
+        override val data: Flow<Preferences> = flow {
+            val snapshot = values.value
+            if (holdNextSnapshot) {
+                holdNextSnapshot = false
+                snapshotCaptured.complete(Unit)
+                releaseSnapshot.await()
+            }
+            emit(snapshot)
+            emitAll(values)
+        }
+        override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences = writes.withLock {
+            transform(values.value).also { values.value = it; commits += it }
+        }
     }
 
     @Test fun `an unknown local theme is the system one`() {
