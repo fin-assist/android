@@ -9,10 +9,12 @@ checks what:
 | Design check (Robolectric + Roborazzi) | how a screen, state, sheet or dialog looks next to its mockup | `*DesignCheckTest` in feature `:impl` | by hand, `-Ppf.designcheck` (design-check/README.md) |
 | Maestro | user scenarios end to end on the mock build | `.maestro/flows/<feature>/` | emulator; CI only after merges to `main` (docs/e2e.md) |
 | Native instrumented | what Maestro cannot drive: system dialogs, intents, permissions | `app/src/androidTestMock/` | same as Maestro |
-| JVM UI companions (FIN-473 pilot) | exhaustive Qase82/83/89 states and paging through real AnalyticsContent/ViewModel | `AnalyticsReliabilityComponentTest` | ordinary JVM PR tests; targeted post-merge component job also supplies the full UI/Qase verdict |
+| JVM UI companions (FIN-473 pilot) | Qase73/82/83/89 state/race combinations and paging through real AnalyticsContent/ViewModel | `AnalyticsReliabilityComponentTest` | ordinary JVM PR tests; targeted post-merge component job also supplies the full UI/Qase verdict |
 
 Maestro, native and targeted JVM companions have independent post-merge execution budgets and strict combined
-result completeness. See [UI reliability](ui-test-reliability.md) and the [pilot obligation map](qa/fin473-pilot-coverage.md).
+result completeness. See [UI reliability](ui-test-reliability.md), the [pilot obligation map](qa/fin473-pilot-coverage.md)
+and the [additional Qase73 coverage](qa/fin473-next-slice-qase73.md). Qase73 keeps its full Maestro flow alongside
+the additional required companion (FIN-482); no original oracle or execution timeout is removed.
 
 What a change needs:
 

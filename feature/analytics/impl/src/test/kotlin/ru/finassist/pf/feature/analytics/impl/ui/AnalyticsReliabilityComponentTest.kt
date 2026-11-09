@@ -10,6 +10,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -69,7 +72,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Qase82/89 connect the real screen to its ViewModel; Qase83 combines VM paging and a catalog chart component.
+ * Qase73/82/89 connect the real screen to its ViewModel; Qase83 combines VM paging and a catalog chart component.
  * Explicit replies and virtual polling time keep these obligations independent from emulator gesture timing.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -89,6 +92,135 @@ class AnalyticsReliabilityComponentTest {
     @After fun tearDown() {
         stores.forEach(ViewModelStore::clear)
         Dispatchers.resetMain()
+    }
+
+    @Test fun qase73PeriodRetryAndDeferredRefusal() {
+        val september = analyticsFixture("september")
+        val year = analyticsFixture("year_2026")
+        val expectedWrite = DismissRequest("r1", PeriodKey("2026-09"), TransferMode.WITH)
+        val yearTarget = ReadRequest(PeriodTypeCode.YEAR, PeriodKey("2026-09"), TransferMode.WITH)
+        val api = FakeApi(september)
+        var active by mutableStateOf(opened(api))
+        render { active }
+        periodLabel("Сентябрь 2026").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("ds.segment.0").assertIsOn()
+        compose.onNodeWithTag("analytics.block.tiles").performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { api.read = { _, _, _ -> throw AppError.Offline() } }
+        compose.onNodeWithTag("ds.segment.2").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Не удалось сменить период", substring = true).assertIsDisplayed()
+        compose.onNodeWithTag("analytics.period.retry").assertIsDisplayed().assertIsEnabled()
+        periodLabel("Сентябрь 2026").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("ds.segment.0").assertIsOn()
+        compose.onNodeWithTag("analytics.block.tiles").performScrollTo().assertIsDisplayed()
+        val periodFailure = compose.runOnIdle {
+            assertEquals(september, active.state.value.data, "keep the whole response, including money and source-zone ranges")
+            assertEquals(2, api.reads)
+            assertEquals(yearTarget, api.readRequests.last(), "the failed request keeps the finer September anchor")
+            api.mutate = { throw knownRefusal() }
+            assertNotNull(active.state.value.periodChangeErrorPresentation)
+        }
+        compose.onNodeWithContentDescription("Не подписка — Спортзал").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText(REFUSAL_MESSAGE).assertIsDisplayed()
+        compose.onNodeWithText("Не удалось сменить период", substring = true).assertIsDisplayed()
+        compose.onNodeWithTag("analytics.period.retry").assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithContentDescription("Не подписка — Спортзал").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("analytics.unknown_mutation").assertDoesNotExist()
+        val failedRequests = compose.runOnIdle {
+            assertEquals(september, active.state.value.data)
+            assertEquals(periodFailure, active.state.value.periodChangeErrorPresentation)
+            assertEquals(listOf(expectedWrite), api.dismissRequests, "count API entry before the known refusal throws")
+            active.onResume(null)
+            api.readRequests.toList()
+        }
+        advance(30_000)
+        compose.runOnIdle {
+            assertEquals(2, api.reads, "resume after both failures cannot submit a hidden GET")
+            assertEquals(failedRequests, api.readRequests)
+            assertEquals(listOf(expectedWrite), api.dismissRequests, "resume cannot replay the PUT")
+            assertEquals(september, active.state.value.data)
+            assertEquals(periodFailure, active.state.value.periodChangeErrorPresentation)
+            api.read = { type, _, _ -> if (type == PeriodTypeCode.YEAR) year else september }
+        }
+        compose.onNodeWithText(REFUSAL_MESSAGE).assertIsDisplayed()
+        compose.onNodeWithTag("analytics.period.retry").performClick()
+        periodLabel("2026").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("ds.segment.2").assertIsOn()
+        compose.onNodeWithTag("analytics.period.retry").assertDoesNotExist()
+        compose.onNodeWithTag("ds.error.error").assertDoesNotExist()
+        compose.onNodeWithText(REFUSAL_MESSAGE).assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(failedRequests + yearTarget, api.readRequests, "the actual period retry must resend the exact failed triple")
+            assertEquals(year, active.state.value.data)
+            assertEquals(listOf(expectedWrite), api.dismissRequests)
+        }
+        compose.onNodeWithTag("ds.segment.0").performClick()
+        periodLabel("Сентябрь 2026").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("ds.segment.0").assertIsOn()
+        compose.runOnIdle {
+            assertEquals(september, active.state.value.data)
+            assertEquals(failedRequests + listOf(yearTarget, ReadRequest(PeriodTypeCode.MONTH, PeriodKey("2026-09"), TransferMode.WITH)), api.readRequests)
+            assertEquals(listOf(expectedWrite), api.dismissRequests)
+        }
+
+        // Independent command/selection phase: real UI callbacks, with replies held at the API boundary.
+        val deferredApi = FakeApi(september)
+        val heldWrite = CompletableDeferred<AnalyticsBlockUpdate>()
+        val heldYear = CompletableDeferred<Analytics>()
+        compose.runOnIdle {
+            active = opened(deferredApi)
+            deferredApi.mutate = { heldWrite.await() }
+            deferredApi.read = { _, _, _ -> heldYear.await() }
+        }
+        compose.onNodeWithContentDescription("Не подписка — Спортзал").performScrollTo().assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            assertEquals(september, active.state.value.data)
+            assertEquals(listOf(expectedWrite), deferredApi.dismissRequests)
+            assertEquals(1, deferredApi.reads)
+        }
+        compose.onNodeWithText(REFUSAL_MESSAGE).assertDoesNotExist()
+        // The segment has its own horizontal scroll parent. Reveal the vertical picker first.
+        periodLabel("Сентябрь 2026").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("ds.segment.2").performScrollTo().assertIsDisplayed().performClick()
+        periodLabel("Сентябрь 2026").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("ds.segment.0").assertIsOn()
+        compose.onNodeWithTag("analytics.block.tiles").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("analytics.period.retry").assertDoesNotExist()
+        compose.runOnIdle {
+            assertFalse(heldWrite.isCompleted, "Year must be selected while the PUT is still in flight")
+            assertEquals(september, active.state.value.data)
+            assertEquals(1, deferredApi.reads, "selection cannot send GET before the PUT completes")
+            assertEquals(listOf(expectedWrite), deferredApi.dismissRequests)
+            heldWrite.completeExceptionally(knownRefusal())
+            scheduler.runCurrent()
+        }
+        // Completing a suspended Main coroutine and observing its rendered state are separate UI turns.
+        compose.runOnIdle {
+            assertEquals(2, deferredApi.reads, "a known refusal resumes exactly one deferred GET without another tap")
+            assertEquals(yearTarget, deferredApi.readRequests.last())
+            assertFalse(heldYear.isCompleted)
+            assertFalse(active.state.value.unknownMutation, "known refusal must not take Qase89's unknown-result branch")
+        }
+        // A quiet deferred read keeps the ready September until the held Year actually arrives.
+        periodLabel("Сентябрь 2026").performScrollTo().assertIsDisplayed()
+        periodLabel("2026").assertDoesNotExist()
+        compose.onNodeWithTag("analytics.period.retry").assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(september, active.state.value.data)
+            heldYear.complete(year)
+            scheduler.runCurrent()
+        }
+        periodLabel("2026").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("ds.segment.2").assertIsOn()
+        compose.onNodeWithTag("analytics.period.rolling_year").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("analytics.period.retry").assertDoesNotExist()
+        compose.onNodeWithTag("analytics.unknown_mutation").assertDoesNotExist()
+        advance(30_000)
+        compose.runOnIdle {
+            assertEquals(year, active.state.value.data)
+            assertEquals(2, deferredApi.reads, "completion cannot schedule a repeated read")
+            assertEquals(listOf(expectedWrite), deferredApi.dismissRequests, "no retry of the refused command")
+            assertEquals(1, deferredApi.writes)
+        }
     }
 
     @Test fun qase82RetainedSnapshotsAndRefusedMutation() {
@@ -311,6 +443,22 @@ class AnalyticsReliabilityComponentTest {
         compose.runOnIdle { assertEquals(3, api.writes, "exactly one command in each independent scenario; no recovery PUT") }
     }
 
+    private fun analyticsFixture(name: String) = ApiJson.decodeFromString(Analytics.serializer(),
+        javaClass.getResource("/analytics/$name.json")!!.readText())
+
+    private fun periodLabel(text: String) = compose.onNode(hasText(text, substring = false) and
+        hasAnyAncestor(hasTestTag("ds.period.pick")), useUnmergedTree = true)
+
+    private fun knownRefusal(): AppError.Api {
+        val wire = ApiJson.decodeFromString(ApiError.serializer(),
+            """{"code":"FUTURE_OPERATION_FAILURE","message":"internal diagnostic must not be displayed","user_message":"$REFUSAL_MESSAGE","severity":"warning"}""")
+        return AppError.Api(wire.code, 422, response = ErrorResponseInfo(wire.code, 422,
+            presentation = wire.presentation, requestRetryable = wire.retryable))
+    }
+
+    private data class ReadRequest(val period: PeriodTypeCode?, val date: PeriodKey?, val transferMode: TransferMode?)
+    private data class DismissRequest(val id: String, val date: PeriodKey, val transferMode: TransferMode)
+
     private fun assertUnknown() {
         compose.onNodeWithTag("analytics.unknown_mutation").assertIsDisplayed()
         compose.onNodeWithText("Убрали из регулярных платежей").assertDoesNotExist()
@@ -380,16 +528,23 @@ class AnalyticsReliabilityComponentTest {
         var reads = 0
         var writes = 0
         val cursors = mutableListOf<String>()
+        val readRequests = mutableListOf<ReadRequest>()
+        val dismissRequests = mutableListOf<DismissRequest>()
         var read: suspend (PeriodTypeCode?, PeriodKey?, TransferMode?) -> Analytics = { _, _, _ -> initial }
         var pageRead: suspend (String) -> AnalyticsChartPage = { error("unexpected page") }
         var mutate: suspend () -> AnalyticsBlockUpdate = { error("unexpected mutation") }
         override suspend fun getAnalytics(period: PeriodTypeCode?, date: PeriodKey?, transferMode: TransferMode?, supports: String?, exp: String?): Analytics {
             reads++
+            readRequests += ReadRequest(period, date, transferMode)
             return read(period, date, transferMode)
         }
         override suspend fun listPeriods(period: PeriodTypeCode?) = AnalyticsPeriodsList(emptyList(), ZONE)
         override suspend fun getMonthlyChartPage(cursor: String): AnalyticsChartPage { cursors += cursor; return pageRead(cursor) }
-        override suspend fun dismissRegularPayment(id: String, date: PeriodKey, transferMode: TransferMode): AnalyticsBlockUpdate { writes++; return mutate() }
+        override suspend fun dismissRegularPayment(id: String, date: PeriodKey, transferMode: TransferMode): AnalyticsBlockUpdate {
+            writes++
+            dismissRequests += DismissRequest(id, date, transferMode)
+            return mutate()
+        }
         override suspend fun restoreRegularPayment(id: String) = Unit
     }
 
@@ -422,6 +577,7 @@ class AnalyticsReliabilityComponentTest {
     }
     private companion object {
         const val ZONE = "Europe/Moscow"
+        const val REFUSAL_MESSAGE = "Сервис получил новый тип ошибки. Попробуйте позже"
         const val UNAVAILABLE = "Не получилось посчитать категории"
     }
 }
