@@ -84,6 +84,10 @@ availability ViewModel on one virtual clock. The UI fixture opts into `consent_s
 when ending maintenance. Only that mock recovery response waits for the actual probe request entry;
 normal streams, active server maintenance and the client policy are unchanged. This does not require the probe
 response to finish before the stream, issue an extra GET, sleep or extend either captured deadline.
+If another response has already ended visible maintenance, a pending fixture wait releases without changing
+its counters, so the strict final packet can diagnose a missing probe rather than leave the upload waiting.
+The real-stack tests also use the e2e 50 ms reply latency: a probe enters, the stream opens the gate, and the
+in-flight probe is cancelled with reads2/probe1 preserved and activeReads0.
 
 The final Qase46 packet remains unchanged: exact consent reads2, probe1, stream429 count1, after-deadline
 witnesses and upload2. Extra or early calls still fail. The barrier defaults off and is cancellable; resetting
