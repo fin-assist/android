@@ -2,6 +2,10 @@ package ru.finassist.pf.mock
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -9,6 +13,7 @@ import ru.finassist.pf.core.api.model.ConsentDocument
 import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.availability.ServiceGate
 
 /** Bounded consent fixtures and request evidence for mock UI tests; never contains phone numbers or tokens. */
 class MockConsentScenarios(private val backend: MockBackend) {
@@ -42,7 +47,7 @@ class MockConsentScenarios(private val backend: MockBackend) {
 
     private class DocumentState(var published: String) {
         var plan = DocumentSettings()
-        var reads = 0
+        val reads = MutableStateFlow(0)
         var active = 0
         var maxActive = 0
         var retryDeadline: Long? = null
@@ -59,6 +64,22 @@ class MockConsentScenarios(private val backend: MockBackend) {
     private var grantedVersion: String? = null
     private var overflow = false
     private var registerRejection: RegisterRejection? = null
+    private val streamRecoveryReadTarget = MutableStateFlow(0)
+
+    /** Mock-only interleaving: a recovery response waits for actual personal-data GET entry, not its completion. */
+    fun setStreamRecoveryReadTarget(type: ConsentType, reads: Int) {
+        require(type == ConsentType.PERSONAL_DATA && reads in 0..MAX_EVIDENCE) { "Invalid stream recovery read target" }
+        streamRecoveryReadTarget.value = reads // zero restores the normal, unfenced backend
+    }
+
+    internal suspend fun awaitStreamRecoveryReads(availability: StateFlow<ServiceGate.State>) {
+        if (streamRecoveryReadTarget.value == 0) return
+        // An unrelated success may legitimately end maintenance before the probe enters. Stop ordering that
+        // ended episode so its strict read/probe diagnostics remain reachable instead of stalling the stream.
+        combine(streamRecoveryReadTarget, pd.reads, availability) { target, reads, state ->
+            target == 0 || reads >= target || state !is ServiceGate.State.Maintenance
+        }.first { it }
+    }
 
     /** Changes server validation independently from a stale or delayed document response. */
     suspend fun publish(type: ConsentType, version: String) {
@@ -125,7 +146,7 @@ class MockConsentScenarios(private val backend: MockBackend) {
         }
         val (plan, version, held) = lock.withLock {
             val state = state(type)
-            state.reads += 1
+            state.reads.value += 1
             val plan = state.plan
             val held = if (plan.mode == DocumentMode.HELD) {
                 if (state.held.size >= MAX_EVIDENCE) {
@@ -170,7 +191,7 @@ class MockConsentScenarios(private val backend: MockBackend) {
             registrations.toList(), grants.toList(), grantedVersion, overflow)
     }
 
-    private fun documentSnapshot(state: DocumentState) = DocumentSnapshot(state.reads, state.active, state.maxActive,
+    private fun documentSnapshot(state: DocumentState) = DocumentSnapshot(state.reads.value, state.active, state.maxActive,
         state.retryDeadline?.let { (it - elapsedMillis()).coerceAtLeast(0) })
 
     private fun elapsedMillis(): Long = backend.elapsedClock?.nowMillis() ?: backend.now().toInstant().toEpochMilli()
