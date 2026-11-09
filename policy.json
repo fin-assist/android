@@ -1026,6 +1026,22 @@
       "matchJsonata": [
         "newDigest = \"sha512-QWzhpqsRA/DRzG/Ft+TCD+SAVY8KF0pwW99EEH3C2XCihTDKC9vAj4BUXhhYgT8vqvUaZrU0EP/Bj0CckjUQww==\""
       ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "renovate"
+      ],
+      "matchDatasources": [
+        "npm"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-317-",
+      "matchJsonata": [
+        "newDigest = \"sha512-+1NQefCqhw3N3aqrY0lNgxmdUl55/WEBn2TWzKaK4T7dfZW88JaUkigp4JiwlpbhSXQGs6wQ0sdgz65iTS/6Zw==\""
+      ]
     }
   ]
 }
