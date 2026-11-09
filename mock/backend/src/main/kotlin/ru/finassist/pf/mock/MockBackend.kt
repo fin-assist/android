@@ -232,6 +232,9 @@ class MockBackend(
      */
     fun <T> droppable(stream: Flow<T>, isTerminal: (T) -> Boolean): Flow<T> = flow {
         uiEvidence.streamOpening(elapsedClock?.nowMillis())
+        // Qase46 can select probe-entry-before-stream-success without changing either client's retained deadline.
+        // Normal streams and still-active maintenance never wait; the mock fixture is disabled by default.
+        if (gate.maintenance != null && !config.maintenance) consents.awaitStreamRecoveryReads()
         // Before the stream starts, as an HTTP answer (api.md «SSE»: a re-open during maintenance gets 503).
         checkAvailability()
         takeRateLimit()?.let { throw it }

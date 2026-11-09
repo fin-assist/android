@@ -25,6 +25,7 @@ internal class E2eConsentControl(private val consents: MockConsentScenarios) {
                     "consent_retry_s" -> require(value.toIntOrNull() in 1..60) { "Invalid consent retry duration" }
                     "consent_release", "expect_consent_wait_elapsed" -> require(value == "true") { "Invalid consent predicate" }
                     "consent_register_error" -> require(type == ConsentType.PERSONAL_DATA && value in REGISTER_ERRORS) { "Invalid registration fixture" }
+                    "consent_stream_recovery_reads" -> require(type == ConsentType.PERSONAL_DATA && value.toIntOrNull() in 0..128) { "Invalid stream recovery read target" }
                     in COUNTS -> require(value.toIntOrNull() in 0..128) { "Invalid consent count" }
                     in VERSIONS -> require(versions(value).let { it.size <= 128 && it.all(::validVersion) }) { "Invalid consent evidence" }
                 }
@@ -48,6 +49,7 @@ internal class E2eConsentControl(private val consents: MockConsentScenarios) {
                 })
             }
             if (values["consent_release"] == "true") consents.releaseDocuments(type)
+            values["consent_stream_recovery_reads"]?.let { consents.setStreamRecoveryReadTarget(type, it.toInt()) }
             val evidence = consents.snapshot()
             require(!evidence.overflow) { "Consent evidence limit exceeded" }
             val document = if (type == ConsentType.PERSONAL_DATA) evidence.personalData else evidence.assistant
@@ -57,7 +59,9 @@ internal class E2eConsentControl(private val consents: MockConsentScenarios) {
                 "expect_consent_max_active" to document.maxConcurrentReads,
                 "expect_consent_start_keys" to evidence.startKeyCount,
             )
-            counts.forEach { (key, actual) -> values[key]?.let { require(actual == it.toInt()) { "Consent count mismatch: $key" } } }
+            counts.forEach { (key, actual) -> values[key]?.let {
+                require(actual == it.toInt()) { "Consent count mismatch: $key type=${type.code} expected=$it actual=$actual" }
+            } }
             val requests = mapOf(
                 "expect_consent_starts" to evidence.startVersions,
                 "expect_consent_registers" to evidence.registerVersions,
@@ -82,6 +86,6 @@ internal class E2eConsentControl(private val consents: MockConsentScenarios) {
         val COUNTS = setOf("expect_consent_reads", "expect_consent_active", "expect_consent_max_active", "expect_consent_start_keys")
         val VERSIONS = setOf("expect_consent_starts", "expect_consent_registers", "expect_consent_grants")
         val DOCUMENT_SETTINGS = setOf("consent_document", "consent_read", "consent_retry_s")
-        val KEYS = COUNTS + VERSIONS + DOCUMENT_SETTINGS + setOf("consent_type", "consent_publish", "consent_release", "consent_register_error", "expect_consent_wait_elapsed")
+        val KEYS = COUNTS + VERSIONS + DOCUMENT_SETTINGS + setOf("consent_type", "consent_publish", "consent_release", "consent_register_error", "consent_stream_recovery_reads", "expect_consent_wait_elapsed")
     }
 }
