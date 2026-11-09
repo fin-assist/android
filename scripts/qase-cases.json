@@ -97,6 +97,7 @@
     ".maestro/flows/statements/upload_amount_overflow.yaml": 95,
     "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase82RetainedSnapshotsAndRefusedMutation": 82,
     "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase83HistoryPagingAndSelection": 83,
-    "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase89UnknownReadRecoveryAndDeferredSelection": 89
+    "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase89UnknownReadRecoveryAndDeferredSelection": 89,
+    "jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase73PeriodRetryAndDeferredRefusal": 73
   }
 }

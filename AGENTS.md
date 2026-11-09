@@ -393,7 +393,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
     `app/src/androidTestMock` only for what Maestro cannot drive (system pickers, intents, permissions).
     FIN-473's approved Qase82/83/89 pilot also uses mandatory JVM Compose companions for exhaustive state/paging
     combinations while retaining the real end-to-end boundaries. Preserve its assertion map and both components;
-    this exception does not permit dropping UI coverage or replacing unrelated journeys with state-only tests.
+    FIN-482 extends the named pilot to Qase73 with an additional required companion while keeping its full
+    Maestro flow unchanged. This exception does not permit dropping UI coverage or replacing unrelated journeys
+    with state-only tests.
   - Tag the root, the controls and the checked states (`<feature>.<screen>[.<element>]`, shared components `ds.*`).
     Renaming a tag means updating `.maestro/`.
   - Qase semantic parity evidence lives in `docs/qa/qase-parity/`: preserve the audited source text, account
@@ -405,7 +407,8 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
     component result. Do not add another duplicate map ID without explaining its components.
     A pass requires all mapped components in the report; a partial pass is Skipped with missing components named.
     FIN-473 adds `jvm:Class#method` companion keys for Qase82/83/89 to the same map and validates exact native,
-    JVM and Maestro inventories. Missing/skipped/duplicate/unknown results cannot establish full acceptance.
+    JVM and Maestro inventories. FIN-482 adds the Qase73 pair under the same completeness rules.
+    Missing/skipped/duplicate/unknown results cannot establish full acceptance.
   - A new or renamed test also updates its Qase case, `scripts/qase-cases.json` and the coverage table in
     docs/e2e.md («Qase», «Coverage»).
   - Not automatable on the emulator (biometrics, real speech/audio integration, a bug that does not reproduce there): add it to «Not

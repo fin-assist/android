@@ -305,6 +305,28 @@ class CaseMapTest(unittest.TestCase):
                 stale.append(key)
         self.assertEqual(stale, [], "these instrumented tests were renamed or removed: update scripts/qase-cases.json")
 
+    def test_qase73_requires_full_flow_and_the_additional_jvm_component(self):
+        flow = '.maestro/flows/analytics/period_change_retry.yaml'
+        companion = ('jvm:ru.finassist.pf.feature.analytics.impl.ui.'
+                     'AnalyticsReliabilityComponentTest#qase73PeriodRetryAndDeferredRefusal')
+        cases = {key: case_id for key, case_id in self.cases.items() if case_id == 73}
+        self.assertEqual(cases, {flow: 73, companion: 73})
+        passed_flow = qase.TestResult(flow, flow, 'passed', 1)
+        passed_component = qase.TestResult(companion, companion, 'passed', 1)
+        observations = [
+            ('missing component', [passed_flow], 'skipped'),
+            ('missing flow', [passed_component], 'skipped'),
+            ('failed component', [passed_flow, qase.TestResult(companion, companion, 'failed', 1)], 'failed'),
+            ('skipped component', [passed_flow, qase.TestResult(companion, companion, 'skipped', 1)], 'skipped'),
+            ('both passed', [passed_flow, passed_component], 'passed'),
+        ]
+        for label, results, expected in observations:
+            with self.subTest(label=label):
+                payload, unmapped = qase.map_results(results, cases)
+                self.assertEqual(unmapped, [])
+                self.assertEqual(len(payload), 1)
+                self.assertEqual((payload[0]['case_id'], payload[0]['status']), (73, expected))
+
     def test_case_ids_are_unique_except_declared_complementary_ui_checks(self):
         by_case = {}
         for key, case_id in self.cases.items():
@@ -319,6 +341,7 @@ class CaseMapTest(unittest.TestCase):
         }}
         pilot_class = 'jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#'
         pilot = {
+            73: ('.maestro/flows/analytics/period_change_retry.yaml', 'qase73PeriodRetryAndDeferredRefusal'),
             82: ('.maestro/flows/analytics/recalculation_snapshot.yaml', 'qase82RetainedSnapshotsAndRefusedMutation'),
             83: ('.maestro/flows/analytics/chart_history_pages.yaml', 'qase83HistoryPagingAndSelection'),
             89: ('.maestro/flows/analytics/unknown_mutation_recovery.yaml', 'qase89UnknownReadRecoveryAndDeferredSelection'),

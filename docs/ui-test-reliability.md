@@ -8,15 +8,17 @@ The full post-merge acceptance consists of three independent suites on the same 
   `--native-only` selects only the native suite, `--shard i/n` selects Maestro without native tests.
 - Targeted JVM Compose/Robolectric companions (`AnalyticsReliabilityComponentTest`), with a 900 s process
   deadline. These use the actual Analytics ViewModel and production Compose renderers, controlled fake API replies
-  and virtual coroutine time; Qase82/89 render the full screen and Qase83 isolates its chart renderer. Their ordinary JVM PR execution remains enabled; emulator UI still runs only after
+  and virtual coroutine time; Qase73/82/89 render the full screen and Qase83 isolates its chart renderer. Their ordinary JVM PR execution remains enabled; emulator UI still runs only after
   merge to main or an explicitly authorized manual dispatch.
 
 The expected inventory is derived from flow discovery, test source discovery and the existing
 `scripts/qase-cases.json`; there is no second hand-maintained registry. Its `jvm:Class#method` keys are
 explicit JVM companions. Unprefixed `Class#method` keys remain native, and `.maestro/…` keys remain flows.
-The 92 existing case IDs are preserved. Qase82/83/89 each require both their Maestro and JVM components.
+The 92 existing case IDs are preserved. Qase73/82/83/89 each require both their Maestro and JVM components.
 The assertion-by-assertion transfer is in [the pilot coverage map](qa/fin473-pilot-coverage.md).
-The next candidate is documented in [the Qase73 coverage-preservation plan](qa/fin473-next-slice-qase73.md) (FIN-476); its full Maestro flow remains unchanged pending verified replacement coverage.
+FIN-482 adds [the Qase73 companion](qa/fin473-next-slice-qase73.md) planned in FIN-476: exact failed-period
+retry, independent errors and deferred selection after a known command refusal through the production screen
+and ViewModel. Its full Maestro flow remains unchanged; this addition does not authorize a later shortening.
 
 ## Evidence and verdict
 

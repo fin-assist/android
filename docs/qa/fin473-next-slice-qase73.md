@@ -1,159 +1,84 @@
-# Qase73: карта сохранения покрытия перед следующим срезом
+# Qase73: дополнительное компонентное покрытие
 
-[FIN-476](https://finassist.youtrack.cloud/issue/FIN-476), продолжение
-[FIN-473](https://finassist.youtrack.cloud/issue/FIN-473). Сверка исходников выполнена на
-`release/0.2.20`, `25c878053e095bae53f7a5d921065a3c641827e0`.
-Эта задача меняет только документацию. Текущий flow, assertions, бюджеты, mapping и runtime сохранены.
+[FIN-482](https://finassist.youtrack.cloud/issue/FIN-482) реализует карту
+[FIN-476](https://finassist.youtrack.cloud/issue/FIN-476) после отдельного поручения владельца.
+**Полный Maestro-flow сохранён без изменений.** Никакой oracle не перенесён из E2E и не удалён;
+две login/reset-фазы, реальный resume, задержка20с, жесты, финансовые assertions и оба final exact1 guard
+остаются обязательными. Таймауты не изменены. Сокращение flow требует отдельного решения и проверки.
 
-**Решение: NO-GO сокращению Qase73 сейчас.** Существующие тесты покрывают отдельные правила,
-но пока не доказывают эквивалентность всей комбинации через настоящие UI callbacks. Предлагается следующий
-ограниченный PR с недостающим companion и обязательной связью с Qase73 **после отдельного решения владельца**
-о расширении именованного пилота. Текущая задача на карту этого расширения не разрешает; реализация не входит в FIN-476.
-Полный Maestro остаётся обязательным до успешной проверки замены и отдельного решения о сокращении.
+В существующем `scripts/qase-cases.json` Qase73 требует оба компонента:
 
-В [исходном полном прогоне 42506253547](https://github.com/fin-assist/android/actions/runs/42506253547)
-зафиксированы PASS97/97 компонентов и Qase73=259,621с. Это одна успешная выборка, не измерение выигрыша
-от переноса и не доказательство нестабильности. Историческая проблема видимости final Year
-[FIN-444](https://finassist.youtrack.cloud/issue/FIN-444) уже исправлена: сохраняем проверку текста года,
-а не объявляем новый дефект по длительности. Факт прогона дан в FIN-476; заново он здесь не запускался.
+- `.maestro/flows/analytics/period_change_retry.yaml`;
+- `jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase73PeriodRetryAndDeferredRefusal`.
 
-## Источники и границы доказательства
+Результат кейса учитывает худший компонент; missing/skipped/failure JVM не даёт PASS даже при успешном
+Maestro. Используются существующие inventory, targeted job и общий verdict. Новый case ID, job,
+framework, production seam или второй реестр тестов не добавлены.
 
-- [Текущий flow `period_change_retry.yaml`](../../.maestro/flows/analytics/period_change_retry.yaml)
-  состоит из двух независимых clean-state UI входов. Вторая ветка удерживает команду через
-  `network_delay_ms=20000`; это создаёт окно для реального жеста и выбора Year до ответа PUT.
-- [AnalyticsViewModelTest](../../feature/analytics/impl/src/test/kotlin/ru/finassist/pf/feature/analytics/impl/ui/AnalyticsViewModelTest.kt)
-  — настоящий VM, fake `AnalyticsApi`, `TestCoroutineScheduler`. Большинство примеров используют `data()`
-  с placeholder-блоком `UNKNOWN`, а не полный финансовый September response.
-- [AnalyticsRetryCallbackTest](../../feature/analytics/impl/src/test/kotlin/ru/finassist/pf/feature/analytics/impl/ui/AnalyticsRetryCallbackTest.kt)
-  — настоящий `AnalyticsContent`, счётчики в `Handlers`, поданное извне состояние; VM не подключён.
-- [AnalyticsPeriodControlTest](../../feature/analytics/impl/src/test/kotlin/ru/finassist/pf/feature/analytics/impl/ui/AnalyticsPeriodControlTest.kt)
-  — настоящий control/layout/semantics; handlers сами изменяют `shown`. Это не прохождение VM/API.
-- [AnalyticsReliabilityComponentTest](../../feature/analytics/impl/src/test/kotlin/ru/finassist/pf/feature/analytics/impl/ui/AnalyticsReliabilityComponentTest.kt)
-  — существующий подход для real `AnalyticsContent` + real VM с управляемыми ответами API.
-  `opened()` освобождает предыдущие `ViewModelStore`; `render()` подписывает content на VM state.
-  Используется [September fixture](../../feature/analytics/impl/src/test/resources/analytics/september.json),
-  где платёж «Спортзал»; mock-ledger Maestro показывает РБК. Эти fixture нельзя выдавать за одинаковые данные.
-- [AnalyticsScreen](../../feature/analytics/impl/src/main/kotlin/ru/finassist/pf/feature/analytics/impl/ui/AnalyticsScreen.kt)
-  связывает `analytics.period.retry` с `retryPeriodChange()`, сегменты с `setPeriodType()`, блоки с `onAction()`.
-  [AnalyticsViewModel](../../feature/analytics/impl/src/main/kotlin/ru/finassist/pf/feature/analytics/impl/ui/AnalyticsViewModel.kt):
-  `onResume()` не читает при сохранённом failed target; `retryPeriodChange()` возвращает сохранённый triple;
-  `startLoad()` не запускает GET при in-flight PUT; `dismissRegular()` различает известный отказ и неизвестный исход.
-- [MockAnalyticsApi.dismissRegularPayment](../../mock/backend/src/main/kotlin/ru/finassist/pf/mock/api/MockAnalyticsApi.kt)
-  считает реальную попытку до задержки; [MockErrorCatalog.injectedError](../../mock/backend/src/main/kotlin/ru/finassist/pf/mock/MockErrorCatalog.kt)
-  задаёт для `unknown_code` именно `AppError.Api(FUTURE_OPERATION_FAILURE, 422)` с wire user message.
-  [E2eControlActivity](../../app/src/mockE2e/kotlin/ru/finassist/pf/e2e/E2eControlActivity.kt) проверяет накопленный
-  injected error count, [MockUiEvidence](../../mock/backend/src/main/kotlin/ru/finassist/pf/mock/MockUiEvidence.kt)
-  — число dismissal attempts. Сброс `error_operation` счётчики не обнуляет.
-- [Текущая связь Qase](../../scripts/qase-cases.json): `.maestro/flows/analytics/period_change_retry.yaml` →73.
-  Обязательного JVM-компонента73 пока нет. Правила слоёв — [testing](../testing.md),
-  [E2E](../e2e.md), [карта предыдущего пилота](fin473-pilot-coverage.md).
+## Реализация и границы доказательства
 
-Прямой вызов VM или событие репозитория проверяет потребителя, а не producer UI, Android lifecycle,
-жест, сетевой transport или mock request boundary. Mock flavor работает in-process; даже Maestro здесь
-не доказывает HTTP/SSE stage backend. Эти границы нельзя закрыть сходством названий тестов.
+Новый метод в [AnalyticsReliabilityComponentTest](../../feature/analytics/impl/src/test/kotlin/ru/finassist/pf/feature/analytics/impl/ui/AnalyticsReliabilityComponentTest.kt)
+рисует настоящий `AnalyticsContent`, подписанный на настоящий `AnalyticsViewModel`. Входящие
+ответы `AnalyticsApi` управляются fake объявленного интерфейса. `CompletableDeferred` удерживает PUT/GET,
+`TestCoroutineScheduler` двигает виртуальное время; реальных sleeps нет. Для каждой из двух фаз создаются
+новые API/VM, прежний `ViewModelStore` очищается. Сегменты, dismiss и period Retry нажимаются через
+production Compose semantics/callbacks; lifecycle `onResume(null)` вызывается непосредственно.
 
-## Обязательства исходного flow
+Используются **полные неизменённые** versioned responses
+[September](../../feature/analytics/impl/src/test/resources/analytics/september.json) и
+[Year2026](../../feature/analytics/impl/src/test/resources/analytics/year_2026.json).
+На удерживаемых/отказавших переходах сравнивается весь September: params, currency-bearing blocks/суммы,
+source zone, ranges, state и calculation. Финансовые расчёты, deduplication, refunds и own-transfer exclusion
+этим fake не вычисляются и не меняются. JVM fixture содержит «Спортзал»/`r1`; реальный mock-ledger E2E
+сохраняет РБК. Различные fixture не выдаются за один и тот же ledger.
 
-Номера A/B ниже обозначают фазы flow, а не новые Qase-кейсы. Каждая строка остаётся обязательной.
-«Частично» означает, что существующий тест полезен, но удалять исходную проверку на его основании нельзя.
+Известный отказ использует тот же wire shape, что `MockErrorCatalog.UNKNOWN_CODE`: `ApiError` с
+`FUTURE_OPERATION_FAILURE`, HTTP422, `user_message` «Сервис получил новый тип ошибки. Попробуйте позже»
+и `severity=warning`; presentation/retryability передаются в `ErrorResponseInfo`. Это не unknown outcome
+Server500/Offline из Qase89. Feature не зависит от `mock/backend`.
+Fake записывает полные GET/PUT параметры **до** возврата или исключения; отказавший PUT считается попыткой.
 
-| Исходное действие / oracle | Точное существующее покрытие | Пробел и обязательный будущий владелец |
-| --- | --- | --- |
-| A/B: clear-state, документ готов, полноценный UI login/passcode, Analytics → «Октябрь 2026», prev → «Сентябрь 2026» | Maestro и вызываемые `clear_state`/`login`; VM `the tab root asks for the server's default period and adopts the answer's parameters`, `the period route opens the given parameters` — только запросы/параметры | Сохранить реальные вход, навигацию и переход месяца в Maestro; VM init не заменяет producer UI. Два reset сейчас не объединять. |
-| A: Month checked=true и `analytics.block.tiles` после выбора September | Maestro; VM `a failed switch retains visible data without a transient snackbar` проверяет date/no snackbar | Companion должен отрисовать реальный September, проверить Month/header/tiles и равенство полного снимка. Maestro проверяет наличие tiles, но исходный Q73 **не содержит числового oracle** сумм; не приписывать ему соседние финансовые проверки. |
-| A: offline Year создаёт durable «Не удалось сменить период» и `analytics.period.retry`, сохраняет September и Month checked=true | VM `a failed period switch keeps the shown period and says so`; `a failed switch retains visible data without a transient snackbar` | Нет combined Content→VM проверки видимой period notice, Retry и сохранённого финансового content. Добавить companion; настоящий offline request/видимая ошибка остаются Maestro. |
-| A: September интерактивен; реальное «Не подписка» получает unknown-code сообщение, period error и Retry не исчезают | VM `a dismissal failure cannot relabel or consume the pending period error`: Server500 period + Offline dismissal, сохраняет presentation после `consumeSnackbar()` | Это соседняя пара ошибок, не offline period + known API refusal с пользовательским unknown-code текстом. Нужен combined companion с реальным block-button→VM callback, обеими видимыми ошибками и неизменным полным September. Producer/button и unknown-code mock boundary сохранить в Maestro. |
-| A: `expect_analytics_dismiss_requests=1` после ошибки | Только Maestro predicate; упомянутый VM test не считает попытки: fake бросает `dismissFailure` **до** добавления id в `dismissed` | Сохранить exact guard. Companion должен считать входы fake API до исключения, проверять paymentId/date/transferMode и отсутствие скрытого повторного PUT; это отдельный oracle, не замена mock счётчика. |
-| A: возврат из control Activity не заменяет September и period notice; после scrollUP виден Retry | VM `explicit period retry preserves the failed target and resume never retries it`: после `onResume(null)` ровно2 GET; `a dismissal failure cannot relabel or consume the pending period error` — другая отдельная последовательность | Объединить resume **после** двух ошибок в companion: zero additional GET/PUT и тот же снимок/presentation. Реальный Activity resume и сохранённая прокрутка остаются Maestro. В flow отсутствие авто-GET выводится по сохранённому состоянию, собственного exact GET-count guard нет. |
-| A: явный `analytics.period.retry` открывает Year, header «2026», Year checked=true, исчезают period Retry и `ds.error.error` | VM `explicit period retry preserves the failed target and resume never retries it`: retry равен сохранённому Request, повтор после успеха не добавляет GET; `a dismissal failure cannot relabel or consume the pending period error` проверяет точный target/очистку period error | `AnalyticsRetryCallbackTest` **не нажимает** `analytics.period.retry`: методы `paused recalculation retry refreshes shown data instead of resetting a failed period`, `fullscreen offline retry refreshes the shown context`, `fullscreen preparation timeout retry refreshes the shown context` нажимают `analytics.retry`→refresh. Companion обязан нажать настоящий period Retry, получить exact failed triple и проверить оба исчезнувших UI error oracle. Сохранить сквозной retry/header. |
-| A: Month после успешного Year возвращает именно September и checked=true | VM `explicit period retry preserves the failed target and resume never retries it`; `month quarter and year retain independent choices even outside the other tabs` | Нужен настоящий segment click после UI retry, а не вызов `setPeriodType()`; проверить September header, Month semantics и точные параметры GET. До замены оставить Maestro. |
-| B: в готовом September нажать именно «Не подписка — РБК»; команда ещё не завершена при выборе Year | Maestro: delay20s, реальный dismiss click, scrollUP, отсутствие сообщения отказа перед Year tap | `period selection during a refused PUT is read after the command finishes` держит fake через `CompletableDeferred`, но вызывает VM напрямую. Companion должен нажать настоящий item button, удержать PUT, показать неизменный September, проверить отсутствие premature error/GET и нажать настоящий Year. Сохранить producer/gesture/in-flight окно Maestro. |
-| B: известный отказ PUT освобождает отложенный Year; не требуется второй Year tap или Retry | VM `period selection during a refused PUT is read after the command finishes` + helper `deferredSelection`: `NOT_FOUND`404, до release1 GET, после release ожидаемые data/target; `dismissed == [first]` | Это релевантный known refusal, но не точная unknown-code fixture и не real UI wiring. `qase89UnknownReadRecoveryAndDeferredSelection` проверяет **UNKNOWN** Server500: no auto Year, возврат Month, второй tap/recovery — противоположная ветка, не замена. Нужен Q73 companion с известным отказом, release и ровно одним автоматическим deferred GET. |
-| B: `analytics.period.rolling_year` виден; после отдельного scroll к text «2026» виден Year header, Year checked=true, period Retry отсутствует | `AnalyticsPeriodControlTest`: `only the current quarter or year offers its right aligned rolling choice`; `a wide period row shows all four full labels and their selection semantics`; `a narrow large-text period row reveals selection and preserves manual scrolling` | Это state/semantics/handler tests, не финал задержанного VM перехода. Companion должен проверить real final content/Year semantics/отсутствие Retry. Android viewport и scoped year-text scroll, исправленный FIN-444, остаются Maestro; наличие parent picker не заменяет видимость текста. |
-| B: final config требует `expect_error_requests=1` **и** `expect_analytics_dismiss_requests=1`, затем сбрасывает delay/error | Только реальный mock boundary + control receipt. VM `deferredSelection` считает один payment id, но не injected failure counter и не transport | Оба exact1 guard остаются обязательными в Maestro. Companion проверяет собственные read/write request records; они не подменяют контроль mock injection и не оправдывают удаление guards. |
+## Карта обязательств
 
-Дополнительные уже существующие VM regressions не нужно дублировать ради Qase: `an original request refusal
-blocks period retry but not an explicit refresh of the shown month`, `a period retry obeys the captured server
-delay without automatic submission`, `a different selection retires a failed target and its retry action`.
-Они защищают refusal/delay/new intent, но сами не доказывают сохранение всех видимых состояний Q73.
+| Обязательство | Дополнительный JVM oracle | Обязательный полный E2E |
+|---|---|---|
+| Готовый September/Month, tiles и платёж интерактивны | Полный September response; scoped header, Month selected, tiles displayed; реальная item-button | Полный UI login/passcode, Analytics→October→September, Month/tiles |
+| Offline Year сохраняет September и durable period failure | Настоящий Year click, Offline GET; тот же response, видимые notice/period Retry, Month selected | Реальный offline request и September/error assertions |
+| Known dismissal refusal не стирает независимую period error | Настоящая dismiss-button; видны wire user message и period notice/Retry; presentation и весь September неизменны | Unknown-code mock injection и обе ошибки после действия |
+| Отказ PUT считается ровно один раз | Точная запись `id=r1/date=2026-09/transferMode=with`, сделанная до исключения; нет повторного PUT | Exact `expect_analytics_dismiss_requests=1` |
+| Resume после двух ошибок не отправляет запросы | `onResume(null)` + virtual30с; GET records/count=2 и единственный PUT неизменны, оба notice сохранены | Настоящий Activity resume и retained scroll/state |
+| Period Retry повторяет именно failed target | Настоящая `analytics.period.retry`→VM→API; полное равенство request triple, Year data/header/selected; period Retry и прежние ошибки исчезают | Реальный retry, header2026/Year selected/no error |
+| Month восстанавливает September после Year | Настоящий Month click, точный MONTH/2026-09/with GET, полный September/header/selection | Прежний UI Month/September путь |
+| Year выбирается во время незавершённого PUT | Реальная dismiss-button→held PUT→реальный Year click; PUT ещё pending, один initial GET, один PUT, нет premature refusal, September/Month/tiles сохранены | Delay20с и настоящие жесты/Year tap до отказа |
+| Known refusal продолжает deferred selection автоматически | Release PUT известным422; без нового tap ровно один deferred Year GET, исходный September anchor, нет unknown-mutation branch | Unknown-code refusal, переход к Year без второго tap/Retry |
+| Held Year не выдаётся за готовый ответ | Пока GET удерживается, остаётся полный September/header, Year header отсутствует; после reply полный Year response | Реальное завершение отложенного ответа |
+| Финальный Year и отсутствие скрытых повторов | Scoped2026, Year selected, rolling-year choice displayed, нет period Retry/unknown notice; после virtual30с всё ещё2GET/1PUT | Scoped year-text scroll (FIN-444), Year semantics и no period Retry |
+| Реальные mock counters и transport boundaries | Fake records не выдаются за эти проверки | Final `expect_error_requests=1` **и** `expect_analytics_dismiss_requests=1`, сброс delay/error сохранён |
 
-## Минимальное недостающее комбинированное покрытие
+Exact Year target — `YEAR/date=2026-09/with`, а не нормализованная дата ответа `YEAR/date=2026`.
+Coarsening API допускает finer month key; проверяется фактически неудавшийся request triple.
+Scoped period text ищется в unmerged semantics tree; перед visible oracle прокручивается сам текст,
+а не только родительский picker/segment. Это компонентная подготовка viewport, не удаление visible assertion.
 
-Предлагаемый **новый, пока не реализованный** метод
-`AnalyticsReliabilityComponentTest#qase73PeriodRetryAndDeferredRefusal` использует существующие
-`render`/`opened`, fixture, real VM, Compose rule и управляемый fake API. Новый harness, сервис,
-native suite, production seam, sleep или инфраструктура не нужны. Внутри две изолированные фазы:
+## Что остаётся сквозным
 
-1. September → реальный Year click → Offline → оба September/Month/tiles oracle и period notice;
-   реальный dismiss click → известный unknown-code API отказ → независимые ошибки.
-   Для отказа декодировать wire `ApiError` с `FUTURE_OPERATION_FAILURE`, пользовательским сообщением
-   «Сервис получил новый тип ошибки. Попробуйте позже» и `severity=warning`, затем передать его
-   `presentation`/retryability в `ErrorResponseInfo` у `AppError.Api(..., 422)`, как в `MockErrorCatalog`.
-   Простой `AppError.Api(code, 422)` даст общий fallback и не проверит исходный visible-message oracle.
-   Использовать уже доступные `core/api`/`core/common`, без зависимости feature от `mock/backend`;
-   resume без новых запросов; настоящий period Retry с exact triple → Year/header/selected/нет ошибок;
-   настоящий Month click → remembered September. На каждом отказе сравнить весь исходный September response,
-   включая RUB, source zone, ranges, blocks и суммы; видимые tiles и платёж остаются доступны.
-2. Новый VM/store с September; реальная dismiss-кнопка → held PUT → реальный Year click;
-   ноль GET во время PUT, один PUT, сохранённые деньги/Month, отсутствие преждевременной ошибки;
-   release **известным отказом**, один deferred Year GET с исходной датой September и transfer mode;
-   held GET завершается корректным [Year response](../../feature/analytics/impl/src/test/resources/analytics/year_2026.json),
-   затем видимые Year header/selected/rolling choice, нет period Retry.
-   Отдельно проверить no hidden PUT/repeated GET. Нельзя завершить Server500/Offline и назвать это known refusal.
+JVM callback-проверка не доказывает Android gesture/hit testing, Activity lifecycle, сетевой transport или
+реальный mock injection counter. Эти границы остаются полностью в Maestro. `StatementsEvent` не
+подменяет producer UI; в этом срезе событийная ветка не переносится. Mock E2E не является stage HTTP-приёмкой.
+Прямые VM regressions, отдельные callback/control tests и Qase82/89 companions остаются обязательными
+на своих уровнях; Qase89 с unknown outcome не заменяет known refusal Qase73.
 
-Exact target — равенство фактически неудавшемуся request triple, а не только `period == YEAR`.
-API допускает более точный month key при coarsening: текущий `deferredSelection` ожидает
-`YEAR/date=2026-09`, хотя successful response нормализован в `YEAR/date=2026`.
-Не заменять ожидание запроса нормализованной датой ответа.
+Исторический baseline FIN-476: [42506253547](https://github.com/fin-assist/android/actions/runs/42506253547),
+source25c87805, Qase73 PASS259,621с. Это прежнее наблюдение и не результат исполнения нового компонента.
+Предыдущие FAIL/приёмка FIN-473 не переопределяются. Реализация FIN-482 не заявляет ускорение E2E:
+его flow и бюджеты сохранены.
 
-Fake-компонент доказывает удержание ответа и callback-переходы, не финансовые расчёты.
-Контрактные единицы/знаки/RUB, source-zone границы, deduplication, own transfers и refunds нельзя менять
-ради этого среза. Полное равенство fixture не выдаётся за новый расчёт mock-ledger или HTTP acceptance.
+## Локальная проверка
 
-## Ограниченный diff-план следующего PR
-
-После явно зафиксированного решения владельца о расширении пилота на Qase73:
-
-1. Добавить только указанный метод и необходимые request records/controlled replies в существующем
-   `AnalyticsReliabilityComponentTest`; не менять production поведение или соседние companions.
-2. После успешного локального выполнения добавить обязательный ключ
-   `jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#qase73PeriodRetryAndDeferredRefusal`
-   →73 в существующий `scripts/qase-cases.json`. Текущий `.maestro/…/period_change_retry.yaml`→73 сохранить.
-   В `scripts/test_qase_report.py` явно добавить пару73 в whitelist `CaseMapTest.test_case_ids_are_unique_except_declared_complementary_ui_checks`;
-   общий запрет неожиданных дублей сохранить. Проверить `CaseMapTest` и полный inventory:
-   missing/failed JVM компонент не должен давать Qase73 PASS.
-   Существующий targeted job в [e2e.yml](../../.github/workflows/e2e.yml) уже запускает и копирует XML этого
-   класса; новый класс/job/registry не требуется.
-3. Обновить эту карту и строку Qase73 в `docs/e2e.md` с фактически выполненными проверками;
-   в `AGENTS.md`/`docs/testing.md` отразить расширение именованного пилота на73. Согласовать описание
-   обязательных слоёв в существующем Qase73 без нового ID, потери исходных шагов или истории.
-   **Первый такой PR сохраняет весь flow**, обе login/reset фазы, delay20s, все финансовые/visible assertions,
-   real resume, producer gestures и request guards. Компонентное покрытие сначала становится обязательным.
-4. Только после принятой замены и отдельно разрешённого сравнения рассматривать небольшой следующий diff:
-   повторные проверки комбинаций ошибок/состояния могут переехать в companion; каждый удаляемый oracle
-   получает точную строку карты и PASS нового владельца. Обычный offline→explicit retry и отложенный known
-   refusal через реальные producer UI/mock guards остаются сквозными. Если это не сокращает измеренный
-   критический путь, оставить полный E2E и закрыть кандидата с NO-GO оптимизации.
-
-Здесь нет обещания убрать второй login или delay20s: они обеспечивают независимую начальную среду и окно
-реальной конкуренции. Замена delay на меньший timeout без доказательства in-flight precondition запрещена.
-`injectedErrorCount` накапливается внутри backend: объединение фаз без `clear_state` сохранило бы первый
-injected отказ, а второй увеличил бы счётчик до2 и нарушил final `expect_error_requests=1`.
-Clean reset пересоздаёт in-process backend; это конкретная причина сохранять независимость обеих фаз.
-Нельзя считать Qase82/89 отдельной заменой этой producer+subscriber комбинации.
-
-## Проверки и критерии перехода
-
-В FIN-476 выполнена сверка source/flow/issue; UI, AVD, Gradle, design-check и Actions dispatch/rerun
-не выполняются. Приведённые далее команды — план **будущего implementation PR**, не отчёт об исполнении.
-Все процессы запускаются из корня checkout с реальным process-group deadline.
-Используется существующий repository runner `scripts/e2e-cache.py run-command --timeout N -- COMMAND...`:
-он запускает новую process group, по deadline посылает TERM и после grace — KILL всем её процессам.
-Этот же runner уже применён для companions в CI; новый harness не требуется, один tool yield его не заменяет.
+Новый компонент до PR выполняется на существующем Compose/Robolectric стеке с JDK21/API35/native graphics,
+без эмулятора. Команды из корня checkout с реальным process-group deadline:
 
 ```bash
-# Новый метод + соседние real-VM companions и unit/callback/control regressions, debug и release; 900s.
 python3 scripts/e2e-cache.py run-command --timeout 900 -- ./gradlew \
   :feature:analytics:impl:testDebugUnitTest \
   --tests '*AnalyticsViewModelTest' --tests '*AnalyticsRetryCallbackTest' \
@@ -162,30 +87,22 @@ python3 scripts/e2e-cache.py run-command --timeout 900 -- ./gradlew \
   --tests '*AnalyticsViewModelTest' --tests '*AnalyticsRetryCallbackTest' \
   --tests '*AnalyticsPeriodControlTest' --tests '*AnalyticsReliabilityComponentTest' \
   --no-daemon --console=plain
-
-# Existing inventory/report regression tests, без устройства; 120s.
 python3 scripts/e2e-cache.py run-command --timeout 120 -- python3 -m unittest discover -s scripts -p 'test_qase_report.py'
 python3 scripts/e2e-cache.py run-command --timeout 120 -- python3 -m unittest discover -s scripts -p 'test_e2e_shards.py'
 python3 scripts/e2e-cache.py run-command --timeout 60 -- python3 scripts/agent-docs.py --check
-
-# ТОЛЬКО после отдельного разрешения UI: owned clean API34 Pixel6, 1800s весь build+flow.
-# Используется absolute --flow; без --no-build, чтобы не принять чужой APK.
-python3 scripts/e2e-cache.py run-command --timeout 1800 -- scripts/e2e.sh \
-  --flow "$PWD/.maestro/flows/analytics/period_change_retry.yaml"
 ```
 
-Новый Compose companion — новый UI тест: по процессу проекта его локальный PASS обязателен до создания
-implementation PR; запрет исполнения UI в FIN-476 этим не снимается. Debug/release JUnit XML должны содержать
-новый метод без skipped/failure. Полный класс перепроверяется, если менялись shared fake/render/store helpers.
-Для изменённого Maestro нужны локальный PASS до PR, screenshot/hierarchy для final year-text oracle,
-execution receipt, source SHA, APK SHA256, CLI/image/viewport и оба exact1 predicate.
-Не добавлять PR emulator workflow, метку `e2e`, quarantine или авто-retry assertions.
+Фактические результаты, исходная ревизия и диагностированные неудачные попытки фиксируются в FIN-482/PR.
+До успешного локального исполнения компонент не считается принятым. Полный Maestro, manual/full UI CI,
+merge и сокращение E2E в этом этапе не выполняются. Post-merge main-приёмка98компонентов/92кейсов
+остаётся отдельной проверкой после разрешённого владельцем merge.
 
-Для будущего сравнения отдельно согласовать одинаковые source/APK/environment, selection и бюджеты,
-сохранить все попытки и фазовые времена setup/login/interaction/controlled wait. Сопоставлять обе ветки
-Q73 и longest-shard budget, а не только время нового JVM-метода. Без сопоставимых измерений выигрыш неизвестен.
-PASS одного прогона доказывает его функциональный результат, а не стабильность серии.
-
-Перенос остаётся NO-GO, если потерян любой oracle из таблицы, обязательный component mapping/отчёт отсутствует,
-known refusal заменён UNKNOWN, не подтверждены exact request targets/counts или только unit PASS выдан за
-успешную Android UI границу. При неопределённости исходные проверки сохраняются.
+Проверено локально до PR (FIN-482): новый Q73 standalone debug PASS16,109с; расширенная выборка
+`AnalyticsViewModelTest`/`AnalyticsRetryCallbackTest`/`AnalyticsPeriodControlTest`/`AnalyticsReliabilityComponentTest`
+—199debug+199release PASS. После удаления случайного дополнительного assertion из соседнего Q82
+финальный класс перепроверен:4/4debug и4/4release PASS; тела прежних Q82/83/89 совпадают с базой.
+Gradle запущен с `--max-workers=2`, каждый процесс имел прежний900с limit. Qase32 и inventory61 tests PASS,
+agent-docs/KMP/diff checks PASS. Начальные авторские failures scoped semantics/viewport сохранены и
+диагностированы до следующих запусков; временная reflection-диагностика удалена. Изменений production нет.
+SHA256 неизменённого полного Q73 flow: `b36b58d50df8a8cf20a915197020a06088dc5d265f779a4e5a82423d2e18af3f`.
+Эмулятор, полный UI workflow и новая публикация Qase не запускались; результаты main после merge ещё не получены.
