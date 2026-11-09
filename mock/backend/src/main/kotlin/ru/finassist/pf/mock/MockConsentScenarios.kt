@@ -3,6 +3,7 @@ package ru.finassist.pf.mock
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -12,6 +13,7 @@ import ru.finassist.pf.core.api.model.ConsentDocument
 import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.ErrorCodes
 import ru.finassist.pf.core.common.error.AppError
+import ru.finassist.pf.core.common.availability.ServiceGate
 
 /** Bounded consent fixtures and request evidence for mock UI tests; never contains phone numbers or tokens. */
 class MockConsentScenarios(private val backend: MockBackend) {
@@ -70,9 +72,13 @@ class MockConsentScenarios(private val backend: MockBackend) {
         streamRecoveryReadTarget.value = reads // zero restores the normal, unfenced backend
     }
 
-    internal suspend fun awaitStreamRecoveryReads() {
+    internal suspend fun awaitStreamRecoveryReads(availability: StateFlow<ServiceGate.State>) {
         if (streamRecoveryReadTarget.value == 0) return
-        combine(streamRecoveryReadTarget, pd.reads) { target, reads -> target == 0 || reads >= target }.first { it }
+        // An unrelated success may legitimately end maintenance before the probe enters. Stop ordering that
+        // ended episode so its strict read/probe diagnostics remain reachable instead of stalling the stream.
+        combine(streamRecoveryReadTarget, pd.reads, availability) { target, reads, state ->
+            target == 0 || reads >= target || state !is ServiceGate.State.Maintenance
+        }.first { it }
     }
 
     /** Changes server validation independently from a stale or delayed document response. */

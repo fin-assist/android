@@ -2,6 +2,7 @@ package ru.finassist.pf.e2e
 
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.flowOf
@@ -15,8 +16,10 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import ru.finassist.pf.core.api.SseReopenState
+import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.model.ConsentType
+import ru.finassist.pf.core.api.model.ConsentDocument
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.Clock
@@ -54,7 +57,15 @@ class E2eMaintenanceReadOrderTest {
         verifyInterleaving(streamFirst = true, fence = false)
     }
 
-    private suspend fun TestScope.verifyInterleaving(streamFirst: Boolean, fence: Boolean = true) {
+    @Test fun `probe scheduled first with real 50ms latency is cancelled after entry without losing evidence`() = runTest {
+        verifyInterleaving(streamFirst = false, networkDelayMs = 50)
+    }
+
+    @Test fun `stream scheduled first with real 50ms latency cancels an entered probe without losing evidence`() = runTest {
+        verifyInterleaving(streamFirst = true, networkDelayMs = 50)
+    }
+
+    private suspend fun TestScope.verifyInterleaving(streamFirst: Boolean, fence: Boolean = true, networkDelayMs: Long = 0) {
         val elapsed = ElapsedClock { testScheduler.currentTime }
         val start = OffsetDateTime.parse("2026-10-15T12:00:00+03:00")
         val clock = object : Clock {
@@ -62,10 +73,20 @@ class E2eMaintenanceReadOrderTest {
             override fun now() = start.plusNanos(testScheduler.currentTime * 1_000_000)
         }
         val gate = ServiceGate(elapsed)
-        val backend = MockBackend(MockConfig(networkDelayMs = 0, streamDrops = 1, streamRateLimits = 1,
+        val backend = MockBackend(MockConfig(networkDelayMs = networkDelayMs, streamDrops = 1, streamRateLimits = 1,
             streamRetrySeconds = 15), clock, StandardTestDispatcher(testScheduler), gate = gate, elapsedClock = elapsed)
         backend.ready.complete(Unit)
         val auth = MockAuthApi(backend)
+        var probeReplies = 0
+        var cancelledProbes = 0
+        val probeApi = object : AuthApi by auth {
+            override suspend fun getConsentDocument(type: ConsentType): ConsentDocument = try {
+                auth.getConsentDocument(type).also { probeReplies++ }
+            } catch (error: CancellationException) {
+                cancelledProbes++
+                throw error
+            }
+        }
         var vm: AvailabilityViewModel? = null
         try {
             // The control-first fast login reads one document, without creating a Phone screen.
@@ -79,6 +100,7 @@ class E2eMaintenanceReadOrderTest {
             fun stream() = reopeningStream(isTerminal = { it == "done" }, state = state, elapsedClock = elapsed,
                 recoverOnceAfter = { ServiceGate.recoveryDeadline(it, elapsed) }, open = ::opening)
             assertFailsWith<AppError.Maintenance> { stream().toList() }
+            val recoveryAt = testScheduler.currentTime + checkNotNull(gate.maintenance?.deadline?.remainingMillis(elapsed))
             if (fence) assertNull(E2eConsentControl(backend.consents).apply(mapOf(
                 "consent_type" to listOf("personal_data"), "consent_stream_recovery_reads" to listOf("2"))))
             backend.config = backend.config.copy(maintenance = false, streamRateLimits = 0)
@@ -86,7 +108,7 @@ class E2eMaintenanceReadOrderTest {
             val events = mutableListOf<String>()
             fun recover() = launch { events += stream().toList() }
             if (streamFirst) { recover(); runCurrent() }
-            vm = AvailabilityViewModel(gate, auth, clock, elapsed)
+            vm = AvailabilityViewModel(gate, probeApi, clock, elapsed)
             runCurrent()
             advanceTimeBy(14_999); runCurrent()
             assertEquals(1, backend.consents.snapshot().personalData.reads, "neither correction may start early")
@@ -97,11 +119,15 @@ class E2eMaintenanceReadOrderTest {
 
             val consent = backend.consents.snapshot().personalData
             val evidence = backend.uiEvidence.snapshot(0, 0, 0)
-            println("FIN481 streamFirst=$streamFirst fence=$fence reads=${consent.reads} " +
-                "probes=${evidence.counts.getValue(MockUiEvidence.Metric.MAINTENANCE_PROBES)}")
+            println("FIN481 streamFirst=$streamFirst fence=$fence networkDelayMs=$networkDelayMs reads=${consent.reads} " +
+                "probes=${evidence.counts.getValue(MockUiEvidence.Metric.MAINTENANCE_PROBES)} " +
+                "active=${consent.activeReads} probeReplies=$probeReplies cancelled=$cancelledProbes")
+            assertEquals(recoveryAt, testScheduler.currentTime, "a probe's 50ms reply must still be pending when recovery opens the gate")
             assertEquals(ServiceGate.State.Open, gate.state.value)
             assertEquals(listOf("progress", "done"), events)
             assertEquals(1, backend.streamRateLimited.value)
+            assertEquals(0, consent.activeReads, "cancelled in-flight document reads must retire their active slot")
+            assertFalse(vm.checking.value)
             assertTrue(evidence.predicates.getValue(MockUiEvidence.Predicate.STREAM_NOT_EARLY))
             val unmet = E2eConsentControl(backend.consents).apply(mapOf(
                 "consent_type" to listOf("personal_data"), "expect_consent_reads" to listOf("2")))
@@ -109,6 +135,8 @@ class E2eMaintenanceReadOrderTest {
                 assertNull(unmet)
                 assertEquals(1, evidence.counts.getValue(MockUiEvidence.Metric.MAINTENANCE_PROBES))
                 assertTrue(evidence.predicates.getValue(MockUiEvidence.Predicate.MAINTENANCE_NOT_EARLY))
+                assertEquals(if (networkDelayMs == 0L) 1 else 0, probeReplies)
+                assertEquals(if (networkDelayMs == 0L) 0 else 1, cancelledProbes)
             } else {
                 assertEquals("Consent count mismatch: expect_consent_reads type=personal_data expected=2 actual=1", unmet)
                 assertEquals(0, evidence.counts.getValue(MockUiEvidence.Metric.MAINTENANCE_PROBES))

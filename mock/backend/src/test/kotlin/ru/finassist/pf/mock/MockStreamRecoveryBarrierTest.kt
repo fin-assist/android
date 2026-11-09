@@ -19,14 +19,15 @@ import ru.finassist.pf.mock.api.MockAuthApi
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /** The opt-in server-side fixture orders actual reads; it never performs a read or changes the client's clock. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MockStreamRecoveryBarrierTest {
     private val pd = ConsentType.PERSONAL_DATA
 
-    private suspend fun withBackend(test: suspend (MockBackend) -> Unit) {
-        val backend = MockBackend(FAST, TestClock(NOW), gate = ServiceGate(ElapsedClock { 0L }), elapsedClock = ElapsedClock { 0L })
+    private suspend fun withBackend(gate: ServiceGate = ServiceGate(ElapsedClock { 0L }), test: suspend (MockBackend) -> Unit) {
+        val backend = MockBackend(FAST, TestClock(NOW), gate = gate, elapsedClock = ElapsedClock { 0L })
         backend.ready.complete(Unit)
         try { test(backend) } finally { backend.scope.cancel() }
     }
@@ -91,7 +92,7 @@ class MockStreamRecoveryBarrierTest {
         }
     }
 
-    @Test fun `only selected real read entry releases recovery and overshoot remains visible`() = runTest {
+    @Test fun `only selected real read entry releases a still blocked recovery and overshoot remains visible`() = runTest {
         withBackend { backend ->
             val api = MockAuthApi(backend)
             backend.consents.setStreamRecoveryReadTarget(pd, 2)
@@ -99,14 +100,18 @@ class MockStreamRecoveryBarrierTest {
             val pending = async(start = CoroutineStart.UNDISPATCHED) { opening(backend) }
             runCurrent()
             assertFalse(pending.isCompleted)
-            api.getConsentDocument(ConsentType.ASSISTANT)
+            // Failed GET attempts still enter the counters, but cannot legitimately open ServiceGate.
+            // Successful unrelated GETs are covered by the independent gate-open release regression instead.
+            backend.config = backend.config.copy(offline = true)
+            assertFailsWith<AppError.Offline> { api.getConsentDocument(ConsentType.ASSISTANT) }
             runCurrent()
             assertFalse(pending.isCompleted)
-            api.getConsentDocument(pd)
+            assertFailsWith<AppError.Offline> { api.getConsentDocument(pd) }
             runCurrent()
             assertFalse(pending.isCompleted)
-            api.getConsentDocument(pd)
-            api.getConsentDocument(pd)
+            assertFailsWith<AppError.Offline> { api.getConsentDocument(pd) }
+            assertFailsWith<AppError.Offline> { api.getConsentDocument(pd) }
+            backend.config = backend.config.copy(offline = false)
             assertEquals(listOf("done"), pending.await())
             assertEquals(3, backend.consents.snapshot().personalData.reads, "the fixture must not rewrite or cap evidence to its target")
         }
@@ -124,6 +129,24 @@ class MockStreamRecoveryBarrierTest {
             assertFalse(pending.isCompleted)
             backend.consents.setStreamRecoveryReadTarget(pd, 0)
             assertEquals(listOf("done"), pending.await())
+        }
+    }
+
+    @Test fun `an independent gate reopening releases a pending recovery without inventing a read`() = runTest {
+        val gate = ServiceGate(ElapsedClock { 0L })
+        withBackend(gate) { backend ->
+            MockAuthApi(backend).getConsentDocument(pd)
+            backend.consents.setStreamRecoveryReadTarget(pd, 2)
+            maintenance(backend)
+            val pending = async(start = CoroutineStart.UNDISPATCHED) { opening(backend) }
+            runCurrent()
+            assertFalse(pending.isCompleted)
+            gate.reopen()
+            runCurrent()
+            assertTrue(pending.isCompleted, "an optional ordering fixture must not mask a missing probe after maintenance ended")
+            assertEquals(listOf("done"), pending.await())
+            assertEquals(1, backend.consents.snapshot().personalData.reads)
+            assertEquals(ServiceGate.State.Open, gate.state.value)
         }
     }
 }
