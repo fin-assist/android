@@ -75,6 +75,21 @@ The FIN-465 transition from four to five shards (runs42461258707/42467271555) pr
 Its native300s reserve was a scheduling mitigation; it is no longer charged to Maestro shard1.
 Historical duration samples remain scheduling inputs, not proof of a complete successful run.
 
+### FIN-481: select the maintenance recovery interleaving
+
+Qase46 requires the one automatic personal-data probe, its retained deadline and exactly two document reads
+(fast login plus probe). A concurrent stream may legitimately reopen the gate first and cancel that probe;
+`E2eMaintenanceReadOrderTest` reproduces both orders with the real backend, Auth API, SSE policy, gate and
+availability ViewModel on one virtual clock. The UI fixture opts into `consent_stream_recovery_reads=2`
+when ending maintenance. Only that mock recovery response waits for the actual probe request entry;
+normal streams, active server maintenance and the client policy are unchanged. This does not require the probe
+response to finish before the stream, issue an extra GET, sleep or extend either captured deadline.
+
+The final Qase46 packet remains unchanged: exact consent reads2, probe1, stream429 count1, after-deadline
+witnesses and upload2. Extra or early calls still fail. The barrier defaults off and is cancellable; resetting
+the target to0 releases it. The original UI assertions and waits remain. JVM regression evidence and the
+separate device-execution scope are recorded in FIN-481 and its PR.
+
 ### Default SDK caching and fresh cold AVD (FIN-378)
 
 Normal pushes to `main` and manual runs with the default inputs restore **SDK packages**, then create a fresh cold
@@ -504,6 +519,9 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
 - **Control link.** `pfe2e://config?…` changes state from a flow (`E2eControlActivity`). Open it through the subflow,
   not a bare `openLink`: `runFlow: {file: ../../subflows/config.yaml, env: {LINK: "pfe2e://config?…"}}`. The activity
   writes the values and keeps `e2e.config.applied` until explicit `e2e.config.continue` acknowledgement.
+  The helper wakes for either `e2e.config.applied` or terminal `e2e.config.unmet` within the existing wait,
+  rejects an unmet command before acknowledgement, then still requires the applied receipt. Consent-count
+  mismatches include the selected type and exact expected/actual values (FIN-481).
   The original minimum4s dwell remains for elapsed-deadline probes; slow drivers no longer miss a disappearing
   pulse. Cold fixture-ready has its own60s budget before the unchanged30s sign-in deadline (FIN-473).
 
@@ -522,6 +540,7 @@ it, and only it carries the JaCoCo probes (docs/testing.md, «UI test coverage»
   | `consent_release=true` | releases currently held reads; subsequent held-mode reads return normally | process |
   | `consent_register_error=outdated\|required\|off` | personal-data scope only: reject Register before creating an account, or restore normal validation | process |
   | `expect_consent_reads`, `expect_consent_active`, `expect_consent_max_active` | exact document request/concurrency counts for the selected type, each 0..128 | instant check |
+  | `consent_stream_recovery_reads=0..128` | mock-only Qase46 phase barrier, personal_data only: while recovering from maintenance, a stream response waits for this many actual document GET entries; sends no GET and changes no client deadline. Default0/off; setting0 releases the wait | process |
   | `expect_consent_starts`, `expect_consent_registers`, `expect_consent_grants` | exact comma-separated attempted version sequence, including failures; an empty value requires zero attempts | instant check |
   | `expect_consent_start_keys=0..128` | exact number of distinct Start keys; no raw key, phone or token is exposed | instant check |
   | `expect_consent_wait_elapsed=true` | requires a real prior document-429 receipt and zero remaining captured wait; missing receipt fails | instant check |
@@ -801,7 +820,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `availability/update_required` | `min_version=9.0.0`: the next request gets `CLIENT_VERSION_UNSUPPORTED`, the update screen covers the app — FIN-22 |
 | `availability/maintenance` | The check button is disabled during `Retry-After`; the first automatic probe is refused, then a guarded manual check after the fresh wait opens the app; a new maintenance episode has its own one-shot automatic check — FIN-22, FIN-223 |
 | `availability/maintenance_on_sign_in` | load the consent document and confirm age/PD first, then `maintenance=unknown&maintenance_retry_after=600`; «Продолжить» on the phone screen gets maintenance over sign-in, without an end time (Qase35, FIN-22/436) |
-| `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223 |
+| `availability/maintenance_during_import` | A 15s stream 429 wait survives returning from the control link; its next opening gets 503 MAINTENANCE. After disabling maintenance/limits, the single guarded recovery waits its captured 15s deadline, then lifts maintenance within 40s; history shows both preloaded and new uploads done (Qase46) — FIN-22, FIN-170, FIN-177, FIN-223; FIN-481 selects probe-entry-before-stream-success with a mock-only barrier; exact read/probe/deadline/upload guards remain mandatory |
 | `offline/no_network` | connection-failure title and internet hint without VPN on analytics/profile; enabled retry before recovery; optional recovery tap when resume has not already loaded the screen, followed by mandatory loaded data and no offline state (Qase19, FIN-396/470) |
 | `offline/stream_drops` | `stream_drops=2` before each stream: the server closes the call, import and answer streams after their first event without a terminal one; the app re-opens them with a pause and shows no error — sign-in goes on, the import result opens, the answer comes, 4 of 5 — FIN-170 |
 | native `VoicePermissionTest#deniedMicrophonePreservesDraftWithoutSendingQuestion` | actual ChatScreen/VoiceInput requests RECORD_AUDIO → real system denial through UiAutomation → clear permission notice → close → original draft, quota=5 and Ask=0 (Qase72, FIN-404); no speech service needed; focused local execution tracked in PR #277 / Qase |
