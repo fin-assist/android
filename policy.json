@@ -214,19 +214,6 @@
     {
       "description": "FIN-211: recovery of an automatically failed dependency family",
       "matchPackageNames": [
-        "gradle"
-      ],
-      "matchDatasources": [
-        "gradle-version"
-      ],
-      "recreateWhen": "always",
-      "matchJsonata": [
-        "newMajor = 9"
-      ]
-    },
-    {
-      "description": "FIN-211: recovery of an automatically failed dependency family",
-      "matchPackageNames": [
         "fin-assist/go-ci"
       ],
       "matchDatasources": [
@@ -275,6 +262,19 @@
       "recreateWhen": "always",
       "matchJsonata": [
         "newMajor = 44"
+      ]
+    },
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "gradle"
+      ],
+      "matchDatasources": [
+        "gradle-version"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 9"
       ]
     },
     {
@@ -1105,6 +1105,23 @@
       "additionalBranchPrefix": "fin211-retry-325-",
       "matchJsonata": [
         "newDigest = \"sha512-hkpgvU3WouoLNUvJ9LDk1GBIXWJFu/CXAmimPBXBmv/SiwCYxAMxj6fhjl40u6VzUnzU9L2UmLI36zuZ4Y+xhw==\""
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "gradle"
+      ],
+      "matchDatasources": [
+        "gradle-version"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-326-",
+      "matchNewValue": "/^9\\.9\\.1$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
       ]
     }
   ]
