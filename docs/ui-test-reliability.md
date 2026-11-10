@@ -42,6 +42,13 @@ installation. Every restore is rehashed and extracted into a fresh directory; th
 checked before publishing PATH. Missing or corrupt cached input uses a bounded download fallback. Cache success
 does not authorize a retry of a test assertion. Native execution does not depend on Maestro installation.
 
+SDK preparation uses the same `e2e-sdk-cache.py prepare` in Maestro/native (FIN-485). Verified local packages,
+binaries and accepted license-text hashes avoid a redundant global `--licenses` scan; missing/invalid inputs
+retain the 120s license preparation, and online installation/update checks always keep their 600s deadline.
+Pre/post-install validation and bounded raw logs retain the exact failing SDK subphase, exit code and observed
+setup deadline. The SDK helper does not write acceptance hashes, retry preparation or change the UI test budget.
+See [SDK preparation evidence](e2e.md#default-sdk-caching-and-fresh-cold-avd-fin-378).
+
 The main path still uses a fresh cold AVD. Snapshot caching remains explicitly experimental. Changing host or
 SDK packages is visible in execution evidence; neither cache identity nor a pinned API level promises an
 immutable hosted runner. APK identities from independently built suites are recorded for comparison.

@@ -112,8 +112,13 @@ and proceeds to ordinary online installation. Hosted-only checks, SDK-manager ex
 package paths guard this cleanup. A package already supplied by the hosted image skips restore and save, so archives
 are never merged over preinstalled files and no extra save cost is introduced for that unmeasured case.
 
-Online SDK license/install checks always run through the explicit SDK-manager path, with 120s/600s subprocess
-limits. Final immutable keys contain the actual installed revision/metadata hash. Only shard 1 saves new/updated
+`e2e-sdk-cache.py prepare` shares SDK preparation between Maestro and native. It skips global `--licenses`
+only when all three selected packages have matching local identities, valid revisions, required binaries and
+the exact license-text hash already accepted in the SDK's license files. Missing/invalid inputs use the existing
+120s license preparation. The online `--install platform-tools emulator <image> --channel=0` check always runs,
+including on a warm cache, within its unchanged 600s limit. The SDK manager receives finite affirmative input
+for its own prompts; the helper never manufactures acceptance files. Post-install validation must pass before
+finalizing cache keys. Final immutable keys contain the actual installed revision/metadata hash. Only shard 1 saves new/updated
 packages, before any emulator/tests, with two-minute transfer limits; other shards only read caches. A current hit
 is not re-saved; a prefix hit updated online gets a new final key. Restore/save failures are cache failures, not a
 reason to retry UI tests. An online SDK failure or direct cold test failure remains red. `cache-matched-key`, rather
@@ -122,6 +127,12 @@ be considered in the repository cache budget; two current archives measured abou
 
 The sidecar `build/e2e/sdk-cache.json` records matched/final keys, actual metadata, `hit-current`, `hit-updated`,
 `miss` or `preinstalled`, and restore/install/save phase times. It is included in existing shard artifacts.
+FIN-485 adds `preparation`: inspect/licenses/install/validate/complete phase, timestamps, original command exit
+codes, limits, observed deadline flags and log-tail sizes. `sdk-licenses.log` (when needed) and `sdk-install.log`
+retain up to 64KiB each of merged stdout/stderr in raw artifacts, with original output sizes and truncation flags
+in JSON. Compact results include this JSON unchanged, without log files. The shared coordinator stops the entire
+SDK command group on deadline; setup expiry remains `setup` with exit124 and never creates a UI-test budget marker.
+Later cleanup preserves the first failure. There is no setup/UI retry or relaxation of report completeness.
 `sdk-start` precedes the first restore, so total preparation includes all SDK transfer/install/save plus Android
 boot. `preparation.json` labels the normal path `fresh-cold-direct` with AVD cache `disabled`; it cannot activate the
 snapshot fallback, and it never saves a post-test snapshot. The authorized full cold-SDK/warm-SDK pair below

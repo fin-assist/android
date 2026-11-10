@@ -107,8 +107,10 @@ def mark_budget_expiry(receipt=Path('build/e2e/execution.json')):
         print('::warning::Could not mark the process deadline before termination')
 
 
-def run_command(command, timeout=2400, grace=10, archive_output=False):
+def run_command(command, timeout=2400, grace=10, archive_output=False, *,
+                stdin=None, stdout=None, stderr=None, record_deadline=True):
     """Stop the whole command group on a real deadline, preserving the first failure and optional UI traces."""
+    # SDK preparation owns a separate setup deadline receipt; it must not set a UI budget marker.
     def interrupted(signum, _frame):
         raise SystemExit(128 + signum)
 
@@ -116,13 +118,13 @@ def run_command(command, timeout=2400, grace=10, archive_output=False):
     archive_ready = True
     budget_expired = False
     try:
-        process = subprocess.Popen(command, start_new_session=True)
+        process = subprocess.Popen(command, start_new_session=True, stdin=stdin, stdout=stdout, stderr=stderr)
         try:
             return process.wait(timeout=timeout)
         except BaseException as error:
             budget_expired = isinstance(error, subprocess.TimeoutExpired)
             archive_ready = False
-            if budget_expired:
+            if budget_expired and record_deadline:
                 # A real Bash EXIT trap can run on TERM and otherwise record 143 as a test failure (or 0
                 # as success on some shells). Never write execution.json until all child writers stop.
                 mark_budget_expiry()
@@ -151,7 +153,7 @@ def run_command(command, timeout=2400, grace=10, archive_output=False):
     finally:
         signal.signal(signal.SIGTERM, previous)
         if archive_ready:
-            if budget_expired:
+            if budget_expired and record_deadline:
                 record_budget_expiry()
             if archive_output:
                 archive_maestro_output()

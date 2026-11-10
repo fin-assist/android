@@ -2,16 +2,145 @@
 """Select SDK package caches, recover failed restores, and record actual online-installed revisions."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
+import tempfile
 import time
+import xml.etree.ElementTree as ET
 
 SCHEMA = 'e2e-sdk-v1'
 WORKFLOW = Path(__file__).resolve().parents[1] / '.github/workflows/e2e.yml'
 STATE = Path('build/e2e/sdk-cache.json')
+INSTALL_SECONDS = 600
+LICENSE_SECONDS = 120
+LOG_BYTES = 64 * 1024
+PROCESS_SPEC = importlib.util.spec_from_file_location('sdk_process', Path(__file__).with_name('e2e-cache.py'))
+PROCESS = importlib.util.module_from_spec(PROCESS_SPEC)
+PROCESS_SPEC.loader.exec_module(PROCESS)
+
+
+def license_hash(text):
+    """Match SDK TrimStringAdapter.unmarshal followed by License.getLicenseHash (UTF-8 SHA1)."""
+    text = re.sub(r'(?<=\s)[ \t]*', '', text, flags=re.ASCII)
+    text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
+    text = re.sub(r' +', ' ', text).strip(''.join(chr(code) for code in range(33)))
+    return hashlib.sha1(text.encode('utf-8')).hexdigest()
+
+
+def validate_installed(root, packages):
+    """Check selected local metadata, binaries and actual SDK license acceptance, never write license hashes."""
+    selected = {'platform-tools': root / 'platform-tools', **packages}
+    for name, path in selected.items():
+        if not path.resolve().is_relative_to(root.resolve()):
+            raise ValueError('SDK package escapes its SDK root')
+        metadata(path)
+        document = ET.parse(path / 'package.xml').getroot()
+        local = document.find('localPackage')
+        expected = str(path.relative_to(root)).replace('/', ';')
+        if local is None or local.get('path') != expected:
+            raise ValueError('Installed SDK package identity does not match its requested path')
+        uses = local.find('uses-license')
+        license_id = uses.get('ref', '') if uses is not None else ''
+        if not re.fullmatch(r'[A-Za-z0-9_-][A-Za-z0-9_.-]*', license_id):
+            raise ValueError('Missing or invalid SDK package license reference')
+        licenses = [item for item in document.findall('license') if item.get('id') == license_id]
+        if len(licenses) != 1 or not licenses[0].text:
+            raise ValueError('Missing or ambiguous SDK package license text')
+        accepted = root / 'licenses' / license_id
+        if not accepted.resolve().is_relative_to(root.resolve()):
+            raise ValueError('SDK license file escapes its SDK root')
+        # License.checkAccepted compares the normalized text hash to a complete line, never a substring.
+        digest = license_hash(licenses[0].text)
+        if digest not in accepted.read_text().splitlines():
+            raise ValueError('Required SDK package license has not been accepted')
+        binary = path / ('system.img' if name == 'image' else 'adb' if name == 'platform-tools' else 'emulator')
+        if not binary.is_file() or (name != 'image' and not os.access(binary, os.X_OK)):
+            raise ValueError('Required SDK package binary is missing or not executable')
+
+
+def prepare():
+    """Skip redundant global licensing only after local validation; always retain the online install check."""
+    from e2e_execution import update
+    root, packages = package_paths()
+    data = json.loads(STATE.read_text())
+    detail = {'phase': 'inspect', 'result': 'running', 'started': time.time(), 'steps': [], 'exit_code': None}
+    data['preparation'] = detail
+    write(data)
+    code = 1
+    def command(phase, arguments, seconds):
+        detail['phase'] = phase
+        step = {'phase': phase, 'started': time.time(), 'timeout_seconds': seconds,
+                'deadline_expired': False, 'exit_code': None, 'log': 'sdk-' + phase + '.log'}
+        detail['steps'].append(step)
+        write(data)
+        result = 1
+        try:
+            # A finite stream accepts SDK prompts without a separate yes process/Broken pipe diagnostic.
+            with tempfile.TemporaryFile() as answers, tempfile.TemporaryFile() as log:
+                answers.write(b'y\n' * 100)
+                answers.seek(0)
+                try:
+                    result = PROCESS.run_command([
+                        str(root / 'cmdline-tools/latest/bin/sdkmanager'), '--sdk_root=' + str(root),
+                        *arguments, '--verbose',
+                    ], timeout=seconds, stdin=answers, stdout=log, stderr=subprocess.STDOUT,
+                        record_deadline=False)
+                except subprocess.TimeoutExpired:
+                    step['deadline_expired'] = True
+                    result = 124
+                finally:
+                    size = log.seek(0, os.SEEK_END)
+                    log.seek(max(0, size - LOG_BYTES))
+                    STATE.with_name(step['log']).write_bytes(log.read(LOG_BYTES))
+                    step.update(log_bytes=size, log_truncated=size > LOG_BYTES)
+            return result
+        finally:
+            step.update(exit_code=result, finished=time.time())
+            write(data)
+
+    try:
+        try:
+            validate_installed(root, packages)
+            detail['licenses'] = 'already_accepted'
+        except (OSError, ValueError, ET.ParseError):
+            detail['licenses'] = 'preparation_required'
+            code = command('licenses', ['--licenses'], LICENSE_SECONDS)
+            if code:
+                return code
+        image = ';'.join(('system-images', 'android-' + os.environ['AVD_API'],
+                          os.environ['AVD_TARGET'], os.environ['AVD_ARCH']))
+        code = command('install', ['--install', 'platform-tools', 'emulator', image, '--channel=0'], INSTALL_SECONDS)
+        if code:
+            return code
+        detail['phase'] = 'validate'
+        write(data)
+        validate_installed(root, packages)
+        finalize()
+        detail['phase'] = 'complete'
+        detail['result'] = 'passed'
+        detail['exit_code'] = 0
+        return 0
+    except (OSError, ValueError, ET.ParseError) as error:
+        # Our validation messages are fixed; OS/parser errors expose only their class in receipts.
+        detail['error'] = str(error)[:200] if isinstance(error, ValueError) else type(error).__name__
+        code = 1
+        return code
+    finally:
+        # finalize owns the cache keys; preserve them instead of replacing its updated state.
+        latest = json.loads(STATE.read_text())
+        detail['finished'] = time.time()
+        if detail['result'] != 'passed':
+            code = code or 1
+            detail.update(result='failed', exit_code=code)
+            update(phase='setup', result='failed', exit_code=code, failure_category='setup')
+        latest['preparation'] = detail
+        write(latest)
+        print('SDK preparation: ' + json.dumps(detail, sort_keys=True))
 
 
 def write(data):
@@ -155,5 +284,5 @@ def complete():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['paths', 'recover', 'finalize', 'complete'])
-    globals()[parser.parse_args().command]()
+    parser.add_argument('command', choices=['paths', 'recover', 'prepare', 'finalize', 'complete'])
+    raise SystemExit(globals()[parser.parse_args().command]())
