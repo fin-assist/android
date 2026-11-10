@@ -18,11 +18,11 @@ jobs:
         with:
           python-version: '3.15'
       - name: Verify the shared controller and consumer contract
-        uses: fin-assist/go-ci/.github/actions/renovate-policy-tests@cd8066d4f72eb03a894f781cd753dfa619973ca0 # main
+        uses: fin-assist/go-ci/.github/actions/renovate-policy-tests@ceea840290fe34c728e543128b13f0fe8e18d856 # main
         with:
           mode: policy
           repository-root: ${{ github.workspace }}
-          source-revision: cd8066d4f72eb03a894f781cd753dfa619973ca0
+          source-revision: ceea840290fe34c728e543128b13f0fe8e18d856
 
   runtime-contract:
     name: Renovate runtime contract
@@ -44,9 +44,9 @@ jobs:
         working-directory: scripts/renovate-runtime
         run: timeout 600s npm ci --ignore-scripts --no-audit --no-fund
       - name: Verify the shared runtime contract against the local lock
-        uses: fin-assist/go-ci/.github/actions/renovate-policy-tests@cd8066d4f72eb03a894f781cd753dfa619973ca0 # main
+        uses: fin-assist/go-ci/.github/actions/renovate-policy-tests@ceea840290fe34c728e543128b13f0fe8e18d856 # main
         with:
           mode: runtime
           repository-root: ${{ github.workspace }}
           runtime-path: ${{ github.workspace }}/scripts/renovate-runtime
-          source-revision: cd8066d4f72eb03a894f781cd753dfa619973ca0
+          source-revision: ceea840290fe34c728e543128b13f0fe8e18d856
