@@ -91,7 +91,7 @@ def prepare():
                     ], timeout=seconds, stdin=answers, stdout=log, stderr=subprocess.STDOUT,
                         record_deadline=False)
                 except BaseException as error:
-                    if not isinstance(error, subprocess.TimeoutExpired) and not getattr(error, 'command_deadline_expired', False):
+                    if not getattr(error, 'command_deadline_expired', False):
                         raise
                     step['deadline_expired'] = True
                     result = 124

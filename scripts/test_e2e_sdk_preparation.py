@@ -262,6 +262,64 @@ class SdkPreparationTest(unittest.TestCase):
                 self.assertEqual('preparation_required', self.detail()['licenses'])
                 self.assertEqual('licenses', self.detail()['steps'][0]['phase'])
 
+    def test_ps_probe_timeout_preserves_real_deadline_but_never_invents_one_after_cancellation(self):
+        self.initialize(True)
+        run = SDK.PROCESS.run_command
+        wait = SDK.PROCESS.wait_for_process_group
+        for expired in (True, False):
+            with self.subTest(real_command_deadline=expired):
+                execution.update(initialize=True)
+                process = Mock(pid=12345678)
+                process.wait.side_effect = subprocess.TimeoutExpired(['fake-sdkmanager'], 600) if expired else SystemExit(143)
+                with patch.object(SDK.PROCESS, 'run_command', functools.partial(run, grace=0)), \
+                     patch.object(SDK.PROCESS.subprocess, 'Popen', return_value=process), \
+                     patch.object(SDK.PROCESS.os, 'killpg', side_effect=ProcessLookupError), \
+                     patch.object(SDK.PROCESS, 'wait_for_process_group', functools.partial(wait, timeout=0.05)), \
+                     patch.object(SDK.PROCESS.subprocess, 'run', side_effect=subprocess.TimeoutExpired(['ps'], 0.001)), \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    if expired:
+                        self.assertEqual(124, SDK.prepare())
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, 'did not stop'):
+                            SDK.prepare()
+                step = self.detail()['steps'][-1]
+                self.assertEqual(expired, step['deadline_expired'])
+                if expired:
+                    self.assertEqual(('RuntimeError', 124), (step['cleanup_error'], step['exit_code']))
+                else:
+                    self.assertNotEqual(124, step['exit_code'])
+                self.assertFalse(execution.STATE.with_suffix('.deadline').exists())
+
+    def test_unmarked_timeout_from_a_service_probe_is_not_a_command_deadline(self):
+        self.initialize(True)
+        with patch.object(SDK.PROCESS, 'run_command', side_effect=subprocess.TimeoutExpired(['ps'], 0.001)), \
+             contextlib.redirect_stdout(io.StringIO()), self.assertRaises(subprocess.TimeoutExpired):
+            SDK.prepare()
+        self.assertFalse(self.detail()['steps'][-1]['deadline_expired'])
+        self.assertNotEqual(124, execution.read()['exit_code'])
+
+    def test_timeout_while_reaping_the_group_leader_is_also_reported_as_cleanup_failure(self):
+        self.initialize(True)
+        run = SDK.PROCESS.run_command
+        wait = SDK.PROCESS.wait_for_process_group
+        process = Mock(pid=12345678)
+        calls = []
+        def timed_wait(**kwargs):
+            calls.append(kwargs)
+            raise subprocess.TimeoutExpired(['fake-sdkmanager' if len(calls) == 1 else 'leader-reap'], kwargs['timeout'])
+        process.wait.side_effect = timed_wait
+        with patch.object(SDK.PROCESS, 'run_command', functools.partial(run, grace=0)), \
+             patch.object(SDK.PROCESS.subprocess, 'Popen', return_value=process), \
+             patch.object(SDK.PROCESS.os, 'killpg', side_effect=ProcessLookupError), \
+             patch.object(SDK.PROCESS, 'wait_for_process_group', functools.partial(wait, timeout=0.05)), \
+             patch.object(SDK.PROCESS.subprocess, 'run', return_value=subprocess.CompletedProcess(['ps'], 0, stdout='')), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(124, SDK.prepare())
+        self.assertGreater(len(calls), 1)
+        step = self.detail()['steps'][-1]
+        self.assertEqual(('RuntimeError', 124), (step['cleanup_error'], step['exit_code']))
+        self.assertTrue(step['deadline_expired'])
+
     def test_online_success_cannot_hide_a_still_missing_binary(self):
         self.initialize(True)
         (self.sdk / 'emulator/emulator').unlink()

@@ -66,14 +66,24 @@ def wait_for_process_group(process, timeout=5):
         if remaining <= 0:
             raise RuntimeError('Command process group did not stop after SIGKILL; raw evidence retained')
         process.poll()  # Reap the leader without mistaking its exit for the descendants' exit.
-        result = subprocess.run(['ps', '-eo', 'pgid=,stat='], check=True, capture_output=True,
-                                text=True, timeout=min(1, remaining))
+        try:
+            result = subprocess.run(['ps', '-eo', 'pgid=,stat='], check=True, capture_output=True,
+                                    text=True, timeout=min(1, remaining))
+        except subprocess.TimeoutExpired:
+            # A slow probe is not the command's deadline. Exhaust this barrier as a cleanup RuntimeError.
+            continue
         members = [line.split() for line in result.stdout.splitlines() if line.strip()]
         # A zombie leader can still have a live JVM thread (procps marks this with lowercase l).
         if not any(int(group) == process.pid and not (status.startswith('Z') and 'l' not in status)
                    for group, status in members):
             # The leader may have become a zombie after poll(); reap it before handing the evidence to tar.
-            process.wait(timeout=min(1, remaining))
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                continue
+            try:
+                process.wait(timeout=min(1, remaining))
+            except subprocess.TimeoutExpired:
+                continue
             return
         time.sleep(min(0.05, max(0, deadline - time.monotonic())))
 
