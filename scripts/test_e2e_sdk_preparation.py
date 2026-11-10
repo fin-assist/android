@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import e2e_execution as execution
 
@@ -216,6 +216,59 @@ class SdkPreparationTest(unittest.TestCase):
         log = SDK.STATE.with_name(step['log']).read_bytes()
         self.assertEqual(SDK.LOG_BYTES, len(log))
         self.assertIn(b'last SDK diagnostic', log)
+
+    def test_cleanup_error_cannot_erase_an_already_observed_setup_deadline(self):
+        self.initialize(True)
+        run = SDK.PROCESS.run_command
+        # Real child termination is covered above; simulate a barrier failure without leaving a live child.
+        for error in (RuntimeError('barrier failure'), PermissionError('barrier failure')):
+            with self.subTest(error=type(error).__name__):
+                execution.update(initialize=True)
+                process = Mock(pid=12345678)
+                process.wait.side_effect = subprocess.TimeoutExpired(['fake-sdkmanager'], 600)
+                with patch.object(SDK.PROCESS, 'run_command', functools.partial(run, grace=0)), \
+                     patch.object(SDK.PROCESS.subprocess, 'Popen', return_value=process), \
+                     patch.object(SDK.PROCESS.os, 'killpg', side_effect=ProcessLookupError), \
+                     patch.object(SDK.PROCESS, 'wait_for_process_group', side_effect=error), \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(124, SDK.prepare())
+                step = self.detail()['steps'][-1]
+                self.assertTrue(step['deadline_expired'])
+                self.assertEqual((type(error).__name__, 124), (step['cleanup_error'], step['exit_code']))
+                self.assertEqual(('setup', 124), (execution.read()['category'], execution.read()['exit_code']))
+                self.assertFalse(execution.STATE.with_suffix('.deadline').exists())
+                self.assertNotIn('actual', json.loads(SDK.STATE.read_text())['packages']['emulator'])
+
+    def test_incomplete_binaries_and_invalid_platform_tools_forbid_license_skip(self):
+        self.initialize(True)
+        for relative, operation in [
+            ('emulator/emulator', 'missing'), ('emulator/emulator', 'not_executable'),
+            ('platform-tools/adb', 'missing'), ('platform-tools/adb', 'not_executable'),
+            ('system-images/android-34/google_apis/x86_64/system.img', 'missing'),
+            ('platform-tools/package.xml', 'wrong_identity'),
+        ]:
+            with self.subTest(relative=relative, operation=operation):
+                for path in self.template.iterdir():
+                    shutil.copytree(path, self.sdk / path.name, dirs_exist_ok=True)
+                path = self.sdk / relative
+                if operation == 'missing':
+                    path.unlink()
+                elif operation == 'not_executable':
+                    path.chmod(0o644)
+                else:
+                    path.write_text(path.read_text().replace('path="platform-tools"', 'path="other"'))
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(0, SDK.prepare())
+                self.assertEqual('preparation_required', self.detail()['licenses'])
+                self.assertEqual('licenses', self.detail()['steps'][0]['phase'])
+
+    def test_online_success_cannot_hide_a_still_missing_binary(self):
+        self.initialize(True)
+        (self.sdk / 'emulator/emulator').unlink()
+        with patch.dict(os.environ, {'FAKE_SDK_MODE': 'invalid-install'}), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(1, SDK.prepare())
+        self.assertEqual(('validate', 'failed'), (self.detail()['phase'], self.detail()['result']))
 
     def test_successful_process_with_no_valid_install_still_fails_closed(self):
         self.assertEqual(1, self.prepare(warm=False, mode='invalid-install'))

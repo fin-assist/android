@@ -132,6 +132,8 @@ codes, limits, observed deadline flags and log-tail sizes. `sdk-licenses.log` (w
 retain up to 64KiB each of merged stdout/stderr in raw artifacts, with original output sizes and truncation flags
 in JSON. Compact results include this JSON unchanged, without log files. The shared coordinator stops the entire
 SDK command group on deadline; setup expiry remains `setup` with exit124 and never creates a UI-test budget marker.
+If the final process-group barrier also fails, its `cleanup_error` is retained alongside the observed deadline/124;
+the cleanup exception cannot turn that observation into a generic exit1 or allow validation/tests to continue.
 Later cleanup preserves the first failure. There is no setup/UI retry or relaxation of report completeness.
 `sdk-start` precedes the first restore, so total preparation includes all SDK transfer/install/save plus Android
 boot. `preparation.json` labels the normal path `fresh-cold-direct` with AVD cache `disabled`; it cannot activate the

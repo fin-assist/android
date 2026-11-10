@@ -150,6 +150,11 @@ def run_command(command, timeout=2400, grace=10, archive_output=False, *,
                 wait_for_process_group(process)
                 archive_ready = True
             raise
+    except BaseException as error:
+        # Cleanup failure may replace TimeoutExpired; preserve the observed deadline for setup callers too.
+        if budget_expired:
+            error.command_deadline_expired = True
+        raise
     finally:
         signal.signal(signal.SIGTERM, previous)
         if archive_ready:

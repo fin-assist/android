@@ -90,9 +90,13 @@ def prepare():
                         *arguments, '--verbose',
                     ], timeout=seconds, stdin=answers, stdout=log, stderr=subprocess.STDOUT,
                         record_deadline=False)
-                except subprocess.TimeoutExpired:
+                except BaseException as error:
+                    if not isinstance(error, subprocess.TimeoutExpired) and not getattr(error, 'command_deadline_expired', False):
+                        raise
                     step['deadline_expired'] = True
                     result = 124
+                    if not isinstance(error, subprocess.TimeoutExpired):
+                        step['cleanup_error'] = type(error).__name__
                 finally:
                     size = log.seek(0, os.SEEK_END)
                     log.seek(max(0, size - LOG_BYTES))
