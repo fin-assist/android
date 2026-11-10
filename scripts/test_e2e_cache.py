@@ -466,7 +466,8 @@ class ShardExitBarrierTest(unittest.TestCase):
                       subprocess.CalledProcessError(1, 'ps')):
             with self.subTest(error=error):
                 archive = Mock()
-                with self.assertRaises(type(error)):
+                expected = RuntimeError if isinstance(error, subprocess.TimeoutExpired) else type(error)
+                with self.assertRaises(expected):
                     self.run_interrupted(Mock(side_effect=error), archive)
                 archive.assert_not_called()
 
