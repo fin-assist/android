@@ -200,7 +200,7 @@ class SdkCacheTest(unittest.TestCase):
         self.assertRegex(workflow, r'avd_cache:[\s\S]*?type: boolean\n        default: false')
         first = workflow.index('scripts/e2e-cache.py mark sdk-start')
         restore = workflow.index('name: Restore emulator SDK package')
-        online = workflow.index('timeout 600 "$sdkmanager_path" --install platform-tools')
+        online = workflow.index('scripts/e2e-sdk-cache.py prepare')
         save = workflow.index('name: Save current emulator SDK package')
         sdk_end = workflow.index('scripts/e2e-sdk-cache.py complete')
         emulator = workflow.index('uses: reactivecircus/android-emulator-runner@')
@@ -209,7 +209,9 @@ class SdkCacheTest(unittest.TestCase):
         self.assertLess(online, save)
         self.assertLess(save, sdk_end)
         self.assertLess(sdk_end, emulator)
-        self.assertIn('timeout 120 "$sdkmanager_path" --licenses', workflow)
+        self.assertEqual(2, workflow.count('run: python3 scripts/e2e-sdk-cache.py prepare'))
+        self.assertNotIn('--licenses', workflow)
+        self.assertEqual(600, SDK.INSTALL_SECONDS)
         for package in ('emulator', 'image'):
             self.assertIn(f'steps.sdk-{package}.outputs.cache-matched-key', workflow)
             block = steps[f'Save current {"emulator" if package == "emulator" else "system image"} SDK package']

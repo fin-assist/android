@@ -184,14 +184,7 @@ jobs:
 
       - name: Prepare current SDK packages
         id: sdk-install
-        run: |
-          sdkmanager_path="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          # yes exits on SIGPIPE when sdkmanager has read all answers; only sdkmanager failure matters here.
-          set +o pipefail
-          yes | timeout 120 "$sdkmanager_path" --licenses >/dev/null
-          set -o pipefail
-          timeout 600 "$sdkmanager_path" --install platform-tools emulator "system-images;android-${AVD_API};${AVD_TARGET};${AVD_ARCH}" --channel=0
-          python3 scripts/e2e-sdk-cache.py finalize
+        run: python3 scripts/e2e-sdk-cache.py prepare
 
       # One shard publishes actual online-installed revisions, strictly before starting any emulator/tests.
       - name: Save current emulator SDK package
@@ -489,14 +482,7 @@ jobs:
 
       - name: Prepare current SDK packages
         id: sdk-install
-        run: |
-          sdkmanager_path="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          # yes exits on SIGPIPE when sdkmanager has read all answers; only sdkmanager failure matters here.
-          set +o pipefail
-          yes | timeout 120 "$sdkmanager_path" --licenses >/dev/null
-          set -o pipefail
-          timeout 600 "$sdkmanager_path" --install platform-tools emulator "system-images;android-${AVD_API};${AVD_TARGET};${AVD_ARCH}" --channel=0
-          python3 scripts/e2e-sdk-cache.py finalize
+        run: python3 scripts/e2e-sdk-cache.py prepare
 
       - name: Finish SDK preparation timings
         run: |

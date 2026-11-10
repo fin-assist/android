@@ -466,7 +466,8 @@ class ShardExitBarrierTest(unittest.TestCase):
                       subprocess.CalledProcessError(1, 'ps')):
             with self.subTest(error=error):
                 archive = Mock()
-                with self.assertRaises(type(error)):
+                expected = RuntimeError if isinstance(error, subprocess.TimeoutExpired) else type(error)
+                with self.assertRaises(expected):
                     self.run_interrupted(Mock(side_effect=error), archive)
                 archive.assert_not_called()
 
@@ -907,9 +908,11 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
 
     def test_sdk_commands_before_emulator_action_do_not_assume_sdk_tools_on_path(self):
         preparation = self.step('Prepare current SDK packages')
-        self.assertIn('sdkmanager_path="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"', preparation)
-        self.assertIn('yes | timeout 120 "$sdkmanager_path" --licenses', preparation)
-        self.assertIn('"$sdkmanager_path" --install platform-tools', preparation)
+        self.assertIn('run: python3 scripts/e2e-sdk-cache.py prepare', preparation)
+        helper = Path(__file__).with_name('e2e-sdk-cache.py').read_text()
+        self.assertIn("str(root / 'cmdline-tools/latest/bin/sdkmanager')", helper)
+        self.assertIn("command('licenses', ['--licenses'], LICENSE_SECONDS)", helper)
+        self.assertIn("['--install', 'platform-tools', 'emulator', image, '--channel=0']", helper)
         self.assertNotRegex(preparation, r'(?m)(?:\||^)[ \t]*sdkmanager\s')
         with patch.dict(os.environ, {'ANDROID_HOME': '/sdk-without-path', 'PATH': '/bin'}):
             self.assertEqual('/sdk-without-path/platform-tools/adb', cache.adb_executable())
