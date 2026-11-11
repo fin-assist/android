@@ -1,0 +1,12 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <provider
+            android:name="io.appmetrica.analytics.internal.PreloadInfoContentProvider"
+            tools:node="remove" />
+        <service
+            android:name="io.appmetrica.analytics.internal.AppMetricaService"
+            android:enabled="${appMetricaEnabled}"
+            tools:replace="android:enabled" />
+    </application>
+</manifest>

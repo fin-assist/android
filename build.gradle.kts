@@ -1,5 +1,6 @@
 // Root build: plugins are declared here (apply false) so every module resolves the same versions.
 plugins {
+    alias(libs.plugins.appmetrica) apply false
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.kotlin.android) apply false
@@ -8,7 +9,6 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.hilt) apply false
-    alias(libs.plugins.tracer) apply false
     // Unit test coverage of all modules in one report: `./gradlew :koverHtmlReportUnit` (docs/testing.md).
     alias(libs.plugins.kover)
     // Enforces the module dependency rules (see docs/modules.md). Fails the build on a violation.
@@ -84,7 +84,7 @@ val e2eCoverageModules: List<Project> = subprojects.filter {
     it.buildFile.exists() &&
         it.path !in setOf(
             ":core:screenshot-testing", ":core:network",
-            ":providers:toggles-rustore", ":providers:tracking-mytracker", ":providers:crash-appmetrica",
+            ":providers:toggles-rustore", ":providers:telemetry-appmetrica",
         )
 }
 

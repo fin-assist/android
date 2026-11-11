@@ -29,9 +29,9 @@ retrofit = "3.0.0"
 
 # Prod SDKs (stage 8)
 rustoreRemoteConfig = "10.5.2"
-mytracker = "3.6.0"
+appmetrica = "8.6.0"
+appmetrica-plugin = "2.1.0"
 # Crashes and ANR (both flavors); the Gradle plugin uploads R8 mappings
-tracer = "1.6.1"
 
 # Security
 tink = "1.24.0"
@@ -74,9 +74,7 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 rustore-remoteconfig = { group = "ru.rustore.sdk", name = "remoteconfig", version.ref = "rustoreRemoteConfig" }
-mytracker-sdk = { group = "com.my.tracker", name = "mytracker-sdk", version.ref = "mytracker" }
-tracer-platform = { group = "ru.ok.tracer", name = "tracer-platform", version.ref = "tracer" }
-tracer-crash-report = { group = "ru.ok.tracer", name = "tracer-crash-report" }
+appmetrica-analytics = { group = "io.appmetrica.analytics", name = "analytics", version.ref = "appmetrica" }
 androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
 
 # Compose (versions come from the BOM)
@@ -130,6 +128,7 @@ androidx-test-services = { group = "androidx.test.services", name = "test-servic
 openapi-validator = { group = "com.atlassian.oai", name = "swagger-request-validator-core", version.ref = "openapiValidator" }
 
 [plugins]
+appmetrica = { id = "io.appmetrica.analytics", version.ref = "appmetrica-plugin" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
@@ -139,5 +138,4 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
-tracer = { id = "ru.ok.tracer", version.ref = "tracer" }
 

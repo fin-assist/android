@@ -1,6 +1,7 @@
 """Run the immutable shared policy tests for this consumer (read-only)."""
 from pathlib import Path
 import json
+import os
 import re
 import subprocess
 import sys
@@ -12,6 +13,10 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class SharedRenovate(unittest.TestCase):
+    @unittest.skipIf(
+        os.environ.get('PF_RENOVATE_POLICY_VIA_ACTION') == 'true',
+        'Verified by the required Renovate policy tests workflow through the pinned private action',
+    )
     def test_pinned_policy_and_consumer_contract(self):
         if (ROOT / '.finassist-ci.json').is_file():
             config = read_config(ROOT)
@@ -29,3 +34,7 @@ class SharedRenovate(unittest.TestCase):
                         '--root', str(ROOT), '--mode', 'policy',
                         '--source-revision', config['revision']],
                        check=True, timeout=120)
+
+
+if __name__ == '__main__':
+    unittest.main()

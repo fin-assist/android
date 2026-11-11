@@ -19,8 +19,7 @@ import javax.inject.Singleton
 
 /**
  * Logcat tracking for the `mock` flavor: the same event stream as production, no SDK. As a crash reporter it runs
- * next to Tracer (`CompositeCrashReporter`), so non-fatals and breadcrumbs are visible in logcat with or without a
- * Tracer token.
+ * next to AppMetrica when configured (`CompositeCrashReporter`), so non-fatals and breadcrumbs are visible locally.
  */
 @Singleton
 class LogTracker @Inject constructor() : Tracker, CrashReporter {
@@ -35,7 +34,7 @@ class LogTracker @Inject constructor() : Tracker, CrashReporter {
     }
 
     override fun report(error: NonFatal) {
-        // The same scrubbed copy Tracer gets: in `mock` messages may quote the statement (titles, amounts).
+        // The same scrubbed copy AppMetrica gets: in `mock` messages may quote the statement (titles, amounts).
         Log.e(TAG, "non-fatal ${error.severity} ${error.issueKey}", ScrubbedThrowable.of(error.cause, error.code?.value))
     }
 

@@ -49,7 +49,7 @@
 
 ## Проверки
 
-`python3 -m unittest discover -s scripts -p 'test_renovate_shared.py'` проверяет manifest и action pins, затем вызывает общий policy/lifecycle/CLI/gate набор из закреплённого source. Shared Python suite ограничен90s; локальный shim —120s. Внешний process timeout обязателен. Изменение касается автоматизации репозитория.
+В GitHub Actions общий набор выполняет обязательная проверка `Renovate policy tests` через закреплённый приватный action `fin-assist/go-ci`. Для локального запуска сначала получите commit из `.github/renovate-source.json` с авторизованным Git в `.finassist-ci/<revision>`. У checkout должен быть origin `https://github.com/fin-assist/go-ci.git`, чистое рабочее дерево и HEAD на этом commit. Затем `python3 scripts/test_renovate_shared.py` проверит целостность checkout, manifest и action pins и запустит общий набор policy/lifecycle/CLI/gate. Локальный runner ограничивает дочерний процесс 120 секундами.
 
 Настоящий Renovate и integrity транзитивных зависимостей закреплены в `scripts/renovate-runtime/package.json`/`package-lock.json`; версия не дублируется в командах. Используйте Node из текущего workflow/manifest. Установку `(cd scripts/renovate-runtime && npm ci --ignore-scripts --no-audit --no-fund)` ограничьте process timeout600s. Затем запускайте общий runner из проверенного cache: `python3 -I .finassist-ci/<revision>/common/renovate/test.py --root "$PWD" --mode runtime --runtime "$PWD/scripts/renovate-runtime" --source-revision <revision>`. Он сам задаёт пути к config, manifest и controller, запускает все три fixtures с timeout90s каждый и проверяет actual grouping/recovery/digests, metadata и совместное извлечение immutable source pins. Внешние mutation/network adapters заменены фейками. Native RE2 install выключен: JavaScript RegExp fallback явно сообщается и не доказывает hosted RE2/загрузку presets. Hosted App execution и обычная очистка веток Renovate проверяются отдельно; сам controller ветки не удаляет.
 
@@ -89,7 +89,7 @@ state и receipts остаются данными репозитория. Пос
 
 В командах `<revision>` означает полный SHA из manifest, а `<consumer>` — корень checkout.
 До передачи mutation credential подготовьте и проверьте cache read-only командой
-`python3 -m unittest discover -s scripts -p 'test_renovate_shared.py'` с внешним process timeout.
+`python3 scripts/test_renovate_shared.py` с внешним process timeout.
 Она использует побайтно совпадающий bootstrap с проверкой raw cache integrity; тесты не получают
 `RENOVATE_POLICY_TOKEN`. После этого явный bootstrap выполняется кодом source:
 `GITHUB_REPOSITORY=fin-assist/android python3 -I .finassist-ci/<revision>/common/renovate/renovate_policy.py --root "$PWD" --bootstrap`.

@@ -189,7 +189,7 @@ reruns the tests of every module depending on it. A version bump in `gradle/libs
 it reaches the modules with the artifact on their classpath — a test library reruns the tests with the main code still
 cached, an `androidTest` one touches nothing — so most Renovate PRs keep the cache. Everything recompiles only when the
 build itself changes: `build-logic`, the Gradle wrapper, or a plugin or compiler version (`kotlin`, `ksp`, `agp`,
-`hilt`, `kover`, `tracer`). More test
+`hilt`, `kover`, `appmetrica`). More test
 JVMs per task (`maxParallelForks`) were measured and left out: a Robolectric module holds one or two long test
 classes, so a second JVM only adds Robolectric's start-up, and the runner's four cores are already busy with the
 modules Gradle runs in parallel. A few lines of the race tests (`*RaceTest`) are covered in some runs and not in
@@ -305,7 +305,7 @@ with the other script tests in CI. This guard does not authorize Compose/Android
 CI assembles stageDebug and stageRelease, publishes `app-stage-debug`, validates stage version suffix/identity,
 fixed HTTPS endpoint and default-off SDKs, and tests stage/prod pin isolation on generated manifests/resources.
 Both stage debug and release guards are also run with production SDK sentinel properties and a different local backend URL;
-those must not enter the stage BuildConfig or enable Tracer. `:app:checkNoMockCode` checks both stage runtime
+those must not enter the stage BuildConfig or enable AppMetrica. `:app:checkNoMockCode` checks both stage runtime
 classpaths. These are build/configuration checks, not a public-stage UI acceptance run (docs/e2e.md).
 
 

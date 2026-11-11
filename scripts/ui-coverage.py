@@ -256,7 +256,7 @@ NOT_INSTRUMENTED = re.compile(r"^(?:(?:public|internal|private|data|sealed|enum|
 TOP_LEVEL_MEMBER = re.compile(r"^(?:(?:public|internal|private|inline|suspend|operator|infix)\s+)*(?:fun|val|var)\b", re.MULTILINE)
 SOURCE_SETS = ("main", "mock", "mockE2e")
 # Modules outside the mock e2e APK (`e2eCoverageModules` in the root build.gradle.kts).
-NOT_IN_E2E_APK = ("core/network", "core/screenshot-testing", "providers/toggles-rustore", "providers/tracking-mytracker", "providers/crash-appmetrica")
+NOT_IN_E2E_APK = ("core/network", "core/screenshot-testing", "providers/toggles-rustore", "providers/telemetry-appmetrica")
 
 
 def source_module(path: Path) -> str:
