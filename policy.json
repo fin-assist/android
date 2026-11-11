@@ -278,6 +278,19 @@
       ]
     },
     {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "gradle"
+      ],
+      "matchDatasources": [
+        "gradle-version"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 8"
+      ]
+    },
+    {
       "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
       "matchPackageNames": [
         "io.github.takahirom.roborazzi:roborazzi-compose"
@@ -1154,6 +1167,23 @@
       "additionalBranchPrefix": "fin211-retry-328-",
       "matchJsonata": [
         "newDigest = \"sha512-+62GEWYQzXo/FEoGVBkDyZts25B1F9PlwaEiEe+eK71JS6i5A2zaEgEHavUNTn2wFYdP1zrPsyJAeyHm7UyGCA==\""
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "gradle"
+      ],
+      "matchDatasources": [
+        "gradle-version"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-330-",
+      "matchNewValue": "/^8\\.14\\.7$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
       ]
     }
   ]
