@@ -47,6 +47,9 @@ def update(phase=None, result=None, exit_code=None, failure_category=None, initi
             data['exit_code'] = exit_code
             if result == 'failed':
                 data['category'] = failure_category or category(data['phase'])
+    if failure_category == 'budget':
+        # A deadline during cleanup is still a deadline even when the first failure was an assertion.
+        data['budget_expired'] = True
     data['events'].append({'phase': phase or data['phase'], 'result': result or 'running', 'at': time.time()})
     write(data)
     return data

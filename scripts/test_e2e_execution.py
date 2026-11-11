@@ -55,6 +55,17 @@ class ExecutionEvidenceTest(unittest.TestCase):
         self.assertEqual(('budget', 'components'),
                          (execution.read()['category'], execution.read()['phase']))
 
+    def test_finish_keeps_deadline_marker_even_when_an_assertion_failed_first(self):
+        execution.update(initialize=True)
+        execution.update(phase='maestro')
+        execution.update(result='failed', exit_code=1)
+        execution.STATE.with_suffix('.deadline').touch()
+        with patch.object(sys, 'argv', ['e2e_execution.py', 'finish', 'cancelled']):
+            execution.main()
+        data = execution.read()
+        self.assertEqual(('test', 1), (data['category'], data['exit_code']))
+        self.assertTrue(data['budget_expired'])
+
     def test_initialization_clears_a_previous_attempt_deadline(self):
         marker = execution.STATE.with_suffix('.deadline')
         marker.touch()

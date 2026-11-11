@@ -351,6 +351,37 @@ class MergeTest(unittest.TestCase):
             "problems=shard 1/2: 1 flow(s) failed; shard 2/2: 1 flow(s) missing from its report", "interrupted=false",
         ])
 
+    def test_qase_deadline_guard_does_not_depend_on_console_progress(self):
+        identity = {'GITHUB_SHA': 'a' * 40, 'GITHUB_RUN_ID': '42', 'GITHUB_RUN_ATTEMPT': '1'}
+        directory = self.shard_dir(2)
+        path = directory / shards.PROGRESS_FILE
+        with patch.dict(os.environ, identity):
+            execution_receipt(self.shard_dir(1))
+            for category, marker, expected in [('test', False, 'false'), ('budget', False, 'true'), ('test', True, 'true')]:
+                for checkpoint in (False, True):
+                    with self.subTest(category=category, marker=marker, checkpoint=checkpoint):
+                        execution_receipt(directory, phase='maestro', category=category, result='failed',
+                                          exit_code=124 if category == 'budget' else 1, budget_expired=marker)
+                        path.unlink(missing_ok=True)
+                        if checkpoint:
+                            write(path, json.dumps({'schema': 1, 'identity': identity, 'flows': {self.flows[1]: 'passed'}}))
+                        _, _, output = self.run_gather()
+                        self.assertEqual(output.splitlines()[-1], f'interrupted={expected}')
+
+    def test_checkpoint_cannot_hide_missing_flow_in_received_junit(self):
+        identity = {'GITHUB_SHA': 'a' * 40, 'GITHUB_RUN_ID': '42', 'GITHUB_RUN_ATTEMPT': '1'}
+        directory = self.shard_dir(2)
+        write(directory / 'maestro-report.xml', report(self.root, [(self.flows[2], 'Flow three', 40, False)]))
+        write(directory / shards.PROGRESS_FILE,
+              json.dumps({'schema': 1, 'identity': identity, 'flows': {self.flows[1]: 'passed'}}))
+        with patch.dict(os.environ, identity):
+            execution_receipt(self.shard_dir(1))
+            execution_receipt(directory)
+            outcomes, merged = self.gather()
+        self.assertEqual((outcomes[1].missing, outcomes[1].unverified), (1, 0))
+        self.assertIn('shard 2/2: 1 flow(s) missing from its report', shards.problems(outcomes))
+        self.assertEqual(next(c for c in merged.iter('testcase') if c.get('name') == 'Flow two').get('pf-execution'), 'not-run')
+
     def test_complete_run_is_not_incomplete(self):
         write(self.shard_dir(1) / "maestro-report.xml", report(self.root, [(self.flows[0], "Flow one", 61, False)]))
         write(self.shard_dir(2) / "maestro-report.xml", report(self.root, [

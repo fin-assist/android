@@ -410,9 +410,9 @@ def merge_reports(
         outcome = ShardOutcome(shard.index, len(shard.flows), reported=False)
         if report is not None:
             _receipt(report.parent, outcome, receipts_required)
-        progress = read_progress(report.parent, outcome, shard.flows) if report is not None else {}
-        _merge_suite(root, suite, shard.flows, [report] if report is not None and report.is_file() else [],
-                     outcome, by_name, progress)
+        has_report = report is not None and report.is_file()
+        progress = read_progress(report.parent, outcome, shard.flows) if report is not None and not has_report else {}
+        _merge_suite(root, suite, shard.flows, [report] if has_report else [], outcome, by_name, progress)
         outcomes.append(outcome)
     return merged, outcomes
 
@@ -652,8 +652,7 @@ def main(argv: list[str] | None = None) -> int:
             with args.github_output.open("a", encoding="utf-8") as output:
                 output.write(f"incomplete={'true' if found else 'false'}\n")
                 output.write(f"problems={'; '.join(found)}\n")
-                interrupted = any(o.budget_expired or o.category == "budget" or (not o.reported and o.unverified)
-                                  for o in outcomes)
+                interrupted = any(o.budget_expired or o.category == "budget" for o in outcomes)
                 output.write(f"interrupted={'true' if interrupted else 'false'}\n")
         return 0
     stored = json.loads(args.durations.read_text(encoding="utf-8")) if args.durations.is_file() else {}
