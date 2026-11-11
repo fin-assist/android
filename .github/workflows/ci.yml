@@ -33,7 +33,10 @@ jobs:
         with:
           python-version: '3.15'
 
+      # The required Renovate policy job runs the same shared suite using the pinned private action.
       - name: Test the scripts (agent-docs parsers, Qase report and case map, UI coverage, design-check export)
+        env:
+          PF_RENOVATE_POLICY_VIA_ACTION: 'true'
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
       # Both PR directions matter: feature → release and release → main, as well as direct release pushes.
