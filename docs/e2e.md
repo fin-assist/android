@@ -1602,7 +1602,7 @@ reproduces the duplicate-ID failure before the fix and checks both aliases, dire
 the retained Salary category. Qase93 keeps its ordinary scroll to Salary, so the crash is not bypassed
 with a search query. This is a mock-backend correction; shared UI helpers and control hooks are unchanged.
 
-Qase93 starts the scroll inside the category sheet's list with a swipe spanning most of the list's height.
+Qase93 advances within the category sheet's list with up to three swipes spanning most of its height.
 It then locates the Income heading and Salary in two separate Maestro commands, each with the existing
 20 s default. On run 43051390522 the final selector lookup preceded the last centered swipe, and the
 failure screenshot already showed the heading. The directory stays unfiltered so the flow traverses
