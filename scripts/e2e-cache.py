@@ -174,14 +174,19 @@ def run_command(command, timeout=2400, grace=10, archive_output=False, *,
                 archive_maestro_output()
 
 
-def maestro_budget(configured, started, now):
-    """Reserve time in the 45-minute shard job for shutdown, evidence finalization and upload."""
-    if started is None:
+def maestro_budget(configured, started, now, job_minutes):
+    """Reserve time in the shard job for shutdown, evidence finalization and upload."""
+    if started is None and job_minutes is None:
         return configured
+    if started is None or job_minutes is None:
+        raise ValueError('shard budget requires both the start clock and the job timeout')
+    job_seconds = int(job_minutes) * 60
+    if job_seconds <= 0:
+        raise ValueError('shard job timeout must be positive')
     elapsed = now - float(started)
     if not math.isfinite(elapsed) or elapsed < 0:
         raise ValueError('invalid shard budget clock')
-    return round(max(0, min(configured, 45 * 60 - 90 - elapsed)), 3)
+    return round(max(0, min(configured, job_seconds - 90 - elapsed)), 3)
 
 
 def run_tests(shard, timeout=2400, grace=10, native_only=False):
@@ -500,7 +505,8 @@ def main():
             data['cache'] = 'disabled'
         budget = args.timeout if args.timeout is not None else 600 if args.native_only else 2400
         if not args.native_only:
-            budget = maestro_budget(budget, os.environ.get('E2E_SHARD_STARTED_MONOTONIC'), time.monotonic())
+            budget = maestro_budget(budget, os.environ.get('E2E_SHARD_STARTED_MONOTONIC'), time.monotonic(),
+                                    os.environ.get('E2E_SHARD_JOB_MINUTES'))
         data['effective_budget_seconds'] = budget
         write(data)
         print(f'UI process budget after preparation: {budget:g}s', flush=True)

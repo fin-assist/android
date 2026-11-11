@@ -33,7 +33,7 @@ env:
   # The number of shards; the matrix below lists 1..SHARDS.
   SHARDS: 5
   # Shared by the actual process coordinator and the compact result's configuration metadata.
-  MAESTRO_TEST_SECONDS: 2400
+  MAESTRO_TEST_SECONDS: 2700
   NATIVE_TEST_SECONDS: 600
   COMPONENT_TEST_SECONDS: 900
   MAESTRO_VERSION: 2.11.0
@@ -100,12 +100,16 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || !inputs.sdk_benchmark
     name: Shard ${{ matrix.shard }} (emulator)
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
+    timeout-minutes: ${{ matrix.job_timeout_minutes }}
+    env:
+      E2E_SHARD_JOB_MINUTES: ${{ matrix.job_timeout_minutes }}
     strategy:
       # A failed shard must not cancel the others: their results still count, and the run is red anyway.
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4, 5]
+        # One value keeps the Actions limit and the process coordinator in sync.
+        job_timeout_minutes: [52]
     steps:
       - name: Start shard budget clock
         run: python3 -c 'import time; print(f"E2E_SHARD_STARTED_MONOTONIC={time.monotonic()}")' >> "$GITHUB_ENV"

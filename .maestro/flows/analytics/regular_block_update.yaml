@@ -27,6 +27,21 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?analytics_recalculating_responses=100"
+# Cover more of the analytics list per swipe before Maestro's bounded selector search.
+# Start in the scrollable gutter to avoid tapping a row on a slow emulator.
+- assertVisible:
+    id: "analytics.screen"
+- repeat:
+    times: 2
+    while:
+      notVisible: "Не подписка — РБК"
+    commands:
+      - swipe:
+          start: "3%, 78%"
+          end: "3%, 27%"
+          duration: 300
+      - assertVisible:
+          id: "analytics.screen"
 - scrollUntilVisible:
     element: "Не подписка — РБК"
 - assertVisible: "РБК"

@@ -88,7 +88,7 @@ authenticate an artifact independently of its run. The index does not execute an
 
 Suite identity is `(kind,index)`: Maestro uses 1-based shard indices; `native` and `jvm` use index0. `evidence`
 has exactly `execution`, `preparation`, `sdk_cache` paths or null. `budget_seconds` is a positive integer or null:
-in CI it is passed from the same workflow variables used by the actual process coordinator (2400/600/900 today).
+in CI it is passed from the same workflow variables used by the actual process coordinator (2700/600/900 today).
 Offline reconstruction leaves it unknown unless explicitly supplied from independently verified configuration.
 The budget is the test process limit, not the enclosing job or emulator/setup limit. Maestro archive cache hit
 telemetry is not persisted by the existing installer, so `maestro_archive_cache` is explicitly null.
