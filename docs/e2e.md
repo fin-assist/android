@@ -57,19 +57,29 @@ run summary lists the shards, the flows and the UI test coverage; reports are in
 Five Maestro-only emulators run a deterministic longest-flow-first split from
 `scripts/e2e-durations.json`; `python3 scripts/e2e-shards.py plan --shards 5` prints the selection.
 Native tests have a separate fresh AVD and budget; the targeted JVM companions are an independent job.
-The reports job waits for all three suites, including failed jobs, and gathers their artifacts.
+The reports job waits for the build and all three suites, including failed jobs, and gathers their artifacts.
 A setup failure leaves tests NOT RUN, not failed assertions; incomplete acceptance remains red.
 
-Every shard still builds the APK through the existing Gradle build cache. Maestro installation uses a
-SHA256-addressed official ZIP cache with revalidation, fresh extraction and exact-version checks.
-The test/CI limits remain 2400 s / 45 min for Maestro; native has 600 s execution / 25 min job and
-components 900 s execution / 20 min job. These are independent budgets, not test retries.
+FIN-489 builds the two mockE2e APKs once. Maestro and the independent native job download the same
+artifact by ID; the manifest checks SHA256, source SHA and workflow run. A failed-job rerun may consume the
+successful build from an earlier attempt of the same run. The artifact also holds AGP's native discovery
+inputs, so the connected test task can reuse the signed pair without reassembling it. Reports uses the
+same build's JaCoCo classes, preserving the local report's class filters and execution-data inputs.
+Maestro itself is restored from the SHA256-addressed official ZIP cache and revalidated.
+
+The ceilings remain 2400 s / 45 min for Maestro, 600 s / 25 min for native and 900 s / 20 min for JVM.
+A Maestro shard uses the smaller of 2400 s and the time remaining in its job after a 90 s reserve for
+shutdown and evidence upload. The measured budget is written in `preparation.json`. This is a deadline,
+not a retry. Console observations are checkpointed atomically as flows complete. With missing JUnit,
+the matching observations are UNVERIFIED (diagnostic only), and flows without terminal evidence are NOT RUN.
+Cancelled or deadline-interrupted runs are not sent to Qase.
 
 The expected inventory is derived from source discovery and the existing Qase map. `gather` validates
 Maestro, native and JVM reports for exact presence, no skips, duplicate/unknown/wrong-shard entries,
 and preserves canonical XML plus structured execution status. Evidence includes early setup receipts,
 source/environment identity and APK hashes. Shard and merged evidence is kept for14 days.
-Qase receives the worst result of all required components, including missing native-only/JVM cases.
+For runs eligible for Qase publication, Qase receives the worst result of all required components,
+including missing native-only/JVM cases.
 See [UI reliability](ui-test-reliability.md) for commands, phase classification and acceptance rules.
 
 The FIN-465 transition from four to five shards (runs42461258707/42467271555) predates this separation.

@@ -56,7 +56,7 @@ trap finish EXIT
 # A local checkout can retain outputs from an earlier attempt. Clear test payload before any setup can fail,
 # while retaining this CI job's execution receipt and its SDK/AVD preparation telemetry. Never remove APKs.
 rm -rf "$OUT/maestro" "$OUT/maestro-log" "$OUT/shots" "$OUT/maestro-output.tgz" "$OUT/maestro-output.tmp" \
-    "$OUT/maestro-report.xml" "$OUT/native-report.xml" "$OUT/jvm-report.xml" "$OUT/preflight-ui.xml" \
+    "$OUT/maestro-report.xml" "$OUT/maestro-progress.json" "$OUT/maestro-progress.tmp" "$OUT/native-report.xml" "$OUT/jvm-report.xml" "$OUT/preflight-ui.xml" \
     "$OUT/preflight.png" "$OUT/logcat.txt" "$OUT/coverage" "$OUT/native" "$OUT/native-coverage" \
     "$OUT/native-report" "$OUT/expected-tests.json" "$OUT/execution-status.json" "$OUT/qase-delivery.json" \
     "$ROOT/app/build/outputs/androidTest-results" "$ROOT/app/build/outputs/code_coverage" \
@@ -158,7 +158,12 @@ log "maestro ${maestro_args[*]}"
 status=0
 if [[ ${#FLOWS[@]} -gt 0 ]]; then
     receipt phase maestro
-    (cd "$OUT/shots" && maestro "${maestro_args[@]}") || status=$?
+    if [[ -n "$SHARD" && "${GITHUB_ACTIONS:-}" == true ]]; then
+        (cd "$OUT/shots" && python3 "$ROOT/scripts/e2e-shards.py" watch --shard "$SHARD" \
+            --progress "$OUT/maestro-progress.json" -- maestro "${maestro_args[@]}") || status=$?
+    else
+        (cd "$OUT/shots" && maestro "${maestro_args[@]}") || status=$?
+    fi
     [[ "$status" == 0 ]] || receipt finish "$status"
 fi
 receipt phase reporting
@@ -184,7 +189,16 @@ if [[ "$NATIVE" == 1 ]]; then
     log "native instrumented tests (mock e2e build)"
     # The first failure decides the exit code: the Maestro status is kept if both fail.
     native=0
-    (cd "$ROOT" && ./gradlew :app:connectedMockE2eAndroidTest --console=plain) || native=$?
+    native_args=(:app:connectedMockE2eAndroidTest --console=plain)
+    if [[ "${E2E_USE_PREBUILT_APKS:-}" == true ]]; then
+        # Preserve AGP's runner, JUnit and JaCoCo. Its APK listings and test discovery inputs came from the build job.
+        native_args+=(-Ppf.e2ePrebuiltApks)
+        (cd "$ROOT" && python3 scripts/e2e-build-inputs.py check-apks)
+    fi
+    (cd "$ROOT" && ./gradlew "${native_args[@]}") || native=$?
+    if [[ "${E2E_USE_PREBUILT_APKS:-}" == true ]]; then
+        (cd "$ROOT" && python3 scripts/e2e-build-inputs.py check-apks)
+    fi
     [[ "$native" == 0 ]] || receipt finish "$native"
     # A fresh local run builds the test APK in the connected task; capture it even after a partial/failed suite.
     receipt identity

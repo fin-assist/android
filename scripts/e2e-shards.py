@@ -34,6 +34,7 @@ import os
 import re
 import shutil
 import statistics
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass, field
@@ -126,6 +127,60 @@ def flow_of(case: ET.Element, by_name: dict[str, str] | None = None) -> str | No
 def flows_by_name(root: Path, flows: list[str]) -> dict[str, str]:
     """`name:` of each flow → its path: the fallback of [flow_of]."""
     return {flow_name(root, flow): flow for flow in flows}
+
+
+# Maestro 2.11's terminal lines, not its nested per-command status messages (which are indented).
+TERMINAL_FLOW = re.compile(r"\[(Passed|Failed)\] (.+?) \((?:[0-9]+[hms] )*[0-9]+[hms]\)(?: \(.*\))?")
+PROGRESS_IDENTITY = ("GITHUB_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")
+PROGRESS_FILE = "maestro-progress.json"
+
+
+def watch_progress(root: Path, flows: list[str], path: Path, command: list[str]) -> int:
+    """Persist terminal flow observations while preserving the one Maestro process and its exit status."""
+    names: dict[str, list[str]] = {}
+    for flow in flows:
+        names.setdefault(flow_name(root, flow), []).append(flow)
+    identity = {key: os.environ[key] for key in PROGRESS_IDENTITY if key in os.environ}
+    observed: dict[str, str] = {}
+    recording = True
+    with subprocess.Popen(command, stdout=subprocess.PIPE) as process:
+        assert process.stdout is not None
+        for line in process.stdout:
+            match = TERMINAL_FLOW.fullmatch(line.decode("utf-8", errors="replace").rstrip("\r\n"))
+            if recording and match and line.endswith(b"\n"):
+                candidates = names.get(match[2], [])
+                if len(candidates) == 1 and candidates[0] not in observed:
+                    observed[candidates[0]] = match[1].lower()
+                    try:
+                        temporary = path.with_suffix(".tmp")
+                        temporary.write_text(json.dumps({"schema": 1, "identity": identity, "flows": observed}) + "\n",
+                                             encoding="utf-8")
+                        temporary.replace(path)
+                    except OSError:
+                        # Logging cannot turn a valid Maestro JUnit result into a test failure.
+                        print("Warning: could not checkpoint Maestro progress", file=sys.stderr, flush=True)
+                        recording = False
+            sys.stdout.buffer.write(line)
+            sys.stdout.buffer.flush()
+        code = process.wait()
+    return code if code >= 0 else 128 - code
+
+
+def read_progress(directory: Path, outcome: ShardOutcome, expected: list[str]) -> dict[str, str]:
+    """Console evidence is tied to the matching receipt and never promoted to a verified result."""
+    if not all(key in outcome.identity for key in PROGRESS_IDENTITY):
+        return {}
+    path = directory / PROGRESS_FILE
+    try:
+        if path.is_symlink() or path.stat().st_size > 64 * 1024:
+            return {}
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data["schema"] != 1 or data["identity"] != {key: outcome.identity[key] for key in PROGRESS_IDENTITY}:
+            return {}
+        return {flow: status for flow, status in data["flows"].items()
+                if flow in expected and status in ("passed", "failed")}
+    except (OSError, KeyError, ValueError, TypeError, AttributeError):
+        return {}
 
 
 def _failed(case: ET.Element) -> bool:
@@ -233,6 +288,7 @@ def _receipt(directory: Path, outcome: ShardOutcome, required: bool = True) -> N
 def _merge_suite(
     root: Path, suite: ET.Element, expected: list[str], reports: list[Path], outcome: ShardOutcome,
     by_name: dict[str, str] | None = None,
+    progress: dict[str, str] | None = None,
 ) -> None:
     seen: dict[str, ET.Element] = {}
     for report in reports:
@@ -316,8 +372,19 @@ def _merge_suite(
             message = f"NOT RUN: {label}; phase={outcome.phase}; cause={cause}; no test result received"
             if outcome.budget_expired:
                 message += "; deadline_expired=true"
-            suite.append(_missing_case(root, key, message))
-            outcome.missing += 1
+            observed = (progress or {}).get(key)
+            if observed:
+                message = f"UNVERIFIED: {label}; console observed {observed}; no JUnit result received"
+                case = _missing_case(root, key, message)
+                case.set("pf-execution", "unverified")
+                case.set("pf-raw-status", observed)
+                suite.append(case)
+                outcome.unverified += 1
+                outcome.unverified_results[observed] = outcome.unverified_results.get(observed, 0) + 1
+                outcome.skipped += 1
+            else:
+                suite.append(_missing_case(root, key, message))
+                outcome.missing += 1
     suite.set("tests", str(outcome.planned))
     suite.set("failures", str(outcome.failed))
     suite.set("skipped", str(outcome.skipped + outcome.missing))
@@ -343,7 +410,9 @@ def merge_reports(
         outcome = ShardOutcome(shard.index, len(shard.flows), reported=False)
         if report is not None:
             _receipt(report.parent, outcome, receipts_required)
-        _merge_suite(root, suite, shard.flows, [report] if report is not None and report.is_file() else [], outcome, by_name)
+        has_report = report is not None and report.is_file()
+        progress = read_progress(report.parent, outcome, shard.flows) if report is not None and not has_report else {}
+        _merge_suite(root, suite, shard.flows, [report] if has_report else [], outcome, by_name, progress)
         outcomes.append(outcome)
     return merged, outcomes
 
@@ -468,7 +537,8 @@ def problems(outcomes: list[ShardOutcome]) -> list[str]:
         unit = "test(s)" if o.kind != "maestro" else "flow(s)"
         if not o.reported and o.planned:
             kind = o.kind if o.kind != "maestro" else "Maestro"
-            found.append(f"{label}: no {kind} report received ({o.planned} {unit} not run)")
+            observed = f", {o.unverified} observed without JUnit" if o.unverified else ""
+            found.append(f"{label}: no {kind} report received ({o.missing} {unit} not run{observed})")
         elif o.missing:
             found.append(f"{label}: {o.missing} {unit} missing from its report")
         if o.failed:
@@ -528,6 +598,10 @@ def main(argv: list[str] | None = None) -> int:
 
     commands.add_parser("plan", help="print the split as a table").add_argument("--shards", type=int, required=True)
     commands.add_parser("list", help="flow files of one shard").add_argument("--shard", required=True, help="i/n, e.g. 2/4")
+    watcher = commands.add_parser("watch", help="checkpoint the terminal progress of one Maestro shard")
+    watcher.add_argument("--shard", required=True)
+    watcher.add_argument("--progress", type=Path, required=True)
+    watcher.add_argument("maestro", nargs=argparse.REMAINDER)
     gatherer = commands.add_parser("gather", help="merge the shards' reports and put coverage data in place")
     gatherer.add_argument("--shards", type=int, required=True)
     gatherer.add_argument("--dir", type=Path, required=True, help="folder with e2e-shard-<i>/ of every shard")
@@ -547,12 +621,18 @@ def main(argv: list[str] | None = None) -> int:
     flows = discover_flows(root)
     durations = load_durations(args.durations)
 
-    if args.command == "list":
+    if args.command in ("list", "watch"):
         try:
             index, count = parse_shard(args.shard)
         except ValueError as e:
             parser.error(str(e))
-        print("\n".join(plan(flows, durations, count)[index - 1].flows))
+        selected = plan(flows, durations, count)[index - 1].flows
+        if args.command == "watch":
+            command = args.maestro[1:] if args.maestro[:1] == ["--"] else args.maestro
+            if not command:
+                parser.error("watch requires a Maestro command")
+            return watch_progress(root, selected, args.progress, command)
+        print("\n".join(selected))
         return 0
     if args.command == "plan":
         print(plan_markdown(plan(flows, durations, args.shards)))
@@ -572,6 +652,8 @@ def main(argv: list[str] | None = None) -> int:
             with args.github_output.open("a", encoding="utf-8") as output:
                 output.write(f"incomplete={'true' if found else 'false'}\n")
                 output.write(f"problems={'; '.join(found)}\n")
+                interrupted = any(o.budget_expired or o.category == "budget" for o in outcomes)
+                output.write(f"interrupted={'true' if interrupted else 'false'}\n")
         return 0
     stored = json.loads(args.durations.read_text(encoding="utf-8")) if args.durations.is_file() else {}
     stored["flows"] = updated_durations(durations, args.reports, flows_by_name(root, flows))

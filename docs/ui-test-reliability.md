@@ -28,7 +28,10 @@ JVM results receive the same completeness checks as Maestro. Synthetic missing r
 not assertions that ran and failed; the full acceptance still stays red. Canonical XML, an inventory,
 structured execution status, raw suite artifacts and the summary retain the distinction. Observations without
 valid source/run receipts or required APK identity become UNVERIFIED/skipped in canonical XML and Qase, even
-when their raw report says PASS. Raw status counts and bounded original diagnostics remain available.
+when their raw report says PASS. The per-shard `maestro-progress.json` also records terminal console
+observations before Maestro writes JUnit. Gather accepts those only from the matching source/run/attempt
+receipt and uses them only to distinguish UNVERIFIED from NOT RUN. JUnit remains authoritative; interrupted
+runs stay red and do not publish to Qase.
 
 Execution receipts start before setup. They retain phase, environment/source identity, safe tool versions
 and APK hashes, and identify setup/device/budget/test failures. The first failing phase and per-test evidence
@@ -51,7 +54,9 @@ See [SDK preparation evidence](e2e.md#default-sdk-caching-and-fresh-cold-avd-fin
 
 The main path still uses a fresh cold AVD. Snapshot caching remains explicitly experimental. Changing host or
 SDK packages is visible in execution evidence; neither cache identity nor a pinned API level promises an
-immutable hosted runner. APK identities from independently built suites are recorded for comparison.
+immutable hosted runner. Emulator jobs consume the same hash-verified pair of APKs from the build job.
+The shard process budget leaves 90 s in its job for shutdown and artifact upload; preparation time is
+not part of the nominal 2400 s cap, but reduces the usable budget when the job would run out of time.
 
 ## Deterministic preparation and interactions
 

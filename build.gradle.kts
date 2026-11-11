@@ -111,37 +111,66 @@ fun e2eClassDirectories(module: Project): List<File> {
 fun e2eSourceDirectories(module: Project): List<File> =
     listOf("main", "mock", "mockE2e").flatMap { set -> listOf(module.file("src/$set/kotlin"), module.file("src/$set/java")) }.filter { it.isDirectory }
 
+// AGP uses task-backed providers for the APK listings and discovery classes. Keep the producers in
+// the graph so those providers resolve, but skip their actions when the files came from the shared build.
+if (providers.gradleProperty("pf.e2ePrebuiltApks").isPresent) {
+    val connected = ":app:connectedMockE2eAndroidTest"
+    require(gradle.startParameter.taskNames == listOf(connected)) {
+        "pf.e2ePrebuiltApks is only supported for $connected"
+    }
+    gradle.taskGraph.whenReady {
+        allTasks.filter { it.path != connected }.forEach { it.enabled = false }
+    }
+}
+
+// Export the exact uninstrumented class inputs from the job that produced the instrumented APK.
+fun e2eReportClasses(directory: File): FileTree =
+    fileTree(directory) {
+        // Generated code, as in the Kover report (above), plus the test hooks of the e2e build.
+        exclude(
+            "**/BuildConfig.class", "**/R.class", "**/R$*.class",
+            "**/Hilt_*.class", "**/HiltWrapper_*.class", "**/*_HiltModules*.class", "**/*_HiltComponents*.class",
+            "**/*_Factory.class", "**/*_Factory$*.class", "**/*Module_*Factory*.class", "**/*_MembersInjector.class",
+            "**/*_GeneratedInjector.class", "**/*_ComponentTreeDeps*.class", "**/Dagger*.class",
+            "dagger/**", "hilt_aggregated_deps/**", "**/*$\$serializer.class", "**/*$\$serializer$*.class",
+            "**/ComposableSingletons*.class",
+            "ru/finassist/pf/e2e/**",
+            // AGP 8.9 copies instead of instrumenting every class whose simple name starts with `R` or
+            // `Manifest` (its filter for the generated `R`/`Manifest` classes is `.+?/R\$?.*?\.class$`):
+            // `ResultViewModel`, `RussianDates`, `RowModel`… carry no probes, so they would show as never
+            // executed. Left out of the report; docs/testing.md lists this gap.
+            "**/R*.class", "**/Manifest*.class",
+        )
+    }
+
+val prebuiltE2eClasses = layout.projectDirectory.file("build/e2e-input/e2e-classes.zip")
+tasks.register<Zip>("e2eCoverageClasses") {
+    dependsOn(":app:assembleMockE2e")
+    archiveFileName.set("e2e-classes.zip")
+    destinationDirectory.set(prebuiltE2eClasses.asFile.parentFile)
+    // Resolve the class directories only after assemble: ASM output takes priority when present.
+    for (module in e2eCoverageModules) {
+        from(provider { e2eClassDirectories(module).map(::e2eReportClasses) }) {
+            into(module.path.replace(':', '/').trimStart('/'))
+        }
+    }
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+}
+
 tasks.register<JacocoReport>("e2eCoverageReport") {
     group = "verification"
     description = "Coverage of the mock e2e build by the UI tests (Maestro flows and instrumented tests)."
-    dependsOn(":app:assembleMockE2e")
+    val usePrebuilt = providers.gradleProperty("pf.e2ePrebuiltClasses").isPresent
+    if (!usePrebuilt) dependsOn(":app:assembleMockE2e")
     executionData.from(
         fileTree(layout.projectDirectory.dir("build/e2e/coverage/ec")) { include("*.ec") },
         fileTree(layout.projectDirectory.dir("app/build/outputs/code_coverage")) { include("**/*.ec") },
     )
-    classDirectories.from(
-        provider {
-            e2eCoverageModules.flatMap(::e2eClassDirectories).map { directory ->
-                fileTree(directory) {
-                    // Generated code, as in the Kover report (above), plus the test hooks of the e2e build.
-                    exclude(
-                        "**/BuildConfig.class", "**/R.class", "**/R$*.class",
-                        "**/Hilt_*.class", "**/HiltWrapper_*.class", "**/*_HiltModules*.class", "**/*_HiltComponents*.class",
-                        "**/*_Factory.class", "**/*_Factory$*.class", "**/*Module_*Factory*.class", "**/*_MembersInjector.class",
-                        "**/*_GeneratedInjector.class", "**/*_ComponentTreeDeps*.class", "**/Dagger*.class",
-                        "dagger/**", "hilt_aggregated_deps/**", "**/*$\$serializer.class", "**/*$\$serializer$*.class",
-                        "**/ComposableSingletons*.class",
-                        "ru/finassist/pf/e2e/**",
-                        // AGP 8.9 copies instead of instrumenting every class whose simple name starts with `R` or
-                        // `Manifest` (its filter for the generated `R`/`Manifest` classes is `.+?/R\$?.*?\.class$`):
-                        // `ResultViewModel`, `RussianDates`, `RowModel`… carry no probes, so they would show as never
-                        // executed. Left out of the report; docs/testing.md lists this gap.
-                        "**/R*.class", "**/Manifest*.class",
-                    )
-                }
-            }
-        },
-    )
+    classDirectories.from(provider {
+        if (usePrebuilt) listOf(zipTree(prebuiltE2eClasses))
+        else e2eCoverageModules.flatMap(::e2eClassDirectories).map(::e2eReportClasses)
+    })
     sourceDirectories.from(e2eCoverageModules.flatMap(::e2eSourceDirectories))
     reports {
         xml.required.set(true)
