@@ -5,6 +5,7 @@ plugins {
 
 dependencies {
     implementation(projects.core.tracking)
+    testImplementation(libs.robolectric)
     implementation(libs.appmetrica.analytics) {
         exclude(group = "io.appmetrica.analytics", module = "analytics-ad-revenue")
         exclude(group = "io.appmetrica.analytics", module = "analytics-appsetid")

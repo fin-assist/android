@@ -1,6 +1,9 @@
 package ru.finassist.pf.providers.telemetry.appmetrica
 
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import ru.finassist.pf.core.tracking.Breadcrumb
 import ru.finassist.pf.core.tracking.CrashKey
 import ru.finassist.pf.core.tracking.CrashValue
@@ -15,6 +18,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 class AppMetricaTelemetryTest {
     @Test
     fun `mock can report crashes without automatic sessions`() {
