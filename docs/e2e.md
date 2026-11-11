@@ -39,7 +39,7 @@ scripts/e2e.sh --tags smoke
 scripts/e2e.sh --no-build --flow "$PWD/.maestro/flows/assistant/ask_question.yaml"
 
 # One Maestro shard of the CI split (below); native has its own CI job
-scripts/e2e.sh --shard 2/5
+scripts/e2e.sh --shard 2/6
 ```
 
 Reports go to `build/e2e/`: JUnit XML, `maestro-output.tgz` (per flow: screenshot and view hierarchy of the failed
@@ -54,8 +54,8 @@ run summary lists the shards, the flows and the UI test coverage; reports are in
 
 ### Shards in CI
 
-Five Maestro-only emulators run a deterministic longest-flow-first split from
-`scripts/e2e-durations.json`; `python3 scripts/e2e-shards.py plan --shards 5` prints the selection.
+Six Maestro-only emulators run a deterministic longest-flow-first split from
+`scripts/e2e-durations.json`; `python3 scripts/e2e-shards.py plan --shards 6` prints the selection.
 Native tests have a separate fresh AVD and budget; the targeted JVM companions are an independent job.
 The reports job waits for the build and all three suites, including failed jobs, and gathers their artifacts.
 A setup failure leaves tests NOT RUN, not failed assertions; incomplete acceptance remains red.
@@ -121,7 +121,7 @@ separate device-execution scope are recorded in FIN-481 and its PR.
 ### Default SDK caching and fresh cold AVD (FIN-378)
 
 Normal pushes to `main` and manual runs with the default inputs restore **SDK packages**, then create a fresh cold
-AVD for each of the five shards. The requested API/profile/cores/RAM/GPU/disk, KVM, test selection, app-data resets,
+AVD for each Maestro shard. The requested API/profile/cores/RAM/GPU/disk, KVM, test selection, app-data resets,
 native tests and reports/coverage/Qase stay unchanged. No AVD or adb key is stored in these SDK caches. Both manual
 inputs, `avd_cache` and `sdk_benchmark`, default to `false`; the latter selects the isolated SDK-only experiment.
 
@@ -167,7 +167,7 @@ do not establish a substantial or stable total UI speedup.
 ### Optional clean AVD snapshot cache (FIN-378)
 
 
-Only a manual run with `avd_cache=true` enables this experimental path. The five shard jobs restore independent writable copies of one clean Android API 34 / google_apis / x86_64 /
+Only a manual run with `avd_cache=true` enables this experimental path. Each shard job restores an independent writable copy of one clean Android API 34 / google_apis / x86_64 /
 Pixel 6 AVD. A cache miss creates a fresh AVD, boots Android, checks that no FinAssist app or test APK is installed,
 and explicitly saves the named `clean` snapshot. This happens before `e2e.sh` installs anything, signs in or imports
 financial fixtures. The action shuts down the emulator; the helper waits for its process to exit and verifies the
