@@ -1,5 +1,6 @@
 package ru.finassist.pf
 
+import android.app.Application
 import android.content.pm.ApplicationInfo
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -12,16 +13,14 @@ import ru.finassist.pf.core.tracking.CrashContextSync
 import ru.finassist.pf.core.tracking.CrashReporter
 import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.profile.api.TimeZoneSync
-import ru.finassist.pf.providers.crash.tracer.CrashReportingApplication
 import javax.inject.Inject
 
 /**
  * Injecting the providers here creates them in `onCreate`, so the tracker and the remote config start with the
- * process, before any screen. Crash and ANR collection starts even earlier, from the SDK's own startup provider
- * ([CrashReportingApplication]) — when the build has a Tracer token.
+ * process, before any screen. Injecting crash reporting also activates AppMetrica when configured.
  */
 @HiltAndroidApp
-class PfApplication : CrashReportingApplication() {
+class PfApplication : Application() {
     @Inject lateinit var crashReporter: CrashReporter
     @Inject lateinit var crashContext: CrashContextSync
     @Inject lateinit var tracker: Tracker
@@ -30,10 +29,6 @@ class PfApplication : CrashReportingApplication() {
     @Inject lateinit var minVersionCheck: MinVersionCheck
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    // Debug builds upload too: a debug build only has a token when its crashes are wanted (the mock alpha).
-    override val uploadCrashesFromDebugBuilds: Boolean get() = BuildConfig.DEBUG
-    override val crashReportingEnabled: Boolean get() = BuildConfig.CRASH_REPORTING_ENABLED
 
     override fun onCreate() {
         // Test tags as resource ids for UI tests (docs/e2e.md): debuggable builds only, before any screen.

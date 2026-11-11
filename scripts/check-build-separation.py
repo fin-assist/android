@@ -164,8 +164,8 @@ def stage_default_problems(manifest_xml: str, build_config_java: str) -> list[st
     expected = {
         "APPLICATION_ID": '"ru.finassist.pf.stage"',
         "RUSTORE_REMOTE_CONFIG_APP_ID": '""',
-        "MYTRACKER_SDK_KEY": '""',
-        "CRASH_REPORTING_ENABLED": "false",
+        "APPMETRICA_API_KEY": '""',
+        "APPMETRICA_SESSIONS": "true",
         "E2E_NOW": '""',
     }
     for name, value in expected.items():

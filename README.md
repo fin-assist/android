@@ -9,7 +9,7 @@
 
 Kotlin 2.1, Jetpack Compose, Hilt (KSP), Navigation Compose (typed routes), OkHttp + Retrofit +
 kotlinx.serialization, OkHttp SSE, DataStore, Tink (refresh-токен под Android Keystore).
-Флаги — RuStore Remote Config, события — MyTracker (flavor `prod`); крэши и ANR — Tracer (`mock` и `prod`, при заданном токене).
+Флаги — RuStore Remote Config. AppMetrica собирает продуктовые события в `stage` и `prod`, а также крэши, ANR и non-fatal в `mock`, `stage` и `prod` при заданном ключе.
 
 ## Структура
 
@@ -63,8 +63,8 @@ Flavor-ы — одно измерение `env` (FIN-120): `mock`, `local`, `sta
 
 HTTP без TLS разрешён только в `localDebug` и только к хосту из `pf.apiBaseUrl` (сгенерированный
 `network_security_config`); в `prod` и в любой release-сборке — запрещён. Флаги — локальные (код по умолчанию, свой
-`app/src/local/assets/flags.json` по желанию, в git не попадает; docs/flags.md), события — в logcat, Tracer, RuStore
-Remote Config и MyTracker выключены: локальные прогоны не попадают в продовые консоли.
+`app/src/local/assets/flags.json` по желанию, в git не попадает; docs/flags.md), события — в logcat, AppMetrica и RuStore
+Remote Config выключены: локальные прогоны не попадают в продовые консоли.
 
 ### Flavor `stage`
 
@@ -94,12 +94,9 @@ SDK выключены без stage-ключей; флаги тогда беру
 | Свойство | Переменная окружения |
 |---|---|
 | `pf.stageRustoreRemoteConfigAppId` | `PF_STAGE_RUSTORE_REMOTE_CONFIG_APP_ID` |
-| `pf.stageMytrackerSdkKey` | `PF_STAGE_MYTRACKER_SDK_KEY` |
-| `pf.stageTracerAppToken` | `PF_STAGE_TRACER_APP_TOKEN` |
-| `pf.stageTracerPluginToken` | `PF_STAGE_TRACER_PLUGIN_TOKEN` |
+| `pf.stageAppMetricaApiKey` | `PF_STAGE_APP_METRICA_API_KEY` |
 
-Не подставляй ключи production-консолей в эти свойства. Без Tracer app token отключены и runtime SDK, и загрузка
-маппингов. Stage не требует переноса серверных ключей или IAM-токенов в приложение.
+Не подставляй ключи production-консолей в эти свойства. Stage использует собственное приложение AppMetrica.
 
 TLS проверяется системными CA Android; отключать проверку сертификата не нужно. Опциональный pinning задаётся
 **отдельно** парой `pf.stageApiPins` / `pf.stageApiPinsExpiration` (`PF_STAGE_API_PINS` /
@@ -139,31 +136,29 @@ Gradle 8.11 не запускается на JDK 25, а Android Studio 2026.x п
 
 ### Flavor `prod`
 
-Настоящий HTTP-клиент, флаги из RuStore Remote Config, события в MyTracker.
-Ключи SDK не хранятся в репозитории: Gradle-свойства в `~/.gradle/gradle.properties` или переменные
-окружения в CI. Без ключа соответствующий SDK не включается (флаги — значения по умолчанию из `Flag`).
+Настоящий HTTP-клиент, флаги из RuStore Remote Config, аналитика и диагностика в AppMetrica.
+Ключи SDK задаются в `~/.gradle/gradle.properties` или через переменные окружения сборки. При пустом ключе
+AppMetrica не активируется. Без ключа RuStore используются значения по умолчанию из `Flag`.
 
-| Свойство | Переменная окружения | Что это |
+| Свойство | Переменная окружения | Назначение |
 |---|---|---|
 | `pf.rustoreRemoteConfigAppId` | `PF_RUSTORE_REMOTE_CONFIG_APP_ID` | ID приложения в RuStore Remote Config |
-| `pf.mytrackerSdkKey` | `PF_MYTRACKER_SDK_KEY` | SDK key MyTracker — выдаётся только опубликованному приложению; до публикации пусто |
+| `pf.appMetricaApiKey` | `PF_APP_METRICA_API_KEY` | API-ключ SDK приложения AppMetrica для prod |
+| `pf.stageAppMetricaApiKey` | `PF_STAGE_APP_METRICA_API_KEY` | API-ключ отдельного приложения для stage |
+| `pf.mockAppMetricaApiKey` | `PF_MOCK_APP_METRICA_API_KEY` | API-ключ отдельного приложения для mock-альфы |
 
-Пока ключ MyTracker пуст, события пишутся никуда.
+В `mock` продуктовые события пишутся в logcat, автоматические сессии AppMetrica отключены. В `local` и
+`mockE2e` SDK отсутствует. Из крэшей и non-fatal передаются тип, стек и безопасный код ошибки. Для диагностики
+приложение добавляет `rc_ver`, последние шаги сессии и непрозрачный `user_id`, который очищается при выходе.
+SDK собирает базовые технические данные об устройстве и установке. Геолокация устройства, рекламные идентификаторы,
+автосбор покупок и ссылки запуска отключены.
 
-### Крэши и ANR: Tracer (`mock` и `prod`)
+Для релизной сборки с ключом Gradle-плагин готовит `app/build/appmetrica/<variant>/result/mapping.zip`. Загрузи
+архив в соответствующее приложение AppMetrica через **Настройки → Крэши → Android**. Автоматическая загрузка
+потребовала бы отдельного Post API key. [Инструкция AppMetrica](https://appmetrica.yandex.ru/docs/ru/sdk/android/analytics/android-gradle-plugin)
 
-Tracer (VK, консоль RuStore) собирает крэши, ANR и non-fatal ошибки. Токены — из консоли Tracer, в репозиторий не
-коммитятся:
-
-| Свойство | Переменная окружения | Что это |
-|---|---|---|
-| `pf.tracerAppToken` | `PF_TRACER_APP_TOKEN` | Токен приложения. Без него SDK не стартует ни в одном варианте (в `local` — и с ним): провайдер запуска выключен в манифесте, `TracerCrashReporter` ничего не делает. CI проверяет это по собранному манифесту (`scripts/check-tracer-off.py`) |
-| `pf.tracerPluginToken` | `PF_TRACER_PLUGIN_TOKEN` | Токен Gradle-плагина: загрузка маппингов R8 у минифицированных сборок. Без него маппинги не грузятся; у `local` не грузятся и с ним (`tracer { create("local") }`) |
-
-Текст исключений в Tracer не уходит — ни у non-fatal, ни у фатальных крашей (`ScrubbedThrowable`): только тип, стек и код ошибки; в debug-сборке исходный текст фатального краша остаётся в logcat (`PfCrash`). С токеном отчёты отправляются и из debug-сборок (`setDebugUpload`): токен задают только для сборки, чьи крэши
-нужны, — сейчас это `mock` альфы. В `mock` отчёты дублируются в logcat (`PfTracking`). Как проверить: собрать с
-токеном, вызвать краш, ANR (заблокировать главный поток на 5+ секунд) и non-fatal — они появятся в консоли с
-`userId` и ключом `rc_ver`; после выхода из аккаунта — без `userId`.
+Перед выпуском проверь в отдельном приложении AppMetrica доставку одного события, non-fatal, крэша и ANR, а также
+наличие `rc_ver` и отсутствие `user_id` в новых отчётах после выхода.
 
 Ключи флагов в консоли RuStore — как в `docs/flags.md` (булевы значения). Таргетинг и AB — по `account`
 (наш `user_id` после входа).

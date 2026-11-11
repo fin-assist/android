@@ -267,7 +267,7 @@ jobs:
       # stageDebug as an installable stage artifact and stageRelease/prodRelease unsigned (CI has no signing key).
       # Other variants (mockRelease, prodDebug, localRelease) are not built here.
       - name: Assemble
-        run: ./gradlew assembleMockDebug assembleLocalDebug assembleStageDebug assembleStageRelease assembleProdRelease processLocalReleaseManifest :app:checkNoMockCode --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew assembleMockDebug assembleLocalDebug assembleStageDebug assembleStageRelease assembleProdRelease processLocalReleaseManifest processMockE2eManifest :app:checkNoMockCode --no-daemon 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # Check AGP output too: Android keeps flavor suffixes, the version sent in X-Client-Version does not.
       - name: Manifest and client versions match the app version
@@ -290,15 +290,19 @@ jobs:
             --manifest "$m/prodRelease/processProdReleaseManifest/AndroidManifest.xml" \
             --build-config "$b/prod/release/ru/finassist/pf/BuildConfig.java"
 
-      # CI has no Tracer token: the SDK must not be able to start (scripts/check-tracer-off.py, README).
-      - name: Tracer is off without a token
+      # CI uses keyless builds: AppMetrica must have no enabled components.
+      - name: AppMetrica is off without an API key
         run: |
           m=app/build/intermediates/merged_manifests
-          python3 scripts/check-tracer-off.py $m/mockDebug/processMockDebugManifest/AndroidManifest.xml \
-            $m/localDebug/processLocalDebugManifest/AndroidManifest.xml \
-            $m/stageDebug/processStageDebugManifest/AndroidManifest.xml \
-            $m/stageRelease/processStageReleaseManifest/AndroidManifest.xml \
-            $m/prodRelease/processProdReleaseManifest/AndroidManifest.xml 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
+          {
+            python3 scripts/check-appmetrica-off.py "$m/mockDebug/processMockDebugManifest/AndroidManifest.xml" \
+              "$m/stageDebug/processStageDebugManifest/AndroidManifest.xml" \
+              "$m/stageRelease/processStageReleaseManifest/AndroidManifest.xml" \
+              "$m/prodRelease/processProdReleaseManifest/AndroidManifest.xml" &&
+            python3 scripts/check-appmetrica-off.py --absent "$m/localDebug/processLocalDebugManifest/AndroidManifest.xml" \
+              "$m/localRelease/processLocalReleaseManifest/AndroidManifest.xml" \
+              "$m/mockE2e/processMockE2eManifest/AndroidManifest.xml"
+          } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 
       # No e2e/mock hooks and no cleartext in release builds; in localDebug cleartext only to the host of the compiled
       # API_BASE_URL, none for https (scripts/check-build-separation.py). Mock code on the HTTP flavors' classpath fails
@@ -327,16 +331,14 @@ jobs:
               generateStageReleaseBuildConfig processStageReleaseManifest --no-daemon \
               -Ppf.apiBaseUrl=http://unrelated.invalid:8080/ \
               -Ppf.rustoreRemoteConfigAppId=production-sentinel \
-              -Ppf.mytrackerSdkKey=production-sentinel \
-              -Ppf.tracerAppToken=production-sentinel \
-              -Ppf.tracerPluginToken=production-plugin-sentinel &&
+              -Ppf.appMetricaApiKey=production-sentinel &&
             python3 scripts/check-build-separation.py stage-default \
               "$m/stageDebug/processStageDebugManifest/AndroidManifest.xml" \
               "$b/stage/debug/ru/finassist/pf/BuildConfig.java" &&
             python3 scripts/check-build-separation.py stage-default \
               "$m/stageRelease/processStageReleaseManifest/AndroidManifest.xml" \
               "$b/stage/release/ru/finassist/pf/BuildConfig.java" &&
-            python3 scripts/check-tracer-off.py "$m/stageDebug/processStageDebugManifest/AndroidManifest.xml" \
+            python3 scripts/check-appmetrica-off.py "$m/stageDebug/processStageDebugManifest/AndroidManifest.xml" \
               "$m/stageRelease/processStageReleaseManifest/AndroidManifest.xml"
           } 2>&1 | tee -a build.log; exit ${PIPESTATUS[0]}
 

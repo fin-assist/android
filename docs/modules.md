@@ -21,8 +21,7 @@ core/screenshot-testing   design-check snapshot harness (Robolectric + Roborazzi
 providers/toggles-local   flags from a JSON asset + debug overrides (mock, local)
 providers/tracking-log    logcat tracker (mock, local)
 providers/toggles-rustore RuStore Remote Config (prod, stage; separate SDK keys)
-providers/tracking-mytracker MyTracker events (prod, stage; separate SDK keys)
-providers/crash-tracer    Tracer crashes, ANR, non-fatals (mock, stage, prod; stage-specific tokens; off without the environment app token and always in local)
+providers/telemetry-appmetrica AppMetrica events (prod, stage) and crashes, ANR, non-fatals (mock, prod, stage); separate API keys, excluded from local and mockE2e
 mock/backend              in-process fake backend on an OFX statement, implements core/api (mock flavor)
 feature/<name>/api        public surface of the feature (JVM)
 feature/<name>/impl       data / domain / ui + Hilt bindings (Android, Compose)
@@ -55,10 +54,10 @@ anything beyond `scripts/kmp-baseline.json`. Rule, check and inventory of what i
 
 | Flavor | Modules it adds | Source sets |
 |---|---|---|
-| `mock` | `:mock:backend`, `:providers:toggles-local`, `:providers:tracking-log` | `src/mock` (flags asset), `src/mockE2e` (UI-test hooks), `src/androidTestMock` |
+| `mock` | `:mock:backend`, `:providers:toggles-local`, `:providers:tracking-log`, `:providers:telemetry-appmetrica` except in e2e | `src/mock` (flags asset), `src/mockE2e` (UI-test hooks), `src/androidTestMock` |
 | `local` | `:core:network`, `:providers:toggles-local`, `:providers:tracking-log` | `src/local` (`LocalModule`: base URL, name), `src/localDebug` (network security config) |
-| `stage` | `:core:network`, `:providers:toggles-rustore`, `:providers:tracking-mytracker` | `src/stage` (`StageModule`, name); fixed HTTPS stage URL, separate `pf.stage…` SDK keys and optional stage-only pins |
-| `prod` | `:core:network`, `:providers:toggles-rustore`, `:providers:tracking-mytracker` | `src/prod` (`ProdModule`: base URL, SDK keys); with `pf.apiPins` — a generated network security config with a `pin-set` and its manifest overlay (`ApiPins` in build-logic, FIN-121) |
+| `stage` | `:core:network`, `:providers:toggles-rustore`, `:providers:telemetry-appmetrica` | `src/stage` (`StageModule`, name); fixed HTTPS stage URL, separate `pf.stage…` SDK keys and optional stage-only pins |
+| `prod` | `:core:network`, `:providers:toggles-rustore`, `:providers:telemetry-appmetrica` | `src/prod` (`ProdModule`: base URL, SDK keys); with `pf.apiPins` — a generated network security config with a `pin-set` and its manifest overlay (`ApiPins` in build-logic, FIN-121) |
 
 `:mock:*` never reaches `local`, `stage` or `prod` (`:app:checkNoMockCode` in CI checks every variant outside `mock`, so a new flavor is covered by itself). Stage follows prod with separate endpoint and SDK properties.
 Variants that are off: `localE2e`, `stageE2e`, `prodE2e` (`androidComponents.beforeVariants` in `app/build.gradle.kts`).

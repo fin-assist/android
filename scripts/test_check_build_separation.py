@@ -98,8 +98,8 @@ STAGE_CONFIG = '\n'.join([
     'public static final String APPLICATION_ID = "ru.finassist.pf.stage";',
     'public static final String API_BASE_URL = "https://stage.plainfin.ru/";',
     'public static final String RUSTORE_REMOTE_CONFIG_APP_ID = "";',
-    'public static final String MYTRACKER_SDK_KEY = "";',
-    'public static final boolean CRASH_REPORTING_ENABLED = false;',
+    'public static final String APPMETRICA_API_KEY = "";',
+    'public static final boolean APPMETRICA_SESSIONS = true;',
     'public static final String E2E_NOW = "";',
 ])
 
@@ -121,14 +121,14 @@ class StageDefaultTest(unittest.TestCase):
                         STAGE_CONFIG.replace('"ru.finassist.pf.stage"', '"ru.finassist.pf"')))
 
     def test_production_sdk_values_fail_without_logging_them(self):
-        for field in ['RUSTORE_REMOTE_CONFIG_APP_ID', 'MYTRACKER_SDK_KEY']:
+        for field in ['RUSTORE_REMOTE_CONFIG_APP_ID', 'APPMETRICA_API_KEY']:
             config = STAGE_CONFIG.replace(field + ' = ""', field + ' = "sensitive-sentinel"')
             errors = module.stage_default_problems(STAGE_MANIFEST, config)
             self.assertEqual(['unexpected default stage BuildConfig.' + field], errors)
             self.assertNotIn('sensitive-sentinel', str(errors))
 
-    def test_tracer_or_pinned_clock_fails(self):
-        for before, after in [('CRASH_REPORTING_ENABLED = false', 'CRASH_REPORTING_ENABLED = true'),
+    def test_missing_sessions_or_pinned_clock_fails(self):
+        for before, after in [('APPMETRICA_SESSIONS = true', 'APPMETRICA_SESSIONS = false'),
                               ('E2E_NOW = ""', 'E2E_NOW = "2026-10-08T12:00:00+03:00"')]:
             self.assertTrue(module.stage_default_problems(STAGE_MANIFEST, STAGE_CONFIG.replace(before, after)))
 
@@ -141,7 +141,7 @@ class StageDefaultTest(unittest.TestCase):
 
     def test_missing_or_duplicate_fields_fail(self):
         for config in ['', STAGE_CONFIG.replace('public static final String E2E_NOW = "";', ''),
-                       STAGE_CONFIG + '\npublic static final String MYTRACKER_SDK_KEY = "";']:
+                       STAGE_CONFIG + '\npublic static final String APPMETRICA_API_KEY = "";']:
             if not config:
                 with self.assertRaises(ValueError):
                     module.stage_default_problems(STAGE_MANIFEST, config)

@@ -53,7 +53,7 @@ Details and dependency rules: `docs/modules.md`. Entry points worth knowing:
 | Design system: theme, tokens, components, icons | `core/designsystem/…/theme`, `components`, `icons` |
 | Server-composed blocks (Analytics, assistant): catalog models, renderers, registry, `supports` | `core/api/…/model/Blocks.kt`; `core/blocks` (`CatalogV1`, `BlockRegistry`, `BlocksColumn`); composer of the fake server `mock/backend/…/domain/AnalyticsComposer.kt` |
 | Feature flags | `core/toggles/…/Flag.kt` (registry + defaults), `docs/flags.md` (meaning); mock overrides `app/src/mock/assets/flags.json` |
-| Events / crashes | `core/tracking/…/Tracker.kt`, `CrashReporter.kt` (typed context, no free-form strings); providers in `providers/*` (only `:app` depends on them; Tracer keys — README) |
+| Events / crashes | `core/tracking/…/Tracker.kt`, `CrashReporter.kt` (typed context, no free-form strings); providers in `providers/*` (only `:app` depends on them; AppMetrica keys — README) |
 | Tokens, preferences, idempotency keys | `core/storage`; `EncryptedTokenStore` atomically maintains `authSessionEpoch` (new login rotates, refresh retains) |
 | Silent background profile-zone sync (FIN-345) | `feature/profile/impl/…/data/TimeZoneChecker.kt`, `ZoneSyncStateStore.kt`, `BootCounter.kt`; independent durable GET/PATCH advice and boot-bound waits — `docs/errors.md` |
 | Screens vs mockups (snapshot comparison) | `design-check/README.md` (mockups: Figma, exported by `design-check/export.py`), `*DesignCheckTest.kt` in feature `:impl` modules |
@@ -69,10 +69,10 @@ multiplied:
 
 | Flavor | Backend | Flags / events / crashes | Id, name |
 |---|---|---|---|
-| `mock` | in-process fake (`:mock:backend`) | `toggles-local` (`app/src/mock/assets/flags.json`) / logcat / Tracer with a token | `.mock` |
+| `mock` | in-process fake (`:mock:backend`) | `toggles-local` (`app/src/mock/assets/flags.json`) / logcat / AppMetrica diagnostics with a key | `.mock` |
 | `local` | bank-bff on the developer's machine: `pf.apiBaseUrl` (Gradle property or `PF_API_BASE_URL`), default `http://10.0.2.2:8080/` (emulator → host; `LocalBackend` in build-logic) | `toggles-local` (optional, gitignored `app/src/local/assets/flags.json`) / logcat / off — nothing reaches production consoles | `.local`, «Понятные финансы local» |
-| `stage` | `https://stage.plainfin.ru/`, real HTTP/SSE client | RuStore Remote Config / MyTracker / Tracer, only with separate `pf.stage…` keys; otherwise code defaults / SDKs off | `.stage`, «Понятные финансы stage» |
-| `prod` | `API_BASE_URL` (placeholder until there is a server); certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | RuStore Remote Config / MyTracker / Tracer with a token | no suffix |
+| `stage` | `https://stage.plainfin.ru/`, real HTTP/SSE client | RuStore Remote Config / AppMetrica events and diagnostics, only with separate `pf.stage…` keys; otherwise code defaults / SDKs off | `.stage`, «Понятные финансы stage» |
+| `prod` | `API_BASE_URL` (placeholder until there is a server); certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | RuStore Remote Config / AppMetrica events and diagnostics with a key | no suffix |
 
 `stage` follows `prod`, with isolated SDK properties and optional `pf.stageApiPins` / `pf.stageApiPinsExpiration`.
 Production keys and pins never serve as a fallback for stage. Plain HTTP only in `localDebug`: its network security config
@@ -122,11 +122,10 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:core:storage` | `pf.android.library`, `pf.hilt` | unit |
 | `:core:toggles` | `pf.jvm.library` | unit |
 | `:core:tracking` | `pf.jvm.library` | unit |
-| `:providers:crash-tracer` | `pf.android.library`, `pf.hilt` | unit |
+| `:providers:telemetry-appmetrica` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:toggles-local` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:toggles-rustore` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:tracking-log` | `pf.android.library`, `pf.hilt` | - |
-| `:providers:tracking-mytracker` | `pf.android.library`, `pf.hilt` | - |
 | `:mock:backend` | `pf.android.library`, `pf.hilt` | unit |
 | `:feature:analytics:api` | `pf.feature.api` | - |
 | `:feature:analytics:impl` | `pf.feature.impl`, `pf.screenshots` | unit, design-check |
@@ -185,7 +184,7 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
 - CI (`.github/workflows/ci.yml`, FIN-176) runs the Gradle checks as parallel jobs: unit tests with coverage
   (`unitTest :build-logic:convention:test` plus analytics release and stage app unit tests on a PR; `test`, the unit
   tests of every variant, on pushes to `main`, `release/**` and `stage-*/**`), `lintMockDebug lintStageDebug`, and the build of `assembleMockDebug assembleLocalDebug
-  assembleStageDebug assembleStageRelease assembleProdRelease` (release unsigned) with `:app:checkNoMockCode`, the Tracer check and the manifest checks
+  assembleStageDebug assembleStageRelease assembleProdRelease` (release unsigned) with `:app:checkNoMockCode`, the AppMetrica isolation check and the manifest checks
   (`scripts/check-build-separation.py`, pinning included). A test that fails only in a release, `local`, `prod` or
   `e2e` variant is generally caught after the merge (analytics release and stage app tests also run on PRs);
   run `./gradlew test` locally when a change is variant-specific. Compose's test host is a `testImplementation`
@@ -574,7 +573,7 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
 
 - Personal and financial data (phone, amounts, counterparties, operation descriptions, statement content, assistant
   dialogue) leaving the device or the app's private storage other than through the API client: logs, crash reports
-  (Tracer), analytics events, Remote Config parameters (only our opaque `user_id` / device id go there), exception
+  (AppMetrica), analytics events, Remote Config parameters (only our opaque `user_id` / device id go there), exception
   messages, clipboard, notifications, files in shared storage.
 - Secrets: auth tokens, the passcode and keys are stored encrypted with a Keystore-backed key (as the passcode in
   `feature/applock`), never in plain preferences, files, `BuildConfig`, resources or source; no real keys or tokens

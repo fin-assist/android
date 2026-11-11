@@ -10,7 +10,7 @@ import javax.inject.Named
 /**
  * Flavor `local` (FIN-120): real HTTP client (`:core:network`) against a bank-bff on the developer's machine
  * (`pf.apiBaseUrl`). Flags and tracking are the local providers of `mock` (`:providers:toggles-local`,
- * `:providers:tracking-log`): no RuStore Remote Config or MyTracker, so no production keys are needed and no event
+ * `:providers:tracking-log`): no RuStore Remote Config or AppMetrica, so no production keys are needed and no event
  * of a local build reaches production analytics.
  */
 @Module

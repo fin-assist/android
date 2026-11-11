@@ -1,3 +1,4 @@
+import io.appmetrica.analytics.gradle.agp8.appmetrica
 import ru.finassist.pf.buildlogic.ApiPins
 import ru.finassist.pf.buildlogic.BuildDate
 import ru.finassist.pf.buildlogic.CheckNoMockCode
@@ -10,15 +11,8 @@ plugins {
     id("pf.android.application")
     alias(libs.plugins.kotlin.serialization)
     id("pf.hilt")
-    alias(libs.plugins.tracer)
+    alias(libs.plugins.appmetrica)
 }
-
-// Tracer (crashes, ANR): tokens come from ~/.gradle/gradle.properties or CI env and are never committed. Without
-// an app token the SDK is switched off in every variant (README, «Ключи SDK»).
-val tracerAppToken = secret("pf.tracerAppToken")
-val tracerPluginToken = secret("pf.tracerPluginToken")
-val stageTracerAppToken = secret("pf.stageTracerAppToken")
-val stageTracerPluginToken = secret("pf.stageTracerPluginToken")
 
 // Backend of the `local` flavor: `pf.apiBaseUrl`, by default bank-bff on the emulator's host (LocalBackend, FIN-120).
 // An invalid value fails the configuration with the reason.
@@ -89,36 +83,38 @@ android {
         testInstrumentationRunnerArguments["useTestStorageService"] = "true"
         // Empty: the real clock. The e2e build pins "now" (see below).
         buildConfigField("String", "E2E_NOW", "\"\"")
-        buildConfigField("boolean", "CRASH_REPORTING_ENABLED", tracerAppToken.isNotBlank().toString())
-        // Enables the SDK's startup provider (providers/crash-tracer manifest).
-        manifestPlaceholders["tracerEnabled"] = tracerAppToken.isNotBlank()
+        buildConfigField("String", "APPMETRICA_API_KEY", "\"\"")
+        buildConfigField("boolean", "APPMETRICA_SESSIONS", "false")
+        manifestPlaceholders["appMetricaEnabled"] = false
     }
 
     // One dimension `env`, one flavor per environment (FIN-120/385); dimensions are not multiplied.
     // `mock`: in-process fake backend on an OFX statement, local toggles, logcat tracking — no SDK keys needed.
     // `local`: real HTTP client against a bank-bff on the developer's machine (`pf.apiBaseUrl`); local toggles and
-    //   logcat tracking as in `mock` — no RuStore, MyTracker or Tracer, so nothing reaches production analytics,
+    //   logcat tracking as in `mock` — no RuStore or AppMetrica, so nothing reaches production analytics,
     //   config or crash console. Installs next to `prod` (`.local`). Plain HTTP only in localDebug (src/localDebug +
     //   generated security config).
-    // `prod`: real HTTP client, RuStore Remote Config, MyTracker; certificate pinning of the API host when
+    // `prod`: real HTTP client, RuStore Remote Config and AppMetrica; certificate pinning of the API host when
     //   `pf.apiPins` is set (pinnedFlavors above, FIN-121).
     // `stage`: the same HTTP/SDK providers as prod, with its own endpoint, app id and optional SDK keys/pins.
-    // `mock` and `prod`: shared Tracer keys; `stage`: separate keys. Blank keys keep SDKs off.
+    // Each reporting environment uses its own AppMetrica app. Blank keys keep the SDK off.
     flavorDimensions += "env"
     productFlavors {
         create("mock") {
             dimension = "env"
             applicationIdSuffix = ".mock"
             versionNameSuffix = "-mock"
+            val key = secret("pf.mockAppMetricaApiKey")
+            buildConfigField("String", "APPMETRICA_API_KEY", "\"${key}\"")
+            manifestPlaceholders["appMetricaEnabled"] = key.isNotBlank()
+            appmetrica { if (key.isBlank()) enable.set(false) }
         }
         create("local") {
             dimension = "env"
             applicationIdSuffix = ".local"
             versionNameSuffix = "-local"
+            appmetrica { enable.set(false) }
             buildConfigField("String", "API_BASE_URL", "\"${localBackend.url}\"")
-            // Tracer stays off even with a token: crashes of a developer's backend runs do not belong in the console.
-            buildConfigField("boolean", "CRASH_REPORTING_ENABLED", "false")
-            manifestPlaceholders["tracerEnabled"] = false
         }
         create("stage") {
             dimension = "env"
@@ -126,16 +122,22 @@ android {
             versionNameSuffix = "-stage"
             buildConfigField("String", "API_BASE_URL", "\"$stageBaseUrl\"")
             buildConfigField("String", "RUSTORE_REMOTE_CONFIG_APP_ID", "\"${secret("pf.stageRustoreRemoteConfigAppId")}\"")
-            buildConfigField("String", "MYTRACKER_SDK_KEY", "\"${secret("pf.stageMytrackerSdkKey")}\"")
-            buildConfigField("boolean", "CRASH_REPORTING_ENABLED", stageTracerAppToken.isNotBlank().toString())
-            manifestPlaceholders["tracerEnabled"] = stageTracerAppToken.isNotBlank()
+            val key = secret("pf.stageAppMetricaApiKey")
+            buildConfigField("String", "APPMETRICA_API_KEY", "\"${key}\"")
+            buildConfigField("boolean", "APPMETRICA_SESSIONS", "true")
+            manifestPlaceholders["appMetricaEnabled"] = key.isNotBlank()
+            appmetrica { if (key.isBlank()) enable.set(false) }
         }
         create("prod") {
             dimension = "env"
             buildConfigField("String", "API_BASE_URL", "\"$prodBaseUrl\"")
             // SDK keys come from ~/.gradle/gradle.properties or CI env; empty → the SDK stays off.
             buildConfigField("String", "RUSTORE_REMOTE_CONFIG_APP_ID", "\"${secret("pf.rustoreRemoteConfigAppId")}\"")
-            buildConfigField("String", "MYTRACKER_SDK_KEY", "\"${secret("pf.mytrackerSdkKey")}\"")
+            val key = secret("pf.appMetricaApiKey")
+            buildConfigField("String", "APPMETRICA_API_KEY", "\"${key}\"")
+            buildConfigField("boolean", "APPMETRICA_SESSIONS", "true")
+            manifestPlaceholders["appMetricaEnabled"] = key.isNotBlank()
+            appmetrica { if (key.isBlank()) enable.set(false) }
         }
     }
 
@@ -158,6 +160,9 @@ android {
             initWith(getByName("debug"))
             matchingFallbacks += "debug"
             applicationIdSuffix = ".e2e"
+            appmetrica { enable.set(false) }
+            buildConfigField("String", "APPMETRICA_API_KEY", "\"\"")
+            manifestPlaceholders["appMetricaEnabled"] = false
             buildConfigField("String", "E2E_NOW", "\"2026-10-08T12:00:00+03:00\"")
             // UI test coverage (FIN-48, docs/testing.md): AGP instruments the classes of this build — the app and
             // every project module in it — with JaCoCo probes. `E2eCoverage` saves the data while the flows run;
@@ -212,6 +217,10 @@ androidComponents {
     }
 }
 
+// The mock app can report diagnostics, while its e2e variant never includes the SDK.
+val mockDebugImplementation by configurations.creating
+val mockReleaseImplementation by configurations.creating
+
 dependencies {
     implementation(projects.core.common)
     implementation(projects.core.api)
@@ -220,7 +229,6 @@ dependencies {
     implementation(projects.core.toggles)
     implementation(projects.core.tracking)
     implementation(projects.core.storage)
-    implementation(projects.providers.crashTracer)
 
     // Features: the app is the only module that sees :impl modules and binds them to their :api.
     listOf("auth", "applock", "availability", "operations", "statements", "analytics", "assistant", "profile").forEach { feature ->
@@ -231,6 +239,8 @@ dependencies {
     "mockImplementation"(projects.mock.backend)
     "mockImplementation"(projects.providers.togglesLocal)
     "mockImplementation"(projects.providers.trackingLog)
+    mockDebugImplementation(projects.providers.telemetryAppmetrica)
+    mockReleaseImplementation(projects.providers.telemetryAppmetrica)
 
     "localImplementation"(projects.core.network)
     "localImplementation"(projects.providers.togglesLocal)
@@ -238,11 +248,11 @@ dependencies {
 
     "stageImplementation"(projects.core.network)
     "stageImplementation"(projects.providers.togglesRustore)
-    "stageImplementation"(projects.providers.trackingMytracker)
+    "stageImplementation"(projects.providers.telemetryAppmetrica)
 
     "prodImplementation"(projects.core.network)
     "prodImplementation"(projects.providers.togglesRustore)
-    "prodImplementation"(projects.providers.trackingMytracker)
+    "prodImplementation"(projects.providers.telemetryAppmetrica)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -275,30 +285,13 @@ dependencies {
     "e2eImplementation"(libs.androidx.compose.ui.test.manifest)
 }
 
-tracer {
-    create("defaultConfig") {
-        // An empty app token is the SDK's «off»: nothing is generated or uploaded for the variant.
-        isDisabled = tracerAppToken.isBlank()
-        appToken = tracerAppToken
-        pluginToken = tracerPluginToken
-        // R8 mappings of minified builds, so stack traces in the console are readable. Needs the plugin token.
-        uploadMapping = tracerPluginToken.isNotBlank()
-    }
-    // `local` never reports to Tracer (see the flavor): no mappings of its builds either. The plugin takes each setting
-    // from the first config that has it — variant name, build type, flavors, then `defaultConfig`.
-    create("local") {
-        isDisabled = true
-        uploadMapping = false
-    }
-    create("stage") {
-        isDisabled = stageTracerAppToken.isBlank()
-        appToken = stageTracerAppToken
-        pluginToken = stageTracerPluginToken
-        uploadMapping = stageTracerAppToken.isNotBlank() && stageTracerPluginToken.isNotBlank()
-    }
+// Archive release mappings for manual upload to the corresponding AppMetrica application.
+appmetrica {
+    offline.set(true)
+    enableAnalytics.set(false)
 }
 
-/** Gradle property or environment variable (`pf.mytrackerSdkKey` → `PF_MYTRACKER_SDK_KEY`); empty when absent. */
+/** Gradle property or environment variable (`pf.appMetricaApiKey` → `PF_APP_METRICA_API_KEY`); empty when absent. */
 fun secret(name: String): String =
     (findProperty(name) as String?)
         ?: System.getenv(name.replace(".", "_").replace(Regex("([a-z])([A-Z])"), "$1_$2").uppercase())

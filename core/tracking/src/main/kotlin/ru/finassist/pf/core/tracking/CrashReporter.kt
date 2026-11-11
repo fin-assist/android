@@ -1,13 +1,13 @@
 package ru.finassist.pf.core.tracking
 
 /**
- * Crash, ANR and non-fatal reporting (Tracer; logcat in builds without a Tracer token). Fatal crashes and ANRs
+ * Crash, ANR and non-fatal reporting (AppMetrica when configured; logcat in `mock` and `local`). Fatal crashes and ANRs
  * are collected by the provider on its own; the app only adds context through this interface.
  *
  * Everything the app adds here is typed: [Slug]s, enums and the classes below. There is no method that takes a
  * free-form string, so operation titles, amounts and phone numbers cannot end up in a report by accident.
  * Exceptions go out as [ScrubbedThrowable] (type and stack trace, no message) — both non-fatals sent through this
- * interface and fatal crashes, which the Tracer provider scrubs in its uncaught-exception handler.
+ * interface and fatal crashes, which the provider scrubs before sending.
  */
 interface CrashReporter {
     /** A handled error worth knowing about (a degraded block, a failed secondary request). */
@@ -16,7 +16,7 @@ interface CrashReporter {
     /** A step of the session shown next to a crash: what the user opened, which config was applied. */
     fun breadcrumb(crumb: Breadcrumb)
 
-    /** Our own `user_id`; `null` after sign-out and account deletion (the provider keeps the value across launches). */
+    /** Our own `user_id`; `null` after sign-out and account deletion (the app restores the user context at sign-in or session restore). */
     fun setUserId(userId: String?)
 
     /** A value attached to every later report; `null` removes it. */
@@ -50,7 +50,7 @@ enum class Severity {
     /** The scenario failed and the user saw an error. Does not affect crash-free. */
     ERROR,
 
-    /** Counted as a crash in crash-free. Not for degradations of secondary requests. */
+    /** Fatal diagnostic severity. Providers may count it separately from uncaught crashes. */
     FATAL,
 }
 
@@ -145,7 +145,7 @@ value class CrashValue private constructor(val value: String) {
 }
 
 /**
- * Fans out to every provider of the build: Tracer, plus logcat in `mock`. A provider that throws must not
+ * Fans out to every provider of the build: AppMetrica and logcat in `mock`. A provider that throws must not
  * break the caller or keep the others from getting the report.
  */
 class CompositeCrashReporter(private val reporters: Collection<CrashReporter>) : CrashReporter {
