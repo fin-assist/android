@@ -99,6 +99,25 @@ class AppMetricaTelemetryTest {
     }
 
     @Test
+    fun `install wraps the current Android handler once`() {
+        val original = Thread.getDefaultUncaughtExceptionHandler()
+        var forwarded: Throwable? = null
+        val system = Thread.UncaughtExceptionHandler { _, cause -> forwarded = cause }
+        try {
+            Thread.setDefaultUncaughtExceptionHandler(system)
+            ScrubbingExceptionHandler.install()
+            val installed = assertNotNull(Thread.getDefaultUncaughtExceptionHandler())
+            ScrubbingExceptionHandler.install()
+
+            assertSame(installed, Thread.getDefaultUncaughtExceptionHandler())
+            installed.uncaughtException(Thread.currentThread(), IllegalArgumentException("raw value"))
+            assertEquals("java.lang.IllegalArgumentException", assertNotNull(forwarded).message)
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(original)
+        }
+    }
+
+    @Test
     fun `product event names and parameters are preserved and sign out clears the profile`() {
         val sdk = RecordingGateway()
         val tracker = AppMetricaTracker(AppMetricaRuntime(enabled = true, sdk))
