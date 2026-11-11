@@ -2,7 +2,7 @@
 
 The full post-merge acceptance consists of three independent suites on the same source revision:
 
-- Five Maestro shards on clean API34 Pixel6 emulators. Each shard has its own 2400 s test deadline.
+- Five Maestro shards on clean API34 Pixel6 emulators. Each shard has a 2700 s process deadline and a 52 min job ceiling.
 - Native instrumented tests on a separate clean emulator, with a 600 s test deadline. They no longer wait
   behind Maestro or consume its remaining budget. Local `scripts/e2e.sh` still runs the full selection;
   `--native-only` selects only the native suite, `--shard i/n` selects Maestro without native tests.
@@ -56,7 +56,7 @@ The main path still uses a fresh cold AVD. Snapshot caching remains explicitly e
 SDK packages is visible in execution evidence; neither cache identity nor a pinned API level promises an
 immutable hosted runner. Emulator jobs consume the same hash-verified pair of APKs from the build job.
 The shard process budget leaves 90 s in its job for shutdown and artifact upload; preparation time is
-not part of the nominal 2400 s cap, but reduces the usable budget when the job would run out of time.
+not part of the nominal 2700 s cap, but reduces the usable budget when the job would run out of time.
 
 ## Deterministic preparation and interactions
 

@@ -67,9 +67,10 @@ inputs, so the connected test task can reuse the signed pair without reassemblin
 same build's JaCoCo classes, preserving the local report's class filters and execution-data inputs.
 Maestro itself is restored from the SHA256-addressed official ZIP cache and revalidated.
 
-The ceilings remain 2400 s / 45 min for Maestro, 600 s / 25 min for native and 900 s / 20 min for JVM.
-A Maestro shard uses the smaller of 2400 s and the time remaining in its job after a 90 s reserve for
-shutdown and evidence upload. The measured budget is written in `preparation.json`. This is a deadline,
+The CI ceilings are 2700 s / 52 min for Maestro, 600 s / 25 min for native and 900 s / 20 min for JVM.
+A Maestro shard uses the smaller of 2700 s and the time remaining in its job after a 90 s reserve for
+shutdown and evidence upload. The workflow supplies the same job timeout to Actions and the process
+coordinator. The measured budget is written in `preparation.json`. This is a deadline,
 not a retry. Console observations are checkpointed atomically as flows complete. With missing JUnit,
 the matching observations are UNVERIFIED (diagnostic only), and flows without terminal evidence are NOT RUN.
 Cancelled or deadline-interrupted runs are not sent to Qase.

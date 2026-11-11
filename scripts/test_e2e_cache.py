@@ -797,13 +797,24 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         self.assertIn('name: e2e-result-attempt-${{ github.run_attempt }}', workflow)
         self.assertNotIn('timeout --kill-after=10s 900s', workflow)
 
-    def test_shard_reserves_cleanup_time_without_expanding_either_limit(self):
-        self.assertEqual(2400, cache.maestro_budget(2400, None, 9000))
-        self.assertEqual(2400, cache.maestro_budget(2400, 1000, 1190))
-        self.assertEqual(2310, cache.maestro_budget(2400, 1000, 1300))
-        self.assertEqual(0, cache.maestro_budget(2400, 1000, 3611))
+    def test_shard_budget_accounts_for_preparation_and_reserves_cleanup_time(self):
+        self.assertEqual(2400, cache.maestro_budget(2400, None, 9000, None))
+        self.assertEqual(2700, cache.maestro_budget(2700, '1000', 1330, '52'))
+        self.assertEqual(2699.875, cache.maestro_budget(2700, '1000', 1330.125, '52'))
+        self.assertEqual(2629.875, cache.maestro_budget(2700, '1000', 1400.125, '52'))
+        self.assertEqual(0, cache.maestro_budget(2700, '1000', 4031, '52'))
+        self.assertEqual(2310, cache.maestro_budget(2400, '1000', 1300, '45'))
+        for started, minutes in [('1000', None), (None, '52'), ('1000', '0'), ('1000', 'bad')]:
+            with self.subTest(started=started, minutes=minutes), self.assertRaises(ValueError):
+                cache.maestro_budget(2700, started, 1300, minutes)
+
+    def test_workflow_shares_the_shard_timeout_with_the_budget_coordinator(self):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
-        self.assertIn('timeout-minutes: 45', workflow)
+        shard = workflow.split('\n  shard:\n', 1)[1].split('\n  native:\n', 1)[0]
+        self.assertIn('MAESTRO_TEST_SECONDS: 2700', workflow)
+        self.assertIn('job_timeout_minutes: [52]', shard)
+        self.assertIn('timeout-minutes: ${{ matrix.job_timeout_minutes }}', shard)
+        self.assertIn('E2E_SHARD_JOB_MINUTES: ${{ matrix.job_timeout_minutes }}', shard)
         self.assertIn("steps.merge.outputs.interrupted == 'false'", self.step('Send results to Qase'))
 
     def test_shard_upload_excludes_unfinished_raw_output_but_keeps_other_evidence(self):
