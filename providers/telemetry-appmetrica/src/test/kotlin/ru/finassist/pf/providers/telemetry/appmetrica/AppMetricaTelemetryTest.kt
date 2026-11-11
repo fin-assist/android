@@ -3,6 +3,7 @@ package ru.finassist.pf.providers.telemetry.appmetrica
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import ru.finassist.pf.core.tracking.Breadcrumb
 import ru.finassist.pf.core.tracking.CrashKey
@@ -16,6 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
@@ -67,6 +69,33 @@ class AppMetricaTelemetryTest {
             error("SDK failed")
         }
         assertTrue(called)
+    }
+
+    @Test
+    fun `the injected runtime does not enable SDK calls for blank keys`() {
+        val context = RuntimeEnvironment.getApplication()
+        for (key in listOf("", "  ")) {
+            val runtime = AppMetricaRuntime(context, apiKey = key, sessions = true)
+            var called = false
+            runtime.call { called = true }
+            assertFalse(called)
+        }
+    }
+
+    @Test
+    fun `Android receives a scrubbed exception or a safe fallback`() {
+        var forwarded: Pair<Thread, Throwable>? = null
+        val handler = ScrubbingExceptionHandler { thread, cause -> forwarded = thread to cause }
+        val thread = Thread.currentThread()
+        handler.uncaughtException(thread, IllegalArgumentException("statement title"))
+
+        assertSame(thread, assertNotNull(forwarded).first)
+        assertEquals("java.lang.IllegalArgumentException", assertNotNull(forwarded).second.message)
+
+        handler.uncaughtException(thread, object : RuntimeException() {
+            override val cause: Throwable? get() = error("scrubbing failed")
+        })
+        assertEquals("Uncaught exception could not be scrubbed", assertNotNull(forwarded).second.message)
     }
 
     @Test

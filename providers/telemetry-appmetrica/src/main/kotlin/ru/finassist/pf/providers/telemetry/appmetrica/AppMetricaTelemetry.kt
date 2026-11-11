@@ -1,6 +1,7 @@
 package ru.finassist.pf.providers.telemetry.appmetrica
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -99,6 +100,9 @@ internal interface AppMetricaGateway {
 private object SdkGateway : AppMetricaGateway {
     fun activate(context: Context, apiKey: String, sessions: Boolean): Boolean =
         apiKey.isNotBlank() && runCatching {
+            if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) {
+                ScrubbingExceptionHandler.install()
+            }
             AppMetrica.activate(context, appMetricaConfig(apiKey, sessions))
         }.isSuccess
 
