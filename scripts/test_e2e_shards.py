@@ -103,13 +103,14 @@ class PlanTest(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 shards.parse_shard(bad)
 
-    def test_real_flows_split_into_four_or_five_shards_with_native_separate(self):
+    def test_real_flows_split_into_four_five_or_six_shards_with_native_separate(self):
         flows = shards.discover_flows(ROOT)
         self.assertTrue(flows)
         self.assertTrue(all(f.startswith(".maestro/flows/") for f in flows))
         self.assertFalse(any("/subflows/" in f for f in flows))
-        for count in (4, 5):
+        for count in (4, 5, 6):
             planned = shards.plan(flows, shards.load_durations(shards.DURATIONS_FILE), count)
+            self.assertTrue(all(s.flows for s in planned))
             self.assertEqual(sorted(f for s in planned for f in s.flows), flows)
             self.assertEqual([s.index for s in planned if s.native], [])
 
@@ -121,15 +122,14 @@ class PlanTest(unittest.TestCase):
 
     def test_real_plan_keeps_observed_flow_variance_and_setup_within_2400_seconds(self):
         flows = shards.discover_flows(ROOT)
-        planned = shards.plan(flows, shards.load_durations(shards.DURATIONS_FILE), 5)
+        durations = shards.load_durations(shards.DURATIONS_FILE)
         # FIN-465 run 42467271555: largest comparable successful-shard total grew 13.1%.
         # Individual growth up to 33.1% is absorbed by maximum successful sample weights.
         # Stress flow time by 20% above those maxima, not a claimed percentile or a per-flow bound.
-        # Native 300s already includes >=50% headroom on the complete measured suite.
-        for shard in planned:
-            native = shards.NATIVE_SECONDS if shard.native else 0
-            stressed = math.ceil((shard.seconds - native) * 1.2) + native + 120
-            self.assertLessEqual(stressed, 2400, f"shard {shard.index} needs {stressed}s including headroom")
+        for count in (5, 6):
+            for shard in shards.plan(flows, durations, count):
+                stressed = math.ceil(shard.seconds * 1.2) + 120
+                self.assertLessEqual(stressed, 2400, f"shard {shard.index}/{count} needs {stressed}s including headroom")
 
     def test_flow_names_are_unique(self):
         # Reports are matched to flows by name when Maestro writes no `file` (flow_of): two flows of one name would mix.
