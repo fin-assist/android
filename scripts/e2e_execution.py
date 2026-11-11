@@ -55,6 +55,22 @@ def update(phase=None, result=None, exit_code=None, failure_category=None, initi
     return data
 
 
+NATIVE_SHELL_MARKS = ('device_setup_started', 'device_setup_finished', 'apk_verification_started',
+                      'artifact_collection_started', 'artifact_collection_finished')
+
+
+def native_mark(mark, details=None):
+    data = read()
+    timings = data.setdefault('native_timings', {})
+    entry = {'at': time.time(), **(details or {})}
+    if mark == 'device_progress':
+        timings.setdefault('first_device_progress', entry)
+        timings['last_device_progress'] = entry
+    else:
+        timings[mark] = entry
+    write(data)
+
+
 def identity():
     data = read()
     hashes = {}
@@ -89,7 +105,7 @@ def identity():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('init', 'phase', 'identity', 'finish', 'budget'))
+    parser.add_argument('command', choices=('init', 'phase', 'identity', 'finish', 'budget', 'native-mark'))
     parser.add_argument('value', nargs='?')
     args = parser.parse_args()
     if args.command == 'init':
@@ -100,6 +116,10 @@ def main():
         update(phase=args.value)
     elif args.command == 'identity':
         identity()
+    elif args.command == 'native-mark':
+        if args.value not in NATIVE_SHELL_MARKS:
+            parser.error('invalid native timing mark')
+        native_mark(args.value)
     elif args.command == 'budget' or STATE.with_suffix('.deadline').exists():
         # The coordinator observed TimeoutExpired before signalling the process group. Its separate marker
         # avoids concurrent receipt writers and distinguishes termination from an ordinary child exit124/137.

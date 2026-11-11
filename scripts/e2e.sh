@@ -55,7 +55,7 @@ finish() {
 trap finish EXIT
 # A local checkout can retain outputs from an earlier attempt. Clear test payload before any setup can fail,
 # while retaining this CI job's execution receipt and its SDK/AVD preparation telemetry. Never remove APKs.
-rm -rf "$OUT/maestro" "$OUT/maestro-log" "$OUT/shots" "$OUT/maestro-output.tgz" "$OUT/maestro-output.tmp" \
+rm -rf "$OUT/preflight" "$OUT/maestro" "$OUT/maestro-log" "$OUT/shots" "$OUT/maestro-output.tgz" "$OUT/maestro-output.tmp" \
     "$OUT/maestro-report.xml" "$OUT/maestro-progress.json" "$OUT/maestro-progress.tmp" "$OUT/native-report.xml" "$OUT/jvm-report.xml" "$OUT/preflight-ui.xml" \
     "$OUT/preflight.png" "$OUT/logcat.txt" "$OUT/coverage" "$OUT/native" "$OUT/native-coverage" \
     "$OUT/native-report" "$OUT/expected-tests.json" "$OUT/execution-status.json" "$OUT/qase-delivery.json" \
@@ -88,6 +88,7 @@ if [[ "$NATIVE_ONLY" == 0 ]]; then
     command -v maestro >/dev/null || { log "maestro is not on PATH: use scripts/install-maestro.sh"; exit 1; }
 fi
 receipt phase device
+if [[ "$NATIVE_ONLY" == 1 ]]; then receipt native-mark device_setup_started; fi
 [[ "$(adb devices | grep -c -w device)" -ge 1 ]] || { log "no device attached (adb devices)"; exit 1; }
 
 # The flows assume Moscow time: periods and «today» are computed in the device zone.
@@ -103,8 +104,11 @@ fi
 receipt identity
 receipt phase device
 
-log "installing $APP_ID"
-adb install -r -t "$APK" >/dev/null
+# AGP installs both APKs for connected tests. Only Maestro needs an explicit app installation.
+if [[ "$NATIVE_ONLY" == 0 ]]; then
+    log "installing $APP_ID"
+    adb install -r -t "$APK" >/dev/null
+fi
 
 adb logcat -c || true
 # Execution data of an earlier run must not count: the device folder is pulled whole after the flows, and
@@ -117,32 +121,39 @@ adb shell settings put global hide_error_dialogs 1 || true
 # Restored by finish(): on a developer's own device the setting must not stay behind.
 adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
 
-# Preflight: cold start and dump the UI hierarchy. If test tags do not show up as resource-id here, every
-# flow would fail on its first step — the dump says why in one file instead of eighteen failures.
+# The cold app may be progressing while UI Automator cannot return a hierarchy. Keep it in the
+# foreground between the three observations instead of discarding its startup work.
 if [[ "$NATIVE_ONLY" == 0 ]]; then
 preflight_ok=0
+needs_launch=1
+mkdir -p "$OUT/preflight"
+adb shell am force-stop "$APP_ID"
 for attempt in 1 2 3; do
-    adb shell am force-stop "$APP_ID"
-    adb shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+    if [[ "$needs_launch" == 1 ]]; then
+        launch_log="$OUT/preflight/attempt-$attempt.launch.log"
+        launch_status=0
+        adb shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1 > "$launch_log" 2>&1 || launch_status=$?
+        printf '\nexit_code=%s\n' "$launch_status" >> "$launch_log"
+        if [[ "$launch_status" == 0 ]]; then needs_launch=0; fi
+    fi
     sleep 10
-    rm -f "$OUT/preflight-ui.xml"
-    adb shell uiautomator dump /sdcard/pf-ui.xml >/dev/null 2>&1 && adb pull /sdcard/pf-ui.xml "$OUT/preflight-ui.xml" >/dev/null 2>&1 || true
-    adb exec-out screencap -p > "$OUT/preflight.png" 2>/dev/null || true
-    if grep -q 'resource-id="auth.phone' "$OUT/preflight-ui.xml" 2>/dev/null \
-        && ! grep -q "isn't responding" "$OUT/preflight-ui.xml" 2>/dev/null; then
+    if python3 "$ROOT/scripts/e2e-device.py" preflight "$OUT" "$APP_ID" "$attempt"; then
         log "preflight: the phone screen is up, test tags are visible to UI Automator"
         preflight_ok=1
         break
+    elif [[ "$?" == 3 ]]; then
+        # A valid hierarchy showed another package. Bring the app forward without stopping it.
+        needs_launch=1
     fi
-    log "preflight $attempt: app screen not clean (see $OUT/preflight-ui.xml, preflight.png); closing system dialogs"
-    adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
-    adb shell input keyevent KEYCODE_HOME || true
-    sleep 15
+    if [[ "$attempt" != 3 ]]; then
+        adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
+        sleep 15
+    fi
 done
+adb exec-out screencap -p > "$OUT/preflight.png" 2>/dev/null || true
 if [[ "$preflight_ok" != 1 ]]; then
-    # Every flow would fail on its first step; stop here with the dump instead of eighteen failures.
     adb logcat -d > "$OUT/logcat.txt" 2>/dev/null || true
-    log "preflight failed: no clean phone screen after 3 attempts (see $OUT/preflight-ui.xml, preflight.png, logcat.txt)"
+    log "preflight failed: no clean phone screen after 3 attempts (see $OUT/preflight/, preflight.png, logcat.txt)"
     exit 1
 fi
 
@@ -182,6 +193,7 @@ if [[ -d "$OUT/maestro" ]]; then
 fi
 else
     status=0
+    receipt native-mark device_setup_finished
 fi
 
 if [[ "$NATIVE" == 1 ]]; then
@@ -190,16 +202,18 @@ if [[ "$NATIVE" == 1 ]]; then
     # The first failure decides the exit code: the Maestro status is kept if both fail.
     native=0
     native_args=(:app:connectedMockE2eAndroidTest --console=plain)
+    receipt native-mark apk_verification_started
     if [[ "${E2E_USE_PREBUILT_APKS:-}" == true ]]; then
         # Preserve AGP's runner, JUnit and JaCoCo. Its APK listings and test discovery inputs came from the build job.
         native_args+=(-Ppf.e2ePrebuiltApks)
         (cd "$ROOT" && python3 scripts/e2e-build-inputs.py check-apks)
     fi
-    (cd "$ROOT" && ./gradlew "${native_args[@]}") || native=$?
+    (cd "$ROOT" && python3 scripts/e2e-device.py native -- ./gradlew "${native_args[@]}") || native=$?
+    [[ "$native" == 0 ]] || receipt finish "$native"
+    receipt native-mark artifact_collection_started
     if [[ "${E2E_USE_PREBUILT_APKS:-}" == true ]]; then
         (cd "$ROOT" && python3 scripts/e2e-build-inputs.py check-apks)
     fi
-    [[ "$native" == 0 ]] || receipt finish "$native"
     # A fresh local run builds the test APK in the connected task; capture it even after a partial/failed suite.
     receipt identity
     [[ "$status" == 0 ]] && status=$native
@@ -208,6 +222,7 @@ if [[ "$NATIVE" == 1 ]]; then
     # Execution data of the native tests: kept with the reports, so a shard's artifact carries it (e2e-shards.py gather).
     cp -r "$ROOT/app/build/outputs/code_coverage" "$OUT/native-coverage" 2>/dev/null || true
     cp -r "$ROOT/app/build/reports/androidTests" "$OUT/native-report" 2>/dev/null || true
+    receipt native-mark artifact_collection_finished
 fi
 
 log "reports: $OUT"

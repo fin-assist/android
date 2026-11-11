@@ -541,6 +541,24 @@ def main():
         for label, start, end in rows:
             if start in marks and end in marks:
                 lines.append(f'| {label} | {marks[end] - marks[start]:.2f} |')
+        from e2e_execution import read
+        native = read().get('native_timings', {})
+        native_phases = (
+            ('Device setup', 'device_setup_started', 'device_setup_finished'),
+            ('Native setup and APK verification', 'apk_verification_started', 'gradle_started'),
+            ('Gradle launch to connected task', 'gradle_started', 'connected_task_observed'),
+            ('Connected task to first AGP progress', 'connected_task_observed', 'first_device_progress'),
+            ('First to last AGP progress', 'first_device_progress', 'last_device_progress'),
+            ('Last AGP progress to Gradle exit', 'last_device_progress', 'gradle_finished'),
+            ('Artifact collection', 'artifact_collection_started', 'artifact_collection_finished'),
+        )
+        for label, start, end in native_phases:
+            if start in native and end in native:
+                lines.append(f"| {label} | {native[end]['at'] - native[start]['at']:.2f} |")
+        if 'last_device_progress' in native:
+            progress = native['last_device_progress']
+            lines += ['', f"Last AGP progress: {progress['completed']}/{progress['total']} completed, "
+                          f"{progress['failed']} failed, {progress['skipped']} skipped (console observation)."]
         if 'effective_budget_seconds' in data:
             lines += ['', f"UI process budget after preparation: {data['effective_budget_seconds']:g}s."]
         if data.get('cache_warning'):
