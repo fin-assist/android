@@ -1602,10 +1602,11 @@ reproduces the duplicate-ID failure before the fix and checks both aliases, dire
 the retained Salary category. Qase93 keeps its ordinary scroll to Salary, so the crash is not bypassed
 with a search query. This is a mock-backend correction; shared UI helpers and control hooks are unchanged.
 
-Qase93 navigates the long unfiltered directory in two observable steps: scroll to the Income heading,
-then to Salary inside that section, each with Maestro's existing 20 s default. A single scroll across
-the whole directory exhausted that navigation budget on the local Pixel6. No financial assertion is
-removed, and the ordinary path still traverses the expense categories where FIN-443 reproduced.
+Qase93 starts the scroll inside the category sheet's list with a swipe spanning most of the list's height.
+It then locates the Income heading and Salary in two separate Maestro commands, each with the existing
+20 s default. On run 43051390522 the final selector lookup preceded the last centered swipe, and the
+failure screenshot already showed the heading. The directory stays unfiltered so the flow traverses
+the expense categories where FIN-443 reproduced and still verifies both directions of the transfer split.
 
 ### FIN-444: post-merge UI evidence and selected-year visibility
 

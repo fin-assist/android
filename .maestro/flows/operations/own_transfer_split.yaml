@@ -298,7 +298,12 @@ tags:
       id: "operations.category.search"
     timeout: 5000
 - assertVisible: "Если это не перевод себе, разделим его на списание и зачисление: выбранная категория — подходящей стороне, другой — категория банка"
-# Income follows the long expense section. Establish the section before locating its option.
+# Start inside the sheet's list and swipe across most of its height before searching for the heading.
+# Keep the list unfiltered so this still traverses the expense categories before locating Income.
+- swipe:
+    start: "50%, 83%"
+    end: "50%, 43%"
+    duration: 300
 - scrollUntilVisible:
     element: "ДОХОДЫ"
 - scrollUntilVisible:
