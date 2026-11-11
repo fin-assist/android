@@ -799,7 +799,8 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
 
     def test_shard_budget_accounts_for_preparation_and_reserves_cleanup_time(self):
         self.assertEqual(2400, cache.maestro_budget(2400, None, 9000, None))
-        self.assertEqual(2700, cache.maestro_budget(2700, '1000', 1228, '52'))
+        self.assertEqual(2700, cache.maestro_budget(2700, '1000', 1330, '52'))
+        self.assertEqual(2699.875, cache.maestro_budget(2700, '1000', 1330.125, '52'))
         self.assertEqual(2629.875, cache.maestro_budget(2700, '1000', 1400.125, '52'))
         self.assertEqual(0, cache.maestro_budget(2700, '1000', 4031, '52'))
         self.assertEqual(2310, cache.maestro_budget(2400, '1000', 1300, '45'))

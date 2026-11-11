@@ -28,7 +28,7 @@ tags:
     env:
       LINK: "pfe2e://config?analytics_recalculating_responses=100"
 # Cover more of the analytics list per swipe before Maestro's bounded selector search.
-# Start in the scrollable gutter to avoid tapping a row on a slow emulator.
+# Drag slowly in the scrollable gutter to keep each move within the viewport.
 - assertVisible:
     id: "analytics.screen"
 - repeat:
@@ -39,7 +39,7 @@ tags:
       - swipe:
           start: "3%, 78%"
           end: "3%, 27%"
-          duration: 300
+          duration: 1500
       - assertVisible:
           id: "analytics.screen"
 - scrollUntilVisible:
