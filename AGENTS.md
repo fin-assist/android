@@ -202,6 +202,8 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   for a branch; PRs never run them by themselves). CI splits the flows between five emulators
   (`scripts/e2e-shards.py`, durations in `scripts/e2e-durations.json`), runs native tests in an independent
   emulator job and collects the targeted JVM companions before validating all results (docs/ui-test-reliability.md).
+  The emulator jobs reuse one checked pair of APKs; Reports uses the matching JaCoCo classes. Maestro
+  console checkpoints are diagnostics for interrupted runs; only JUnit can confirm a flow result.
   Their coverage: `./gradlew :e2eCoverageReport` after a run, then
   `python3 scripts/ui-coverage.py summary --jacoco build/reports/e2e-coverage/report.xml`; the scenario part
   (`python3 scripts/ui-coverage.py summary`) needs no device (docs/testing.md).

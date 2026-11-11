@@ -772,7 +772,7 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         self.assertNotIn('matrix.shard', native)
         self.assertIn('timeout-minutes: 25', native)
         reports = workflow.split('\n  reports:\n', 1)[1]
-        self.assertIn('needs: [shard, native, components]', reports)
+        self.assertIn('needs: [build, shard, native, components]', reports)
         self.assertIn("needs.native.result != 'success'", reports)
         self.assertIn("needs.components.result != 'success'", reports)
         self.assertIn('name: e2e-native', reports)
@@ -786,7 +786,7 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         self.assertIn('maestro-archive-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.MAESTRO_VERSION }}-${{ env.MAESTRO_SHA256 }}', workflow)
         self.assertIn('path: ${{ runner.temp }}/maestro-package', workflow)
         self.assertNotIn('restore-keys: maestro', workflow)
-        self.assertEqual(2, workflow.count('run-command --timeout 540 -- ./gradlew :app:assembleMockE2e'))
+        self.assertEqual(1, workflow.count('run-command --timeout 540 -- ./gradlew :app:assembleMockE2e'))
         self.assertIn('COMPONENT_TEST_SECONDS: 900', workflow)
         self.assertIn('run-command --timeout "$COMPONENT_TEST_SECONDS" -- ./gradlew :feature:analytics:impl:testDebugUnitTest', workflow)
         self.assertIn('--jvm-budget-seconds "$COMPONENT_TEST_SECONDS"', workflow)
@@ -796,6 +796,15 @@ class CacheWorkflowSafetyTest(unittest.TestCase):
         self.assertIn('--native-budget-seconds "$NATIVE_TEST_SECONDS"', workflow)
         self.assertIn('name: e2e-result-attempt-${{ github.run_attempt }}', workflow)
         self.assertNotIn('timeout --kill-after=10s 900s', workflow)
+
+    def test_shard_reserves_cleanup_time_without_expanding_either_limit(self):
+        self.assertEqual(2400, cache.maestro_budget(2400, None, 9000))
+        self.assertEqual(2400, cache.maestro_budget(2400, 1000, 1190))
+        self.assertEqual(2310, cache.maestro_budget(2400, 1000, 1300))
+        self.assertEqual(0, cache.maestro_budget(2400, 1000, 3611))
+        workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()
+        self.assertIn('timeout-minutes: 45', workflow)
+        self.assertIn("steps.merge.outputs.interrupted == 'false'", self.step('Send results to Qase'))
 
     def test_shard_upload_excludes_unfinished_raw_output_but_keeps_other_evidence(self):
         workflow = (Path(__file__).parent.parent / '.github/workflows/e2e.yml').read_text()

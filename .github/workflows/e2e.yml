@@ -56,7 +56,47 @@ jobs:
       contents: read
     uses: ./.github/workflows/sdk-preparation-benchmark.yml
 
+  build:
+    name: Build shared UI inputs
+    if: github.event_name != 'workflow_dispatch' || !inputs.sdk_benchmark
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    outputs:
+      apks: ${{ steps.apks.outputs.artifact-id }}
+      classes: ${{ steps.classes.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - name: Build APKs and matching coverage classes
+        timeout-minutes: 10
+        run: |
+          python3 scripts/e2e-cache.py run-command --timeout 540 -- ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest :e2eCoverageClasses --no-daemon --console=plain
+          python3 scripts/e2e-build-inputs.py publish
+      - uses: actions/upload-artifact@v7
+        id: apks
+        with:
+          name: e2e-build-apks-attempt-${{ github.run_attempt }}
+          path: build/e2e-input/apks/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        id: classes
+        with:
+          name: e2e-build-classes-attempt-${{ github.run_attempt }}
+          path: build/e2e-input/classes/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+
   shard:
+    needs: build
     if: github.event_name != 'workflow_dispatch' || !inputs.sdk_benchmark
     name: Shard ${{ matrix.shard }} (emulator)
     runs-on: ubuntu-26.04
@@ -67,6 +107,9 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5]
     steps:
+      - name: Start shard budget clock
+        run: python3 -c 'import time; print(f"E2E_SHARD_STARTED_MONOTONIC={time.monotonic()}")' >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v7
 
       - name: Initialize execution evidence
@@ -101,18 +144,15 @@ jobs:
           distribution: temurin
           java-version: 25
 
-      # Every shard builds the APKs itself, mostly from the build cache (~40 s): the native tests and the coverage
-      # report need the Gradle build anyway, and a separate build job would delay every emulator (docs/e2e.md).
-      - uses: gradle/actions/setup-gradle@v6
+      - name: Download shared APKs
+        uses: actions/download-artifact@v8
+        timeout-minutes: 2
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' || matrix.shard != 1 }}
-
-      - name: Build APKs
-        timeout-minutes: 10
+          artifact-ids: ${{ needs.build.outputs.apks }}
+          path: build/e2e-input/apks
+      - name: Verify shared APKs
         run: |
-          status=0
-          python3 scripts/e2e-cache.py run-command --timeout 540 -- ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest --no-daemon --console=plain || status=$?
-          if [ "$status" != 0 ]; then python3 scripts/e2e_execution.py finish "$status"; exit "$status"; fi
+          python3 scripts/e2e-build-inputs.py apks
           python3 scripts/e2e_execution.py identity
 
       # Pinned: the reports job matches flows by the JUnit report Maestro writes, so a new version is a deliberate
@@ -396,10 +436,13 @@ jobs:
           retention-days: 14
 
   native:
+    needs: build
     if: github.event_name != 'workflow_dispatch' || !inputs.sdk_benchmark
     name: Native (fresh emulator)
     runs-on: ubuntu-26.04
     timeout-minutes: 25
+    env:
+      E2E_USE_PREBUILT_APKS: 'true'
     steps:
       - uses: actions/checkout@v7
       - name: Initialize execution evidence
@@ -424,18 +467,19 @@ jobs:
           distribution: temurin
           java-version: 25
 
-      # Every shard builds the APKs itself, mostly from the build cache (~40 s): the native tests and the coverage
-      # report need the Gradle build anyway, and a separate build job would delay every emulator (docs/e2e.md).
       - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: true
 
-      - name: Build APKs
-        timeout-minutes: 10
+      - name: Download shared APKs
+        uses: actions/download-artifact@v8
+        timeout-minutes: 2
+        with:
+          artifact-ids: ${{ needs.build.outputs.apks }}
+          path: build/e2e-input/apks
+      - name: Verify shared APKs
         run: |
-          status=0
-          python3 scripts/e2e-cache.py run-command --timeout 540 -- ./gradlew :app:assembleMockE2e :app:assembleMockE2eAndroidTest --no-daemon --console=plain || status=$?
-          if [ "$status" != 0 ]; then python3 scripts/e2e_execution.py finish "$status"; exit "$status"; fi
+          python3 scripts/e2e-build-inputs.py apks
           python3 scripts/e2e_execution.py identity
 
       # SDK caches contain only binaries, never AVD state or adb keys. Prefix restore may select an older
@@ -566,10 +610,9 @@ jobs:
 
   reports:
     name: Reports
-    needs: [shard, native, components]
+    needs: [build, shard, native, components]
     # Also after a failed or timed-out shard: the other shards' results and coverage must not be lost. Not for a
-    # cancelled run (a newer merge cancels it): nothing of it goes to Qase, and with fail-fast off a shard is cancelled
-    # only together with the run.
+    # cancelled run (a newer merge cancels it): nothing of it goes to Qase.
     if: ${{ !cancelled() && !inputs.sdk_benchmark }}
     runs-on: ubuntu-26.04
     timeout-minutes: 20
@@ -619,11 +662,24 @@ jobs:
             --native-dir build/e2e-native --jvm-dir build/e2e-components \
             --summary "$GITHUB_STEP_SUMMARY" --github-output "$GITHUB_OUTPUT"
 
+      - name: Download matching JaCoCo classes
+        if: needs.build.result == 'success'
+        id: coverage-inputs
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        timeout-minutes: 2
+        with:
+          artifact-ids: ${{ needs.build.outputs.classes }}
+          path: build/e2e-input/classes
+
       # The report does not fail the job: without data it is empty and the summary says so.
       - name: UI test coverage report
+        if: steps.coverage-inputs.outcome == 'success'
         continue-on-error: true
         timeout-minutes: 10
-        run: timeout --kill-after=10s 540s ./gradlew :e2eCoverageReport --no-daemon --console=plain
+        run: |
+          python3 scripts/e2e-build-inputs.py classes
+          timeout --kill-after=10s 540s ./gradlew :e2eCoverageReport -Ppf.e2ePrebuiltClasses --no-daemon --console=plain
 
       - name: Test report
         if: always()
@@ -633,10 +689,11 @@ jobs:
 
       # One Qase run per merge to main for all shards (project PLAINFIN, cases in scripts/qase-cases.json). Cancelled
       # runs are not sent — neither a cancelled workflow (a newer merge cancels the run) nor one with a cancelled shard:
-      # partial results would read as lost coverage; manual runs of a branch are not either — Qase tracks main.
+      # partial results would read as lost coverage. The same applies to a shard's controlled deadline shutdown
+      # and manual branch runs — Qase tracks complete attempts on main.
       # Without the QASE_API_TOKEN secret the script only prints a notice; a Qase outage does not fail the job.
       - name: Send results to Qase
-        if: ${{ !cancelled() && needs.shard.result != 'cancelled' && needs.native.result != 'cancelled' && needs.components.result != 'cancelled' && github.event_name == 'push' }}
+        if: ${{ !cancelled() && needs.build.result == 'success' && steps.merge.outputs.interrupted == 'false' && needs.shard.result != 'cancelled' && needs.native.result != 'cancelled' && needs.components.result != 'cancelled' && github.event_name == 'push' }}
         continue-on-error: true
         env:
           QASE_API_TOKEN: ${{ secrets.QASE_API_TOKEN }}
@@ -719,15 +776,16 @@ jobs:
       # not a pass although every job was green — a shard's report that never arrived (the download above may fail),
       # flows missing from a report or failed in it.
       - name: Fail if a shard failed or its report is missing
-        if: needs.shard.result != 'success' || needs.native.result != 'success' || needs.components.result != 'success' || steps.merge.outputs.incomplete == 'true' || steps.merge.outcome != 'success'
+        if: needs.build.result != 'success' || needs.shard.result != 'success' || needs.native.result != 'success' || needs.components.result != 'success' || steps.merge.outputs.incomplete == 'true' || steps.merge.outcome != 'success'
         env:
+          BUILD_RESULT: ${{ needs.build.result }}
           RESULT: ${{ needs.shard.result }}
           NATIVE_RESULT: ${{ needs.native.result }}
           COMPONENT_RESULT: ${{ needs.components.result }}
           PROBLEMS: ${{ steps.merge.outputs.problems }}
         run: |
-          if [ "$RESULT" != "success" ] || [ "$NATIVE_RESULT" != "success" ] || [ "$COMPONENT_RESULT" != "success" ]; then
-            echo "::error::UI tests did not pass: Maestro=$RESULT native=$NATIVE_RESULT components=$COMPONENT_RESULT; see the e2e-reports artifact"
+          if [ "$BUILD_RESULT" != "success" ] || [ "$RESULT" != "success" ] || [ "$NATIVE_RESULT" != "success" ] || [ "$COMPONENT_RESULT" != "success" ]; then
+            echo "::error::UI tests did not pass: build=$BUILD_RESULT Maestro=$RESULT native=$NATIVE_RESULT components=$COMPONENT_RESULT; see the e2e-reports artifact"
           fi
           if [ -n "$PROBLEMS" ]; then
             echo "::error::UI tests: the merged report is incomplete or failed: $PROBLEMS"

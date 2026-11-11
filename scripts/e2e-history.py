@@ -430,8 +430,13 @@ def inspect_bundle(source, run, repo, artifact, reconstructed=False, workflow='e
                 require(receipt.get(field) == outcome.get(field), 'receipt_status_mismatch')
             require(receipt.get('budget_expired', False) == outcome.get('budget_expired', False), 'receipt_status_mismatch')
         process = None
+        effective_budget = budget
         if prep is not None:
             require(isinstance(prep, dict) and isinstance(prep.get('marks'), dict), 'invalid_preparation')
+            if 'effective_budget_seconds' in prep:
+                effective_budget = prep['effective_budget_seconds']
+                require(number(effective_budget) and (budget is None or effective_budget <= budget),
+                        'invalid_effective_budget')
             start, finish = (prep['marks'].get(k) for k in ('tests-started', 'tests-finished'))
             if start is not None and finish is not None:
                 require(number(start) and number(finish) and finish >= start, 'invalid_process_duration')
@@ -446,8 +451,9 @@ def inspect_bundle(source, run, repo, artifact, reconstructed=False, workflow='e
                 if classification in {'hit-current', 'hit-updated', 'miss', 'preinstalled'}:
                     cache[package] = classification
         details.append({k: outcome.get(k) for k in ('kind', 'index', 'planned', 'passed', 'failed', 'missing', 'skipped', 'unverified', 'phase', 'category', 'result', 'budget_expired', 'invalid')} |
-                       {'budget_seconds': budget, 'process_seconds': process,
-                        'remaining_budget_seconds': round(budget - process, 3) if budget is not None and process is not None else None,
+                       {'budget_seconds': budget, 'effective_budget_seconds': effective_budget, 'process_seconds': process,
+                        'remaining_budget_seconds': round(effective_budget - process, 3)
+                        if effective_budget is not None and process is not None else None,
                         'cache': cache, 'apks': receipt.get('apks', {}) if receipt else {}, 'evidence': evidence})
         projections.append((suite, receipt or {}, prep, sdk))
     delivery = index.get('delivery')
@@ -706,7 +712,7 @@ def markdown(report):
             details.append(f"\nQase: [{row['qase_run_id']}]({row['qase_run_url']}).")
         details.append(f"\n{row['run_id']}/{row['attempt']}: Qase run={row.get('qase_run_id')}; control={escape(json.dumps(row['control_plane'], sort_keys=True))}; problems={escape(json.dumps(row.get('problems', [])))}; source={row.get('source_sha')}; artifact={row.get('artifact_provenance', 'unknown')}; inventory={row.get('inventory', 'unknown')}.")
         for suite in row.get('suites', []):
-            details.append(f"\n- {row['run_id']}/{row['attempt']} {suite['kind']} {suite['index']}: cause={escape(suite['category'])}, phase={escape(suite['phase'])}, deadline={suite.get('budget_expired', False)}; failed={suite['failed']}, missing={suite['missing']}, skipped={suite['skipped']}; process={suite['process_seconds']}s, budget={suite['budget_seconds']}s, remaining={suite['remaining_budget_seconds']}s; cache={escape(json.dumps(suite['cache'], sort_keys=True))}; diagnostics={escape(json.dumps(suite['invalid']))}.")
+            details.append(f"\n- {row['run_id']}/{row['attempt']} {suite['kind']} {suite['index']}: cause={escape(suite['category'])}, phase={escape(suite['phase'])}, deadline={suite.get('budget_expired', False)}; failed={suite['failed']}, missing={suite['missing']}, skipped={suite['skipped']}; process={suite['process_seconds']}s, budget={suite['budget_seconds']}s, effective={suite.get('effective_budget_seconds')}s, remaining={suite['remaining_budget_seconds']}s; cache={escape(json.dumps(suite['cache'], sort_keys=True))}; diagnostics={escape(json.dumps(suite['invalid']))}.")
     lines += details
     lines += ['', f"Comparable cohorts: {len(report['cohorts'])}. Exact source, inventory and known configuration only; unknown configuration is incomparable.",
               'Process duration uses recorded start/finish marks, never summed test durations. Unknown values remain unknown. No p95 or SLO inference.']

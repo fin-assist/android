@@ -7,12 +7,16 @@ import io
 import json
 import math
 import os
+import signal
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import xml.etree.ElementTree as ET
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("e2e_shards", ROOT / "scripts" / "e2e-shards.py")
@@ -170,6 +174,45 @@ class MergeTest(unittest.TestCase):
         merged = ET.parse(out / "maestro-report.xml").getroot()
         return outcomes, merged
 
+    def test_cancelled_maestro_keeps_only_unverified_terminal_observations(self):
+        identity = {'GITHUB_SHA': 'a' * 40, 'GITHUB_RUN_ID': '42', 'GITHUB_RUN_ATTEMPT': '1'}
+        directory = self.shard_dir(2)
+        progress = directory / shards.PROGRESS_FILE
+        durations = write(self.root / 'durations.json', json.dumps({'flows': self.durations}))
+        fake = "print('    [Passed] Flow three (1s)', flush=True); print('[Passed] Flow two (3m)', flush=True)"
+        fake += "; import time; time.sleep(60)"
+        command = [sys.executable, str(ROOT / 'scripts/e2e-shards.py'), '--root', str(self.root),
+                   '--durations', str(durations), 'watch', '--shard', '2/2',
+                   '--progress', str(progress), '--', sys.executable, '-c', fake]
+        with patch.dict(os.environ, identity):
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, start_new_session=True)
+            try:
+                end = time.monotonic() + 5
+                while not progress.is_file() and process.poll() is None and time.monotonic() < end:
+                    time.sleep(.02)
+                self.assertTrue(progress.is_file(), 'a completed flow must be durable before Maestro exits')
+            finally:
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                process.communicate(timeout=5)
+            execution_receipt(directory, phase='maestro', result='failed', exit_code=1, category='test')
+            outcomes, merged = self.gather()
+            outcome = outcomes[1]
+            self.assertEqual((outcome.passed, outcome.missing, outcome.unverified), (0, 1, 1))
+            self.assertEqual(outcome.unverified_results, {'passed': 1})
+            self.assertTrue(shards.problems(outcomes))
+            states = {case.get('name'): case.get('pf-execution') for case in merged.iter('testcase')}
+            self.assertEqual(states['Flow two'], 'unverified')
+            self.assertEqual(states['Flow three'], 'not-run')
+
+            # A stale console checkpoint must not be attributed to the current receipt.
+            observed = json.loads(progress.read_text())
+            observed['identity']['GITHUB_RUN_ATTEMPT'] = '9'
+            write(progress, json.dumps(observed))
+            self.assertEqual(self.gather()[0][1].missing, 2)
+
     def test_reports_of_all_shards_end_up_in_one(self):
         write(self.shard_dir(1) / "maestro-report.xml", report(self.root, [(self.flows[0], "Flow one", 61.5, False)]))
         write(self.shard_dir(2) / "maestro-report.xml", report(self.root, [
@@ -296,7 +339,7 @@ class MergeTest(unittest.TestCase):
         ]))
         _, _, output = self.run_gather()
         self.assertEqual(output.splitlines(), [
-            "incomplete=true", "problems=shard 1/2: no Maestro report received (1 flow(s) not run)",
+            "incomplete=true", "problems=shard 1/2: no Maestro report received (1 flow(s) not run)", "interrupted=false",
         ])
 
     def test_missing_and_failed_flows_are_listed_per_shard(self):
@@ -305,7 +348,7 @@ class MergeTest(unittest.TestCase):
         _, _, output = self.run_gather()
         self.assertEqual(output.splitlines(), [
             "incomplete=true",
-            "problems=shard 1/2: 1 flow(s) failed; shard 2/2: 1 flow(s) missing from its report",
+            "problems=shard 1/2: 1 flow(s) failed; shard 2/2: 1 flow(s) missing from its report", "interrupted=false",
         ])
 
     def test_complete_run_is_not_incomplete(self):
@@ -314,7 +357,7 @@ class MergeTest(unittest.TestCase):
             (self.flows[2], "Flow three", 40, False), (self.flows[1], "Flow two", 50, False),
         ]))
         _, _, output = self.run_gather()
-        self.assertEqual(output.splitlines(), ["incomplete=false", "problems="])
+        self.assertEqual(output.splitlines(), ["incomplete=false", "problems=", "interrupted=false"])
 
     def test_empty_shard_without_report_is_no_problem(self):
         # More shards than flows: a shard with nothing to run leaves no report, and that is fine.

@@ -168,8 +168,9 @@ are the available configuration evidence. Do not interpret these groups as proof
 identity.
 
 Process duration is the original `tests-started` → `tests-finished` wall interval, never the sum of JUnit
-durations. Remaining budget is recorded budget minus that duration and can be negative. Unknown/empty Java, missing receipt SDK revisions or missing AVD cache policy also make cohorts
-incomparable. Missing marks,
+durations. Remaining budget uses the effective process budget from `preparation.json`, when present,
+and otherwise the configured budget. It can be negative after shutdown and finalization. Unknown/empty Java,
+missing receipt SDK revisions or missing AVD cache policy also make cohorts incomparable. Missing marks,
 JVM timing absent from older receipts, missing budgets and cache outcomes stay unknown. Cache classes come
 only from the SDK sidecar (`hit-current`, `hit-updated`, `miss`, `preinstalled`); a fast run is not evidence
 of a cache hit. Maestro archive caching is unknown in schema 1. There are no p95, SLO or statistical claims

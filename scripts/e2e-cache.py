@@ -174,6 +174,16 @@ def run_command(command, timeout=2400, grace=10, archive_output=False, *,
                 archive_maestro_output()
 
 
+def maestro_budget(configured, started, now):
+    """Reserve time in the 45-minute shard job for shutdown, evidence finalization and upload."""
+    if started is None:
+        return configured
+    elapsed = now - float(started)
+    if not math.isfinite(elapsed) or elapsed < 0:
+        raise ValueError('invalid shard budget clock')
+    return round(max(0, min(configured, 45 * 60 - 90 - elapsed)), 3)
+
+
 def run_tests(shard, timeout=2400, grace=10, native_only=False):
     """Apply the same process-group coordinator to an emulator suite."""
     selection = ['--native-only'] if native_only else ['--shard', shard]
@@ -488,11 +498,19 @@ def main():
         data['boot_mode'] = 'fresh-cold-direct' if args.direct_cold else 'fresh-cold-fallback' if args.cold else 'snapshot-verified'
         if args.direct_cold:
             data['cache'] = 'disabled'
+        budget = args.timeout if args.timeout is not None else 600 if args.native_only else 2400
+        if not args.native_only:
+            budget = maestro_budget(budget, os.environ.get('E2E_SHARD_STARTED_MONOTONIC'), time.monotonic())
+        data['effective_budget_seconds'] = budget
         write(data)
+        print(f'UI process budget after preparation: {budget:g}s', flush=True)
         # The coordinator uses this durable marker to distinguish preparation failure from a real test failure.
         mark('tests-started')
         try:
-            budget = args.timeout if args.timeout is not None else 600 if args.native_only else 2400
+            if budget == 0:
+                mark_budget_expiry()
+                record_budget_expiry()
+                raise SystemExit(124)
             result = run_tests(None, timeout=budget, native_only=True) if args.native_only else run_tests(args.shard, timeout=budget)
         finally:
             mark('tests-finished')
@@ -523,6 +541,8 @@ def main():
         for label, start, end in rows:
             if start in marks and end in marks:
                 lines.append(f'| {label} | {marks[end] - marks[start]:.2f} |')
+        if 'effective_budget_seconds' in data:
+            lines += ['', f"UI process budget after preparation: {data['effective_budget_seconds']:g}s."]
         if data.get('cache_warning'):
             lines += ['', data['cache_warning']]
         lines += ['', 'Action step durations also include repeated SDK checks/AVD setup and teardown; see job timings.', '']
