@@ -74,6 +74,17 @@ not a retry. Console observations are checkpointed atomically as flows complete.
 the matching observations are UNVERIFIED (diagnostic only), and flows without terminal evidence are NOT RUN.
 Cancelled or deadline-interrupted runs are not sent to Qase.
 
+On a cold emulator, preflight launches the app once and makes up to three observations of the
+foreground phone screen. Each observation requests a fresh hierarchy and requires the exact
+`auth.phone` resource ID from the mockE2e package. The raw shard artifact keeps bounded
+`uiautomator dump` and `adb pull` output, exit codes, elapsed time and the reason for rejecting each
+sample under `preflight/`. The final screenshot and logcat supplement the XML on failure.
+
+The standalone native job lets AGP install the app and test APKs together. The execution receipt
+and job summary record device setup, APK verification, Gradle startup through the connected task,
+the first and last AGP progress counters, and artifact collection when it completes. A deadline
+preserves the last counter as console evidence. JUnit still supplies the test results.
+
 The expected inventory is derived from source discovery and the existing Qase map. `gather` validates
 Maestro, native and JVM reports for exact presence, no skips, duplicate/unknown/wrong-shard entries,
 and preserves canonical XML plus structured execution status. Evidence includes early setup receipts,

@@ -3,9 +3,11 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -89,7 +91,7 @@ class NativeOnlyRunnerTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         (self.root / 'scripts').mkdir()
-        for name in ('e2e.sh', 'e2e_execution.py'):
+        for name in ('e2e.sh', 'e2e-device.py', 'e2e_execution.py'):
             shutil.copyfile(Path(__file__).with_name(name), self.root / 'scripts' / name)
         self.bin = self.root / 'bin'
         self.bin.mkdir()
@@ -103,8 +105,23 @@ from pathlib import Path
 with Path(os.environ['CALLS']).open('a') as f: f.write('adb ' + ' '.join(sys.argv[1:]) + '\\n')
 if sys.argv[1:] == ['devices']: print('List of devices attached' if os.environ.get('FAKE_NO_DEVICE') else 'emulator-5554 device')
 elif 'getprop' in sys.argv: print('Europe/Moscow')
-elif sys.argv[1:3] == ['pull', '/sdcard/pf-ui.xml']:
-    Path(sys.argv[-1]).write_text('<node resource-id="auth.phone.document"/>')
+elif 'uiautomator' in sys.argv:
+    state = Path(os.environ['CALLS']).with_suffix('.attempt')
+    attempt = int(state.read_text()) if state.exists() else 0
+    modes = os.environ.get('FAKE_PREFLIGHT', 'ready').split(',')
+    mode = modes[min(attempt, len(modes) - 1)]
+    state.write_text(str(attempt + 1))
+    if mode == 'missing':
+        print('ERROR: could not get idle state.', file=sys.stderr)
+elif sys.argv[1] == 'pull' and sys.argv[2].startswith('/sdcard/pf-ui-'):
+    attempt = int(Path(os.environ['CALLS']).with_suffix('.attempt').read_text())
+    modes = os.environ.get('FAKE_PREFLIGHT', 'ready').split(',')
+    mode = modes[min(attempt - 1, len(modes) - 1)]
+    if mode == 'missing':
+        print('remote object does not exist', file=sys.stderr)
+        raise SystemExit(1)
+    tag = 'auth.phone' if mode == 'ready' else 'auth.phone.document'
+    Path(sys.argv[-1]).write_text(f'<hierarchy><node package="ru.finassist.pf.mock.e2e" resource-id="{tag}"/></hierarchy>')
 elif sys.argv[1] == 'pull': raise SystemExit(1)
 ''')
         adb.chmod(0o755)
@@ -116,6 +133,13 @@ if ':app:assembleMockE2e' in sys.argv and os.environ.get('FAKE_BUILD_EXIT'):
     raise SystemExit(int(os.environ['FAKE_BUILD_EXIT']))
 if os.environ.get('FAKE_NATIVE_EARLY_EXIT'):
     raise SystemExit(int(os.environ['FAKE_NATIVE_EARLY_EXIT']))
+print('> Task :app:connectedMockE2eAndroidTest', flush=True)
+print('emulator-5554 - 14 Tests 0/13 completed. (0 skipped) (0 failed)', flush=True)
+if os.environ.get('FAKE_NATIVE_BLOCK'):
+    print('emulator-5554 - 14 Tests 11/13 completed. (0 skipped) (0 failed)', flush=True)
+    import time
+    time.sleep(60)
+print('emulator-5554 - 14 Tests 13/13 completed. (0 skipped) (0 failed)', flush=True)
 p = Path('app/build/outputs/androidTest-results/connected/mock/TEST-native.xml')
 p.parent.mkdir(parents=True)
 p.write_text('<testsuite><testcase classname="Native" name="method"/></testsuite>')
@@ -134,7 +158,7 @@ raise SystemExit(int(os.environ.get('FAKE_NATIVE_EXIT', '0')))
         names = ('build/e2e/maestro/old?/commands.json', 'build/e2e/maestro-log/old.log',
                  'build/e2e/shots/old.png', 'build/e2e/maestro-output.tgz', 'build/e2e/maestro-output.tmp',
                  'build/e2e/maestro-report.xml', 'build/e2e/native-report.xml', 'build/e2e/jvm-report.xml',
-                 'build/e2e/preflight-ui.xml', 'build/e2e/preflight.png', 'build/e2e/logcat.txt',
+                 'build/e2e/preflight/attempt-1.dump.log', 'build/e2e/preflight-ui.xml', 'build/e2e/preflight.png', 'build/e2e/logcat.txt',
                  'build/e2e/native/connected/mock/TEST-old.xml', 'build/e2e/native-report/old.html',
                  'build/e2e/coverage/ec/old.ec', 'build/e2e/native-coverage/old.ec',
                  'build/e2e/expected-tests.json', 'build/e2e/execution-status.json', 'build/e2e/qase-delivery.json',
@@ -204,12 +228,61 @@ raise SystemExit(int(os.environ.get('FAKE_NATIVE_EXIT', '0')))
         self.assertIn('gradle :app:connectedMockE2eAndroidTest', calls)
         self.assertNotIn('uiautomator', calls)
         self.assertNotIn('monkey', calls)
+        self.assertNotIn('adb install', calls, 'AGP owns both APK installations')
         self.assertTrue((self.root / 'build/e2e/native/connected/mock/TEST-native.xml').is_file())
         data = json.loads((self.root / 'build/e2e/execution.json').read_text())
         self.assertEqual('passed', data['result'])
         self.assertEqual({'app-mock-e2e.apk', 'app-mock-e2e-androidTest.apk'}, set(data['apks']))
         self.assertIn('native', [event['phase'] for event in data['events']])
         self.assertNotIn('maestro', [event['phase'] for event in data['events']])
+        timing = data['native_timings']
+        self.assertEqual(0, timing['first_device_progress']['completed'])
+        self.assertEqual(13, timing['last_device_progress']['completed'])
+        self.assertLessEqual(timing['gradle_started']['at'], timing['connected_task_observed']['at'])
+        self.assertLessEqual(timing['connected_task_observed']['at'], timing['first_device_progress']['at'])
+        self.assertLessEqual(timing['gradle_finished']['at'], timing['artifact_collection_finished']['at'])
+
+    def test_native_progress_survives_termination_without_becoming_junit(self):
+        self.env['FAKE_NATIVE_BLOCK'] = '1'
+        path = self.root / 'build/e2e/execution.json'
+        process = subprocess.Popen(['bash', 'scripts/e2e.sh', '--native-only', '--no-build'], cwd=self.root,
+                                   env=self.env, start_new_session=True, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+        try:
+            deadline = time.monotonic() + 10
+            progress = {}
+            while time.monotonic() < deadline and process.poll() is None:
+                if path.exists():
+                    timing = json.loads(path.read_text()).get('native_timings', {})
+                    progress = timing.get('last_device_progress', {})
+                    if progress.get('completed') == 11:
+                        break
+                time.sleep(0.05)
+            self.assertEqual(11, progress.get('completed'))
+        finally:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=5)
+        timing = json.loads(path.read_text())['native_timings']
+        self.assertEqual(11, timing['last_device_progress']['completed'])
+        self.assertNotIn('gradle_finished', timing)
+        self.assertFalse((self.root / 'build/e2e/native').exists())
+
+    def test_preflight_polls_one_launch_and_keeps_dump_and_pull_diagnostics(self):
+        self.env['FAKE_PREFLIGHT'] = 'missing,child-tag,ready'
+        self.assert_full_local_runner_failure(17)
+        calls = self.calls.read_text().splitlines()
+        self.assertEqual(1, sum('monkey -p' in line for line in calls))
+        self.assertEqual(2, sum('am force-stop ru.finassist.pf.mock.e2e' in line for line in calls))
+        dump_paths = [line.split()[-1] for line in calls if 'uiautomator dump' in line]
+        self.assertEqual(3, len(set(dump_paths)))
+        evidence = self.root / 'build/e2e/preflight'
+        self.assertIn('could not get idle state', (evidence / 'attempt-1.dump.log').read_text())
+        self.assertIn('remote object does not exist', (evidence / 'attempt-1.pull.log').read_text())
+        self.assertEqual(['pull_failed', 'phone_root_missing', 'ready'],
+                         [json.loads((evidence / f'attempt-{i}.json').read_text())['result'] for i in range(1, 4)])
 
     def test_failed_native_suite_still_records_the_freshly_built_test_apk(self):
         self.env['FAKE_NATIVE_EXIT'] = '7'
