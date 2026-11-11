@@ -75,7 +75,8 @@ the matching observations are UNVERIFIED (diagnostic only), and flows without te
 Cancelled or deadline-interrupted runs are not sent to Qase.
 
 On a cold emulator, preflight makes up to three observations of the foreground phone screen
-without restarting a successfully launched app. It repeats the launch command only if that command failed. Each observation requests a fresh hierarchy and requires the exact
+without restarting the app. It repeats the launch command only after a launch failure or a valid
+hierarchy showing another package in the foreground. Each observation requests a fresh hierarchy and requires the exact
 `auth.phone` resource ID from the mockE2e package. The raw shard artifact keeps bounded
 `uiautomator dump` and `adb pull` output, exit codes, elapsed time and the reason for rejecting each
 sample under `preflight/`. The final screenshot and logcat supplement the XML on failure.

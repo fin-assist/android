@@ -14,6 +14,7 @@ import xml.etree.ElementTree as ET
 from e2e_execution import native_mark
 
 LOG_LIMIT = 8192
+APP_NOT_FOREGROUND = 3
 CONNECTED_TASK = re.compile(r'^> Task :app:connectedMockE2eAndroidTest(?:\s|$)')
 DEVICE_PROGRESS = re.compile(r'^\S+ - \d+ Tests (\d+)/(\d+) completed\. \((\d+) skipped\) \((\d+) failed\)$')
 
@@ -46,6 +47,9 @@ def hierarchy_status(path, package):
     nodes = list(root.iter('node'))
     if any("isn't responding" in node.get('text', '') for node in nodes):
         return 'anr_dialog'
+    packages = {node.get('package') for node in nodes if node.get('package')}
+    if packages and package not in packages:
+        return 'app_not_foreground'
     if any(node.get('package') == package and node.get('resource-id') == 'auth.phone' for node in nodes):
         return 'ready'
     return 'phone_root_missing'
@@ -77,6 +81,8 @@ def preflight(out, package, attempt):
         adb_diagnostic(['shell', 'rm', '-f', remote], prefix.with_suffix('.cleanup.log'), 5)
     prefix.with_suffix('.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     print(f"[e2e] preflight {attempt}: {result['result']}", flush=True)
+    if result['result'] == 'app_not_foreground':
+        return APP_NOT_FOREGROUND
     return 0 if result['result'] == 'ready' else 1
 
 

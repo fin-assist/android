@@ -124,8 +124,17 @@ elif sys.argv[1] == 'pull' and sys.argv[2].startswith('/sdcard/pf-ui-'):
     if mode == 'missing':
         print('remote object does not exist', file=sys.stderr)
         raise SystemExit(1)
-    tag = 'auth.phone' if mode == 'ready' else 'auth.phone.document'
-    Path(sys.argv[-1]).write_text(f'<hierarchy><node package="ru.finassist.pf.mock.e2e" resource-id="{tag}"/></hierarchy>')
+    tag = 'auth.phone.document' if mode == 'child-tag' else 'auth.phone'
+    node = f'<node package="ru.finassist.pf.mock.e2e" resource-id="{tag}"/>'
+    if mode == 'malformed':
+        xml = '<hierarchy>' + node
+    elif mode == 'foreign-root':
+        xml = '<unexpected>' + node + '</unexpected>'
+    elif mode == 'launcher':
+        xml = '<hierarchy><node package="com.android.launcher3" resource-id="workspace"/></hierarchy>'
+    else:
+        xml = '<hierarchy>' + node + '</hierarchy>'
+    Path(sys.argv[-1]).write_text(xml)
 elif sys.argv[1] == 'pull': raise SystemExit(1)
 ''')
         adb.chmod(0o755)
@@ -296,6 +305,37 @@ raise SystemExit(int(os.environ.get('FAKE_NATIVE_EXIT', '0')))
         self.assertEqual(2, sum('am force-stop ru.finassist.pf.mock.e2e' in line for line in calls))
         launch = self.root / 'build/e2e/preflight/attempt-1.launch.log'
         self.assertIn('launch transport failed', launch.read_text())
+        self.assertIn('exit_code=1', launch.read_text())
+
+    def test_preflight_brings_app_forward_when_hierarchy_shows_launcher(self):
+        self.env['FAKE_PREFLIGHT'] = 'launcher,ready'
+        self.assert_full_local_runner_failure(17)
+        calls = self.calls.read_text().splitlines()
+        self.assertEqual(2, sum('monkey -p' in line for line in calls))
+        self.assertEqual(2, sum('am force-stop ru.finassist.pf.mock.e2e' in line for line in calls))
+        evidence = self.root / 'build/e2e/preflight'
+        self.assertEqual('app_not_foreground',
+                         json.loads((evidence / 'attempt-1.json').read_text())['result'])
+
+    def test_preflight_rejects_malformed_and_unexpected_root_xml_with_phone_tag(self):
+        self.env['FAKE_PREFLIGHT'] = 'malformed,foreign-root,ready'
+        self.assert_full_local_runner_failure(17)
+        evidence = self.root / 'build/e2e/preflight'
+        results = [json.loads((evidence / f'attempt-{i}.json').read_text())['result'] for i in range(1, 4)]
+        self.assertEqual(['invalid_xml', 'invalid_xml', 'ready'], results)
+
+    def test_three_failed_preflight_observations_preserve_logs_and_stop_before_maestro(self):
+        self.prepare_fake_maestro(17)
+        self.env['FAKE_PREFLIGHT'] = 'child-tag,child-tag,missing'
+        result = subprocess.run(['bash', 'scripts/e2e.sh', '--no-build'], cwd=self.root,
+                                env=self.env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(1, result.returncode, result.stderr)
+        out = self.root / 'build/e2e'
+        self.assertNotIn('maestro failed', self.calls.read_text())
+        self.assertFalse((out / 'preflight-ui.xml').exists())
+        attempts = sorted((out / 'preflight').glob('attempt-*.json'))
+        self.assertEqual(['phone_root_missing', 'phone_root_missing', 'pull_failed'],
+                         [json.loads(path.read_text())['result'] for path in attempts])
 
     def test_failed_native_suite_still_records_the_freshly_built_test_apk(self):
         self.env['FAKE_NATIVE_EXIT'] = '7'
@@ -315,7 +355,7 @@ raise SystemExit(int(os.environ.get('FAKE_NATIVE_EXIT', '0')))
             with self.subTest(code=code):
                 self.assert_full_local_runner_failure(code)
 
-    def assert_full_local_runner_failure(self, code):
+    def prepare_fake_maestro(self, code):
         maestro = self.bin / 'maestro'
         maestro.write_text('#!' + sys.executable + '\n' + '''import os, sys
 from pathlib import Path
@@ -327,6 +367,9 @@ raise SystemExit(int(os.environ['FAKE_MAESTRO_EXIT']))
         sleep.write_text('#!/bin/sh\nexit 0\n')
         sleep.chmod(0o755)
         self.env['FAKE_MAESTRO_EXIT'] = str(code)
+
+    def assert_full_local_runner_failure(self, code):
+        self.prepare_fake_maestro(code)
         result = subprocess.run(['bash', 'scripts/e2e.sh', '--no-build'], cwd=self.root,
                                 env=self.env, capture_output=True, text=True, timeout=10)
         self.assertEqual(code, result.returncode, result.stderr)

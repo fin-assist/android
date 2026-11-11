@@ -129,15 +129,21 @@ needs_launch=1
 mkdir -p "$OUT/preflight"
 adb shell am force-stop "$APP_ID"
 for attempt in 1 2 3; do
-    if [[ "$needs_launch" == 1 ]] && adb shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1 \
-        > "$OUT/preflight/attempt-$attempt.launch.log" 2>&1; then
-        needs_launch=0
+    if [[ "$needs_launch" == 1 ]]; then
+        launch_log="$OUT/preflight/attempt-$attempt.launch.log"
+        launch_status=0
+        adb shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1 > "$launch_log" 2>&1 || launch_status=$?
+        printf '\nexit_code=%s\n' "$launch_status" >> "$launch_log"
+        if [[ "$launch_status" == 0 ]]; then needs_launch=0; fi
     fi
     sleep 10
     if python3 "$ROOT/scripts/e2e-device.py" preflight "$OUT" "$APP_ID" "$attempt"; then
         log "preflight: the phone screen is up, test tags are visible to UI Automator"
         preflight_ok=1
         break
+    elif [[ "$?" == 3 ]]; then
+        # A valid hierarchy showed another package. Bring the app forward without stopping it.
+        needs_launch=1
     fi
     if [[ "$attempt" != 3 ]]; then
         adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
