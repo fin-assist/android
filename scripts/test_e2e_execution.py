@@ -105,6 +105,10 @@ from pathlib import Path
 with Path(os.environ['CALLS']).open('a') as f: f.write('adb ' + ' '.join(sys.argv[1:]) + '\\n')
 if sys.argv[1:] == ['devices']: print('List of devices attached' if os.environ.get('FAKE_NO_DEVICE') else 'emulator-5554 device')
 elif 'getprop' in sys.argv: print('Europe/Moscow')
+elif 'monkey' in sys.argv and os.environ.get('FAKE_LAUNCH_FAIL_ONCE'):
+    if Path(os.environ['CALLS']).read_text().count('monkey -p') == 1:
+        print('launch transport failed', file=sys.stderr)
+        raise SystemExit(1)
 elif 'uiautomator' in sys.argv:
     state = Path(os.environ['CALLS']).with_suffix('.attempt')
     attempt = int(state.read_text()) if state.exists() else 0
@@ -283,6 +287,15 @@ raise SystemExit(int(os.environ.get('FAKE_NATIVE_EXIT', '0')))
         self.assertIn('remote object does not exist', (evidence / 'attempt-1.pull.log').read_text())
         self.assertEqual(['pull_failed', 'phone_root_missing', 'ready'],
                          [json.loads((evidence / f'attempt-{i}.json').read_text())['result'] for i in range(1, 4)])
+
+    def test_preflight_retries_launch_only_if_launch_command_failed(self):
+        self.env.update(FAKE_LAUNCH_FAIL_ONCE='1', FAKE_PREFLIGHT='missing,ready')
+        self.assert_full_local_runner_failure(17)
+        calls = self.calls.read_text().splitlines()
+        self.assertEqual(2, sum('monkey -p' in line for line in calls))
+        self.assertEqual(2, sum('am force-stop ru.finassist.pf.mock.e2e' in line for line in calls))
+        launch = self.root / 'build/e2e/preflight/attempt-1.launch.log'
+        self.assertIn('launch transport failed', launch.read_text())
 
     def test_failed_native_suite_still_records_the_freshly_built_test_apk(self):
         self.env['FAKE_NATIVE_EXIT'] = '7'

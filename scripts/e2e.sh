@@ -125,10 +125,15 @@ adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 
 # foreground between the three observations instead of discarding its startup work.
 if [[ "$NATIVE_ONLY" == 0 ]]; then
 preflight_ok=0
+needs_launch=1
+mkdir -p "$OUT/preflight"
 adb shell am force-stop "$APP_ID"
-adb shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
-sleep 10
 for attempt in 1 2 3; do
+    if [[ "$needs_launch" == 1 ]] && adb shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1 \
+        > "$OUT/preflight/attempt-$attempt.launch.log" 2>&1; then
+        needs_launch=0
+    fi
+    sleep 10
     if python3 "$ROOT/scripts/e2e-device.py" preflight "$OUT" "$APP_ID" "$attempt"; then
         log "preflight: the phone screen is up, test tags are visible to UI Automator"
         preflight_ok=1
@@ -136,7 +141,7 @@ for attempt in 1 2 3; do
     fi
     if [[ "$attempt" != 3 ]]; then
         adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
-        sleep 25
+        sleep 15
     fi
 done
 adb exec-out screencap -p > "$OUT/preflight.png" 2>/dev/null || true
