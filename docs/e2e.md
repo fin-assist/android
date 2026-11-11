@@ -167,7 +167,7 @@ do not establish a substantial or stable total UI speedup.
 ### Optional clean AVD snapshot cache (FIN-378)
 
 
-Only a manual run with `avd_cache=true` enables this experimental path. The five shard jobs restore independent writable copies of one clean Android API 34 / google_apis / x86_64 /
+Only a manual run with `avd_cache=true` enables this experimental path. Each shard job restores an independent writable copy of one clean Android API 34 / google_apis / x86_64 /
 Pixel 6 AVD. A cache miss creates a fresh AVD, boots Android, checks that no FinAssist app or test APK is installed,
 and explicitly saves the named `clean` snapshot. This happens before `e2e.sh` installs anything, signs in or imports
 financial fixtures. The action shuts down the emulator; the helper waits for its process to exit and verifies the
