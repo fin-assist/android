@@ -7539,11 +7539,6 @@
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
               "line": 125,
               "detail": "- tapOn: | point: \"1%,8%\""
-            },
-            {
-              "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 134,
-              "detail": "- scrollUntilVisible: | element: | text: \"^1[ \\u00a0\\u202f]000[ \\u00a0\\u202f]₽$\" | childOf: | id: \"analytics.tile.expense\" | direction: UP | centerElement: true"
             }
           ],
           "expectations": [
@@ -7577,7 +7572,7 @@
                 }
               ],
               "status": "fixed",
-              "note": "The forecast title is asserted in its tile. The anchored popup shows the complete history text for this fixture."
+              "note": "Maestro asserts the forecast title in its tile and checks the full semantics text of the anchored popup. The flow does not scroll within the popup. AnalyticsHelpPopupTest verifies scrolling a long explanation in JVM Compose as separate evidence outside the Qase71 run."
             },
             {
               "requirement": "После закрытия доступны прежняя плитка и короткая причина.",
@@ -7606,21 +7601,21 @@
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
                   "line": 130,
                   "detail": "- assertVisible: | text: \".*есть 11.*\" | childOf: | id: \"analytics.tile.forecast\""
-                },
-                {
-                  "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 134,
-                  "detail": "- scrollUntilVisible: | element: | text: \"^1[ \\u00a0\\u202f]000[ \\u00a0\\u202f]₽$\" | childOf: | id: \"analytics.tile.expense\" | direction: UP | centerElement: true"
                 }
               ],
               "status": "fixed",
-              "note": "Back and an outside tap both remove the popup and its text. The short reason and actual spending remain available."
+              "note": "Back and an outside tap both remove the popup and its text. The forecast tile still shows the short reason."
             }
           ]
         },
         {
           "position": 4,
           "action_evidence": [
+            {
+              "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
+              "line": 134,
+              "detail": "- scrollUntilVisible: | element: | text: \"^1[ \\u00a0\\u202f]000[ \\u00a0\\u202f]₽$\" | childOf: | id: \"analytics.tile.expense\" | direction: UP | centerElement: true"
+            },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
               "line": 141,
@@ -8289,7 +8284,8 @@
       ],
       "limitations": [
         "Static semantic review is not a passing UI run. Changed Maestro flows have not been executed on an emulator or device.",
-        "Bundled in-process mock data/faults exercise client behavior; they do not prove stage/backend calculations, delivery or durability."
+        "Bundled in-process mock data/faults exercise client behavior; they do not prove stage/backend calculations, delivery or durability.",
+        "Qase71 step 3 checks the help text via Maestro semantics. In-popup scrolling of a long text is exercised by AnalyticsHelpPopupTest in JVM Compose and is outside the mapped Qase71 run."
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
