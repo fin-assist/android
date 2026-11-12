@@ -105,19 +105,22 @@ tags:
     id: "analytics.tile.forecast.help"
 - extendedWaitUntil:
     visible:
-      id: "analytics.tile.forecast.help.sheet"
+      id: "analytics.tile.forecast.help.popup"
     timeout: 10000
-- assertVisible: "Прогноз расходов на год"
-- scrollUntilVisible:
-    element:
-      text: "(?s).*ноябрь 2025.*сентябрь 2026.*"
 - assertVisible: "(?s).*ноябрь 2025.*сентябрь 2026.*"
-- scrollUntilVisible:
-    element:
-      text: "(?s).*Неполные месяцы.*октябрь 2025.*октябрь 2026.*"
+- assertVisible: "(?s).*Неполные месяцы.*октябрь 2025.*октябрь 2026.*"
 - assertVisible: "(?s).*независимо от выбранного года.*"
+- pressKey: Back
+- assertNotVisible:
+    id: "analytics.tile.forecast.help.popup"
 - tapOn:
-    id: "ds.sheet.close"
+    id: "analytics.tile.forecast.help"
+- assertVisible:
+    id: "analytics.tile.forecast.help.popup"
+- tapOn:
+    point: "1%,8%"
+- assertNotVisible:
+    id: "analytics.tile.forecast.help.popup"
 - assertVisible:
     text: ".*есть 11.*"
     childOf:

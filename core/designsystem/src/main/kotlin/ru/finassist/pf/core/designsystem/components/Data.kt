@@ -96,6 +96,7 @@ fun PfStatTile(
     onClick: (() -> Unit)? = null,
     minAmountFontSize: TextUnit = 14.sp,
     trailing: (@Composable () -> Unit)? = null,
+    alignTrailingTop: Boolean = false,
 ) {
     val c = PfTheme.colors
     val shape = RoundedCornerShape(PfTheme.dimens.radiusXl)
@@ -113,7 +114,10 @@ fun PfStatTile(
             .padding(PfTheme.dimens.space3)
             .semantics(mergeDescendants = true) { contentDescription = spoken },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = if (alignTrailingTop) Alignment.Top else Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(if (alignTrailingTop && trailing != null) PfTheme.dimens.space1 else 0.dp),
+        ) {
             Text(label, style = PfTheme.type.caption, color = c.textMuted, modifier = Modifier.weight(1f))
             trailing?.invoke()
         }
@@ -229,6 +233,7 @@ fun PfInsightCard(
     chartId: String? = null,
     onClick: (() -> Unit)? = null,
     action: (@Composable () -> Unit)? = null,
+    headingHelp: (@Composable () -> Unit)? = null,
     content: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     val c = PfTheme.colors
@@ -263,7 +268,8 @@ fun PfInsightCard(
                 if (amount != null && !locked && !empty) {
                     Text(amount, style = PfTheme.type.bodyStrong, color = c.text, maxLines = 1, softWrap = false)
                 }
-                if (clickable) PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = 18.dp, tint = c.textFaint, modifier = Modifier.padding(top = 1.dp))
+                headingHelp?.invoke()
+                if (clickable && headingHelp == null) PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = 18.dp, tint = c.textFaint, modifier = Modifier.padding(top = 1.dp))
             }
             if (state == InsightState.TENTATIVE) PfBadge("предварительно")
             if (locked) {

@@ -223,7 +223,10 @@ object InsightCardRenderer : BlockRenderer {
     override val type = BlockType.INSIGHT_CARD
     override val version = 1
     override fun prepare(block: Block): (@Composable (BlockContext) -> Unit)? {
-        val data = block.decode(InsightCardData.serializer()) ?: return AltTextRenderer.prepare(block)
+        val data = block.decode(InsightCardData.serializer()) ?: run {
+            val fallback = AltTextRenderer.prepare(block) ?: return null
+            return { ctx -> WithBlockHelp(ctx.helpButton(block)) { fallback(ctx) } }
+        }
         return { ctx -> InsightCard(block, data, ctx) }
     }
 }
@@ -248,6 +251,7 @@ private fun InsightCard(block: Block, data: InsightCardData, ctx: BlockContext) 
         lockedText = BlockFormat.lockText(block.lock),
         chartId = ctx.tags.chart(block.id ?: data.title),
         onClick = ctx.clickOf(block, block.action),
+        headingHelp = ctx.helpButton(block, data.title),
         content = if (!status.hasData || data.items.isEmpty() && data.itemsMore == null) null else ({
             if (listed) {
                 // Mockup `Analytics`: a line above the list and between the rows; a button under a row.

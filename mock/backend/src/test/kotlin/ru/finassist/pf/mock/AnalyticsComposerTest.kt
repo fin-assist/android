@@ -78,6 +78,13 @@ class AnalyticsComposerTest {
         assertEquals("Не подписка", card.items.first().button?.label)
     }
 
+    @Test fun `notable spending exposes the comparison period as card help`() {
+        val block = AnalyticsComposer.compose(f.september()).blocks.single { it.id == "notable_spending" }
+        val card = assertNotNull(block.decode(InsightCardData.serializer()))
+        assertEquals("Обычные расходы рассчитаны за апрель — август.", block.helpText)
+        assertTrue("апрель" !in assertNotNull(card.description))
+    }
+
     @Test fun `a locked block carries the server's lock text`() {
         val regular = AnalyticsComposer.compose(f.early).blocks.single { it.id == "regular_payments" }
         assertEquals(BlockStatus.LOCKED, regular.status)

@@ -36,7 +36,10 @@ object ChartRenderer : BlockRenderer {
         val status = block.status.effective
         if (!status.hasData) return { ctx -> ChartState(block, ctx) }
         val data = block.decode(ChartData.serializer())?.takeIf { it.kind == ChartKind.BAR && it.valueKind != ValueKind.UNKNOWN }
-            ?: return AltTextRenderer.prepare(block)
+            ?: run {
+                val fallback = AltTextRenderer.prepare(block) ?: return null
+                return { ctx -> WithBlockHelp(ctx.helpButton(block)) { fallback(ctx) } }
+            }
         return { ctx -> ChartCard(block, data, ctx) }
     }
 }
@@ -54,6 +57,7 @@ private fun ChartState(block: Block, ctx: BlockContext) {
         description = block.emptyText.takeIf { !locked },
         state = if (locked) InsightState.LOCKED else InsightState.EMPTY,
         lockedText = BlockFormat.lockText(block.lock),
+        headingHelp = ctx.helpButton(block),
     )
 }
 
@@ -66,10 +70,12 @@ private fun ChartCard(block: Block, data: ChartData, ctx: BlockContext) {
         Spacer(Modifier.height(d.space2))
     }
     PfCard {
-        data.summary?.let { s ->
-            BlockFormat.value(s.value, s.valueKind, ctx.currency)?.let { PfAmountText(it, style = PfTheme.type.amountLg, color = c.text) }
+        WithBlockHelp(ctx.helpButton(block)) {
+            data.summary?.let { s ->
+                BlockFormat.value(s.value, s.valueKind, ctx.currency)?.let { PfAmountText(it, style = PfTheme.type.amountLg, color = c.text) }
+            }
+            data.caption?.let { Text(it, style = PfTheme.type.caption, color = c.textMuted, modifier = Modifier.padding(top = d.space1)) }
         }
-        data.caption?.let { Text(it, style = PfTheme.type.caption, color = c.textMuted, modifier = Modifier.padding(top = d.space1)) }
         if (data.points.isNotEmpty()) {
             if (data.summary != null || data.caption != null) Spacer(Modifier.height(d.space4))
             BlockChartBars(data, ctx.tags.chart(block.id ?: "chart"), height = if (data.showValues == true) 64.dp else 96.dp, currency = ctx.currency,

@@ -33,6 +33,7 @@ class BlockContext(
     val onSelectAnalyticsPeriod: ((Block, BlockAction) -> Unit)? = null,
     /** Wraps the main card of a block — the Analytics screen lays its coachmarks over it. */
     val decorate: @Composable (block: Block, content: @Composable () -> Unit) -> Unit = { _, content -> content() },
+    val anchoredHelp: Boolean = false,
 )
 
 /** Test tags and chart ids of the drawn blocks (UI tests, docs/e2e.md). */
@@ -61,8 +62,13 @@ class BlockRegistry(renderers: List<BlockRenderer>, private val fallback: BlockR
         val renderer = byType[block.type]?.takeIf { block.v <= it.version }
         val draw = renderer?.prepare(block) ?: fallback?.prepare(block) ?: return null
         return PreparedBlock(block) { context ->
-            draw(context)
-            block.helpText?.takeIf { it.isNotBlank() }?.let { text ->
+            val help = context.helpButton(block)
+            when {
+                help == null -> draw(context)
+                renderer === ChartRenderer || renderer === InsightCardRenderer -> draw(context)
+                else -> WithBlockHelp(help) { draw(context) }
+            }
+            if (!context.anchoredHelp) block.helpText?.takeIf { it.isNotBlank() }?.let { text ->
                 BlockHelpRow(text, block.title ?: "Пояснение", context.tags.block(block.id ?: block.type.code))
             }
         }
