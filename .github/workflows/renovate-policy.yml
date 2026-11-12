@@ -46,7 +46,7 @@ jobs:
         with:
           python-version: '3.15'
       - name: Reconcile Renovate PRs
-        uses: fin-assist/go-ci/.github/actions/renovate-policy@ceea840290fe34c728e543128b13f0fe8e18d856 # main
+        uses: fin-assist/renovate-actions/.github/actions/renovate-policy@72556b3dc2557bfce2594f97181ae2d0b3dd832e # main
         with:
           enabled: ${{ needs.gate.outputs.enabled }}
           repository-root: ${{ github.workspace }}

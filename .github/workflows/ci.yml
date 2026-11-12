@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: '3.15'
 
-      # The required Renovate policy job runs the same shared suite using the pinned private action.
+      # The required Renovate policy job runs the same shared suite using the pinned public action.
       - name: Test the scripts (agent-docs parsers, Qase report and case map, UI coverage, design-check export)
         env:
           PF_RENOVATE_POLICY_VIA_ACTION: 'true'

@@ -49,7 +49,7 @@
 
 ## Проверки
 
-В GitHub Actions общий набор выполняет обязательная проверка `Renovate policy tests` через закреплённый приватный action `fin-assist/go-ci`. Для локального запуска сначала получите commit из `.github/renovate-source.json` с авторизованным Git в `.finassist-ci/<revision>`. У checkout должен быть origin `https://github.com/fin-assist/go-ci.git`, чистое рабочее дерево и HEAD на этом commit. Затем `python3 scripts/test_renovate_shared.py` проверит целостность checkout, manifest и action pins и запустит общий набор policy/lifecycle/CLI/gate. Локальный runner ограничивает дочерний процесс 120 секундами.
+В GitHub Actions общий набор выполняет обязательная проверка `Renovate policy tests` через закреплённую публичную Action `fin-assist/renovate-actions`. Для локального запуска `python3 scripts/test_renovate_shared.py` получает commit из `.github/renovate-source.json` в `.finassist-ci/<revision>`, проверяет целостность checkout, manifest и action pins и запускает общий набор policy/lifecycle/CLI/gate. Источник checkout — `https://github.com/fin-assist/renovate-actions.git`. Локальный runner ограничивает дочерний процесс 120 секундами.
 
 Настоящий Renovate и integrity транзитивных зависимостей закреплены в `scripts/renovate-runtime/package.json`/`package-lock.json`; версия не дублируется в командах. Используйте Node из текущего workflow/manifest. Установку `(cd scripts/renovate-runtime && npm ci --ignore-scripts --no-audit --no-fund)` ограничьте process timeout600s. Затем запускайте общий runner из проверенного cache: `python3 -I .finassist-ci/<revision>/common/renovate/test.py --root "$PWD" --mode runtime --runtime "$PWD/scripts/renovate-runtime" --source-revision <revision>`. Он сам задаёт пути к config, manifest и controller, запускает все три fixtures с timeout90s каждый и проверяет actual grouping/recovery/digests, metadata и совместное извлечение immutable source pins. Внешние mutation/network adapters заменены фейками. Native RE2 install выключен: JavaScript RegExp fallback явно сообщается и не доказывает hosted RE2/загрузку presets. Hosted App execution и обычная очистка веток Renovate проверяются отдельно; сам controller ветки не удаляет.
 
@@ -81,7 +81,7 @@ Install scripts отключены намеренно: в этом fixture от�
 
 ## Общий контроллер Renovate (FIN-456)
 
-Production-код и lifecycle/runtime-регрессии поставляет immutable `fin-assist/go-ci`.
+С FIN-499 production-код и lifecycle/runtime-регрессии Android поставляет публичный `fin-assist/renovate-actions`.
 Единый source pin этого репозитория — `.github/renovate-source.json` (`revision`); action refs обоих workflows
 и `source-revision` test steps должны совпадать с ним. Config, baseline, runtime package/lock,
 state и receipts остаются данными репозитория. После exact activation gate controller job

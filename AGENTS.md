@@ -670,6 +670,6 @@ FIN-448: before publishing the baseline/target, require each configured required
 
 ## Shared Renovate source (FIN-456)
 
-Controller code and regressions live in immutable `fin-assist/go-ci`; see `docs/renovate-policy.md`.
+FIN-499 pins controller code and regressions to a full commit in `fin-assist/renovate-actions`; see `docs/renovate-policy.md`.
 Keep the manifest and both workflow action pins equal. Local checks delegate through the unchanged
 verified bootstrap; never restore a local executable controller or run consumer code with its write token.
