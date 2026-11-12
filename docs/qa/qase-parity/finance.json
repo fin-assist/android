@@ -7571,7 +7571,7 @@
                   "detail": "- assertVisible: \"(?s).*независимо от выбранного года.*\""
                 }
               ],
-              "status": "fixed",
+              "status": "bounded",
               "note": "Maestro asserts the forecast title in its tile and checks the full semantics text of the anchored popup. The flow does not scroll within the popup. AnalyticsHelpPopupTest verifies scrolling a long explanation in JVM Compose as separate evidence outside the Qase71 run."
             },
             {
