@@ -22,10 +22,10 @@ class HelpPopupPlacementTest {
         )
     }
 
-    @Test fun `align the leading edge in rtl and choose the side with more room`() {
+    @Test fun `align the leading edge in rtl and leave the anchor clear`() {
         assertEquals(
-            HelpPopupPlacement(IntOffset(28, 68), aboveAnchor = false, arrowX = 22),
-            helpPopupPlacement(IntRect(40, 80, 60, 100), IntSize(320, 220), LayoutDirection.Rtl, IntSize(240, 140), 12),
+            HelpPopupPlacement(IntOffset(28, 100), aboveAnchor = false, arrowX = 22),
+            helpPopupPlacement(IntRect(40, 80, 60, 100), IntSize(320, 260), LayoutDirection.Rtl, IntSize(240, 140), 12),
         )
     }
 }

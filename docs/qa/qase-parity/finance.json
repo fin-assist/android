@@ -7522,27 +7522,27 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 104,
+              "line": 108,
               "detail": "- tapOn: | id: \"analytics.tile.forecast.help\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 111,
-              "detail": "- scrollUntilVisible: | element: | text: \"(?s).*ноябрь 2025.*сентябрь 2026.*\""
+              "line": 117,
+              "detail": "- pressKey: Back"
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 115,
-              "detail": "- scrollUntilVisible: | element: | text: \"(?s).*Неполные месяцы.*октябрь 2025.*октябрь 2026.*\""
-            },
-            {
-              "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 119,
-              "detail": "- tapOn: | id: \"ds.sheet.close\""
+              "line": 121,
+              "detail": "- tapOn: | id: \"analytics.tile.forecast.help\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
               "line": 125,
+              "detail": "- tapOn: | point: \"1%,8%\""
+            },
+            {
+              "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
+              "line": 134,
               "detail": "- scrollUntilVisible: | element: | text: \"^1[ \\u00a0\\u202f]000[ \\u00a0\\u202f]₽$\" | childOf: | id: \"analytics.tile.expense\" | direction: UP | centerElement: true"
             }
           ],
@@ -7552,18 +7552,13 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 106,
-                  "detail": "- extendedWaitUntil: | visible: | id: \"analytics.tile.forecast.help.sheet\" | timeout: 10000"
+                  "line": 104,
+                  "detail": "- assertVisible: | text: \"Прогноз расходов на год\" | childOf: | id: \"analytics.tile.forecast\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
                   "line": 110,
-                  "detail": "- assertVisible: \"Прогноз расходов на год\""
-                },
-                {
-                  "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 111,
-                  "detail": "- scrollUntilVisible: | element: | text: \"(?s).*ноябрь 2025.*сентябрь 2026.*\""
+                  "detail": "- extendedWaitUntil: | visible: | id: \"analytics.tile.forecast.help.popup\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
@@ -7573,73 +7568,53 @@
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
                   "line": 115,
-                  "detail": "- scrollUntilVisible: | element: | text: \"(?s).*Неполные месяцы.*октябрь 2025.*октябрь 2026.*\""
+                  "detail": "- assertVisible: \"(?s).*Неполные месяцы.*октябрь 2025.*октябрь 2026.*\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 118,
+                  "line": 116,
                   "detail": "- assertVisible: \"(?s).*независимо от выбранного года.*\""
-                },
-                {
-                  "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 121,
-                  "detail": "- assertVisible: | text: \".*есть 11.*\" | childOf: | id: \"analytics.tile.forecast\""
-                },
-                {
-                  "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 125,
-                  "detail": "- scrollUntilVisible: | element: | text: \"^1[ \\u00a0\\u202f]000[ \\u00a0\\u202f]₽$\" | childOf: | id: \"analytics.tile.expense\" | direction: UP | centerElement: true"
                 }
               ],
               "status": "fixed",
-              "note": "Help title/historyNov2025..Sep2026/partialOct2025+2026/independence, close restores short reason and fact."
+              "note": "The forecast title is asserted in its tile. The anchored popup shows the complete history text for this fixture."
             },
             {
               "requirement": "После закрытия доступны прежняя плитка и короткая причина.",
               "evidence": [
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 106,
-                  "detail": "- extendedWaitUntil: | visible: | id: \"analytics.tile.forecast.help.sheet\" | timeout: 10000"
-                },
-                {
-                  "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 110,
-                  "detail": "- assertVisible: \"Прогноз расходов на год\""
-                },
-                {
-                  "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 111,
-                  "detail": "- scrollUntilVisible: | element: | text: \"(?s).*ноябрь 2025.*сентябрь 2026.*\""
-                },
-                {
-                  "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 114,
-                  "detail": "- assertVisible: \"(?s).*ноябрь 2025.*сентябрь 2026.*\""
-                },
-                {
-                  "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 115,
-                  "detail": "- scrollUntilVisible: | element: | text: \"(?s).*Неполные месяцы.*октябрь 2025.*октябрь 2026.*\""
-                },
-                {
-                  "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
                   "line": 118,
-                  "detail": "- assertVisible: \"(?s).*независимо от выбранного года.*\""
+                  "detail": "- assertNotVisible: | id: \"analytics.tile.forecast.help.popup\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 121,
+                  "line": 120,
+                  "detail": "- assertNotVisible: \"(?s).*независимо от выбранного года.*\""
+                },
+                {
+                  "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
+                  "line": 127,
+                  "detail": "- assertNotVisible: | id: \"analytics.tile.forecast.help.popup\""
+                },
+                {
+                  "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
+                  "line": 129,
+                  "detail": "- assertNotVisible: \"(?s).*независимо от выбранного года.*\""
+                },
+                {
+                  "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
+                  "line": 130,
                   "detail": "- assertVisible: | text: \".*есть 11.*\" | childOf: | id: \"analytics.tile.forecast\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 125,
+                  "line": 134,
                   "detail": "- scrollUntilVisible: | element: | text: \"^1[ \\u00a0\\u202f]000[ \\u00a0\\u202f]₽$\" | childOf: | id: \"analytics.tile.expense\" | direction: UP | centerElement: true"
                 }
               ],
               "status": "fixed",
-              "note": "Help title/historyNov2025..Sep2026/partialOct2025+2026/independence, close restores short reason and fact."
+              "note": "Back and an outside tap both remove the popup and its text. The short reason and actual spending remain available."
             }
           ]
         },
@@ -7648,27 +7623,27 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 132,
+              "line": 141,
               "detail": "- tapOn: | id: \"analytics.tile.expense\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 146,
+              "line": 155,
               "detail": "- swipe: | from: | id: \"operations.search.chip.category\" | direction: LEFT"
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 155,
+              "line": 164,
               "detail": "- tapOn: | id: \"ds.back\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 157,
+              "line": 166,
               "detail": "- scrollUntilVisible: | element: | id: \"ds.segment.0\" | direction: UP"
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 161,
+              "line": 170,
               "detail": "- swipe: | start: \"50%, 30%\" | end: \"50%, 65%\""
             }
           ],
@@ -7678,42 +7653,42 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 134,
+                  "line": 143,
                   "detail": "- extendedWaitUntil: | visible: | id: \"operations.search\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 138,
+                  "line": 147,
                   "detail": "- assertVisible: | id: \"operations.row\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 140,
+                  "line": 149,
                   "detail": "- assertVisible: | childOf: | id: \"operations.search.chip.period\" | text: \"1[ \\\\u00a0\\\\u202f]января.*31[ \\\\u00a0\\\\u202f]декабря\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 144,
+                  "line": 153,
                   "detail": "- assertVisible: \"Магазин\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 145,
+                  "line": 154,
                   "detail": "- assertVisible: \".*1[ \\\\u00a0\\\\u202f]?000.*\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 150,
+                  "line": 159,
                   "detail": "- assertVisible: | id: \"operations.search.chip.kind\" | checked: true | containsDescendants: | - text: \"Только расходы\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 157,
+                  "line": 166,
                   "detail": "- scrollUntilVisible: | element: | id: \"ds.segment.0\" | direction: UP"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 164,
+                  "line": 173,
                   "detail": "- assertVisible: | text: \"2026\" | childOf: | id: \"ds.period.pick\""
                 }
               ],
@@ -7725,42 +7700,42 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 134,
+                  "line": 143,
                   "detail": "- extendedWaitUntil: | visible: | id: \"operations.search\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 138,
+                  "line": 147,
                   "detail": "- assertVisible: | id: \"operations.row\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 140,
+                  "line": 149,
                   "detail": "- assertVisible: | childOf: | id: \"operations.search.chip.period\" | text: \"1[ \\\\u00a0\\\\u202f]января.*31[ \\\\u00a0\\\\u202f]декабря\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 144,
+                  "line": 153,
                   "detail": "- assertVisible: \"Магазин\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 145,
+                  "line": 154,
                   "detail": "- assertVisible: \".*1[ \\\\u00a0\\\\u202f]?000.*\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 150,
+                  "line": 159,
                   "detail": "- assertVisible: | id: \"operations.search.chip.kind\" | checked: true | containsDescendants: | - text: \"Только расходы\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 157,
+                  "line": 166,
                   "detail": "- scrollUntilVisible: | element: | id: \"ds.segment.0\" | direction: UP"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 164,
+                  "line": 173,
                   "detail": "- assertVisible: | text: \"2026\" | childOf: | id: \"ds.period.pick\""
                 }
               ],
@@ -7774,32 +7749,32 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 168,
+              "line": 177,
               "detail": "- tapOn: | id: \"ds.segment.0\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 177,
+              "line": 186,
               "detail": "- tapOn: | id: \"ds.period.pick\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 179,
+              "line": 188,
               "detail": "- scrollUntilVisible: | element: | id: \"analytics.period.option\" | containsDescendants: | - text: \"Сентябрь 2026.*\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 184,
+              "line": 193,
               "detail": "- tapOn: | id: \"analytics.period.option\" | containsDescendants: | - text: \"Сентябрь 2026.*\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 197,
+              "line": 206,
               "detail": "- scrollUntilVisible: | element: | id: \"analytics.tile.income\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 202,
+              "line": 211,
               "detail": "- scrollUntilVisible: | element: | id: \"analytics.block.expense_categories\""
             }
           ],
@@ -7809,42 +7784,42 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 170,
+                  "line": 179,
                   "detail": "- extendedWaitUntil: | visible: | text: \"Октябрь 2026\" | childOf: | id: \"ds.period.pick\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 179,
+                  "line": 188,
                   "detail": "- scrollUntilVisible: | element: | id: \"analytics.period.option\" | containsDescendants: | - text: \"Сентябрь 2026.*\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 188,
+                  "line": 197,
                   "detail": "- extendedWaitUntil: | visible: | text: \"Сентябрь 2026\" | childOf: | id: \"ds.period.pick\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 194,
+                  "line": 203,
                   "detail": "- assertVisible: | id: \"analytics.tile.expense\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 197,
+                  "line": 206,
                   "detail": "- scrollUntilVisible: | element: | id: \"analytics.tile.income\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 200,
+                  "line": 209,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.forecast\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 202,
+                  "line": 211,
                   "detail": "- scrollUntilVisible: | element: | id: \"analytics.block.expense_categories\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 205,
+                  "line": 214,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.forecast\""
                 }
               ],
@@ -7856,42 +7831,42 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 170,
+                  "line": 179,
                   "detail": "- extendedWaitUntil: | visible: | text: \"Октябрь 2026\" | childOf: | id: \"ds.period.pick\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 179,
+                  "line": 188,
                   "detail": "- scrollUntilVisible: | element: | id: \"analytics.period.option\" | containsDescendants: | - text: \"Сентябрь 2026.*\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 188,
+                  "line": 197,
                   "detail": "- extendedWaitUntil: | visible: | text: \"Сентябрь 2026\" | childOf: | id: \"ds.period.pick\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 194,
+                  "line": 203,
                   "detail": "- assertVisible: | id: \"analytics.tile.expense\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 197,
+                  "line": 206,
                   "detail": "- scrollUntilVisible: | element: | id: \"analytics.tile.income\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 200,
+                  "line": 209,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.forecast\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 202,
+                  "line": 211,
                   "detail": "- scrollUntilVisible: | element: | id: \"analytics.block.expense_categories\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 205,
+                  "line": 214,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.forecast\""
                 }
               ],
@@ -7905,57 +7880,57 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 209,
+              "line": 218,
               "detail": "- tapOn: | id: \"ds.tab.profile\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 215,
+              "line": 224,
               "detail": "- runFlow: | when: | notVisible: | id: \"statements.history\" | commands: | - tapOn: | id: \"profile.statements\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 222,
+              "line": 231,
               "detail": "- scrollUntilVisible: | element: | id: \"statements.history.upload\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 225,
+              "line": 234,
               "detail": "- tapOn: | id: \"statements.history.upload\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 227,
+              "line": 236,
               "detail": "- scrollUntilVisible: | element: | id: \"statements.upload.pick\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 230,
+              "line": 239,
               "detail": "- tapOn: | id: \"statements.upload.pick\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 232,
+              "line": 241,
               "detail": "- tapOn: | id: \"e2e.picker.october.ofx\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 238,
+              "line": 247,
               "detail": "- scrollUntilVisible: | element: | id: \"statements.result.done\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 241,
+              "line": 250,
               "detail": "- tapOn: | id: \"statements.result.done\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 243,
+              "line": 252,
               "detail": "- tapOn: | id: \"ds.tab.analytics\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 249,
+              "line": 258,
               "detail": "- scrollUntilVisible: | element: | id: \"ds.period.pick\" | direction: UP"
             }
           ],
@@ -7965,47 +7940,47 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 211,
+                  "line": 220,
                   "detail": "- extendedWaitUntil: | notVisible: | id: \"analytics.screen\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 222,
+                  "line": 231,
                   "detail": "- scrollUntilVisible: | element: | id: \"statements.history.upload\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 227,
+                  "line": 236,
                   "detail": "- scrollUntilVisible: | element: | id: \"statements.upload.pick\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 234,
+                  "line": 243,
                   "detail": "- extendedWaitUntil: | visible: | id: \"statements.result\" | timeout: 20000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 238,
+                  "line": 247,
                   "detail": "- scrollUntilVisible: | element: | id: \"statements.result.done\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 245,
+                  "line": 254,
                   "detail": "- extendedWaitUntil: | visible: | id: \"analytics.screen\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 249,
+                  "line": 258,
                   "detail": "- scrollUntilVisible: | element: | id: \"ds.period.pick\" | direction: UP"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 253,
+                  "line": 262,
                   "detail": "- assertVisible: | text: \"Сентябрь 2026\" | childOf: | id: \"ds.period.pick\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 257,
+                  "line": 266,
                   "detail": "- assertVisible: | id: \"analytics.tile.expense\""
                 }
               ],
@@ -8019,32 +7994,32 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 259,
+              "line": 268,
               "detail": "- tapOn: | id: \"ds.tab.profile\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 265,
+              "line": 274,
               "detail": "- runFlow: | when: | notVisible: | id: \"statements.history\" | commands: | - tapOn: | id: \"profile.statements\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 275,
+              "line": 284,
               "detail": "- tapOn: \"Удалить загрузку forecast_history.ofx\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 276,
+              "line": 285,
               "detail": "- tapOn: | id: \"ds.dialog.confirm\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 284,
+              "line": 293,
               "detail": "- tapOn: | id: \"ds.back\""
             },
             {
               "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-              "line": 286,
+              "line": 295,
               "detail": "- tapOn: | id: \"ds.tab.analytics\""
             }
           ],
@@ -8054,77 +8029,77 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 261,
+                  "line": 270,
                   "detail": "- extendedWaitUntil: | notVisible: | id: \"analytics.screen\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 272,
+                  "line": 281,
                   "detail": "- extendedWaitUntil: | visible: \"forecast_history.ofx\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 278,
+                  "line": 287,
                   "detail": "- extendedWaitUntil: | notVisible: \"forecast_history.ofx\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 281,
+                  "line": 290,
                   "detail": "- assertVisible: \"october.ofx\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 282,
+                  "line": 291,
                   "detail": "- assertNotVisible: | id: \"statements.history.empty\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 288,
+                  "line": 297,
                   "detail": "- extendedWaitUntil: | visible: \"За этот период данных нет\" | timeout: 15000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 291,
+                  "line": 300,
                   "detail": "- assertVisible: | text: \"Сентябрь 2026\" | childOf: | id: \"ds.period.pick\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 295,
+                  "line": 304,
                   "detail": "- assertVisible: | id: \"analytics.block.tiles\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 297,
+                  "line": 306,
                   "detail": "- assertNotVisible: | text: \"За этот период данных нет\" | index: 1"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 300,
+                  "line": 309,
                   "detail": "- assertNotVisible: | id: \"analytics.empty\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 302,
+                  "line": 311,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.expense\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 304,
+                  "line": 313,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.balance\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 306,
+                  "line": 315,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.daily\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 308,
+                  "line": 317,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.income\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 310,
+                  "line": 319,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.forecast\""
                 }
               ],
@@ -8136,77 +8111,77 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 261,
+                  "line": 270,
                   "detail": "- extendedWaitUntil: | notVisible: | id: \"analytics.screen\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 272,
+                  "line": 281,
                   "detail": "- extendedWaitUntil: | visible: \"forecast_history.ofx\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 278,
+                  "line": 287,
                   "detail": "- extendedWaitUntil: | notVisible: \"forecast_history.ofx\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 281,
+                  "line": 290,
                   "detail": "- assertVisible: \"october.ofx\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 282,
+                  "line": 291,
                   "detail": "- assertNotVisible: | id: \"statements.history.empty\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 288,
+                  "line": 297,
                   "detail": "- extendedWaitUntil: | visible: \"За этот период данных нет\" | timeout: 15000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 291,
+                  "line": 300,
                   "detail": "- assertVisible: | text: \"Сентябрь 2026\" | childOf: | id: \"ds.period.pick\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 295,
+                  "line": 304,
                   "detail": "- assertVisible: | id: \"analytics.block.tiles\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 297,
+                  "line": 306,
                   "detail": "- assertNotVisible: | text: \"За этот период данных нет\" | index: 1"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 300,
+                  "line": 309,
                   "detail": "- assertNotVisible: | id: \"analytics.empty\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 302,
+                  "line": 311,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.expense\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 304,
+                  "line": 313,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.balance\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 306,
+                  "line": 315,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.daily\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 308,
+                  "line": 317,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.income\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 310,
+                  "line": 319,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.forecast\""
                 }
               ],
@@ -8218,77 +8193,77 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 261,
+                  "line": 270,
                   "detail": "- extendedWaitUntil: | notVisible: | id: \"analytics.screen\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 272,
+                  "line": 281,
                   "detail": "- extendedWaitUntil: | visible: \"forecast_history.ofx\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 278,
+                  "line": 287,
                   "detail": "- extendedWaitUntil: | notVisible: \"forecast_history.ofx\" | timeout: 10000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 281,
+                  "line": 290,
                   "detail": "- assertVisible: \"october.ofx\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 282,
+                  "line": 291,
                   "detail": "- assertNotVisible: | id: \"statements.history.empty\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 288,
+                  "line": 297,
                   "detail": "- extendedWaitUntil: | visible: \"За этот период данных нет\" | timeout: 15000"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 291,
+                  "line": 300,
                   "detail": "- assertVisible: | text: \"Сентябрь 2026\" | childOf: | id: \"ds.period.pick\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 295,
+                  "line": 304,
                   "detail": "- assertVisible: | id: \"analytics.block.tiles\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 297,
+                  "line": 306,
                   "detail": "- assertNotVisible: | text: \"За этот период данных нет\" | index: 1"
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 300,
+                  "line": 309,
                   "detail": "- assertNotVisible: | id: \"analytics.empty\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 302,
+                  "line": 311,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.expense\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 304,
+                  "line": 313,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.balance\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 306,
+                  "line": 315,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.daily\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 308,
+                  "line": 317,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.income\""
                 },
                 {
                   "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
-                  "line": 310,
+                  "line": 319,
                   "detail": "- assertNotVisible: | id: \"analytics.tile.forecast\""
                 }
               ],
@@ -8304,7 +8279,7 @@
           "id": "FIN-450-Q71-assertions",
           "requirement": "Every assigned original UI outcome and financial/temporal discriminator.",
           "before": "Tooltip complete-month range not explicitly asserted.",
-          "fix": "Assert Nov2025..Sep2026 in help sheet in additionto partialmonths andindependentbasis.",
+          "fix": "Assert November 2025 through September 2026 in the anchored popup together with incomplete months and the independent history basis.",
           "status": "fixed",
           "files": [
             ".maestro/flows/analytics/facts_and_forecast.yaml"
@@ -8318,7 +8293,7 @@
       ],
       "verification": {
         "static_review": "Full assigned source preconditions/actions/every expected clause compared with actual flow/helper/control, financial fixtures and selected underlying implementation. YAML syntax, diff hygiene and matrix/source completeness checked separately; no runtime claim.",
-        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json. Изменённый сценарий FIN-496 ожидает прогона на устройстве.",
         "security_review": "Reviewed: only synthetic fixture assertions and closed mockE2e controls changed; no production code, exported surfaces, auth/owner permissions, real personal data, tokens or remote sending. copyTextFrom stays in the test runner and observes synthetic money only.",
         "usecase_review": "Reviewed original main/error/empty/zero/boundary, explicit versus automatic retries, navigation/period memory, transfers/refunds, source zones and repeated intent in all assigned steps. Lower-layer-only guarantees are explicitly bounded; runtime acceptance remains outstanding."
       }

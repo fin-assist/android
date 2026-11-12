@@ -7,11 +7,15 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import org.junit.Rule
@@ -25,6 +29,7 @@ import ru.finassist.pf.core.designsystem.components.LocalSuppressPopups
 import ru.finassist.pf.core.designsystem.components.PfInsightCard
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class, qualifiers = "w320dp-h640dp-xxhdpi")
@@ -71,6 +76,19 @@ class AnalyticsHelpPopupTest {
         compose.onNodeWithText("Аптеки").assertIsDisplayed()
         openHelp()
         assertEquals(0, openedCard)
+    }
+
+    @Test fun `long help scrolls inside its popup`() {
+        val longHelp = List(24) { HELP }.joinToString("\n\n")
+        compose.setContent { PfTheme { BlockHelpPopupButton(longHelp, "Прогноз", TAG) } }
+
+        compose.onNodeWithTag("$TAG.help").performClick()
+        val scroll = compose.onNode(hasScrollAction()).assertIsDisplayed()
+        val range = scroll.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+        assertTrue(range.maxValue() > 0f)
+        scroll.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 240f) }
+        compose.waitForIdle()
+        assertTrue(range.value() > 0f)
     }
 
     private fun openHelp() {

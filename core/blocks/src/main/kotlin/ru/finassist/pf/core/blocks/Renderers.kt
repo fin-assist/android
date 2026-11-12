@@ -135,8 +135,7 @@ object TileGroupRenderer : BlockRenderer {
 private fun Tiles(block: Block, data: TileGroupData, ctx: BlockContext) {
     val d = PfTheme.dimens
     Column(verticalArrangement = Arrangement.spacedBy(d.space4)) {
-        val help = ctx.helpButton(block)
-        if (help != null) WithBlockHelp(help) { block.title?.let { PfSectionTitle(it) } }
+        BlockHelpHeader(ctx.helpButton(block))
         data.tiles.chunked(2).forEach { pair ->
             Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(d.space4)) {
                 pair.forEach { tile -> BlockTile(block, tile, ctx, Modifier.weight(1f).fillMaxHeight()) }

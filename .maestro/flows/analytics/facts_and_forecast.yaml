@@ -101,6 +101,10 @@ tags:
     childOf:
       id: "analytics.tile.forecast"
 - assertNotVisible: ".*независимо от выбранного года.*"
+- assertVisible:
+    text: "Прогноз расходов на год"
+    childOf:
+      id: "analytics.tile.forecast"
 - tapOn:
     id: "analytics.tile.forecast.help"
 - extendedWaitUntil:

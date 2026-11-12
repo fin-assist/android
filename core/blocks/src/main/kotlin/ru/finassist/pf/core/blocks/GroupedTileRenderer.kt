@@ -45,8 +45,7 @@ object GroupedTileRenderer : BlockRenderer {
 private fun GroupedTiles(block: Block, groups: List<TileGroupSection>, ctx: BlockContext) {
     val d = PfTheme.dimens
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(d.space6)) {
-        val help = ctx.helpButton(block)
-        if (help != null) WithBlockHelp(help) { block.title?.let { PfSectionTitle(it) } }
+        BlockHelpHeader(ctx.helpButton(block))
         groups.forEach { group ->
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(d.space4)) {
                 group.title?.takeIf { it.isNotBlank() }?.let { PfSectionTitle(it) }
