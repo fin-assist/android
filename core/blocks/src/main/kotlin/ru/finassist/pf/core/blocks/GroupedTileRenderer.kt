@@ -23,13 +23,14 @@ import ru.finassist.pf.core.designsystem.theme.PfTheme
 object GroupedTileRenderer : BlockRenderer {
     override val type = BlockType.TILE_GROUP
     override val version = 2
+    override val placesHelp = true
 
     override fun prepare(block: Block): (@Composable (BlockContext) -> Unit)? {
         if (block.v == 1) return TileGroupRenderer.prepare(block)
         if (block.v != version) return null
         if (block.status.effective == BlockStatus.LOCKED) {
             val text = BlockFormat.lockText(block.lock) ?: BlockFormat.LOCKED_FALLBACK
-            return { Text(text, style = PfTheme.type.body, color = PfTheme.colors.textMuted) }
+            return { ctx -> WithBlockHelp(ctx.helpButton(block)) { Text(text, style = PfTheme.type.body, color = PfTheme.colors.textMuted) } }
         }
         if (block.status.effective == BlockStatus.UNAVAILABLE || block.status.effective == BlockStatus.NONE) {
             return TileGroupRenderer.prepare(block)
@@ -44,6 +45,8 @@ object GroupedTileRenderer : BlockRenderer {
 private fun GroupedTiles(block: Block, groups: List<TileGroupSection>, ctx: BlockContext) {
     val d = PfTheme.dimens
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(d.space6)) {
+        val help = ctx.helpButton(block)
+        if (help != null) WithBlockHelp(help) { block.title?.let { PfSectionTitle(it) } }
         groups.forEach { group ->
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(d.space4)) {
                 group.title?.takeIf { it.isNotBlank() }?.let { PfSectionTitle(it) }

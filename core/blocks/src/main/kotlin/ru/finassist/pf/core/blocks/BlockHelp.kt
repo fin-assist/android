@@ -55,3 +55,9 @@ internal fun WithBlockHelp(help: (@Composable () -> Unit)?, content: @Composable
         }
     }
 }
+
+/** Block-level help belongs inside a single-card renderer, before its contents. */
+@Composable
+internal fun BlockHelpHeader(help: (@Composable () -> Unit)?) {
+    if (help != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { help() }
+}

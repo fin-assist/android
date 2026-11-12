@@ -32,6 +32,7 @@ import kotlin.math.abs
 object ChartRenderer : BlockRenderer {
     override val type = BlockType.CHART
     override val version = 1
+    override val placesHelp = true
     override fun prepare(block: Block): (@Composable (BlockContext) -> Unit)? {
         val status = block.status.effective
         if (!status.hasData) return { ctx -> ChartState(block, ctx) }

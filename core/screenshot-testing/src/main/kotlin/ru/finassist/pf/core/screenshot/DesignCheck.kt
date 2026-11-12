@@ -16,7 +16,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.platform.InfiniteAnimationPolicy
 import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.platform.WindowRecomposerFactory
+import androidx.compose.ui.platform.WindowRecomposerPolicy
+import androidx.compose.ui.platform.createLifecycleAwareWindowRecomposer
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -36,6 +41,7 @@ import ru.finassist.pf.core.designsystem.theme.PfTheme
 import java.io.File
 import java.time.Duration
 import kotlin.math.ceil
+import kotlinx.coroutines.CancellationException
 
 /**
  * Design check: renders a screen the way the mockups draw it, for comparison with the Figma artboards.
@@ -80,7 +86,7 @@ object DesignCheck {
         content: @Composable () -> Unit,
     ) {
         var height = heightDp
-        var controller = render(height, dark, tab, content)
+        var controller = render(height, dark, tab, popups, content)
         // A failed capture must still dispose: a live activity would break the next capture in this JVM (see dispose).
         try {
             if (fullHeight) {
@@ -91,7 +97,7 @@ object DesignCheck {
                     height += ceil(restPx / DENSITY).toInt()
                     // Swap before disposing: if render throws, finally disposes the old, still live controller once.
                     val old = controller
-                    controller = render(height, dark, tab, content)
+                    controller = render(height, dark, tab, popups, content)
                     dispose(old)
                 }
             }
@@ -113,11 +119,20 @@ object DesignCheck {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
     }
 
-    @OptIn(ExperimentalComposeUiApi::class)
+    @OptIn(ExperimentalComposeUiApi::class, InternalComposeUiApi::class)
+    private val staticPopupRecomposer = WindowRecomposerFactory { view ->
+        view.createLifecycleAwareWindowRecomposer(object : InfiniteAnimationPolicy {
+            override suspend fun <R> onInfiniteOperation(block: suspend () -> R): R =
+                throw CancellationException("Static design check")
+        })
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class, InternalComposeUiApi::class)
     private fun render(
         heightDp: Int,
         dark: Boolean,
         tab: Int?,
+        popups: Boolean,
         content: @Composable () -> Unit,
     ): ActivityController<ComponentActivity> {
         RuntimeEnvironment.setQualifiers("w${WIDTH_DP}dp-h${heightDp}dp-${if (dark) "night" else "notnight"}-xxhdpi")
@@ -125,21 +140,30 @@ object DesignCheck {
         // The app's activity has no action bar; the default test theme would draw one with the class name.
         controller.get().setTheme(android.R.style.Theme_Material_NoActionBar)
         val activity = controller.setup().get()
-        activity.setContent {
-            val bars = PfSystemBars(
-                statusBars = WindowInsets(top = SYSTEM_BAR_DP.dp),
-                navigationBars = WindowInsets(bottom = SYSTEM_BAR_DP.dp),
-            )
-            CompositionLocalProvider(LocalPfSystemBars provides bars, LocalInspectionMode provides true) {
-                PfTheme(darkTheme = dark) {
-                    Box(Modifier.fillMaxSize().background(PfTheme.colors.bg)) {
-                        Column(Modifier.fillMaxSize()) {
-                            Box(Modifier.weight(1f).fillMaxWidth()) { content() }
-                            if (tab != null) PfTabBar(items = PfMainTabs, active = tab, onSelect = {})
+        val setContent = {
+            activity.setContent {
+                val bars = PfSystemBars(
+                    statusBars = WindowInsets(top = SYSTEM_BAR_DP.dp),
+                    navigationBars = WindowInsets(bottom = SYSTEM_BAR_DP.dp),
+                )
+                CompositionLocalProvider(LocalPfSystemBars provides bars, LocalInspectionMode provides true) {
+                    PfTheme(darkTheme = dark) {
+                        Box(Modifier.fillMaxSize().background(PfTheme.colors.bg)) {
+                            Column(Modifier.fillMaxSize()) {
+                                Box(Modifier.weight(1f).fillMaxWidth()) { content() }
+                                if (tab != null) PfTabBar(items = PfMainTabs, active = tab, onSelect = {})
+                            }
                         }
                     }
                 }
             }
+        }
+        if (popups) {
+            // Popup polls its anchor on every frame. In a static snapshot layout callbacks are sufficient,
+            // and disabling that infinite effect lets Robolectric finish advancing the main looper.
+            WindowRecomposerPolicy.withFactory(staticPopupRecomposer, setContent)
+        } else {
+            setContent()
         }
         // Let intro animations (charts, tiles) reach their final frame, as on the static mockup.
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))

@@ -573,9 +573,9 @@ internal object AnalyticsTags {
     // Tiles: the chart id of a tile is also its test tag (`Tile` → `PfStatTile(modifier.testTag(chartId))`).
     const val TILE_BALANCE = "analytics.tile.balance"
     const val TILE_FORECAST = "analytics.tile.forecast"
-    // Shared BlockHelpButton and PfPagedBarChart compose these concrete tags from their host's identifiers.
+    // Shared BlockHelpPopupButton and PfPagedBarChart compose these concrete tags from their host's identifiers.
     const val TILE_FORECAST_HELP = "analytics.tile.forecast.help"
-    const val TILE_FORECAST_HELP_SHEET = "analytics.tile.forecast.help.sheet"
+    const val TILE_FORECAST_HELP_POPUP = "analytics.tile.forecast.help.popup"
     const val MONTHLY_HISTORY = "analytics.expense.monthly"
     const val TILE_DAILY = "analytics.tile.daily"
     const val TILE_INCOME = "analytics.tile.income"

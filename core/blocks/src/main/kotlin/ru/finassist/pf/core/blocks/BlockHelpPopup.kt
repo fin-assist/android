@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -13,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,22 +37,30 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import ru.finassist.pf.core.designsystem.components.LocalSuppressPopups
+import ru.finassist.pf.core.designsystem.components.pfTestRoot
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 
-/** A compact anchor leaves room for the card title; Compose expands the clickable touch target. */
+/** The icon stays compact inside a full-size touch target. */
 @Composable
 fun BlockHelpPopupButton(text: String, title: String, tag: String, initiallyOpen: Boolean = false) {
-    var shown by remember(text) { mutableStateOf(initiallyOpen) }
-    Box {
-        Box(
-            Modifier.size(24.dp).testTag("$tag.help").clickable(role = Role.Button) { shown = true },
-            contentAlignment = Alignment.Center,
-        ) {
+    val suppressed = LocalSuppressPopups.current
+    var shown by remember(text) { mutableStateOf(initiallyOpen && !suppressed) }
+    if (suppressed) LaunchedEffect(Unit) { shown = false }
+    Box(
+        Modifier.size(PfTheme.dimens.touch).testTag("$tag.help").clickable(
+            enabled = !suppressed,
+            role = Role.Button,
+            onClickLabel = "Открыть пояснение",
+        ) { shown = true },
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Box(Modifier.offset(y = PfTheme.dimens.space1)) {
             PfIcon(PfIcons.INFO, contentDescription = "Пояснение: $title", size = 20.dp, tint = PfTheme.colors.text)
+            if (!suppressed && shown) HelpPopup(text, "$tag.help.popup") { shown = false }
         }
-        if (shown) HelpPopup(text, "$tag.help.popup") { shown = false }
     }
 }
 
@@ -73,29 +83,17 @@ private fun HelpPopup(text: String, tag: String, onDismiss: () -> Unit) {
                 layoutDirection: LayoutDirection,
                 popupContentSize: IntSize,
             ): IntOffset {
-                val anchor = anchorBounds
-                val window = windowSize
-                val popup = popupContentSize
-                val above = anchor.top - margin
-                val below = window.height - anchor.bottom - margin
-                val aboveFits = popup.height <= above
-                aboveAnchor = aboveFits || above >= below
-                val desiredX = if (layoutDirection == LayoutDirection.Ltr) {
-                    anchor.right + margin - popup.width
-                } else {
-                    anchor.left - margin
-                }
-                val x = desiredX.coerceIn(margin, (window.width - popup.width - margin).coerceAtLeast(margin))
-                val desiredY = if (aboveAnchor) anchor.top - popup.height else anchor.bottom
-                val y = desiredY.coerceIn(margin, (window.height - popup.height - margin).coerceAtLeast(margin))
-                arrowX = (anchor.center.x - x).toFloat()
-                return IntOffset(x, y)
+                val placement = helpPopupPlacement(anchorBounds, windowSize, layoutDirection, popupContentSize, margin)
+                aboveAnchor = placement.aboveAnchor
+                arrowX = placement.arrowX.toFloat()
+                return placement.offset
             }
         }
     }
     Popup(position, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
         Box(
             Modifier
+                .pfTestRoot()
                 .widthIn(max = minOf(280.dp, (config.screenWidthDp.dp - d.space3 * 2).coerceAtLeast(1.dp)))
                 .drawWithContent {
                     drawContent()
@@ -122,4 +120,26 @@ private fun HelpPopup(text: String, tag: String, onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+internal data class HelpPopupPlacement(val offset: IntOffset, val aboveAnchor: Boolean, val arrowX: Int)
+
+internal fun helpPopupPlacement(
+    anchor: IntRect,
+    window: IntSize,
+    direction: LayoutDirection,
+    popup: IntSize,
+    margin: Int,
+): HelpPopupPlacement {
+    val above = anchor.top - margin
+    val below = window.height - anchor.bottom - margin
+    val aboveAnchor = popup.height <= above || above >= below
+    val alignedX = when (direction) {
+        LayoutDirection.Ltr -> anchor.right + margin - popup.width
+        LayoutDirection.Rtl -> anchor.left - margin
+    }
+    val x = alignedX.coerceIn(margin, (window.width - popup.width - margin).coerceAtLeast(margin))
+    val alignedY = if (aboveAnchor) anchor.top - popup.height else anchor.bottom
+    val y = alignedY.coerceIn(margin, (window.height - popup.height - margin).coerceAtLeast(margin))
+    return HelpPopupPlacement(IntOffset(x, y), aboveAnchor, anchor.center.x - x)
 }

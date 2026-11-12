@@ -113,6 +113,7 @@ tags:
 - pressKey: Back
 - assertNotVisible:
     id: "analytics.tile.forecast.help.popup"
+- assertNotVisible: "(?s).*независимо от выбранного года.*"
 - tapOn:
     id: "analytics.tile.forecast.help"
 - assertVisible:
@@ -121,6 +122,7 @@ tags:
     point: "1%,8%"
 - assertNotVisible:
     id: "analytics.tile.forecast.help.popup"
+- assertNotVisible: "(?s).*независимо от выбранного года.*"
 - assertVisible:
     text: ".*есть 11.*"
     childOf:

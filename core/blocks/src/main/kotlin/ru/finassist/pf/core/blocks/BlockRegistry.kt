@@ -13,6 +13,8 @@ import ru.finassist.pf.core.api.model.BlockType
 interface BlockRenderer {
     val type: BlockType
     val version: Int
+    /** This renderer supplies its own placement for anchored block help. */
+    val placesHelp: Boolean get() = false
 
     fun prepare(block: Block): (@Composable (BlockContext) -> Unit)?
 }
@@ -60,14 +62,12 @@ class BlockRegistry(renderers: List<BlockRenderer>, private val fallback: BlockR
 
     fun prepare(block: Block): PreparedBlock? {
         val renderer = byType[block.type]?.takeIf { block.v <= it.version }
-        val draw = renderer?.prepare(block) ?: fallback?.prepare(block) ?: return null
+        val prepared = renderer?.prepare(block)
+        val draw = prepared ?: fallback?.prepare(block) ?: return null
+        val placesHelp = prepared != null && renderer?.placesHelp == true
         return PreparedBlock(block) { context ->
-            val help = context.helpButton(block)
-            when {
-                help == null -> draw(context)
-                renderer === ChartRenderer || renderer === InsightCardRenderer -> draw(context)
-                else -> WithBlockHelp(help) { draw(context) }
-            }
+            if (placesHelp) draw(context)
+            else WithBlockHelp(context.helpButton(block)) { draw(context) }
             if (!context.anchoredHelp) block.helpText?.takeIf { it.isNotBlank() }?.let { text ->
                 BlockHelpRow(text, block.title ?: "Пояснение", context.tags.block(block.id ?: block.type.code))
             }

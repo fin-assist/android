@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -222,6 +223,7 @@ enum class InsightState { READY, TENTATIVE, LOCKED, EMPTY }
  * centred on the lock text; `empty` — a muted title and no link.
  */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun PfInsightCard(
     icon: String,
     title: String,
@@ -259,17 +261,22 @@ fun PfInsightCard(
         PfIconTile(icon)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(d.space1)) {
             Row(horizontalArrangement = Arrangement.spacedBy(d.space2), verticalAlignment = Alignment.Top) {
-                Text(
-                    title,
-                    style = PfTheme.type.bodyStrong,
-                    color = if (empty) c.textMuted else c.text,
-                    modifier = Modifier.weight(1f).semantics { heading() },
-                )
-                if (amount != null && !locked && !empty) {
-                    Text(amount, style = PfTheme.type.bodyStrong, color = c.text, maxLines = 1, softWrap = false)
+                if (headingHelp == null) {
+                    PfInsightHeading(title, amount.takeUnless { locked || empty }, empty, clickable)
+                } else {
+                    FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(d.space2)) {
+                        PfInsightTitle(title, empty, Modifier.weight(1f))
+                        if (clickable || amount != null && !locked && !empty) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(d.space2), verticalAlignment = Alignment.Top) {
+                                if (amount != null && !locked && !empty) {
+                                    PfAmountText(amount, PfTheme.type.bodyStrong, c.text, minFontSize = 10.sp)
+                                }
+                                if (clickable) PfInsightChevron()
+                            }
+                        }
+                    }
+                    headingHelp()
                 }
-                headingHelp?.invoke()
-                if (clickable && headingHelp == null) PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = 18.dp, tint = c.textFaint, modifier = Modifier.padding(top = 1.dp))
             }
             if (state == InsightState.TENTATIVE) PfBadge("предварительно")
             if (locked) {
@@ -285,6 +292,36 @@ fun PfInsightCard(
             if (action != null) Box(Modifier.offset(x = -d.space4)) { action() }
         }
     }
+}
+
+@Composable
+private fun RowScope.PfInsightHeading(title: String, amount: String?, empty: Boolean, clickable: Boolean) {
+    PfInsightTitle(title, empty, Modifier.weight(1f))
+    if (amount != null) {
+        Text(amount, style = PfTheme.type.bodyStrong, color = PfTheme.colors.text, maxLines = 1, softWrap = false)
+    }
+    if (clickable) PfInsightChevron()
+}
+
+@Composable
+private fun PfInsightTitle(title: String, empty: Boolean, modifier: Modifier) {
+    Text(
+        title,
+        style = PfTheme.type.bodyStrong,
+        color = if (empty) PfTheme.colors.textMuted else PfTheme.colors.text,
+        modifier = modifier.semantics { heading() },
+    )
+}
+
+@Composable
+private fun PfInsightChevron() {
+    PfIcon(
+        PfIcons.CHEVRON_RIGHT,
+        contentDescription = null,
+        size = 18.dp,
+        tint = PfTheme.colors.textFaint,
+        modifier = Modifier.padding(top = 1.dp),
+    )
 }
 
 /**

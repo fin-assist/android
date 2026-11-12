@@ -47,7 +47,10 @@ class AnalyticsHelpDesignCheckTest {
             }
         }
 
-    @Test fun insightHelpDark() = DesignCheck.capture("AnalyticsInsightHelpDark", dark = true, popups = true) {
+    @Test fun insightHelp() = insightHelp("AnalyticsInsightHelp")
+    @Test fun insightHelpDark() = insightHelp("AnalyticsInsightHelpDark", dark = true)
+
+    private fun insightHelp(name: String, dark: Boolean = false) = DesignCheck.capture(name, dark = dark, popups = true) {
         CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 1.5f)) {
             Column(Modifier.padding(20.dp)) {
                 Spacer(Modifier.height(180.dp))
@@ -56,6 +59,7 @@ class AnalyticsHelpDesignCheckTest {
                     title = "Аптеки",
                     amount = "11 868 ₽",
                     description = "В 4,2 раза больше обычного — обычно около 2 840,67 ₽",
+                    onClick = {},
                     headingHelp = {
                         BlockHelpPopupButton(
                             "Обычные расходы рассчитаны за август–октябрь.",
@@ -64,6 +68,50 @@ class AnalyticsHelpDesignCheckTest {
                             initiallyOpen = true,
                         )
                     },
+                )
+            }
+        }
+    }
+
+    @Test fun lockedHelp() = DesignCheck.capture("AnalyticsLockedHelp", popups = true) {
+        Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            PfStatTile(
+                label = "Прогноз расходов",
+                modifier = Modifier.weight(1f),
+                locked = true,
+                lockedText = "Недостаточно данных",
+                alignTrailingTop = true,
+                trailing = {
+                    BlockHelpPopupButton(
+                        "Для прогноза нужны полные месяцы истории.",
+                        "Прогноз расходов",
+                        "analytics.tile.forecast",
+                        initiallyOpen = true,
+                    )
+                },
+            )
+            PfStatTile("Операции", Modifier.weight(1f), value = "12")
+        }
+    }
+
+    @Test fun chartHelp() = DesignCheck.capture("AnalyticsChartHelp", popups = true) {
+        Column(Modifier.padding(20.dp)) {
+            PfCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    BlockHelpPopupButton(
+                        "Столбики показывают полные календарные месяцы всей загруженной истории.",
+                        "Расходы по месяцам",
+                        "analytics.block.monthly_chart",
+                        initiallyOpen = true,
+                    )
+                }
+                PfPagedBarChart(
+                    "analytics.expense.monthly",
+                    listOf(
+                        BarPoint("2025-11", "нояб.", "Ноябрь", 0.8f, "80 000 ₽"),
+                        BarPoint("2025-12", "дек.", "Декабрь", 1f, "100 000 ₽"),
+                    ),
+                    "2025-12", 96.dp, {}, {},
                 )
             }
         }

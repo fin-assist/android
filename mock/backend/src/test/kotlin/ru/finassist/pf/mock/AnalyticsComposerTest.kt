@@ -82,6 +82,7 @@ class AnalyticsComposerTest {
         val block = AnalyticsComposer.compose(f.september()).blocks.single { it.id == "notable_spending" }
         val card = assertNotNull(block.decode(InsightCardData.serializer()))
         assertEquals("Обычные расходы рассчитаны за апрель — август.", block.helpText)
+        assertTrue(requireNotNull(block.altText).endsWith("(апрель — август)"))
         assertTrue("апрель" !in assertNotNull(card.description))
     }
 
