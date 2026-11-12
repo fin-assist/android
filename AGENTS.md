@@ -362,7 +362,8 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   current selection once, then uses an explicit retry without a loop. Response source zones own calendar labels.
   Analytics block/tile `help_text` opens a scrollable popup anchored to its info button (FIN-496). Back, an
   outside tap, or app lock closes the popup. Main content and concise lock reasons stay in place.
-  Assistant block/tile help opens a scrollable sheet.
+  The shared block catalog retains scrollable sheets when `anchoredHelp = false`. The assistant uses its own
+  renderer, where block/tile `help_text` is currently unused.
 - Assistant SSE (FIN-453): a final-status snapshot does not replace `done` / `error`. Reopen dropped streams
   until terminal metadata arrives, including after pause/resume; never create another question to recover a stream.
   A definitive stream refusal reconciles history once and retires pending terminal recovery unless a one-shot

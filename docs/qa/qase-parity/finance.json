@@ -8280,6 +8280,17 @@
             ".maestro/flows/analytics/facts_and_forecast.yaml"
           ],
           "notes": "Authored assertions only; execution not performed. Closed request-witness keys require root shared implementation in the integrated PR."
+        },
+        {
+          "id": "FIN-450-Q71-source-wording",
+          "requirement": "steps[2].action",
+          "before": "Открыть значок пояснения прогноза, прочитать и прокрутить текст, закрыть подсказку.",
+          "fix": "Открыть значок пояснения прогноза и прочитать текст. Если текст не помещается, прокрутить подсказку до конца. Закрыть кнопкой «Назад», снова открыть и закрыть касанием вне подсказки.",
+          "status": "bounded",
+          "files": [
+            "docs/qa/qase-parity/finance-qase-proposals.json"
+          ],
+          "notes": "Maestro checks the forecast text and dismissal. AnalyticsHelpPopupTest covers overflow scrolling. Proposal only; the audited Qase source remains unchanged."
         }
       ],
       "limitations": [

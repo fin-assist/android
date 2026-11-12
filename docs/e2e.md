@@ -1326,7 +1326,8 @@ and refreshes the current selection once; repeated expiration never starts an au
 
 In Analytics the 48dp info action opens an anchored, scrollable popup for block/tile `help_text`, including
 locked and unknown-version blocks (FIN-496). Back, an outside tap, or app lock closes the popup. Main contents
-and concise lock reasons stay in place. Assistant block/tile help opens a scrollable sheet. Qase71 checks the
+and concise lock reasons stay in place. The shared block catalog can render help as a sheet when
+`anchoredHelp = false`. The assistant's own renderer currently leaves `help_text` unused. Qase71 checks the
 forecast text and dismissal. A JVM Compose test verifies scrolling long help inside the popup. FIN-415 fixes for the touched
 facts/forecast and chart-selection flows are synchronized from main. Proposed light/dark help and history design
 artboards are authored; approved Figma artboards for these new states do not yet exist.
