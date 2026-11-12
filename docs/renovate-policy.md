@@ -98,8 +98,10 @@ Credential передаётся через окружение; bootstrap не в
 Runtime runner того же source вызывается с явными данными и pin:
 `python3 -I .finassist-ci/<revision>/common/renovate/test.py --root "$PWD" --mode runtime --runtime "$PWD/scripts/renovate-runtime" --source-revision <revision>`.
 Обновление или откат возвращает manifest, все action refs/test inputs и matching bootstrap вместе.
-Сначала source-коммит проходит ревью и merge с сохранением его identity; squash/rebase требует
-repin итогового SHA и нового CI/review. Перенос не меняет credentials, protections или activation.
+Для ручного обновления pin проверьте, что проверенный source-коммит достижим из `main` репозитория Actions.
+Команда `gh api 'repos/fin-assist/renovate-actions/compare/<revision>...main' --jq .status` должна вернуть
+`identical` или `ahead`. После squash/rebase закрепляйте итоговый SHA и повторяйте CI и ревью.
+Перенос сохраняет существующие credentials, protections и activation.
 
 FIN-456: активный `renovate.json` содержит новые managers для source inputs; action refs
 извлекает штатный `github-actions` manager. Прежние FIN-372 managers manifest/`ci.yml` и
