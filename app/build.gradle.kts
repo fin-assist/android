@@ -63,7 +63,7 @@ val checkNoMockCode = tasks.register<CheckNoMockCode>("checkNoMockCode")
 // build, which `GITHUB_RUN_NUMBER` does not guarantee (a counter per workflow; a re-run keeps it). Without it — the CI
 // run number (`GITHUB_RUN_NUMBER`, enough to tell builds apart in logs), 1 locally. Both go into `X-Client-Version`
 // (`android/0.2.16+41`, api.md «Заголовки», FIN-20/22).
-val appVersionName = "0.2.20"
+val appVersionName = "0.2.21"
 val appVersionCode = (System.getenv("PF_VERSION_CODE") ?: System.getenv("GITHUB_RUN_NUMBER"))?.toIntOrNull() ?: 1
 
 android {

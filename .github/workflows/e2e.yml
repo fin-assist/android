@@ -31,7 +31,7 @@ concurrency:
 
 env:
   # The number of shards; the matrix below lists 1..SHARDS.
-  SHARDS: 5
+  SHARDS: 6
   # Shared by the actual process coordinator and the compact result's configuration metadata.
   MAESTRO_TEST_SECONDS: 2700
   NATIVE_TEST_SECONDS: 600
@@ -107,7 +107,7 @@ jobs:
       # A failed shard must not cancel the others: their results still count, and the run is red anyway.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4, 5, 6]
         # One value keeps the Actions limit and the process coordinator in sync.
         job_timeout_minutes: [52]
     steps:

@@ -2,7 +2,7 @@
 
 The full post-merge acceptance consists of three independent suites on the same source revision:
 
-- Five Maestro shards on clean API34 Pixel6 emulators. Each shard has a 2700 s process deadline and a 52 min job ceiling.
+- Six Maestro shards on clean API34 Pixel6 emulators. Each shard has a 2700 s process deadline and a 52 min job ceiling.
 - Native instrumented tests on a separate clean emulator, with a 600 s test deadline. They no longer wait
   behind Maestro or consume its remaining budget. Local `scripts/e2e.sh` still runs the full selection;
   `--native-only` selects only the native suite, `--shard i/n` selects Maestro without native tests.
