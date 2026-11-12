@@ -360,7 +360,10 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   at most three neighbouring pages, and virtualized columns. Selected-month identity and selected-period notes
   survive page changes. Source-zone/revision/context mismatch rejects a page; an expired cursor refreshes the
   current selection once, then uses an explicit retry without a loop. Response source zones own calendar labels.
-  Block/tile `help_text` opens a scrollable info sheet without replacing main content or concise lock reasons.
+  Analytics block/tile `help_text` opens a scrollable popup anchored to its info button (FIN-496). Back, an
+  outside tap, or app lock closes the popup. Main content and concise lock reasons stay in place.
+  The shared block catalog retains scrollable sheets when `anchoredHelp = false`. The assistant uses its own
+  renderer, where block/tile `help_text` is currently unused.
 - Assistant SSE (FIN-453): a final-status snapshot does not replace `done` / `error`. Reopen dropped streams
   until terminal metadata arrives, including after pause/resume; never create another question to recover a stream.
   A definitive stream refusal reconciles history once and retires pending terminal recovery unless a one-shot
@@ -667,6 +670,6 @@ FIN-448: before publishing the baseline/target, require each configured required
 
 ## Shared Renovate source (FIN-456)
 
-Controller code and regressions live in immutable `fin-assist/go-ci`; see `docs/renovate-policy.md`.
+FIN-499 pins controller code and regressions to a full commit in `fin-assist/renovate-actions`; see `docs/renovate-policy.md`.
 Keep the manifest and both workflow action pins equal. Local checks delegate through the unchanged
 verified bootstrap; never restore a local executable controller or run consumer code with its write token.

@@ -14,10 +14,13 @@ import ru.finassist.pf.core.designsystem.components.PfStatTile
 internal fun BlockTile(block: Block, tile: Tile, ctx: BlockContext, modifier: Modifier, minAmountFontSize: TextUnit = 14.sp) {
     val tag = ctx.tags.tile(tile.id)
     val help: (@Composable () -> Unit)? = tile.helpText?.takeIf { it.isNotBlank() }?.let { text ->
-        { BlockHelpButton(text, tile.title, tag) }
+        {
+            if (ctx.anchoredHelp) BlockHelpPopupButton(text, tile.title, tag)
+            else BlockHelpButton(text, tile.title, tag)
+        }
     }
     if (!tile.status.hasData) {
-        PfStatTile(tile.title, modifier.testTag(tag), locked = true, lockedText = BlockFormat.lockText(tile.lock), chartId = tag, trailing = help)
+        PfStatTile(tile.title, modifier.testTag(tag), locked = true, lockedText = BlockFormat.lockText(tile.lock), chartId = tag, trailing = help, alignTrailingTop = ctx.anchoredHelp)
         return
     }
     val action = BlockLayout.tapAction(tile.action)
@@ -29,5 +32,6 @@ internal fun BlockTile(block: Block, tile: Tile, ctx: BlockContext, modifier: Mo
         onClick = action?.let { { ctx.onAction(block, it) } },
         minAmountFontSize = minAmountFontSize,
         trailing = help,
+        alignTrailingTop = ctx.anchoredHelp,
     )
 }

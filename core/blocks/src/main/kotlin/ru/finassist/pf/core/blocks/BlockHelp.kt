@@ -1,5 +1,6 @@
 package ru.finassist.pf.core.blocks
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.designsystem.components.PfBottomSheet
 import ru.finassist.pf.core.designsystem.components.PfIconButton
 import ru.finassist.pf.core.designsystem.icons.PfIcons
@@ -35,4 +37,27 @@ fun BlockHelpSheet(title: String, text: String, onDismiss: () -> Unit, modifier:
 @Composable
 internal fun BlockHelpRow(text: String, title: String, tag: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { BlockHelpButton(text, title, tag) }
+}
+
+internal fun BlockContext.helpButton(block: Block, title: String = block.title ?: "Пояснение"): (@Composable () -> Unit)? {
+    val text = block.helpText?.takeIf { anchoredHelp && it.isNotBlank() } ?: return null
+    return { BlockHelpPopupButton(text, title, tags.block(block.id ?: block.type.code)) }
+}
+
+@Composable
+internal fun WithBlockHelp(help: (@Composable () -> Unit)?, content: @Composable () -> Unit) {
+    if (help == null) {
+        content()
+    } else {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2)) {
+            Column(Modifier.weight(1f)) { content() }
+            help()
+        }
+    }
+}
+
+/** Block-level help belongs inside a single-card renderer, before its contents. */
+@Composable
+internal fun BlockHelpHeader(help: (@Composable () -> Unit)?) {
+    if (help != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { help() }
 }

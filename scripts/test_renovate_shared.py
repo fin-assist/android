@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 class SharedRenovate(unittest.TestCase):
     @unittest.skipIf(
         os.environ.get('PF_RENOVATE_POLICY_VIA_ACTION') == 'true',
-        'Verified by the required Renovate policy tests workflow through the pinned private action',
+        'Verified by the required Renovate policy tests workflow through the pinned public action',
     )
     def test_pinned_policy_and_consumer_contract(self):
         if (ROOT / '.finassist-ci.json').is_file():

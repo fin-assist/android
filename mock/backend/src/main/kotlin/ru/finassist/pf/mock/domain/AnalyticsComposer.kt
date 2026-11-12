@@ -401,14 +401,19 @@ object AnalyticsComposer {
         val items = n.items.orEmpty()
         if (n.isReady && n.status.effective == MetricStatus.READY && items.isNotEmpty()) {
             // One card per category («Заправки 7 200 ₽ · В 2,3 раза больше обычного…»).
+            val basis = basisMonths(n)
             return items.map { item ->
-                card(
+                val block = card(
                     "notable_spending", n,
                     InsightCardData(
                         icon = item.categoryIcon, title = item.categoryName, value = item.amount.minor.toDouble(), valueKind = ValueKind.AMOUNT,
-                        description = AnalyticsServerTexts.notable(item.amount, item.typicalAmount, n.basis?.range),
+                        description = AnalyticsServerTexts.notable(item.amount, item.typicalAmount, basis = null),
                     ),
                     s, action = open(item.filters),
+                )
+                if (basis == null) block else block.copy(
+                    helpText = "Обычные расходы рассчитаны за $basis.",
+                    altText = block.altText?.let { "$it ($basis)" },
                 )
             }
         }
