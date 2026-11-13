@@ -11,13 +11,13 @@ private const val ACCOUNT_CONTEXT_MIGRATION = "pf_appmetrica_account_context_rem
  * Clear the reporting stores before the SDK opens them. Installation identifiers and other app files stay in place.
  */
 internal fun discardLegacyAppMetricaReports(context: Context) {
-    val root = context.noBackupFilesDir
+    val root = context.noBackupFilesDir.canonicalFile
     val marker = File(root, ACCOUNT_CONTEXT_MIGRATION)
     check(!Files.isSymbolicLink(marker.toPath()))
     if (marker.isFile) return
 
     val storage = File(root, "appmetrica/analytics")
-    check(storage.canonicalFile == storage.absoluteFile)
+    check(storage.canonicalFile == storage)
     discard(File(storage, "db"))
     discard(File(storage, "crashes"))
     discard(File(storage, "native_crashes"))

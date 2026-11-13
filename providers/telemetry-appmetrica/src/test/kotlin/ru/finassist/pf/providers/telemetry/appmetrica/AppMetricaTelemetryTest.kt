@@ -192,7 +192,7 @@ class AppMetricaTelemetryTest {
         val unrelated = seedFile(root, "other-state/settings", "keep")
         val reports = File(root, "appmetrica/analytics/db")
         reports.parentFile?.mkdirs()
-        Files.createSymbolicLink(reports.toPath(), unrelated.parentFile.toPath())
+        Files.createSymbolicLink(reports.toPath(), unrelated.toPath().parent)
 
         assertTrue(activateAppMetrica(context, UUID.randomUUID().toString(), sessions = false, sdk))
 
