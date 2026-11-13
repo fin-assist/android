@@ -22,7 +22,7 @@ jobs:
         with:
           mode: policy
           repository-root: ${{ github.workspace }}
-          source-revision: 72556b3dc2557bfce2594f97181ae2d0b3dd832e
+          source-revision: 1b495d8f7b9d86ee700383f619db0a68fcb587f6
 
   runtime-contract:
     name: Renovate runtime contract
@@ -49,4 +49,4 @@ jobs:
           mode: runtime
           repository-root: ${{ github.workspace }}
           runtime-path: ${{ github.workspace }}/scripts/renovate-runtime
-          source-revision: 72556b3dc2557bfce2594f97181ae2d0b3dd832e
+          source-revision: 1b495d8f7b9d86ee700383f619db0a68fcb587f6
