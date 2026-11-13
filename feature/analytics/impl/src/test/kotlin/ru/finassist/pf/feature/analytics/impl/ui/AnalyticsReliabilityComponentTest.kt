@@ -566,7 +566,6 @@ class AnalyticsReliabilityComponentTest {
     }
     private object NoTracking : Tracker {
         override fun track(event: Event, params: Map<String, String>) = Unit
-        override fun setUserId(userId: String?) = Unit
     }
     private object NoAssistant : AssistantApi {
         override suspend fun getLimit() = AssistantLimit(5, 5, java.time.OffsetDateTime.parse("2026-10-09T00:00:00+03:00"))

@@ -133,8 +133,11 @@ open class FakeAuthApi(private val log: Log = Log()) : AuthApi {
 }
 
 class RecordingTracker(private val log: Log) : Tracker {
-    override fun track(event: Event, params: Map<String, String>) { log += "track:${event.name}" }
-    override fun setUserId(userId: String?) { log += "tracker.user:$userId" }
+    val events: MutableList<Pair<Event, Map<String, String>>> = Collections.synchronizedList(mutableListOf())
+    override fun track(event: Event, params: Map<String, String>) {
+        events += event to params
+        log += "track:${event.name}"
+    }
 }
 
 class RecordingFlags(private val log: Log, private val values: Map<Flag, Boolean> = emptyMap()) : FeatureFlags {
@@ -150,11 +153,10 @@ class RecordingFlags(private val log: Log, private val values: Map<Flag, Boolean
     override suspend fun refresh() = Unit
 }
 
-class RecordingCrashReporter(private val log: Log) : CrashReporter {
+class RecordingCrashReporter : CrashReporter {
     val crumbs: MutableList<Breadcrumb> = Collections.synchronizedList(mutableListOf())
     override fun report(error: NonFatal) = Unit
     override fun breadcrumb(crumb: Breadcrumb) { crumbs += crumb }
-    override fun setUserId(userId: String?) { log += "crash.user:$userId" }
     override fun setKey(key: CrashKey, value: CrashValue?) = Unit
 }
 
@@ -169,7 +171,7 @@ class SessionHarness(
     val profile = FakeProfileApi(log)
     val tracker = RecordingTracker(log)
     val flags = RecordingFlags(log, flagValues)
-    val crash = RecordingCrashReporter(log)
+    val crash = RecordingCrashReporter()
     val flow = SignInFlow()
     private val dir: File = createTempDirectory("session").toFile()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

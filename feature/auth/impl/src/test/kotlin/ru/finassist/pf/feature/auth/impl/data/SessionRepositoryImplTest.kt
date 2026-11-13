@@ -12,6 +12,7 @@ import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.tracking.Breadcrumb
+import ru.finassist.pf.core.tracking.Events
 import ru.finassist.pf.feature.auth.api.AuthRoutes
 import ru.finassist.pf.feature.auth.api.SessionState
 import ru.finassist.pf.feature.auth.impl.SessionHarness
@@ -65,11 +66,12 @@ class SessionRepositoryImplTest {
         assertFalse(h.repo.consumeJustRegistered())
     }
 
-    @Test fun `identity is applied to flags, analytics and crash reports on sign-in`() = runBlocking {
+    @Test fun `sign-in targets flags and sends an event without account parameters`() = runBlocking {
         val h = harness()
         h.repo.start(userId = "u1", tokens = pair, registered = false)
         val log = h.log.all()
-        assertTrue("flags.user:u1" in log && "tracker.user:u1" in log && "crash.user:u1" in log, log.toString())
+        assertTrue("flags.user:u1" in log, log.toString())
+        assertEquals(listOf(Events.AUTH_VERIFIED to emptyMap()), h.tracker.events.toList())
     }
 
     @Test fun `a failed profile request drops the placeholder session and reaches the caller`() = runBlocking {
@@ -115,10 +117,9 @@ class SessionRepositoryImplTest {
         assertFalse(h.repo.consumeJustRegistered(), "a pending first upload does not survive a sign-out")
         eventually { "logout:a1/r1" in h.log.all() }
         val log = h.log.all()
-        val loggedOut = log.indexOf("track:auth.logged_out")
-        assertTrue(loggedOut in 0 until log.lastIndexOf("tracker.user:null"), "event is attributed to the user: $log")
+        assertEquals(listOf(Events.AUTH_REGISTERED to emptyMap(), Events.AUTH_LOGGED_OUT to emptyMap()), h.tracker.events.toList())
         assertTrue(log.indexOf("clear") < log.indexOf("logout:a1/r1"), log.toString())
-        assertTrue("flags.user:null" in log && "crash.user:null" in log)
+        assertTrue("flags.user:null" in log)
         assertEquals(AuthRoutes.Phone.REASON_LOGGED_OUT, h.repo.consumeSignOutReason())
         assertNull(h.repo.consumeSignOutReason(), "the reason is consumed on read")
     }
@@ -165,7 +166,7 @@ class SessionRepositoryImplTest {
 
         eventually { "logout:a1/r1" in h.log.all() }
         assertNull(h.tokens.current())
-        assertTrue("tracker.user:null" in h.log.all())
+        assertTrue("flags.user:null" in h.log.all())
     }
 
     @Test fun `local clearing sends no logout and no sign-out event`() = runBlocking {
@@ -176,7 +177,7 @@ class SessionRepositoryImplTest {
         val log = h.log.all()
         assertFalse(log.any { it.startsWith("logout:") }, log.toString())
         assertFalse("track:auth.logged_out" in log)
-        assertTrue("tracker.user:null" in log)
+        assertTrue("flags.user:null" in log)
         assertEquals(AuthRoutes.Phone.REASON_DELETED, h.repo.consumeSignOutReason())
     }
 
@@ -187,7 +188,7 @@ class SessionRepositoryImplTest {
         h.tokens.flow.value = null // the refresh was rejected
 
         eventually { "flags.user:null" in h.log.all() }
-        assertTrue("tracker.user:null" in h.log.all() && "crash.user:null" in h.log.all())
+        assertTrue(h.tracker.events.isEmpty())
         assertEquals(AuthRoutes.Phone.REASON_EXPIRED, h.repo.consumeSignOutReason())
     }
 
@@ -224,10 +225,10 @@ class SessionRepositoryImplTest {
 
         h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
         release.complete(Unit)
-        eventually { "tracker.user:u1" in h.log.all() } // the stalled setup has finished
-
-        eventually { h.log.all().lastOrNull { it.startsWith("tracker.user:") } == "tracker.user:null" }
-        eventually { h.log.all().lastOrNull { it.startsWith("flags.user:") } == "flags.user:null" }
+        eventually {
+            h.log.all().filter { it.startsWith("flags.user:") }.takeLast(3) ==
+                listOf("flags.user:null", "flags.user:u1", "flags.user:null")
+        }
         assertEquals(AuthRoutes.Phone.REASON_LOGGED_OUT, h.repo.consumeSignOutReason(), "not reported as expired")
     }
 
@@ -368,9 +369,9 @@ class SessionRepositoryImplTest {
     @Test fun `a restored session applies the identity and leaves the time zone alone`() {
         val h = harness(TokenStore.Session("u1", pair))
         h.profile.timezone = "Asia/Vladivostok-not-this-device"
-        eventually { "crash.user:u1" in h.log.all() }
+        eventually { "flags.user:u1" in h.log.all() }
         Thread.sleep(100)
-        assertTrue("flags.user:u1" in h.log.all())
+        assertTrue(h.tracker.events.isEmpty())
         // FIN-91: the profile feature's TimeZoneSync sends the zone once it has held for 72 h, not every sign-in.
         assertTrue("getProfile" !in h.log.all())
         assertTrue(h.profile.updates.isEmpty())

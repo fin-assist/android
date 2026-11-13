@@ -59,7 +59,6 @@ class DeleteAccountViewModelTest {
     private class FakeTracker : Tracker {
         val events = mutableListOf<Event>()
         override fun track(event: Event, params: Map<String, String>) { events += event }
-        override fun setUserId(userId: String?) = Unit
     }
 
     private val scheduler = TestCoroutineScheduler()

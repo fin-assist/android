@@ -199,7 +199,6 @@ class ProfileViewModelTest {
         override fun track(event: Event, params: Map<String, String>) {
             events += event to params
         }
-        override fun setUserId(userId: String?) = Unit
     }
 
     private class FakeAppLock(private val availability: BiometricAvailability) : AppLock {
