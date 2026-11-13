@@ -11,6 +11,7 @@ import dagger.multibindings.IntoSet
 import ru.finassist.pf.core.navigation.FeatureEntry
 import ru.finassist.pf.core.navigation.Navigator
 import ru.finassist.pf.core.navigation.PfNavTypes
+import ru.finassist.pf.core.storage.TooltipOnboardingStore
 import ru.finassist.pf.feature.analytics.api.AnalyticsRoutes
 import ru.finassist.pf.feature.analytics.impl.ui.AnalyticsActions
 import ru.finassist.pf.feature.analytics.impl.ui.AnalyticsScreen
@@ -19,7 +20,7 @@ import ru.finassist.pf.feature.operations.api.OperationsRoutes
 import ru.finassist.pf.feature.statements.api.StatementsRoutes
 import javax.inject.Inject
 
-class AnalyticsEntry @Inject constructor() : FeatureEntry {
+class AnalyticsEntry @Inject constructor(private val onboarding: TooltipOnboardingStore) : FeatureEntry {
     override fun NavGraphBuilder.install(navigator: Navigator) {
         fun actions(back: (() -> Unit)?) = AnalyticsActions(
             openSearch = { filter -> navigator.navigate(OperationsRoutes.Search(filter)) },
@@ -29,11 +30,11 @@ class AnalyticsEntry @Inject constructor() : FeatureEntry {
             back = back,
         )
         composable<AnalyticsRoutes.Home> {
-            AnalyticsScreen(params = null, actions = actions(back = null))
+            AnalyticsScreen(params = null, actions = actions(back = null), onboarding = onboarding)
         }
         composable<AnalyticsRoutes.Period>(typeMap = PfNavTypes.MAP) { entry ->
             val route = entry.toRoute<AnalyticsRoutes.Period>()
-            AnalyticsScreen(params = route.params, actions = actions(back = { navigator.back() }))
+            AnalyticsScreen(params = route.params, actions = actions(back = { navigator.back() }), onboarding = onboarding)
         }
     }
 }

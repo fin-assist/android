@@ -110,6 +110,7 @@ data class AnalyticsUiState(
     val chartRetryReady: Boolean = true,
     val chartHasOlder: Boolean = false,
     val chartHasNewer: Boolean = false,
+    val owner: RequestOwner? = null,
 ) {
     val periodChangeFailed: Boolean get() = periodChangeErrorPresentation != null
 }
@@ -239,7 +240,7 @@ class AnalyticsViewModel @Inject constructor(
                 importPollRevision = null
                 importPolls = 0
                 recalculationPolls = 0
-                _state.value = AnalyticsUiState(blocks = readBlocks(flags))
+                _state.value = AnalyticsUiState(blocks = readBlocks(flags), owner = next)
                 if (initialized && next != null) load()
             }
         }

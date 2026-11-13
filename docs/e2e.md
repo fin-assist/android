@@ -808,6 +808,8 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/chart_month_selection` (mock-only) | whole-column selection including zero expenses, exact month/year, selected state and retained transfer mode/scroll; failed switch and explicit retry (Qase74, FIN-398); authored, not executed |
 | `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state; expense search uses the ASCII query FIN-400 within the inherited 2024–2026 range, checks the single January 2024 debit and retained kind/scope (Qase75, FIN-400/415); follow-up not executed (previous run failed) |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
+| `analytics/tooltip_onboarding` | first tooltip opens automatically, closing it scrolls to the second, returning to the screen preserves manual help only ([Qase97](https://app.qase.io/case/PLAINFIN-97), FIN-497) |
+| `analytics/tooltip_onboarding_interrupted` | interruption consumes the sequence, both icons still work, a clean install follows changed mock server text, tags and order ([Qase98](https://app.qase.io/case/PLAINFIN-98), FIN-497) |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` + JVM `AnalyticsReliabilityComponentTest#qase82RetainedSnapshotsAndRefusedMutation` (mock-only) | retained ready/unavailable snapshots, bounded polling and explicit retry, uncached Year preparation, refused mutation independent of polling; real journey retains visible errors/payment and exact request guards; required JVM companion covers transferred exhaustive state combinations (Qase82, FIN-473; see docs/qa/fin473-pilot-coverage.md) |
 | `analytics/regular_block_update` (mock-only) | successful PUT removes RBC and promotes the third visible payment row before a ready GET; seven seconds in the same card retain that row without RBC across marked GET polls; bounded polling pauses with September retained, then explicit Retry permits ready GET; separate unknown offline result retains RBC until explicit PUT retry, revealing the scoped row title after error/read notices before the unchanged assertions (Qase81, FIN-416/427/436/478). Its case-level Passed covers these UI observations only; JVM version/context checks and backend post-commit/durable delivery are separate |
@@ -1331,6 +1333,13 @@ and concise lock reasons stay in place. The shared block catalog can render help
 forecast text and dismissal. A JVM Compose test verifies scrolling long help inside the popup. FIN-415 fixes for the touched
 facts/forecast and chart-selection flows are synchronized from main. Proposed light/dark help and history design
 artboards are authored; approved Figma artboards for these new states do not yet exist.
+
+FIN-497 uses the same anchored help for automatic onboarding when the screen response tags a block or tile with
+`onboarding` and supplies a positive `help_order`. It scrolls to each anchor before opening. A device-local
+DataStore claim per account and screen prevents replay after leaving, locking, relogin or restarting. Unmarked
+help remains manual. The mockE2e-only `analytics_help=manual|onboarding|reversed` control selects fixed server
+compositions. `manual` is the default for existing flows. `onboarding` marks the daily-expenses tile and the
+balance block, while `reversed` puts balance before the monthly chart and leaves the daily tile manual.
 
 JVM scenarios cover full-block replacement, version barriers, missing/malformed data, owner changes and late
 responses, page ownership/eviction/errors, source-zone conversion and HTTP routing. Maestro cases 81, 82, 83, 88 and

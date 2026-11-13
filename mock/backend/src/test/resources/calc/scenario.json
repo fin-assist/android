@@ -589,6 +589,13 @@
       "expect": "expected/fin418-chart-return.json"
     },
     {
+      "name": "fin501-tooltip-onboarding",
+      "do": "get",
+      "request": "GET /v1/analytics?period=month&date=2026-10&supports=heading@1,text@1,rows@1,chart@1,tile_group@2,ranked_list@1,insight_card@1",
+      "analytics_help_fixture": "onboarding",
+      "expect": "expected/fin501-tooltip-onboarding.json"
+    },
+    {
       "name": "fin418-config-cross-year",
       "do": "get",
       "request": "GET /v1/statements/config?period_from=2025-12-31&period_to=2026-01-01",

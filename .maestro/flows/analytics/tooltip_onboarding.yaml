@@ -1,0 +1,62 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — подсказки открываются по порядку и остаются доступны вручную
+tags:
+  - analytics
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_help=onboarding"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.tile.daily.help.popup"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.block.balance.help"
+- assertNotVisible:
+    id: "analytics.block.monthly_chart.help.popup"
+- back
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.balance.help.popup"
+    timeout: 15000
+- assertVisible:
+    id: "analytics.block.balance.help"
+- back
+- tapOn:
+    id: "ds.tab.operations"
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.screen"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.daily.help"
+    direction: UP
+- assertNotVisible:
+    id: "analytics.tile.daily.help.popup"
+- assertNotVisible:
+    id: "analytics.block.balance.help.popup"
+- tapOn:
+    id: "analytics.tile.daily.help"
+- assertVisible:
+    id: "analytics.tile.daily.help.popup"
+- back
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.balance.help"
+    direction: DOWN
+- tapOn:
+    id: "analytics.block.balance.help"
+- assertVisible:
+    id: "analytics.block.balance.help.popup"

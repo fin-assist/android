@@ -21,6 +21,7 @@ import ru.finassist.pf.core.toggles.FlagOverrides
 import ru.finassist.pf.feature.applock.api.AppLock
 import ru.finassist.pf.feature.auth.api.SessionRepository
 import ru.finassist.pf.feature.auth.impl.data.SessionRepositoryImpl
+import ru.finassist.pf.mock.MockAnalyticsHelp
 import ru.finassist.pf.mock.MockErrorOperation
 import ru.finassist.pf.mock.MockErrorScenario
 import ru.finassist.pf.mock.MockBackend
@@ -42,6 +43,7 @@ import javax.inject.Inject
  * - `consent_type=personal_data|assistant` with closed document controls or exact `expect_consent_*` checks —
  *   version rotation, held reads and safe request evidence for Qase54/55; see [E2eConsentControl] and docs/e2e.md.
  * - `assistant_model_errors=<n>` — the next n assistant answers fail with MODEL_ERROR («Повторить» under them).
+ * - `analytics_help=manual|onboarding|reversed` — closed analytics tooltip compositions.
  * - `analytics_recalculating_responses=<0..100>` — next n non-empty analytics reads carry `state.recalculating=true`.
  * - `analytics_pending_responses=<0..100>` — next n valid analytics reads return `has_data=false`, simulating
  *   publication lag after a UI import; zero restores the actual projection without changing the imported ledger.
@@ -158,6 +160,12 @@ class E2eControlActivity : ComponentActivity() {
                 name == "call_ttl_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(verificationTtlMs = it) }
                 name == "network_delay_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(networkDelayMs = it) }
                 name == "assistant_model_errors" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(assistantModelErrors = it) }
+                name == "analytics_help" -> when (value) {
+                    "manual" -> backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.MANUAL)
+                    "onboarding" -> backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.ONBOARDING)
+                    "reversed" -> backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.REVERSED)
+                    else -> unmet = "invalid analytics help fixture"
+                }
                 name == "analytics_pending_responses" -> {
                     val count = value.toIntOrNull()?.takeIf { it in 0..100 }
                     if (count == null) unmet = "invalid analytics pending response count"

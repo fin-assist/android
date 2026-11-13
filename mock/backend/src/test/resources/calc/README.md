@@ -47,6 +47,8 @@
 | `dismiss_regular_payment` | `request`, `title` | выполняет `request` (6.1), находит в блоке `regular_payments` строку с этим `title` (одну из видимых строк `items`) и вызывает 6.3 `PUT` с её `payment_id` | — |
 | `delete_upload` | `file` | 3.5 удаляет загрузку этого файла | — |
 
+Сценарий FIN-501 использует `analytics_help_fixture: onboarding` на одном шаге чтения 6.1. Тестовый producer помечает плитку `daily_expense` и блок `balance` позициями 2 и 1; у блока также есть неизвестный тег. Выбор подсказок в рабочей композиции остаётся за producer экрана.
+
 Ошибка API на шаге с `expect` записывается как `{"status": <HTTP>, "error": {"code": "<код>", "message": "<ignored>"}}`: сравниваются статус и код, `message` — текст. Такой шаг один: `feed-before-mid-month` — 400 `VALIDATION_ERROR` на `before` не в начале месяца (`docs/calc.md`, раздел 6); остальные ответы — `200`.
 
 ## Правила сравнения
