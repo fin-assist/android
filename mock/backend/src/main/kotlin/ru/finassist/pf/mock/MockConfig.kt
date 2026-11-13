@@ -34,6 +34,8 @@ data class MockConfig(
     val analyticsPendingResponses: Int = 0,
     /** Next n valid non-empty analytics responses carry the existing recalculation marker (UI fixture only). */
     val analyticsRecalculatingResponses: Int = 0,
+    /** Server tooltip metadata shown by the mock analytics response. */
+    val analyticsHelp: MockAnalyticsHelp = MockAnalyticsHelp.ONBOARDING,
     /** Send codes the client does not know ([MockCodes]) where the contract allows new ones (FIN-83). */
     val unknownCodes: Boolean = false,
     /** Fixed valid-shaped zone absent from the device tzdb; response metadata only, for UI tests. */
@@ -80,3 +82,6 @@ data class MockConfig(
         const val STREAM_RETRY_SECONDS = 3L
     }
 }
+
+/** Server compositions used by the mock app and the closed UI fixtures. */
+enum class MockAnalyticsHelp { MANUAL, ONBOARDING, REVERSED }

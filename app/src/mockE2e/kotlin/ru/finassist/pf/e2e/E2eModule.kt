@@ -4,6 +4,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import ru.finassist.pf.mock.MockAnalyticsHelp
 import ru.finassist.pf.mock.MockConfig
 import javax.inject.Singleton
 
@@ -17,6 +18,7 @@ object E2eModule {
     @Provides
     @Singleton
     fun mockConfig(): MockConfig = MockConfig(
+        analyticsHelp = MockAnalyticsHelp.MANUAL,
         callVerifyDelayMs = 1_500,
         networkDelayMs = 50,
         importStepDelayMs = 300,

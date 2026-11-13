@@ -1,5 +1,6 @@
 package ru.finassist.pf.core.blocks
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,11 +10,14 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,11 +50,34 @@ import ru.finassist.pf.core.designsystem.theme.PfTheme
 /** The icon stays compact inside a full-size touch target. */
 @Composable
 fun BlockHelpPopupButton(text: String, title: String, tag: String, initiallyOpen: Boolean = false) {
+    HelpPopupButton(text, title, tag, initiallyOpen, null, null)
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun HelpPopupButton(
+    text: String,
+    title: String,
+    tag: String,
+    initiallyOpen: Boolean = false,
+    key: List<String>?,
+    order: Int?,
+) {
     val suppressed = LocalSuppressPopups.current
+    val onboarding = LocalTooltipOnboarding.current
+    val requester = remember { BringIntoViewRequester() }
+    if (onboarding != null && key != null && order != null) {
+        DisposableEffect(onboarding, key, order, requester) {
+            val anchor = TooltipOnboarding.Anchor(order) { requester.bringIntoView() }
+            onboarding.anchors[key] = anchor
+            onDispose { if (onboarding.anchors[key] === anchor) onboarding.anchors.remove(key) }
+        }
+    }
+    val automatic = key != null && onboarding?.current == key
     var shown by remember(text) { mutableStateOf(initiallyOpen && !suppressed) }
     if (suppressed) LaunchedEffect(Unit) { shown = false }
     Box(
-        Modifier.size(PfTheme.dimens.touch).testTag("$tag.help").clickable(
+        Modifier.size(PfTheme.dimens.touch).bringIntoViewRequester(requester).testTag("$tag.help").clickable(
             enabled = !suppressed,
             role = Role.Button,
             onClickLabel = "Открыть пояснение",
@@ -59,7 +86,10 @@ fun BlockHelpPopupButton(text: String, title: String, tag: String, initiallyOpen
     ) {
         Box(Modifier.offset(y = PfTheme.dimens.space1)) {
             PfIcon(PfIcons.INFO, contentDescription = "Пояснение: $title", size = 20.dp, tint = PfTheme.colors.text)
-            if (!suppressed && shown) HelpPopup(text, "$tag.help.popup") { shown = false }
+            if (!suppressed && (shown || automatic)) HelpPopup(text, "$tag.help.popup") {
+                shown = false
+                if (key != null) onboarding?.dismiss(key)
+            }
         }
     }
 }

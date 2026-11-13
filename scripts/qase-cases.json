@@ -16,6 +16,8 @@
     ".maestro/flows/operations/unknown_filter_kind.yaml": 29,
     ".maestro/flows/operations/days_in_profile_zone.yaml": 27,
     ".maestro/flows/operations/statement_stale.yaml": 37,
+    ".maestro/flows/analytics/tooltip_onboarding.yaml": 97,
+    ".maestro/flows/analytics/tooltip_onboarding_interrupted.yaml": 98,
     ".maestro/flows/analytics/overview.yaml": 10,
     ".maestro/flows/analytics/period_change_retry.yaml": 73,
     ".maestro/flows/analytics/transfer_change_retry.yaml": 96,
