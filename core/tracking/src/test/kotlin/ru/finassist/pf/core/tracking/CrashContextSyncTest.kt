@@ -8,7 +8,6 @@ class CrashContextSyncTest {
     private val reporter = object : CrashReporter {
         override fun report(error: NonFatal) = Unit
         override fun breadcrumb(crumb: Breadcrumb) { calls += crumb.render() }
-        override fun setUserId(userId: String?) = Unit
         override fun setKey(key: CrashKey, value: CrashValue?) { calls += "${key.name}=${value?.value}" }
     }
     private var version = "defaults"
@@ -61,7 +60,6 @@ class CrashContextSyncFollowTest {
     private val reporter = object : CrashReporter {
         override fun report(error: NonFatal) = Unit
         override fun breadcrumb(crumb: Breadcrumb) = Unit
-        override fun setUserId(userId: String?) = Unit
         override fun setKey(key: CrashKey, value: CrashValue?) { keys += value?.value }
     }
 

@@ -16,6 +16,5 @@ internal class RecordingCrashReporter : CrashReporter {
     }
 
     override fun breadcrumb(crumb: Breadcrumb) = Unit
-    override fun setUserId(userId: String?) = Unit
     override fun setKey(key: CrashKey, value: CrashValue?) = Unit
 }

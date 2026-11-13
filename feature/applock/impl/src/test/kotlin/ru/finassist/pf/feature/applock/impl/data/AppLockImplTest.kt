@@ -97,7 +97,6 @@ class AppLockImplTest {
     private val tracked = Collections.synchronizedList(mutableListOf<Pair<String, Map<String, String>>>())
     private val tracker = object : Tracker {
         override fun track(event: Event, params: Map<String, String>) { tracked += event.name to params }
-        override fun setUserId(userId: String?) = Unit
     }
 
     @After

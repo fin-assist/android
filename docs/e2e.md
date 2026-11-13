@@ -1826,3 +1826,10 @@ semantics and bounds, and the two gutter samples. The bounded preference diagnos
 unchanged label wait. Other Profile content is excluded from the diagnostic log. Source, executed checks and
 device-proof limits are recorded in FIN-480 and its PR; the original CI snapshot did not contain the failed
 node count, so its exact UI state cannot be reconstructed.
+
+
+FIN-498 — Not covered yet: AppMetrica's service-side report contents after upgrading an installation with buffered
+events and an active account. The Maestro build `mockE2e` excludes the real SDK and the in-process backend cannot
+restore that account across an APK replacement. Robolectric covers cleanup of the pinned SDK's reporting paths,
+activation order, retained app state and payloads at the SDK boundary. Existing sign-in, sign-out and account
+deletion flows continue to exercise the user-visible behaviour. The isolated SDK upgrade check is in [README](../README.md#flavor-prod).

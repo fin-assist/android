@@ -16,9 +16,6 @@ interface CrashReporter {
     /** A step of the session shown next to a crash: what the user opened, which config was applied. */
     fun breadcrumb(crumb: Breadcrumb)
 
-    /** Our own `user_id`; `null` after sign-out and account deletion (the app restores the user context at sign-in or session restore). */
-    fun setUserId(userId: String?)
-
     /** A value attached to every later report; `null` removes it. */
     fun setKey(key: CrashKey, value: CrashValue?)
 }
@@ -151,7 +148,6 @@ value class CrashValue private constructor(val value: String) {
 class CompositeCrashReporter(private val reporters: Collection<CrashReporter>) : CrashReporter {
     override fun report(error: NonFatal) = each { it.report(error) }
     override fun breadcrumb(crumb: Breadcrumb) = each { it.breadcrumb(crumb) }
-    override fun setUserId(userId: String?) = each { it.setUserId(userId) }
     override fun setKey(key: CrashKey, value: CrashValue?) = each { it.setKey(key, value) }
 
     private inline fun each(action: (CrashReporter) -> Unit) {

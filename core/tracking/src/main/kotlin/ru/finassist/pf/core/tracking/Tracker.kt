@@ -3,13 +3,10 @@ package ru.finassist.pf.core.tracking
 /**
  * Product analytics events (AppMetrica in `prod` and `stage`, logcat in `mock` and `local`). Event names follow the flag naming
  * scheme — `<feature>.<object>.<action>` — so a flag and the events of the thing it gates share a prefix.
- * Parameters never carry personal data (no phone numbers, no operation titles), only ids and codes.
+ * Parameters carry technical codes and counts. Account identifiers and user-provided values are excluded.
  */
 interface Tracker {
     fun track(event: Event, params: Map<String, String> = emptyMap())
-
-    /** Our own `user_id`; `null` after sign-out. */
-    fun setUserId(userId: String?)
 }
 
 @JvmInline
@@ -70,5 +67,4 @@ object Events {
 
 object NoopTracker : Tracker {
     override fun track(event: Event, params: Map<String, String>) = Unit
-    override fun setUserId(userId: String?) = Unit
 }
