@@ -181,7 +181,6 @@ class AnalyticsViewModelTest {
         override fun track(event: Event, params: Map<String, String>) {
             events += event to params
         }
-        override fun setUserId(userId: String?) = Unit
     }
 
     private class FakeSession : ru.finassist.pf.feature.auth.api.SessionRepository {

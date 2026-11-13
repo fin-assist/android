@@ -159,14 +159,12 @@ class CompositeCrashReporterTest {
         val calls = mutableListOf<String>()
         override fun report(error: NonFatal) { calls += "report ${error.issueKey}" }
         override fun breadcrumb(crumb: Breadcrumb) { calls += "crumb ${crumb.render()}" }
-        override fun setUserId(userId: String?) { calls += "user $userId" }
         override fun setKey(key: CrashKey, value: CrashValue?) { calls += "key ${key.name}=${value?.value}" }
     }
 
     private object Broken : CrashReporter {
         override fun report(error: NonFatal) = error("sdk")
         override fun breadcrumb(crumb: Breadcrumb) = error("sdk")
-        override fun setUserId(userId: String?) = error("sdk")
         override fun setKey(key: CrashKey, value: CrashValue?) = error("sdk")
     }
 
@@ -175,16 +173,14 @@ class CompositeCrashReporterTest {
         val second = Recording()
         val composite = CompositeCrashReporter(listOf(first, second))
 
-        composite.setUserId("u1")
         composite.setKey(CrashKey.RC_VERSION, CrashValue.of("0a1b2c3d"))
         composite.breadcrumb(Breadcrumb.ScreenOpened(Slug.of("analytics.home")))
         composite.report(NonFatal(Slug.of("analytics"), Slug.of("tiles"), RuntimeException()))
-        composite.setUserId(null)
         composite.setKey(CrashKey.RC_VERSION, null)
 
         val expected = listOf(
-            "user u1", "key rc_ver=0a1b2c3d", "crumb screen analytics.home", "report analytics.tiles",
-            "user null", "key rc_ver=null",
+            "key rc_ver=0a1b2c3d", "crumb screen analytics.home", "report analytics.tiles",
+            "key rc_ver=null",
         )
         assertEquals(expected, first.calls)
         assertEquals(expected, second.calls)
@@ -194,15 +190,14 @@ class CompositeCrashReporterTest {
         val healthy = Recording()
         val composite = CompositeCrashReporter(listOf(Broken, healthy))
 
-        composite.setUserId("u1")
         composite.setKey(CrashKey.RC_VERSION, null)
         composite.breadcrumb(Breadcrumb.ScreenOpened(Slug.of("a")))
         composite.report(NonFatal(Slug.of("a"), Slug.of("b"), RuntimeException()))
 
-        assertEquals(4, healthy.calls.size)
+        assertEquals(3, healthy.calls.size)
     }
 
     @Test fun `no providers is fine`() {
-        CompositeCrashReporter(emptyList()).setUserId("u1")
+        CompositeCrashReporter(emptyList()).setKey(CrashKey.RC_VERSION, null)
     }
 }

@@ -49,7 +49,7 @@ class SessionRepositoryImpl @Inject constructor(
     /**
      * Outlives screens. Sign-in and sign-out run here, not in the caller's scope: the moment the session changes
      * `PfApp` drops the calling screen's layer and its `viewModelScope` is cancelled, which would cut the
-     * identity update, the tracking event and `/logout` half-way.
+     * flag targeting update, the tracking event and `/logout` half-way.
      */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val signOutReason = AtomicReference<String?>(null)
@@ -91,14 +91,13 @@ class SessionRepositoryImpl @Inject constructor(
                 if (signedInUser != null && s == null) {
                     // Not ours: the network layer dropped the session (refresh rejected).
                     if (ownedBy != signedInUser) signOutReason.compareAndSet(null, AuthRoutes.Phone.REASON_EXPIRED)
-                    // Ours too: [clearLocalNow] has reset the identity already, but an [applyIdentity] of this
-                    // collector still running then (a slow flags provider) set the user again after it.
-                    resetIdentity()
+                    // Ours too: a slow targeting update from this collector can finish after [clearLocalNow].
+                    flags.setUser(null)
                 }
                 if (signedInUser == null && signedIn) {
-                    // Also on a cold start with a restored session: flags targeting and analytics need the user.
+                    // Restore flag targeting on a cold start with an existing session.
                     // The profile time zone is kept by the profile feature's `TimeZoneSync` (FIN-91).
-                    applyIdentity(s!!.userId)
+                    flags.setUser(s!!.userId)
                 }
                 signedInUser = if (signedIn) s!!.userId else null
             }
@@ -106,8 +105,8 @@ class SessionRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Called by the sign-in flow after `verified` / `register`: persists tokens and tells the SDKs who the user
-     * is. The `verified` event of an existing user carries no `user_id` (api.md 1.2), so it is read from the
+     * Called after `verified` / `register`: persists tokens and applies the account to flag targeting.
+     * The `verified` event of an existing user carries no `user_id` (api.md 1.2), so it is read from the
      * profile right after the tokens are stored. The one-time sign-in state ([SignInFlow]) is dropped before
      * the final session is saved: a later sign-in with the same number must not reuse a spent request key.
      */
@@ -130,7 +129,7 @@ class SessionRepositoryImpl @Inject constructor(
         // but a sign-in that fails on the way (the profile request, the save itself) leaves no session, and the
         // observer may still be due the earlier sign-out's `null`: without the mark it would read as an expiry.
         ownSignOut.set(null)
-        applyIdentity(id)
+        flags.setUser(id)
         tracker.track(if (registered) Events.AUTH_REGISTERED else Events.AUTH_VERIFIED)
     }
 
@@ -146,7 +145,6 @@ class SessionRepositoryImpl @Inject constructor(
      */
     override suspend fun signOut(reason: String?): Unit = detached {
         val tokens = tokenStore.current()?.tokens
-        // Tracked before the identity is reset, so the event is still attributed to the user.
         tracker.track(Events.AUTH_LOGGED_OUT)
         clearLocalNow(reason)
         if (tokens != null) scope.launch { runCatching { revoke(tokens) } }
@@ -167,7 +165,7 @@ class SessionRepositoryImpl @Inject constructor(
             throw e
         }
         dataStore.edit { it.remove(KEY_PENDING_FIRST_UPLOAD) }
-        resetIdentity()
+        flags.setUser(null)
     }
 
     /**
@@ -186,18 +184,6 @@ class SessionRepositoryImpl @Inject constructor(
 
     /** Runs [block] in [scope]: cancelling the caller no longer cancels the work, errors still reach the caller. */
     private suspend fun <T> detached(block: suspend () -> T): T = scope.async { block() }.await()
-
-    private suspend fun applyIdentity(userId: String) {
-        flags.setUser(userId)
-        tracker.setUserId(userId)
-        crashReporter.setUserId(userId)
-    }
-
-    private suspend fun resetIdentity() {
-        flags.setUser(null)
-        tracker.setUserId(null)
-        crashReporter.setUserId(null)
-    }
 
     override fun consumeSignOutReason(): String? = signOutReason.getAndSet(null)
 

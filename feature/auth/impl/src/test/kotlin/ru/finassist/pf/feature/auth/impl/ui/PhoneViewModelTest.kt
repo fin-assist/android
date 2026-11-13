@@ -84,7 +84,6 @@ class PhoneViewModelTest {
     private val tracked = mutableListOf<String>()
     private val tracker = object : Tracker {
         override fun track(event: Event, params: Map<String, String>) { tracked += event.name }
-        override fun setUserId(userId: String?) = Unit
     }
 
     @BeforeTest fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())

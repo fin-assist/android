@@ -129,7 +129,6 @@ internal class FakeTracker : Tracker {
     override fun track(event: Event, params: Map<String, String>) {
         events += event to params
     }
-    override fun setUserId(userId: String?) = Unit
 
     fun names() = events.map { it.first.name }
 }

@@ -580,8 +580,10 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
 
 - Personal and financial data (phone, amounts, counterparties, operation descriptions, statement content, assistant
   dialogue) leaving the device or the app's private storage other than through the API client: logs, crash reports
-  (AppMetrica), analytics events, Remote Config parameters (only our opaque `user_id` / device id go there), exception
-  messages, clipboard, notifications, files in shared storage.
+  (AppMetrica), analytics events, Remote Config parameters, exception messages, clipboard, notifications, files in
+  shared storage. AppMetrica product events accept only declared technical parameters. Keep account, API request,
+  sign-in session and consent evidence IDs out of analytics and crash reporting. Keep AppMetrica identifiers out
+  of the app's API, logs, consent records and support messages. RuStore Remote Config account targeting is independent.
 - Secrets: auth tokens, the passcode and keys are stored encrypted with a Keystore-backed key (as the passcode in
   `feature/applock`), never in plain preferences, files, `BuildConfig`, resources or source; no real keys or tokens
   in the repository.

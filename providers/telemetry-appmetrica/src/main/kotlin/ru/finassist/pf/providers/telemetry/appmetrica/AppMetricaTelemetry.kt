@@ -31,7 +31,7 @@ internal class AppMetricaRuntime(
         @ApplicationContext context: Context,
         @Named("appMetricaApiKey") apiKey: String,
         @Named("appMetricaSessions") sessions: Boolean,
-    ) : this(SdkGateway.activate(context, apiKey, sessions), SdkGateway)
+    ) : this(activateAppMetrica(context, apiKey, sessions, SdkGateway), SdkGateway)
 
     fun call(action: AppMetricaGateway.() -> Unit) {
         if (enabled) runCatching { gateway.action() }
@@ -56,10 +56,8 @@ internal fun scrubCrash(error: Throwable): Throwable? = runCatching { ScrubbedTh
 
 class AppMetricaTracker @Inject internal constructor(private val runtime: AppMetricaRuntime) : Tracker {
     override fun track(event: Event, params: Map<String, String>) = runtime.call {
-        event(event.name, params)
+        event(event.name, appMetricaEventParams(event, params))
     }
-
-    override fun setUserId(userId: String?) = runtime.call { profile(userId) }
 }
 
 @Singleton
@@ -77,10 +75,6 @@ internal class AppMetricaCrashReporter @Inject constructor(private val runtime: 
         context("breadcrumbs", breadcrumbs.joinToString("\n"))
     }
 
-    override fun setUserId(userId: String?) = runtime.call {
-        context("user_id", userId)
-    }
-
     override fun setKey(key: CrashKey, value: CrashValue?) = runtime.call {
         context(key.name, value?.value)
     }
@@ -91,26 +85,39 @@ internal class AppMetricaCrashReporter @Inject constructor(private val runtime: 
 }
 
 internal interface AppMetricaGateway {
+    fun activate(context: Context, config: AppMetricaConfig)
+    fun clearErrorEnvironment()
+    fun clearProfile()
     fun event(name: String, params: Map<String, String>)
-    fun profile(userId: String?)
     fun error(issueKey: String, severity: String, cause: Throwable)
     fun context(key: String, value: String?)
 }
 
+internal fun activateAppMetrica(
+    context: Context,
+    apiKey: String,
+    sessions: Boolean,
+    gateway: AppMetricaGateway,
+): Boolean = apiKey.isNotBlank() && runCatching {
+    discardLegacyAppMetricaReports(context.noBackupFilesDir, context.packageName)
+    if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) {
+        ScrubbingExceptionHandler.install()
+    }
+    gateway.clearErrorEnvironment()
+    gateway.activate(context, appMetricaConfig(apiKey, sessions))
+    gateway.clearProfile()
+}.isSuccess
+
 private object SdkGateway : AppMetricaGateway {
-    fun activate(context: Context, apiKey: String, sessions: Boolean): Boolean =
-        apiKey.isNotBlank() && runCatching {
-            if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) {
-                ScrubbingExceptionHandler.install()
-            }
-            AppMetrica.activate(context, appMetricaConfig(apiKey, sessions))
-        }.isSuccess
+    override fun activate(context: Context, config: AppMetricaConfig) = AppMetrica.activate(context, config)
+
+    override fun clearErrorEnvironment() = AppMetrica.clearErrorEnvironment()
+
+    override fun clearProfile() = AppMetrica.setUserProfileID(null)
 
     override fun event(name: String, params: Map<String, String>) {
         if (params.isEmpty()) AppMetrica.reportEvent(name) else AppMetrica.reportEvent(name, params)
     }
-
-    override fun profile(userId: String?) = AppMetrica.setUserProfileID(userId)
 
     override fun error(issueKey: String, severity: String, cause: Throwable) =
         AppMetrica.reportError(issueKey, severity, cause)

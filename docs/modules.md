@@ -21,7 +21,7 @@ core/screenshot-testing   design-check snapshot harness (Robolectric + Roborazzi
 providers/toggles-local   flags from a JSON asset + debug overrides (mock, local)
 providers/tracking-log    logcat tracker (mock, local)
 providers/toggles-rustore RuStore Remote Config (prod, stage; separate SDK keys)
-providers/telemetry-appmetrica AppMetrica events (prod, stage) and crashes, ANR, non-fatals (mock, prod, stage); separate API keys, excluded from local and mockE2e
+providers/telemetry-appmetrica AppMetrica events (prod, stage) and crashes, ANR, non-fatals (mock, prod, stage); no account attribution, separate API keys, excluded from local and mockE2e
 mock/backend              in-process fake backend on an OFX statement, implements core/api (mock flavor)
 feature/<name>/api        public surface of the feature (JVM)
 feature/<name>/impl       data / domain / ui + Hilt bindings (Android, Compose)

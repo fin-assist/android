@@ -8,6 +8,8 @@ android {
 }
 
 dependencies {
+    implementation(projects.core.api)
+    implementation(projects.core.toggles)
     implementation(projects.core.tracking)
     testImplementation(libs.robolectric)
     implementation(libs.appmetrica.analytics) {
