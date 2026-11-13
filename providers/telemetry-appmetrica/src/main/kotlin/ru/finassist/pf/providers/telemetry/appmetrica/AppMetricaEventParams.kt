@@ -14,7 +14,7 @@ import ru.finassist.pf.core.tracking.Events
 internal fun appMetricaEventParams(event: Event, params: Map<String, String>): Map<String, String> = when (event) {
     Events.APPLOCK_UNLOCK_FAILED -> params.count("attempt")
     Events.STATEMENTS_UPLOAD_COMPLETED -> params.count("new_count")
-    Events.STATEMENTS_UPLOAD_FAILED -> params.code("code", uploadErrorCodes)
+    Events.STATEMENTS_UPLOAD_FAILED -> params.code("code", uploadErrorCodes, unknown = UNKNOWN_DIMENSION)
     Events.STATEMENTS_UPLOAD_INTERRUPTED -> params.code("reason", interruptionReasons)
     Events.OPERATIONS_SEARCH_SUBMITTED -> params.count("count")
     Events.OPERATIONS_CATEGORY_CHANGED -> params.code("split", booleanValues)
@@ -23,7 +23,7 @@ internal fun appMetricaEventParams(event: Event, params: Map<String, String>): M
     Events.ANALYTICS_TILE_OPENED -> params.code("block", tileIds)
     Events.ANALYTICS_BLOCK_EXPOSED -> buildMap {
         // Block IDs are supplied by the server. Do not transmit an arbitrary ID as a dimension.
-        params["block"]?.let { put("block", it.takeIf(analyticsBlocks::contains) ?: "unknown") }
+        params["block"]?.let { put("block", it.takeIf(analyticsBlocks::contains) ?: UNKNOWN_DIMENSION) }
         params["exp"]?.takeIf(::validExperimentVariants)?.let { put("exp", it) }
     }
     Events.ASSISTANT_ANSWER_DONE -> params.code("charged", booleanValues)
@@ -35,8 +35,11 @@ internal fun appMetricaEventParams(event: Event, params: Map<String, String>): M
 private fun Map<String, String>.count(key: String): Map<String, String> =
     this[key]?.toIntOrNull()?.takeIf { it >= 0 }?.let { mapOf(key to it.toString()) }.orEmpty()
 
-private fun Map<String, String>.code(key: String, allowed: Set<String>): Map<String, String> =
-    this[key]?.takeIf(allowed::contains)?.let { mapOf(key to it) }.orEmpty()
+private fun Map<String, String>.code(key: String, allowed: Set<String>, unknown: String? = null): Map<String, String> {
+    val value = this[key] ?: return emptyMap()
+    val safeValue = value.takeIf(allowed::contains) ?: unknown ?: return emptyMap()
+    return mapOf(key to safeValue)
+}
 
 private fun validExperimentVariants(value: String): Boolean {
     if (value.length > maxExperimentVariantsLength) return false
@@ -58,12 +61,15 @@ private val uploadErrorCodes = setOf(
     ErrorCodes.VALIDATION_ERROR,
     ErrorCodes.NOT_FOUND,
     ErrorCodes.PROCESSING_FAILED,
+    ErrorCodes.MAINTENANCE,
+    ErrorCodes.CLIENT_VERSION_UNSUPPORTED,
     ErrorCodes.IDEMPOTENCY_CONFLICT,
     ErrorCodes.REQUEST_IN_PROGRESS,
     ErrorCodes.RATE_LIMITED,
     ErrorCodes.INTERNAL_ERROR,
     "OFFLINE",
 )
+private const val UNKNOWN_DIMENSION = "unknown"
 private val interruptionReasons = setOf("maintenance", "update_required")
 private val booleanValues = setOf("false", "true")
 private val periodCodes = PeriodTypeCode.entries.map { it.code }.toSet()

@@ -99,7 +99,7 @@ internal fun activateAppMetrica(
     sessions: Boolean,
     gateway: AppMetricaGateway,
 ): Boolean = apiKey.isNotBlank() && runCatching {
-    discardLegacyAppMetricaReports(context)
+    discardLegacyAppMetricaReports(context.noBackupFilesDir, context.packageName)
     if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) {
         ScrubbingExceptionHandler.install()
     }

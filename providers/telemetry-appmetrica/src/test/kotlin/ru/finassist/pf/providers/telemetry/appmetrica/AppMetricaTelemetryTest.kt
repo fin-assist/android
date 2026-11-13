@@ -1,6 +1,7 @@
 package ru.finassist.pf.providers.telemetry.appmetrica
 
 import android.content.Context
+import android.content.ContextWrapper
 import io.appmetrica.analytics.AppMetricaConfig
 
 import org.junit.Test
@@ -201,6 +202,45 @@ class AppMetricaTelemetryTest {
     }
 
     @Test
+    fun `the no-backup directory may be reached through an Android data directory link`() {
+        val context = RuntimeEnvironment.getApplication()
+        val root = context.noBackupFilesDir
+        val original = seedFile(root, "app-data/no_backup/appmetrica/analytics/db/component_main.db", "old")
+        val alias = File(root, "android-data-link")
+        Files.createSymbolicLink(alias.toPath(), File(root, "app-data").toPath())
+
+        discardLegacyAppMetricaReports(File(alias, "no_backup"), context.packageName)
+
+        assertFalse(original.exists())
+        assertTrue(File(root, "app-data/no_backup/pf_appmetrica_account_context_removed").isFile)
+        assertTrue(Files.isSymbolicLink(alias.toPath()))
+    }
+
+    @Test
+    fun `a link in either SDK parent directory blocks activation without touching the target`() {
+        val context = RuntimeEnvironment.getApplication()
+        val root = context.noBackupFilesDir
+        for ((index, folder) in listOf("appmetrica", "appmetrica/analytics").withIndex()) {
+            val privateRoot = File(root, "app-state-$index")
+            val unrelatedRoot = File(root, "other-state-$index")
+            val prefix = if (folder == "appmetrica") "analytics/" else ""
+            val unrelated = seedFile(unrelatedRoot, "${prefix}db/unrelated-file", "keep")
+            val link = File(privateRoot, folder)
+            link.parentFile?.mkdirs()
+            Files.createSymbolicLink(link.toPath(), unrelatedRoot.toPath())
+            val sdk = RecordingGateway()
+            val app = object : ContextWrapper(context) {
+                override fun getNoBackupFilesDir() = privateRoot
+            }
+
+            assertFalse(activateAppMetrica(app, UUID.randomUUID().toString(), sessions = false, sdk))
+            assertTrue(sdk.calls.isEmpty())
+            assertEquals("keep", unrelated.readText())
+            assertFalse(File(privateRoot, "pf_appmetrica_account_context_removed").exists())
+        }
+    }
+
+    @Test
     fun `account lifecycle events do not gain account context`() {
         val sdk = RecordingGateway()
         val runtime = AppMetricaRuntime(enabled = true, sdk)
@@ -247,7 +287,7 @@ class AppMetricaTelemetryTest {
             listOf(
                 "statements.upload.interrupted" to params,
                 "auth.logged_out" to emptyMap(),
-                "statements.upload.failed" to emptyMap(),
+                "statements.upload.failed" to mapOf("code" to "unknown"),
                 "analytics.block.exposed" to mapOf("block" to "unknown", "exp" to "analytics_order:b"),
                 "analytics.block.exposed" to mapOf("block" to "tiles"),
             ),
