@@ -45,6 +45,7 @@ tags:
     element:
       id: "analytics.tile.daily.help"
     direction: UP
+    centerElement: true
 - assertNotVisible:
     id: "analytics.tile.daily.help.popup"
 - assertNotVisible:
@@ -58,6 +59,7 @@ tags:
     element:
       id: "analytics.block.balance.help"
     direction: DOWN
+    centerElement: true
 - tapOn:
     id: "analytics.block.balance.help"
 - assertVisible:
