@@ -15,10 +15,17 @@ tags:
     visible:
       id: "analytics.tile.daily.help.popup"
     timeout: 15000
-- runFlow:
-    file: ../../subflows/config.yaml
-    env:
-      LINK: "pfe2e://config?analytics_help=onboarding"
+- pressKey: HOME
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "analytics.screen"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.tile.daily.help.popup"
+- assertNotVisible:
+    id: "analytics.block.balance.help.popup"
 - tapOn:
     id: "ds.tab.operations"
 - extendedWaitUntil:
