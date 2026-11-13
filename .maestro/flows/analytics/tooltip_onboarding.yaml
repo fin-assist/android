@@ -24,8 +24,8 @@ tags:
     visible:
       id: "analytics.block.balance.help.popup"
     timeout: 15000
-- assertVisible:
-    id: "analytics.block.balance.help"
+# The focused popup hides the underlying window from UI Automator; its tag is tied to the balance icon.
+- assertVisible: "Доходов за период нет"
 - back
 - tapOn:
     id: "ds.tab.operations"
