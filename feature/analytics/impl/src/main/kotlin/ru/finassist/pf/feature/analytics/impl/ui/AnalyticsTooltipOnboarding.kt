@@ -28,7 +28,7 @@ internal fun AnalyticsTooltipOnboarding(
     val controller = remember(owner) { TooltipOnboarding() }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val suppressed = LocalSuppressPopups.current || state.hint != null || state.sheet != null
-    val responseOrder = remember(blocks) { responseOrder(blocks) }
+    val responseOrder = remember(blocks) { tooltipResponseOrder(blocks) }
     if (owner != null && claim != null && !suppressed) {
         LaunchedEffect(controller, lifecycle, responseOrder) {
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -41,7 +41,7 @@ internal fun AnalyticsTooltipOnboarding(
     CompositionLocalProvider(LocalTooltipOnboarding provides controller, content = content)
 }
 
-private fun responseOrder(blocks: List<PreparedBlock>): List<List<String>> = buildList {
+internal fun tooltipResponseOrder(blocks: List<PreparedBlock>): List<List<String>> = buildList {
     for (prepared in blocks) {
         val block = prepared.block
         val id = block.id?.takeIf { it.isNotBlank() } ?: continue
@@ -52,6 +52,8 @@ private fun responseOrder(blocks: List<PreparedBlock>): List<List<String>> = bui
             2 -> block.decode(TileGroupDataV2.serializer())?.groups.orEmpty().flatMap { it.tiles }
             else -> emptyList()
         }
-        tiles.forEach { add(listOf(id, it.id)) }
+        for (tile in tiles) {
+            if (tile.id.isNotBlank()) add(listOf(id, tile.id))
+        }
     }
 }

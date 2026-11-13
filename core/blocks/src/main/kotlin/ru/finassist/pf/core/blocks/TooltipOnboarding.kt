@@ -1,7 +1,5 @@
 package ru.finassist.pf.core.blocks
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.getValue
@@ -12,9 +10,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 
 /** Screen-local queue for the same anchors and popup used by manual help. */
-@OptIn(ExperimentalFoundationApi::class)
 class TooltipOnboarding {
-    internal data class Anchor(val order: Int, val requester: BringIntoViewRequester)
+    internal class Anchor(val order: Int, val reveal: suspend () -> Unit)
 
     internal val anchors = mutableStateMapOf<List<String>, Anchor>()
     internal var current by mutableStateOf<List<String>?>(null)
@@ -34,7 +31,7 @@ class TooltipOnboarding {
         try {
             for ((key, anchor) in sequence) {
                 if (anchors[key] !== anchor) continue
-                anchor.requester.bringIntoView()
+                anchor.reveal()
                 if (anchors[key] !== anchor) continue
                 current = key
                 snapshotFlow { current == key && anchors[key] === anchor }.first { showing -> !showing }

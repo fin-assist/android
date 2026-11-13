@@ -68,7 +68,7 @@ internal fun HelpPopupButton(
     val requester = remember { BringIntoViewRequester() }
     if (onboarding != null && key != null && order != null) {
         DisposableEffect(onboarding, key, order, requester) {
-            val anchor = TooltipOnboarding.Anchor(order, requester)
+            val anchor = TooltipOnboarding.Anchor(order) { requester.bringIntoView() }
             onboarding.anchors[key] = anchor
             onDispose { if (onboarding.anchors[key] === anchor) onboarding.anchors.remove(key) }
         }

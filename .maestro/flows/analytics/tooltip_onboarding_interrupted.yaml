@@ -15,9 +15,22 @@ tags:
     visible:
       id: "analytics.tile.daily.help.popup"
     timeout: 15000
-- pressKey: HOME
-- launchApp:
-    stopApp: false
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?lock_app=true"
+- extendedWaitUntil:
+    visible:
+      id: "applock.unlock"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.tile.daily.help.popup"
+- assertNotVisible:
+    id: "analytics.block.balance.help.popup"
+- runFlow:
+    file: ../../subflows/enter_code.yaml
+    env:
+      CODE: "1234"
 - extendedWaitUntil:
     visible:
       id: "analytics.screen"
