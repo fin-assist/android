@@ -27,6 +27,8 @@ tags:
 # The focused popup hides the underlying window from UI Automator; its tag is tied to the balance icon.
 - assertVisible: "Доходов за период нет"
 - back
+- assertVisible:
+    id: "analytics.block.balance.help"
 - tapOn:
     id: "ds.tab.operations"
 - extendedWaitUntil:
