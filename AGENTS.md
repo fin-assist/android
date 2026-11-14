@@ -72,7 +72,7 @@ multiplied:
 | `mock` | in-process fake (`:mock:backend`) | `toggles-local` (`app/src/mock/assets/flags.json`) / logcat / AppMetrica diagnostics with a key | `.mock` |
 | `local` | bank-bff on the developer's machine: `pf.apiBaseUrl` (Gradle property or `PF_API_BASE_URL`), default `http://10.0.2.2:8080/` (emulator → host; `LocalBackend` in build-logic) | `toggles-local` (optional, gitignored `app/src/local/assets/flags.json`) / logcat / off — nothing reaches production consoles | `.local`, «Понятные финансы local» |
 | `stage` | `https://stage.plainfin.ru/`, real HTTP/SSE client | RuStore Remote Config / AppMetrica events and diagnostics, only with separate `pf.stage…` keys; otherwise code defaults / SDKs off | `.stage`, «Понятные финансы stage» |
-| `prod` | `API_BASE_URL` (placeholder until there is a server); certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | RuStore Remote Config / AppMetrica events and diagnostics with a key | no suffix |
+| `prod` | `https://api.plainfin.ru/`; certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | RuStore Remote Config / AppMetrica events and diagnostics with a key | no suffix |
 
 `stage` follows `prod`, with isolated SDK properties and optional `pf.stageApiPins` / `pf.stageApiPinsExpiration`.
 Production keys and pins never serve as a fallback for stage. Plain HTTP only in `localDebug`: its network security config
