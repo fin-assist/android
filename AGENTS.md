@@ -26,7 +26,8 @@ orientation map: read it first, then open only the files the task touches.
 - Version 0.2 (API, mockups, docs) is crystallized; every change goes through a YouTrack issue (`FIN-<n>`,
   finassist.youtrack.cloud) and is referenced in the PR. Release notes live in Confluence.
 - The deployed backend stage is `https://stage.plainfin.ru/` (FIN-149/385): `stage` talks to its real Go services
-  with fake-phone/fake-LLM. `mock` stays in-process; `local` targets a developer backend; `prod` has a placeholder URL.
+  with fake-phone/fake-LLM. `mock` stays in-process; `local` targets a developer backend; `prod` uses
+  `https://api.plainfin.ru/` (FIN-121).
 - Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) +
   the latest decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
 - API extensibility (decision of 13.10.2026): the contract grows by addition and keeps `deprecated` for
