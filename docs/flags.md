@@ -1,7 +1,7 @@
 # Feature flags registry
 
 Source of truth for flag names. Code defaults live in `core/toggles` (`Flag` enum, `defaultValue`); the provider
-(RuStore Remote Config in `prod`/`stage`, JSON asset in `mock` and `local`) may override them. Unknown or unreachable provider →
+(Varioqub in `prod`/`stage`, JSON asset in `mock` and `local`) may override them. Unknown or unreachable provider →
 code default. Values are read at the screen boundary (when a screen is entered), not mid-screen.
 
 Flags by flavor (FIN-120):
@@ -10,20 +10,19 @@ Flags by flavor (FIN-120):
   `app/src/mockE2e/assets/flags.json` and the control link).
 - `local` — `:providers:toggles-local`: code defaults; a developer may put their own `app/src/local/assets/flags.json`
   (gitignored, same format as in `mock`). No debug screen yet: the e2e control link is mock-only.
-- `stage` — `:providers:toggles-rustore`, only `pf.stageRustoreRemoteConfigAppId`; blank → code defaults.
-  Production Remote Config properties never supply stage configuration.
-- `prod` — `:providers:toggles-rustore`: RuStore Remote Config over code defaults.
+- `stage` — `:providers:toggles-varioqub`, only `pf.stageVarioqubAppId`; blank → code defaults.
+  Stage uses a separate AppMetrica project.
+- `prod` — `:providers:toggles-varioqub`: Varioqub over code defaults.
 
-Why `local` has local flags and not RuStore: whoever runs a local bank-bff should not depend on the RuStore console
-or its keys, nor read flags meant for real users; and a `local` build stays out of production configs and cohorts
-(it has no RuStore app id). The cost: Remote Config itself is not exercised in `local` — that is for `prod` and `stage` (with its separate app id).
+The local flags let developers work against a local bank-bff without a console or credentials. The stage
+app uses its own Varioqub project to verify remote configuration.
 
 Naming: `<feature>.<object>[.<detail>]`, lowercase, dot-separated. Same prefix is used for analytics events
 (`<feature>.<object>.<action>`), see `core/tracking`.
 
 | Flag | Default | What `false` does |
 |---|---|---|
-| `auth.registration` | `true` | New phone number after the call: instead of the consent screen, "Регистрация пока закрыта". Existing users still sign in. In `mock` the only "existing" number is the one in the mock config, and `app/src/mock/assets/flags.json` sets this flag to `false` (only that number signs in). The code default stays `true` on purpose: with RuStore unreachable and no cached config, registration is open (decision 06.10.2026). |
+| `auth.registration` | `true` | New phone number after the call: instead of the consent screen, "Регистрация пока закрыта". Existing users still sign in. In `mock` the only "existing" number is the one in the mock config, and `app/src/mock/assets/flags.json` sets this flag to `false` (only that number signs in). The code default stays `true` on purpose: with Varioqub unreachable and no cached config, registration is open (decision 06.10.2026). |
 | `analytics.block.tiles` | `true` | Hides the tiles block (expense, income, balance, daily expense, forecast) |
 | `analytics.block.expense_categories` | `true` | Hides "Расходы по категориям" and the "Все категории" screen for expenses |
 | `analytics.block.income_categories` | `true` | Hides "Доходы по категориям" |
@@ -48,8 +47,7 @@ together with the last of its blocks.
 
 ## Experiments
 
-Variants of experiments over server-composed screens (FIN-9): a string under the key in the same provider (RuStore
-Remote Config); registry — `Experiment` in `core/toggles`. The client sends the variant with the request (api.md 6.1
+Variants of experiments over server-composed screens (FIN-9): a string under the key in the same provider (Varioqub); registry — `Experiment` in `core/toggles`. The client sends the variant with the request (api.md 6.1
 `exp=key:variant`) because the server composes the screen, and reports an exposure when a block is actually drawn
 (`analytics.block.exposed` with `block` and `exp`), not when the config arrives. A value outside the list is the
 default (first) variant. In `mock` the provider has no variants: the default one is in effect.
@@ -80,15 +78,20 @@ has none.
 3. Read it with `FeatureFlags.isEnabled(Flag.X)` at the screen boundary (view model init or `FeatureEntry`).
 4. Run `python3 scripts/agent-docs.py --write` to refresh the flags block in `AGENTS.md`.
 
-## Known limitation: account switch and RuStore cache
+## Varioqub setup and refresh (FIN-514)
 
-RuStore Remote Config serves its persisted config and syncs in the background (default interval 15 minutes).
-After sign-in, sign-out or an account switch the provider asks for the config with the new `account`, but the
-SDK may still answer from the cache fetched for the previous identity until its next sync. Toggles keyed by
-user cohort can therefore lag up to one sync interval after an account change. If that matters for an
-experiment, switch the client to `UpdateBehaviour.Actual` (every request goes to the server; cold start then
-uses code defaults until the first answer).
+In each environment's AppMetrica project, publish the required values in Varioqub → Flag configuration. Use
+the keys above and strings `true` or `false` for switches. Copy any active non-default values, including
+`app.min_version`, before releasing an APK that uses Varioqub. Check both projects independently.
 
+The app activates cached values on startup and tries to fetch when it enters the foreground and every 15
+minutes while in use. A successful fetch is applied immediately so a changed minimum version can take effect.
+Failed fetches leave the last applied values in place. The app supplies neither client features nor an account
+ID. If AppMetrica is active, its adapter uses the technical device ID and UUID. Otherwise flags still work
+with the config-only adapter.
+
+The provider reads all known keys when updating its snapshot. A Varioqub test counts as triggered when its
+flag is read by the SDK. Use the app's `analytics.block.exposed` event to measure actual display on Analytics.
 
 FIN-397: MainLayer owns `AssistantAvailabilityPolicy` in its ViewModelStore. Its initial flag value survives
 configuration recreation and is shared by the bar and every Chat/Consent guard through

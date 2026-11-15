@@ -10,7 +10,7 @@ import ru.finassist.pf.providers.telemetry.appmetrica.AppMetricaTracker
 import javax.inject.Named
 
 /**
- * Flavor `prod`: real HTTP client (`:core:network`), RuStore Remote Config, AppMetrica
+ * Flavor `prod`: real HTTP client (`:core:network`), Varioqub, AppMetrica
  * (`:providers:*`). Keys come from BuildConfig; blank keys keep the SDKs off (local builds).
  */
 @Module
@@ -22,8 +22,8 @@ object ProdModule {
     @Provides @Named("httpLogging")
     fun httpLogging(): Boolean = BuildConfig.DEBUG
 
-    @Provides @Named("rustoreRemoteConfigAppId")
-    fun rustoreAppId(): String = BuildConfig.RUSTORE_REMOTE_CONFIG_APP_ID
+    @Provides @Named("varioqubAppId")
+    fun varioqubAppId(): String = BuildConfig.VARIOQUB_APP_ID
 
     @Provides
     fun tracker(impl: AppMetricaTracker): Tracker = impl

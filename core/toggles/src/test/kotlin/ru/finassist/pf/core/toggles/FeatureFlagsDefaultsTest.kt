@@ -11,7 +11,6 @@ class FeatureFlagsDefaultsTest {
         override fun isEnabled(flag: Flag) = flag.defaultValue
         override val changes = emptyFlow<Unit>()
         override val version = FLAGS_VERSION_DEFAULTS
-        override suspend fun setUser(userId: String?) = Unit
         override suspend fun refresh() = Unit
     }
 

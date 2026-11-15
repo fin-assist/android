@@ -333,7 +333,7 @@ jobs:
             ./gradlew generateStageDebugBuildConfig processStageDebugManifest \
               generateStageReleaseBuildConfig processStageReleaseManifest --no-daemon \
               -Ppf.apiBaseUrl=http://unrelated.invalid:8080/ \
-              -Ppf.rustoreRemoteConfigAppId=production-sentinel \
+              -Ppf.varioqubAppId=production-sentinel \
               -Ppf.appMetricaApiKey=production-sentinel &&
             python3 scripts/check-build-separation.py stage-default \
               "$m/stageDebug/processStageDebugManifest/AndroidManifest.xml" \

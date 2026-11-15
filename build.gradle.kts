@@ -84,7 +84,7 @@ val e2eCoverageModules: List<Project> = subprojects.filter {
     it.buildFile.exists() &&
         it.path !in setOf(
             ":core:screenshot-testing", ":core:network",
-            ":providers:toggles-rustore", ":providers:telemetry-appmetrica",
+            ":providers:toggles-varioqub", ":providers:telemetry-appmetrica",
         )
 }
 

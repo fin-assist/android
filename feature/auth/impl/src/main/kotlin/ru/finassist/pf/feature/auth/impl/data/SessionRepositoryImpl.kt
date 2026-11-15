@@ -20,7 +20,6 @@ import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.common.error.AppError
-import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.tracking.Breadcrumb
 import ru.finassist.pf.core.tracking.CrashReporter
 import ru.finassist.pf.core.tracking.Events
@@ -38,7 +37,6 @@ class SessionRepositoryImpl @Inject constructor(
     private val tokenStore: TokenStore,
     private val authApi: AuthApi,
     private val profileApi: ProfileApi,
-    private val flags: FeatureFlags,
     private val tracker: Tracker,
     private val crashReporter: CrashReporter,
     private val dataStore: DataStore<Preferences>,
@@ -76,6 +74,12 @@ class SessionRepositoryImpl @Inject constructor(
             var signedInUser: String? = null
             tokenStore.session.collect { s ->
                 val signedIn = s != null && s.userId.isNotEmpty()
+                val ownedBy = if (s == null) ownSignOut.getAndSet(null) else null
+                if (signedInUser != null && s == null) {
+                    // Not ours: the network layer dropped the session (refresh rejected).
+                    if (ownedBy != signedInUser) signOutReason.compareAndSet(null, AuthRoutes.Phone.REASON_EXPIRED)
+                }
+                signedInUser = if (signedIn) s!!.userId else null
                 // Breadcrumb (logcat in mock, crash context in prod): `PfApp` switches graphs on this value, so a
                 // screen that does not move after `auth.verified` can be told apart from a session that never emitted (FIN-63).
                 crashReporter.breadcrumb(
@@ -87,25 +91,12 @@ class SessionRepositoryImpl @Inject constructor(
                         },
                     ),
                 )
-                val ownedBy = if (s == null) ownSignOut.getAndSet(null) else null
-                if (signedInUser != null && s == null) {
-                    // Not ours: the network layer dropped the session (refresh rejected).
-                    if (ownedBy != signedInUser) signOutReason.compareAndSet(null, AuthRoutes.Phone.REASON_EXPIRED)
-                    // Ours too: a slow targeting update from this collector can finish after [clearLocalNow].
-                    flags.setUser(null)
-                }
-                if (signedInUser == null && signedIn) {
-                    // Restore flag targeting on a cold start with an existing session.
-                    // The profile time zone is kept by the profile feature's `TimeZoneSync` (FIN-91).
-                    flags.setUser(s!!.userId)
-                }
-                signedInUser = if (signedIn) s!!.userId else null
             }
         }
     }
 
     /**
-     * Called after `verified` / `register`: persists tokens and applies the account to flag targeting.
+     * Called after `verified` / `register`: persists the signed-in session.
      * The `verified` event of an existing user carries no `user_id` (api.md 1.2), so it is read from the
      * profile right after the tokens are stored. The one-time sign-in state ([SignInFlow]) is dropped before
      * the final session is saved: a later sign-in with the same number must not reuse a spent request key.
@@ -129,7 +120,6 @@ class SessionRepositoryImpl @Inject constructor(
         // but a sign-in that fails on the way (the profile request, the save itself) leaves no session, and the
         // observer may still be due the earlier sign-out's `null`: without the mark it would read as an expiry.
         ownSignOut.set(null)
-        flags.setUser(id)
         tracker.track(if (registered) Events.AUTH_REGISTERED else Events.AUTH_VERIFIED)
     }
 
@@ -165,7 +155,6 @@ class SessionRepositoryImpl @Inject constructor(
             throw e
         }
         dataStore.edit { it.remove(KEY_PENDING_FIRST_UPLOAD) }
-        flags.setUser(null)
     }
 
     /**

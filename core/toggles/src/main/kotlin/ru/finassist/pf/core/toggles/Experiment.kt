@@ -1,8 +1,7 @@
 package ru.finassist.pf.core.toggles
 
 /**
- * Experiments over server-composed screens (FIN-9): the variant comes from the same provider as the flags (RuStore
- * Remote Config, a string under [key]) and goes to the server with the request (api.md 6.1 `exp`) — the server
+ * Experiments over server-composed screens (FIN-9): the variant comes from the same provider as the flags (Varioqub, a string under [key]) and goes to the server with the request (api.md 6.1 `exp`) — the server
  * composes the screen, so it has to know the variant. A value outside [variants] is [defaultVariant]. Registry of keys:
  * docs/flags.md, «Experiments».
  */
