@@ -21,7 +21,9 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -30,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.toggles.Experiment
 import ru.finassist.pf.core.toggles.FLAGS_VERSION_DEFAULTS
 import ru.finassist.pf.core.toggles.FeatureFlags
@@ -56,10 +59,7 @@ internal class VarioqubFeatureFlags(private val client: ConfigClient?) : Feature
         if (client != null) {
             CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
                 ProcessLifecycleOwner.get().lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    while (isActive) {
-                        refresh()
-                        delay(REFRESH_INTERVAL)
-                    }
+                    refreshInForeground()
                 }
             }
         }
@@ -82,11 +82,19 @@ internal class VarioqubFeatureFlags(private val client: ConfigClient?) : Feature
 
     override val loaded: Boolean get() = client == null || config != null
 
+    internal suspend fun refreshInForeground() {
+        while (currentCoroutineContext().isActive) {
+            // The SDK keeps the request running when the app moves to the background. Publish its result as well,
+            // especially when a successful empty config removes the last minimum version.
+            withContext(NonCancellable) { refresh() }
+            delay(REFRESH_INTERVAL)
+        }
+    }
+
     override suspend fun refresh() {
         val client = client ?: return
         updates.withLock {
             try {
-                // Also picks up a download that finished after the previous foreground scope was cancelled.
                 apply(client, fetched = false)
                 if (client.fetch()) apply(client, fetched = true)
             } catch (e: CancellationException) {

@@ -1,5 +1,7 @@
 package ru.finassist.pf.providers.toggles.varioqub
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -88,8 +90,32 @@ class VarioqubFeatureFlagsTest {
         assertEquals("b", flags.variant(Experiment.ANALYTICS_ORDER))
     }
 
+    @Test fun `moving to the background while fetching still applies a successful empty config`() = runTest {
+        val client = TestClient(mapOf(RemoteValue.APP_MIN_VERSION.key to "0.3.0"))
+        val loading = CompletableDeferred<Unit>()
+        val complete = CompletableDeferred<Unit>()
+        client.beforeFetch = {
+            loading.complete(Unit)
+            complete.await()
+        }
+        client.response = emptyMap()
+        val flags = VarioqubFeatureFlags(client)
+
+        val foreground = launch { flags.refreshInForeground() }
+        loading.await()
+        assertEquals("0.3.0", flags.value(RemoteValue.APP_MIN_VERSION))
+        foreground.cancel()
+
+        complete.complete(Unit)
+        foreground.join()
+
+        assertTrue(flags.loaded)
+        assertEquals(RemoteValue.APP_MIN_VERSION.defaultValue, flags.value(RemoteValue.APP_MIN_VERSION))
+    }
+
     private class TestClient(private var persisted: Map<String, String> = emptyMap()) : ConfigClient {
         var response: Map<String, String>? = null
+        var beforeFetch: suspend () -> Unit = {}
         private var active: Map<String, String> = emptyMap()
 
         override suspend fun activate(): Set<String> {
@@ -98,6 +124,7 @@ class VarioqubFeatureFlagsTest {
         }
 
         override suspend fun fetch(): Boolean {
+            beforeFetch()
             persisted = response ?: return false
             return true
         }
