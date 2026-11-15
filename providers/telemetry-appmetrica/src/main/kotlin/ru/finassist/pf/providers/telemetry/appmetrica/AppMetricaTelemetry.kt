@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
@@ -24,7 +25,7 @@ import javax.inject.Singleton
 
 @Singleton
 internal class AppMetricaRuntime(
-    private val enabled: Boolean,
+    val enabled: Boolean,
     private val gateway: AppMetricaGateway,
 ) {
     @Inject constructor(
@@ -129,4 +130,9 @@ private object SdkGateway : AppMetricaGateway {
 @InstallIn(SingletonComponent::class)
 internal abstract class AppMetricaModule {
     @Binds @IntoSet abstract fun crashReporter(impl: AppMetricaCrashReporter): CrashReporter
+
+    companion object {
+        @Provides @Named("appMetricaActive")
+        fun active(runtime: AppMetricaRuntime): Boolean = runtime.enabled
+    }
 }

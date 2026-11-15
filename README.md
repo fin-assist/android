@@ -9,7 +9,7 @@
 
 Kotlin 2.1, Jetpack Compose, Hilt (KSP), Navigation Compose (typed routes), OkHttp + Retrofit +
 kotlinx.serialization, OkHttp SSE, DataStore, Tink (refresh-токен под Android Keystore).
-Флаги — RuStore Remote Config. AppMetrica собирает продуктовые события в `stage` и `prod`, а также крэши, ANR и non-fatal в `mock`, `stage` и `prod` при заданном ключе.
+Флаги — Вариокуб. AppMetrica собирает продуктовые события в `stage` и `prod`, а также крэши, ANR и non-fatal в `mock`, `stage` и `prod` при заданном ключе.
 
 ## Структура
 
@@ -63,8 +63,7 @@ Flavor-ы — одно измерение `env` (FIN-120): `mock`, `local`, `sta
 
 HTTP без TLS разрешён только в `localDebug` и только к хосту из `pf.apiBaseUrl` (сгенерированный
 `network_security_config`); в `prod` и в любой release-сборке — запрещён. Флаги — локальные (код по умолчанию, свой
-`app/src/local/assets/flags.json` по желанию, в git не попадает; docs/flags.md), события — в logcat, AppMetrica и RuStore
-Remote Config выключены: локальные прогоны не попадают в продовые консоли.
+`app/src/local/assets/flags.json` по желанию, в git не попадает; docs/flags.md), события — в logcat, AppMetrica и Вариокуб выключены: локальные прогоны не попадают в продовые консоли.
 
 ### Flavor `stage`
 
@@ -93,7 +92,7 @@ SDK выключены без stage-ключей; флаги тогда беру
 
 | Свойство | Переменная окружения |
 |---|---|
-| `pf.stageRustoreRemoteConfigAppId` | `PF_STAGE_RUSTORE_REMOTE_CONFIG_APP_ID` |
+| `pf.stageVarioqubAppId` | `PF_STAGE_VARIOQUB_APP_ID` |
 | `pf.stageAppMetricaApiKey` | `PF_STAGE_APP_METRICA_API_KEY` |
 
 Не подставляй ключи production-консолей в эти свойства. Stage использует собственное приложение AppMetrica.
@@ -136,13 +135,13 @@ Gradle 8.11 не запускается на JDK 25, а Android Studio 2026.x п
 
 ### Flavor `prod`
 
-Настоящий HTTP-клиент, флаги из RuStore Remote Config, аналитика и диагностика в AppMetrica.
+Настоящий HTTP-клиент, флаги из Вариокуба, аналитика и диагностика в AppMetrica.
 Ключи SDK задаются в `~/.gradle/gradle.properties` или через переменные окружения сборки. При пустом ключе
-AppMetrica не активируется. Без ключа RuStore используются значения по умолчанию из `Flag`.
+AppMetrica не активируется. Без ID приложения Вариокуба используются значения по умолчанию из кода.
 
 | Свойство | Переменная окружения | Назначение |
 |---|---|---|
-| `pf.rustoreRemoteConfigAppId` | `PF_RUSTORE_REMOTE_CONFIG_APP_ID` | ID приложения в RuStore Remote Config |
+| `pf.varioqubAppId` | `PF_VARIOQUB_APP_ID` | Числовой ID приложения prod в AppMetrica |
 | `pf.appMetricaApiKey` | `PF_APP_METRICA_API_KEY` | API-ключ SDK приложения AppMetrica для prod |
 | `pf.stageAppMetricaApiKey` | `PF_STAGE_APP_METRICA_API_KEY` | API-ключ отдельного приложения для stage |
 | `pf.mockAppMetricaApiKey` | `PF_MOCK_APP_METRICA_API_KEY` | API-ключ отдельного приложения для mock-альфы |
@@ -170,8 +169,10 @@ SDK собирает базовые технические данные об у�
 и смены аккаунта. Для обновления установи предыдущую сборку с тем же тестовым ключом, создай синтетическую сессию
 и очередь без сети, затем установи новую сборку поверх неё и проверь доставку только новых отчётов.
 
-Ключи флагов в консоли RuStore — как в `docs/flags.md` (булевы значения). Таргетинг и AB — по `account`
-(наш `user_id` после входа).
+В AppMetrica → Вариокуб → «Конфиг флагов» опубликуй нужные значения из `docs/flags.md` отдельно для stage
+и prod. Булевы флаги задаются строками `true` и `false`. Для A/B используются технические идентификаторы SDK.
+Android не передаёт Вариокубу ID аккаунта и клиентские признаки. Проверь применение опубликованного
+значения в stage, включая запуск без сети, прежде чем выпустить сборку с новой конфигурацией.
 
 ## UI-автотесты
 

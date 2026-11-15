@@ -71,8 +71,8 @@ multiplied:
 |---|---|---|---|
 | `mock` | in-process fake (`:mock:backend`) | `toggles-local` (`app/src/mock/assets/flags.json`) / logcat / AppMetrica diagnostics with a key | `.mock` |
 | `local` | bank-bff on the developer's machine: `pf.apiBaseUrl` (Gradle property or `PF_API_BASE_URL`), default `http://10.0.2.2:8080/` (emulator → host; `LocalBackend` in build-logic) | `toggles-local` (optional, gitignored `app/src/local/assets/flags.json`) / logcat / off — nothing reaches production consoles | `.local`, «Понятные финансы local» |
-| `stage` | `https://stage.plainfin.ru/`, real HTTP/SSE client | RuStore Remote Config / AppMetrica events and diagnostics, only with separate `pf.stage…` keys; otherwise code defaults / SDKs off | `.stage`, «Понятные финансы stage» |
-| `prod` | `API_BASE_URL` (placeholder until there is a server); certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | RuStore Remote Config / AppMetrica events and diagnostics with a key | no suffix |
+| `stage` | `https://stage.plainfin.ru/`, real HTTP/SSE client | Varioqub / AppMetrica events and diagnostics, only with separate `pf.stage…` keys; otherwise code defaults / SDKs off | `.stage`, «Понятные финансы stage» |
+| `prod` | `API_BASE_URL` (placeholder until there is a server); certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | Varioqub / AppMetrica events and diagnostics with a key | no suffix |
 
 `stage` follows `prod`, with isolated SDK properties and optional `pf.stageApiPins` / `pf.stageApiPinsExpiration`.
 Production keys and pins never serve as a fallback for stage. Plain HTTP only in `localDebug`: its network security config
@@ -124,7 +124,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:core:tracking` | `pf.jvm.library` | unit |
 | `:providers:telemetry-appmetrica` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:toggles-local` | `pf.android.library`, `pf.hilt` | unit |
-| `:providers:toggles-rustore` | `pf.android.library`, `pf.hilt` | unit |
+| `:providers:toggles-varioqub` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:tracking-log` | `pf.android.library`, `pf.hilt` | - |
 | `:mock:backend` | `pf.android.library`, `pf.hilt` | unit |
 | `:feature:analytics:api` | `pf.feature.api` | - |
@@ -583,7 +583,7 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
   (AppMetrica), analytics events, Remote Config parameters, exception messages, clipboard, notifications, files in
   shared storage. AppMetrica product events accept only declared technical parameters. Keep account, API request,
   sign-in session and consent evidence IDs out of analytics and crash reporting. Keep AppMetrica identifiers out
-  of the app's API, logs, consent records and support messages. RuStore Remote Config account targeting is independent.
+  of the app's API, logs, consent records and support messages. Keep account IDs out of Varioqub client features and configuration requests.
 - Secrets: auth tokens, the passcode and keys are stored encrypted with a Keystore-backed key (as the passcode in
   `feature/applock`), never in plain preferences, files, `BuildConfig`, resources or source; no real keys or tokens
   in the repository.

@@ -561,7 +561,6 @@ class AnalyticsReliabilityComponentTest {
         override fun isEnabled(flag: Flag) = flag != Flag.ASSISTANT && flag.defaultValue
         override fun variant(experiment: Experiment) = experiment.defaultVariant
         override val version = "pilot"
-        override suspend fun setUser(userId: String?) = Unit
         override suspend fun refresh() = Unit
     }
     private object NoTracking : Tracker {

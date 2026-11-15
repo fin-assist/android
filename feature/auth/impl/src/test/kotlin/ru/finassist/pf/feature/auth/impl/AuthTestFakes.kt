@@ -140,16 +140,10 @@ class RecordingTracker(private val log: Log) : Tracker {
     }
 }
 
-class RecordingFlags(private val log: Log, private val values: Map<Flag, Boolean> = emptyMap()) : FeatureFlags {
+class RecordingFlags(private val values: Map<Flag, Boolean> = emptyMap()) : FeatureFlags {
     override fun isEnabled(flag: Flag): Boolean = values[flag] ?: flag.defaultValue
     override val changes: Flow<Unit> = emptyFlow()
     override val version: String = "test"
-    /** Suspends inside [setUser] before it is recorded — lets a test hold an identity change half-way. */
-    @Volatile var beforeSetUser: suspend (String?) -> Unit = {}
-    override suspend fun setUser(userId: String?) {
-        beforeSetUser(userId)
-        log += "flags.user:$userId"
-    }
     override suspend fun refresh() = Unit
 }
 
@@ -170,13 +164,13 @@ class SessionHarness(
     val auth = FakeAuthApi(log)
     val profile = FakeProfileApi(log)
     val tracker = RecordingTracker(log)
-    val flags = RecordingFlags(log, flagValues)
+    val flags = RecordingFlags(flagValues)
     val crash = RecordingCrashReporter()
     val flow = SignInFlow()
     private val dir: File = createTempDirectory("session").toFile()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val dataStore: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") }
-    val repo = SessionRepositoryImpl(tokens, auth, profile, flags, tracker, crash, dataStore, flow, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
+    val repo = SessionRepositoryImpl(tokens, auth, profile, tracker, crash, dataStore, flow, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
 
     fun close() {
         scope.cancel()
