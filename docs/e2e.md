@@ -780,7 +780,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | Flow | Checks |
 |---|---|
 | `refresh/server_data` | pull-to-refresh on the feed, operation details, empty search, selected analytics month, profile, upload history, unread lines and an assistant draft; offline retains data/query/period, online clears the failure; after a failed Year switch, failed/successful Month pulls and current-read Retry preserve Month and its separate target notice, then only the Year Retry changes the period; a history read never asks or retries a question (Qase70, FIN-399); authored, not executed |
-| `auth/register_new_user` (smoke) | empty mock history prepared through UI before registration; independent 14+/PD before phone → new number → create account without another consent → passcode → first upload offers «Скачать за год» and reachable «Загружу позже» → result → feed (Qase2, FIN-365, FIN-416/427) |
+| `auth/register_new_user` (smoke) | empty mock history prepared through UI before registration; independent 14+/PD before phone → new number → standalone «Политика конфиденциальности», no terms/acceptance text → create account without another consent → passcode → first upload offers «Скачать за год» and reachable «Загружу позже» → result → feed (Qase2, FIN-365, FIN-416/427/519) |
 | `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the main tabs (Qase1, FIN-365) |
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
 | `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains confirmations; repeated confirm_phone keeps both checked and input enabled (Qase57, FIN-365, FIN-375) |
@@ -875,6 +875,13 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
 | native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
 | native `StatementPickerTest` | login button opens exactly `https://tbank-online.com/login` in an intercepted ACTION_VIEW (FIN-395; Qase16), then upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
+| native `StatementPickerTest#opensPrivacyPolicyBeforeRegistration` | standalone policy link before account creation opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; no terms/acceptance text or second consent checkbox; returning to registration still allows creation (Qase2, FIN-519/520) |
+| native `StatementPickerTest#opensPrivacyPolicyFromUploadNotice` | «Как мы защищаем данные» in the upload notice opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; the upload guide remains available after returning (Qase14, FIN-520) |
+
+FIN-519/520: Qase2 and Qase14 each require their Maestro journey and the corresponding native privacy-link
+companion above. Maestro verifies the visible flow; Espresso-Intents verifies the actual external destination
+without depending on a browser or the published site's availability. A missing component is not a passed case.
+The release-build HTTPS/content check of the published policy remains separate from these intercepted intents.
 
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
@@ -919,9 +926,9 @@ options, final-only text, recomposition and lifecycle/resource cleanup. `ChatVie
 bounds and no automatic Ask; `ChatDesignCheckTest` retains existing panel-state fixtures.
 Biometrics (needs an enrolled
 fingerprint), custom date ranges in search,
-links inside a sentence — the registration terms and privacy policy, «Как мы защищаем данные», «разобрать» and
-«Подробнее» on the import result, «Подробнее» on «Аналитика» (a link inside a text node has no own view or
-resource id for Maestro to tap, and the first three open an external browser the flow cannot check).
+links inside a sentence — «разобрать» and «Подробнее» on the import result, «Подробнее» on «Аналитика»
+(a link inside a text node has no own view or resource id for Maestro to tap). The registration and upload
+privacy-policy destinations are covered by the native Qase2/14 companions above.
 The server's own check of the phone number (400 `VALIDATION_ERROR` at `phone`, FIN-68) cannot be reached either:
 the app sends only `+7` and 10 digits, the very rule the server checks, so neither a real build nor the mock gets
 that error; `PhoneViewModelTest` covers the branch, `auth/phone_validation` the app's own check of a short number.

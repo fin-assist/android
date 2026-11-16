@@ -45,8 +45,6 @@ import ru.finassist.pf.core.common.LegalLinks
 import ru.finassist.pf.core.designsystem.components.ButtonVariant
 import ru.finassist.pf.core.designsystem.components.HeroTone
 import ru.finassist.pf.core.designsystem.components.NoticeTone
-import ru.finassist.pf.core.designsystem.components.PfLinkedText
-import ru.finassist.pf.core.designsystem.components.TextPart
 import ru.finassist.pf.core.designsystem.components.PfButton
 import ru.finassist.pf.core.designsystem.components.PfCard
 import ru.finassist.pf.core.designsystem.components.PfCheckbox
@@ -381,14 +379,10 @@ internal fun ConsentContent(
                     busyText = "Создаём…",
                     modifier = Modifier.testTag(AuthTags.CONSENT_SUBMIT),
                 )
-                PfLinkedText(
-                    listOf(
-                        TextPart.Plain("Нажимая «Создать аккаунт», вы принимаете "),
-                        TextPart.Link("условия использования", AuthTags.CONSENT_TERMS) { onOpenDocument(LegalLinks.TERMS) },
-                        TextPart.Plain(" и "),
-                        TextPart.Link("политику конфиденциальности", AuthTags.CONSENT_PRIVACY) { onOpenDocument(LegalLinks.PRIVACY) },
-                    ),
-                    modifier = Modifier.padding(top = PfTheme.dimens.space3),
+                PfLink(
+                    "Политика конфиденциальности",
+                    onClick = { onOpenDocument(LegalLinks.PRIVACY) },
+                    modifier = Modifier.padding(top = PfTheme.dimens.space3).testTag(AuthTags.CONSENT_PRIVACY),
                 )
                 Spacer(Modifier.windowInsetsPadding(PfInsets.navigationBars))
             }
@@ -445,7 +439,6 @@ internal object AuthTags {
     const val CONSENT = "auth.consent"
     const val CONSENT_CHECKBOX = "auth.consent.checkbox"
     const val CONSENT_SUBMIT = "auth.consent.submit"
-    const val CONSENT_TERMS = "auth.consent.terms"
     const val CONSENT_PRIVACY = "auth.consent.privacy"
     const val CLOSED = "auth.closed"
     const val CLOSED_BACK = "auth.closed.back"

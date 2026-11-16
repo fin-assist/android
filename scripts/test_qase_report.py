@@ -332,7 +332,13 @@ class CaseMapTest(unittest.TestCase):
         for key, case_id in self.cases.items():
             by_case.setdefault(case_id, set()).add(key)
         duplicates = {case_id: keys for case_id, keys in by_case.items() if len(keys) > 1}
-        expected = {17: {
+        expected = {2: {
+            ".maestro/flows/auth/register_new_user.yaml",
+            "ru.finassist.pf.StatementPickerTest#opensPrivacyPolicyBeforeRegistration",
+        }, 14: {
+            ".maestro/flows/statements/upload_and_history.yaml",
+            "ru.finassist.pf.StatementPickerTest#opensPrivacyPolicyFromUploadNotice",
+        }, 17: {
             ".maestro/flows/profile/theme_and_logout.yaml",
             "ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette",
         }, 84: {
