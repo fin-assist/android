@@ -4,6 +4,31 @@
   ],
   "packageRules": [
     {
+      "description": "FIN-504: batch ordinary updates in the weekly window",
+      "matchPackageNames": [
+        "!androidx.**",
+        "!org.jetbrains.compose**",
+        "!org.jetbrains.kotlin.plugin.compose**",
+        "!org.jetbrains.kotlin:compose-compiler-gradle-plugin"
+      ],
+      "matchDepNames": [
+        "!org.jetbrains.kotlin:kotlin-gradle-plugin",
+        "!org.jetbrains.kotlin:kotlin-test",
+        "!org.jetbrains.kotlin.android",
+        "!org.jetbrains.kotlin.jvm",
+        "!org.jetbrains.kotlin.plugin.serialization"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "weekly dependencies",
+      "groupSlug": "weekly-dependencies"
+    },
+    {
       "description": "FIN-184: a new AndroidX line can pull Compose UI and lifecycle past the Compose BOM, and CI on a PR does not catch it; the stack moves as one PR, checked with a UI tests run",
       "matchPackageNames": [
         "androidx.compose:compose-bom",
@@ -33,6 +58,47 @@
         "org.jetbrains.kotlin:compose-compiler-gradle-plugin"
       ],
       "automerge": false
+    },
+    {
+      "description": "FIN-525: update the shared Kotlin catalog version with the Compose compiler in one manual PR",
+      "matchDepNames": [
+        "org.jetbrains.kotlin:kotlin-gradle-plugin",
+        "org.jetbrains.kotlin:kotlin-test",
+        "org.jetbrains.kotlin.android",
+        "org.jetbrains.kotlin.jvm",
+        "org.jetbrains.kotlin.plugin.serialization",
+        "org.jetbrains.kotlin.plugin.compose",
+        "org.jetbrains.kotlin:compose-compiler-gradle-plugin"
+      ],
+      "groupName": "Kotlin Compose compiler",
+      "matchJsonata": [
+        "$not(isVulnerabilityAlert = true)"
+      ],
+      "groupSingleUpdates": true,
+      "separateMajorMinor": false,
+      "automerge": false
+    },
+    {
+      "description": "Go compiler and toolchain updates remain manual",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "golang",
+        "toolchain"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Go toolchains in reusable workflows and container images remain manual",
+      "matchPackageNames": [
+        "actions/go-versions",
+        "golang",
+        "library/golang",
+        "docker.io/library/golang",
+        "golang/go"
+      ],
+      "enabled": false
     }
   ]
 }
