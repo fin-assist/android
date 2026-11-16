@@ -6,6 +6,14 @@
   ],
   "automerge": false,
   "dependencyDashboard": true,
+  "timezone": "Europe/Moscow",
+  "schedule": [
+    "* 0-8 * * 1"
+  ],
+  "updateNotScheduled": false,
+  "baseBranchPatterns": [
+    "main"
+  ],
   "prBodyNotes": [
     "<!-- fin211-update {{{encodeBase64 (toJSON (toObject 'depName' depName 'packageName' packageName 'newValue' newValue 'datasource' datasource 'newDigest' newDigest 'newMajor' newMajor))}}} -->"
   ],

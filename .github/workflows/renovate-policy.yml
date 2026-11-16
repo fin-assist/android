@@ -1,20 +1,26 @@
 name: Renovate policy controller
 on:
   workflow_run:
-    workflows: [CI, ci, Renovate policy tests]
+    workflows: [CI, Renovate policy tests]
     types: [completed]
+    branches: ['renovate/**']
   schedule:
-    - cron: '17,47 * * * *'
+    - cron: '17 6 * * 1'
   workflow_dispatch:
 permissions:
   contents: read
   checks: read
 concurrency:
   group: renovate-policy-controller
-  cancel-in-progress: false
+  queue: max
 jobs:
   gate:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.event == 'pull_request' &&
+        github.event.workflow_run.actor.id == 29139614 &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
     permissions: {}
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -24,7 +30,18 @@ jobs:
       - id: activation
         env:
           RENOVATE_POLICY_ENABLED: ${{ vars.RENOVATE_POLICY_ENABLED }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
+          # POSIX cron fires every Monday. Run reconciliation every 14 days
+          # from a fixed UTC Monday, independent of ISO week/year boundaries.
+          if [ "$EVENT_NAME" = schedule ]; then
+            epoch_monday=345600
+            days_since_monday=$(( ($(date -u +%s) - epoch_monday) / 86400 ))
+            if [ "$((days_since_monday / 7 % 2))" -ne 0 ]; then
+              printf 'enabled=false\n' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
           if [ "$RENOVATE_POLICY_ENABLED" = true ]; then
             echo 'enabled=true' >> "$GITHUB_OUTPUT"
           else
@@ -46,7 +63,7 @@ jobs:
         with:
           python-version: '3.15'
       - name: Reconcile Renovate PRs
-        uses: fin-assist/renovate-actions/.github/actions/renovate-policy@72556b3dc2557bfce2594f97181ae2d0b3dd832e # main
+        uses: fin-assist/renovate-actions/.github/actions/renovate-policy@161673500392c3ef38b128a85004d409a6356ae6 # main
         with:
           enabled: ${{ needs.gate.outputs.enabled }}
           repository-root: ${{ github.workspace }}
