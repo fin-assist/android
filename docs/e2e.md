@@ -882,6 +882,12 @@ FIN-519/520: Qase2 and Qase14 each require their Maestro journey and the corresp
 companion above. Maestro verifies the visible flow; Espresso-Intents verifies the actual external destination
 without depending on a browser or the published site's availability. A missing component is not a passed case.
 The release-build HTTPS/content check of the published policy remains separate from these intercepted intents.
+Local verification on 2026-11-16 used Maestro 2.11.0 and API 34/google_apis/x86_64, Pixel 6 (1080×2400, 420 dpi).
+The changed registration flow passed (185.156 s) and saved `registration_policy.png`. Both new native methods
+passed: upload in the first attempt (61.534 s), registration in a focused second attempt (39.940 s).
+The first registration attempt failed before reaching the changed screen: `auth.phone.document` was not ready
+within the existing 60 s setup deadline. That attempt is retained; no assertion or timeout was weakened.
+The unchanged Qase14 Maestro journey was not rerun, so this does not claim a complete new Qase14 acceptance.
 
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)

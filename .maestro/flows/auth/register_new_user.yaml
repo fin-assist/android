@@ -69,6 +69,7 @@ tags:
     text: "Политика конфиденциальности"
     childOf:
       id: "auth.consent.privacy"
+- takeScreenshot: registration_policy
 - scrollUntilVisible:
     element:
       id: "auth.consent.submit"
