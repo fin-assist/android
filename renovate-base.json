@@ -11,6 +11,13 @@
         "!org.jetbrains.kotlin.plugin.compose**",
         "!org.jetbrains.kotlin:compose-compiler-gradle-plugin"
       ],
+      "matchDepNames": [
+        "!org.jetbrains.kotlin:kotlin-gradle-plugin",
+        "!org.jetbrains.kotlin:kotlin-test",
+        "!org.jetbrains.kotlin.android",
+        "!org.jetbrains.kotlin.jvm",
+        "!org.jetbrains.kotlin.plugin.serialization"
+      ],
       "matchUpdateTypes": [
         "minor",
         "patch",
@@ -50,6 +57,25 @@
         "org.jetbrains.kotlin.plugin.compose**",
         "org.jetbrains.kotlin:compose-compiler-gradle-plugin"
       ],
+      "automerge": false
+    },
+    {
+      "description": "FIN-525: update the shared Kotlin catalog version with the Compose compiler in one manual PR",
+      "matchDepNames": [
+        "org.jetbrains.kotlin:kotlin-gradle-plugin",
+        "org.jetbrains.kotlin:kotlin-test",
+        "org.jetbrains.kotlin.android",
+        "org.jetbrains.kotlin.jvm",
+        "org.jetbrains.kotlin.plugin.serialization",
+        "org.jetbrains.kotlin.plugin.compose",
+        "org.jetbrains.kotlin:compose-compiler-gradle-plugin"
+      ],
+      "groupName": "Kotlin Compose compiler",
+      "matchJsonata": [
+        "$not(isVulnerabilityAlert = true)"
+      ],
+      "groupSingleUpdates": true,
+      "separateMajorMinor": false,
       "automerge": false
     },
     {
