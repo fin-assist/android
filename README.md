@@ -188,7 +188,7 @@ Android не передаёт Вариокубу ID аккаунта и клие
 
 ## Автоматизация обновлений зависимостей
 
-[Политика Renovate](docs/renovate-policy.md) (FIN-211): одна актуальная release/main, автомерж полностью ботских PR после обязательного CI, один повтор красного CI и закрытие с явным повтором через Dependency Dashboard. AndroidX/Compose остаются на ручной проверке. Исходные группировки, ограничения версий и расписания — `renovate-base.json`; generated target и quarantine — ветка `renovate-policy`. Активация требует отдельного токена и строгой защиты веток; по умолчанию выключена.
+[Политика Renovate](docs/renovate-policy.md) (FIN-211): цель `main`, одна пачка обычных обновлений в понедельник до 09:00 МСК, security-обновления вне окна и один автоматический повтор красных проверок. AndroidX/Compose остаются на ручной проверке. Исходные группировки, ограничения версий и расписания — `renovate-base.json`; generated target и quarantine — ветка `renovate-policy`. Активация требует отдельного токена и строгой защиты веток; по умолчанию выключена.
 
 FIN-499: код контроллера и его регрессии закреплены полным SHA публичного `fin-assist/renovate-actions`; локальные config/runtime lock и состояния сохраняются. Команды pinned source и bootstrap с явным consumer root — в [политике Renovate](docs/renovate-policy.md).
 
