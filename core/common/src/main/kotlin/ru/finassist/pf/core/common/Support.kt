@@ -6,11 +6,9 @@ object Support {
 }
 
 /**
- * Public documents of the service (FIN-40): the registration footer links to them, the upload screen's privacy
- * notice links to the privacy policy. The contract has no such documents (`ConsentType` covers only the consents),
- * so the addresses are constants of the app; they open in the browser.
+ * Public privacy policy linked from the registration footer and the upload screen's privacy notice.
+ * The contract covers consent documents separately, so the policy address is an app constant opened in the browser.
  */
 object LegalLinks {
-    const val TERMS = "https://plainfin.ru/terms"
-    const val PRIVACY = "https://plainfin.ru/privacy"
+    const val PRIVACY = "https://documents.plainfin.ru/privacy"
 }
