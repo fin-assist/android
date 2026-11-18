@@ -94,15 +94,15 @@ date, JaCoCo probes; the native tests run on it (docs/e2e.md).
 | Component | Version |
 |---|---|
 | Gradle | 8.11.1 |
-| agp | 8.9.1 |
+| agp | 8.10.1 |
 | kotlin | 2.1.20 |
 | ksp | 2.1.20-1.0.32 |
 | hilt | 2.56.1 |
 | composeBom | 2025.03.01 |
 | navigationCompose | 2.8.9 |
-| compileSdk | 35 |
+| compileSdk | 36 |
 | minSdk | 26 |
-| targetSdk | 35 |
+| targetSdk | 36 |
 <!-- generated:stack:end -->
 
 JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Java 17.

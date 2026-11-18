@@ -23,6 +23,7 @@ Prerequisites: an emulator or device with `adb`, [Maestro](https://maestro.dev) 
 (use the version pinned in the UI workflow, currently2.11.0), JDK21. Set the emulator time zone to Europe/Moscow
 (Settings → System → Date & time, or `-timezone Europe/Moscow` when starting it).
 
+Both Maestro and native emulator jobs run on Android 16 (API 36, FIN-533).
 To reproduce a CI failure locally, use `MAESTRO_VERSION` and the `AVD_API`, `AVD_TARGET`, `AVD_ARCH`
 and `AVD_PROFILE` values from `.github/workflows/e2e.yml`, with animations disabled as in that workflow.
 Record the actual CLI, image and viewport in the result. Use an absolute path with `--flow`: the runner
@@ -167,8 +168,8 @@ do not establish a substantial or stable total UI speedup.
 ### Optional clean AVD snapshot cache (FIN-378)
 
 
-Only a manual run with `avd_cache=true` enables this experimental path. Each shard job restores an independent writable copy of one clean Android API 34 / google_apis / x86_64 /
-Pixel 6 AVD. A cache miss creates a fresh AVD, boots Android, checks that no FinAssist app or test APK is installed,
+Only a manual run with `avd_cache=true` enables this experimental path. Each shard job restores an independent writable copy of one clean AVD matching the workflow's image and device profile.
+A cache miss creates a fresh AVD, boots Android, checks that no FinAssist app or test APK is installed,
 and explicitly saves the named `clean` snapshot. This happens before `e2e.sh` installs anything, signs in or imports
 financial fixtures. The action shuts down the emulator; the helper waits for its process to exit and verifies the
 snapshot files before `actions/cache/save` uploads the pristine device. Only that AVD directory, its `.ini`, and a generated disposable CI adb key pair/provenance receipt are
