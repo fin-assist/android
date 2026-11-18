@@ -167,7 +167,6 @@ class AnalyticsViewModelTest {
         override fun isEnabled(flag: Flag): Boolean = values[flag] ?: flag.defaultValue
         override fun variant(experiment: Experiment): String = variants[experiment] ?: experiment.defaultVariant
         override val version: String = "test"
-        override suspend fun setUser(userId: String?) = Unit
         override suspend fun refresh() = Unit
         fun set(flag: Flag, on: Boolean) {
             values[flag] = on

@@ -60,6 +60,16 @@ tags:
     timeout: 15000
 - assertNotVisible:
     id: "auth.consent.checkbox"
+- assertNotVisible: ".*условия использования.*"
+- assertNotVisible: ".*вы принимаете.*"
+- scrollUntilVisible:
+    element:
+      id: "auth.consent.privacy"
+- assertVisible:
+    text: "Политика конфиденциальности"
+    childOf:
+      id: "auth.consent.privacy"
+- takeScreenshot: registration_policy
 - scrollUntilVisible:
     element:
       id: "auth.consent.submit"

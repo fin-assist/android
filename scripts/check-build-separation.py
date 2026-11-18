@@ -163,7 +163,7 @@ def stage_default_problems(manifest_xml: str, build_config_java: str) -> list[st
         problems.append("stage API_BASE_URL must be https://stage.plainfin.ru/")
     expected = {
         "APPLICATION_ID": '"ru.finassist.pf.stage"',
-        "RUSTORE_REMOTE_CONFIG_APP_ID": '""',
+        "VARIOQUB_APP_ID": '""',
         "APPMETRICA_API_KEY": '""',
         "APPMETRICA_SESSIONS": "true",
         "E2E_NOW": '""',

@@ -30,7 +30,7 @@ class MockModulesTest {
         val root = component(
             project(":"),
             component(project(":core:network"), component(external("com.squareup.retrofit2:retrofit"))),
-            component(project(":providers:toggles-rustore")),
+            component(project(":providers:toggles-varioqub")),
         )
         assertEquals(emptySet<String>(), mockModules(root))
     }

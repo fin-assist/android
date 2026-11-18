@@ -37,7 +37,7 @@ import javax.inject.Singleton
 /**
  * Flags for the `mock` flavor: `assets/flags.json` (`{"assistant": false}`) overridden by values set from the
  * debug screen (DataStore). Mirrors the provider contract: values are snapshotted, [changes] fires when the
- * overrides read from the store change and on [refresh], [setUser] is a no-op.
+ * overrides read from the store change and on [refresh].
  */
 @Singleton
 class LocalFeatureFlags @Inject constructor(
@@ -84,7 +84,6 @@ class LocalFeatureFlags @Inject constructor(
     override val version: String
         get() = flagsVersion((assetValues + overrideValues).mapKeys { it.key.key })
 
-    override suspend fun setUser(userId: String?) = Unit
 
     /** Re-reads the asset; [changes] fires unconditionally, as a remote provider's fetch would. */
     override suspend fun refresh() {

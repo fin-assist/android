@@ -15,6 +15,9 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -92,6 +95,35 @@ class StatementPickerTest {
     }
 
     @Test
+    fun opensPrivacyPolicyBeforeRegistration() {
+        startSignIn(NEW_PHONE)
+        compose.waitForTag("auth.consent", timeoutMs = 30_000)
+        compose.onNodeWithText("условия использования", substring = true, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("вы принимаете", substring = true, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("auth.consent.checkbox").assertDoesNotExist()
+        intending(hasAction(Intent.ACTION_VIEW)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null))
+        compose.onNodeWithTag("auth.consent.privacy").performScrollTo()
+            .assertTextEquals("Политика конфиденциальности").performClick()
+        intended(allOf(hasAction(Intent.ACTION_VIEW), hasData(PRIVACY_URL)))
+        compose.onNodeWithTag("auth.consent").assertIsDisplayed()
+        compose.onNodeWithTag("auth.consent.submit").performScrollTo().performClick()
+        compose.waitForTag("applock.setup", timeoutMs = 30_000)
+    }
+
+    @Test
+    fun opensPrivacyPolicyFromUploadNotice() {
+        signInWithExistingAccount()
+        compose.onNodeWithTag("operations.feed.upload_new").performClick()
+        compose.waitForTag("statements.upload.pick")
+        intending(hasAction(Intent.ACTION_VIEW)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null))
+        val privacyNotice = "Операции видите только вы. Удалить загрузку или аккаунт — в профиле. Как мы защищаем данные"
+        compose.onNodeWithText(privacyNotice).performScrollTo().assertIsDisplayed()
+        compose.onNode(hasClickAction() and hasAnyAncestor(hasText(privacyNotice)), useUnmergedTree = true).performClick()
+        intended(allOf(hasAction(Intent.ACTION_VIEW), hasData(PRIVACY_URL)))
+        compose.onNodeWithTag("statements.upload").assertIsDisplayed()
+    }
+
+    @Test
     fun opensTheServerUrlForSelectedInclusiveDates() {
         signInWithExistingAccount()
         compose.onNodeWithTag("operations.feed.upload_new").performClick()
@@ -150,24 +182,9 @@ class StatementPickerTest {
     }
 
     private fun signInWithExistingAccount() {
-        compose.waitForTag("auth.phone.document", timeoutMs = DOCUMENT_READY_MS)
-        compose.onNodeWithTag("auth.phone.age").performScrollTo().assertIsOff()
-        compose.onNodeWithTag("auth.phone.consent").performScrollTo().assertIsOff()
-        compose.onNodeWithTag("auth.phone.age").performScrollTo().performClick()
-        compose.onNodeWithTag("auth.phone.consent").performScrollTo().performClick()
-        compose.waitForTag("auth.phone.input")
-        compose.onNodeWithTag("auth.phone.input").performScrollTo().performTextInput(EXISTING_PHONE)
-        // Submit through the keyboard's «Готово» (the same `onSubmit` as «Продолжить»), not a click: typing focuses
-        // the field, the keyboard slides in and the sign-in screen (`imePadding`) moves the button up with it. A click
-        // computed during that animation lands where the button was and is dropped — FIN-63, run 38304375031: the
-        // number was never sent. An IME action has no coordinates.
-        compose.onNodeWithTag("auth.phone.input").performImeAction()
-        // Step 1: the number is accepted — the call screen, or already the passcode setup if the mock «received the
-        // call» between two polls. A miss here is the submit, not the session switch below.
+        startSignIn(EXISTING_PHONE)
+        // FIN-88 fixed the session subscription race; do not recover by recreating the activity.
         compose.waitUntilTagged("auth.call", "applock.setup", timeoutMs = 10_000)
-        // Step 2: the mock «receives the call» after a few seconds, then asks for a new passcode twice.
-        // FIN-88 fixed the session subscription race. A regression must fail with diagnostics, not recover by
-        // recreating the activity (the temporary FIN-63 workaround).
         compose.waitForTag("applock.setup", timeoutMs = 30_000)
         enterCode()
         compose.waitForTag("applock.setup.repeat")
@@ -177,6 +194,21 @@ class StatementPickerTest {
         }
         compose.waitForTag("operations.feed.upload_new", timeoutMs = 30_000)
         compose.onNodeWithTag("operations.feed").assertIsDisplayed()
+    }
+
+    private fun startSignIn(phone: String) {
+        compose.waitForTag("auth.phone.document", timeoutMs = DOCUMENT_READY_MS)
+        compose.onNodeWithTag("auth.phone.age").performScrollTo().assertIsOff()
+        compose.onNodeWithTag("auth.phone.consent").performScrollTo().assertIsOff()
+        compose.onNodeWithTag("auth.phone.age").performScrollTo().performClick()
+        compose.onNodeWithTag("auth.phone.consent").performScrollTo().performClick()
+        compose.waitForTag("auth.phone.input")
+        compose.onNodeWithTag("auth.phone.input").performScrollTo().performTextInput(phone)
+        // Submit through the keyboard's «Готово» (the same `onSubmit` as «Продолжить»), not a click: typing focuses
+        // the field, the keyboard slides in and the sign-in screen (`imePadding`) moves the button up with it. A click
+        // computed during that animation lands where the button was and is dropped — FIN-63, run 38304375031: the
+        // number was never sent. An IME action has no coordinates.
+        compose.onNodeWithTag("auth.phone.input").performImeAction()
     }
 
     private fun enterCode() = PASSCODE.forEach { d -> compose.onNodeWithTag("ds.numpad.$d").performClick() }
@@ -277,6 +309,8 @@ class StatementPickerTest {
         const val DOCUMENT_READY_MS = 60_000L
         /** `MockConfig.existingPhone` without +7. */
         const val EXISTING_PHONE = "9161234567"
+        const val NEW_PHONE = "9001112233"
+        const val PRIVACY_URL = "https://documents.plainfin.ru/privacy"
         const val PASSCODE = "1234"
     }
 }

@@ -155,7 +155,6 @@ class LocalFeatureFlagsTest {
     fun `refresh rereads the asset and fires changes, setUser does nothing`() = runBlocking {
         val flags = flags()
         flags.changes.test {
-            flags.setUser("user_1")
             expectNoEvents()
             flags.refresh()
             awaitItem()
