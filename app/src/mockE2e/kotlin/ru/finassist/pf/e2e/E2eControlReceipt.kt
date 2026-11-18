@@ -2,6 +2,7 @@ package ru.finassist.pf.e2e
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -12,7 +13,7 @@ import ru.finassist.pf.core.designsystem.components.pfTestRoot
 /** A persistent mockE2e receipt: observing success and acknowledging it are separate actions. */
 @Composable
 internal fun E2eControlReceipt(unmet: String?, canContinue: Boolean, onAcknowledge: () -> Unit) {
-    Column(Modifier.fillMaxSize().pfTestRoot()) {
+    Column(Modifier.fillMaxSize().safeDrawingPadding().pfTestRoot()) {
         if (unmet == null) {
             Text("pfe2e: applied", Modifier.testTag(E2eControlActivity.TAG_APPLIED))
             Button(onClick = onAcknowledge, enabled = canContinue, modifier = Modifier.testTag("e2e.config.continue")) {
