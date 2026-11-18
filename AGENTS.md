@@ -26,7 +26,8 @@ orientation map: read it first, then open only the files the task touches.
 - Version 0.2 (API, mockups, docs) is crystallized; every change goes through a YouTrack issue (`FIN-<n>`,
   finassist.youtrack.cloud) and is referenced in the PR. Release notes live in Confluence.
 - The deployed backend stage is `https://stage.plainfin.ru/` (FIN-149/385): `stage` talks to its real Go services
-  with fake-phone/fake-LLM. `mock` stays in-process; `local` targets a developer backend; `prod` has a placeholder URL.
+  with fake-phone/fake-LLM. `mock` stays in-process; `local` targets a developer backend; `prod` uses
+  `https://api.plainfin.ru/` (FIN-121).
 - Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) +
   the latest decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
 - API extensibility (decision of 13.10.2026): the contract grows by addition and keeps `deprecated` for
@@ -72,7 +73,7 @@ multiplied:
 | `mock` | in-process fake (`:mock:backend`) | `toggles-local` (`app/src/mock/assets/flags.json`) / logcat / AppMetrica diagnostics with a key | `.mock` |
 | `local` | bank-bff on the developer's machine: `pf.apiBaseUrl` (Gradle property or `PF_API_BASE_URL`), default `http://10.0.2.2:8080/` (emulator → host; `LocalBackend` in build-logic) | `toggles-local` (optional, gitignored `app/src/local/assets/flags.json`) / logcat / off — nothing reaches production consoles | `.local`, «Понятные финансы local» |
 | `stage` | `https://stage.plainfin.ru/`, real HTTP/SSE client | Varioqub / AppMetrica events and diagnostics, only with separate `pf.stage…` keys; otherwise code defaults / SDKs off | `.stage`, «Понятные финансы stage» |
-| `prod` | `API_BASE_URL` (placeholder until there is a server); certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | Varioqub / AppMetrica events and diagnostics with a key | no suffix |
+| `prod` | `https://api.plainfin.ru/`; certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | Varioqub / AppMetrica events and diagnostics with a key | no suffix |
 
 `stage` follows `prod`, with isolated SDK properties and optional `pf.stageApiPins` / `pf.stageApiPinsExpiration`.
 Production keys and pins never serve as a fallback for stage. Plain HTTP only in `localDebug`: its network security config

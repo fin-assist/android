@@ -23,8 +23,7 @@ val localNetworkSecurityConfig = tasks.register<GenerateNetworkSecurityConfig>("
     config.set(LocalBackend.networkSecurityConfig(localBackend))
 }
 
-// Production API. A placeholder until there is a server (AGENTS.md «Flavors»).
-val prodBaseUrl = "https://api.example.ru/"
+val prodBaseUrl = "https://api.plainfin.ru/"
 val stageBaseUrl = "https://stage.plainfin.ru/"
 
 // Certificate pinning (FIN-121, ApiPins): `pf.apiPins` + `pf.apiPinsExpiration` (or PF_API_PINS and
