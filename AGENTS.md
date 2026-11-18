@@ -94,15 +94,15 @@ date, JaCoCo probes; the native tests run on it (docs/e2e.md).
 | Component | Version |
 |---|---|
 | Gradle | 8.11.1 |
-| agp | 8.9.1 |
+| agp | 8.10.1 |
 | kotlin | 2.1.20 |
 | ksp | 2.1.20-1.0.32 |
 | hilt | 2.56.1 |
 | composeBom | 2025.03.01 |
 | navigationCompose | 2.8.9 |
-| compileSdk | 35 |
+| compileSdk | 36 |
 | minSdk | 26 |
-| targetSdk | 35 |
+| targetSdk | 36 |
 <!-- generated:stack:end -->
 
 JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Java 17.
@@ -455,14 +455,19 @@ commands: `docs/testing.md`.
 ## Workflow
 
 - Branches: `<kind>/<slug>` — `fix/…`, `feature/…`, `tooling/…`, `design-check/…` (historically `stage-N/…`).
-  `release/<version>` (`release/0.2.5`) is the release branch of a version, cut from `main`; CI runs on pushes to it.
+  `release/<version>` (`release/0.2.5`) is the release branch of a version; CI runs on pushes to it. Cut it
+  from the current release branch when the next version should include its changes, or from `main`. The
+  previous release does not have to be merged first. Match `appVersionName` to the new branch name.
   Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
-- A PR targets the current release branch — the newest `release/<version>` not yet merged into `main` — not `main`;
-  the owner merges the release branch into `main` with its own PR. When every release branch is already merged, target
-  `main`. A release branch counts as merged only when both hold: a merged PR from it into `main` exists
+- A PR targets the current release branch — the newest `release/<version>` whose head has not been included in a
+  release merged into `main`. The owner merges the release branch into `main` with its own PR. When no active release
+  branch remains, target `main`. A release branch is directly merged only when both hold: a merged PR from it into `main` exists
   (`gh api 'repos/fin-assist/android/pulls?state=closed&base=main&head=fin-assist:release/<version>'`, an entry with
   `merged_at`) and `git merge-base --is-ancestor origin/release/<version> origin/main` exits 0. The ancestor check
   alone is not enough: a branch just cut from `main` points at the same commit and passes it.
+  An older release branch also stops being a PR target when its current head is an ancestor of both `origin/main` and
+  the recorded head SHA of a merged PR from a higher-version release branch into `main`. Use the merged PR's head SHA,
+  not the newer branch's current tip: only commits included in that release count. Fetch missing history before checking.
   Fetch both refs first, with explicit refspecs (a single-branch or shallow clone has no `origin/release/*`):
   `git fetch --depth=500 origin '+refs/heads/main:refs/remotes/origin/main'
   '+refs/heads/release/*:refs/remotes/origin/release/*'` (no `--depth` in a full clone). Exit 1 means «not an
