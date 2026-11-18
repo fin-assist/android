@@ -455,7 +455,9 @@ commands: `docs/testing.md`.
 ## Workflow
 
 - Branches: `<kind>/<slug>` — `fix/…`, `feature/…`, `tooling/…`, `design-check/…` (historically `stage-N/…`).
-  `release/<version>` (`release/0.2.5`) is the release branch of a version, cut from `main`; CI runs on pushes to it.
+  `release/<version>` (`release/0.2.5`) is the release branch of a version; CI runs on pushes to it. Cut it
+  from the current release branch when the next version should include its changes, or from `main`. The
+  previous release does not have to be merged first. Match `appVersionName` to the new branch name.
   Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
 - A PR targets the current release branch — the newest `release/<version>` not yet merged into `main` — not `main`;
   the owner merges the release branch into `main` with its own PR. When every release branch is already merged, target
