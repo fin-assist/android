@@ -1,12 +1,12 @@
 [versions]
 # Build
-agp = "8.9.1"
+agp = "8.10.1"
 kotlin = "2.1.20"
 ksp = "2.1.20-1.0.32"
 hilt = "2.56.1"
-compileSdk = "35"
+compileSdk = "36"
 minSdk = "26"
-targetSdk = "35"
+targetSdk = "36"
 
 # AndroidX
 coreKtx = "1.15.0"
@@ -28,7 +28,7 @@ okhttp = "4.12.1"
 retrofit = "3.0.0"
 
 # Prod SDKs (stage 8)
-rustoreRemoteConfig = "10.5.2"
+varioqub = "0.10.0"
 appmetrica = "8.6.0"
 appmetrica-plugin = "2.1.0"
 # Crashes and ANR (both flavors); the Gradle plugin uploads R8 mappings
@@ -73,7 +73,8 @@ androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navig
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
-rustore-remoteconfig = { group = "ru.rustore.sdk", name = "remoteconfig", version.ref = "rustoreRemoteConfig" }
+varioqub-config = { group = "com.yandex.varioqub", name = "config", version.ref = "varioqub" }
+varioqub-appmetrica-adapter = { group = "com.yandex.varioqub", name = "appmetrica-adapter", version.ref = "varioqub" }
 appmetrica-analytics = { group = "io.appmetrica.analytics", name = "analytics", version.ref = "appmetrica" }
 androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
 

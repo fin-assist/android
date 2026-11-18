@@ -19,7 +19,6 @@ class MinVersionCheckTest {
         override val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
         // Only strings in the config: the version of the defaults, whether or not it was read.
         override val version get() = FLAGS_VERSION_DEFAULTS
-        override suspend fun setUser(userId: String?) = Unit
         override suspend fun refresh() = Unit
         override fun value(key: RemoteValue) = if (key == RemoteValue.APP_MIN_VERSION) min else key.defaultValue
     }

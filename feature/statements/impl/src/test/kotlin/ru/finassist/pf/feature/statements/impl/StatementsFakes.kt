@@ -62,7 +62,6 @@ internal class RecordingTracker : Tracker {
     override fun track(event: Event, params: Map<String, String>) {
         synchronized(events) { events += event to params }
     }
-    override fun setUserId(userId: String?) = Unit
     fun names(): List<Event> = synchronized(events) { events.map { it.first } }
 }
 

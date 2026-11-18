@@ -110,6 +110,7 @@ data class AnalyticsUiState(
     val chartRetryReady: Boolean = true,
     val chartHasOlder: Boolean = false,
     val chartHasNewer: Boolean = false,
+    val owner: RequestOwner? = null,
 ) {
     val periodChangeFailed: Boolean get() = periodChangeErrorPresentation != null
 }
@@ -239,7 +240,7 @@ class AnalyticsViewModel @Inject constructor(
                 importPollRevision = null
                 importPolls = 0
                 recalculationPolls = 0
-                _state.value = AnalyticsUiState(blocks = readBlocks(flags))
+                _state.value = AnalyticsUiState(blocks = readBlocks(flags), owner = next)
                 if (initialized && next != null) load()
             }
         }
@@ -440,6 +441,9 @@ class AnalyticsViewModel @Inject constructor(
                 }
                 if (pendingImport != null && !recalculating) statements.analyticsImportReady(pendingImport)
                 if (generation != loadGeneration) return@launch
+                val showImportHint = !recalculating && a.hasData && _state.value.hint == null &&
+                    statements.consumeFirstImportHints()
+                if (generation != loadGeneration) return@launch
                 importPolls = 0
                 // A pull refresh reads the shown period; its result cannot retire another target's refusal.
                 if (!preservePeriodChangeFailure) clearPeriodChangeFailure()
@@ -467,12 +471,9 @@ class AnalyticsViewModel @Inject constructor(
                 }
                 _state.update { it.copy(loading = displayed == null && !expired && !snapshots.freezesUnknownReads, offline = false, errorPresentation = null, sourceZoneUnsupported = false,
                     requestRetryable = null, preparationTimedOut = displayed == null && expired, data = displayed,
+                    hint = if (showImportHint) AnalyticsHint.CATEGORIES else it.hint,
                     recalculating = recalculating, recalculationPaused = expired || snapshots.freezesUnknownReads, response = it.response + if (newExposure) 1 else 0) }
                 updateUnknownMutationNotice()
-                if (!recalculating && a.hasData && _state.value.hint == null && statements.consumeFirstImportHints()) {
-                    if (generation != loadGeneration) return@launch
-                    _state.update { it.copy(hint = AnalyticsHint.CATEGORIES) }
-                }
                 if (generation != loadGeneration) return@launch
                 if (updateLimit && _state.value.blocks.assistant) refreshLimit()
                 // The server is still recalculating after an edit: ask again shortly (api.md 6.1 `recalculating`).

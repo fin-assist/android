@@ -115,7 +115,6 @@ internal class FakeFlags(private val values: MutableMap<Flag, Boolean> = mutable
     override val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     override fun isEnabled(flag: Flag): Boolean = values[flag] ?: flag.defaultValue
     override val version: String = "test"
-    override suspend fun setUser(userId: String?) = Unit
     override suspend fun refresh() = Unit
 
     fun set(flag: Flag, on: Boolean) {
@@ -129,7 +128,6 @@ internal class FakeTracker : Tracker {
     override fun track(event: Event, params: Map<String, String>) {
         events += event to params
     }
-    override fun setUserId(userId: String?) = Unit
 
     fun names() = events.map { it.first.name }
 }

@@ -45,7 +45,6 @@ class AppLockStoreRaceTest {
 
     private val tracker = object : Tracker {
         override fun track(event: Event, params: Map<String, String>) = Unit
-        override fun setUserId(userId: String?) = Unit
     }
 
     private class SignedOutSession : SessionRepository {

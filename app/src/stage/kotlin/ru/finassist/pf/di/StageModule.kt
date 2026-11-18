@@ -19,8 +19,8 @@ object StageModule {
     @Provides @Named("httpLogging")
     fun httpLogging(): Boolean = BuildConfig.DEBUG
 
-    @Provides @Named("rustoreRemoteConfigAppId")
-    fun rustoreAppId(): String = BuildConfig.RUSTORE_REMOTE_CONFIG_APP_ID
+    @Provides @Named("varioqubAppId")
+    fun varioqubAppId(): String = BuildConfig.VARIOQUB_APP_ID
 
     @Provides
     fun tracker(impl: AppMetricaTracker): Tracker = impl

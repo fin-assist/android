@@ -9,7 +9,7 @@
 
 Kotlin 2.1, Jetpack Compose, Hilt (KSP), Navigation Compose (typed routes), OkHttp + Retrofit +
 kotlinx.serialization, OkHttp SSE, DataStore, Tink (refresh-токен под Android Keystore).
-Флаги — RuStore Remote Config. AppMetrica собирает продуктовые события в `stage` и `prod`, а также крэши, ANR и non-fatal в `mock`, `stage` и `prod` при заданном ключе.
+Флаги — Вариокуб. AppMetrica собирает продуктовые события в `stage` и `prod`, а также крэши, ANR и non-fatal в `mock`, `stage` и `prod` при заданном ключе.
 
 ## Структура
 
@@ -20,7 +20,8 @@ kotlinx.serialization, OkHttp SSE, DataStore, Tink (refresh-токен под An
 
 ## Сборка
 
-Требования: Android Studio (Ladybug или новее), JDK 21 для Gradle (см. ниже), Android SDK 35.
+Требования: Android Studio (Meerkat Feature Drop 2024.3.2 или новее), JDK 21 для Gradle (см. ниже),
+Android SDK Platform 36 (`platforms;android-36`). Приложение нацелено на Android 16 и поддерживает Android 8.0 (API 26) и новее.
 
 ```
 ./gradlew assembleMockDebug     # сборка без сервера и без ключей SDK
@@ -63,8 +64,7 @@ Flavor-ы — одно измерение `env` (FIN-120): `mock`, `local`, `sta
 
 HTTP без TLS разрешён только в `localDebug` и только к хосту из `pf.apiBaseUrl` (сгенерированный
 `network_security_config`); в `prod` и в любой release-сборке — запрещён. Флаги — локальные (код по умолчанию, свой
-`app/src/local/assets/flags.json` по желанию, в git не попадает; docs/flags.md), события — в logcat, AppMetrica и RuStore
-Remote Config выключены: локальные прогоны не попадают в продовые консоли.
+`app/src/local/assets/flags.json` по желанию, в git не попадает; docs/flags.md), события — в logcat, AppMetrica и Вариокуб выключены: локальные прогоны не попадают в продовые консоли.
 
 ### Flavor `stage`
 
@@ -93,7 +93,7 @@ SDK выключены без stage-ключей; флаги тогда беру
 
 | Свойство | Переменная окружения |
 |---|---|
-| `pf.stageRustoreRemoteConfigAppId` | `PF_STAGE_RUSTORE_REMOTE_CONFIG_APP_ID` |
+| `pf.stageVarioqubAppId` | `PF_STAGE_VARIOQUB_APP_ID` |
 | `pf.stageAppMetricaApiKey` | `PF_STAGE_APP_METRICA_API_KEY` |
 
 Не подставляй ключи production-консолей в эти свойства. Stage использует собственное приложение AppMetrica.
@@ -105,9 +105,9 @@ TLS проверяется системными CA Android; отключать �
 
 ### Закрепление сертификата в `prod`
 
-Решение и процесс ротации — Confluence PF, «Архитектура» → «Вход трафика» → «Закрепление сертификата API (pinning)»
-(FIN-121). Пока сертификата нет, пины не заданы и pinning выключен. Когда появится: в среде, где собирается релиз
-(`~/.gradle/gradle.properties` или секреты CI), задать
+Адрес production API — `https://api.plainfin.ru/`. Решение и процесс ротации — Confluence PF,
+«Архитектура» → «Вход трафика» → «Закрепление сертификата API (pinning)» (FIN-121). Для публичного релиза
+задайте оба свойства в среде сборки (`~/.gradle/gradle.properties` или секреты CI).
 
 ```
 pf.apiPins=sha256/<текущий ключ>,sha256/<резервный ключ>     # или PF_API_PINS
@@ -136,13 +136,13 @@ Gradle 8.11 не запускается на JDK 25, а Android Studio 2026.x п
 
 ### Flavor `prod`
 
-Настоящий HTTP-клиент, флаги из RuStore Remote Config, аналитика и диагностика в AppMetrica.
+Настоящий HTTP-клиент, флаги из Вариокуба, аналитика и диагностика в AppMetrica.
 Ключи SDK задаются в `~/.gradle/gradle.properties` или через переменные окружения сборки. При пустом ключе
-AppMetrica не активируется. Без ключа RuStore используются значения по умолчанию из `Flag`.
+AppMetrica не активируется. Без ID приложения Вариокуба используются значения по умолчанию из кода.
 
 | Свойство | Переменная окружения | Назначение |
 |---|---|---|
-| `pf.rustoreRemoteConfigAppId` | `PF_RUSTORE_REMOTE_CONFIG_APP_ID` | ID приложения в RuStore Remote Config |
+| `pf.varioqubAppId` | `PF_VARIOQUB_APP_ID` | Числовой ID приложения prod в AppMetrica |
 | `pf.appMetricaApiKey` | `PF_APP_METRICA_API_KEY` | API-ключ SDK приложения AppMetrica для prod |
 | `pf.stageAppMetricaApiKey` | `PF_STAGE_APP_METRICA_API_KEY` | API-ключ отдельного приложения для stage |
 | `pf.mockAppMetricaApiKey` | `PF_MOCK_APP_METRICA_API_KEY` | API-ключ отдельного приложения для mock-альфы |
@@ -150,20 +150,30 @@ AppMetrica не активируется. Без ключа RuStore исполь
 В `mock` продуктовые события пишутся в logcat, автоматические сессии AppMetrica отключены. В `local` и
 `mockE2e` SDK отсутствует. Из крэшей и non-fatal передаются тип, стек и безопасный код ошибки. В релизной
 сборке с ключом системный обработчик получает очищенное исключение для отчёта Android. Системный logcat может
-записать исходный текст до вызова этого обработчика. Для диагностики
-приложение добавляет `rc_ver`, последние шаги сессии и непрозрачный `user_id`, который очищается при выходе.
+записать исходный текст до вызова этого обработчика. Для диагностики приложение добавляет `rc_ver` и последние
+технические шаги сессии. AppMetrica получает только разрешённые параметры событий. Идентификатор аккаунта,
+телефон и идентификаторы запросов, сессий приложения и доказательств согласия в SDK не передаются.
 SDK собирает базовые технические данные об устройстве и установке. Геолокация устройства, рекламные идентификаторы,
 автосбор покупок и ссылки запуска отключены.
+
+При первом запуске с FIN-498 приложение очищает локальные базы отчётности AppMetrica 8.6.0, их старые копии
+и отложенные крэши до активации SDK. В очереди старой версии события могли уже содержать `ProfileID` и
+контекст ошибок. Изменение действует на локальные данные. История, ранее отправленная в AppMetrica, хранится
+отдельно на стороне сервиса.
 
 Для релизной сборки с ключом Gradle-плагин готовит `app/build/appmetrica/<variant>/result/mapping.zip`. Загрузи
 архив в соответствующее приложение AppMetrica через **Настройки → Крэши → Android**. Автоматическая загрузка
 потребовала бы отдельного Post API key. [Инструкция AppMetrica](https://appmetrica.yandex.ru/docs/ru/sdk/android/analytics/android-gradle-plugin)
 
 Перед выпуском проверь в отдельном приложении AppMetrica доставку одного события, non-fatal, крэша и ANR, а также
-наличие `rc_ver` и отсутствие `user_id` в новых отчётах после выхода.
+наличие `rc_ver` и отсутствие `user_id` и прикладного `ProfileID` в новых отчётах до и после входа, выхода
+и смены аккаунта. Для обновления установи предыдущую сборку с тем же тестовым ключом, создай синтетическую сессию
+и очередь без сети, затем установи новую сборку поверх неё и проверь доставку только новых отчётов.
 
-Ключи флагов в консоли RuStore — как в `docs/flags.md` (булевы значения). Таргетинг и AB — по `account`
-(наш `user_id` после входа).
+В AppMetrica → Вариокуб → «Конфиг флагов» опубликуй нужные значения из `docs/flags.md` отдельно для stage
+и prod. Булевы флаги задаются строками `true` и `false`. Для A/B используются технические идентификаторы SDK.
+Android не передаёт Вариокубу ID аккаунта и клиентские признаки. Проверь применение опубликованного
+значения в stage, включая запуск без сети, прежде чем выпустить сборку с новой конфигурацией.
 
 ## UI-автотесты
 
@@ -179,9 +189,9 @@ SDK собирает базовые технические данные об у�
 
 ## Автоматизация обновлений зависимостей
 
-[Политика Renovate](docs/renovate-policy.md) (FIN-211): одна актуальная release/main, автомерж полностью ботских PR после обязательного CI, один повтор красного CI и закрытие с явным повтором через Dependency Dashboard. AndroidX/Compose остаются на ручной проверке. Исходные группировки, ограничения версий и расписания — `renovate-base.json`; generated target и quarantine — ветка `renovate-policy`. Активация требует отдельного токена и строгой защиты веток; по умолчанию выключена.
+[Политика Renovate](docs/renovate-policy.md) (FIN-211): цель `main`, одна пачка обычных обновлений в понедельник до 09:00 МСК, security-обновления вне окна и один автоматический повтор красных проверок. AndroidX/Compose остаются на ручной проверке. Исходные группировки, ограничения версий и расписания — `renovate-base.json`; generated target и quarantine — ветка `renovate-policy`. Активация требует отдельного токена и строгой защиты веток; по умолчанию выключена.
 
-FIN-456: код контроллера и его регрессии подключены из immutable `fin-assist/go-ci`; локальные config/runtime lock и состояния сохраняются. Команды pinned source и bootstrap с явным consumer root — в [политике Renovate](docs/renovate-policy.md).
+FIN-499: код контроллера и его регрессии закреплены полным SHA публичного `fin-assist/renovate-actions`; локальные config/runtime lock и состояния сохраняются. Команды pinned source и bootstrap с явным consumer root — в [политике Renovate](docs/renovate-policy.md).
 
 ## Профильное ревью (FIN-421)
 

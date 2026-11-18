@@ -8,10 +8,12 @@ import ru.finassist.pf.core.api.model.ActionType
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockAction
 import ru.finassist.pf.core.api.model.BlockType
+import ru.finassist.pf.core.api.RequestOwner
 import ru.finassist.pf.core.blocks.BlockContext
 import ru.finassist.pf.core.blocks.BlockLayout
 import ru.finassist.pf.core.blocks.BlockTags
 import ru.finassist.pf.core.blocks.BlocksColumn
+import ru.finassist.pf.core.storage.TooltipOnboardingStore
 import ru.finassist.pf.core.blocks.PreparedBlock
 import ru.finassist.pf.core.blocks.GroupedTileRenderer
 import ru.finassist.pf.core.api.model.AnalyticsPeriodInfo
@@ -93,13 +95,20 @@ class AnalyticsActions(
 private val PERIOD_TYPES = listOf(PeriodTypeCode.MONTH, PeriodTypeCode.QUARTER, PeriodTypeCode.YEAR, PeriodTypeCode.ALL_TIME)
 
 @Composable
-fun AnalyticsScreen(params: AnalyticsParams?, actions: AnalyticsActions, vm: AnalyticsViewModel = hiltViewModel()) {
+fun AnalyticsScreen(
+    params: AnalyticsParams?,
+    actions: AnalyticsActions,
+    onboarding: TooltipOnboardingStore,
+    vm: AnalyticsViewModel = hiltViewModel(),
+) {
     LifecycleResumeEffect(params) {
         vm.onResume(params)
         onPauseOrDispose {}
     }
     val state by vm.state.collectAsStateWithLifecycle()
-    AnalyticsContent(state, actions, vm)
+    AnalyticsContent(state, actions, vm) { owner ->
+        onboarding.claim("analytics", owner.userId, owner.authSessionEpoch)
+    }
 }
 
 /**
@@ -125,7 +134,12 @@ interface AnalyticsHandlers {
 }
 
 @Composable
-internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions, vm: AnalyticsHandlers) {
+internal fun AnalyticsContent(
+    state: AnalyticsUiState,
+    actions: AnalyticsActions,
+    vm: AnalyticsHandlers,
+    claimOnboarding: (suspend (RequestOwner) -> Boolean)? = null,
+) {
     val baseClock = LocalPfClock.current
     val sourceClock = state.data?.timeZone?.let { source ->
         remember(baseClock, source) { baseClock.withZone(ru.finassist.pf.core.common.time.SourceTimeZone.require(source)) }
@@ -218,7 +232,7 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
                 else -> Column(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(top = d.space2, bottom = d.space6),
                 ) {
-                    Content(a, state, vm, actions)
+                    Content(a, state, vm, actions, claimOnboarding)
                 }
             }
             state.snackbar?.takeIf { state.errorPresentation == null }?.let { text ->
@@ -239,7 +253,13 @@ internal fun AnalyticsContent(state: AnalyticsUiState, actions: AnalyticsActions
  * expense chart → categories → income → insights → «Доходы минус расходы по месяцам».
  */
 @Composable
-private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers, actions: AnalyticsActions) {
+private fun ColumnScope.Content(
+    a: Analytics,
+    state: AnalyticsUiState,
+    vm: AnalyticsHandlers,
+    actions: AnalyticsActions,
+    claimOnboarding: (suspend (RequestOwner) -> Boolean)?,
+) {
     val params = a.params ?: return
     val period = a.period ?: return
     val blocks = state.blocks
@@ -362,7 +382,9 @@ private fun ColumnScope.Content(a: Analytics, state: AnalyticsUiState, vm: Analy
             modifier = if (params.period == PeriodTypeCode.ALL_TIME) Modifier.testTag(AnalyticsTags.ALL_TIME_RANGE) else Modifier)
     }
 
-    Blocks(a, state, vm, actions, prepared, afterCaption = coverageCaption != null)
+    AnalyticsTooltipOnboarding(state, prepared, claimOnboarding) {
+        Blocks(a, state, vm, actions, prepared, afterCaption = coverageCaption != null)
+    }
 }
 
 /** Registry of the renderers (FIN-7): the catalog version this client draws. */
@@ -425,6 +447,7 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
             a.params?.takeIf { it.period == PeriodTypeCode.MONTH }?.date?.value,
         ),
         tags = AnalyticsBlockTags,
+        anchoredHelp = true,
         onAction = { block, action -> vm.onAction(block, action, navigate) },
         onSelectAnalyticsPeriod = { block, action -> vm.onAction(block, action, navigate) },
         expanded = state.expanded,
@@ -572,11 +595,13 @@ internal object AnalyticsTags {
     // Tiles: the chart id of a tile is also its test tag (`Tile` → `PfStatTile(modifier.testTag(chartId))`).
     const val TILE_BALANCE = "analytics.tile.balance"
     const val TILE_FORECAST = "analytics.tile.forecast"
-    // Shared BlockHelpButton and PfPagedBarChart compose these concrete tags from their host's identifiers.
+    // Shared BlockHelpPopupButton and PfPagedBarChart compose these concrete tags from their host's identifiers.
     const val TILE_FORECAST_HELP = "analytics.tile.forecast.help"
-    const val TILE_FORECAST_HELP_SHEET = "analytics.tile.forecast.help.sheet"
+    const val TILE_FORECAST_HELP_POPUP = "analytics.tile.forecast.help.popup"
     const val MONTHLY_HISTORY = "analytics.expense.monthly"
     const val TILE_DAILY = "analytics.tile.daily"
+    const val TILE_DAILY_HELP = "analytics.tile.daily.help"
+    const val TILE_DAILY_HELP_POPUP = "analytics.tile.daily.help.popup"
     const val TILE_INCOME = "analytics.tile.income"
     const val TILE_EXPENSE = "analytics.tile.expense"
 

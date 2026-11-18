@@ -24,13 +24,6 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
-        // RuStore SDK (Remote Config)
-        maven("https://nexus-external.rustore.ru/repository/maven-rustore-exposed") {
-            content { includeGroupByRegex("ru\\.rustore.*") }
-        }
-        maven("https://artifactory-external.vkpartner.ru/artifactory/maven") {
-            content { includeGroupByRegex("ru\\.rustore.*") }
-        }
     }
 }
 
@@ -55,7 +48,7 @@ include(":core:screenshot-testing")
 // Providers: implementations of core:toggles / core:tracking interfaces. Only :app depends on them.
 include(":providers:toggles-local")
 include(":providers:tracking-log")
-include(":providers:toggles-rustore")
+include(":providers:toggles-varioqub")
 include(":providers:telemetry-appmetrica")
 
 // In-process fake backend for the `mock` flavor (implements :core:api).

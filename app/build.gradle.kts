@@ -23,8 +23,7 @@ val localNetworkSecurityConfig = tasks.register<GenerateNetworkSecurityConfig>("
     config.set(LocalBackend.networkSecurityConfig(localBackend))
 }
 
-// Production API. A placeholder until there is a server (AGENTS.md «Flavors»).
-val prodBaseUrl = "https://api.example.ru/"
+val prodBaseUrl = "https://api.plainfin.ru/"
 val stageBaseUrl = "https://stage.plainfin.ru/"
 
 // Certificate pinning (FIN-121, ApiPins): `pf.apiPins` + `pf.apiPinsExpiration` (or PF_API_PINS and
@@ -63,7 +62,7 @@ val checkNoMockCode = tasks.register<CheckNoMockCode>("checkNoMockCode")
 // build, which `GITHUB_RUN_NUMBER` does not guarantee (a counter per workflow; a re-run keeps it). Without it — the CI
 // run number (`GITHUB_RUN_NUMBER`, enough to tell builds apart in logs), 1 locally. Both go into `X-Client-Version`
 // (`android/0.2.16+41`, api.md «Заголовки», FIN-20/22).
-val appVersionName = "0.2.20"
+val appVersionName = "1.0.1"
 val appVersionCode = (System.getenv("PF_VERSION_CODE") ?: System.getenv("GITHUB_RUN_NUMBER"))?.toIntOrNull() ?: 1
 
 android {
@@ -91,10 +90,10 @@ android {
     // One dimension `env`, one flavor per environment (FIN-120/385); dimensions are not multiplied.
     // `mock`: in-process fake backend on an OFX statement, local toggles, logcat tracking — no SDK keys needed.
     // `local`: real HTTP client against a bank-bff on the developer's machine (`pf.apiBaseUrl`); local toggles and
-    //   logcat tracking as in `mock` — no RuStore or AppMetrica, so nothing reaches production analytics,
+    //   logcat tracking as in `mock` — no Varioqub or AppMetrica, so nothing reaches production analytics,
     //   config or crash console. Installs next to `prod` (`.local`). Plain HTTP only in localDebug (src/localDebug +
     //   generated security config).
-    // `prod`: real HTTP client, RuStore Remote Config and AppMetrica; certificate pinning of the API host when
+    // `prod`: real HTTP client, Varioqub and AppMetrica; certificate pinning of the API host when
     //   `pf.apiPins` is set (pinnedFlavors above, FIN-121).
     // `stage`: the same HTTP/SDK providers as prod, with its own endpoint, app id and optional SDK keys/pins.
     // Each reporting environment uses its own AppMetrica app. Blank keys keep the SDK off.
@@ -121,7 +120,7 @@ android {
             applicationIdSuffix = ".stage"
             versionNameSuffix = "-stage"
             buildConfigField("String", "API_BASE_URL", "\"$stageBaseUrl\"")
-            buildConfigField("String", "RUSTORE_REMOTE_CONFIG_APP_ID", "\"${secret("pf.stageRustoreRemoteConfigAppId")}\"")
+            buildConfigField("String", "VARIOQUB_APP_ID", "\"${secret("pf.stageVarioqubAppId")}\"")
             val key = secret("pf.stageAppMetricaApiKey")
             buildConfigField("String", "APPMETRICA_API_KEY", "\"${key}\"")
             buildConfigField("boolean", "APPMETRICA_SESSIONS", "true")
@@ -132,7 +131,7 @@ android {
             dimension = "env"
             buildConfigField("String", "API_BASE_URL", "\"$prodBaseUrl\"")
             // SDK keys come from ~/.gradle/gradle.properties or CI env; empty → the SDK stays off.
-            buildConfigField("String", "RUSTORE_REMOTE_CONFIG_APP_ID", "\"${secret("pf.rustoreRemoteConfigAppId")}\"")
+            buildConfigField("String", "VARIOQUB_APP_ID", "\"${secret("pf.varioqubAppId")}\"")
             val key = secret("pf.appMetricaApiKey")
             buildConfigField("String", "APPMETRICA_API_KEY", "\"${key}\"")
             buildConfigField("boolean", "APPMETRICA_SESSIONS", "true")
@@ -247,11 +246,11 @@ dependencies {
     "localImplementation"(projects.providers.trackingLog)
 
     "stageImplementation"(projects.core.network)
-    "stageImplementation"(projects.providers.togglesRustore)
+    "stageImplementation"(projects.providers.togglesVarioqub)
     "stageImplementation"(projects.providers.telemetryAppmetrica)
 
     "prodImplementation"(projects.core.network)
-    "prodImplementation"(projects.providers.togglesRustore)
+    "prodImplementation"(projects.providers.togglesVarioqub)
     "prodImplementation"(projects.providers.telemetryAppmetrica)
 
     implementation(libs.androidx.core.ktx)

@@ -23,6 +23,7 @@ Prerequisites: an emulator or device with `adb`, [Maestro](https://maestro.dev) 
 (use the version pinned in the UI workflow, currently2.11.0), JDK21. Set the emulator time zone to Europe/Moscow
 (Settings → System → Date & time, or `-timezone Europe/Moscow` when starting it).
 
+Both Maestro and native emulator jobs run on Android 16 (API 36, FIN-533).
 To reproduce a CI failure locally, use `MAESTRO_VERSION` and the `AVD_API`, `AVD_TARGET`, `AVD_ARCH`
 and `AVD_PROFILE` values from `.github/workflows/e2e.yml`, with animations disabled as in that workflow.
 Record the actual CLI, image and viewport in the result. Use an absolute path with `--flow`: the runner
@@ -39,7 +40,7 @@ scripts/e2e.sh --tags smoke
 scripts/e2e.sh --no-build --flow "$PWD/.maestro/flows/assistant/ask_question.yaml"
 
 # One Maestro shard of the CI split (below); native has its own CI job
-scripts/e2e.sh --shard 2/5
+scripts/e2e.sh --shard 2/6
 ```
 
 Reports go to `build/e2e/`: JUnit XML, `maestro-output.tgz` (per flow: screenshot and view hierarchy of the failed
@@ -54,8 +55,8 @@ run summary lists the shards, the flows and the UI test coverage; reports are in
 
 ### Shards in CI
 
-Five Maestro-only emulators run a deterministic longest-flow-first split from
-`scripts/e2e-durations.json`; `python3 scripts/e2e-shards.py plan --shards 5` prints the selection.
+Six Maestro-only emulators run a deterministic longest-flow-first split from
+`scripts/e2e-durations.json`; `python3 scripts/e2e-shards.py plan --shards 6` prints the selection.
 Native tests have a separate fresh AVD and budget; the targeted JVM companions are an independent job.
 The reports job waits for the build and all three suites, including failed jobs, and gathers their artifacts.
 A setup failure leaves tests NOT RUN, not failed assertions; incomplete acceptance remains red.
@@ -121,7 +122,7 @@ separate device-execution scope are recorded in FIN-481 and its PR.
 ### Default SDK caching and fresh cold AVD (FIN-378)
 
 Normal pushes to `main` and manual runs with the default inputs restore **SDK packages**, then create a fresh cold
-AVD for each of the five shards. The requested API/profile/cores/RAM/GPU/disk, KVM, test selection, app-data resets,
+AVD for each Maestro shard. The requested API/profile/cores/RAM/GPU/disk, KVM, test selection, app-data resets,
 native tests and reports/coverage/Qase stay unchanged. No AVD or adb key is stored in these SDK caches. Both manual
 inputs, `avd_cache` and `sdk_benchmark`, default to `false`; the latter selects the isolated SDK-only experiment.
 
@@ -167,8 +168,8 @@ do not establish a substantial or stable total UI speedup.
 ### Optional clean AVD snapshot cache (FIN-378)
 
 
-Only a manual run with `avd_cache=true` enables this experimental path. The five shard jobs restore independent writable copies of one clean Android API 34 / google_apis / x86_64 /
-Pixel 6 AVD. A cache miss creates a fresh AVD, boots Android, checks that no FinAssist app or test APK is installed,
+Only a manual run with `avd_cache=true` enables this experimental path. Each shard job restores an independent writable copy of one clean AVD matching the workflow's image and device profile.
+A cache miss creates a fresh AVD, boots Android, checks that no FinAssist app or test APK is installed,
 and explicitly saves the named `clean` snapshot. This happens before `e2e.sh` installs anything, signs in or imports
 financial fixtures. The action shuts down the emulator; the helper waits for its process to exit and verifies the
 snapshot files before `actions/cache/save` uploads the pristine device. Only that AVD directory, its `.ini`, and a generated disposable CI adb key pair/provenance receipt are
@@ -780,7 +781,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | Flow | Checks |
 |---|---|
 | `refresh/server_data` | pull-to-refresh on the feed, operation details, empty search, selected analytics month, profile, upload history, unread lines and an assistant draft; offline retains data/query/period, online clears the failure; after a failed Year switch, failed/successful Month pulls and current-read Retry preserve Month and its separate target notice, then only the Year Retry changes the period; a history read never asks or retries a question (Qase70, FIN-399); authored, not executed |
-| `auth/register_new_user` (smoke) | empty mock history prepared through UI before registration; independent 14+/PD before phone → new number → create account without another consent → passcode → first upload offers «Скачать за год» and reachable «Загружу позже» → result → feed (Qase2, FIN-365, FIN-416/427) |
+| `auth/register_new_user` (smoke) | empty mock history prepared through UI before registration; independent 14+/PD before phone → new number → standalone «Политика конфиденциальности», no terms/acceptance text → create account without another consent → passcode → first upload offers «Скачать за год» and reachable «Загружу позже» → result → feed (Qase2, FIN-365, FIN-416/427/519) |
 | `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → passcode → feed; the main tabs (Qase1, FIN-365) |
 | `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
 | `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains confirmations; repeated confirm_phone keeps both checked and input enabled (Qase57, FIN-365, FIN-375) |
@@ -800,7 +801,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `operations/search_filters` | empty result → «Сбросить фильтры» with the query alone clears it; query, «Только расходы», amount, separate «Сбросить» below the chips stays visible at both horizontal scroll edges (FIN-416, Qase9), period, result card; «Без категории» in the picker's «Системные» — FIN-108 |
 | `operations/refund_category` (mock-only) | automatic refund card and explicit refund category for an ordinary credit; synthetic September expense/income 900/+300 RUB → 600/0 RUB, target explanation and retained row/details after reopening (Qase92, FIN-442); execution evidence in PR #273 |
 | `operations/own_transfer_split` (mock-only) | two known own-transfer pairs: expense category goes to debit, income category to credit; split notice, exact search count 1→2, signed rows, each side's own timestamp/category after reopening (Qase93, FIN-442); execution evidence in PR #273 |
-| `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast and opens the history explanation in its help sheet; fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month through its option container and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; follow-up not executed (previous run failed) |
+| `analytics/facts_and_forecast` | current-month fact with a blocked forecast; replace the full seeded year through UI import with a rolling-year OFX (11 full months); year keeps expense beside forecast and opens the anchored history tooltip and dismisses it with Back and an outside tap (FIN-496); fact → search checks year range, expense kind and merchant/amount → Back; explicitly pick a past month through its option container and inspect the full tile area for no forecast; delete its covering statement while another month remains and retain the selected month with one no-data explanation and no monetary tiles (FIN-401/402); Qase71; follow-up not executed (previous run failed) |
 | `analytics/period_change_retry` + JVM `AnalyticsReliabilityComponentTest#qase73PeriodRetryAndDeferredRefusal` (mock-only) | failed Year switch keeps September and its selected segment; concurrent dismissal failure keeps a separate notice; durable notice + explicit Retry preserves the exact target, resume does not retry; recovery returns Year and saved Month; deferred Year response after a refused in-flight dismissal scrolls to the selected year text itself (Qase73, FIN-391/444); execution evidence in FIN-444; required real-screen/ViewModel companion additionally covers exact failed target, independent period/mutation errors, remembered September and deferred Year after known422 refusal; full E2E unchanged (FIN-482) |
 | `analytics/transfer_change_retry` (mock-only) | offline transfer-mode switch preserves September/Month, WITH and the observed ready expense; restoring connectivity through config/resume preserves the notice and old mode; explicit target Retry commits WITHOUT and removes the error; after returning to WITH, disabling the transfer filter retires a new refused WITHOUT target, hides the chip and Retry, and preserves September/Month and the WITH expense (Qase96, FIN-452); authored only, UI not run |
 | `analytics/period_controls` (common) | Month/All-time hide rolling choices; Quarter/Year expose only their right-aligned choice; tapping the selected calendar segment exits its rolling period; All-time removes the whole period row across tab navigation (Qase80, FIN-416); authored, not executed |
@@ -808,6 +809,8 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/chart_month_selection` (mock-only) | whole-column selection including zero expenses, exact month/year, selected state and retained transfer mode/scroll; failed switch and explicit retry (Qase74, FIN-398); authored, not executed |
 | `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state; expense search uses the ASCII query FIN-400 within the inherited 2024–2026 range, checks the single January 2024 debit and retained kind/scope (Qase75, FIN-400/415); follow-up not executed (previous run failed) |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
+| `analytics/tooltip_onboarding` | first tooltip opens automatically, closing it scrolls to the second, returning to the screen preserves manual help only ([Qase97](https://app.qase.io/case/PLAINFIN-97), FIN-497) |
+| `analytics/tooltip_onboarding_interrupted` | after the first tooltip opens, locking interrupts the sequence; unlocking does not replay it, both icons still work, and a clean install follows changed mock server text, tags and order ([Qase98](https://app.qase.io/case/PLAINFIN-98), FIN-497) |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` + JVM `AnalyticsReliabilityComponentTest#qase82RetainedSnapshotsAndRefusedMutation` (mock-only) | retained ready/unavailable snapshots, bounded polling and explicit retry, uncached Year preparation, refused mutation independent of polling; real journey retains visible errors/payment and exact request guards; required JVM companion covers transferred exhaustive state combinations (Qase82, FIN-473; see docs/qa/fin473-pilot-coverage.md) |
 | `analytics/regular_block_update` (mock-only) | successful PUT removes RBC and promotes the third visible payment row before a ready GET; seven seconds in the same card retain that row without RBC across marked GET polls; bounded polling pauses with September retained, then explicit Retry permits ready GET; separate unknown offline result retains RBC until explicit PUT retry, revealing the scoped row title after error/read notices before the unchanged assertions (Qase81, FIN-416/427/436/478). Its case-level Passed covers these UI observations only; JVM version/context checks and backend post-commit/durable delivery are separate |
@@ -873,6 +876,19 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
 | native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
 | native `StatementPickerTest` | login button opens exactly `https://tbank-online.com/login` in an intercepted ACTION_VIEW (FIN-395; Qase16), then upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
+| native `StatementPickerTest#opensPrivacyPolicyBeforeRegistration` | standalone policy link before account creation opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; no terms/acceptance text or second consent checkbox; returning to registration still allows creation (Qase2, FIN-519/520) |
+| native `StatementPickerTest#opensPrivacyPolicyFromUploadNotice` | «Как мы защищаем данные» in the upload notice opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; the upload guide remains available after returning (Qase14, FIN-520) |
+
+FIN-519/520: Qase2 and Qase14 each require their Maestro journey and the corresponding native privacy-link
+companion above. Maestro verifies the visible flow; Espresso-Intents verifies the actual external destination
+without depending on a browser or the published site's availability. A missing component is not a passed case.
+The release-build HTTPS/content check of the published policy remains separate from these intercepted intents.
+Local verification on 2026-11-16 used Maestro 2.11.0 and API 34/google_apis/x86_64, Pixel 6 (1080×2400, 420 dpi).
+The changed registration flow passed (185.156 s) and saved `registration_policy.png`. Both new native methods
+passed: upload in the first attempt (61.534 s), registration in a focused second attempt (39.940 s).
+The first registration attempt failed before reaching the changed screen: `auth.phone.document` was not ready
+within the existing 60 s setup deadline. That attempt is retained; no assertion or timeout was weakened.
+The unchanged Qase14 Maestro journey was not rerun, so this does not claim a complete new Qase14 acceptance.
 
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
@@ -917,9 +933,9 @@ options, final-only text, recomposition and lifecycle/resource cleanup. `ChatVie
 bounds and no automatic Ask; `ChatDesignCheckTest` retains existing panel-state fixtures.
 Biometrics (needs an enrolled
 fingerprint), custom date ranges in search,
-links inside a sentence — the registration terms and privacy policy, «Как мы защищаем данные», «разобрать» and
-«Подробнее» on the import result, «Подробнее» on «Аналитика» (a link inside a text node has no own view or
-resource id for Maestro to tap, and the first three open an external browser the flow cannot check).
+links inside a sentence — «разобрать» and «Подробнее» on the import result, «Подробнее» on «Аналитика»
+(a link inside a text node has no own view or resource id for Maestro to tap). The registration and upload
+privacy-policy destinations are covered by the native Qase2/14 companions above.
 The server's own check of the phone number (400 `VALIDATION_ERROR` at `phone`, FIN-68) cannot be reached either:
 the app sends only `+7` and 10 digits, the very rule the server checks, so neither a real build nor the mock gets
 that error; `PhoneViewModelTest` covers the branch, `auth/phone_validation` the app's own check of a short number.
@@ -1324,10 +1340,21 @@ Selected month identity and selected-period notes survive prepending/eviction. P
 revision or zone are rejected. Failed pages retain points with a gated explicit retry. OUT_OF_RANGE clears pages
 and refreshes the current selection once; repeated expiration never starts an automatic loop.
 
-Optional block/tile `help_text` is shown through a 48dp info action and a scrollable sheet, including locked and
-unknown-version blocks. Main contents and concise lock reasons remain visible. FIN-415 fixes for the touched
+In Analytics the 48dp info action opens an anchored, scrollable popup for block/tile `help_text`, including
+locked and unknown-version blocks (FIN-496). Back, an outside tap, or app lock closes the popup. Main contents
+and concise lock reasons stay in place. The shared block catalog can render help as a sheet when
+`anchoredHelp = false`. The assistant's own renderer currently leaves `help_text` unused. Qase71 checks the
+forecast text and dismissal. A JVM Compose test verifies scrolling long help inside the popup. FIN-415 fixes for the touched
 facts/forecast and chart-selection flows are synchronized from main. Proposed light/dark help and history design
 artboards are authored; approved Figma artboards for these new states do not yet exist.
+
+FIN-497 uses the same anchored help for automatic onboarding when the screen response tags a block or tile with
+`onboarding` and supplies a positive `help_order`. It scrolls to each anchor before opening. A device-local
+DataStore claim per account and screen prevents replay after leaving, locking, relogin or restarting. Unmarked
+help remains manual. The mockE2e-only `analytics_help=manual|onboarding|reversed` control selects fixed server
+compositions. `manual` is the default for existing flows. `onboarding` marks the daily-expenses tile and
+the balance block, while `reversed` puts balance before the monthly chart and leaves the daily tile manual.
+The mockE2e-only `lock_app=true` control locks the current test session through AppLock.
 
 JVM scenarios cover full-block replacement, version barriers, missing/malformed data, owner changes and late
 responses, page ownership/eviction/errors, source-zone conversion and HTTP routing. Maestro cases 81, 82, 83, 88 and
@@ -1823,3 +1850,10 @@ semantics and bounds, and the two gutter samples. The bounded preference diagnos
 unchanged label wait. Other Profile content is excluded from the diagnostic log. Source, executed checks and
 device-proof limits are recorded in FIN-480 and its PR; the original CI snapshot did not contain the failed
 node count, so its exact UI state cannot be reconstructed.
+
+
+FIN-498 — Not covered yet: AppMetrica's service-side report contents after upgrading an installation with buffered
+events and an active account. The Maestro build `mockE2e` excludes the real SDK and the in-process backend cannot
+restore that account across an APK replacement. Robolectric covers cleanup of the pinned SDK's reporting paths,
+activation order, retained app state and payloads at the SDK boundary. Existing sign-in, sign-out and account
+deletion flows continue to exercise the user-visible behaviour. The isolated SDK upgrade check is in [README](../README.md#flavor-prod).

@@ -119,6 +119,12 @@ data class Block(
     val helpText: String? = null,
     val data: JsonObject? = null,
     val action: BlockAction? = null,
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @Serializable(with = HelpTagsSerializer::class)
+    val helpTags: List<String> = emptyList(),
+    @Serializable(with = HelpOrderSerializer::class)
+    val helpOrder: Int? = null,
 ) {
     /** [data] as [serializer], or null when absent or it does not decode. */
     fun <T> decode(serializer: KSerializer<T>): T? = data?.let {
@@ -257,6 +263,12 @@ data class Tile(
     val caption: String? = null,
     val helpText: String? = null,
     val action: BlockAction? = null,
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @Serializable(with = HelpTagsSerializer::class)
+    val helpTags: List<String> = emptyList(),
+    @Serializable(with = HelpOrderSerializer::class)
+    val helpOrder: Int? = null,
 )
 
 @Serializable

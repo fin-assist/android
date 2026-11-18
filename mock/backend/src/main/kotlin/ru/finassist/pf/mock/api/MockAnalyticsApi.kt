@@ -28,6 +28,7 @@ import ru.finassist.pf.mock.apiError
 import ru.finassist.pf.mock.MockErrorOperation
 import ru.finassist.pf.mock.MockCodes
 import ru.finassist.pf.mock.domain.AnalyticsComposer
+import ru.finassist.pf.mock.domain.withAnalyticsHelp
 
 class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
     private val chartPages = ru.finassist.pf.mock.domain.MockChartPages(backend)
@@ -80,7 +81,8 @@ class MockAnalyticsApi(private val backend: MockBackend) : AnalyticsApi {
             val calculation = backend.calculation.state().let { if (remaining > 0) it.copy(recalculating = true) else it }
             val marked = composed.copy(timeZone = composed.timeZone?.let { if (backend.config.unsupportedResponseTimeZone) "Area/Future_City" else it }, calculation = calculation,
                 state = composed.state?.copy(recalculating = calculation.recalculating))
-            if (backend.config.unknownCodes && marked.hasData) withUnknownCodes(marked) else marked
+            val response = marked.withAnalyticsHelp(backend.config.analyticsHelp)
+            if (backend.config.unknownCodes && response.hasData) withUnknownCodes(response) else response
         }
     }
 

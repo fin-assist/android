@@ -93,9 +93,15 @@ object TextRenderer : BlockRenderer {
 object RowsRenderer : BlockRenderer {
     override val type = BlockType.ROWS
     override val version = 1
+    override val placesHelp = true
     override fun prepare(block: Block): (@Composable (BlockContext) -> Unit)? {
         val data = block.decode(RowsData.serializer()) ?: return null
-        return { ctx -> PfCard { BlockRows(block, data, ctx) } }
+        return { ctx ->
+            PfCard {
+                BlockHelpHeader(ctx.helpButton(block))
+                BlockRows(block, data, ctx)
+            }
+        }
     }
 }
 
@@ -113,10 +119,11 @@ fun BlockRows(block: Block, data: RowsData, ctx: BlockContext) {
 object TileGroupRenderer : BlockRenderer {
     override val type = BlockType.TILE_GROUP
     override val version = 1
+    override val placesHelp = true
     override fun prepare(block: Block): (@Composable (BlockContext) -> Unit)? {
         if (block.status.effective == BlockStatus.UNAVAILABLE || block.status.effective == BlockStatus.NONE) {
             val text = block.emptyText ?: return null
-            return { Text(text, style = PfTheme.type.body, color = PfTheme.colors.textMuted) }
+            return { ctx -> WithBlockHelp(ctx.helpButton(block)) { Text(text, style = PfTheme.type.body, color = PfTheme.colors.textMuted) } }
         }
         val data = block.decode(TileGroupData.serializer())?.takeIf { it.tiles.isNotEmpty() } ?: return null
         return { ctx -> Tiles(block, data, ctx) }
@@ -128,6 +135,7 @@ object TileGroupRenderer : BlockRenderer {
 private fun Tiles(block: Block, data: TileGroupData, ctx: BlockContext) {
     val d = PfTheme.dimens
     Column(verticalArrangement = Arrangement.spacedBy(d.space4)) {
+        BlockHelpHeader(ctx.helpButton(block))
         data.tiles.chunked(2).forEach { pair ->
             Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(d.space4)) {
                 pair.forEach { tile -> BlockTile(block, tile, ctx, Modifier.weight(1f).fillMaxHeight()) }
@@ -139,6 +147,7 @@ private fun Tiles(block: Block, data: TileGroupData, ctx: BlockContext) {
 object RankedListRenderer : BlockRenderer {
     override val type = BlockType.RANKED_LIST
     override val version = 1
+    override val placesHelp = true
     override fun prepare(block: Block): (@Composable (BlockContext) -> Unit)? {
         val status = block.status.effective
         val data = if (status.hasData) block.decode(RankedListData.serializer()) ?: return null else null
@@ -155,11 +164,16 @@ private fun RankedList(block: Block, data: RankedListData?, ctx: BlockContext) {
         Spacer(Modifier.height(d.space2))
     }
     if (data == null || data.items.isEmpty()) {
-        (data?.emptyText ?: block.emptyText ?: BlockFormat.lockText(block.lock))?.let { Text(it, style = PfTheme.type.body, color = c.textMuted) }
+        WithBlockHelp(ctx.helpButton(block)) {
+            (data?.emptyText ?: block.emptyText ?: BlockFormat.lockText(block.lock))?.let {
+                Text(it, style = PfTheme.type.body, color = c.textMuted)
+            }
+        }
         return
     }
     if (data.style == ListStyle.PLAIN) {
         PfCard {
+            BlockHelpHeader(ctx.helpButton(block))
             data.items.forEachIndexed { i, item ->
                 PfDataRow(
                     item.title,
@@ -192,6 +206,7 @@ private fun RankedList(block: Block, data: RankedListData?, ctx: BlockContext) {
         Column {
             Spacer(Modifier.height(d.space2))
             PfCard {
+                BlockHelpHeader(ctx.helpButton(block))
                 Column(verticalArrangement = Arrangement.spacedBy(d.space2)) {
                     visible.forEachIndexed { i, item ->
                         val amount = BlockFormat.value(item.value, item.valueKind, ctx.currency).orEmpty()
@@ -222,8 +237,12 @@ private fun RankedList(block: Block, data: RankedListData?, ctx: BlockContext) {
 object InsightCardRenderer : BlockRenderer {
     override val type = BlockType.INSIGHT_CARD
     override val version = 1
+    override val placesHelp = true
     override fun prepare(block: Block): (@Composable (BlockContext) -> Unit)? {
-        val data = block.decode(InsightCardData.serializer()) ?: return AltTextRenderer.prepare(block)
+        val data = block.decode(InsightCardData.serializer()) ?: run {
+            val fallback = AltTextRenderer.prepare(block) ?: return null
+            return { ctx -> WithBlockHelp(ctx.helpButton(block)) { fallback(ctx) } }
+        }
         return { ctx -> InsightCard(block, data, ctx) }
     }
 }
@@ -248,6 +267,7 @@ private fun InsightCard(block: Block, data: InsightCardData, ctx: BlockContext) 
         lockedText = BlockFormat.lockText(block.lock),
         chartId = ctx.tags.chart(block.id ?: data.title),
         onClick = ctx.clickOf(block, block.action),
+        headingHelp = ctx.helpButton(block, data.title),
         content = if (!status.hasData || data.items.isEmpty() && data.itemsMore == null) null else ({
             if (listed) {
                 // Mockup `Analytics`: a line above the list and between the rows; a button under a row.

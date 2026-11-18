@@ -23,14 +23,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class LogTracker @Inject constructor() : Tracker, CrashReporter {
-    private var userId: String? = null
-
     override fun track(event: Event, params: Map<String, String>) {
-        Log.i(TAG, "event ${event.name} user=$userId ${if (params.isEmpty()) "" else params}")
-    }
-
-    override fun setUserId(userId: String?) {
-        this.userId = userId
+        Log.i(TAG, "event ${event.name} ${if (params.isEmpty()) "" else params}")
     }
 
     override fun report(error: NonFatal) {

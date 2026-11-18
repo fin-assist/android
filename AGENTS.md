@@ -26,7 +26,8 @@ orientation map: read it first, then open only the files the task touches.
 - Version 0.2 (API, mockups, docs) is crystallized; every change goes through a YouTrack issue (`FIN-<n>`,
   finassist.youtrack.cloud) and is referenced in the PR. Release notes live in Confluence.
 - The deployed backend stage is `https://stage.plainfin.ru/` (FIN-149/385): `stage` talks to its real Go services
-  with fake-phone/fake-LLM. `mock` stays in-process; `local` targets a developer backend; `prod` has a placeholder URL.
+  with fake-phone/fake-LLM. `mock` stays in-process; `local` targets a developer backend; `prod` uses
+  `https://api.plainfin.ru/` (FIN-121).
 - Mismatches between mockups, docs and API are expected. Resolve them in favour of `docs/api.md` (contracts) +
   the latest decision, say so in the PR, and propose (not impose) engineering changes; keep them non-radical.
 - API extensibility (decision of 13.10.2026): the contract grows by addition and keeps `deprecated` for
@@ -71,8 +72,8 @@ multiplied:
 |---|---|---|---|
 | `mock` | in-process fake (`:mock:backend`) | `toggles-local` (`app/src/mock/assets/flags.json`) / logcat / AppMetrica diagnostics with a key | `.mock` |
 | `local` | bank-bff on the developer's machine: `pf.apiBaseUrl` (Gradle property or `PF_API_BASE_URL`), default `http://10.0.2.2:8080/` (emulator → host; `LocalBackend` in build-logic) | `toggles-local` (optional, gitignored `app/src/local/assets/flags.json`) / logcat / off — nothing reaches production consoles | `.local`, «Понятные финансы local» |
-| `stage` | `https://stage.plainfin.ru/`, real HTTP/SSE client | RuStore Remote Config / AppMetrica events and diagnostics, only with separate `pf.stage…` keys; otherwise code defaults / SDKs off | `.stage`, «Понятные финансы stage» |
-| `prod` | `API_BASE_URL` (placeholder until there is a server); certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | RuStore Remote Config / AppMetrica events and diagnostics with a key | no suffix |
+| `stage` | `https://stage.plainfin.ru/`, real HTTP/SSE client | Varioqub / AppMetrica events and diagnostics, only with separate `pf.stage…` keys; otherwise code defaults / SDKs off | `.stage`, «Понятные финансы stage» |
+| `prod` | `https://api.plainfin.ru/`; certificate pinning of its host when `pf.apiPins` + `pf.apiPinsExpiration` are set (`ApiPins` in build-logic, FIN-121) | Varioqub / AppMetrica events and diagnostics with a key | no suffix |
 
 `stage` follows `prod`, with isolated SDK properties and optional `pf.stageApiPins` / `pf.stageApiPinsExpiration`.
 Production keys and pins never serve as a fallback for stage. Plain HTTP only in `localDebug`: its network security config
@@ -93,15 +94,15 @@ date, JaCoCo probes; the native tests run on it (docs/e2e.md).
 | Component | Version |
 |---|---|
 | Gradle | 8.11.1 |
-| agp | 8.9.1 |
+| agp | 8.10.1 |
 | kotlin | 2.1.20 |
 | ksp | 2.1.20-1.0.32 |
 | hilt | 2.56.1 |
 | composeBom | 2025.03.01 |
 | navigationCompose | 2.8.9 |
-| compileSdk | 35 |
+| compileSdk | 36 |
 | minSdk | 26 |
-| targetSdk | 35 |
+| targetSdk | 36 |
 <!-- generated:stack:end -->
 
 JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Java 17.
@@ -124,7 +125,7 @@ JDK 21 runs Gradle (`gradle/gradle-daemon-jvm.properties`); bytecode targets Jav
 | `:core:tracking` | `pf.jvm.library` | unit |
 | `:providers:telemetry-appmetrica` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:toggles-local` | `pf.android.library`, `pf.hilt` | unit |
-| `:providers:toggles-rustore` | `pf.android.library`, `pf.hilt` | unit |
+| `:providers:toggles-varioqub` | `pf.android.library`, `pf.hilt` | unit |
 | `:providers:tracking-log` | `pf.android.library`, `pf.hilt` | - |
 | `:mock:backend` | `pf.android.library`, `pf.hilt` | unit |
 | `:feature:analytics:api` | `pf.feature.api` | - |
@@ -199,7 +200,7 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   isolation is checked with production sentinel properties, and stage/prod pinning is checked independently. Release preparation and the independent monotonic build number: `docs/releasing.md`.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally (all flows and the native
   tests; `--shard i/n` runs one CI shard), the `UI tests` workflow in CI (after a merge to `main`, or started by hand
-  for a branch; PRs never run them by themselves). CI splits the flows between five emulators
+  for a branch; PRs never run them by themselves). CI splits the flows between six emulators
   (`scripts/e2e-shards.py`, durations in `scripts/e2e-durations.json`), runs native tests in an independent
   emulator job and collects the targeted JVM companions before validating all results (docs/ui-test-reliability.md).
   The emulator jobs reuse one checked pair of APKs; Reports uses the matching JaCoCo classes. Maestro
@@ -360,7 +361,10 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   at most three neighbouring pages, and virtualized columns. Selected-month identity and selected-period notes
   survive page changes. Source-zone/revision/context mismatch rejects a page; an expired cursor refreshes the
   current selection once, then uses an explicit retry without a loop. Response source zones own calendar labels.
-  Block/tile `help_text` opens a scrollable info sheet without replacing main content or concise lock reasons.
+  Analytics block/tile `help_text` opens a scrollable popup anchored to its info button (FIN-496). Back, an
+  outside tap, or app lock closes the popup. Main content and concise lock reasons stay in place.
+  The shared block catalog retains scrollable sheets when `anchoredHelp = false`. The assistant uses its own
+  renderer, where block/tile `help_text` is currently unused.
 - Assistant SSE (FIN-453): a final-status snapshot does not replace `done` / `error`. Reopen dropped streams
   until terminal metadata arrives, including after pause/resume; never create another question to recover a stream.
   A definitive stream refusal reconciles history once and retires pending terminal recovery unless a one-shot
@@ -451,14 +455,19 @@ commands: `docs/testing.md`.
 ## Workflow
 
 - Branches: `<kind>/<slug>` — `fix/…`, `feature/…`, `tooling/…`, `design-check/…` (historically `stage-N/…`).
-  `release/<version>` (`release/0.2.5`) is the release branch of a version, cut from `main`; CI runs on pushes to it.
+  `release/<version>` (`release/0.2.5`) is the release branch of a version; CI runs on pushes to it. Cut it
+  from the current release branch when the next version should include its changes, or from `main`. The
+  previous release does not have to be merged first. Match `appVersionName` to the new branch name.
   Commits: imperative English subject (`Add …`, `Fix …`, `Address review: …`).
-- A PR targets the current release branch — the newest `release/<version>` not yet merged into `main` — not `main`;
-  the owner merges the release branch into `main` with its own PR. When every release branch is already merged, target
-  `main`. A release branch counts as merged only when both hold: a merged PR from it into `main` exists
+- A PR targets the current release branch — the newest `release/<version>` whose head has not been included in a
+  release merged into `main`. The owner merges the release branch into `main` with its own PR. When no active release
+  branch remains, target `main`. A release branch is directly merged only when both hold: a merged PR from it into `main` exists
   (`gh api 'repos/fin-assist/android/pulls?state=closed&base=main&head=fin-assist:release/<version>'`, an entry with
   `merged_at`) and `git merge-base --is-ancestor origin/release/<version> origin/main` exits 0. The ancestor check
   alone is not enough: a branch just cut from `main` points at the same commit and passes it.
+  An older release branch also stops being a PR target when its current head is an ancestor of both `origin/main` and
+  the recorded head SHA of a merged PR from a higher-version release branch into `main`. Use the merged PR's head SHA,
+  not the newer branch's current tip: only commits included in that release count. Fetch missing history before checking.
   Fetch both refs first, with explicit refspecs (a single-branch or shallow clone has no `origin/release/*`):
   `git fetch --depth=500 origin '+refs/heads/main:refs/remotes/origin/main'
   '+refs/heads/release/*:refs/remotes/origin/release/*'` (no `--depth` in a full clone). Exit 1 means «not an
@@ -577,8 +586,10 @@ names what leaks or breaks and how an attacker or another app gets to it. Check 
 
 - Personal and financial data (phone, amounts, counterparties, operation descriptions, statement content, assistant
   dialogue) leaving the device or the app's private storage other than through the API client: logs, crash reports
-  (AppMetrica), analytics events, Remote Config parameters (only our opaque `user_id` / device id go there), exception
-  messages, clipboard, notifications, files in shared storage.
+  (AppMetrica), analytics events, Remote Config parameters, exception messages, clipboard, notifications, files in
+  shared storage. AppMetrica product events accept only declared technical parameters. Keep account, API request,
+  sign-in session and consent evidence IDs out of analytics and crash reporting. Keep AppMetrica identifiers out
+  of the app's API, logs, consent records and support messages. Keep account IDs out of Varioqub client features and configuration requests.
 - Secrets: auth tokens, the passcode and keys are stored encrypted with a Keystore-backed key (as the passcode in
   `feature/applock`), never in plain preferences, files, `BuildConfig`, resources or source; no real keys or tokens
   in the repository.
@@ -667,6 +678,6 @@ FIN-448: before publishing the baseline/target, require each configured required
 
 ## Shared Renovate source (FIN-456)
 
-Controller code and regressions live in immutable `fin-assist/go-ci`; see `docs/renovate-policy.md`.
+FIN-499 pins controller code and regressions to a full commit in `fin-assist/renovate-actions`; see `docs/renovate-policy.md`.
 Keep the manifest and both workflow action pins equal. Local checks delegate through the unchanged
 verified bootstrap; never restore a local executable controller or run consumer code with its write token.

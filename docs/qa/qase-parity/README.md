@@ -82,28 +82,28 @@
 | [Q68](https://app.qase.io/case/PLAINFIN-68) | Позднее включение помощника допускает вход и сохраняется до конца слоя | 7 / 3 / 0 / 0 | [assistant](assistant.json#L4855) |
 | [Q69](https://app.qase.io/case/PLAINFIN-69) | Диктовка — готовность, отмена и редактируемый черновик (симуляция распознавателя) | 18 / 5 / 3 / 0 | [assistant](assistant.json#L5189) |
 | [Q70](https://app.qase.io/case/PLAINFIN-70) | Обновление свайпом сохраняет данные, период, фильтры и черновик (FIN-399) | 24 / 4 / 0 / 0 | [finance](finance.json#L5593) |
-| [Q71](https://app.qase.io/case/PLAINFIN-71) | Аналитика — фактические расходы, прогноз и открываемое пояснение полной истории | 16 / 2 / 0 / 0 | [finance](finance.json#L7086) |
+| [Q71](https://app.qase.io/case/PLAINFIN-71) | Аналитика — фактические расходы, прогноз и открываемое пояснение полной истории | 16 / 1 / 1 / 0 | [finance](finance.json#L7086) |
 | [Q72](https://app.qase.io/case/PLAINFIN-72) | FIN-404: отказ в разрешении микрофона сохраняет черновик без отправки вопроса | 5 / 4 / 0 / 0 | [assistant](assistant.json#L5952) |
-| [Q73](https://app.qase.io/case/PLAINFIN-73) | Аналитика — повтор смены периода и независимая ошибка платежа | 12 / 4 / 1 / 0 | [finance](finance.json#L8327) |
-| [Q74](https://app.qase.io/case/PLAINFIN-74) | Аналитика — выбор месяца столбиком, нулевые расходы и повтор ошибки | 14 / 3 / 0 / 0 | [finance](finance.json#L9249) |
-| [Q75](https://app.qase.io/case/PLAINFIN-75) | Аналитика «За всё время» — периоды, переводы и обновление данных (FIN-400) | 7 / 8 / 0 / 0 | [finance](finance.json#L10239) |
-| [Q76](https://app.qase.io/case/PLAINFIN-76) | Скользящие 12 и 3 месяца: точные даты, вкладки и переход в календарный месяц | 6 / 11 / 2 / 0 | [finance](finance.json#L11618) |
+| [Q73](https://app.qase.io/case/PLAINFIN-73) | Аналитика — повтор смены периода и независимая ошибка платежа | 12 / 4 / 1 / 0 | [finance](finance.json#L8309) |
+| [Q74](https://app.qase.io/case/PLAINFIN-74) | Аналитика — выбор месяца столбиком, нулевые расходы и повтор ошибки | 14 / 3 / 0 / 0 | [finance](finance.json#L9231) |
+| [Q75](https://app.qase.io/case/PLAINFIN-75) | Аналитика «За всё время» — периоды, переводы и обновление данных (FIN-400) | 7 / 8 / 0 / 0 | [finance](finance.json#L10221) |
+| [Q76](https://app.qase.io/case/PLAINFIN-76) | Скользящие 12 и 3 месяца: точные даты, вкладки и переход в календарный месяц | 6 / 11 / 2 / 0 | [finance](finance.json#L11600) |
 | [Q77](https://app.qase.io/case/PLAINFIN-77) | Неверный код целиком виден на малом экране при разблокировке и удалении | 6 / 1 / 0 / 0 | [shell](shell.json#L7795) |
 | [Q78](https://app.qase.io/case/PLAINFIN-78) | Точки и действия PIN доступны без ошибки при крупном шрифте во всей семье экранов | 6 / 1 / 0 / 0 | [shell](shell.json#L8104) |
 | [Q79](https://app.qase.io/case/PLAINFIN-79) | Наблюдатель PIN-прокрутки переживает отмену во время удерживаемого UserInput drag | 8 / 0 / 1 / 0 | [shell](shell.json#L8373) |
-| [Q80](https://app.qase.io/case/PLAINFIN-80) | Аналитика: скользящие периоды в своих вкладках и скрытая навигация за всё время | 8 / 7 / 0 / 0 | [finance](finance.json#L13118) |
-| [Q81](https://app.qase.io/case/PLAINFIN-81) | Не подписка: обновлённый список, сохранение при пересчёте и явный повтор неизвестного результата | 21 / 8 / 1 / 0 | [finance](finance.json#L13833) |
-| [Q82](https://app.qase.io/case/PLAINFIN-82) | Аналитика: сохранение готовых показателей во время пересчёта | 19 / 4 / 0 / 0 | [finance](finance.json#L15720) |
-| [Q83](https://app.qase.io/case/PLAINFIN-83) | График аналитики: вся история, соседние страницы и возврат к выбранному месяцу | 12 / 0 / 1 / 0 | [finance](finance.json#L17020) |
+| [Q80](https://app.qase.io/case/PLAINFIN-80) | Аналитика: скользящие периоды в своих вкладках и скрытая навигация за всё время | 8 / 7 / 0 / 0 | [finance](finance.json#L13100) |
+| [Q81](https://app.qase.io/case/PLAINFIN-81) | Не подписка: обновлённый список, сохранение при пересчёте и явный повтор неизвестного результата | 21 / 8 / 1 / 0 | [finance](finance.json#L13815) |
+| [Q82](https://app.qase.io/case/PLAINFIN-82) | Аналитика: сохранение готовых показателей во время пересчёта | 19 / 4 / 0 / 0 | [finance](finance.json#L15702) |
+| [Q83](https://app.qase.io/case/PLAINFIN-83) | График аналитики: вся история, соседние страницы и возврат к выбранному месяцу | 12 / 0 / 1 / 0 | [finance](finance.json#L17002) |
 | [Q84](https://app.qase.io/case/PLAINFIN-84) | Выписка — выбор включительного периода и ошибки подготовки ссылки (FIN-416) | 6 / 2 / 0 / 0 | [statements](statements.json#L4487) |
 | [Q85](https://app.qase.io/case/PLAINFIN-85) | Выписка — браузер получает точную серверную ссылку выбранного периода (FIN-416) | 4 / 1 / 0 / 0 | [statements](statements.json#L4893) |
-| [Q86](https://app.qase.io/case/PLAINFIN-86) | Операции — неподдерживаемый пояс сохраняет проверенный кэш и восстанавливается явно (FIN-416) | 0 / 5 / 1 / 0 | [finance](finance.json#L17668) |
+| [Q86](https://app.qase.io/case/PLAINFIN-86) | Операции — неподдерживаемый пояс сохраняет проверенный кэш и восстанавливается явно (FIN-416) | 0 / 5 / 1 / 0 | [finance](finance.json#L17650) |
 | [Q87](https://app.qase.io/case/PLAINFIN-87) | Загрузка — неподдерживаемый пояс условий и результата (FIN-416) | 6 / 2 / 0 / 0 | [statements](statements.json#L5085) |
-| [Q88](https://app.qase.io/case/PLAINFIN-88) | Аналитика: неподдерживаемый пояс и новый вход не подменяют готовый снимок | 4 / 5 / 3 / 0 | [finance](finance.json#L18090) |
-| [Q89](https://app.qase.io/case/PLAINFIN-89) | Неизвестный результат «Не подписка»: явное чтение без подтверждения команды | 11 / 13 / 0 / 0 | [finance](finance.json#L18830) |
-| [Q91](https://app.qase.io/case/PLAINFIN-91) | Не подписка — ошибка после сохранения и явный повтор обновляют полный список | 16 / 7 / 2 / 0 | [finance](finance.json#L20636) |
-| [Q92](https://app.qase.io/case/PLAINFIN-92) | Возврат денег — распознавание, ручная категория и расходы вместо дохода | 11 / 0 / 1 / 0 | [finance](finance.json#L21697) |
-| [Q93](https://app.qase.io/case/PLAINFIN-93) | Смена категории разделяет пару собственных переводов на две операции | 21 / 0 / 1 / 0 | [finance](finance.json#L22356) |
+| [Q88](https://app.qase.io/case/PLAINFIN-88) | Аналитика: неподдерживаемый пояс и новый вход не подменяют готовый снимок | 4 / 5 / 3 / 0 | [finance](finance.json#L18072) |
+| [Q89](https://app.qase.io/case/PLAINFIN-89) | Неизвестный результат «Не подписка»: явное чтение без подтверждения команды | 11 / 13 / 0 / 0 | [finance](finance.json#L18812) |
+| [Q91](https://app.qase.io/case/PLAINFIN-91) | Не подписка — ошибка после сохранения и явный повтор обновляют полный список | 16 / 7 / 2 / 0 | [finance](finance.json#L20618) |
+| [Q92](https://app.qase.io/case/PLAINFIN-92) | Возврат денег — распознавание, ручная категория и расходы вместо дохода | 11 / 0 / 1 / 0 | [finance](finance.json#L21679) |
+| [Q93](https://app.qase.io/case/PLAINFIN-93) | Смена категории разделяет пару собственных переводов на две операции | 21 / 0 / 1 / 0 | [finance](finance.json#L22338) |
 
 Опубликованы и подтверждены обратным чтением уточнения 32 существующих кейсов Qase; точные изменения — в [publication.json](publication.json). ID, статусы, автоматизация и незатронутые поля сохранены. После отдельного разрешения владельца созданы фактические результаты точечных прогонов; прежние результаты не изменялись.
 

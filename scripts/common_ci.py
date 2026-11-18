@@ -2,7 +2,6 @@
 """Resolve the immutable shared CI source; copied unchanged into consumer scripts/."""
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import os
@@ -11,10 +10,9 @@ import re
 import shutil
 import stat
 import subprocess
-import sys
 import tempfile
 
-SOURCE_URL = "https://github.com/fin-assist/go-ci.git"
+SOURCE_URL = "https://github.com/fin-assist/renovate-actions.git"
 CONFIG_NAME = ".finassist-ci.json"
 
 
@@ -147,20 +145,13 @@ def validate_cache(cache: Path, revision: str) -> Path:
         raise ValueError("Shared CI cache has hidden index entries; remove that revision cache and retry.")
     verify_checkout(cache, revision)
     common = cache / "common"
-    if common.is_symlink() or not (common / "render_lint.py").is_file():
+    if common.is_symlink() or not (common / "renovate/test.py").is_file():
         raise ValueError("Pinned shared CI source is incomplete.")
     return common
 
 
-def source_dir(root: Path, config: dict, source: Path | None = None) -> Path:
-    """Resolve an explicit local source or an independently verified pinned checkout."""
-    if source is not None:
-        if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_EVENT_NAME") not in {"push", "pull_request"}:
-            raise ValueError("Local source overrides are restricted to ordinary push or pull_request CI.")
-        common = source.resolve()
-        if not common.is_dir() or not (common / "render_lint.py").is_file() or not (common / "configs").is_dir():
-            raise ValueError("Local source must be the shared common directory.")
-        return common
+def source_dir(root: Path, config: dict) -> Path:
+    """Resolve the verified checkout of a pinned Renovate source revision."""
     cache_root = root / ".finassist-ci"
     if cache_root.is_symlink():
         raise ValueError("Shared CI cache root must not be a symbolic link.")
@@ -188,27 +179,3 @@ def source_dir(root: Path, config: dict, source: Path | None = None) -> Path:
     finally:
         if staging.exists():
             shutil.rmtree(staging)
-
-
-def main() -> int:
-    """Print the common directory, or render shared configs for the caller root."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", nargs="?", choices=["render"])
-    parser.add_argument("--source", type=Path, help="Explicit local common/ source for development and unprivileged CI")
-    args = parser.parse_args()
-    root = Path(__file__).resolve().parents[1]
-    try:
-        common = source_dir(root, read_config(root), args.source)
-        if args.command == "render":
-            subprocess.run([sys.executable, "-B", str(common / "render_lint.py"), "--root", str(root)],
-                           check=True, timeout=60)
-        else:
-            print(common)
-    except (ValueError, OSError, subprocess.SubprocessError) as error:
-        print("Shared CI bootstrap failed: " + str(error), file=sys.stderr)
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

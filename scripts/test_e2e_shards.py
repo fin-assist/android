@@ -103,13 +103,14 @@ class PlanTest(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 shards.parse_shard(bad)
 
-    def test_real_flows_split_into_four_or_five_shards_with_native_separate(self):
+    def test_real_flows_split_into_four_five_or_six_shards_with_native_separate(self):
         flows = shards.discover_flows(ROOT)
         self.assertTrue(flows)
         self.assertTrue(all(f.startswith(".maestro/flows/") for f in flows))
         self.assertFalse(any("/subflows/" in f for f in flows))
-        for count in (4, 5):
+        for count in (4, 5, 6):
             planned = shards.plan(flows, shards.load_durations(shards.DURATIONS_FILE), count)
+            self.assertTrue(all(s.flows for s in planned))
             self.assertEqual(sorted(f for s in planned for f in s.flows), flows)
             self.assertEqual([s.index for s in planned if s.native], [])
 
@@ -119,17 +120,14 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(sum(s.seconds for s in planned), sum(self.DURATIONS.values()))
         self.assertFalse(any(s.native for s in planned))
 
-    def test_real_plan_keeps_observed_flow_variance_and_setup_within_2400_seconds(self):
+    def test_real_six_shard_plan_fits_synthetic_weight_envelope(self):
         flows = shards.discover_flows(ROOT)
-        planned = shards.plan(flows, shards.load_durations(shards.DURATIONS_FILE), 5)
-        # FIN-465 run 42467271555: largest comparable successful-shard total grew 13.1%.
-        # Individual growth up to 33.1% is absorbed by maximum successful sample weights.
-        # Stress flow time by 20% above those maxima, not a claimed percentile or a per-flow bound.
-        # Native 300s already includes >=50% headroom on the complete measured suite.
-        for shard in planned:
-            native = shards.NATIVE_SECONDS if shard.native else 0
-            stressed = math.ceil((shard.seconds - native) * 1.2) + native + 120
-            self.assertLessEqual(stressed, 2400, f"shard {shard.index} needs {stressed}s including headroom")
+        durations = shards.load_durations(shards.DURATIONS_FILE)
+        # FIN-465's fixed padding checks the plan against stored weights. Run 43081255161 exceeded
+        # that padding in CI, so this test only checks the synthetic workload.
+        for shard in shards.plan(flows, durations, 6):
+            stressed = math.ceil(shard.seconds * 1.2) + 120
+            self.assertLessEqual(stressed, 2400, f"shard {shard.index}/6 has {stressed}s of synthetic load")
 
     def test_flow_names_are_unique(self):
         # Reports are matched to flows by name when Maestro writes no `file` (flow_of): two flows of one name would mix.

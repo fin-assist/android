@@ -6,7 +6,7 @@
 #   scripts/e2e.sh                       # everything
 #   scripts/e2e.sh --tags smoke          # only Maestro flows tagged `smoke` (no native tests)
 #   scripts/e2e.sh --flow .maestro/flows/auth/register_new_user.yaml   # --flow may be repeated
-#   scripts/e2e.sh --shard 2/5           # one Maestro shard; native suite runs separately in CI
+#   scripts/e2e.sh --shard 2/6           # one Maestro shard; native suite runs separately in CI
 #   scripts/e2e.sh --no-build            # reuse the APK built last time
 #   scripts/e2e.sh --no-native           # skip the instrumented tests
 #   scripts/e2e.sh --native-only         # native suite only, no Maestro installation or flow preflight

@@ -69,6 +69,25 @@
           "detail": "Dedicated E2E preload asset list."
         }
       ]
+    },
+    {
+      "case_id": 71,
+      "field": "steps[2].action",
+      "original": "Открыть значок пояснения прогноза, прочитать и прокрутить текст, закрыть подсказку.",
+      "proposed": "Открыть значок пояснения прогноза и прочитать текст. Если текст не помещается, прокрутить подсказку до конца. Закрыть кнопкой «Назад», снова открыть и закрыть касанием вне подсказки.",
+      "reason": "FIN-496 uses an anchored popup. Qase71 asserts the text and both dismissal paths. A separate JVM Compose test verifies overflow scrolling.",
+      "evidence": [
+        {
+          "path": ".maestro/flows/analytics/facts_and_forecast.yaml",
+          "line": 108,
+          "detail": "Open the forecast popup; assert its text and dismiss with Back and an outside tap."
+        },
+        {
+          "path": "feature/analytics/impl/src/test/kotlin/ru/finassist/pf/feature/analytics/impl/ui/AnalyticsHelpPopupTest.kt",
+          "line": 81,
+          "detail": "A long explanation scrolls inside the popup."
+        }
+      ]
     }
   ]
 }

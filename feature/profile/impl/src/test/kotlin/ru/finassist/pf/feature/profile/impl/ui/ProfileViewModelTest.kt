@@ -186,7 +186,6 @@ class ProfileViewModelTest {
         override val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
         override fun isEnabled(flag: Flag): Boolean = values[flag] ?: flag.defaultValue
         override val version: String = "test"
-        override suspend fun setUser(userId: String?) = Unit
         override suspend fun refresh() = Unit
         fun set(flag: Flag, on: Boolean) {
             values[flag] = on
@@ -199,7 +198,6 @@ class ProfileViewModelTest {
         override fun track(event: Event, params: Map<String, String>) {
             events += event to params
         }
-        override fun setUserId(userId: String?) = Unit
     }
 
     private class FakeAppLock(private val availability: BiometricAvailability) : AppLock {

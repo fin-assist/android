@@ -139,6 +139,7 @@ class AnalyticsViewModelTest {
 
     private class FakeStatements : StatementsRepository {
         var firstImportHints = false
+        var firstImportHintsGate: CompletableDeferred<Unit>? = null
         var pendingImport: Long? = null
         val acknowledged = mutableListOf<Long>()
         override suspend fun pendingAnalyticsImport(): Long? = pendingImport
@@ -148,7 +149,10 @@ class AnalyticsViewModelTest {
         }
         override val events = MutableSharedFlow<StatementsEvent>(extraBufferCapacity = 4)
         override fun lastResult(uploadId: String): ImportResult? = null
-        override suspend fun consumeFirstImportHints(): Boolean = firstImportHints.also { firstImportHints = false }
+        override suspend fun consumeFirstImportHints(): Boolean {
+            firstImportHintsGate?.await()
+            return firstImportHints.also { firstImportHints = false }
+        }
     }
 
     private class FakeOperations : OperationsRepository {
@@ -163,7 +167,6 @@ class AnalyticsViewModelTest {
         override fun isEnabled(flag: Flag): Boolean = values[flag] ?: flag.defaultValue
         override fun variant(experiment: Experiment): String = variants[experiment] ?: experiment.defaultVariant
         override val version: String = "test"
-        override suspend fun setUser(userId: String?) = Unit
         override suspend fun refresh() = Unit
         fun set(flag: Flag, on: Boolean) {
             values[flag] = on
@@ -181,7 +184,6 @@ class AnalyticsViewModelTest {
         override fun track(event: Event, params: Map<String, String>) {
             events += event to params
         }
-        override fun setUserId(userId: String?) = Unit
     }
 
     private class FakeSession : ru.finassist.pf.feature.auth.api.SessionRepository {
@@ -741,9 +743,15 @@ class AnalyticsViewModelTest {
     }
 
     @Test fun `the first data after the first import starts the hints, categories then ask`() {
+        val hintsGate = CompletableDeferred<Unit>()
         statements.firstImportHints = true
+        statements.firstImportHintsGate = hintsGate
         api.answers += data()
         val vm = opened()
+        assertNull(vm.state.value.data)
+        hintsGate.complete(Unit)
+        scheduler.runCurrent()
+        assertNotNull(vm.state.value.data)
         assertEquals(AnalyticsHint.CATEGORIES, vm.state.value.hint)
         vm.nextHint(stop = false)
         assertEquals(AnalyticsHint.ASK, vm.state.value.hint)

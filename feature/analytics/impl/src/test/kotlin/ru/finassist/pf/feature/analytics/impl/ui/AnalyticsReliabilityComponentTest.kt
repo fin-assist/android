@@ -561,12 +561,10 @@ class AnalyticsReliabilityComponentTest {
         override fun isEnabled(flag: Flag) = flag != Flag.ASSISTANT && flag.defaultValue
         override fun variant(experiment: Experiment) = experiment.defaultVariant
         override val version = "pilot"
-        override suspend fun setUser(userId: String?) = Unit
         override suspend fun refresh() = Unit
     }
     private object NoTracking : Tracker {
         override fun track(event: Event, params: Map<String, String>) = Unit
-        override fun setUserId(userId: String?) = Unit
     }
     private object NoAssistant : AssistantApi {
         override suspend fun getLimit() = AssistantLimit(5, 5, java.time.OffsetDateTime.parse("2026-10-09T00:00:00+03:00"))

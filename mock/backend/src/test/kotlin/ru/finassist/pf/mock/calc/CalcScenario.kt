@@ -31,6 +31,8 @@ import ru.finassist.pf.core.api.model.PeriodTypeCode
 import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.AppError
 import ru.finassist.pf.core.common.time.PeriodKey
+import ru.finassist.pf.mock.MockAnalyticsHelp
+import ru.finassist.pf.mock.domain.withAnalyticsHelp
 import ru.finassist.pf.mock.FAST
 import ru.finassist.pf.mock.MockBackend
 import ru.finassist.pf.mock.TestClock
@@ -51,7 +53,7 @@ import java.time.ZoneId
 internal class CalcScenario(private val root: File) {
     private val scenario = Json.parseToJsonElement(File(root, "scenario.json").readText()).jsonObject
     private val clock = TestClock("2025-01-01T00:00:00+03:00")
-    private val backend = MockBackend(FAST, clock, catalog = Catalog(categories()))
+    private val backend = MockBackend(FAST.copy(analyticsHelp = MockAnalyticsHelp.MANUAL), clock, catalog = Catalog(categories()))
     private val statements = MockStatementsApi(backend)
     private val operations = MockOperationsApi(backend)
     private val analytics = MockAnalyticsApi(backend)
@@ -94,7 +96,11 @@ internal class CalcScenario(private val root: File) {
             val request = step["cursor_from"]?.let { "GET /v1/analytics/charts/monthly_chart" to mapOf("cursor" to resolve(it.jsonObject).jsonPrimitive.content) }
                 ?: step["filter_from"]?.let { "GET /v1/operations" to filterQuery(resolve(it.jsonObject).jsonObject) }
                 ?: parse(step.string("request"))
-            get(request.first.removePrefix("GET "), request.second)
+            get(
+                request.first.removePrefix("GET "),
+                request.second,
+                balanceFirst = step["analytics_help_fixture"]?.jsonPrimitive?.content == "onboarding",
+            )
         }
         "change_category" -> {
             val op = step.getValue("operation").jsonObject
@@ -131,7 +137,7 @@ internal class CalcScenario(private val root: File) {
         else -> error("unknown step $action")
     }
 
-    private suspend fun get(path: String, query: Map<String, String>): JsonElement = when (path) {
+    private suspend fun get(path: String, query: Map<String, String>, balanceFirst: Boolean = false): JsonElement = when (path) {
         "/v1/analytics" -> encode(
             Analytics.serializer(),
             analytics.getAnalytics(
@@ -139,7 +145,9 @@ internal class CalcScenario(private val root: File) {
                 date = query["date"]?.let(::PeriodKey),
                 transferMode = query["transfer_mode"]?.let { code -> TransferMode.entries.first { it.code == code } },
                 supports = query["supports"], exp = query["exp"],
-            ),
+            ).let { response ->
+                if (balanceFirst) response.withAnalyticsHelp(MockAnalyticsHelp.ONBOARDING, balanceFirst = true) else response
+            },
         )
         "/v1/analytics/charts/monthly_chart" -> encode(ru.finassist.pf.core.api.model.AnalyticsChartPage.serializer(), analytics.getMonthlyChartPage(query["cursor"].orEmpty()))
         "/v1/statements/config" -> encode(ru.finassist.pf.core.api.model.ImportConfig.serializer(), statements.getImportConfig(query["period_from"], query["period_to"]))

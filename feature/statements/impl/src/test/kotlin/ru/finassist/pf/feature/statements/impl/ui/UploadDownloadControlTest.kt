@@ -27,7 +27,6 @@ import org.robolectric.annotation.GraphicsMode
 import ru.finassist.pf.core.api.model.ImportConfig
 import ru.finassist.pf.core.api.model.LoadedSummary
 import ru.finassist.pf.core.common.time.DateRange
-import ru.finassist.pf.core.common.LegalLinks
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import java.time.OffsetDateTime
 import kotlin.test.assertEquals
@@ -81,7 +80,7 @@ class UploadDownloadControlTest {
         val privacy = "Операции видите только вы. Удалить загрузку или аккаунт — в профиле. Как мы защищаем данные"
         compose.onNodeWithText(privacy).performScrollTo().assertTextEquals(privacy)
         compose.onNode(hasClickAction() and hasAnyAncestor(hasText(privacy)), useUnmergedTree = true).performClick()
-        assertEquals(LegalLinks.PRIVACY, opened.last())
+        assertEquals("https://documents.plainfin.ru/privacy", opened.last())
         compose.runOnIdle { config.value = empty }
         download.performScrollTo().assertTextEquals("Скачать за год")
     }
