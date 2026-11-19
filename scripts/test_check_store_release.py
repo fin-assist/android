@@ -6,13 +6,16 @@ import hashlib
 import importlib.util
 from pathlib import Path
 import os
+import shutil
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 
 
 SCRIPTS = Path(__file__).resolve().parent
+WORKFLOW = SCRIPTS.parent / ".github" / "workflows" / "android-store-release.yml"
 spec = importlib.util.spec_from_file_location("check_store_release", SCRIPTS / "check-store-release.py")
 checker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checker)
@@ -208,3 +211,44 @@ class SigningVerificationTest(unittest.TestCase):
                 self.assertIn("must each be signed with the expected FIN-121 certificate", result.stderr)
                 self.assertFalse(self.bundle_checks.exists())
                 self.assertFalse(self.output.exists())
+
+
+class RunnerSdkTest(unittest.TestCase):
+    def test_build_and_sign_find_sdkmanager_outside_path(self):
+        workflow = WORKFLOW.read_text()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "path"
+            path.mkdir()
+            (path / "sed").symlink_to(shutil.which("sed"))
+            for command in ("curl", "sha256sum"):
+                stub = path / command
+                stub.write_text("#!/bin/sh\nexit 0\n")
+                stub.chmod(0o700)
+
+            sdk = root / "android sdk"
+            sdkmanager = sdk / "cmdline-tools" / "latest" / "bin" / "sdkmanager"
+            sdkmanager.parent.mkdir(parents=True)
+            sdkmanager.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$SDKMANAGER_ARGUMENTS"\n')
+            sdkmanager.chmod(0o700)
+            receipt = root / "sdkmanager-arguments"
+            env = os.environ | {
+                "ANDROID_HOME": str(sdk),
+                "SDKMANAGER_ARGUMENTS": str(receipt),
+                "PATH": str(path),
+            }
+
+            for step, packages in (
+                ("Install Android SDK packages", ["platforms;android-36", "build-tools;36.0.0"]),
+                ("Prepare verification tools", ["build-tools;36.0.0"]),
+            ):
+                with self.subTest(step=step):
+                    receipt.unlink(missing_ok=True)
+                    block = workflow.split(f"      - name: {step}\n", 1)[1].split("\n      - ", 1)[0]
+                    script = textwrap.dedent(block.split("        run: |\n", 1)[1])
+                    result = subprocess.run(
+                        ["/bin/bash", "-eo", "pipefail", "-c", script],
+                        cwd=SCRIPTS.parent, env=env, text=True, capture_output=True, timeout=10,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(receipt.read_text().splitlines(), [f"--sdk_root={sdk}", *packages])
