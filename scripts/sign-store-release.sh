@@ -62,6 +62,11 @@ java -jar "$bundletool" build-apks --bundle="$release/$aab" --mode=universal --o
 unzip -p "$tmp/inspect.apks" universal.apk > "$tmp/universal.apk"
 python3 scripts/check-store-release.py "$BUILD_TOOLS/aapt2" "$tmp/universal.apk" "$release/$apk"
 
-(cd "$release" && shasum -a 256 "$aab" "$apk" > SHA256SUMS)
+files=("$aab" "$apk")
+if [[ -f "$unsigned/appmetrica-mapping.zip" ]]; then
+  cp "$unsigned/appmetrica-mapping.zip" "$release/"
+  files+=(appmetrica-mapping.zip)
+fi
+(cd "$release" && shasum -a 256 "${files[@]}" > SHA256SUMS)
 mkdir "$output"
-cp "$release/$aab" "$release/$apk" "$release/SHA256SUMS" "$output/"
+cp "$release/"* "$output/"
