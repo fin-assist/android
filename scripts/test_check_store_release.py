@@ -2,6 +2,7 @@
 
 import base64
 from datetime import date, timedelta
+import hashlib
 import importlib.util
 from pathlib import Path
 import os
@@ -111,54 +112,99 @@ class PackageVerificationTest(unittest.TestCase):
                 self.check_release(**options)
 
 
-# Stub only the external signing commands. The actual shell script evaluates both certificate
-# digests and the test observes that it stops before bundletool or creation of upload files.
+# The actual shell script verifies both certificates and hands the two packaged APKs to the
+# checker. The stubs supply observable artifacts without an Android SDK or keystore in PR CI.
 FAKE_SIGNER = r"""#!/usr/bin/env bash
 set -euo pipefail
 case "${0##*/}:$1" in
-  zipalign:*) ;;
-  apksigner:sign) ;;
+  zipalign:-P) printf 'aligned apk' > "$6" ;;
+  zipalign:-c) ;;
+  apksigner:sign)
+    while [[ "$1" != --out ]]; do shift; done
+    test "$(cat "$3")" = 'aligned apk'
+    printf 'signed apk' > "$2"
+    ;;
   apksigner:verify)
     echo 'Verified using v2 scheme (APK Signature Scheme v2): true'
     printf 'Signer #1 certificate SHA-256 digest: %s\n' "$TEST_APK_SIGNER"
     ;;
-  jarsigner:-keystore) ;;
+  jarsigner:-keystore)
+    while [[ "$1" != -signedjar ]]; do shift; done
+    test "$(cat "$3")" = 'unsigned aab'
+    printf 'signed aab' > "$2"
+    ;;
   jarsigner:-J-Duser.language=en) echo 'jar verified.' ;;
   keytool:*) printf 'SHA256: %s\n' "$TEST_AAB_SIGNER" ;;
-  java:*) echo 'Verification continued after a wrong signer' >&2; exit 99 ;;
+  java:-jar) printf '%s\n' "$3" >> "$TEST_BUNDLE_CHECKS" ;;
+  unzip:-p) printf 'inspection apk' ;;
+  python3:scripts/check-store-release.py)
+    test "$#" = 4
+    test "$(cat "$3")" = 'inspection apk'
+    test "$(cat "$4")" = 'signed apk'
+    printf '%s\n' "${3##*/}" "${4##*/}" > "$TEST_PACKAGE_CHECKS"
+    ;;
   *) exit 98 ;;
 esac
 """
 
 
 class SigningVerificationTest(unittest.TestCase):
+    correct = "a" * 64
+
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.output = self.root / "upload"
+        self.package_checks = self.root / "package-checks"
+        self.bundle_checks = self.root / "bundle-checks"
+        stub = self.root / "stub"
+        stub.write_text(FAKE_SIGNER)
+        stub.chmod(0o700)
+        for command in ("apksigner", "zipalign", "jarsigner", "keytool", "java", "unzip", "python3"):
+            (self.root / command).symlink_to(stub)
+        (self.root / "unsigned.aab").write_text("unsigned aab")
+        (self.root / "appmetrica-mapping.zip").write_text("mapping archive")
+
+    def run_signing(self, apk_signer, aab_signer):
+        env = os.environ | {
+            "PATH": f"{self.root}{os.pathsep}{os.environ['PATH']}",
+            "BUILD_TOOLS": str(self.root),
+            "PF_STORE_KEYSTORE_BASE64": base64.b64encode(b"fake keystore").decode(),
+            "PF_STORE_KEYSTORE_PASSWORD": "fake",
+            "PF_STORE_SIGNER_SHA256": self.correct,
+            "PF_VERSION_NAME": "1.0.1",
+            "PF_VERSION_CODE": "2",
+            "TEST_APK_SIGNER": apk_signer,
+            "TEST_AAB_SIGNER": aab_signer,
+            "TEST_BUNDLE_CHECKS": str(self.bundle_checks),
+            "TEST_PACKAGE_CHECKS": str(self.package_checks),
+        }
+        return subprocess.run(
+            ["bash", str(SCRIPTS / "sign-store-release.sh"), str(self.root), "fake.jar", str(self.output)],
+            env=env, text=True, capture_output=True, timeout=10,
+        )
+
+    def test_checks_both_packages_and_publishes_signed_files_and_checksums(self):
+        result = self.run_signing(self.correct, self.correct)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        aab = "plainfin-1.0.1+2-google-play.aab"
+        apk = "plainfin-1.0.1+2-rustore.apk"
+        self.assertEqual(self.bundle_checks.read_text().splitlines(), ["validate", "build-apks"])
+        self.assertEqual(self.package_checks.read_text().splitlines(), ["universal.apk", apk])
+        expected = {aab: b"signed aab", apk: b"signed apk", "appmetrica-mapping.zip": b"mapping archive"}
+        self.assertEqual({p.name for p in self.output.iterdir()}, set(expected) | {"SHA256SUMS"})
+        for name, payload in expected.items():
+            self.assertEqual((self.output / name).read_bytes(), payload)
+        self.assertEqual(
+            (self.output / "SHA256SUMS").read_text().splitlines(),
+            [f"{hashlib.sha256(payload).hexdigest()}  {name}" for name, payload in expected.items()],
+        )
+
     def test_stops_before_upload_when_either_certificate_differs(self):
-        correct = "a" * 64
         wrong = "b" * 64
-        for apk_signer, aab_signer in ((wrong, correct), (correct, wrong)):
-            with self.subTest(apk_signer=apk_signer), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                stub = root / "stub"
-                stub.write_text(FAKE_SIGNER)
-                stub.chmod(0o700)
-                for command in ("apksigner", "zipalign", "jarsigner", "keytool", "java"):
-                    (root / command).symlink_to(stub)
-                output = root / "upload"
-                env = os.environ | {
-                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
-                    "BUILD_TOOLS": str(root),
-                    "PF_STORE_KEYSTORE_BASE64": base64.b64encode(b"fake keystore").decode(),
-                    "PF_STORE_KEYSTORE_PASSWORD": "fake",
-                    "PF_STORE_SIGNER_SHA256": correct,
-                    "PF_VERSION_NAME": "1.0.1",
-                    "PF_VERSION_CODE": "2",
-                    "TEST_APK_SIGNER": apk_signer,
-                    "TEST_AAB_SIGNER": aab_signer,
-                }
-                result = subprocess.run(
-                    ["bash", str(SCRIPTS / "sign-store-release.sh"), str(root), "fake.jar", str(output)],
-                    env=env, text=True, capture_output=True, timeout=10,
-                )
+        for apk_signer, aab_signer in ((wrong, self.correct), (self.correct, wrong)):
+            with self.subTest(apk_signer=apk_signer):
+                result = self.run_signing(apk_signer, aab_signer)
                 self.assertEqual(result.returncode, 1, result.stderr)
                 self.assertIn("must each be signed with the expected FIN-121 certificate", result.stderr)
-                self.assertFalse(output.exists())
+                self.assertFalse(self.bundle_checks.exists())
+                self.assertFalse(self.output.exists())

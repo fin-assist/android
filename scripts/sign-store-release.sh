@@ -67,6 +67,6 @@ if [[ -f "$unsigned/appmetrica-mapping.zip" ]]; then
   cp "$unsigned/appmetrica-mapping.zip" "$release/"
   files+=(appmetrica-mapping.zip)
 fi
-(cd "$release" && shasum -a 256 "${files[@]}" > SHA256SUMS)
+(cd "$release" && sha256sum "${files[@]}" > SHA256SUMS)
 mkdir "$output"
 cp "$release/"* "$output/"
