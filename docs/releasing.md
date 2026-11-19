@@ -40,3 +40,37 @@ GITHUB_REF_NAME=release/0.2.15 python3 scripts/check-app-version.py
 
 Правила выбора целевой ветки PR и слияния владельцем остаются в `AGENTS.md`, раздел Workflow.
 Изменение номера сборки не добавляет пользовательский сценарий и не требует UI-прогона.
+
+## Подписанные файлы для Google Play и RuStore
+
+В GitHub откройте **Actions → Android store release → Run workflow**, выберите защищённую ветку
+`main` и задайте `version_code` для обоих магазинов. Workflow берёт версию из `app/build.gradle.kts`
+и собирает `prodRelease` из SHA выбранного запуска. Перед запуском сверьте код с последними загрузками
+в обоих кабинетах.
+
+После успешной сборки скачайте `plainfin-X.Y.Z+N-stores-<попытка>` в разделе **Artifacts**.
+В нём подписанный AAB для Google Play, подписанный APK для RuStore, `SHA256SUMS` и SHA исходного
+коммита. Оба файла проверяются на подпись FIN-121, пакет, версию, SDK и production-пины.
+Если включена AppMetrica, в том же артефакте будет `appmetrica-mapping.zip` для расшифровки крэшей
+этой сборки. Загрузите архив в [AppMetrica](../README.md#flavor-prod) вместе с выпуском приложения.
+Артефакт доступен для скачивания вошедшим в GitHub пользователям публичного репозитория 14 дней.
+Промежуточный публичный артефакт `unsigned-store-inputs-<попытка>` служит для передачи неподписанных
+файлов между заданиями одного запуска и хранится один день.
+Загрузку в магазины выполняет владелец.
+
+### Настройка Actions владельцем
+
+1. В **Settings → Environments** создайте `android-store-signing`. В **Deployment branches and tags**
+   разрешите только ветку `main` с типом **Branch**. Включите **Required reviewers** для владельца
+   или назначенных ответственных за подпись. Снимите **Allow administrators to bypass configured
+   protection rules**. Эти ограничения применяются GitHub до выдачи секретов.
+2. Добавьте в это окружение секреты `PF_STORE_KEYSTORE_BASE64` (PKCS#12 FIN-121 в base64) и
+   `PF_STORE_KEYSTORE_PASSWORD` (пароль хранилища), а также переменную `PF_STORE_SIGNER_SHA256`
+   (SHA-256 сертификата FIN-121 в нижнем регистре, без двоеточий). Секреты подписи должны храниться
+   в окружении `android-store-signing`. Алиас существующего ключа — `plainfin-android-release`.
+3. На уровне репозитория в **Secrets and variables → Actions → Variables** задайте действующие
+   `PF_API_PINS` и `PF_API_PINS_EXPIRATION` для production API. Формат совпадает с [README](../README.md#закрепление-сертификата-в-prod).
+   Для включения production SDK также используйте `PF_VARIOQUB_APP_ID` как переменную Actions и
+   `PF_APP_METRICA_API_KEY` как секрет Actions. Без ключа сборка выпускается с отключённой AppMetrica.
+4. После запуска одобрите задание **Sign and verify store artifacts**. Оно проверяет скачанные
+   файлы и подписывает их на отдельном runner, где Gradle не запускается.

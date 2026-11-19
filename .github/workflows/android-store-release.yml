@@ -1,0 +1,130 @@
+name: Android store release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: "Integer versionCode for both stores (higher than any previously uploaded)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build unsigned prodRelease
+    if: github.repository == 'fin-assist/android' && github.ref == 'refs/heads/main' && github.ref_protected
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version_name: ${{ steps.version.outputs.name }}
+      unsigned_artifact_id: ${{ steps.unsigned.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Validate release inputs
+        id: version
+        env:
+          PF_VERSION_CODE: ${{ inputs.version_code }}
+          PF_API_PINS: ${{ vars.PF_API_PINS }}
+          PF_API_PINS_EXPIRATION: ${{ vars.PF_API_PINS_EXPIRATION }}
+        run: |
+          if [[ ! "$PF_VERSION_CODE" =~ ^[1-9][0-9]{0,9}$ ]] || (( PF_VERSION_CODE > 2100000000 )); then
+            echo "::error::versionCode must be an integer from 1 to 2100000000"
+            exit 1
+          fi
+          if [[ -z "$PF_API_PINS" || -z "$PF_API_PINS_EXPIRATION" ]]; then
+            echo "::error::Configure the FIN-121 production pins and their expiration"
+            exit 1
+          fi
+          python3 scripts/check-app-version.py
+          version="$(sed -nE 's/^val appVersionName = "([0-9.]+)"[[:space:]]*$/\1/p' app/build.gradle.kts)"
+          printf 'name=%s\n' "$version" >> "$GITHUB_OUTPUT"
+      - name: Install Android SDK packages
+        run: |
+          compile_sdk="$(sed -nE 's/^compileSdk = "([0-9]+)"$/\1/p' gradle/libs.versions.toml)"
+          [[ "$compile_sdk" =~ ^[0-9]+$ ]]
+          sdkmanager "platforms;android-${compile_sdk}" "build-tools;36.0.0"
+      - name: Assemble AAB and APK from the same checkout
+        env:
+          PF_VERSION_CODE: ${{ inputs.version_code }}
+          PF_API_PINS: ${{ vars.PF_API_PINS }}
+          PF_API_PINS_EXPIRATION: ${{ vars.PF_API_PINS_EXPIRATION }}
+          PF_APP_METRICA_API_KEY: ${{ secrets.PF_APP_METRICA_API_KEY }}
+          PF_VARIOQUB_APP_ID: ${{ vars.PF_VARIOQUB_APP_ID }}
+        run: |
+          ./gradlew --no-daemon :app:bundleProdRelease :app:assembleProdRelease :app:checkNoMockCode
+          mkdir unsigned-store-release
+          cp app/build/outputs/bundle/prodRelease/app-prod-release.aab unsigned-store-release/unsigned.aab
+          cp app/build/outputs/apk/prod/release/app-prod-release-unsigned.apk unsigned-store-release/unsigned.apk
+          if [[ -n "$PF_APP_METRICA_API_KEY" ]]; then
+            mapping=app/build/appmetrica/prodRelease/result/mapping.zip
+            if [[ ! -s "$mapping" ]]; then
+              echo "::error::AppMetrica is enabled but its release mapping archive is missing"
+              exit 1
+            fi
+            cp "$mapping" unsigned-store-release/appmetrica-mapping.zip
+          fi
+      - name: Pass unsigned files to the signing job
+        id: unsigned
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: unsigned-store-inputs-${{ github.run_attempt }}
+          path: unsigned-store-release/
+          if-no-files-found: error
+          retention-days: 1
+
+  sign:
+    name: Sign and verify store artifacts
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: android-store-signing
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          artifact-ids: ${{ needs.build.outputs.unsigned_artifact_id }}
+          path: ${{ runner.temp }}/unsigned-store-release
+          digest-mismatch: error
+      - name: Prepare verification tools
+        working-directory: ${{ runner.temp }}
+        run: |
+          sdkmanager "build-tools;36.0.0"
+          curl --fail --silent --show-error --location --retry 3 --max-time 120 \
+            https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar \
+            --output bundletool.jar
+          echo 'a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29  bundletool.jar' | sha256sum --check
+      - name: Sign and verify both files
+        env:
+          PF_STORE_KEYSTORE_BASE64: ${{ secrets.PF_STORE_KEYSTORE_BASE64 }}
+          PF_STORE_KEYSTORE_PASSWORD: ${{ secrets.PF_STORE_KEYSTORE_PASSWORD }}
+          PF_STORE_SIGNER_SHA256: ${{ vars.PF_STORE_SIGNER_SHA256 }}
+          PF_API_PINS: ${{ vars.PF_API_PINS }}
+          PF_API_PINS_EXPIRATION: ${{ vars.PF_API_PINS_EXPIRATION }}
+          PF_VERSION_CODE: ${{ inputs.version_code }}
+          PF_VERSION_NAME: ${{ needs.build.outputs.version_name }}
+        run: |
+          export BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
+          bash scripts/sign-store-release.sh \
+            "$RUNNER_TEMP/unsigned-store-release" "$RUNNER_TEMP/bundletool.jar" "$RUNNER_TEMP/store-release"
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/store-release/source-commit.txt"
+      - name: Upload signed AAB and APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: plainfin-${{ needs.build.outputs.version_name }}+${{ inputs.version_code }}-stores-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/store-release/
+          if-no-files-found: error
+          retention-days: 14
