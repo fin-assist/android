@@ -20,6 +20,9 @@ tags:
 - scrollUntilVisible:
     element:
       id: "analytics.block.e2e_unknown"
+      containsDescendants:
+        - text: "Карта расходов по районам — обновите приложение, чтобы её увидеть"
+    centerElement: true
 - assertVisible:
     id: "analytics.block.e2e_unknown"
     below:
@@ -29,6 +32,10 @@ tags:
 - scrollUntilVisible:
     element:
       id: "analytics.block.e2e_locked"
+      containsDescendants:
+        - text: "Сравнение банков"
+        - text: "Откроется, когда подключите второй банк"
+    centerElement: true
 - assertVisible:
     id: "analytics.block.e2e_locked"
     containsDescendants:
