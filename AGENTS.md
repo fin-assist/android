@@ -198,6 +198,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   side of a PR. The assemble job also checks generated manifest/BuildConfig versions for mockDebug, localDebug, both stage variants
   and prodRelease. The assemble job publishes `app-stage-debug` for installation; default stage identity/HTTPS/SDK
   isolation is checked with production sentinel properties, and stage/prod pinning is checked independently. Release preparation and the independent monotonic build number: `docs/releasing.md`.
+- The manual `Android store release` workflow builds from protected `main`, signs verified Google Play AAB and
+  RuStore APK on a separate runner using the `android-store-signing` environment, and uploads them as downloadable
+  artifacts. Setup, version input and download are documented in `docs/releasing.md`.
 - UI tests need an emulator (not available in a cloud container): `scripts/e2e.sh` locally (all flows and the native
   tests; `--shard i/n` runs one CI shard), the `UI tests` workflow in CI (after a merge to `main`, or started by hand
   for a branch; PRs never run them by themselves). CI splits the flows between six emulators
