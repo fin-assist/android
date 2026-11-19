@@ -34,6 +34,10 @@ tags:
       id: "statements.upload.pick"
 - tapOn:
     id: "statements.upload.pick"
+- scrollUntilVisible:
+    element:
+      id: "e2e.picker.unreadable.ofx"
+    centerElement: true
 - tapOn:
     id: "e2e.picker.unreadable.ofx"
 - extendedWaitUntil:
@@ -75,6 +79,10 @@ tags:
       id: "statements.upload.pick"
 - tapOn:
     id: "statements.upload.pick"
+- scrollUntilVisible:
+    element:
+      id: "e2e.picker.unreadable-fixed.ofx"
+    centerElement: true
 - tapOn:
     id: "e2e.picker.unreadable-fixed.ofx"
 - extendedWaitUntil:

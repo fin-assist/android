@@ -1857,3 +1857,12 @@ events and an active account. The Maestro build `mockE2e` excludes the real SDK 
 restore that account across an APK replacement. Robolectric covers cleanup of the pinned SDK's reporting paths,
 activation order, retained app state and payloads at the SDK boundary. Existing sign-in, sign-out and account
 deletion flows continue to exercise the user-visible behaviour. The isolated SDK upgrade check is in [README](../README.md#flavor-prod).
+
+### FIN-533: reveal complete targets on API 36
+
+The unreadable-statement flows scroll the test picker before selecting either unreadable file, including
+when `refresh/server_data.yaml` reuses the unreadable-upload journey. Centering keeps a clipped row's tap
+away from the system gesture area. The unknown-block flow scrolls until the card contains its expected
+server text, then retains the original assertions for the fallback, title and lock explanation.
+These changes preserve the existing scenarios and Qase mapping. Full API 36 acceptance comes from the
+post-merge `UI tests` run, not static validation of the flows.

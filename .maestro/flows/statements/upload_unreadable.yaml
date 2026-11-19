@@ -34,6 +34,11 @@ tags:
       id: "statements.upload.pick"
 - tapOn:
     id: "statements.upload.pick"
+# Compose can expose a clipped last row inside the system gesture area on API 36.
+- scrollUntilVisible:
+    element:
+      id: "e2e.picker.unreadable.ofx"
+    centerElement: true
 - tapOn:
     id: "e2e.picker.unreadable.ofx"
 - extendedWaitUntil:
