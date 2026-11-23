@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import ru.finassist.pf.core.api.model.HelpTags
 import ru.finassist.pf.core.designsystem.components.LocalSuppressPopups
 import ru.finassist.pf.core.designsystem.components.pfTestRoot
 import ru.finassist.pf.core.designsystem.icons.PfIcon
@@ -62,6 +63,7 @@ internal fun HelpPopupButton(
     initiallyOpen: Boolean = false,
     key: List<String>?,
     order: Int?,
+    tags: List<String> = emptyList(),
 ) {
     val suppressed = LocalSuppressPopups.current
     val onboarding = LocalTooltipOnboarding.current
@@ -86,9 +88,17 @@ internal fun HelpPopupButton(
     ) {
         Box(Modifier.offset(y = PfTheme.dimens.space1)) {
             PfIcon(PfIcons.INFO, contentDescription = "Пояснение: $title", size = 20.dp, tint = PfTheme.colors.text)
-            if (!suppressed && (shown || automatic)) HelpPopup(text, "$tag.help.popup") {
-                shown = false
-                if (key != null) onboarding?.dismiss(key)
+            if (!suppressed && (shown || automatic)) {
+                val onDismiss = {
+                    shown = false
+                    if (key != null) onboarding?.dismiss(key)
+                    Unit
+                }
+                if (HelpTags.BOTTOM in tags) {
+                    BlockHelpSheet(title, text, onDismiss, Modifier.testTag("$tag.help.sheet"))
+                } else {
+                    HelpPopup(text, "$tag.help.popup", onDismiss)
+                }
             }
         }
     }

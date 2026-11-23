@@ -17,7 +17,7 @@ internal fun BlockTile(block: Block, tile: Tile, ctx: BlockContext, modifier: Mo
     val order = onboardingOrder(tile.helpTags, tile.helpOrder)
     val help: (@Composable () -> Unit)? = tile.helpText?.takeIf { it.isNotBlank() }?.let { text ->
         {
-            if (ctx.anchoredHelp) HelpPopupButton(text, tile.title, tag, key = key, order = order)
+            if (ctx.anchoredHelp) HelpPopupButton(text, tile.title, tag, key = key, order = order, tags = tile.helpTags)
             else BlockHelpButton(text, tile.title, tag)
         }
     }

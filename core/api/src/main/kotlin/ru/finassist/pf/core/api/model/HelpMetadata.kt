@@ -13,6 +13,12 @@ import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
 
+/** Known values in the open help_tags list. */
+object HelpTags {
+    const val ONBOARDING = "onboarding"
+    const val BOTTOM = "bottom"
+}
+
 object HelpTagsSerializer : KSerializer<List<String>> by ListSerializer(String.serializer()) {
     override fun deserialize(decoder: Decoder): List<String> {
         val input = decoder as? JsonDecoder ?: return ListSerializer(String.serializer()).deserialize(decoder)

@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
+import ru.finassist.pf.core.api.model.HelpTags
 
 /** Screen-local queue for the same anchors and popup used by manual help. */
 class TooltipOnboarding {
@@ -50,4 +51,4 @@ class TooltipOnboarding {
 val LocalTooltipOnboarding = compositionLocalOf<TooltipOnboarding?> { null }
 
 internal fun onboardingOrder(tags: List<String>, order: Int?): Int? =
-    order?.takeIf { it > 0 && "onboarding" in tags }
+    order?.takeIf { it > 0 && HelpTags.ONBOARDING in tags }

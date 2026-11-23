@@ -43,7 +43,7 @@ internal fun BlockContext.helpButton(block: Block, title: String = block.title ?
     val text = block.helpText?.takeIf { anchoredHelp && it.isNotBlank() } ?: return null
     val key = block.id?.takeIf { it.isNotBlank() }?.let(::listOf)
     val order = onboardingOrder(block.helpTags, block.helpOrder)
-    return { HelpPopupButton(text, title, tags.block(block.id ?: block.type.code), key = key, order = order) }
+    return { HelpPopupButton(text, title, tags.block(block.id ?: block.type.code), key = key, order = order, tags = block.helpTags) }
 }
 
 @Composable
