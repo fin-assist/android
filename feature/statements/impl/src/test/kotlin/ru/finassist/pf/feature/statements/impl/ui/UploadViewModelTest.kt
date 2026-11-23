@@ -169,6 +169,13 @@ class UploadViewModelTest {
         assertNull(uploadViewModel.supportUserId())
     }
 
+    @Test fun `support remains available when the session store cannot be read`() = runTest(dispatcher) {
+        val unreadable = object : TokenStore by NoTokens {
+            override suspend fun current(): TokenStore.Session? = throw IOException("unreadable session")
+        }
+        assertNull(newViewModel(tokenStore = unreadable).supportUserId())
+    }
+
     @Test fun `cold config error shows an explicit failure without invented calendar data`() {
         api.configFailure = AppError.Server(500)
         val state = newViewModel().state.value

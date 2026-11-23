@@ -114,7 +114,10 @@ fun UploadScreen(
         onCancelImport = vm::cancelImport,
         onRetryUpload = vm::retryUpload,
         onSupport = {
-            scope.launch { writeToSupport(context, "Не получилось загрузить выписку", vm.supportUserId()) }
+            scope.launch {
+                val draft = importSupportDraft(vm.supportUserId())
+                runCatching { context.startActivity(draft) }
+            }
         },
         onStartNewUpload = vm::startNewUpload,
         onOpenHistory = onOpenHistory,
@@ -419,14 +422,11 @@ private fun FileRow(label: String, value: String, divider: Boolean) {
     }
 }
 
-/** Opens the mail app with a letter to support; nothing happens without one. */
-private fun writeToSupport(context: android.content.Context, subject: String, userId: String?) {
-    val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")).apply {
-        putExtra(Intent.EXTRA_EMAIL, arrayOf(Support.EMAIL))
-        putExtra(Intent.EXTRA_SUBJECT, subject)
-        if (!userId.isNullOrBlank()) putExtra(Intent.EXTRA_TEXT, Support.userIdFooter(userId))
-    }
-    runCatching { context.startActivity(intent) }
+/** Builds the mail draft with an import-specific subject. */
+internal fun importSupportDraft(userId: String?): Intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")).apply {
+    putExtra(Intent.EXTRA_EMAIL, arrayOf(Support.EMAIL))
+    putExtra(Intent.EXTRA_SUBJECT, "Не получилось загрузить выписку")
+    if (!userId.isNullOrBlank()) putExtra(Intent.EXTRA_TEXT, Support.userIdFooter(userId))
 }
 
 private fun openUrl(context: android.content.Context, url: String) {

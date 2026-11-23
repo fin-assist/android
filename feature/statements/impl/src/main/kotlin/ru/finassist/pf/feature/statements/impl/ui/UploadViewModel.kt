@@ -145,7 +145,11 @@ class UploadViewModel @Inject constructor(
         load()
     }
 
-    internal suspend fun supportUserId(): String? = tokenStore.current()?.userId
+    internal suspend fun supportUserId(): String? = try {
+        tokenStore.current()?.userId
+    } catch (_: IOException) {
+        null
+    }
 
     fun load() {
         if (!configGate.isReady() || configJob?.isActive == true) return
