@@ -96,23 +96,27 @@ class AnalyticsHelpPopupTest {
                     Box(Modifier.width(288.dp)) {
                         PfAskCard(
                             onClick = { openedChat++ },
-                            modifier = Modifier.testTag("ask.card"),
+                            modifier = Modifier.testTag(AnalyticsTags.ASK),
                             title = title,
-                            help = { BlockHelpPopupButton(HELP, title, TAG) },
+                            help = { BlockHelpPopupButton(HELP, title, AnalyticsTags.ASK) },
                         )
                     }
                 }
             }
         }
-        val card = compose.onNodeWithTag("ask.card").assertIsDisplayed()
+        val card = compose.onNodeWithTag(AnalyticsTags.ASK).assertIsDisplayed()
         val bounds = card.getUnclippedBoundsInRoot()
         val titleBounds = compose.onNodeWithText(title, useUnmergedTree = true).getUnclippedBoundsInRoot()
-        val helpBounds = compose.onNodeWithTag("$TAG.help").getUnclippedBoundsInRoot()
+        val help = compose.onNodeWithTag(AnalyticsTags.ASK_HELP).assertIsDisplayed()
+        val helpBounds = help.getUnclippedBoundsInRoot()
         assertTrue(titleBounds.right <= helpBounds.left)
         assertTrue(helpBounds.right <= bounds.right)
         assertEquals(48.dp, helpBounds.right - helpBounds.left)
         card.performClick()
-        openHelp()
+        help.performClick()
+        compose.onNodeWithTag(AnalyticsTags.ASK_HELP_POPUP).assertIsDisplayed()
+        compose.onNodeWithText(HELP).assertIsDisplayed()
+        compose.onNodeWithTag(AnalyticsTags.ASK_HELP_SKIP).assertDoesNotExist()
         assertEquals(bounds, card.getUnclippedBoundsInRoot())
         assertEquals(1, openedChat)
     }

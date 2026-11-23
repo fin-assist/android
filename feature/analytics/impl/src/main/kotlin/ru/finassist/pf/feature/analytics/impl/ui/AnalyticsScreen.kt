@@ -554,6 +554,10 @@ internal object AnalyticsTags {
     const val RETRY = "analytics.retry"
     const val PERIOD_RETRY = "analytics.period.retry"
     const val ASK = "analytics.ask"
+    // The shared popup appends these suffixes to ASK.
+    const val ASK_HELP = "analytics.ask.help"
+    const val ASK_HELP_POPUP = "analytics.ask.help.popup"
+    const val ASK_HELP_SKIP = "analytics.ask.help.popup.skip"
     const val UNREAD = "analytics.unread"
     /** The stale statement banner: «Данные в приложении по … — с тех пор прошло больше двух недель». */
     const val STALE = "analytics.stale"
