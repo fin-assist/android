@@ -24,8 +24,7 @@ class StatementOpenIntentTest {
         assertNull(incomingStatementUri(openOfx().setAction(Intent.ACTION_SEND)))
     }
 
-    @Test fun `ignores missing path grants and non-content URI schemes`() {
-        assertNull(incomingStatementUri(openOfx().setFlags(0)))
+    @Test fun `ignores invalid content and non-content URI schemes`() {
         assertNull(incomingStatementUri(openOfx().setDataAndType(Uri.parse("file:///storage/example.ofx"), OFX_MIME_TYPE)))
         assertNull(incomingStatementUri(openOfx().setDataAndType(Uri.parse("https://example.test/file.ofx"), OFX_MIME_TYPE)))
         assertNull(incomingStatementUri(openOfx().setDataAndType(Uri.parse("content:///23"), OFX_MIME_TYPE)))

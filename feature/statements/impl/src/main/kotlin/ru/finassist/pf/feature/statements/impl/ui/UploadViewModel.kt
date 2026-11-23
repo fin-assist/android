@@ -232,8 +232,12 @@ class UploadViewModel @Inject constructor(
         launchUpload(uri)
     }
 
-    fun onExternalFilePicked(uri: Uri) {
-        if (uploadInFlight || _state.value.phase is UploadPhase.Busy) return
+    /** Take the selection only after the initial limits are loaded and the caller still permits import. */
+    suspend fun onExternalFilePicked(takeSelection: () -> Uri?) {
+        configJob?.join()
+        val uri = takeSelection() ?: return
+        val phase = _state.value.phase
+        if (uploadInFlight || phase is UploadPhase.Busy || phase == UploadPhase.Disabled) return
         val readPermission = context.checkUriPermission(
             uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION,
         )

@@ -241,30 +241,40 @@ private fun MainLayer(
     val controller = rememberNavController()
     ScreenBreadcrumbs(controller, onScreenOpened, active)
     val navigator = remember(controller) { NavControllerNavigator(controller) }
-    // Right after registration the first run continues with the statement upload (step 4 of 4) — unless the
-    // upload screen is switched off by `statements.upload`.
+    // Keep the registration step while an external selection waits for the app to unlock.
+    var firstRunUpload by rememberSaveable(userId) { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(userId) {
-        if (session.consumeJustRegistered() && incomingStatementId == null &&
-            flags.isEnabled(Flag.STATEMENTS_UPLOAD)
-        ) {
-            controller.navigate(StatementsRoutes.Upload(firstRun = true))
-        }
+        if (firstRunUpload == null) firstRunUpload = session.consumeJustRegistered()
     }
     val backStack by controller.currentBackStackEntryAsState()
     val destination = backStack?.destination
     val canOpenStatement = consumeIncomingStatement != null
-    LaunchedEffect(incomingStatementId, canOpenStatement, destination != null) {
-        if (incomingStatementId == null || !canOpenStatement || destination == null ||
-            !flags.isEnabled(Flag.STATEMENTS_UPLOAD)
-        ) return@LaunchedEffect
+    LaunchedEffect(firstRunUpload, incomingStatementId, canOpenStatement, destination != null) {
+        val firstRun = firstRunUpload ?: return@LaunchedEffect
+        if (destination == null) return@LaunchedEffect
+        if (!flags.isEnabled(Flag.STATEMENTS_UPLOAD)) {
+            firstRunUpload = false
+            return@LaunchedEffect
+        }
+        if (incomingStatementId == null) {
+            if (firstRun) {
+                controller.navigate(StatementsRoutes.Upload(firstRun = true))
+                firstRunUpload = false
+            }
+            return@LaunchedEffect
+        }
+        if (!canOpenStatement) return@LaunchedEffect
         val current = backStack?.takeIf { it.destination.hasRoute<StatementsRoutes.Upload>() }
             ?.toRoute<StatementsRoutes.Upload>()
         if (current?.externalRequestId != incomingStatementId) {
-            controller.navigate(StatementsRoutes.Upload(
-                firstRun = current?.firstRun ?: false,
-                externalRequestId = incomingStatementId,
-            )) { launchSingleTop = true }
+            controller.navigate(
+                StatementsRoutes.Upload(
+                    firstRun = firstRun || current?.firstRun == true,
+                    externalRequestId = incomingStatementId,
+                ),
+            ) { launchSingleTop = true }
         }
+        firstRunUpload = false
     }
     val assistantPolicy: AssistantAvailabilityPolicy = viewModel {
         AssistantAvailabilityPolicy(flags.isEnabled(Flag.ASSISTANT))

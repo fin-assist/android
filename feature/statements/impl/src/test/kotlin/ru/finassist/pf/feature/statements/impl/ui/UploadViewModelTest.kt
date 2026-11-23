@@ -4,10 +4,15 @@ import ru.finassist.pf.core.common.time.ElapsedClock
 import java.time.ZoneId
 import ru.finassist.pf.core.common.time.Clock
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -79,6 +84,7 @@ class UploadViewModelTest {
     private inner class FakeApi : StatementsApi {
         var offline = false
         var configFailure: AppError? = null
+        var configResponseGate: CompletableDeferred<Unit>? = null
         var currentConfig = config
         var configCalls = 0
         val dateRequests = mutableListOf<Pair<String?, String?>>()
@@ -99,6 +105,7 @@ class UploadViewModelTest {
         override suspend fun getImportConfig(periodFrom: String?, periodTo: String?): ImportConfig {
             configCalls++
             dateRequests += periodFrom to periodTo
+            configResponseGate?.await()
             return configFailure?.let { throw it } ?: currentConfig
         }
         override suspend fun uploadStatement(key: IdempotencyKey, file: UploadFile): UploadAccepted {
@@ -152,8 +159,8 @@ class UploadViewModelTest {
         vm = newViewModel()
     }
 
-    private fun newViewModel(flags: StaticFlags = StaticFlags()) =
-        UploadViewModel(context, api, repository, flags, tracker, IdempotencyKeys(store), clock, ElapsedClock { dispatcher.scheduler.currentTime })
+    private fun newViewModel(flags: StaticFlags = StaticFlags(), fileContext: Context = context) =
+        UploadViewModel(fileContext, api, repository, flags, tracker, IdempotencyKeys(store), clock, ElapsedClock { dispatcher.scheduler.currentTime })
 
     @After fun tearDown() = Dispatchers.resetMain()
 
@@ -162,6 +169,38 @@ class UploadViewModelTest {
         val state = newViewModel().state.value
         assertIs<UploadPhase.ConfigFailure>(state.phase)
         assertNull(state.config)
+    }
+
+    @Test fun `external selection waits for and applies the initial size limit`() {
+        val configReady = CompletableDeferred<Unit>()
+        val small = config.copy(maxFileSizeBytes = 4)
+        val granted = object : ContextWrapper(context) {
+            override fun checkUriPermission(uri: Uri, pid: Int, uid: Int, modeFlags: Int) =
+                PackageManager.PERMISSION_GRANTED
+        }
+        api.configResponseGate = configReady
+        api.currentConfig = small
+        vm = newViewModel(fileContext = granted)
+        var selected = false
+
+        runBlocking {
+            val external = launch(start = CoroutineStart.UNDISPATCHED) {
+                vm.onExternalFilePicked {
+                    selected = true
+                    uri
+                }
+            }
+            assertFalse(selected)
+            assertIs<UploadPhase.Loading>(vm.state.value.phase)
+            configReady.complete(Unit)
+            external.join()
+        }
+
+        assertTrue(selected)
+        await("the size error") { it.phase is UploadPhase.Error }
+        assertEquals(small, vm.state.value.config)
+        assertEquals(UploadPhase.Error(ErrorCodes.FILE_TOO_LARGE, name, small), vm.state.value.phase)
+        assertTrue(api.keys.isEmpty())
     }
 
     @Test fun `selected dates request exact inclusive days and open unchanged server URL only after validation`() {

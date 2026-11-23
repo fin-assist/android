@@ -894,6 +894,21 @@ The unchanged Qase14 Maestro journey was not rerun, so this does not claim a com
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
 
+FIN-549: native `ExternalStatementOpenTest` sends a synthetic OFX from a separate test APK using an Android
+URI grant. It checks a cold launch followed by sign-in, a warm launch through the passcode gate and the existing
+import error when the file has no Android read grant. A new account that opens an unavailable file keeps
+its first-run upload guide and «Загружу позже». The system picker still has its own native coverage
+in `StatementPickerTest`.
+
+The Android 16 Chrome download probe confirmed `ACTION_VIEW` with `content://media/external/downloads/<id>`.
+It kept `application/x-ofx` for an OFX served with that MIME type and `application/octet-stream` for an OFX
+served as generic binary data. The numeric URI path exposes no extension for intent filtering. The display
+name becomes available from the provider after selection. The app declares the OFX MIME type so it is offered
+only for typed content; downloads served with a generic type remain selectable through the in-app picker.
+
+Not covered yet (FIN-549): the T-Bank account download itself requires an authenticated test account and a real
+statement response. The Chrome observations above used synthetic attachments.
+
 Not covered yet (FIN-452, FIN-453): an Analytics GET refusal with `retryable:false` after selecting another
 transfer mode, its exact `Retry-After` boundary, and an answer connection lost between a final-status `snapshot`
 and the following `done` / `error`. The existing closed error controls do not target Analytics GET (only
@@ -916,20 +931,6 @@ offline Retry and recovery through resume followed by explicit Send instead. The
 `ChatViewModelBehaviourTest#offline keeps the question and the retry re-sends it with the same key` covers the
 pending text, exactly two Ask attempts and reuse of the original idempotency key. The foreground online-Retry
 path still needs UI coverage with controllable connectivity that does not pause Chat.
-
-FIN-549: native `ExternalStatementOpenTest` sends a synthetic OFX from a separate test APK using an Android
-URI grant. It checks a cold launch followed by sign-in, a warm launch through the passcode gate and the existing
-import error when read access is revoked before unlocking. The system picker still has its own native coverage
-in `StatementPickerTest`.
-
-The Android 16 Chrome download probe confirmed `ACTION_VIEW` with `content://media/external/downloads/<id>`.
-It kept `application/x-ofx` for an OFX served with that MIME type and `application/octet-stream` for an OFX
-served as generic binary data. The numeric URI path exposes no extension for intent filtering. The display
-name becomes available from the provider after selection. The app declares the OFX MIME type so it is offered
-only for typed content; downloads served with a generic type remain selectable through the in-app picker.
-
-Not covered yet (FIN-549): the T-Bank account download itself requires an authenticated test account and a real
-statement response. The Chrome observations above used synthetic attachments.
 
 Dictation UI behavior is authored in native `VoiceDictationTest` /
 [PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69) (FIN-449), using deterministic platform callbacks while retaining
