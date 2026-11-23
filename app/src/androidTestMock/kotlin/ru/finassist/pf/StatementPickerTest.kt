@@ -44,6 +44,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import ru.finassist.pf.e2e.E2eDocumentPickerActivity
 import ru.finassist.pf.e2e.E2eControlActivity
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -92,6 +95,41 @@ class StatementPickerTest {
         intended(hasComponent(E2eDocumentPickerActivity::class.java.name))
         compose.waitForTag("statements.result", timeoutMs = 30_000)
         compose.onNodeWithTag("statements.result").assertIsDisplayed()
+    }
+
+    @Test
+    fun opensSupportDraftWithCurrentUserAfterRejectedImport() {
+        signInWithExistingAccount()
+        val mailAction = hasAction(Intent.ACTION_SENDTO)
+        intending(mailAction).respondWith(Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null))
+
+        compose.onNodeWithTag("ds.tab.profile").performClick()
+        compose.waitForTag("profile.statements")
+        compose.onNodeWithText("Написать в поддержку").performScrollTo().performClick()
+        compose.waitUntil(10_000) { Intents.getIntents().count { it.action == Intent.ACTION_SENDTO } == 1 }
+        val profileDraft = Intents.getIntents().single { it.action == Intent.ACTION_SENDTO }
+        val expectedBody = requireNotNull(profileDraft.getStringExtra(Intent.EXTRA_TEXT))
+        assertTrue(expectedBody.matches(Regex("""\n\n—\nID пользователя: [0-9a-f-]{36}""")))
+
+        compose.onNodeWithTag("ds.tab.operations").performClick()
+        compose.waitForTag("operations.feed.upload_new")
+        compose.onNodeWithTag("operations.feed.upload_new").performClick()
+        compose.waitForTag("statements.upload.pick")
+        compose.onNodeWithTag("statements.upload.pick").performScrollTo().performClick()
+        compose.waitForTag("e2e.picker.statement.csv")
+        compose.onNodeWithTag("e2e.picker.statement.csv").performScrollTo().performClick()
+        compose.waitForTag("statements.upload.error.csv_not_accepted", timeoutMs = 15_000)
+        assertEquals(1, Intents.getIntents().count { it.action == Intent.ACTION_SENDTO })
+
+        compose.onNodeWithTag("statements.upload.support").performScrollTo().performClick()
+        compose.waitUntil(10_000) { Intents.getIntents().count { it.action == Intent.ACTION_SENDTO } == 2 }
+        val draft = Intents.getIntents().last { it.action == Intent.ACTION_SENDTO }
+        assertEquals("mailto:", draft.dataString)
+        assertArrayEquals(arrayOf("admin@plainfin.ru"), draft.getStringArrayExtra(Intent.EXTRA_EMAIL))
+        assertEquals("Не получилось загрузить выписку", draft.getStringExtra(Intent.EXTRA_SUBJECT))
+        assertEquals(expectedBody, draft.getStringExtra(Intent.EXTRA_TEXT))
+        assertNull(draft.clipData)
+        assertTrue(!draft.hasExtra(Intent.EXTRA_STREAM))
     }
 
     @Test

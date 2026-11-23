@@ -16,6 +16,21 @@
       ]
     },
     {
+      "case_id": 15,
+      "field": "steps.insert_after_position_1",
+      "before": null,
+      "proposed": {
+        "action": "После ошибки CSV нажать «Написать в поддержку»",
+        "expected_result": "Открывается черновик на admin@plainfin.ru с темой «Не получилось загрузить выписку» и строкой «ID пользователя: <ID текущего пользователя>», совпадающей с черновиком из профиля. Вложений нет."
+      },
+      "status": "pending_root_validation",
+      "reason": "FIN-551 добавляет проверку содержимого черновика через нативный тест в составе существующего Qase15.",
+      "evidence": [
+        "https://finassist.youtrack.cloud/issue/FIN-551",
+        "app/src/androidTestMock/kotlin/ru/finassist/pf/StatementPickerTest.kt"
+      ]
+    },
+    {
       "case_id": 16,
       "field": "preconditions",
       "before": "Синтетическая сборка mockE2e. FIN-365: перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа; обе отметки изначально сняты. Автотесты обновлены, новый UI-прогон не выполнялся.",
