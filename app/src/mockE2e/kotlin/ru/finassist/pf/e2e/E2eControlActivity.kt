@@ -14,10 +14,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.api.AuthApi
-import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.storage.IdempotencyKeys
-import ru.finassist.pf.core.storage.TooltipOnboardingStore
-import java.io.IOException
 import java.security.MessageDigest
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.toggles.FlagOverrides
@@ -98,8 +95,7 @@ class E2eControlActivity : ComponentActivity() {
     @Inject lateinit var sessionImpl: SessionRepositoryImpl
     @Inject lateinit var appLock: AppLock
     @Inject lateinit var keys: IdempotencyKeys
-    @Inject lateinit var tokenStore: TokenStore
-    @Inject lateinit var tooltipOnboarding: TooltipOnboardingStore
+    @Inject internal lateinit var analyticsHelpControl: E2eAnalyticsHelpControl
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -128,27 +124,7 @@ class E2eControlActivity : ComponentActivity() {
             prepareFixture = { backend.ready.await() },
         )
         return signIn.signIn(phone = backend.config.existingPhone, passcode = E2E_PASSCODE)
-            ?: verifyAnalyticsHelp(backend.config.analyticsHelp)
-    }
-
-    private suspend fun verifyAnalyticsHelp(mode: MockAnalyticsHelp, allowSignedOut: Boolean = false): String? {
-        val manual = mode == MockAnalyticsHelp.MANUAL
-        return try {
-            val current = tokenStore.current()
-            if (current == null) {
-                return if (allowSignedOut && !manual) null else "analytics_help needs an active login"
-            }
-            val epoch = current.authSessionEpoch ?: return "analytics_help needs an active login"
-            if (manual) tooltipOnboarding.claim("analytics", current.userId, epoch)
-            // A false claim can mean an existing record or a failed write. The receipt depends on stored state.
-            when (tooltipOnboarding.isClaimed("analytics", current.userId, epoch)) {
-                null -> "analytics_help: login changed"
-                true -> if (manual) null else "analytics_help: onboarding already claimed; clear app data first"
-                false -> if (manual) "analytics_help=manual: claim was not saved" else null
-            }
-        } catch (_: IOException) {
-            "analytics_help: could not read onboarding state"
-        }
+            ?: analyticsHelpControl.verify(backend.config.analyticsHelp)
     }
 
     private fun show(unmet: String?) {
@@ -201,7 +177,7 @@ class E2eControlActivity : ComponentActivity() {
                     } else {
                         // A combined sign-in verifies the new session before returning its receipt.
                         val issue = if (uri?.getQueryParameter(SIGN_IN) == SIGN_IN_EXISTING) null
-                        else verifyAnalyticsHelp(mode, allowSignedOut = true)
+                        else analyticsHelpControl.verify(mode, allowSignedOut = true)
                         if (issue == null) backend.config = backend.config.copy(analyticsHelp = mode)
                         else unmet = issue
                     }

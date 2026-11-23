@@ -63,7 +63,7 @@ fun BlockHelpPopupButton(
 ) {
     // An empty first segment distinguishes screen-owned anchors from server block and tile IDs.
     val key = listOf("", tag).takeIf { text.isNotBlank() && hasOnboardingTag(helpTags) }
-    HelpPopupButton(text, title, tag, initiallyOpen, key)
+    HelpPopupButton(text, title, tag, initiallyOpen, key, openStateKey = tag)
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -74,6 +74,7 @@ internal fun HelpPopupButton(
     tag: String,
     initiallyOpen: Boolean = false,
     key: List<String>?,
+    openStateKey: String = text,
 ) {
     val suppressed = LocalSuppressPopups.current
     val onboarding = LocalTooltipOnboarding.current
@@ -97,7 +98,7 @@ internal fun HelpPopupButton(
         Modifier
     }
     val automatic = key != null && onboarding?.current == key
-    var shown by remember(text) { mutableStateOf(initiallyOpen && !suppressed) }
+    var shown by remember(openStateKey) { mutableStateOf(initiallyOpen && !suppressed) }
     if (suppressed) LaunchedEffect(Unit) { shown = false }
     Box(
         Modifier.size(PfTheme.dimens.touch).then(anchorPlacement).bringIntoViewRequester(requester).testTag("$tag.help").clickable(

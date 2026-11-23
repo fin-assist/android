@@ -3,6 +3,7 @@ package ru.finassist.pf.feature.analytics.impl.ui
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -13,8 +14,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import ru.finassist.pf.core.api.ApiJson
 import ru.finassist.pf.core.api.model.Analytics
+import ru.finassist.pf.core.api.model.AssistantLimit
 import ru.finassist.pf.core.api.model.Block
 import ru.finassist.pf.core.api.model.BlockAction
 import ru.finassist.pf.core.api.model.PeriodTypeCode
@@ -22,6 +25,7 @@ import ru.finassist.pf.core.api.model.TransferMode
 import ru.finassist.pf.core.common.error.ErrorPresentation
 import ru.finassist.pf.core.common.time.PeriodKey
 import ru.finassist.pf.core.designsystem.theme.PfTheme
+import java.time.OffsetDateTime
 import kotlin.test.assertEquals
 
 /** JVM-only callback regression: no emulator, network or screenshot capture. */
@@ -124,6 +128,47 @@ class AnalyticsRetryCallbackTest {
         compose.onNodeWithTag("ds.refresh.indicator").assertExists()
         compose.runOnIdle { state.value = state.value.copy(refreshing = false) }
         compose.onNodeWithTag("ds.refresh.indicator").assertDoesNotExist()
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `assistant help updates to the server limit and stays open`() {
+        val data = ApiJson.decodeFromString(Analytics.serializer(), javaClass.getResource("/analytics/september.json")!!.readText())
+        val analytics = data.copy(blocks = emptyList())
+        val state = mutableStateOf(AnalyticsUiState(
+            loading = false,
+            data = analytics,
+            blocks = AnalyticsBlocks(),
+        ))
+        compose.setContent {
+            PfTheme {
+                AnalyticsContent(state.value, AnalyticsActions({}, {}, {}, { _, _ -> }, null), Handlers())
+            }
+        }
+
+        val popup = compose.onNodeWithTag(AnalyticsTags.ASK_HELP_POPUP)
+        val initialText = compose.onNodeWithText("Помощник отвечает по вашим операциям, 5 вопросов в день")
+        val serverText = compose.onNodeWithText("Помощник отвечает по вашим операциям, 10 вопросов в день")
+        compose.onNodeWithTag(AnalyticsTags.ASK_HELP).assertIsDisplayed().performClick()
+        popup.assertIsDisplayed()
+        initialText.assertIsDisplayed()
+
+        compose.runOnIdle {
+            state.value = state.value.copy(
+                limit = AssistantLimit(remaining = 8, dailyMax = 10, resetsAt = OffsetDateTime.parse("2026-09-26T00:00:00+03:00")),
+            )
+        }
+        popup.assertIsDisplayed()
+        serverText.assertIsDisplayed()
+        initialText.assertDoesNotExist()
+
+        // Return to the card with the quota already loaded and open its help again.
+        compose.runOnIdle { state.value = state.value.copy(data = null) }
+        popup.assertDoesNotExist()
+        compose.runOnIdle { state.value = state.value.copy(data = analytics) }
+        compose.onNodeWithTag(AnalyticsTags.ASK_HELP).performClick()
+        serverText.assertIsDisplayed()
+        initialText.assertDoesNotExist()
     }
 
     private class Handlers : AnalyticsHandlers {
