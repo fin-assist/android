@@ -44,7 +44,8 @@ tags:
     element:
       id: "analytics.block.balance.help"
     direction: DOWN
-    visibilityPercentage: 60
+    centerElement: true
+    timeout: 30000
 - tapOn:
     id: "analytics.block.balance.help"
 - extendedWaitUntil:
