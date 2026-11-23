@@ -240,7 +240,7 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-              "line": 53,
+              "line": 57,
               "detail": "id: \"ds.tab.analytics\""
             }
           ],
@@ -250,7 +250,7 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-                  "line": 56,
+                  "line": 60,
                   "detail": "id: \"analytics.screen\""
                 }
               ],
@@ -264,7 +264,7 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-              "line": 59,
+              "line": 63,
               "detail": "id: \"ds.tab.profile\""
             }
           ],
@@ -274,12 +274,12 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-                  "line": 62,
+                  "line": 66,
                   "detail": "id: \"profile.phone\""
                 },
                 {
                   "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-                  "line": 64,
+                  "line": 68,
                   "detail": "- assertVisible: \".*916.*123.*45.*67.*\""
                 }
               ],
@@ -293,7 +293,7 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-              "line": 66,
+              "line": 70,
               "detail": "id: \"ds.tab.operations\""
             }
           ],
@@ -303,7 +303,7 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-                  "line": 68,
+                  "line": 72,
                   "detail": "id: \"operations.row\""
                 }
               ],
