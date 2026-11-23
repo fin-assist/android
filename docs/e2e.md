@@ -1362,6 +1362,8 @@ The default `manual` fixture records a completed Analytics onboarding claim for 
 select it explicitly after signing in. For Qase97/98 set `onboarding` or `reversed` before `fast_login.yaml`
 so the app takes the real first-run path. `onboarding` marks the daily-expenses tile and balance.
 `reversed` gives balance a lower `help_order` than the monthly chart and leaves the daily tile manual.
+The preloaded statement covers the first day of October; its operations end in September. Runs that
+assert the categories card first import the bundled October statement through the UI before opening Analytics.
 The mockE2e-only `lock_app=true` control locks the current test session through AppLock.
 
 JVM scenarios cover full-block replacement, version barriers, missing/malformed data, owner changes and late

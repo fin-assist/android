@@ -64,8 +64,8 @@ tags:
     env:
       LINK: "pfe2e://config?analytics_help=reversed&flag.assistant=false"
 - runFlow: ../../subflows/fast_login.yaml
-- tapOn:
-    id: "ds.tab.analytics"
+# Load real October categories before claiming the first Analytics visit.
+- runFlow: ../../subflows/import_october_to_analytics.yaml
 - extendedWaitUntil:
     visible:
       id: "analytics.block.monthly_chart.help.popup"

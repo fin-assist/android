@@ -9,8 +9,8 @@ tags:
     env:
       LINK: "pfe2e://config?analytics_help=onboarding"
 - runFlow: ../../subflows/fast_login.yaml
-- tapOn:
-    id: "ds.tab.analytics"
+# The preloaded statement covers the first day of October but has no October operations.
+- runFlow: ../../subflows/import_october_to_analytics.yaml
 - extendedWaitUntil:
     visible:
       id: "analytics.ask.help.popup"
@@ -34,7 +34,7 @@ tags:
     visible:
       id: "analytics.block.balance.help.popup"
     timeout: 15000
-- assertVisible: "Доходов за период нет"
+- assertVisible: "5% дохода: на столько доходы по выписке больше расходов.*"
 - back
 - assertVisible:
     id: "analytics.block.balance.help"
@@ -46,6 +46,28 @@ tags:
     timeout: 10000
 - tapOn:
     id: "ds.tab.analytics"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.balance.help"
+    direction: DOWN
+- assertNotVisible:
+    id: "analytics.block.balance.help.popup"
+- tapOn:
+    id: "analytics.block.balance.help"
+- assertVisible:
+    id: "analytics.block.balance.help.popup"
+- back
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.daily.help"
+    direction: UP
+- assertNotVisible:
+    id: "analytics.tile.daily.help.popup"
+- tapOn:
+    id: "analytics.tile.daily.help"
+- assertVisible:
+    id: "analytics.tile.daily.help.popup"
+- back
 - scrollUntilVisible:
     element:
       id: "analytics.ask.help"
