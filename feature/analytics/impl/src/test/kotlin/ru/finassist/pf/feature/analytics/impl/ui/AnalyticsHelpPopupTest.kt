@@ -2,6 +2,7 @@ package ru.finassist.pf.feature.analytics.impl.ui
 
 import android.app.Application
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
@@ -119,7 +120,7 @@ class AnalyticsHelpPopupTest {
     @Test fun `category help keeps the list geometry and row action at large font`() {
         val block = ApiJson.decodeFromString<Block>(
             """{"id":"expense_categories","type":"ranked_list","title":"Расходы по категориям","data":{"items":[
-                {"id":"groceries","title":"Супермаркеты","value":123456789,"value_kind":"amount",
+                {"id":"groceries","icon":"cart","title":"Супермаркеты","value":123456789,"value_kind":"amount",
                  "action":{"type":"open_operations","filter":{"category_id":"groceries"}}}]}}""",
         )
         val list = requireNotNull(CatalogV1.registry().prepare(block))
@@ -127,7 +128,7 @@ class AnalyticsHelpPopupTest {
         compose.setContent {
             PfTheme {
                 CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
-                    Box(Modifier.width(288.dp).testTag("ranked.list")) {
+                    Column(Modifier.width(288.dp).testTag("ranked.list")) {
                         list.draw(BlockContext("RUB", BlockTags("analytics"), { _, _ -> openedOperations++ },
                             rankedListHelp = mapOf("expense_categories" to HELP), anchoredHelp = true))
                     }
