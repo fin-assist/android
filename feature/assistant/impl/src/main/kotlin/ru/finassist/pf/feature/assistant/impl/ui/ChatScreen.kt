@@ -65,7 +65,6 @@ import ru.finassist.pf.core.designsystem.components.PfLink
 import ru.finassist.pf.core.designsystem.components.PfNoticeLink
 import ru.finassist.pf.core.designsystem.components.PfNotice
 import ru.finassist.pf.core.designsystem.components.NoticeTone
-import ru.finassist.pf.core.designsystem.components.PfPageHeader
 import ru.finassist.pf.core.designsystem.components.PfUserMessage
 import ru.finassist.pf.core.designsystem.icons.PfIcons
 import ru.finassist.pf.core.designsystem.theme.PfTheme
@@ -84,6 +83,7 @@ fun ChatScreen(
     onConsentResultConsumed: () -> Unit,
     vm: ChatViewModel = hiltViewModel(),
     speechRecognitionFactory: VoiceRecognizerFactory? = null,
+    assistantAbout: AssistantAboutViewModel? = null,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val clock = LocalPfClock.current
@@ -118,6 +118,8 @@ fun ChatScreen(
         // Read on every recomposition, as before FIN-71: a chat left open past midnight relabels its days.
         today = clock.today(),
         voiceState = voiceState,
+        assistantAbout = assistantAbout,
+        refreshAboutLimit = { vm.refreshLimit() },
         actions = remember(vm, voice.start, voice.finish, voice.cancel, onBack, onOpenSearch, onOpenAnalytics) {
             ChatActions(
                 onBack = { voice.cancel(); onBack() },
@@ -168,6 +170,9 @@ internal fun ChatContent(
     voiceState: VoiceState = VoiceState(),
     actions: ChatActions,
     listState: LazyListState = rememberLazyListState(),
+    assistantAbout: AssistantAboutViewModel? = null,
+    aboutInitiallyOpen: Boolean = false,
+    refreshAboutLimit: (suspend () -> Unit)? = null,
 ) {
     val d = PfTheme.dimens
     // Keep the newest message in view as the thread grows at the bottom or an answer streams in. Keyed by the
@@ -180,7 +185,7 @@ internal fun ChatContent(
         Column(Modifier.fillMaxSize().imePadding().testTag(AssistantTags.CHAT)) {
             val limit = state.limit
             // The remaining questions are in the meter above the composer (mockup `Chat`).
-            PfPageHeader("Помощник", onBack = actions.onBack, subtitle = "Отвечает по вашим операциям")
+            AssistantChatHeader(state, zone, actions.onBack, assistantAbout, aboutInitiallyOpen, refreshAboutLimit)
             state.limitErrorPresentation?.let {
                 ErrorMessage(it, "Не получилось обновить лимит вопросов", modifier = Modifier.padding(PfTheme.dimens.space4),
                     onRetry = actions.onRefresh.takeIf { state.limitRetryReady })
@@ -312,7 +317,7 @@ internal fun ChatContent(
 }
 
 /** «00:00 по Москве», plus local time in brackets when the phone is in another zone (api.md 7.5). */
-private fun resetTime(at: java.time.OffsetDateTime, zone: ZoneId): String {
+internal fun resetTime(at: java.time.OffsetDateTime, zone: ZoneId): String {
     val moscow = at.atZoneSameInstant(ZoneId.of("Europe/Moscow"))
     val local = at.atZoneSameInstant(zone)
     val base = "%02d:%02d по Москве".format(moscow.hour, moscow.minute)
