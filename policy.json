@@ -1,6 +1,6 @@
 {
   "baseBranchPatterns": [
-    "release/1.0.1"
+    "main"
   ],
   "packageRules": [
     {
