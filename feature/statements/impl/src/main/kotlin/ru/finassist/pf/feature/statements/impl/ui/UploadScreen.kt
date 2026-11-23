@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -45,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import ru.finassist.pf.core.api.model.ImportConfig
 import ru.finassist.pf.core.common.time.RussianDates
 import ru.finassist.pf.core.common.time.countWithNoun
@@ -79,6 +81,7 @@ fun UploadScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val picker = rememberLauncherForActivityResult(PickStatementDocument()) { uri -> if (uri != null) vm.onFilePicked(uri) }
 
     LaunchedEffect(state.doneUploadId) {
@@ -110,7 +113,9 @@ fun UploadScreen(
         onAskCancel = vm::askCancel,
         onCancelImport = vm::cancelImport,
         onRetryUpload = vm::retryUpload,
-        onSupport = { writeToSupport(context, "Не получилось загрузить выписку") },
+        onSupport = {
+            scope.launch { writeToSupport(context, "Не получилось загрузить выписку", vm.supportUserId()) }
+        },
         onStartNewUpload = vm::startNewUpload,
         onOpenHistory = onOpenHistory,
         onShowPeriod = vm::showPeriodPicker, onSelectPeriod = vm::selectPeriod, onDownloadPeriod = vm::downloadPeriod,
@@ -415,10 +420,11 @@ private fun FileRow(label: String, value: String, divider: Boolean) {
 }
 
 /** Opens the mail app with a letter to support; nothing happens without one. */
-private fun writeToSupport(context: android.content.Context, subject: String) {
+private fun writeToSupport(context: android.content.Context, subject: String, userId: String?) {
     val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")).apply {
         putExtra(Intent.EXTRA_EMAIL, arrayOf(Support.EMAIL))
         putExtra(Intent.EXTRA_SUBJECT, subject)
+        if (!userId.isNullOrBlank()) putExtra(Intent.EXTRA_TEXT, Support.userIdFooter(userId))
     }
     runCatching { context.startActivity(intent) }
 }
