@@ -285,10 +285,7 @@ tags:
     id: "ds.back"
 - tapOn:
     id: "ds.tab.assistant"
-- extendedWaitUntil:
-    visible:
-      id: "assistant.chat"
-    timeout: 10000
+- runFlow: ../../subflows/dismiss_first_assistant_about.yaml
 - tapOn:
     id: "ds.chat.input"
 - inputText: "Draft stays here"

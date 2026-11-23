@@ -810,6 +810,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state; expense search uses the ASCII query FIN-400 within the inherited 2024–2026 range, checks the single January 2024 debit and retained kind/scope (Qase75, FIN-400/415); follow-up not executed (previous run failed) |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/tooltip_onboarding` | first tooltip opens automatically, closing it scrolls to the second, returning to the screen preserves manual help only ([Qase97](https://app.qase.io/case/PLAINFIN-97), FIN-497) |
+| `analytics/help_bottom_sheet` | a tile and a block tagged `onboarding` and `bottom` open as sheets, then reopen manually (FIN-554) |
 | `analytics/tooltip_onboarding_interrupted` | after the first tooltip opens, locking interrupts the sequence; unlocking does not replay it, both icons still work, and a clean install follows changed mock server text, tags and order ([Qase98](https://app.qase.io/case/PLAINFIN-98), FIN-497) |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` + JVM `AnalyticsReliabilityComponentTest#qase82RetainedSnapshotsAndRefusedMutation` (mock-only) | retained ready/unavailable snapshots, bounded polling and explicit retry, uncached Year preparation, refused mutation independent of polling; real journey retains visible errors/payment and exact request guards; required JVM companion covers transferred exhaustive state combinations (Qase82, FIN-473; see docs/qa/fin473-pilot-coverage.md) |
@@ -827,6 +828,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `assistant/tab_consent_in_profile` | denied draft in retained tab → consent through Profile → server read enables explicit send without submitting on resume (Qase65, FIN-397) |
 | `AiConsentSpacingTest#keepsTwentyFourDpAfterConsentContentWhenScrolledAtLargeFont` | native geometry assertion: scroll to submit in 640 dp viewport / 150% text, verify ≥24 dp after full checkbox/error block with and without formError (Qase64, FIN-394/397); authored, compile only |
 | `assistant/tab_and_consent_recovery` | bottom tab keeps draft/history across Operations, Analytics and Profile; consent Back → Give consent → grant preserves draft without automatic send, explicit send creates one question (Qase61, FIN-397, FIN-394) |
+| `assistant/about` | first entry opens the About sheet automatically. The quota and collapsed rules are available, the document link is reachable, and opening the sheet manually preserves the draft (FIN-554) |
 | `assistant/ask_question` (smoke) | disclosure of question/history, account-phone/file exclusion and masking limits → consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search (Qase12, FIN-366) |
 | `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
 | `assistant/off_topic` | a question not about finances (`weather`): the server's OFF_TOPIC text, no «Повторить» (`retryable: false`), still 5 of 5; the next question is answered, 4 of 5 — FIN-160 |
@@ -1033,6 +1035,13 @@ history → unread list path, with index selectors checking both equal row title
 `UnreadLinesViewModelTest` verifies duplicate-preservation in state; it does not claim to execute the renderer.
 `UnreadLinesSamePhysicalLine` / `UnreadLinesSamePhysicalLineDark` are proposed DesignCheck artboards with no Figma
 counterpart yet. The flow, Qase56 and fixtures were authored without UI/Maestro/DesignCheck/instrumented execution.
+
+### FIN-554 assistant About sheet
+
+A fresh account's first chat entry opens the About sheet. Other chat flows use
+`dismiss_first_assistant_about.yaml` at that entry. The sheet fetches the current
+consent document on the link tap, so opening the sheet does not add document
+requests to the consent scenarios.
 
 ### FIN-366 assistant-consent disclosure
 
@@ -1351,7 +1360,7 @@ artboards are authored; approved Figma artboards for these new states do not yet
 FIN-497 uses the same anchored help for automatic onboarding when the screen response tags a block or tile with
 `onboarding` and supplies a positive `help_order`. It scrolls to each anchor before opening. A device-local
 DataStore claim per account and screen prevents replay after leaving, locking, relogin or restarting. Unmarked
-help remains manual. The mockE2e-only `analytics_help=manual|onboarding|reversed` control selects fixed server
+help remains manual. The mockE2e-only `analytics_help=manual|onboarding|reversed|bottom` control selects fixed server
 compositions. `manual` is the default for existing flows. `onboarding` marks the daily-expenses tile and
 the balance block, while `reversed` puts balance before the monthly chart and leaves the daily tile manual.
 The mockE2e-only `lock_app=true` control locks the current test session through AppLock.

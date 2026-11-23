@@ -13,10 +13,7 @@ tags:
     timeout: 15000
 - tapOn:
     id: "analytics.ask"
-- extendedWaitUntil:
-    visible:
-      id: "assistant.chat"
-    timeout: 10000
+- runFlow: ../../subflows/dismiss_first_assistant_about.yaml
 
 # FIN-160: a question not about the user's finances is OFF_TOPIC (the fake server recognises «weather»).
 - tapOn:

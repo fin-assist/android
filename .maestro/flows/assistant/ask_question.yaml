@@ -15,10 +15,7 @@ tags:
 - tapOn:
     id: "analytics.ask"
 
-- extendedWaitUntil:
-    visible:
-      id: "assistant.chat"
-    timeout: 10000
+- runFlow: ../../subflows/dismiss_first_assistant_about.yaml
 - assertVisible: ".*[Оо]сталось 5 из 5.*"
 
 # A merchant from the fixture. The first question asks for consent (off by default, the server answers

@@ -1,0 +1,53 @@
+appId: ru.finassist.pf.mock.e2e
+name: Аналитика — подсказки с тегом bottom открываются шторкой
+tags:
+  - analytics
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_help=bottom"
+- tapOn:
+    id: "ds.tab.analytics"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.tile.daily.help.sheet"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.tile.daily.help.popup"
+- tapOn:
+    id: "ds.sheet.close"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.balance.help.sheet"
+    timeout: 15000
+- assertNotVisible:
+    id: "analytics.block.balance.help.popup"
+- tapOn:
+    id: "ds.sheet.close"
+- scrollUntilVisible:
+    element:
+      id: "analytics.tile.daily.help"
+    direction: UP
+    centerElement: true
+- tapOn:
+    id: "analytics.tile.daily.help"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.tile.daily.help.sheet"
+    timeout: 10000
+- tapOn:
+    id: "ds.sheet.close"
+- scrollUntilVisible:
+    element:
+      id: "analytics.block.balance.help"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: "analytics.block.balance.help"
+- extendedWaitUntil:
+    visible:
+      id: "analytics.block.balance.help.sheet"
+    timeout: 10000
