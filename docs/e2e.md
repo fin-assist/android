@@ -926,8 +926,9 @@ decodes real PNGs runs locally with Pillow before release acceptance. With `adb`
 run both commands:
 
 ```bash
-python3 -m unittest discover -s scripts -p 'test_check_release_screenshot.py'
-python3 scripts/check-release-screenshot.py --serial emulator-5554 --avd Test_API36 build/release-operations.png
+python3 -c 'import PIL' &&
+    python3 -m unittest discover -v -s scripts -p 'test_check_release_screenshot.py' &&
+    python3 scripts/check-release-screenshot.py --serial emulator-5554 --avd Test_API36 build/release-operations.png
 ```
 
 The host check has a 60 s deadline and requires a new System UI screenshot with visible content over the fixture
