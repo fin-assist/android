@@ -68,11 +68,10 @@ tags:
 - assertVisible:
     id: "analytics.tile.daily.help.popup"
 - back
-- scrollUntilVisible:
-    element:
-      id: "analytics.ask.help"
-    direction: UP
-    centerElement: true
+- runFlow:
+    file: ../../subflows/reveal_tag_up.yaml
+    env:
+      TARGET_ID: "analytics.ask.help"
 - assertNotVisible:
     id: "analytics.ask.help.popup"
 - tapOn:
