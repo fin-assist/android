@@ -917,10 +917,18 @@ offline Retry and recovery through resume followed by explicit Send instead. The
 pending text, exactly two Ask attempts and reuse of the original idempotency key. The foreground online-Retry
 path still needs UI coverage with controllable connectivity that does not pause Chat.
 
-Not covered yet (FIN-550): system screenshots of the «Операции» screen in a release build.
-Maestro and native tests run against `mockE2e`, which inherits the debug build and allowed screenshots before
-this change. For release acceptance, install a locally signed `mockRelease` on a test device, sign in with the mock
-account, open «Операции», and verify that an Android screenshot contains the screen and its test operations.
+FIN-550: the owner confirmed that Android Recents can show the last main-window thumbnail after app lock.
+`scripts/check-release-screenshot.py` checks a locally signed `mockRelease` on an owned Android
+emulator. Sign in with the existing mock account and open «Операции» with the bundled fixture operation
+«Barsik 29» visible. With `adb` on PATH and Pillow installed, run:
+
+```bash
+python3 scripts/check-release-screenshot.py --serial emulator-5554 --avd Test_API36 build/release-operations.png
+```
+
+The check has a 60 s deadline and requires a new System UI screenshot with visible content over the fixture
+operation. It runs separately from the standard UI suites, which use `mockE2e` and inherit the debug build's
+screenshot behaviour.
 
 Dictation UI behavior is authored in native `VoiceDictationTest` /
 [PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69) (FIN-449), using deterministic platform callbacks while retaining
