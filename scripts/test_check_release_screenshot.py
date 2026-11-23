@@ -1,8 +1,12 @@
+from contextlib import nullcontext
 import importlib.util
 from io import BytesIO
 from pathlib import Path
+import sys
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 script = Path(__file__).with_name("check-release-screenshot.py")
 spec = importlib.util.spec_from_file_location("check_release_screenshot", script)
@@ -64,6 +68,44 @@ class ReleaseScreenshotTest(unittest.TestCase):
 
     def test_requires_exactly_one_new_screenshot(self):
         self.refuses("Expected one new system screenshot", shots=(SCREENSHOT, "Screenshot_unrelated.png"))
+
+    def test_no_new_screenshot_reaches_its_deadline(self):
+        class Clock:
+            now = 0
+
+            def monotonic(self):
+                return self.now
+
+            def sleep(self, seconds):
+                self.now += seconds
+
+        clock = Clock()
+        with mock.patch.object(check_release_screenshot, "time", clock):
+            self.refuses("did not save a new screenshot", shots=())
+        self.assertEqual(clock.now, 15)
+
+    def test_uses_fixture_bounds_and_contrast_threshold_without_pillow(self):
+        for contrast, visible in ((0, False), (9.99, False), (10, True)):
+            with self.subTest(contrast=contrast):
+                region = object()
+                rgb = SimpleNamespace(crop=mock.Mock(return_value=region))
+                image = SimpleNamespace(
+                    width=32, height=32, format="PNG", convert=mock.Mock(return_value=rgb),
+                )
+                pil = SimpleNamespace(
+                    Image=SimpleNamespace(open=mock.Mock(return_value=nullcontext(image))),
+                    ImageStat=SimpleNamespace(Stat=mock.Mock(return_value=SimpleNamespace(stddev=(0, 0, contrast)))),
+                )
+                png = b"encoded test image"
+                with mock.patch.dict(sys.modules, {"PIL": pil}):
+                    if visible:
+                        check_release_screenshot.capture(emulator(png=png), AVD, self.output)
+                        self.assertEqual(self.output.read_bytes(), png)
+                    else:
+                        self.refuses("does not show the fixture operation", png=png)
+                image.convert.assert_called_once_with("RGB")
+                rgb.crop.assert_called_once_with((4, 4, 24, 20))
+                pil.ImageStat.Stat.assert_called_once_with(region)
 
     @unittest.skipUnless(importlib.util.find_spec("PIL"), "Pillow is required for PNG validation")
     def test_pixel_oracle_rejects_uniform_png_and_accepts_the_visible_row(self):

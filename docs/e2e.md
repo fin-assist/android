@@ -920,8 +920,9 @@ path still needs UI coverage with controllable connectivity that does not pause 
 FIN-550: the owner confirmed that Android Recents can show the last main-window thumbnail after app lock.
 `scripts/check-release-screenshot.py` checks a locally signed `mockRelease` on an owned Android
 emulator. Sign in with the existing mock account and open «Операции» with the bundled fixture operation
-«Barsik 29» visible. The Python CI runs four checks for the host prerequisites and screenshot count.
-The PNG contrast test runs locally with Pillow before release acceptance. With `adb` on PATH and Pillow installed,
+«Barsik 29» visible. The Python CI runs five host checks for the prerequisites, screenshot count and deadline.
+It also checks the crop coordinates and contrast threshold with a test double. The integration test that
+decodes real PNGs runs locally with Pillow before release acceptance. With `adb` on PATH and Pillow installed,
 run both commands:
 
 ```bash
