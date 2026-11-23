@@ -14,7 +14,9 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import ru.finassist.pf.core.api.AuthApi
+import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.storage.IdempotencyKeys
+import ru.finassist.pf.core.storage.TooltipOnboardingStore
 import java.security.MessageDigest
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.toggles.FlagOverrides
@@ -44,7 +46,8 @@ import javax.inject.Inject
  *   version rotation, held reads and safe request evidence for Qase54/55; see [E2eConsentControl] and docs/e2e.md.
  * - `assistant_model_errors=<n>` — the next n assistant answers fail with MODEL_ERROR («Повторить» under them).
  * - `lock_app=true` — lock the current test session through AppLock.
- * - `analytics_help=manual|onboarding|reversed` — closed analytics tooltip compositions.
+ * - `analytics_help=manual|onboarding|reversed` — closed analytics tooltip compositions. Manual fixture logins
+ *   start with the local Analytics sequence already acknowledged.
  * - `analytics_recalculating_responses=<0..100>` — next n non-empty analytics reads carry `state.recalculating=true`.
  * - `analytics_pending_responses=<0..100>` — next n valid analytics reads return `has_data=false`, simulating
  *   publication lag after a UI import; zero restores the actual projection without changing the imported ledger.
@@ -94,6 +97,8 @@ class E2eControlActivity : ComponentActivity() {
     @Inject lateinit var sessionImpl: SessionRepositoryImpl
     @Inject lateinit var appLock: AppLock
     @Inject lateinit var keys: IdempotencyKeys
+    @Inject lateinit var tokenStore: TokenStore
+    @Inject lateinit var tooltipOnboarding: TooltipOnboardingStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -121,7 +126,17 @@ class E2eControlActivity : ComponentActivity() {
             appLock = appLock,
             prepareFixture = { backend.ready.await() },
         )
-        return signIn.signIn(phone = backend.config.existingPhone, passcode = E2E_PASSCODE)
+        val unmet = signIn.signIn(phone = backend.config.existingPhone, passcode = E2E_PASSCODE)
+        if (unmet == null && backend.config.analyticsHelp == MockAnalyticsHelp.MANUAL) {
+            seedManualAnalyticsHelp()
+        }
+        return unmet
+    }
+
+    private suspend fun seedManualAnalyticsHelp() {
+        val current = tokenStore.current() ?: return
+        val epoch = current.authSessionEpoch ?: return
+        tooltipOnboarding.claim("analytics", current.userId, epoch)
     }
 
     private fun show(unmet: String?) {
@@ -163,7 +178,10 @@ class E2eControlActivity : ComponentActivity() {
                 name == "assistant_model_errors" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(assistantModelErrors = it) }
                 name == "lock_app" -> if (value == "true") appLock.lock() else { unmet = "invalid lock fixture" }
                 name == "analytics_help" -> when (value) {
-                    "manual" -> backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.MANUAL)
+                    "manual" -> {
+                        backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.MANUAL)
+                        seedManualAnalyticsHelp()
+                    }
                     "onboarding" -> backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.ONBOARDING)
                     "reversed" -> backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.REVERSED)
                     else -> unmet = "invalid analytics help fixture"

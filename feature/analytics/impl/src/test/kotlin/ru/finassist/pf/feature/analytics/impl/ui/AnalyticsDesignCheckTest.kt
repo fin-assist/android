@@ -25,7 +25,7 @@ import java.time.ZoneOffset
 
 /**
  * Artboards `Analytics` / `AnalyticsDark` and their states (`AnalyticsNoTransfers`, `AnalyticsTransfers`,
- * `AnalyticsHintCategories`, `AnalyticsHintAsk`, `AnalyticsLimit`, `AnalyticsYear`, `AnalyticsEmpty`, `AnalyticsEarly`,
+ * `AnalyticsLimit`, `AnalyticsYear`, `AnalyticsEmpty`, `AnalyticsEarly`,
  * `AnalyticsStale`, `AnalyticsPartial`): September 2026 by the 25th, numbers as in `Analytics.dc.html` renderVals(), laid
  * out as blocks by the server (golden responses in `src/test/resources/analytics`).
  */
@@ -80,7 +80,6 @@ class AnalyticsDesignCheckTest {
         override fun setPeriodType(type: PeriodTypeCode) = Unit
         override fun goTo(key: PeriodKey) = Unit
         override fun openSheet(sheet: AnalyticsSheet?) = Unit
-        override fun nextHint(stop: Boolean) = Unit
         override fun setTransferMode(mode: TransferMode) = Unit
         override fun currentTransferMode() = mode
         override fun toggleExpanded(id: String) = Unit
@@ -148,11 +147,6 @@ class AnalyticsDesignCheckTest {
 
     @Test fun analyticsTransfers() =
         capture("AnalyticsTransfers", ui(september()).copy(sheet = AnalyticsSheet.TRANSFERS), heightDp = 844, popups = true)
-
-    @Test fun analyticsHintCategories() =
-        capture("AnalyticsHintCategories", ui(september()).copy(hint = AnalyticsHint.CATEGORIES), heightDp = 2848)
-
-    @Test fun analyticsHintAsk() = capture("AnalyticsHintAsk", ui(september()).copy(hint = AnalyticsHint.ASK), heightDp = 2848)
 
     @Test fun analyticsLimit() =
         capture("AnalyticsLimit", ui(september()).copy(limit = AssistantLimit(remaining = 0, dailyMax = 5, resetsAt = day(9, 27))), heightDp = 2872)

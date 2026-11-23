@@ -39,11 +39,17 @@ internal fun BlockHelpRow(text: String, title: String, tag: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { BlockHelpButton(text, title, tag) }
 }
 
-internal fun BlockContext.helpButton(block: Block, title: String = block.title ?: "Пояснение"): (@Composable () -> Unit)? {
-    val text = block.helpText?.takeIf { anchoredHelp && it.isNotBlank() } ?: return null
-    val key = block.id?.takeIf { it.isNotBlank() }?.let(::listOf)
-    val order = onboardingOrder(block.helpTags, block.helpOrder)
-    return { HelpPopupButton(text, title, tags.block(block.id ?: block.type.code), key = key, order = order) }
+internal fun BlockContext.helpButton(
+    block: Block,
+    title: String = block.title ?: "Пояснение",
+    localText: String? = null,
+): (@Composable () -> Unit)? {
+    if (!anchoredHelp) return null
+    val suppliedText = block.helpText?.takeIf { it.isNotBlank() }
+    val text = suppliedText ?: localText?.takeIf { it.isNotBlank() } ?: return null
+    val automatic = suppliedText == null || canOnboard(block.helpTags, block.helpOrder)
+    val key = block.id?.takeIf { automatic && it.isNotBlank() }?.let(::listOf)
+    return { HelpPopupButton(text, title, tags.block(block.id ?: block.type.code), key = key) }
 }
 
 @Composable

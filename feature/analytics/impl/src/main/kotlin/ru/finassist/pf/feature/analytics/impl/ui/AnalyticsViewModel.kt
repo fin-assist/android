@@ -66,9 +66,6 @@ data class AnalyticsBlocks(
 
 enum class AnalyticsSheet { PERIODS, TRANSFERS }
 
-/** Contextual hints after the first import, shown one after another. */
-enum class AnalyticsHint { CATEGORIES, ASK }
-
 data class AnalyticsUiState(
     val loading: Boolean = true,
     val refreshing: Boolean = false,
@@ -86,7 +83,6 @@ data class AnalyticsUiState(
     /** Ids of lists shown in full («Все категории»). */
     val expanded: Set<String> = emptySet(),
     val snackbar: String? = null,
-    val hint: AnalyticsHint? = null,
     val periodsFailed: Boolean = false,
     val periodsErrorPresentation: ErrorPresentation? = null,
     val periodsRetryable: Boolean? = null,
@@ -441,9 +437,6 @@ class AnalyticsViewModel @Inject constructor(
                 }
                 if (pendingImport != null && !recalculating) statements.analyticsImportReady(pendingImport)
                 if (generation != loadGeneration) return@launch
-                val showImportHint = !recalculating && a.hasData && _state.value.hint == null &&
-                    statements.consumeFirstImportHints()
-                if (generation != loadGeneration) return@launch
                 importPolls = 0
                 // A pull refresh reads the shown period; its result cannot retire another target's refusal.
                 if (!preservePeriodChangeFailure) clearPeriodChangeFailure()
@@ -471,7 +464,6 @@ class AnalyticsViewModel @Inject constructor(
                 }
                 _state.update { it.copy(loading = displayed == null && !expired && !snapshots.freezesUnknownReads, offline = false, errorPresentation = null, sourceZoneUnsupported = false,
                     requestRetryable = null, preparationTimedOut = displayed == null && expired, data = displayed,
-                    hint = if (showImportHint) AnalyticsHint.CATEGORIES else it.hint,
                     recalculating = recalculating, recalculationPaused = expired || snapshots.freezesUnknownReads, response = it.response + if (newExposure) 1 else 0) }
                 updateUnknownMutationNotice()
                 if (generation != loadGeneration) return@launch
@@ -643,11 +635,6 @@ class AnalyticsViewModel @Inject constructor(
     /** With `analytics.filter.transfers` off every request uses `with` (docs/flags.md), whatever a chip says. */
     private fun allowedMode(mode: TransferMode): TransferMode =
         if (_state.value.blocks.transfersFilter) mode.effective else TransferMode.WITH
-
-    /** Next hint, or none: «Не показывать» skips the rest too. */
-    override fun nextHint(stop: Boolean) = _state.update {
-        it.copy(hint = if (stop || it.hint == AnalyticsHint.ASK || !it.blocks.assistant) null else AnalyticsHint.ASK)
-    }
 
     override fun openSheet(sheet: AnalyticsSheet?) {
         _state.update { it.copy(sheet = sheet) }

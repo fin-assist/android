@@ -137,7 +137,6 @@ class AnalyticsRetryCallbackTest {
         override fun setPeriodType(type: PeriodTypeCode) = Unit
         override fun goTo(key: PeriodKey) = Unit
         override fun openSheet(sheet: AnalyticsSheet?) = Unit
-        override fun nextHint(stop: Boolean) = Unit
         override fun setTransferMode(mode: TransferMode) = Unit
         override fun currentTransferMode() = TransferMode.WITH
         override fun toggleExpanded(id: String) = Unit

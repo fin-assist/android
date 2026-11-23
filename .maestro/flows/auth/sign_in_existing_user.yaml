@@ -49,6 +49,10 @@ tags:
 - assertVisible:
     id: "ds.tab.operations"
     selected: true
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?analytics_help=manual"
 - tapOn:
     id: "ds.tab.analytics"
 - extendedWaitUntil:

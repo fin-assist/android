@@ -33,10 +33,10 @@ class AnalyticsTooltipOnboardingTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun waitsForUnlockAndHintsThenShowsTheBlockBeforeItsTile() {
+    fun waitsForUnlockAndSheetThenShowsTheBlockBeforeItsTile() {
         val locked = mutableStateOf(true)
         val state = mutableStateOf(
-            AnalyticsUiState(blocks = AnalyticsBlocks(), hint = AnalyticsHint.CATEGORIES, owner = RequestOwner("user", "login")),
+            AnalyticsUiState(blocks = AnalyticsBlocks(), sheet = AnalyticsSheet.PERIODS, owner = RequestOwner("user", "login")),
         )
         val registry = CatalogV1.registry()
         val blocks = registry.prepareAll(listOf(
@@ -48,15 +48,11 @@ class AnalyticsTooltipOnboardingTest {
             decode("""{"id":"last","type":"text","help_text":"Last help","help_tags":["onboarding"],"help_order":6,
                 "data":{"text":"Last"}}"""),
         ))
-        assertEquals(
-            listOf(listOf("group"), listOf("group", "legacy"), listOf("v2"), listOf("v2", "current"), listOf("last")),
-            tooltipResponseOrder(blocks),
-        )
         var claims = 0
         compose.setContent {
             PfTheme {
                 CompositionLocalProvider(LocalSuppressPopups provides locked.value) {
-                    AnalyticsTooltipOnboarding(state.value, blocks, claim = { ++claims == 1 }) {
+                    AnalyticsTooltipOnboarding(state.value, claim = { ++claims == 1 }) {
                         Column(Modifier.verticalScroll(rememberScrollState())) {
                             blocks.forEach { it.draw(context(anchored = true)) }
                         }
@@ -67,10 +63,6 @@ class AnalyticsTooltipOnboardingTest {
         compose.runOnIdle {
             assertEquals(0, claims)
             locked.value = false
-        }
-        compose.runOnIdle {
-            assertEquals(0, claims)
-            state.value = state.value.copy(hint = null, sheet = AnalyticsSheet.PERIODS)
         }
         compose.runOnIdle {
             assertEquals(0, claims)
@@ -96,7 +88,7 @@ class AnalyticsTooltipOnboardingTest {
         compose.setContent {
             PfTheme {
                 val state = AnalyticsUiState(blocks = AnalyticsBlocks(), owner = RequestOwner("user", "login"))
-                AnalyticsTooltipOnboarding(state, blocks, claim = { ++claims == 1 }) {
+                AnalyticsTooltipOnboarding(state, claim = { ++claims == 1 }) {
                     blocks.forEach { it.draw(context(anchored = false)) }
                 }
             }
