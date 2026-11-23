@@ -1,14 +1,17 @@
 package ru.finassist.pf
 
+import android.app.Application
 import android.net.Uri
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import ru.finassist.pf.feature.auth.api.SessionState
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], application = Application::class)
 class IncomingStatementTest {
     private val file = Uri.parse("content://example.test/statement.ofx")
     private val session = SessionState.SignedIn("user", "first-session")

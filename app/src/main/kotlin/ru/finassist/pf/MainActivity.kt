@@ -3,9 +3,7 @@ package ru.finassist.pf
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.feature.availability.impl.ui.AvailabilityScreens
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.Process
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -100,10 +98,6 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun acceptIncomingStatement(intent: Intent) {
-        val uri = incomingStatementUri(intent) ?: return
-        val readGranted = checkUriPermission(
-            uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION,
-        ) == PackageManager.PERMISSION_GRANTED
-        if (readGranted) incomingStatement.offer(uri)
+        incomingStatementUri(intent)?.let(incomingStatement::offer)
     }
 }

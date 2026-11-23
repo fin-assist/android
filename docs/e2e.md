@@ -917,6 +917,20 @@ offline Retry and recovery through resume followed by explicit Send instead. The
 pending text, exactly two Ask attempts and reuse of the original idempotency key. The foreground online-Retry
 path still needs UI coverage with controllable connectivity that does not pause Chat.
 
+FIN-549: native `ExternalStatementOpenTest` sends a synthetic OFX from a separate test APK using an Android
+URI grant. It checks a cold launch followed by sign-in, a warm launch through the passcode gate and the existing
+import error when read access is revoked before unlocking. The system picker still has its own native coverage
+in `StatementPickerTest`.
+
+The Android 16 Chrome download probe confirmed `ACTION_VIEW` with `content://media/external/downloads/<id>`.
+It kept `application/x-ofx` for an OFX served with that MIME type and `application/octet-stream` for an OFX
+served as generic binary data. The numeric URI path exposes no extension for intent filtering. The display
+name becomes available from the provider after selection. The app declares the OFX MIME type so it is offered
+only for typed content; downloads served with a generic type remain selectable through the in-app picker.
+
+Not covered yet (FIN-549): the T-Bank account download itself requires an authenticated test account and a real
+statement response. The Chrome observations above used synthetic attachments.
+
 Dictation UI behavior is authored in native `VoiceDictationTest` /
 [PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69) (FIN-449), using deterministic platform callbacks while retaining
 the actual screen, input/session and chat VM. Focused native execution is tracked in [PR #277](https://github.com/fin-assist/android/pull/277) and Qase; each attempt is retained. Maestro cannot inject those

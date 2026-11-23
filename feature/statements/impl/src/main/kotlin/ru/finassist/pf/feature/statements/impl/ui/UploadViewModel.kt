@@ -6,7 +6,10 @@ import ru.finassist.pf.core.common.error.ErrorPresentation
 import ru.finassist.pf.core.common.error.ErrorContext
 import ru.finassist.pf.core.common.time.ElapsedClock
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Process
 import android.provider.OpenableColumns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -226,6 +229,18 @@ class UploadViewModel @Inject constructor(
 
     fun onFilePicked(uri: Uri) {
         if (uploadInFlight) return
+        launchUpload(uri)
+    }
+
+    fun onExternalFilePicked(uri: Uri) {
+        if (uploadInFlight || _state.value.phase is UploadPhase.Busy) return
+        val readPermission = context.checkUriPermission(
+            uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION,
+        )
+        if (readPermission != PackageManager.PERMISSION_GRANTED) {
+            _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, "файл", config)) }
+            return
+        }
         launchUpload(uri)
     }
 

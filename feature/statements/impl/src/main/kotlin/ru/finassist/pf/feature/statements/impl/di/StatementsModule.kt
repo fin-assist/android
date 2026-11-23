@@ -37,7 +37,7 @@ class StatementsEntry @Inject constructor() : FeatureEntry {
             val lifecycle by entry.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
             LaunchedEffect(route.externalRequestId, lifecycle, consume != null) {
                 if (lifecycle == Lifecycle.State.RESUMED) {
-                    route.externalRequestId?.let { consume?.invoke(it) }?.let(upload::onFilePicked)
+                    route.externalRequestId?.let { consume?.invoke(it) }?.let(upload::onExternalFilePicked)
                 }
             }
             UploadScreen(
