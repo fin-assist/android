@@ -920,14 +920,17 @@ path still needs UI coverage with controllable connectivity that does not pause 
 FIN-550: the owner confirmed that Android Recents can show the last main-window thumbnail after app lock.
 `scripts/check-release-screenshot.py` checks a locally signed `mockRelease` on an owned Android
 emulator. Sign in with the existing mock account and open «Операции» with the bundled fixture operation
-«Barsik 29» visible. With `adb` on PATH and Pillow installed, run:
+«Barsik 29» visible. The Python CI runs four checks for the host prerequisites and screenshot count.
+The PNG contrast test runs locally with Pillow before release acceptance. With `adb` on PATH and Pillow installed,
+run both commands:
 
 ```bash
+python3 -m unittest discover -s scripts -p 'test_check_release_screenshot.py'
 python3 scripts/check-release-screenshot.py --serial emulator-5554 --avd Test_API36 build/release-operations.png
 ```
 
-The check has a 60 s deadline and requires a new System UI screenshot with visible content over the fixture
-operation. Run this command locally for release acceptance.
+The host check has a 60 s deadline and requires a new System UI screenshot with visible content over the fixture
+operation.
 
 Not covered yet (FIN-550): regular Android UI CI runs the debuggable `mockE2e` build, where screenshots were
 already allowed before FIN-550. The local `mockRelease` command above verifies the release window. The Qase
