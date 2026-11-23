@@ -876,6 +876,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
 | native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
 | native `StatementPickerTest` | login button opens exactly `https://tbank-online.com/login` in an intercepted ACTION_VIEW (FIN-395; Qase16), then upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
+| native `ExternalStatementOpenTest#importsAfterSignInOnColdStartAndAgainAfterUnlockOnWarmStart` | typed OFX from another Android app, sign-in and unlock gates, exact import POST counts, unreadable URI error, and the first-run upload guide retained at registration (FIN-549) |
 | native `StatementPickerTest#opensPrivacyPolicyBeforeRegistration` | standalone policy link before account creation opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; no terms/acceptance text or second consent checkbox; returning to registration still allows creation (Qase2, FIN-519/520) |
 | native `StatementPickerTest#opensPrivacyPolicyFromUploadNotice` | «Как мы защищаем данные» in the upload notice opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; the upload guide remains available after returning (Qase14, FIN-520) |
 
@@ -905,6 +906,11 @@ It kept `application/x-ofx` for an OFX served with that MIME type and `applicati
 served as generic binary data. The numeric URI path exposes no extension for intent filtering. The display
 name becomes available from the provider after selection. The app declares the OFX MIME type so it is offered
 only for typed content; downloads served with a generic type remain selectable through the in-app picker.
+
+Local validation on 2026-11-24 used an Android 16 (API 36) Pixel 6 emulator. The focused AndroidJUnitRunner
+test passed in 72.815 s through ADB after Gradle could not resolve its additional UTP artifact. Android
+Package Manager resolved `application/x-ofx` to MainActivity and returned no matching activity for
+`application/octet-stream` or `text/plain` in the app. The new native case awaits a verified Qase ID.
 
 Not covered yet (FIN-549): the T-Bank account download itself requires an authenticated test account and a real
 statement response. The Chrome observations above used synthetic attachments.
