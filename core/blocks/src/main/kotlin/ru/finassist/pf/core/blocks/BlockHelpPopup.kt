@@ -6,7 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -82,9 +81,9 @@ internal fun HelpPopupButton(
             role = Role.Button,
             onClickLabel = "Открыть пояснение",
         ) { shown = true },
-        contentAlignment = Alignment.TopCenter,
+        contentAlignment = Alignment.TopEnd,
     ) {
-        Box(Modifier.offset(y = PfTheme.dimens.space1)) {
+        Box {
             PfIcon(PfIcons.INFO, contentDescription = "Пояснение: $title", size = 20.dp, tint = PfTheme.colors.text)
             if (!suppressed && (shown || automatic)) HelpPopup(text, "$tag.help.popup") {
                 shown = false
