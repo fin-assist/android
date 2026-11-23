@@ -917,6 +917,11 @@ offline Retry and recovery through resume followed by explicit Send instead. The
 pending text, exactly two Ask attempts and reuse of the original idempotency key. The foreground online-Retry
 path still needs UI coverage with controllable connectivity that does not pause Chat.
 
+Not covered yet (FIN-550): system screenshots of the «Операции» screen in a release build.
+Maestro and native tests run against `mockE2e`, which inherits the debug build and allowed screenshots before
+this change. For release acceptance, install a locally signed `mockRelease` on a test device, sign in with the mock
+account, open «Операции», and verify that an Android screenshot contains the screen and its test operations.
+
 Dictation UI behavior is authored in native `VoiceDictationTest` /
 [PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69) (FIN-449), using deterministic platform callbacks while retaining
 the actual screen, input/session and chat VM. Focused native execution is tracked in [PR #277](https://github.com/fin-assist/android/pull/277) and Qase; each attempt is retained. Maestro cannot inject those
