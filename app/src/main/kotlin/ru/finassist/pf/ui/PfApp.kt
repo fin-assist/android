@@ -1,5 +1,6 @@
 package ru.finassist.pf.ui
 
+import android.net.Uri
 import androidx.compose.runtime.key
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.feature.availability.impl.ui.AvailabilityScreens
@@ -28,9 +29,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
+import androidx.navigation.toRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import ru.finassist.pf.IncomingStatement
 import ru.finassist.pf.core.designsystem.components.PfTabBar
 import ru.finassist.pf.core.designsystem.components.pfTestRoot
 import ru.finassist.pf.core.designsystem.components.PfMainTabs
@@ -52,6 +55,7 @@ import ru.finassist.pf.feature.auth.api.SessionState
 import ru.finassist.pf.feature.operations.api.OperationsRoutes
 import ru.finassist.pf.feature.profile.api.ProfileRoutes
 import ru.finassist.pf.feature.statements.api.StatementsRoutes
+import ru.finassist.pf.feature.statements.impl.ui.LocalExternalStatementSelection
 
 /**
  * Root of the UI. Three layers chosen by state, not by navigation:
@@ -62,7 +66,7 @@ import ru.finassist.pf.feature.statements.api.StatementsRoutes
  * Each layer has its own NavController, so switching layers resets the back stack for free.
  */
 @Composable
-fun PfApp(
+internal fun PfApp(
     entries: Set<FeatureEntry>,
     session: SessionRepository,
     appLock: AppLock,
@@ -72,6 +76,7 @@ fun PfApp(
     preferences: AppPreferences,
     flags: FeatureFlags,
     onScreenOpened: (routePattern: String?) -> Unit,
+    incomingStatement: IncomingStatement,
     onSessionShown: (SessionState) -> Unit = {},
 ) {
     val theme by preferences.theme.collectAsStateWithLifecycle(initialValue = null)
@@ -120,6 +125,15 @@ fun PfApp(
                                     }
                                 else -> {
                                     val locked = lockState == LockState.Locked
+                                    val statementSelection: ((String) -> Uri?)? =
+                                        if (!locked && !blocked) {
+                                            { id ->
+                                                if (appLock.state.value == LockState.Unlocked &&
+                                                    gate.state.value == ServiceGate.State.Open &&
+                                                    flags.isEnabled(Flag.STATEMENTS_UPLOAD)
+                                                ) incomingStatement.consume(id, s) else null
+                                            }
+                                        } else null
                                     // Main stays composed under the lock so the back stack survives; while locked it is
                                     // hidden from TalkBack and its dialogs and sheets are not shown.
                                     CompositionLocalProvider(LocalSuppressPopups provides (locked || blocked)) {
@@ -127,6 +141,8 @@ fun PfApp(
                                             MainLayer(
                                                 entries, session, flags, userId = s.userId, onScreenOpened = onScreenOpened,
                                                 active = !locked,
+                                                incomingStatementId = incomingStatement.id,
+                                                consumeIncomingStatement = statementSelection,
                                                 modifier = if (locked) Modifier.clearAndSetSemantics { } else Modifier,
                                             )
                                         }
@@ -218,6 +234,8 @@ private fun MainLayer(
     userId: String,
     onScreenOpened: (String?) -> Unit,
     active: Boolean,
+    incomingStatementId: String?,
+    consumeIncomingStatement: ((String) -> Uri?)?,
     modifier: Modifier = Modifier,
 ) {
     val controller = rememberNavController()
@@ -226,12 +244,28 @@ private fun MainLayer(
     // Right after registration the first run continues with the statement upload (step 4 of 4) — unless the
     // upload screen is switched off by `statements.upload`.
     LaunchedEffect(userId) {
-        if (session.consumeJustRegistered() && flags.isEnabled(Flag.STATEMENTS_UPLOAD)) {
+        if (session.consumeJustRegistered() && incomingStatementId == null &&
+            flags.isEnabled(Flag.STATEMENTS_UPLOAD)
+        ) {
             controller.navigate(StatementsRoutes.Upload(firstRun = true))
         }
     }
     val backStack by controller.currentBackStackEntryAsState()
     val destination = backStack?.destination
+    val canOpenStatement = consumeIncomingStatement != null
+    LaunchedEffect(incomingStatementId, canOpenStatement, destination != null) {
+        if (incomingStatementId == null || !canOpenStatement || destination == null ||
+            !flags.isEnabled(Flag.STATEMENTS_UPLOAD)
+        ) return@LaunchedEffect
+        val current = backStack?.takeIf { it.destination.hasRoute<StatementsRoutes.Upload>() }
+            ?.toRoute<StatementsRoutes.Upload>()
+        if (current?.externalRequestId != incomingStatementId) {
+            controller.navigate(StatementsRoutes.Upload(
+                firstRun = current?.firstRun ?: false,
+                externalRequestId = incomingStatementId,
+            )) { launchSingleTop = true }
+        }
+    }
     val assistantPolicy: AssistantAvailabilityPolicy = viewModel {
         AssistantAvailabilityPolicy(flags.isEnabled(Flag.ASSISTANT))
     }
@@ -250,7 +284,10 @@ private fun MainLayer(
         else -> -1
     }
     Column(modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalAssistantAvailability provides assistantPolicy) {
+        CompositionLocalProvider(
+            LocalAssistantAvailability provides assistantPolicy,
+            LocalExternalStatementSelection provides consumeIncomingStatement,
+        ) {
             NavHost(controller, startDestination = OperationsRoutes.Feed, modifier = Modifier.weight(1f)) {
                 entries.forEach { entry -> with(entry) { install(navigator) } }
             }

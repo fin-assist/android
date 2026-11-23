@@ -1,5 +1,10 @@
 package ru.finassist.pf.feature.statements.impl.di
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
@@ -16,17 +21,28 @@ import ru.finassist.pf.feature.statements.api.StatementsRepository
 import ru.finassist.pf.feature.statements.api.StatementsRoutes
 import ru.finassist.pf.feature.statements.impl.data.StatementsRepositoryImpl
 import ru.finassist.pf.feature.statements.impl.ui.HistoryScreen
+import ru.finassist.pf.feature.statements.impl.ui.LocalExternalStatementSelection
 import ru.finassist.pf.feature.statements.impl.ui.ResultScreen
 import ru.finassist.pf.feature.statements.impl.ui.UnreadLinesScreen
 import ru.finassist.pf.feature.statements.impl.ui.UploadScreen
+import ru.finassist.pf.feature.statements.impl.ui.UploadViewModel
 import javax.inject.Inject
 
 class StatementsEntry @Inject constructor() : FeatureEntry {
     override fun NavGraphBuilder.install(navigator: Navigator) {
         composable<StatementsRoutes.Upload> { entry ->
             val route = entry.toRoute<StatementsRoutes.Upload>()
+            val upload: UploadViewModel = hiltViewModel(entry)
+            val consume = LocalExternalStatementSelection.current
+            val lifecycle by entry.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
+            LaunchedEffect(route.externalRequestId, lifecycle, consume != null) {
+                if (lifecycle == Lifecycle.State.RESUMED) {
+                    route.externalRequestId?.let { consume?.invoke(it) }?.let(upload::onFilePicked)
+                }
+            }
             UploadScreen(
                 firstRun = route.firstRun,
+                vm = upload,
                 onBack = { navigator.back() },
                 onLater = { navigator.finishTo(OperationsRoutes.Feed) },
                 onOpenHistory = {
