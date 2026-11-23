@@ -31,7 +31,7 @@ tags:
     element:
       id: "analytics.tile.daily.help"
     direction: UP
-    centerElement: true
+    visibilityPercentage: 60
 - tapOn:
     id: "analytics.tile.daily.help"
 - extendedWaitUntil:
@@ -44,7 +44,7 @@ tags:
     element:
       id: "analytics.block.balance.help"
     direction: DOWN
-    centerElement: true
+    visibilityPercentage: 60
 - tapOn:
     id: "analytics.block.balance.help"
 - extendedWaitUntil:
