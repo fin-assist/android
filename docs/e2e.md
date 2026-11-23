@@ -664,6 +664,11 @@ Qase84 likewise combines its Maestro calendar/input/error flow with
 and asserts zero browser launches after offline download preparation. Both Qase84 components passed in
 Qase98. Both components are required for complete case acceptance.
 
+Qase15 combines the Maestro flow `statements/upload_errors` and the required native
+`StatementPickerTest#opensSupportDraftWithCurrentUserAfterRejectedImport`. The native component verifies the
+mail Intent after the user requests support for a rejected import. The case keeps the worst result. A missing
+component makes an otherwise passing case Skipped and is named in the report. A reported failure stays Failed.
+
 ## Test tags
 
 Maestro finds elements by id; in Compose the id is `Modifier.testTag`, exposed as a resource id by
