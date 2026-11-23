@@ -927,8 +927,11 @@ python3 scripts/check-release-screenshot.py --serial emulator-5554 --avd Test_AP
 ```
 
 The check has a 60 s deadline and requires a new System UI screenshot with visible content over the fixture
-operation. It runs separately from the standard UI suites, which use `mockE2e` and inherit the debug build's
-screenshot behaviour.
+operation. Run this command locally for release acceptance.
+
+Not covered yet (FIN-550): regular Android UI CI runs the debuggable `mockE2e` build, where screenshots were
+already allowed before FIN-550. The local `mockRelease` command above verifies the release window. The Qase
+release acceptance case is pending authenticated access.
 
 Dictation UI behavior is authored in native `VoiceDictationTest` /
 [PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69) (FIN-449), using deterministic platform callbacks while retaining

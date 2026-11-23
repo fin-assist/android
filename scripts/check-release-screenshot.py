@@ -10,8 +10,6 @@ import time
 import uuid
 import xml.etree.ElementTree as ET
 
-from PIL import Image, ImageStat
-
 PACKAGE = "ru.finassist.pf.mock"
 SCREENSHOTS = "/sdcard/Pictures/Screenshots"
 SCREEN_TITLE = "Операции"
@@ -65,6 +63,10 @@ def capture(adb, avd_name, output):
     name = new.pop()
     if not re.fullmatch(r"Screenshot_[A-Za-z0-9_.-]+\.png", name):
         raise ValueError("Unexpected system screenshot filename.")
+    try:
+        from PIL import Image, ImageStat
+    except ModuleNotFoundError as error:
+        raise ValueError("Install Pillow to verify screenshot content.") from error
     data = adb("exec-out", "cat", f"{SCREENSHOTS}/{name}")
     with Image.open(BytesIO(data)) as shot:
         x1, y1, x2, y2 = map(int, bounds.groups())
