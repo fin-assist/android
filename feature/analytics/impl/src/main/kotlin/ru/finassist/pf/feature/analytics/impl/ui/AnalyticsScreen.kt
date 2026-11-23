@@ -207,7 +207,7 @@ internal fun AnalyticsContent(
                     PfButton("Повторить", onClick = { vm.refresh() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
                 }
                 state.preparationTimedOut -> PfEmptyState(
-                    PfIcons.BAR_CHART, "Аналитика ещё готовится", "Выписка загружена. Попробуйте обновить показатели чуть позже",
+                    PfIcons.BAR_CHART, "Аналитика ещё готовится",
                     modifier = Modifier.testTag(AnalyticsTags.PREPARATION_TIMEOUT),
                 ) {
                     PfButton("Повторить", onClick = { vm.refresh() }, enabled = state.retryReady,
