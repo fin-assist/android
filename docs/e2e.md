@@ -1362,6 +1362,10 @@ The default `manual` fixture records a completed Analytics onboarding claim for 
 select it explicitly after signing in. For Qase97/98 set `onboarding` or `reversed` before `fast_login.yaml`
 so the app takes the real first-run path. `onboarding` marks the daily-expenses tile and balance.
 `reversed` gives balance a lower `help_order` than the monthly chart and leaves the daily tile manual.
+The receipt for `manual` requires a persisted claim for the active login, including after repeated calls.
+Before sign-in, `onboarding` or `reversed` selects the composition for the upcoming fixture login. A
+`sign_in=existing` receipt verifies the new session's claim state, and switching to either automatic
+mode in a session that already claimed onboarding is reported as unmet.
 The preloaded statement covers the first day of October; its operations end in September. Runs that
 assert the categories card first import the bundled October statement through the UI before opening Analytics.
 The mockE2e-only `lock_app=true` control locks the current test session through AppLock.

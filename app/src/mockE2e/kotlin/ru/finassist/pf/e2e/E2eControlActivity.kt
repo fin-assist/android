@@ -17,6 +17,7 @@ import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.storage.IdempotencyKeys
 import ru.finassist.pf.core.storage.TooltipOnboardingStore
+import java.io.IOException
 import java.security.MessageDigest
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.toggles.FlagOverrides
@@ -126,17 +127,28 @@ class E2eControlActivity : ComponentActivity() {
             appLock = appLock,
             prepareFixture = { backend.ready.await() },
         )
-        val unmet = signIn.signIn(phone = backend.config.existingPhone, passcode = E2E_PASSCODE)
-        if (unmet == null && backend.config.analyticsHelp == MockAnalyticsHelp.MANUAL) {
-            seedManualAnalyticsHelp()
-        }
-        return unmet
+        return signIn.signIn(phone = backend.config.existingPhone, passcode = E2E_PASSCODE)
+            ?: verifyAnalyticsHelp(backend.config.analyticsHelp)
     }
 
-    private suspend fun seedManualAnalyticsHelp() {
-        val current = tokenStore.current() ?: return
-        val epoch = current.authSessionEpoch ?: return
-        tooltipOnboarding.claim("analytics", current.userId, epoch)
+    private suspend fun verifyAnalyticsHelp(mode: MockAnalyticsHelp, allowSignedOut: Boolean = false): String? {
+        val manual = mode == MockAnalyticsHelp.MANUAL
+        return try {
+            val current = tokenStore.current()
+            if (current == null) {
+                return if (allowSignedOut && !manual) null else "analytics_help needs an active login"
+            }
+            val epoch = current.authSessionEpoch ?: return "analytics_help needs an active login"
+            if (manual) tooltipOnboarding.claim("analytics", current.userId, epoch)
+            // A false claim can mean an existing record or a failed write. The receipt depends on stored state.
+            when (tooltipOnboarding.isClaimed("analytics", current.userId, epoch)) {
+                null -> "analytics_help: login changed"
+                true -> if (manual) null else "analytics_help: onboarding already claimed; clear app data first"
+                false -> if (manual) "analytics_help=manual: claim was not saved" else null
+            }
+        } catch (_: IOException) {
+            "analytics_help: could not read onboarding state"
+        }
     }
 
     private fun show(unmet: String?) {
@@ -177,14 +189,22 @@ class E2eControlActivity : ComponentActivity() {
                 name == "network_delay_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(networkDelayMs = it) }
                 name == "assistant_model_errors" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(assistantModelErrors = it) }
                 name == "lock_app" -> if (value == "true") appLock.lock() else { unmet = "invalid lock fixture" }
-                name == "analytics_help" -> when (value) {
-                    "manual" -> {
-                        backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.MANUAL)
-                        seedManualAnalyticsHelp()
+                name == "analytics_help" -> {
+                    val mode = when (value) {
+                        "manual" -> MockAnalyticsHelp.MANUAL
+                        "onboarding" -> MockAnalyticsHelp.ONBOARDING
+                        "reversed" -> MockAnalyticsHelp.REVERSED
+                        else -> null
                     }
-                    "onboarding" -> backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.ONBOARDING)
-                    "reversed" -> backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.REVERSED)
-                    else -> unmet = "invalid analytics help fixture"
+                    if (mode == null) {
+                        unmet = "invalid analytics help fixture"
+                    } else {
+                        // A combined sign-in verifies the new session before returning its receipt.
+                        val issue = if (uri?.getQueryParameter(SIGN_IN) == SIGN_IN_EXISTING) null
+                        else verifyAnalyticsHelp(mode, allowSignedOut = true)
+                        if (issue == null) backend.config = backend.config.copy(analyticsHelp = mode)
+                        else unmet = issue
+                    }
                 }
                 name == "analytics_pending_responses" -> {
                     val count = value.toIntOrNull()?.takeIf { it in 0..100 }

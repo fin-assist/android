@@ -270,17 +270,18 @@ private fun ColumnScope.Content(
 
     if (blocks.assistant) {
         val limit = state.limit
+        val dailyLimit = limit?.dailyMax ?: 5
         val title = "Спросите о своих финансах"
         PfAskCard(
             modifier = Modifier.testTag(AnalyticsTags.ASK),
             onClick = { actions.openChat(params.transferMode.effective) },
-            remaining = limit?.remaining ?: 5,
-            total = limit?.dailyMax ?: 5,
+            remaining = limit?.remaining ?: dailyLimit,
+            total = dailyLimit,
             exhausted = limit != null && limit.remaining <= 0,
             title = title,
             help = {
                 BlockHelpPopupButton(
-                    "Помощник отвечает по вашим операциям, 5 вопросов в день",
+                    AnalyticsTexts.assistantHelp(dailyLimit),
                     title,
                     AnalyticsTags.ASK,
                     helpTags = listOf("onboarding"),

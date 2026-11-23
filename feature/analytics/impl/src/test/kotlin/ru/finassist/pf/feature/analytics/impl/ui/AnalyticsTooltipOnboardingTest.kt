@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -97,6 +99,59 @@ class AnalyticsTooltipOnboardingTest {
         compose.onNodeWithTag("analytics.block.block.help").assertIsDisplayed()
     }
 
+    @Test
+    fun rankedListServerHelpWithoutOnboardingIsManual() {
+        var claims = 0
+        showCategoriesHelp(categoriesHelp().copy(helpText = SERVER_HELP)) { ++claims == 1 }
+
+        compose.onNodeWithTag(CATEGORIES_TAG).assertIsDisplayed()
+        compose.onNodeWithTag("$CATEGORIES_TAG.popup").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(0, claims) }
+        compose.onNodeWithTag(CATEGORIES_TAG).performClick()
+        compose.onNodeWithText(SERVER_HELP).assertIsDisplayed()
+        compose.onNodeWithText(LOCAL_HELP).assertDoesNotExist()
+    }
+
+    @Test
+    fun rankedListServerHelpWithValidOrderEntersTheSequence() {
+        val block = categoriesHelp().copy(helpText = SERVER_HELP, helpTags = listOf("onboarding"), helpOrder = 3)
+        showCategoriesHelp(block) { true }
+
+        compose.onNodeWithTag("$CATEGORIES_TAG.popup").assertIsDisplayed()
+        compose.onNodeWithText(SERVER_HELP).assertIsDisplayed()
+        compose.onNodeWithText(LOCAL_HELP).assertDoesNotExist()
+    }
+
+    @Test
+    fun rankedListWithoutServerHelpShowsLocalHelpAutomatically() {
+        showCategoriesHelp(categoriesHelp()) { true }
+
+        compose.onNodeWithTag("$CATEGORIES_TAG.popup").assertIsDisplayed()
+        compose.onNodeWithText(LOCAL_HELP).assertIsDisplayed()
+    }
+
+    private fun showCategoriesHelp(block: Block, claim: suspend (RequestOwner) -> Boolean) {
+        val prepared = checkNotNull(CatalogV1.registry().prepare(block))
+        val state = AnalyticsUiState(blocks = AnalyticsBlocks(), owner = RequestOwner("user", "login"))
+        compose.setContent {
+            PfTheme {
+                AnalyticsTooltipOnboarding(state, claim) {
+                    Column {
+                        prepared.draw(BlockContext(
+                            "RUB", BlockTags("analytics"), { _, _ -> },
+                            rankedListHelp = mapOf("expense_categories" to LOCAL_HELP), anchoredHelp = true,
+                        ))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun categoriesHelp() = decode(
+        """{"id":"expense_categories","type":"ranked_list","title":"Расходы по категориям",
+            "data":{"items":[{"title":"Аптеки","icon":"pill","value":1000,"value_kind":"amount"}]}}""",
+    )
+
     private fun assertPopup(tag: String) {
         compose.onNodeWithTag("analytics.$tag.help.popup").assertIsDisplayed()
     }
@@ -104,4 +159,10 @@ class AnalyticsTooltipOnboardingTest {
     private fun context(anchored: Boolean) = BlockContext("RUB", BlockTags("analytics"), { _, _ -> }, anchoredHelp = anchored)
 
     private fun decode(json: String): Block = ApiJson.decodeFromString(json)
+
+    private companion object {
+        const val CATEGORIES_TAG = "analytics.block.expense_categories.help"
+        const val LOCAL_HELP = "Категории проставили мы — любую можно поправить в операции"
+        const val SERVER_HELP = "Пояснение к расходам из ответа сервера"
+    }
 }
