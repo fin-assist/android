@@ -792,6 +792,34 @@ class CallViewModelTest {
         assertEquals(keys.first(), keys.last(), "lost transport keeps the pending request key across back")
     }
 
+    @Test fun `Call lost response with an expired key starts a new request on the first Phone retry`() {
+        val h = harness()
+        h.flow.verificationReceived(verification(expiresIn = 0), now.toInstant())
+        val keys = mutableListOf<String>()
+        val phones = mutableListOf<String>()
+        val originalRequest = h.flow.phoneRequest
+        h.auth.startPhone = { key, phone ->
+            keys += key.value
+            phones += phone
+            if (keys.size == 1) throw AppError.Offline()
+            verification(token = "vt_new")
+        }
+        h.vm(event(VerificationStatus.EXPIRED)).apply { watch(); requestAgain() }
+        elapsedOffset = 24L * 60 * 60 * 1000
+
+        val phone = h.phoneVm()
+        phone.onResume()
+        assertTrue(phone.state.value.retrying)
+        assertTrue(phone.state.value.submitEnabled)
+        phone.submit()
+
+        assertEquals(2, keys.size)
+        assertNotEquals(keys.first(), keys.last())
+        assertEquals(listOf(h.flow.phone, h.flow.phone), phones)
+        assertEquals(originalRequest, h.flow.phoneRequest)
+        assertEquals(PhoneEvent.GoToCall, phone.events.value)
+    }
+
     @Test fun `Call terminal Start refusal can be retried with a new key after back to Phone`() {
         val h = harness()
         val keys = mutableListOf<String>()

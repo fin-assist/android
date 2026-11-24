@@ -85,12 +85,16 @@ class PhoneViewModel @Inject constructor(
     private fun canStart(): Boolean =
         retryGate.isReady() || (retryGate.isExplicitlyForbidden() && retryGate.remainingMillis() == 0L)
 
+    private fun hasExpiredStartKey(phone: String): Boolean =
+        flow.phoneRequest?.phone == phone && flow.currentPhoneKey()?.replayWindow?.isOpen(elapsedClock) == false
+
     private fun updateReadiness() {
         val waiting = retryGate.receivedRateLimit?.takeIf { !retryGate.isReady() }
         _state.update {
             it.copy(
                 retryReady = canStart() && rejectedVersion == null,
-                newIntentRequired = retryGate.newIntentRequired || retryGate.isExplicitlyForbidden() || it.replayUnavailable,
+                newIntentRequired = retryGate.newIntentRequired || retryGate.isExplicitlyForbidden() ||
+                    it.replayUnavailable || hasExpiredStartKey(PhoneFormat.toE164(it.digits)),
                 documentRefreshReady = documentGate.remainingMillis() == 0L,
                 documentRefreshRequired = rejectedVersion != null || it.document == null,
                 error = waiting?.let { limit -> rateLimitText(limit.retryAt) } ?: it.error,
@@ -213,10 +217,10 @@ class PhoneViewModel @Inject constructor(
                 val replayAvailable = previousKey?.replayWindow?.isOpen(elapsedClock) == true && flow.phoneRequest != null
                 val bodyChanged = flow.phoneRequest?.let { it != request } == true
                 val callExpired = flow.callServerDeadline?.remainingMillis(elapsedClock) == 0L
-                // An explicit Retry can replace an expired key immediately. An unmarked legacy action first
-                // needs to tell the user that it cannot be replayed.
+                // A known expired key can be replaced on this click, including after returning from Call.
+                // A legacy key of unknown age or body needs an explicit Retry after the unavailable-replay notice.
                 val freshStart = needsNewKey || flow.phone != phone || previousKey == null || bodyChanged ||
-                    callExpired || (state.startFailed && !replayAvailable)
+                    callExpired || hasExpiredStartKey(phone)
                 if (!freshStart && !replayAvailable) {
                     _state.update {
                         it.copy(replayUnavailable = true, error = "Не получилось отправить номер. Повторите попытку")

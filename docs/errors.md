@@ -101,16 +101,18 @@ RetryAnswer additionally needs permission from the current failed result, checke
 After `CONSENT_OUTDATED` in phone Start or assistant consent, the rejected version remains forbidden until a
 successful document GET returns a different version. The new document is installed and its acceptance
 is reset before releasing the old mutation restriction. A failed, same-version or stale GET cannot
-permit the old POST/PUT. Both screens expose «Обновить документ»: it performs only the independently
-permitted document GET, with its own captured wait/false restriction and one pending read at a time.
+permit the old POST/PUT. Phone's primary «Повторить» and the assistant consent screen's
+«Обновить документ» each perform only the document GET. Each screen respects the document wait and
+allows one pending read at a time. Phone can start a fresh read after the wait for a refused GET.
 This recovery does not create a key, renew its age, submit a mutation or renew the registration token.
 FIN-365: Register sends the original Start consent/version without another checkbox or document GET. Its version is
 pinned even if current_version rotates during the call. A Register evidence mismatch or a missing local original
 request starts sign-in over; it never replaces the receipt with a newly fetched version.
 
-For phone Start only, a received 429 keeps the captured server wait but selects a NEW key on the next explicit
-«Запросить заново» intent. This does not replay a terminal dispatched request whose retryable is false. A lost
-transport response retains the original body/key. `PhoneStartGate` keeps this new-intent wait apart from ordinary
+For phone Start only, a received 429 keeps the captured server wait and requires a new key for the next
+explicit attempt. Phone offers «Повторить» and Call offers «Запросить заново» for this action. On Phone,
+an explicit retry after a terminal refusal also uses a fresh key after any captured wait. A lost transport
+response retains the original body and key while the replay window is open. `PhoneStartGate` keeps this new-intent wait apart from ordinary
 request retry permission; it never starts a POST automatically and never invents a fallback five-minute timer.
 
 ## Time

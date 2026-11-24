@@ -31,8 +31,7 @@ tags:
     containsChild:
       text: "Повторить"
     enabled: true
-- assertNotVisible:
-    id: "auth.phone.restart"
+- assertNotVisible: "Начать вход заново"
 - assertNotVisible:
     id: "auth.call"
 - scrollUntilVisible:
