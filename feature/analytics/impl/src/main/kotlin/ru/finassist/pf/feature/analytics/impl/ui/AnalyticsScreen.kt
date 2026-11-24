@@ -602,6 +602,7 @@ internal object AnalyticsTags {
     const val TILE_DAILY = "analytics.tile.daily"
     const val TILE_DAILY_HELP = "analytics.tile.daily.help"
     const val TILE_DAILY_HELP_POPUP = "analytics.tile.daily.help.popup"
+    const val TILE_DAILY_HELP_SHEET = "analytics.tile.daily.help.sheet"
     const val TILE_INCOME = "analytics.tile.income"
     const val TILE_EXPENSE = "analytics.tile.expense"
 
