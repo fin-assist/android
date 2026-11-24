@@ -95,6 +95,11 @@ tags:
     file: ../../subflows/config.yaml
     env:
       LINK: "pfe2e://config?offline=false"
+# Move the retry button above the navigation bar, where clipped bounds can look fully visible.
+- swipe:
+    start: "50%, 76%"
+    end: "50%, 41%"
+    duration: 500
 - scrollUntilVisible:
     element:
       id: "statements.upload.send_retry"
