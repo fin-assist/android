@@ -94,14 +94,18 @@ class SessionRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Persists the complete session from `verified` or `register`. Drop [SignInFlow] before saving so a
-     * later sign-in with the same number starts with a fresh request key.
+     * Persists the complete session from `verified` or `register`. Keep a verified request until its session
+     * is saved so a local write failure can retry the same verification. Registration has consumed its token.
      */
     suspend fun start(userId: String, tokens: TokenPair, registered: Boolean): Unit = detached {
+        val requestKey = signInFlow.phoneRequestKey
         // Persisted: the first-run upload step must survive process death between registration and passcode.
-        if (registered) dataStore.edit { it[KEY_PENDING_FIRST_UPLOAD] = true }
-        signInFlow.reset()
+        if (registered) {
+            dataStore.edit { it[KEY_PENDING_FIRST_UPLOAD] = true }
+            signInFlow.reset()
+        }
         tokenStore.save(TokenStore.Session(userId, tokens))
+        if (!registered && signInFlow.phoneRequestKey == requestKey) signInFlow.reset()
         // A failed save leaves the earlier sign-out mark for the observer to consume.
         ownSignOut.set(null)
         tracker.track(if (registered) Events.AUTH_REGISTERED else Events.AUTH_VERIFIED)

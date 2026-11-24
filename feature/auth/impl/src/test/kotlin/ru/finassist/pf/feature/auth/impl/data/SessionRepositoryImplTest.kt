@@ -98,6 +98,16 @@ class SessionRepositoryImplTest {
         assertFalse(h.repo.consumeJustRegistered())
     }
 
+    @Test fun `a successful session save clears only its own verification request`() = runBlocking {
+        val h = harness()
+        h.flow.phoneRequestKey = "key-1"
+        h.tokens.onSave = { h.flow.phoneRequestKey = "key-2" }
+
+        h.repo.start(userId = "u1", tokens = pair, registered = false)
+
+        assertEquals("key-2", h.flow.phoneRequestKey)
+    }
+
     @Test fun `sign-out clears the local session first and revokes the saved tokens afterwards`() = runBlocking {
         val h = harness()
         h.repo.start(userId = "u1", tokens = pair, registered = true)

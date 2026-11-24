@@ -16,6 +16,33 @@
       ]
     },
     {
+      "case_id": 1,
+      "field": "steps.1.action",
+      "before": "Ввести номер 916 123-45-67 и нажать «Продолжить»",
+      "proposed": "Ввести номер 916 123-45-67 и нажать «Продолжить». На экране звонка нажать «Позвонить» и вернуться из звонилки в приложение.",
+      "status": "pending_root_validation",
+      "reason": "Добавить проверенный переход FIN-560. Обновление текста в Qase ожидает публикации.",
+      "evidence": [
+        ".maestro/flows/auth/sign_in_existing_user.yaml:40",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:45"
+      ]
+    },
+    {
+      "case_id": 1,
+      "field": "steps.1.expected_result",
+      "before": "Экран звонка; мок через пару секунд «получает звонок»",
+      "proposed": "После возврата видны индикатор «Подтверждаем номер…», пояснение «Вход продолжится автоматически» и кнопки «Позвонить», «Изменить номер». После синтетического подтверждения открывается экран настройки кода-пароля.",
+      "status": "pending_root_validation",
+      "reason": "Зафиксировать индикацию активного запроса и автоматическое продолжение входа из FIN-560. Обновление текста в Qase ожидает публикации.",
+      "evidence": [
+        ".maestro/flows/auth/sign_in_existing_user.yaml:50",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:52",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:54",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:59",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:62"
+      ]
+    },
+    {
       "case_id": 3,
       "field": "preconditions",
       "before": "Сборка mockE2e, clear_state и launchApp. До действий на телефоне установить pfe2e://config?call_delay_ms=60000: mock-звонок приходит через минуту, чтобы успеть проверить экран и нажать «Изменить номер». Первоначально 14+ и согласие ПДн сняты; поле телефона недоступно до возраста. Документ personal_data загружен. Существующий тестовый номер 916 123-45-67. В шагах отдельно подтвердить обе отметки; не считать их уже включёнными в предусловии. Настройка сбрасывается clear_state следующего сценария. FIN-436: уточнено дополнение R5, UI заново не запускался.",

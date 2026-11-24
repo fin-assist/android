@@ -29,6 +29,7 @@ import ru.finassist.pf.feature.auth.impl.SessionHarness
 import ru.finassist.pf.feature.auth.impl.domain.CallDeadline
 import ru.finassist.pf.feature.auth.impl.domain.CallLockText
 import ru.finassist.pf.feature.auth.impl.eventually
+import java.io.IOException
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import kotlin.test.AfterTest
@@ -329,6 +330,29 @@ class CallViewModelTest {
         assertNull(h.tokens.flow.value)
     }
 
+    @Test fun `a local save failure can retry the same verified request`() = runBlocking {
+        for (failure in listOf(AppError.Unknown(IOException("keystore")), IOException("disk"))) {
+            opened.clear()
+            val h = harness()
+            val result = PhoneVerificationStatusEvent(
+                VerificationStatus.VERIFIED, isNewUser = false, accessToken = "a", refreshToken = "r", userId = "u7",
+            )
+            h.tokens.onSave = { throw failure }
+            val vm = h.scripted(flow { emit(result); awaitCancellation() }, flowOf(result)).apply { watch() }
+            eventually { vm.state.value.phase == CallPhase.ERROR }
+            assertNull(vm.events.value)
+            assertNull(h.tokens.current())
+            assertEquals("vt_1", h.flow.verification?.verificationToken)
+
+            h.tokens.onSave = {}
+            vm.retry()
+            eventually { vm.events.value == CallEvent.SignedIn }
+            assertEquals(listOf("vt_1", "vt_1"), opened)
+            assertEquals(TokenStore.Session("u7", TokenPair("a", "r")), h.tokens.current())
+            assertNull(h.flow.verification)
+        }
+    }
+
     @Test fun `verified without an id shows an error and keeps the session empty`() {
         for (userId in listOf(null, "")) {
             val h = harness()
@@ -356,16 +380,37 @@ class CallViewModelTest {
         assertTrue("track:auth.call.started" in h.log.all())
     }
 
-    @Test fun `returning from the dialer shows the expiry reported by the server`() {
+    @Test fun `a new request after expiry clears confirmation from the previous call`() {
         val h = harness()
         val vm = h.vm(event(VerificationStatus.PENDING))
         vm.onResume()
         vm.onDialOpened()
         vm.stopWatching()
+        vm.onResume()
+        assertTrue(vm.state.value.confirmingNumber)
+        vm.stopWatching()
         h.auth.stream = { flowOf(event(VerificationStatus.EXPIRED)) }
         vm.onResume()
         assertEquals(CallPhase.EXPIRED, vm.state.value.phase)
         assertNull(vm.events.value)
+
+        h.auth.startPhone = { _, _ -> verification(token = "vt_2", expiresIn = 120) }
+        h.auth.stream = { flowOf(event(VerificationStatus.PENDING)) }
+        vm.requestAgain()
+        assertEquals(CallPhase.WAITING, vm.state.value.phase)
+        assertFalse(vm.state.value.confirmingNumber)
+        assertEquals(clockText(120), vm.state.value.waitUntil)
+    }
+
+    @Test fun `resuming from the dialer while offline does not show confirmation`() {
+        val vm = harness().vm(failure = AppError.Offline())
+        vm.onDialOpened()
+        vm.watch()
+        vm.stopWatching()
+
+        vm.onResume()
+        assertEquals(CallPhase.OFFLINE, vm.state.value.phase)
+        assertFalse(vm.state.value.confirmingNumber)
     }
 
     @Test fun `calling again starts a new request with a new key and watches it`() {

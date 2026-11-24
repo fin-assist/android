@@ -135,6 +135,21 @@
               "path": ".maestro/subflows/sign_in.yaml",
               "line": 34,
               "detail": "id: \"auth.phone.submit\""
+            },
+            {
+              "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
+              "line": 40,
+              "detail": "tapOn: auth.call.dial"
+            },
+            {
+              "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
+              "line": 45,
+              "detail": "pressKey: HOME"
+            },
+            {
+              "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
+              "line": 47,
+              "detail": "stopApp: false"
             }
           ],
           "expectations": [
@@ -156,12 +171,49 @@
               "note": ""
             },
             {
+              "requirement": "FIN-560. После открытия звонилки и возврата в приложение видны состояние подтверждения и обе кнопки.",
+              "evidence": [
+                {
+                  "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
+                  "line": 42,
+                  "detail": "assertNotVisible: auth.call.dial"
+                },
+                {
+                  "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
+                  "line": 50,
+                  "detail": "id: \"auth.call.confirming\""
+                },
+                {
+                  "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
+                  "line": 52,
+                  "detail": "Вход продолжится автоматически"
+                },
+                {
+                  "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
+                  "line": 54,
+                  "detail": "id: \"auth.call.dial\""
+                },
+                {
+                  "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
+                  "line": 59,
+                  "detail": "id: \"auth.call.change_number\""
+                }
+              ],
+              "status": "covered",
+              "note": "Дополнение FIN-560 к исходному шагу. В Qase пока сохранён исходный текст."
+            },
+            {
               "requirement": "Mock звонок завершает ожидание и ведёт к PIN.",
               "evidence": [
                 {
                   "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
                   "line": 29,
-                  "detail": "call_delay_ms=6000"
+                  "detail": "call_delay_ms=45000"
+                },
+                {
+                  "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
+                  "line": 62,
+                  "detail": "id: \"applock.setup\""
                 },
                 {
                   "path": ".maestro/subflows/set_passcode.yaml",
@@ -179,7 +231,7 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-              "line": 40,
+              "line": 64,
               "detail": "set_passcode.yaml"
             },
             {
@@ -216,17 +268,17 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-                  "line": 43,
+                  "line": 67,
                   "detail": "id: \"operations.feed\""
                 },
                 {
                   "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-                  "line": 46,
+                  "line": 70,
                   "detail": "id: \"operations.row\""
                 },
                 {
                   "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-                  "line": 51,
+                  "line": 75,
                   "detail": "selected: true"
                 }
               ],
@@ -240,7 +292,7 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-              "line": 57,
+              "line": 81,
               "detail": "id: \"ds.tab.analytics\""
             }
           ],
@@ -250,7 +302,7 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-                  "line": 60,
+                  "line": 84,
                   "detail": "id: \"analytics.screen\""
                 }
               ],
@@ -264,7 +316,7 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-              "line": 63,
+              "line": 87,
               "detail": "id: \"ds.tab.profile\""
             }
           ],
@@ -274,12 +326,12 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-                  "line": 66,
+                  "line": 90,
                   "detail": "id: \"profile.phone\""
                 },
                 {
                   "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-                  "line": 68,
+                  "line": 92,
                   "detail": "- assertVisible: \".*916.*123.*45.*67.*\""
                 }
               ],
@@ -293,7 +345,7 @@
           "action_evidence": [
             {
               "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-              "line": 70,
+              "line": 94,
               "detail": "id: \"ds.tab.operations\""
             }
           ],
@@ -303,7 +355,7 @@
               "evidence": [
                 {
                   "path": ".maestro/flows/auth/sign_in_existing_user.yaml",
-                  "line": 72,
+                  "line": 96,
                   "detail": "id: \"operations.row\""
                 }
               ],
@@ -319,7 +371,7 @@
           "id": "Q1-call",
           "requirement": "Qase step1 проверяет Call, не только завершение входа.",
           "before": "login.yaml ждал сразу PIN; Call мог отсутствовать и тест оставался зелёным.",
-          "fix": "Сам сценарий удерживает Call6s и проверяет Call/dial до PIN.",
+          "fix": "Сценарий удерживает экран звонка, открывает системную звонилку, проверяет состояние после возврата и ждёт PIN.",
           "status": "fixed",
           "files": [
             ".maestro/flows/auth/sign_in_existing_user.yaml"
@@ -331,8 +383,8 @@
         "Биометрическое предложение зависит от устройства; helper нажимает «Не сейчас» только при его наличии. Реального телефонного звонка нет: mock подтверждает его автоматически."
       ],
       "verification": {
-        "static_review": "Сопоставлены исходные предусловия, все действия и ожидаемые результаты со setup/helpers/fixture и конкретными assertions; строки относятся к FIN-450 shell edits.",
-        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json."
+        "static_review": "Сопоставлены исходные предусловия, все действия и ожидаемые результаты со setup/helpers/fixture и конкретными assertions; строки относятся к FIN-450 shell edits. Ссылки для FIN-560 обновлены на текущий сценарий.",
+        "execution": "Полный автоматический UI-прогон Qase95 на main a9aeb67: passed. 79 Maestro +13 native компонентов сопоставлены90кейсам; подробности — postmerge.json. FIN-560: локальный Maestro на Android 36 прошёл на ba337f2d."
       }
     },
     {

@@ -33,6 +33,7 @@ import ru.finassist.pf.feature.auth.impl.domain.CallDeadline
 import ru.finassist.pf.feature.auth.impl.domain.CallLockText
 import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
 import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
+import java.io.IOException
 import java.time.Duration
 import java.time.ZoneId
 import javax.inject.Inject
@@ -244,8 +245,11 @@ class CallViewModel @Inject constructor(
         }
         try {
             session.start(userId, TokenPair(access, refresh), registered = false)
-        } catch (e: AppError) {
-            _state.update { it.copy(phase = if (e is AppError.Offline) CallPhase.OFFLINE else CallPhase.EXPIRED) }
+        } catch (e: Exception) {
+            if (e !is AppError && e !is IOException) throw e
+            // The transport can still be closing after its terminal event.
+            stopWatching()
+            _state.update { it.copy(phase = CallPhase.ERROR) }
             return
         }
         _events.value = CallEvent.SignedIn
