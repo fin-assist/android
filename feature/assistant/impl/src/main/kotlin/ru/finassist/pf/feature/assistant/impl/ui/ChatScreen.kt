@@ -119,7 +119,7 @@ fun ChatScreen(
         today = clock.today(),
         voiceState = voiceState,
         assistantAbout = assistantAbout,
-        refreshAboutLimit = { vm.refreshLimit() },
+        refreshAboutLimit = vm::refreshLimitForAbout,
         actions = remember(vm, voice.start, voice.finish, voice.cancel, onBack, onOpenSearch, onOpenAnalytics) {
             ChatActions(
                 onBack = { voice.cancel(); onBack() },
@@ -172,7 +172,7 @@ internal fun ChatContent(
     listState: LazyListState = rememberLazyListState(),
     assistantAbout: AssistantAboutViewModel? = null,
     aboutInitiallyOpen: Boolean = false,
-    refreshAboutLimit: (suspend () -> Unit)? = null,
+    refreshAboutLimit: (() -> Unit)? = null,
 ) {
     val d = PfTheme.dimens
     // Keep the newest message in view as the thread grows at the bottom or an answer streams in. Keyed by the

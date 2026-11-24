@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -30,8 +31,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.api.RequestOwner
 import ru.finassist.pf.core.api.model.AssistantLimit
-import ru.finassist.pf.core.api.model.ConsentType
 import ru.finassist.pf.core.api.model.HelpTags
+import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import ru.finassist.pf.core.designsystem.components.LocalSuppressPopups
 import ru.finassist.pf.core.designsystem.components.PfBottomSheet
 import ru.finassist.pf.core.designsystem.components.PfIconButton
@@ -54,14 +55,34 @@ internal fun AssistantChatHeader(
     onBack: () -> Unit,
     about: AssistantAboutViewModel?,
     initiallyOpen: Boolean,
-    refreshLimit: (suspend () -> Unit)?,
+    refreshLimit: (() -> Unit)?,
 ) {
-    val session = about?.session?.collectAsStateWithLifecycle(SessionState.Unknown)?.value as? SessionState.SignedIn
+    val session = about?.session?.collectAsStateWithLifecycle()?.value as? SessionState.SignedIn
     val owner = remember(session) {
         session?.authSessionEpoch?.takeIf { it.isNotBlank() && session.userId.isNotBlank() }
             ?.let { RequestOwner(session.userId, it) }
     }
-    var opened by rememberSaveable(session?.userId, session?.authSessionEpoch) { mutableStateOf(initiallyOpen) }
+    // Leave the owner's saved state untouched until the session is confirmed, including after process restoration.
+    if (about != null && owner == null) {
+        AssistantPageHeader(onBack, onAbout = null)
+        return
+    }
+    key(owner?.userId, owner?.authSessionEpoch) {
+        AssistantOwnedChatHeader(state, zone, onBack, about, owner, initiallyOpen, refreshLimit)
+    }
+}
+
+@Composable
+private fun AssistantOwnedChatHeader(
+    state: ChatUiState,
+    zone: ZoneId,
+    onBack: () -> Unit,
+    about: AssistantAboutViewModel?,
+    owner: RequestOwner?,
+    initiallyOpen: Boolean,
+    refreshLimit: (() -> Unit)?,
+) {
+    var opened by rememberSaveable { mutableStateOf(initiallyOpen) }
     val suppressed = LocalSuppressPopups.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
@@ -76,15 +97,7 @@ internal fun AssistantChatHeader(
         }
     }
 
-    PfPageHeader("Помощник", onBack = onBack, subtitle = "Отвечает по вашим операциям") {
-        PfIconButton(
-            PfIcons.INFO,
-            ABOUT_TITLE,
-            onClick = { opened = true },
-            enabled = !suppressed,
-            modifier = Modifier.testTag("assistant.about.open"),
-        )
-    }
+    AssistantPageHeader(onBack, onAbout = if (suppressed) null else ({ opened = true }))
     if (opened && !suppressed && HelpTags.BOTTOM in aboutTags) {
         if (refreshLimit != null) {
             val currentRefresh by rememberUpdatedState(refreshLimit)
@@ -97,6 +110,19 @@ internal fun AssistantChatHeader(
             onDismiss = { opened = false },
             about = about,
             owner = owner,
+        )
+    }
+}
+
+@Composable
+private fun AssistantPageHeader(onBack: () -> Unit, onAbout: (() -> Unit)?) {
+    PfPageHeader("Помощник", onBack = onBack, subtitle = "Отвечает по вашим операциям") {
+        PfIconButton(
+            PfIcons.INFO,
+            ABOUT_TITLE,
+            onClick = { onAbout?.invoke() },
+            enabled = onAbout != null,
+            modifier = Modifier.testTag("assistant.about.open"),
         )
     }
 }
@@ -171,34 +197,26 @@ private fun AboutSection(title: String, content: @Composable () -> Unit) {
 private fun ConsentDocumentLink(about: AssistantAboutViewModel?, owner: RequestOwner?) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val ready = about?.documentReady?.collectAsStateWithLifecycle(initialValue = false)?.value == true
-    var opening by remember { mutableStateOf(false) }
-    var failed by remember { mutableStateOf(false) }
-
-    PfLink(
-        "Как помощник использует данные",
-        onClick = {
-            if (about != null && owner != null && !opening && ready) {
-                opening = true
-                failed = false
-                scope.launch {
-                    try {
-                        val doc = about.loadDocument(owner)
-                        val url = doc?.takeIf { it.type == ConsentType.ASSISTANT }?.let { Uri.parse(it.url) }
-                            ?.takeIf { it.scheme.equals("https", ignoreCase = true) && !it.host.isNullOrBlank() }
-                        failed = url == null || runCatching {
-                            CustomTabsIntent.Builder().build().launchUrl(context, url)
-                        }.isFailure
-                    } finally {
-                        opening = false
-                    }
+    val state = about?.document?.collectAsStateWithLifecycle()?.value ?: AboutDocumentState()
+    val open: () -> Unit = {
+        if (about != null && owner != null) {
+            scope.launch {
+                val url = about.loadDocument(owner) ?: return@launch
+                val launched = runCatching {
+                    CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(url).normalizeScheme())
                 }
+                if (launched.isFailure) about.documentLaunchFailed(owner)
             }
-        },
-        modifier = Modifier.testTag("assistant.about.document"),
-    )
-    if (opening) Text("Открываем документ…", style = PfTheme.type.caption)
-    if (failed) Text("Не получилось открыть документ. Попробуйте ещё раз.", style = PfTheme.type.caption)
+        }
+    }
+    when {
+        state.opening -> Text("Открываем документ…", style = PfTheme.type.caption)
+        state.error != null -> {
+            ErrorMessage(state.error, "Не получилось открыть документ", onRetry = open.takeIf { state.retryReady })
+            if (!state.retryReady) Text("Повторное открытие пока недоступно.", style = PfTheme.type.caption)
+        }
+        else -> PfLink("Как помощник использует данные", onClick = open, modifier = Modifier.testTag("assistant.about.document"))
+    }
 }
 
 internal fun assistantLimitSummary(remaining: Int?, limit: AssistantLimit?, zone: ZoneId): String = when {

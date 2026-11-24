@@ -340,7 +340,11 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    internal suspend fun refreshLimit(reportOffline: Boolean = false, reconcileUnknown: Boolean = true) {
+    internal fun refreshLimitForAbout() {
+        viewModelScope.launch { refreshLimit() }
+    }
+
+    private suspend fun refreshLimit(reportOffline: Boolean = false, reconcileUnknown: Boolean = true) {
         if (limitReadPending || !limitRetryGate.isReady()) return
         limitReadPending = true
         limitReconciliationPending = false

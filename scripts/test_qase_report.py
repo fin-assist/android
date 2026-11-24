@@ -344,6 +344,9 @@ class CaseMapTest(unittest.TestCase):
         }, 84: {
             ".maestro/flows/statements/download_period.yaml",
             "ru.finassist.pf.StatementPickerTest#failedDownloadKeepsSelectedDatesAndDoesNotOpenBrowser",
+        }, 100: {
+            ".maestro/flows/assistant/about.yaml",
+            "ru.finassist.pf.AssistantAboutDocumentTest#opensCurrentDocumentOnlyAfterATapAndRecoversFromAnOfflineRead",
         }}
         pilot_class = 'jvm:ru.finassist.pf.feature.analytics.impl.ui.AnalyticsReliabilityComponentTest#'
         pilot = {

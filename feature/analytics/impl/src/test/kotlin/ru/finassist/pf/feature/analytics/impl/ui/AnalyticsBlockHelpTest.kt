@@ -23,6 +23,7 @@ import org.robolectric.annotation.GraphicsMode
 import ru.finassist.pf.core.api.ApiJson
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.HelpTags
 import ru.finassist.pf.core.blocks.BlockContext
 import ru.finassist.pf.core.blocks.BlockTags
 import ru.finassist.pf.core.blocks.CatalogV1
@@ -93,6 +94,35 @@ class AnalyticsBlockHelpTest {
         compose.onNodeWithTag("analytics.block.rows.help").performClick()
         compose.onNodeWithTag("analytics.block.rows.help.sheet").assertIsDisplayed()
         compose.onNodeWithTag("analytics.block.rows.help.popup").assertDoesNotExist()
+    }
+
+    @Test fun `a block bottom tag does not apply to its tile`() {
+        showGroupWithOneBottomTag(blockHasBottom = true)
+        compose.onNodeWithTag("analytics.block.group.help").performClick()
+        compose.onNodeWithTag("analytics.block.group.help.sheet").assertIsDisplayed()
+        compose.onNodeWithTag("ds.sheet.close").performClick()
+        compose.onNodeWithTag("analytics.tile.nested.help").performClick()
+        compose.onNodeWithTag("analytics.tile.nested.help.popup").assertIsDisplayed()
+        compose.onNodeWithTag("analytics.tile.nested.help.sheet").assertDoesNotExist()
+    }
+
+    @Test fun `a tile bottom tag does not apply to its block`() {
+        showGroupWithOneBottomTag(blockHasBottom = false)
+        compose.onNodeWithTag("analytics.tile.nested.help").performClick()
+        compose.onNodeWithTag("analytics.tile.nested.help.sheet").assertIsDisplayed()
+        compose.onNodeWithTag("ds.sheet.close").performClick()
+        compose.onNodeWithTag("analytics.block.group.help").performClick()
+        compose.onNodeWithTag("analytics.block.group.help.popup").assertIsDisplayed()
+        compose.onNodeWithTag("analytics.block.group.help.sheet").assertDoesNotExist()
+    }
+
+    private fun showGroupWithOneBottomTag(blockHasBottom: Boolean) {
+        val tileTags = if (blockHasBottom) "[]" else "[\"${HelpTags.BOTTOM}\"]"
+        val block = block("group", "tile_group", """{"tiles":[{"id":"nested","title":"Расходы",
+            "value":100,"value_kind":"amount","help_text":"Пояснение плитки","help_tags":$tileTags}]}""")
+            .copy(helpTags = if (blockHasBottom) listOf(HelpTags.BOTTOM) else emptyList())
+        val prepared = checkNotNull(CatalogV1.registry().prepare(block))
+        compose.setContent { PfTheme { prepared.draw(context(anchoredHelp = true)) } }
     }
 
     private fun context(anchoredHelp: Boolean) =

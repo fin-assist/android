@@ -9,4 +9,5 @@ dependencies {
     implementation(projects.feature.analytics.api)
     implementation(libs.androidx.browser)
     implementation(projects.core.blocks)
+    testImplementation(libs.androidx.datastore.preferences)
 }
