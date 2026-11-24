@@ -121,7 +121,7 @@ class SseTest {
         server.enqueue(
             stream(
                 "status" to """{"status":"pending"}""",
-                "status" to """{"status":"verified","is_new_user":false,"access_token":"a","refresh_token":"r"}""",
+                "status" to """{"status":"verified","is_new_user":false,"access_token":"a","refresh_token":"r","user_id":"u7"}""",
             ),
         )
         // The production SSE client: AuthInterceptor would add the session if the marker were missing.
@@ -132,6 +132,7 @@ class SseTest {
             val verified = awaitItem()
             assertEquals(VerificationStatus.VERIFIED, verified.status)
             assertEquals("a", verified.accessToken)
+            assertEquals("u7", verified.userId)
             awaitComplete()
         }
         val request = server.takeRequest()

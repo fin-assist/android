@@ -385,9 +385,9 @@ fun PfOptionGroupTitle(text: String, modifier: Modifier = Modifier, first: Boole
     )
 }
 
-/** Numbered steps (upload instructions): indigo number on `accent-soft`, text beside. */
+/** Numbered steps beside indigo badges, with an optional [firstStepHint] below the first step's text. */
 @Composable
-fun PfOrderedSteps(steps: List<String>, modifier: Modifier = Modifier) {
+fun PfOrderedSteps(steps: List<String>, modifier: Modifier = Modifier, firstStepHint: String? = null) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space3)) {
         steps.forEachIndexed { i, step ->
             Row(verticalAlignment = Alignment.Top) {
@@ -399,7 +399,17 @@ fun PfOrderedSteps(steps: List<String>, modifier: Modifier = Modifier) {
                     Text("${i + 1}", style = PfTheme.type.hint.copy(fontWeight = FontWeight.Bold), color = PfTheme.colors.accent)
                 }
                 Spacer(Modifier.width(PfTheme.dimens.space3))
-                Text(step, style = PfTheme.type.body, color = PfTheme.colors.text, modifier = Modifier.weight(1f).padding(top = 2.dp))
+                Column(Modifier.weight(1f).padding(top = 2.dp)) {
+                    Text(step, style = PfTheme.type.body, color = PfTheme.colors.text)
+                    if (i == 0 && firstStepHint != null) {
+                        Text(
+                            firstStepHint,
+                            style = PfTheme.type.hint,
+                            color = PfTheme.colors.textMuted,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
+                }
             }
         }
     }

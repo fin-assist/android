@@ -4,6 +4,7 @@ import ru.finassist.pf.core.designsystem.components.connectionFailureTexts
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,11 +16,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,9 +31,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.OffsetMapping
@@ -38,6 +44,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,16 +70,25 @@ import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
 
 /** Screen padding of the sign-in screens: status bar + space-6 on top, gesture bar + space-4 at the bottom. */
 @Composable
-private fun AuthScaffold(tag: String, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+private fun AuthScaffold(
+    tag: String,
+    hasTopHeader: Boolean = false,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    val d = PfTheme.dimens
+    val c = PfTheme.colors
     Column(
         Modifier
             .testTag(tag)
             .fillMaxSize()
+            .background(if (hasTopHeader) c.nav else c.bg)
             .windowInsetsPadding(PfInsets.statusBars)
+            .background(c.bg)
             .windowInsetsPadding(PfInsets.navigationBars)
             .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(start = PfTheme.dimens.space5, end = PfTheme.dimens.space5, top = PfTheme.dimens.space6, bottom = PfTheme.dimens.space4),
+            .padding(bottom = d.space4)
+            .then(if (hasTopHeader) Modifier else Modifier.padding(start = d.space5, end = d.space5, top = d.space6)),
         content = content,
     )
 }
@@ -117,7 +133,7 @@ internal fun PhoneContent(
             PfMark(size = PfTheme.dimens.mark)
             Spacer(Modifier.height(PfTheme.dimens.space4))
             Text("Понятные финансы", style = PfTheme.type.title1, color = PfTheme.colors.text)
-            Text("Разберите операции по выписке и узнайте о своих финансах", style = PfTheme.type.lead, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space1))
+            Text("Узнайте о своих финансах", style = PfTheme.type.lead, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space1))
         }
         Column(verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4)) {
             state.notice?.let { PfNotice(it, tone = NoticeTone.INFO, alert = true, modifier = Modifier.testTag(AuthTags.PHONE_NOTICE)) }
@@ -189,7 +205,7 @@ fun CallScreen(onBack: () -> Unit, onNewUser: () -> Unit, onRegistrationClosed: 
     val event by vm.events.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LifecycleResumeEffect(Unit) {
-        vm.watch()
+        vm.onResume()
         onPauseOrDispose { vm.stopWatching() }
     }
     LaunchedEffect(event) {
@@ -204,8 +220,9 @@ fun CallScreen(onBack: () -> Unit, onNewUser: () -> Unit, onRegistrationClosed: 
     CallContent(
         state,
         onDial = {
-            vm.onDialOpened()
-            runCatching { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${state.callbackNumber}"))) }
+            runCatching {
+                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", state.callbackNumber, null)))
+            }.onSuccess { vm.onDialOpened() }
         },
         onRequestAgain = vm::requestAgain,
         onRetry = vm::retry,
@@ -221,17 +238,22 @@ internal fun CallContent(
     onRetry: () -> Unit,
     onChangeNumber: () -> Unit,
 ) {
-    AuthScaffold(AuthTags.CALL) {
-        PfStatusHero(tone = HeroTone.INFO, icon = PfIcons.PHONE, centered = false)
-        Spacer(Modifier.height(PfTheme.dimens.space4))
-        Text("Позвоните нам для подтверждения", style = PfTheme.type.title1, color = PfTheme.colors.text)
-        Text(
-            "Позвоните с номера ${state.phoneDisplay} на наш номер. Мы сразу сбросим звонок — по нему и поймём, что номер ваш",
-            style = PfTheme.type.lead, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space1),
-        )
+    val d = PfTheme.dimens
+    val c = PfTheme.colors
+    val screenMargin = Modifier.padding(horizontal = d.space5)
+    AuthScaffold(AuthTags.CALL, hasTopHeader = true) {
+        Column(Modifier.fillMaxWidth().background(c.nav).then(screenMargin).padding(top = d.space6)) {
+            PfStatusHero(tone = HeroTone.INFO, icon = PfIcons.PHONE, centered = false)
+            Spacer(Modifier.height(d.space4))
+            Text("Позвоните нам для подтверждения", style = PfTheme.type.title1, color = c.text)
+            Text(
+                "Позвоните с номера ${state.phoneDisplay} на наш номер. Мы сразу сбросим звонок — по нему и поймём, что номер ваш",
+                style = PfTheme.type.lead, color = c.textMuted, modifier = Modifier.padding(top = d.space1),
+            )
+        }
         if (state.phase == CallPhase.WAITING) {
-            Spacer(Modifier.height(PfTheme.dimens.space6))
-            PfCard {
+            Spacer(Modifier.height(d.space6))
+            PfCard(modifier = screenMargin) {
                 Text("Номер для звонка", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
                 Text(state.callbackNumber, style = PfTheme.type.amountLg, color = PfTheme.colors.text, modifier = Modifier.padding(top = PfTheme.dimens.space1))
                 Spacer(Modifier.height(PfTheme.dimens.space4))
@@ -243,16 +265,42 @@ internal fun CallContent(
             }
         }
         Spacer(Modifier.height(PfTheme.dimens.space4))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4)) {
+        Column(Modifier.weight(1f).then(screenMargin), verticalArrangement = Arrangement.spacedBy(d.space4)) {
             when (state.phase) {
                 CallPhase.WAITING -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        PfIcon(PfIcons.CLOCK, contentDescription = null, size = 16.dp, tint = PfTheme.colors.textMuted)
-                        Spacer(Modifier.width(PfTheme.dimens.space2))
-                        Text(
-                            waitText(state.waitUntil), style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
-                            modifier = Modifier.testTag(AuthTags.CALL_WAIT),
-                        )
+                    if (state.confirmingNumber) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2)) {
+                            val indicator = Modifier.size(PfTheme.dimens.space5)
+                            if (LocalInspectionMode.current) {
+                                CircularProgressIndicator(
+                                    progress = { 0.75f }, modifier = indicator,
+                                    color = PfTheme.colors.accent, strokeWidth = 2.dp, trackColor = Color.Transparent,
+                                )
+                            } else {
+                                CircularProgressIndicator(
+                                    modifier = indicator, color = PfTheme.colors.accent,
+                                    strokeWidth = 2.dp, trackColor = Color.Transparent,
+                                )
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space1)) {
+                                Text(
+                                    "Подтверждаем номер…",
+                                    style = PfTheme.type.caption.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                                    color = PfTheme.colors.text,
+                                    modifier = Modifier.testTag(AuthTags.CALL_CONFIRMING),
+                                )
+                                Text("Вход продолжится автоматически", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
+                            }
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            PfIcon(PfIcons.CLOCK, contentDescription = null, size = 16.dp, tint = PfTheme.colors.textMuted)
+                            Spacer(Modifier.width(PfTheme.dimens.space2))
+                            Text(
+                                waitText(state.waitUntil), style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+                                modifier = Modifier.testTag(AuthTags.CALL_WAIT),
+                            )
+                        }
                     }
                     Text(
                         "Не проходит? Проверьте, что звоните с ${state.phoneDisplay} и не скрываете свой номер в настройках звонков",
@@ -434,6 +482,7 @@ internal object AuthTags {
     const val CALL = "auth.call"
     const val CALL_DIAL = "auth.call.dial"
     const val CALL_WAIT = "auth.call.wait"
+    const val CALL_CONFIRMING = "auth.call.confirming"
     const val CALL_RETRY = "auth.call.retry"
     const val CALL_CHANGE_NUMBER = "auth.call.change_number"
     const val CONSENT = "auth.consent"

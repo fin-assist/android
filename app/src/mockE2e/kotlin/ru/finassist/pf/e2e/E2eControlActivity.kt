@@ -44,7 +44,8 @@ import javax.inject.Inject
  *   version rotation, held reads and safe request evidence for Qase54/55; see [E2eConsentControl] and docs/e2e.md.
  * - `assistant_model_errors=<n>` — the next n assistant answers fail with MODEL_ERROR («Повторить» under them).
  * - `lock_app=true` — lock the current test session through AppLock.
- * - `analytics_help=manual|onboarding|reversed` — closed analytics tooltip compositions.
+ * - `analytics_help=manual|onboarding|reversed|bottom` — closed analytics help compositions. Manual fixture logins
+ *   start with the local Analytics sequence already acknowledged.
  * - `analytics_recalculating_responses=<0..100>` — next n non-empty analytics reads carry `state.recalculating=true`.
  * - `analytics_pending_responses=<0..100>` — next n valid analytics reads return `has_data=false`, simulating
  *   publication lag after a UI import; zero restores the actual projection without changing the imported ledger.
@@ -94,6 +95,7 @@ class E2eControlActivity : ComponentActivity() {
     @Inject lateinit var sessionImpl: SessionRepositoryImpl
     @Inject lateinit var appLock: AppLock
     @Inject lateinit var keys: IdempotencyKeys
+    @Inject internal lateinit var analyticsHelpControl: E2eAnalyticsHelpControl
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -117,11 +119,12 @@ class E2eControlActivity : ComponentActivity() {
         val signIn = E2eSignIn(
             authApi = authApi,
             session = session,
-            startSession = { tokens -> sessionImpl.start(userId = null, tokens = tokens, registered = false) },
+            startSession = { userId, tokens -> sessionImpl.start(userId, tokens, registered = false) },
             appLock = appLock,
             prepareFixture = { backend.ready.await() },
         )
         return signIn.signIn(phone = backend.config.existingPhone, passcode = E2E_PASSCODE)
+            ?: analyticsHelpControl.verify(backend.config.analyticsHelp)
     }
 
     private fun show(unmet: String?) {
@@ -162,11 +165,23 @@ class E2eControlActivity : ComponentActivity() {
                 name == "network_delay_ms" -> value.toLongOrNull()?.let { backend.config = backend.config.copy(networkDelayMs = it) }
                 name == "assistant_model_errors" -> value.toIntOrNull()?.let { backend.config = backend.config.copy(assistantModelErrors = it) }
                 name == "lock_app" -> if (value == "true") appLock.lock() else { unmet = "invalid lock fixture" }
-                name == "analytics_help" -> when (value) {
-                    "manual" -> backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.MANUAL)
-                    "onboarding" -> backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.ONBOARDING)
-                    "reversed" -> backend.config = backend.config.copy(analyticsHelp = MockAnalyticsHelp.REVERSED)
-                    else -> unmet = "invalid analytics help fixture"
+                name == "analytics_help" -> {
+                    val mode = when (value) {
+                        "manual" -> MockAnalyticsHelp.MANUAL
+                        "onboarding" -> MockAnalyticsHelp.ONBOARDING
+                        "reversed" -> MockAnalyticsHelp.REVERSED
+                        "bottom" -> MockAnalyticsHelp.BOTTOM
+                        else -> null
+                    }
+                    if (mode == null) {
+                        unmet = "invalid analytics help fixture"
+                    } else {
+                        // A combined sign-in verifies the new session before returning its receipt.
+                        val issue = if (uri?.getQueryParameter(SIGN_IN) == SIGN_IN_EXISTING) null
+                        else analyticsHelpControl.verify(mode, allowSignedOut = true)
+                        if (issue == null) backend.config = backend.config.copy(analyticsHelp = mode)
+                        else unmet = issue
+                    }
                 }
                 name == "analytics_pending_responses" -> {
                     val count = value.toIntOrNull()?.takeIf { it in 0..100 }

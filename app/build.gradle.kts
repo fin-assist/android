@@ -62,7 +62,7 @@ val checkNoMockCode = tasks.register<CheckNoMockCode>("checkNoMockCode")
 // build, which `GITHUB_RUN_NUMBER` does not guarantee (a counter per workflow; a re-run keeps it). Without it — the CI
 // run number (`GITHUB_RUN_NUMBER`, enough to tell builds apart in logs), 1 locally. Both go into `X-Client-Version`
 // (`android/0.2.16+41`, api.md «Заголовки», FIN-20/22).
-val appVersionName = "1.0.1"
+val appVersionName = "1.1.0"
 val appVersionCode = (System.getenv("PF_VERSION_CODE") ?: System.getenv("GITHUB_RUN_NUMBER"))?.toIntOrNull() ?: 1
 
 android {
@@ -269,6 +269,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.androidx.compose.ui.test.manifest)
+    testImplementation(libs.androidx.datastore.preferences)
 
     // Native UI tests (src/androidTestMock, run on the mock e2e build): what Maestro cannot drive.
     androidTestImplementation(platform(libs.androidx.compose.bom))

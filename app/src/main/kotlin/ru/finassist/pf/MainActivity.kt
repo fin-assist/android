@@ -2,16 +2,20 @@ package ru.finassist.pf
 
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.feature.availability.impl.ui.AvailabilityScreens
+import android.content.Intent
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.common.time.ReportZone
 import ru.finassist.pf.core.common.time.withZone
@@ -46,11 +50,14 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var clock: Clock
     @Inject lateinit var reportZone: ReportZone
 
+    private val incomingStatement: IncomingStatement by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Financial data: no screenshots and a blank Recents thumbnail in release builds.
-        if (!BuildConfig.DEBUG) window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
+        lifecycleScope.launch { session.state.collect(incomingStatement::observeSession) }
+        // The view model retains an unconsumed selection on rotation. Restoring navigation must never submit again.
+        if (savedInstanceState == null) acceptIncomingStatement(intent)
         setContent {
             // A new profile zone regroups what is on screen by day (FIN-92).
             val profileZone by reportZone.profile.collectAsState()
@@ -65,6 +72,7 @@ class MainActivity : FragmentActivity() {
                     availabilityScreens = availabilityScreens,
                     preferences = preferences,
                     flags = flags,
+                    incomingStatement = incomingStatement,
                     onScreenOpened = crashContext::onScreenOpened,
                     onSessionShown = { s ->
                         crashContext.onSessionShown(
@@ -78,5 +86,15 @@ class MainActivity : FragmentActivity() {
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        acceptIncomingStatement(intent)
+    }
+
+    private fun acceptIncomingStatement(intent: Intent) {
+        incomingStatementUri(intent)?.let(incomingStatement::offer)
     }
 }

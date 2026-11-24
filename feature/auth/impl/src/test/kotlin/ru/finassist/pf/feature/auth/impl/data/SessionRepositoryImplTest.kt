@@ -40,7 +40,7 @@ class SessionRepositoryImplTest {
     @Test fun `state is signed in only with a user id`() = runBlocking {
         val h = harness()
         assertEquals(SessionState.SignedOut, h.repo.state.first())
-        // The placeholder saved while the profile is being fetched is not a session yet.
+        // An interrupted sign-in from a previous version can leave an incomplete session.
         h.tokens.flow.value = TokenStore.Session("", pair)
         assertEquals(SessionState.SignedOut, h.repo.state.first())
         h.tokens.flow.value = TokenStore.Session("u1", pair)
@@ -56,15 +56,13 @@ class SessionRepositoryImplTest {
         assertEquals(SessionState.SignedIn("u1", "login-2"), h.repo.state.first())
     }
 
-    @Test fun `an existing user's id is read from the profile before the session is saved`() = runBlocking {
+    @Test fun `an existing user's session is saved once with its id`() = runBlocking {
         val h = harness()
-        h.profile.userId = "u42"
-        h.repo.start(userId = null, tokens = pair, registered = false)
+        h.repo.start(userId = "u42", tokens = pair, registered = false)
 
         assertEquals(TokenStore.Session("u42", pair), h.tokens.current())
         val log = h.log.all()
-        assertTrue(log.indexOf("save:") < log.indexOf("getProfile"), "placeholder first, so the profile call is authorized: $log")
-        assertTrue(log.indexOf("getProfile") < log.indexOf("save:u42"), log.toString())
+        assertEquals(listOf("save:u42"), log.filter { it.startsWith("save:") })
         assertTrue("track:auth.verified" in log)
         assertFalse("track:auth.registered" in log)
         assertFalse(h.repo.consumeJustRegistered())
@@ -74,15 +72,6 @@ class SessionRepositoryImplTest {
         val h = harness()
         h.repo.start(userId = "u1", tokens = pair, registered = false)
         assertEquals(listOf(Events.AUTH_VERIFIED to emptyMap()), h.tracker.events.toList())
-    }
-
-    @Test fun `a failed profile request drops the placeholder session and reaches the caller`() = runBlocking {
-        val h = harness()
-        h.profile.failure = AppError.Offline()
-        assertFailsWith<AppError.Offline> { h.repo.start(userId = null, tokens = pair, registered = false) }
-        assertNull(h.tokens.current())
-        assertEquals(SessionState.SignedOut, h.repo.state.first())
-        assertFalse(h.log.all().any { it.startsWith("track:") })
     }
 
     @Test fun `the one-time sign-in state is dropped before the final session is saved`() = runBlocking {
@@ -107,6 +96,16 @@ class SessionRepositoryImplTest {
         assertTrue("track:auth.registered" in h.log.all())
         assertTrue(h.repo.consumeJustRegistered())
         assertFalse(h.repo.consumeJustRegistered())
+    }
+
+    @Test fun `a successful session save clears only its own verification request`() = runBlocking {
+        val h = harness()
+        h.flow.phoneRequestKey = "key-1"
+        h.tokens.onSave = { h.flow.phoneRequestKey = "key-2" }
+
+        h.repo.start(userId = "u1", tokens = pair, registered = false)
+
+        assertEquals("key-2", h.flow.phoneRequestKey)
     }
 
     @Test fun `sign-out clears the local session first and revokes the saved tokens afterwards`() = runBlocking {
@@ -274,33 +273,6 @@ class SessionRepositoryImplTest {
         assertEquals(AuthRoutes.Phone.REASON_EXPIRED, h.repo.consumeSignOutReason())
     }
 
-    @Test fun `a failed sign-in after an own sign-out seen late is not reported as expired`() = runBlocking {
-        val h = harness(TokenStore.Session("u1", pair))
-        h.awaitSignedIn()
-        // The observer stalls on a value it is handling while the user signs out and a new sign-in fails on the
-        // profile request: the placeholder it saved is cleared again.
-        val refreshed = TokenStore.Session("u1", TokenPair("a2", "r2"))
-        val stalled = CompletableDeferred<Unit>()
-        val release = CompletableDeferred<Unit>()
-        h.tokens.beforeDeliver = { if (it == refreshed) { stalled.complete(Unit); release.await() } }
-        h.tokens.flow.value = refreshed
-        withTimeout(5_000) { stalled.await() }
-
-        h.repo.signOut(AuthRoutes.Phone.REASON_LOGGED_OUT)
-        assertEquals(AuthRoutes.Phone.REASON_LOGGED_OUT, h.repo.consumeSignOutReason())
-        h.profile.failure = java.io.IOException("no network")
-        assertFailsWith<java.io.IOException> { h.repo.start(userId = null, tokens = TokenPair("a3", "r3"), registered = false) }
-        val changesBefore = h.crash.crumbs.size
-        release.complete(Unit)
-        // The breadcrumb is emitted after the observer has decided on the reason.
-        eventually {
-            h.crash.crumbs.size > changesBefore &&
-                h.crash.crumbs.lastOrNull() == Breadcrumb.SessionChanged(Breadcrumb.SessionCrumb.SIGNED_OUT)
-        }
-
-        assertNull(h.repo.consumeSignOutReason(), "the next phone screen must not show «session expired»")
-    }
-
     @Test fun `a sign-in whose session failed to save after an own sign-out seen late is not reported as expired`() = runBlocking {
         val h = harness(TokenStore.Session("u1", pair))
         h.awaitSignedIn()
@@ -353,13 +325,11 @@ class SessionRepositoryImplTest {
 
     @Test fun `a restored session leaves the time zone alone`() {
         val h = harness(TokenStore.Session("u1", pair))
-        h.profile.timezone = "Asia/Vladivostok-not-this-device"
         h.awaitSignedIn()
         Thread.sleep(100)
         assertTrue(h.tracker.events.isEmpty())
         // FIN-91: the profile feature's TimeZoneSync sends the zone once it has held for 72 h, not every sign-in.
-        assertTrue("getProfile" !in h.log.all())
-        assertTrue(h.profile.updates.isEmpty())
+        assertTrue(h.log.all().isEmpty())
     }
 
     @Test fun `session changes leave breadcrumbs without user data`() {

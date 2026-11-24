@@ -91,6 +91,8 @@ data class ChatUiState(
     val limit: AssistantLimit? = null,
     /** Latest authoritative remainder, even before GET supplies reset and daily-maximum metadata. */
     val knownRemaining: Int? = null,
+    /** A successful quota read supplied the daily maximum and reset. */
+    val hasLimitMetadata: Boolean = false,
     val offline: Boolean = false,
     /** Last send/retry failed for a reason other than the network (shown with «Повторить»). */
     val sendFailed: Boolean = false,
@@ -338,6 +340,10 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    internal fun refreshLimitForAbout() {
+        viewModelScope.launch { refreshLimit() }
+    }
+
     private suspend fun refreshLimit(reportOffline: Boolean = false, reconcileUnknown: Boolean = true) {
         if (limitReadPending || !limitRetryGate.isReady()) return
         limitReadPending = true
@@ -349,9 +355,9 @@ class ChatViewModel @Inject constructor(
             if (revision == limitRevision) {
                 // A fresh read (including a daily reset) supersedes quota recorded by older streams.
                 limitRevision++
-                _state.update { it.copy(limit = limit, knownRemaining = limit.remaining, limitErrorPresentation = null) }
+                _state.update { it.copy(limit = limit, knownRemaining = limit.remaining, hasLimitMetadata = true, limitErrorPresentation = null) }
             } else {
-                needsMetadata = _state.value.limit == null && _state.value.knownRemaining != null
+                needsMetadata = !_state.value.hasLimitMetadata && _state.value.knownRemaining != null
             }
         } catch (failure: AppError) {
             if (revision != limitRevision) {

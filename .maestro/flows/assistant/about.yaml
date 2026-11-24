@@ -1,0 +1,71 @@
+appId: ru.finassist.pf.mock.e2e
+name: Помощник — о помощнике при первом входе и по значку
+tags:
+  - assistant
+---
+- runFlow: ../../subflows/clear_state.yaml
+- runFlow: ../../subflows/fast_login.yaml
+- tapOn:
+    id: "ds.tab.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.about.sheet"
+    timeout: 15000
+- assertVisible: "Что можно спросить"
+- scrollUntilVisible:
+    element:
+      id: "assistant.about.limit"
+    direction: DOWN
+- extendedWaitUntil:
+    visible:
+      text: "Осталось 5 из 5 вопросов.*"
+    timeout: 15000
+- assertNotVisible: "Попытка возвращается.*"
+- scrollUntilVisible:
+    element:
+      id: "assistant.about.rules"
+    direction: DOWN
+- tapOn:
+    id: "assistant.about.rules"
+- scrollUntilVisible:
+    element:
+      text: "Повторяющиеся вопросы вне темы.*"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      id: "assistant.about.document"
+    direction: DOWN
+- assertVisible: "Как помощник использует данные"
+- tapOn:
+    id: "ds.sheet.close"
+- tapOn:
+    id: "ds.tab.operations"
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 10000
+- tapOn:
+    id: "ds.tab.assistant"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.about.open"
+    timeout: 10000
+- assertNotVisible:
+    id: "assistant.about.sheet"
+- tapOn:
+    id: "ds.chat.input"
+- inputText: "Krabsbir"
+- hideKeyboard
+- tapOn:
+    id: "assistant.about.open"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.about.sheet"
+    timeout: 10000
+- assertVisible: "Что можно спросить"
+- assertNotVisible: "Попытка возвращается.*"
+- tapOn:
+    id: "ds.sheet.close"
+- assertVisible:
+    id: "ds.chat.input"
+    text: "Krabsbir"

@@ -37,14 +37,14 @@ class E2eSignInTest {
     private val auth = FakeAuthApi()
     private val session = FakeSession()
     private val lock = FakeAppLock()
-    private val started = mutableListOf<TokenPair>()
+    private val started = mutableListOf<Pair<String, TokenPair>>()
 
     private fun signIn(timeoutMs: Long = 30_000, prepareFixture: suspend () -> Unit = {}, fixtureTimeoutMs: Long = 60_000) = E2eSignIn(
         authApi = auth,
         session = session,
-        startSession = { tokens ->
-            started += tokens
-            session.state.value = SessionState.SignedIn("u1")
+        startSession = { userId, tokens ->
+            started += userId to tokens
+            session.state.value = SessionState.SignedIn(userId)
         },
         appLock = lock,
         timeoutMs = timeoutMs,
@@ -56,14 +56,14 @@ class E2eSignInTest {
     fun `existing account is signed in with its tokens and the passcode is set`() = runTest {
         auth.events = listOf(
             PhoneVerificationStatusEvent(VerificationStatus.PENDING),
-            PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = false, accessToken = "a", refreshToken = "r"),
+            PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = false, accessToken = "a", refreshToken = "r", userId = "u1"),
         )
 
         assertNull(signIn().signIn("+79161234567", "1234"))
 
         assertEquals(listOf("+79161234567"), auth.phones)
         assertEquals(listOf("vt_1"), auth.streamed)
-        assertEquals(listOf(TokenPair("a", "r")), started)
+        assertEquals(listOf("u1" to TokenPair("a", "r")), started)
         assertEquals(listOf("1234"), lock.passcodes)
         assertEquals(LockState.Unlocked, lock.state.value)
     }
@@ -105,6 +105,14 @@ class E2eSignInTest {
     }
 
     @Test
+    fun `verified without a user id ends without a session`() = runTest {
+        auth.events = listOf(PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = false, accessToken = "a", refreshToken = "r"))
+
+        assertEquals("verified without user ID", signIn().signIn("+79161234567", "1234"))
+        assertTrue(started.isEmpty())
+    }
+
+    @Test
     fun `a session already there is reported, not replaced`() = runTest {
         session.state.value = SessionState.SignedIn("u0")
 
@@ -140,7 +148,7 @@ class E2eSignInTest {
 
     @Test
     fun `a passcode that does not unlock the app is not success`() = runTest {
-        auth.events = listOf(PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = false, accessToken = "a", refreshToken = "r"))
+        auth.events = listOf(PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = false, accessToken = "a", refreshToken = "r", userId = "u1"))
         lock.unlockOnSet = false
 
         assertEquals("sign-in did not finish in 5000 ms", signIn(timeoutMs = 5_000).signIn("+79161234567", "1234"))
@@ -149,7 +157,7 @@ class E2eSignInTest {
     @Test
     fun `cold fixture preparation has its own deadline before authentication starts`() = runTest {
         auth.events = listOf(PhoneVerificationStatusEvent(VerificationStatus.VERIFIED,
-            isNewUser = false, accessToken = "a", refreshToken = "r"))
+            isNewUser = false, accessToken = "a", refreshToken = "r", userId = "u1"))
         val result = signIn(timeoutMs = 5_000, prepareFixture = {
             assertTrue(auth.phones.isEmpty())
             delay(35_000)

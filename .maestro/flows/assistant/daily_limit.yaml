@@ -13,10 +13,7 @@ tags:
     timeout: 15000
 - tapOn:
     id: "analytics.ask"
-- extendedWaitUntil:
-    visible:
-      id: "assistant.chat"
-    timeout: 10000
+- runFlow: ../../subflows/dismiss_first_assistant_about.yaml
 
 # Nothing to answer from: «Вопрос не потрачен», still 5 of 5.
 - tapOn:

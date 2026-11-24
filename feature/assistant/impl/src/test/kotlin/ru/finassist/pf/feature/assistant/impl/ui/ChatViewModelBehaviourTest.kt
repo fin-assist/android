@@ -8,9 +8,11 @@ import ru.finassist.pf.core.common.time.ElapsedClock
 import ru.finassist.pf.core.common.time.ResponseTiming
 import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -1364,6 +1367,9 @@ class ChatViewModelBehaviourTest {
     @Test fun `a concurrent live answer refund queues one reconciliation after an older quota read`() =
         reconcileConcurrentRefund(holdQuotaRead = true)
 
+    @Test fun `closing About does not cancel the refund reconciliation queued by its limit read`() =
+        reconcileConcurrentRefund(holdQuotaRead = true, dismissAbout = true)
+
     @Test fun `concurrent live refunds coalesce into one reconciliation after an older quota read`() =
         reconcileConcurrentRefund(holdQuotaRead = true, extraRefund = true)
 
@@ -1374,7 +1380,7 @@ class ChatViewModelBehaviourTest {
         reconcileConcurrentRefund(holdQuotaRead = true, quotaFailure = askRefusal(retryable = true), waitForQuotaRetry = true)
 
     private fun reconcileConcurrentRefund(holdQuotaRead: Boolean, extraRefund: Boolean = false,
-        quotaFailure: AppError? = null, waitForQuotaRetry: Boolean = false) {
+        quotaFailure: AppError? = null, waitForQuotaRetry: Boolean = false, dismissAbout: Boolean = false) {
         api.pages[null] = MessagesList(listOf(question("q-live"), answer("live", AnswerStatus.GENERATING),
             question("q-failed"), answer("failed", AnswerStatus.FAILED, AnswerErrorCode.MODEL_ERROR, retryable = true)), hasOlder = false)
         val live = MutableSharedFlow<AnswerEvent>(extraBufferCapacity = 1)
@@ -1398,11 +1404,15 @@ class ChatViewModelBehaviourTest {
         api.limitReply = {
             if (++quotaReads == 1 && holdQuotaRead) oldQuota.await() else limit.copy(remaining = refunded)
         }
+        val aboutScope = if (dismissAbout) CoroutineScope(dispatcher) else null
         if (holdQuotaRead) {
             api.pages[null] = MessagesList(listOf(question("q-live"), answer("live", AnswerStatus.GENERATING),
                 question("q-failed"), answer("replacement")) +
                 if (extraRefund) listOf(answer("other", AnswerStatus.GENERATING)) else emptyList(), hasOlder = false)
-            vm.refresh()
+            if (aboutScope == null) vm.refresh() else aboutScope.launch {
+                vm.refreshLimitForAbout()
+                awaitCancellation()
+            }
             assertEquals(1, quotaReads)
         }
         live.tryEmit(AnswerEvent.Error(AnswerErrorEvent(AnswerErrorCode.MODEL_ERROR, "live error", 1,
@@ -1411,6 +1421,7 @@ class ChatViewModelBehaviourTest {
             text = "Ещё одна ошибка", retryable = true)))
         if (holdQuotaRead) {
             assertEquals(1, quotaReads, "the existing GET stays single-flight")
+            aboutScope?.cancel()
             if (quotaFailure == null) oldQuota.complete(limit.copy(remaining = 0)) else oldQuota.completeExceptionally(quotaFailure)
             if (waitForQuotaRetry) {
                 assertEquals(1, quotaReads, "terminal reconciliation cannot bypass a captured endpoint wait")

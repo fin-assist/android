@@ -53,6 +53,7 @@ data class PhoneVerificationStatusEvent(
     val accessToken: String? = null,
     val refreshToken: String? = null,
     val registrationToken: String? = null,
+    val userId: String? = null,
 )
 
 @Serializable

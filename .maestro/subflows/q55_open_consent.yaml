@@ -15,10 +15,7 @@ appId: ru.finassist.pf.mock.e2e
       LINK: "pfe2e://config?network_delay_ms=0&consent_type=assistant&consent_publish=1&consent_document=current&consent_read=ready&expect_consent_reads=0&expect_consent_grants="
 - tapOn:
     id: "ds.tab.assistant"
-- extendedWaitUntil:
-    visible:
-      id: "assistant.chat"
-    timeout: 10000
+- runFlow: dismiss_first_assistant_about.yaml
 - tapOn:
     id: "ds.chat.input"
 - inputText: "Kaspersky"

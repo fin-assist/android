@@ -84,4 +84,4 @@ data class MockConfig(
 }
 
 /** Server compositions used by the mock app and the closed UI fixtures. */
-enum class MockAnalyticsHelp { MANUAL, ONBOARDING, REVERSED }
+enum class MockAnalyticsHelp { MANUAL, ONBOARDING, REVERSED, BOTTOM }

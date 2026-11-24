@@ -8,11 +8,52 @@
       "field": "preconditions",
       "before": "Синтетическая сборка mockE2e. FIN-365: перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа; обе отметки изначально сняты. Автотесты обновлены, новый UI-прогон не выполнялся.",
       "proposed": "Синтетическая сборка mockE2e. FIN-365: перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа; обе отметки изначально сняты.",
-      "status": "pending_root_validation",
+      "status": "superseded_by_fin560",
       "reason": "История выполнения не является предусловием. Исходные строки сохраняются в source audit; перед публикацией переносить историю в description, не удалять. Root указал baseline Qase85 Passed на967f4559; FIN450 edits не исполнялись.",
       "evidence": [
         "https://app.qase.io/run/PF/dashboard/85",
         "docs/qa/qase-parity/shell.json"
+      ]
+    },
+    {
+      "case_id": 1,
+      "field": "preconditions",
+      "before": "Синтетическая сборка mockE2e. FIN-365: перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа; обе отметки изначально сняты. Перед Start установить pfe2e://config?call_delay_ms=6000, чтобы экран звонка оставался наблюдаемым; это синтетическая задержка, не продуктовый срок подтверждения.",
+      "proposed": "Синтетическая сборка mockE2e. Перед отправкой телефона отдельно подтвердить 14+ и согласие ПДн из текущего документа. Обе отметки изначально сняты. Перед Start установить pfe2e://config?call_delay_ms=45000, чтобы успеть открыть звонилку и вернуться в приложение до синтетического подтверждения.",
+      "status": "pending_root_validation",
+      "reason": "Синхронизировать предусловие Qase 1 с задержкой в сценарии FIN-560.",
+      "evidence": [
+        "docs/qa/qase-parity/publication.json",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:29"
+      ]
+    },
+    {
+      "case_id": 1,
+      "field": "steps.1.action",
+      "before": "Ввести номер 916 123-45-67 и нажать «Продолжить»",
+      "proposed": "Ввести номер 916 123-45-67 и нажать «Продолжить». На экране звонка нажать «Позвонить» и вернуться из звонилки в приложение.",
+      "status": "pending_root_validation",
+      "reason": "Добавить проверенный переход FIN-560. Обновление текста в Qase ожидает публикации.",
+      "evidence": [
+        "docs/qa/qase-parity/publication.json",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:40",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:45"
+      ]
+    },
+    {
+      "case_id": 1,
+      "field": "steps.1.expected_result",
+      "before": "Экран звонка; синтетический номер для звонка и «Позвонить» видны. Mock автоматически подтверждает звонок с настроенной задержкой.",
+      "proposed": "После возврата видны индикатор «Подтверждаем номер…», пояснение «Вход продолжится автоматически» и кнопки «Позвонить», «Изменить номер». После синтетического подтверждения открывается экран настройки кода-пароля.",
+      "status": "pending_root_validation",
+      "reason": "Зафиксировать индикацию активного запроса и автоматическое продолжение входа из FIN-560. Обновление текста в Qase ожидает публикации.",
+      "evidence": [
+        "docs/qa/qase-parity/publication.json",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:50",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:52",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:54",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:59",
+        ".maestro/flows/auth/sign_in_existing_user.yaml:62"
       ]
     },
     {
@@ -171,7 +212,7 @@
       "field": "steps.1.expected_result",
       "before": "Экран звонка; мок через пару секунд «получает звонок»",
       "proposed": "Экран звонка; синтетический callbacknumber и «Позвонить» видны. Mock подтверждает звонок через6секунд (call_delay_ms=6000).",
-      "status": "pending_root_validation",
+      "status": "superseded_by_fin560",
       "reason": "Удержание Call6s делает шаг наблюдаемым, сохраняет автоматическое подтверждение mock.",
       "evidence": [
         ".maestro/flows/auth/sign_in_existing_user.yaml"
