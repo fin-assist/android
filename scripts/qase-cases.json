@@ -33,6 +33,7 @@
     "ru.finassist.pf.StatementPickerTest#opensPrivacyPolicyFromUploadNotice": 14,
     ".maestro/flows/statements/upload_history_period.yaml": 47,
     ".maestro/flows/statements/upload_errors.yaml": 15,
+    "ru.finassist.pf.StatementPickerTest#opensSupportDraftWithCurrentUserAfterRejectedImport": 15,
     "ru.finassist.pf.StatementPickerTest#uploadsTheDocumentReturnedBySystemPicker": 16,
     "ru.finassist.pf.ExternalStatementOpenTest#importsAfterSignInOnColdStartAndAgainAfterUnlockOnWarmStart": 99,
     "ru.finassist.pf.ConnectionFailureHintTest#vpnHintUpdatesAfterRetry": 62,

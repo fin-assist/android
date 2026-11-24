@@ -171,9 +171,10 @@ private fun RankedList(block: Block, data: RankedListData?, ctx: BlockContext) {
         }
         return
     }
+    val help = ctx.helpButton(block, localText = block.id?.let(ctx.rankedListHelp::get))
     if (data.style == ListStyle.PLAIN) {
         PfCard {
-            BlockHelpHeader(ctx.helpButton(block))
+            BlockHelpHeader(help)
             data.items.forEachIndexed { i, item ->
                 PfDataRow(
                     item.title,
@@ -202,27 +203,25 @@ private fun RankedList(block: Block, data: RankedListData?, ctx: BlockContext) {
     val visibleCount = data.visibleCount
     val visible = if (expanded || visibleCount == null) data.items else data.items.take(visibleCount)
     val maxPositive = data.items.maxOf { it.value }.coerceAtLeast(1.0)
-    ctx.decorate(block) {
-        Column {
-            Spacer(Modifier.height(d.space2))
-            PfCard {
-                BlockHelpHeader(ctx.helpButton(block))
-                Column(verticalArrangement = Arrangement.spacedBy(d.space2)) {
-                    visible.forEachIndexed { i, item ->
-                        val amount = BlockFormat.value(item.value, item.valueKind, ctx.currency).orEmpty()
-                        PfCategoryBar(
-                            chartId = ctx.tags.chart(id),
-                            index = i,
-                            icon = item.icon,
-                            label = item.title + (item.note?.let { " · $it" } ?: ""),
-                            amount = amount,
-                            percent = if (item.value > 0) (item.value / maxPositive).toFloat() else 0f,
-                            share = item.share?.let { "${(it * 100).toInt()}%" },
-                            spoken = listOfNotNull(item.title, amount, item.note).joinToString(", "),
-                            onClick = ctx.clickOf(block, item.action),
-                            modifier = Modifier.testTag(ctx.tags.item(id)),
-                        )
-                    }
+    Column {
+        Spacer(Modifier.height(d.space2))
+        PfCard {
+            BlockHelpHeader(help)
+            Column(verticalArrangement = Arrangement.spacedBy(d.space2)) {
+                visible.forEachIndexed { i, item ->
+                    val amount = BlockFormat.value(item.value, item.valueKind, ctx.currency).orEmpty()
+                    PfCategoryBar(
+                        chartId = ctx.tags.chart(id),
+                        index = i,
+                        icon = item.icon,
+                        label = item.title + (item.note?.let { " · $it" } ?: ""),
+                        amount = amount,
+                        percent = if (item.value > 0) (item.value / maxPositive).toFloat() else 0f,
+                        share = item.share?.let { "${(it * 100).toInt()}%" },
+                        spoken = listOfNotNull(item.title, amount, item.note).joinToString(", "),
+                        onClick = ctx.clickOf(block, item.action),
+                        modifier = Modifier.testTag(ctx.tags.item(id)),
+                    )
                 }
             }
         }

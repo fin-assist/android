@@ -82,6 +82,8 @@ private fun PasscodePad(
     footer: (@Composable () -> Unit)? = null,
 ) {
     val d = PfTheme.dimens
+    val c = PfTheme.colors
+    val introductionBackground = if (header == null) c.nav else c.bg
     val introductionScroll = rememberScrollState()
     val digitLineHeight = with(LocalDensity.current) { PfTheme.type.title1.lineHeight.toDp() }
     LaunchedEffect(introductionScroll) {
@@ -94,8 +96,8 @@ private fun PasscodePad(
     Column(
         modifier
             .fillMaxSize()
-            .background(PfTheme.colors.bg)
-            .then(if (header == null) Modifier.windowInsetsPadding(PfInsets.statusBars) else Modifier)
+            .background(introductionBackground)
+            .then(if (header == null) Modifier.windowInsetsPadding(PfInsets.statusBars).background(c.bg) else Modifier)
             .windowInsetsPadding(PfInsets.navigationBars),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -105,20 +107,20 @@ private fun PasscodePad(
             // 720 dp minus the standard 24 dp bars; actual insets/header are already excluded here.
             val compact = maxHeight < 672.dp
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Spacer(Modifier.height(if (compact) d.space2 else d.space6))
+                Spacer(Modifier.fillMaxWidth().height(if (compact) d.space2 else d.space6).background(introductionBackground))
                 Column(
-                    Modifier.weight(1f).fillMaxWidth().verticalScroll(introductionScroll).padding(horizontal = d.space5),
+                    Modifier.weight(1f).fillMaxWidth().verticalScroll(introductionScroll),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    if (mark) {
-                        PfMark(size = d.mark)
-                        Spacer(Modifier.height(if (compact) d.space2 else d.space5))
-                    }
                     val textAlign = if (alignStart) TextAlign.Start else TextAlign.Center
                     Column(
-                        Modifier.fillMaxWidth(),
+                        Modifier.fillMaxWidth().background(introductionBackground).padding(horizontal = d.space5),
                         horizontalAlignment = if (alignStart) Alignment.Start else Alignment.CenterHorizontally,
                     ) {
+                        if (mark) {
+                            PfMark(modifier = Modifier.align(Alignment.CenterHorizontally), size = d.mark)
+                            Spacer(Modifier.height(if (compact) d.space2 else d.space5))
+                        }
                         if (hero) {
                             PfStatusHero(tone = HeroTone.INFO, icon = PfIcons.LOCK, centered = false)
                             Spacer(Modifier.height(d.space4))
@@ -130,7 +132,9 @@ private fun PasscodePad(
                         }
                     }
                     Spacer(Modifier.height(if (compact) d.space4 else d.space8))
-                    PfPasscodeDots(filled = entered, length = PASSCODE_LENGTH, error = error)
+                    Box(Modifier.padding(horizontal = d.space5)) {
+                        PfPasscodeDots(filled = entered, length = PASSCODE_LENGTH, error = error)
+                    }
                 }
                 PfNumPad(
                     onDigit = onDigit, onDelete = onDelete, biometric = biometric, onBiometric = onBiometric,
@@ -195,28 +199,35 @@ fun PasscodeSetupContent(
 @Composable
 private fun BiometricOffer(icon: String, onEnable: () -> Unit, onSkip: () -> Unit) {
     val d = PfTheme.dimens
+    val c = PfTheme.colors
+    val screenMargin = Modifier.padding(horizontal = d.space5)
     BackHandler { onSkip() }
     Column(
         Modifier
             .testTag(AppLockTags.BIOMETRIC_OFFER)
             .fillMaxSize()
-            .background(PfTheme.colors.bg)
+            .background(c.nav)
             .windowInsetsPadding(PfInsets.statusBars)
+            .background(c.bg)
             .windowInsetsPadding(PfInsets.navigationBars)
-            .padding(start = d.space5, end = d.space5, top = d.space6, bottom = d.space4),
+            .padding(bottom = d.space4),
     ) {
-        PfStatusHero(tone = HeroTone.INFO, icon = icon, centered = false)
-        Spacer(Modifier.height(d.space4))
-        Text("Входить по биометрии?", style = PfTheme.type.title1, color = PfTheme.colors.text)
-        Spacer(Modifier.height(d.space1))
-        Text(
-            "Отпечаток или лицо — что настроено на телефоне. Код-пароль останется запасным способом",
-            style = PfTheme.type.lead, color = PfTheme.colors.textMuted,
-        )
+        Column(Modifier.fillMaxWidth().background(c.nav).then(screenMargin).padding(top = d.space6)) {
+            PfStatusHero(tone = HeroTone.INFO, icon = icon, centered = false)
+            Spacer(Modifier.height(d.space4))
+            Text("Входить по биометрии?", style = PfTheme.type.title1, color = c.text)
+            Spacer(Modifier.height(d.space1))
+            Text(
+                "Отпечаток или лицо — что настроено на телефоне. Код-пароль останется запасным способом",
+                style = PfTheme.type.lead, color = c.textMuted,
+            )
+        }
         Spacer(Modifier.weight(1f).heightIn(min = d.space6))
-        PfButton("Включить", onClick = onEnable, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(AppLockTags.BIOMETRIC_ENABLE))
-        Spacer(Modifier.height(d.space2))
-        PfButton("Не сейчас", onClick = onSkip, variant = ButtonVariant.GHOST, block = true, modifier = Modifier.testTag(AppLockTags.BIOMETRIC_SKIP))
+        Column(screenMargin) {
+            PfButton("Включить", onClick = onEnable, variant = ButtonVariant.PRIMARY, block = true, modifier = Modifier.testTag(AppLockTags.BIOMETRIC_ENABLE))
+            Spacer(Modifier.height(d.space2))
+            PfButton("Не сейчас", onClick = onSkip, variant = ButtonVariant.GHOST, block = true, modifier = Modifier.testTag(AppLockTags.BIOMETRIC_SKIP))
+        }
     }
 }
 

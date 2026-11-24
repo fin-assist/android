@@ -2,17 +2,21 @@ package ru.finassist.pf.feature.analytics.impl.ui
 
 import android.app.Application
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -24,8 +28,14 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import ru.finassist.pf.core.api.ApiJson
+import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.blocks.BlockContext
 import ru.finassist.pf.core.blocks.BlockHelpPopupButton
+import ru.finassist.pf.core.blocks.BlockTags
+import ru.finassist.pf.core.blocks.CatalogV1
 import ru.finassist.pf.core.designsystem.components.LocalSuppressPopups
+import ru.finassist.pf.core.designsystem.components.PfAskCard
 import ru.finassist.pf.core.designsystem.components.PfInsightCard
 import ru.finassist.pf.core.designsystem.theme.PfTheme
 import kotlin.test.assertEquals
@@ -74,8 +84,78 @@ class AnalyticsHelpPopupTest {
         }
 
         compose.onNodeWithText("Аптеки").assertIsDisplayed()
+        val target = compose.onNodeWithTag("$TAG.help").getUnclippedBoundsInRoot()
+        val icon = compose.onNodeWithContentDescription("Пояснение: Аптеки", useUnmergedTree = true)
+            .getUnclippedBoundsInRoot()
+        assertEquals(48.dp, target.right - target.left)
+        assertEquals(48.dp, target.bottom - target.top)
+        assertEquals(target.top, icon.top)
+        assertEquals(target.right, icon.right)
         openHelp()
         assertEquals(0, openedCard)
+    }
+
+    @Test fun `assistant help fits beside the heading at a large font and leaves the card tappable`() {
+        val title = "Спросите о своих финансах"
+        var openedChat = 0
+        compose.setContent {
+            PfTheme {
+                CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
+                    Box(Modifier.width(288.dp)) {
+                        PfAskCard(
+                            onClick = { openedChat++ },
+                            modifier = Modifier.testTag(AnalyticsTags.ASK),
+                            title = title,
+                            help = { BlockHelpPopupButton(HELP, title, AnalyticsTags.ASK) },
+                        )
+                    }
+                }
+            }
+        }
+        val card = compose.onNodeWithTag(AnalyticsTags.ASK).assertIsDisplayed()
+        val bounds = card.getUnclippedBoundsInRoot()
+        val titleBounds = compose.onNodeWithText(title, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val help = compose.onNodeWithTag(AnalyticsTags.ASK_HELP).assertIsDisplayed()
+        val helpBounds = help.getUnclippedBoundsInRoot()
+        assertTrue(titleBounds.right <= helpBounds.left)
+        assertTrue(helpBounds.right <= bounds.right)
+        assertEquals(48.dp, helpBounds.right - helpBounds.left)
+        card.performClick()
+        help.performClick()
+        compose.onNodeWithTag(AnalyticsTags.ASK_HELP_POPUP).assertIsDisplayed()
+        compose.onNodeWithText(HELP).assertIsDisplayed()
+        compose.onNodeWithTag(AnalyticsTags.ASK_HELP_SKIP).assertDoesNotExist()
+        assertEquals(bounds, card.getUnclippedBoundsInRoot())
+        assertEquals(1, openedChat)
+    }
+
+    @Test fun `category help keeps the list geometry and row action at large font`() {
+        val block = ApiJson.decodeFromString<Block>(
+            """{"id":"expense_categories","type":"ranked_list","title":"Расходы по категориям","data":{"items":[
+                {"id":"groceries","icon":"cart","title":"Супермаркеты","value":123456789,"value_kind":"amount",
+                 "action":{"type":"open_operations","filter":{"category_id":"groceries"}}}]}}""",
+        )
+        val list = requireNotNull(CatalogV1.registry().prepare(block))
+        var openedOperations = 0
+        compose.setContent {
+            PfTheme {
+                CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
+                    Column(Modifier.width(288.dp).testTag("ranked.list")) {
+                        list.draw(BlockContext("RUB", BlockTags("analytics"), { _, _ -> openedOperations++ },
+                            rankedListHelp = mapOf("expense_categories" to HELP), anchoredHelp = true))
+                    }
+                }
+            }
+        }
+        val bounds = compose.onNodeWithTag("ranked.list").getUnclippedBoundsInRoot()
+        val row = compose.onNodeWithTag("analytics.expense_categories.item").assertIsDisplayed()
+        val help = compose.onNodeWithTag("analytics.block.expense_categories.help").assertIsDisplayed()
+        assertTrue(help.getUnclippedBoundsInRoot().bottom <= row.getUnclippedBoundsInRoot().top)
+        row.performClick()
+        help.performClick()
+        compose.onNodeWithText(HELP).assertIsDisplayed()
+        assertEquals(bounds, compose.onNodeWithTag("ranked.list").getUnclippedBoundsInRoot())
+        assertEquals(1, openedOperations)
     }
 
     @Test fun `long help scrolls inside its popup`() {

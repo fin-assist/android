@@ -88,7 +88,7 @@ object AnswerFormat {
     }
 
     /**
-     * «с тех пор категории менялись» / «…загружали выписки»; with a code this client does not know — the server's
+     * «С тех пор категории менялись» / «С тех пор данные изменились»; with a code this client does not know — the server's
      * [serverText] (FIN-82), or a generic line without it; null when nothing changed.
      */
     fun changedSince(list: List<ChangedSince>, serverText: String? = null): String? {
@@ -97,7 +97,7 @@ object AnswerFormat {
         if (list.size > 1) return "С тех пор данные менялись"
         return when (list.single()) {
             ChangedSince.CATEGORIES -> "С тех пор категории менялись"
-            ChangedSince.UPLOADS -> "С тех пор загружали или удаляли выписки"
+            ChangedSince.UPLOADS -> "С тех пор данные изменились"
             ChangedSince.UNKNOWN -> "С тех пор данные менялись"
         }
     }

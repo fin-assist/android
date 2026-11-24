@@ -4,7 +4,6 @@ import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.feature.availability.impl.ui.AvailabilityScreens
 import android.content.Intent
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -55,8 +54,6 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Financial data: no screenshots and a blank Recents thumbnail in release builds.
-        if (!BuildConfig.DEBUG) window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         lifecycleScope.launch { session.state.collect(incomingStatement::observeSession) }
         // The view model retains an unconsumed selection on rotation. Restoring navigation must never submit again.

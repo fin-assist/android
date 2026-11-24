@@ -27,6 +27,15 @@ class AnalyticsTextsTest {
         AnalyticsPeriodInfo(range = range, isCurrent = true, coverage = type, dataFrom = from?.let(::t), dataTo = to?.let(::t), gaps = emptyList())
 
     @Test
+    fun `assistant help uses the daily limit and correct question forms`() {
+        val intro = "Помощник отвечает по вашим операциям"
+        assertEquals("$intro, 1 вопрос в день", AnalyticsTexts.assistantHelp(1))
+        assertEquals("$intro, 2 вопроса в день", AnalyticsTexts.assistantHelp(2))
+        assertEquals("$intro, 5 вопросов в день", AnalyticsTexts.assistantHelp(5))
+        assertEquals("$intro, 10 вопросов в день", AnalyticsTexts.assistantHelp(10))
+    }
+
+    @Test
     fun `rolling caption always names requested range separately from short coverage`() {
         val p = AnalyticsPeriodInfo(
             DateRange(t("2025-10-31T00:00:00+03:00"), t("2026-10-31T00:00:00+03:00")), false, Coverage.PARTIAL,

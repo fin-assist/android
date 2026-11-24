@@ -13,6 +13,7 @@ import ru.finassist.pf.core.blocks.BlockContext
 import ru.finassist.pf.core.blocks.BlockLayout
 import ru.finassist.pf.core.blocks.BlockTags
 import ru.finassist.pf.core.blocks.BlocksColumn
+import ru.finassist.pf.core.blocks.BlockHelpPopupButton
 import ru.finassist.pf.core.storage.TooltipOnboardingStore
 import ru.finassist.pf.core.blocks.PreparedBlock
 import ru.finassist.pf.core.blocks.GroupedTileRenderer
@@ -62,7 +63,6 @@ import ru.finassist.pf.core.designsystem.components.PfAskCard
 import ru.finassist.pf.core.designsystem.components.PfBottomSheet
 import ru.finassist.pf.core.designsystem.components.PfButton
 import ru.finassist.pf.core.designsystem.components.PfChip
-import ru.finassist.pf.core.designsystem.components.PfCoachmark
 import ru.finassist.pf.core.designsystem.components.TextPart
 import ru.finassist.pf.core.designsystem.components.PfLinkedText
 import ru.finassist.pf.core.designsystem.components.PfEmptyState
@@ -123,7 +123,6 @@ interface AnalyticsHandlers {
     fun setPeriodType(type: PeriodTypeCode)
     fun goTo(key: PeriodKey)
     fun openSheet(sheet: AnalyticsSheet?)
-    fun nextHint(stop: Boolean)
     fun setTransferMode(mode: TransferMode)
     fun currentTransferMode(): TransferMode
     fun toggleExpanded(id: String)
@@ -207,7 +206,7 @@ internal fun AnalyticsContent(
                     PfButton("Повторить", onClick = { vm.refresh() }, variant = ButtonVariant.PRIMARY, modifier = Modifier.testTag(AnalyticsTags.RETRY))
                 }
                 state.preparationTimedOut -> PfEmptyState(
-                    PfIcons.BAR_CHART, "Аналитика ещё готовится", "Выписка загружена. Попробуйте обновить показатели чуть позже",
+                    PfIcons.BAR_CHART, "Аналитика ещё готовится",
                     modifier = Modifier.testTag(AnalyticsTags.PREPARATION_TIMEOUT),
                 ) {
                     PfButton("Повторить", onClick = { vm.refresh() }, enabled = state.retryReady,
@@ -232,7 +231,9 @@ internal fun AnalyticsContent(
                 else -> Column(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = d.space5).padding(top = d.space2, bottom = d.space6),
                 ) {
-                    Content(a, state, vm, actions, claimOnboarding)
+                    AnalyticsTooltipOnboarding(state, claimOnboarding) {
+                        Content(a, state, vm, actions)
+                    }
                 }
             }
             state.snackbar?.takeIf { state.errorPresentation == null }?.let { text ->
@@ -258,7 +259,6 @@ private fun ColumnScope.Content(
     state: AnalyticsUiState,
     vm: AnalyticsHandlers,
     actions: AnalyticsActions,
-    claimOnboarding: (suspend (RequestOwner) -> Boolean)?,
 ) {
     val params = a.params ?: return
     val period = a.period ?: return
@@ -270,21 +270,27 @@ private fun ColumnScope.Content(
 
     if (blocks.assistant) {
         val limit = state.limit
+        val dailyLimit = limit?.dailyMax ?: 5
+        val title = "Спросите о своих финансах"
         PfAskCard(
             modifier = Modifier.testTag(AnalyticsTags.ASK),
             onClick = { actions.openChat(params.transferMode.effective) },
-            remaining = limit?.remaining ?: 5,
-            total = limit?.dailyMax ?: 5,
+            remaining = limit?.remaining ?: dailyLimit,
+            total = dailyLimit,
             exhausted = limit != null && limit.remaining <= 0,
+            title = title,
+            help = {
+                BlockHelpPopupButton(
+                    AnalyticsTexts.assistantHelp(dailyLimit),
+                    title,
+                    AnalyticsTags.ASK,
+                    helpTags = listOf("onboarding"),
+                )
+            },
         )
     }
     val early = AnalyticsTexts.isEarly(params.period, period, hasPrevious = a.navigation?.previous != null)
-    // The coachmark lies over the controls under the card (mockup `AnalyticsHintAsk`) and does not move them.
-    WithCoachmark(
-        show = state.hint == AnalyticsHint.ASK,
-        text = "Помощник отвечает по вашим операциям, 5 вопросов в день",
-        vm = vm,
-    ) {
+    Column(Modifier.fillMaxWidth()) {
         // Stale: where the statement data ends (`state.data_to`), not the last operation; days in the profile zone (FIN-125).
         val clock = LocalPfClock.current
         a.state?.let { s -> StaleData.banner(s.stale, s.dataTo, s.lastOperationAt, clock.zone, clock.today()) }?.let { text ->
@@ -382,13 +388,14 @@ private fun ColumnScope.Content(
             modifier = if (params.period == PeriodTypeCode.ALL_TIME) Modifier.testTag(AnalyticsTags.ALL_TIME_RANGE) else Modifier)
     }
 
-    AnalyticsTooltipOnboarding(state, prepared, claimOnboarding) {
-        Blocks(a, state, vm, actions, prepared, afterCaption = coverageCaption != null)
-    }
+    Blocks(a, state, vm, actions, prepared, afterCaption = coverageCaption != null)
 }
 
 /** Registry of the renderers (FIN-7): the catalog version this client draws. */
 private val registry = CatalogV1.registry()
+private val analyticsRankedListHelp = mapOf(
+    "expense_categories" to "Категории проставили мы — любую можно поправить в операции",
+)
 
 internal fun prepareAnalyticsBlocks(blocks: List<Block>, hidden: Set<String>): List<PreparedBlock> =
     BlockLayout.visible(registry.prepareAll(blocks), { it.block }) { it.block.id != null && it.block.id in hidden }
@@ -452,14 +459,7 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
         onSelectAnalyticsPeriod = { block, action -> vm.onAction(block, action, navigate) },
         expanded = state.expanded,
         onToggleExpanded = vm::toggleExpanded,
-        decorate = { block, content ->
-            // The coachmark lies over the card (mockup `AnalyticsHintCategories`).
-            if (block.id == "expense_categories") {
-                WithCoachmark(show = state.hint == AnalyticsHint.CATEGORIES, text = "Категории проставили мы — любую можно поправить в операции", vm = vm) { content() }
-            } else {
-                content()
-            }
-        },
+        rankedListHelp = analyticsRankedListHelp,
     )
     BlocksColumn(
         prepared, ctx,
@@ -479,27 +479,6 @@ private fun Blocks(a: Analytics, state: AnalyticsUiState, vm: AnalyticsHandlers,
 
 @Composable
 private fun Gap(height: androidx.compose.ui.unit.Dp) = Spacer(Modifier.height(height))
-
-/**
- * [content] with a coachmark laid over its top, 12 dp down (mockups: `position: absolute; top: space-3`): the
- * hint covers what lies under it instead of pushing the screen down.
- */
-@Composable
-private fun WithCoachmark(show: Boolean, text: String, vm: AnalyticsHandlers, content: @Composable ColumnScope.() -> Unit) {
-    if (!show) {
-        Column(Modifier.fillMaxWidth(), content = content)
-        return
-    }
-    Box(Modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth(), content = content)
-        PfCoachmark(
-            text,
-            onClose = { vm.nextHint(stop = false) },
-            onNever = { vm.nextHint(stop = true) },
-            modifier = Modifier.padding(top = PfTheme.dimens.space3).zIndex(1f),
-        )
-    }
-}
 
 @Composable
 private fun Sheets(state: AnalyticsUiState, vm: AnalyticsHandlers) {
@@ -576,6 +555,10 @@ internal object AnalyticsTags {
     const val RETRY = "analytics.retry"
     const val PERIOD_RETRY = "analytics.period.retry"
     const val ASK = "analytics.ask"
+    // The shared popup appends these suffixes to ASK.
+    const val ASK_HELP = "analytics.ask.help"
+    const val ASK_HELP_POPUP = "analytics.ask.help.popup"
+    const val ASK_HELP_SKIP = "analytics.ask.help.popup.skip"
     const val UNREAD = "analytics.unread"
     /** The stale statement banner: «Данные в приложении по … — с тех пор прошло больше двух недель». */
     const val STALE = "analytics.stale"

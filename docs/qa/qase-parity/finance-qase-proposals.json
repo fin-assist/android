@@ -4,6 +4,36 @@
   "publication": "Proposals only; root must validate original/current Qase and publish. No case changed by this agent.",
   "proposals": [
     {
+      "case_id": 97,
+      "field": "steps",
+      "source_status": "requires_authenticated_qase_read",
+      "proposed": "На чистой установке с карточкой помощника импортировать тестовую выписку с октябрьскими расходами и впервые открыть «Аналитику». Закрывать подсказки по одной и проверить порядок: карточка помощника, плитка дневных расходов, расходы по категориям, баланс. Вернуться на вкладку и открыть подсказки вручную. Нажатия на карточку помощника и строку расходов по-прежнему открывают чат и поиск операций.",
+      "reason": "https://finassist.youtrack.cloud/issue/FIN-552",
+      "status": "pending_root_validation",
+      "evidence": [
+        {
+          "path": ".maestro/flows/analytics/tooltip_onboarding.yaml",
+          "line": 1,
+          "detail": "Порядок подсказок, повторное ручное открытие и переходы по карточкам."
+        }
+      ]
+    },
+    {
+      "case_id": 98,
+      "field": "steps",
+      "source_status": "requires_authenticated_qase_read",
+      "proposed": "Заблокировать приложение во время первой подсказки и убедиться, что после разблокировки очередь не возобновляется, а иконки открываются вручную. На чистой установке со скрытой карточкой помощника импортировать тестовую выписку с октябрьскими расходами. При первом открытии «Аналитики» и меньшем help_order у баланса сначала проверить график по месяцам, затем категории. Нажать «Пропустить подсказки». Баланс и плитка без тега onboarding остаются доступны вручную.",
+      "reason": "https://finassist.youtrack.cloud/issue/FIN-552",
+      "status": "pending_root_validation",
+      "evidence": [
+        {
+          "path": ".maestro/flows/analytics/tooltip_onboarding_interrupted.yaml",
+          "line": 1,
+          "detail": "Блокировка, порядок без помощника, пропуск и ручное открытие."
+        }
+      ]
+    },
+    {
       "case_id": 8,
       "field": "steps[0].expected_result",
       "original": "Карточка операции с названием и блоком «Дата и время»; запрос деталей передаёт occurred_at строки.",

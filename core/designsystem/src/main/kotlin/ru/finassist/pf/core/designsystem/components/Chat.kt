@@ -131,7 +131,7 @@ enum class ChatStatusTone { BUSY, ERROR }
 
 /**
  * Status in the thread (mockup `ChatStatus`):
- * - busy — three 8 dp `accent` dots (opacity 1 / 0.6 / 0.3) and «Считаю по выписке…» (`13/20` muted), 48 dp tall;
+ * - busy — three 8 dp `accent` dots (opacity 1 / 0.6 / 0.3) and the status text (`13/20` muted), 48 dp tall;
  * - error — a warning notice with the text and [action] (a ghost «Повторить», lined up with the text).
  */
 @Composable

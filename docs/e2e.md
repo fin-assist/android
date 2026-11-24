@@ -664,6 +664,11 @@ Qase84 likewise combines its Maestro calendar/input/error flow with
 and asserts zero browser launches after offline download preparation. Both Qase84 components passed in
 Qase98. Both components are required for complete case acceptance.
 
+Qase15 combines the Maestro flow `statements/upload_errors` and the required native
+`StatementPickerTest#opensSupportDraftWithCurrentUserAfterRejectedImport`. The native component verifies the
+mail Intent after the user requests support for a rejected import. The case keeps the worst result. A missing
+component makes an otherwise passing case Skipped and is named in the report. A reported failure stays Failed.
+
 ## Test tags
 
 Maestro finds elements by id; in Compose the id is `Modifier.testTag`, exposed as a resource id by
@@ -809,8 +814,8 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/chart_month_selection` (mock-only) | whole-column selection including zero expenses, exact month/year, selected state and retained transfer mode/scroll; failed switch and explicit retry (Qase74, FIN-398); authored, not executed |
 | `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state; expense search uses the ASCII query FIN-400 within the inherited 2024–2026 range, checks the single January 2024 debit and retained kind/scope (Qase75, FIN-400/415); follow-up not executed (previous run failed) |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
-| `analytics/tooltip_onboarding` | first tooltip opens automatically, closing it scrolls to the second, returning to the screen preserves manual help only ([Qase97](https://app.qase.io/case/PLAINFIN-97), FIN-497) |
-| `analytics/tooltip_onboarding_interrupted` | after the first tooltip opens, locking interrupts the sequence; unlocking does not replay it, both icons still work, and a clean install follows changed mock server text, tags and order ([Qase98](https://app.qase.io/case/PLAINFIN-98), FIN-497) |
+| `analytics/tooltip_onboarding` | with Assistant enabled, its compact help opens before the daily tile, then the categories card, then balance. Returning to Analytics leaves manual help available. Assistant and category taps still navigate ([Qase97](https://app.qase.io/case/PLAINFIN-97), FIN-552) |
+| `analytics/tooltip_onboarding_interrupted` | lock interrupts the sequence for this account. On a fresh installation with Assistant disabled, the monthly chart comes before the categories card and balance despite the order values in the response. Skip leaves the remaining help available manually, including a tile without the `onboarding` tag ([Qase98](https://app.qase.io/case/PLAINFIN-98), FIN-552) |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` + JVM `AnalyticsReliabilityComponentTest#qase82RetainedSnapshotsAndRefusedMutation` (mock-only) | retained ready/unavailable snapshots, bounded polling and explicit retry, uncached Year preparation, refused mutation independent of polling; real journey retains visible errors/payment and exact request guards; required JVM companion covers transferred exhaustive state combinations (Qase82, FIN-473; see docs/qa/fin473-pilot-coverage.md) |
 | `analytics/regular_block_update` (mock-only) | successful PUT removes RBC and promotes the third visible payment row before a ready GET; seven seconds in the same card retain that row without RBC across marked GET polls; bounded polling pauses with September retained, then explicit Retry permits ready GET; separate unknown offline result retains RBC until explicit PUT retry, revealing the scoped row title after error/read notices before the unchanged assertions (Qase81, FIN-416/427/436/478). Its case-level Passed covers these UI observations only; JVM version/context checks and backend post-commit/durable delivery are separate |
@@ -839,7 +844,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `assistant/retry_without_transfers` | `assistant_model_errors=1`: a question asked «Без переводов» fails, not spent; «Повторить» answers it still «без переводов» — FIN-76 |
 | `assistant/answer_retry` | `assistant_model_errors=1`: the answer fails, not spent; a double tap on «Повторить» while the request is on its way sends it once: one answer, no «Не получилось отправить вопрос», 4 of 5 — FIN-75 |
 | `assistant/answer_changed_since` | after an answer a category is changed, then the statement deleted: the earlier answer in the history shows «С тех пор категории менялись», then «С тех пор данные менялись» (`changed_since` counted at the time of the request) — FIN-135 |
-| `statements/upload_errors` | CSV and another-bank server messages, not a statement; leaving the picker (Qase15, FIN-375) |
+| `statements/upload_errors` + native `StatementPickerTest#opensSupportDraftWithCurrentUserAfterRejectedImport` | CSV and another-bank server messages, not a statement; leaving the picker (FIN-375). The native Qase15 companion verifies that a rejected CSV opens the support draft only on request, with the support address, the import-error subject, the same user ID as in the profile draft and no attachment (FIN-551) |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
 | `statements/upload_amount_overflow` | a small OFX with one valid debit and one amount beyond Long: one unread `bad_amount` line, history/unread navigation and the unchanged valid operation/date/amount ([Qase95](https://app.qase.io/case/PLAINFIN-95), FIN-454); LOCAL Passed 172.089 s on API34/Pixel6/Maestro2.11.0 after explicit cold-backend readiness and UI sign-in, evidence in PR #292; earlier driver/setup failures preserved |
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
@@ -950,6 +955,27 @@ offline Retry and recovery through resume followed by explicit Send instead. The
 `ChatViewModelBehaviourTest#offline keeps the question and the retry re-sends it with the same key` covers the
 pending text, exactly two Ask attempts and reuse of the original idempotency key. The foreground online-Retry
 path still needs UI coverage with controllable connectivity that does not pause Chat.
+
+FIN-550: the owner confirmed that Android Recents can show the last main-window thumbnail after app lock.
+`scripts/check-release-screenshot.py` checks a locally signed `mockRelease` on an owned Android
+emulator. Sign in with the existing mock account and open «Операции» with the bundled fixture operation
+«Barsik 29» visible. The Python CI runs five host checks for the prerequisites, screenshot count and deadline.
+It also checks the crop coordinates and contrast threshold with a test double. The integration test that
+decodes real PNGs runs locally with Pillow before release acceptance. With `adb` on PATH and Pillow installed,
+run both commands:
+
+```bash
+python3 -c 'import PIL' &&
+    python3 -m unittest discover -v -s scripts -p 'test_check_release_screenshot.py' &&
+    python3 scripts/check-release-screenshot.py --serial emulator-5554 --avd Test_API36 build/release-operations.png
+```
+
+The host check has a 60 s deadline and requires a new System UI screenshot with visible content over the fixture
+operation.
+
+Not covered yet (FIN-550): regular Android UI CI runs the debuggable `mockE2e` build, where screenshots were
+already allowed before FIN-550. The local `mockRelease` command above verifies the release window. The Qase
+release acceptance case is pending authenticated access.
 
 Dictation UI behavior is authored in native `VoiceDictationTest` /
 [PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69) (FIN-449), using deterministic platform callbacks while retaining
@@ -1382,12 +1408,26 @@ forecast text and dismissal. A JVM Compose test verifies scrolling long help ins
 facts/forecast and chart-selection flows are synchronized from main. Proposed light/dark help and history design
 artboards are authored; approved Figma artboards for these new states do not yet exist.
 
-FIN-497 uses the same anchored help for automatic onboarding when the screen response tags a block or tile with
-`onboarding` and supplies a positive `help_order`. It scrolls to each anchor before opening. A device-local
-DataStore claim per account and screen prevents replay after leaving, locking, relogin or restarting. Unmarked
-help remains manual. The mockE2e-only `analytics_help=manual|onboarding|reversed` control selects fixed server
-compositions. `manual` is the default for existing flows. `onboarding` marks the daily-expenses tile and
-the balance block, while `reversed` puts balance before the monthly chart and leaves the daily tile manual.
+FIN-552/558 uses the same compact popup for manual and automatic help, including the Assistant card
+and the populated expense categories card. Server help needs a positive `help_order` and the `onboarding`
+tag to enter the sequence. Composition records placed anchors and takes one snapshot in reading order
+when onboarding starts. It includes offscreen anchors, scrolls to each before opening and skips missing
+anchors. Help from anchors added after the snapshot is available manually. «Пропустить подсказки» ends
+this sequence, and a device-local DataStore claim prevents replay for the same account and screen after
+leaving, locking, relogin or restarting.
+
+The mockE2e-only `analytics_help=manual|onboarding|reversed` control selects fixed server compositions.
+The default `manual` fixture records a completed Analytics onboarding claim for the existing account through
+`fast_login.yaml`. `login.yaml` selects the same fixture after the UI sign-in, and direct UI sign-in flows can
+select it explicitly after signing in. For Qase97/98 set `onboarding` or `reversed` before `fast_login.yaml`
+so the app takes the real first-run path. `onboarding` marks the daily-expenses tile and balance.
+`reversed` gives balance a lower `help_order` than the monthly chart and leaves the daily tile manual.
+The receipt for `manual` requires a persisted claim for the active login, including after repeated calls.
+Before sign-in, `onboarding` or `reversed` selects the composition for the upcoming fixture login. A
+`sign_in=existing` receipt verifies the new session's claim state, and switching to either automatic
+mode in a session that already claimed onboarding is reported as unmet.
+The preloaded statement covers the first day of October; its operations end in September. Runs that
+assert the categories card first import the bundled October statement through the UI before opening Analytics.
 The mockE2e-only `lock_app=true` control locks the current test session through AppLock.
 
 JVM scenarios cover full-block replacement, version barriers, missing/malformed data, owner changes and late
