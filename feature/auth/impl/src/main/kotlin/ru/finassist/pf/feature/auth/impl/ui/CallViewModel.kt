@@ -10,6 +10,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -248,7 +250,7 @@ class CallViewModel @Inject constructor(
         } catch (e: Exception) {
             if (e !is AppError && e !is IOException) throw e
             // The transport can still be closing after its terminal event.
-            stopWatching()
+            currentCoroutineContext().cancel()
             _state.update { it.copy(phase = CallPhase.ERROR) }
             return
         }
