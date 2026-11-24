@@ -664,6 +664,11 @@ Qase84 likewise combines its Maestro calendar/input/error flow with
 and asserts zero browser launches after offline download preparation. Both Qase84 components passed in
 Qase98. Both components are required for complete case acceptance.
 
+Qase15 combines the Maestro flow `statements/upload_errors` and the required native
+`StatementPickerTest#opensSupportDraftWithCurrentUserAfterRejectedImport`. The native component verifies the
+mail Intent after the user requests support for a rejected import. The case keeps the worst result. A missing
+component makes an otherwise passing case Skipped and is named in the report. A reported failure stays Failed.
+
 ## Test tags
 
 Maestro finds elements by id; in Compose the id is `Modifier.testTag`, exposed as a resource id by
@@ -839,7 +844,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `assistant/retry_without_transfers` | `assistant_model_errors=1`: a question asked «Без переводов» fails, not spent; «Повторить» answers it still «без переводов» — FIN-76 |
 | `assistant/answer_retry` | `assistant_model_errors=1`: the answer fails, not spent; a double tap on «Повторить» while the request is on its way sends it once: one answer, no «Не получилось отправить вопрос», 4 of 5 — FIN-75 |
 | `assistant/answer_changed_since` | after an answer a category is changed, then the statement deleted: the earlier answer in the history shows «С тех пор категории менялись», then «С тех пор данные менялись» (`changed_since` counted at the time of the request) — FIN-135 |
-| `statements/upload_errors` | CSV and another-bank server messages, not a statement; leaving the picker (Qase15, FIN-375) |
+| `statements/upload_errors` + native `StatementPickerTest#opensSupportDraftWithCurrentUserAfterRejectedImport` | CSV and another-bank server messages, not a statement; leaving the picker (FIN-375). The native Qase15 companion verifies that a rejected CSV opens the support draft only on request, with the support address, the import-error subject, the same user ID as in the profile draft and no attachment (FIN-551) |
 | `statements/upload_unreadable` | a file with no readable operation: the empty result still shows the unread lines notice; the history row opens «Непрочитанные строки» (line, date, reason) |
 | `statements/upload_amount_overflow` | a small OFX with one valid debit and one amount beyond Long: one unread `bad_amount` line, history/unread navigation and the unchanged valid operation/date/amount ([Qase95](https://app.qase.io/case/PLAINFIN-95), FIN-454); LOCAL Passed 172.089 s on API34/Pixel6/Maestro2.11.0 after explicit cold-backend readiness and UI sign-in, evidence in PR #292; earlier driver/setup failures preserved |
 | `statements/unread_same_physical_line` | two distinct unread operations on physical line 31 with the same `no_date` reason: both row titles/reasons are visible and Back still opens history — FIN-352, [Qase56](https://app.qase.io/case/PLAINFIN-56); authored, not executed |
@@ -916,6 +921,27 @@ offline Retry and recovery through resume followed by explicit Send instead. The
 `ChatViewModelBehaviourTest#offline keeps the question and the retry re-sends it with the same key` covers the
 pending text, exactly two Ask attempts and reuse of the original idempotency key. The foreground online-Retry
 path still needs UI coverage with controllable connectivity that does not pause Chat.
+
+FIN-550: the owner confirmed that Android Recents can show the last main-window thumbnail after app lock.
+`scripts/check-release-screenshot.py` checks a locally signed `mockRelease` on an owned Android
+emulator. Sign in with the existing mock account and open «Операции» with the bundled fixture operation
+«Barsik 29» visible. The Python CI runs five host checks for the prerequisites, screenshot count and deadline.
+It also checks the crop coordinates and contrast threshold with a test double. The integration test that
+decodes real PNGs runs locally with Pillow before release acceptance. With `adb` on PATH and Pillow installed,
+run both commands:
+
+```bash
+python3 -c 'import PIL' &&
+    python3 -m unittest discover -v -s scripts -p 'test_check_release_screenshot.py' &&
+    python3 scripts/check-release-screenshot.py --serial emulator-5554 --avd Test_API36 build/release-operations.png
+```
+
+The host check has a 60 s deadline and requires a new System UI screenshot with visible content over the fixture
+operation.
+
+Not covered yet (FIN-550): regular Android UI CI runs the debuggable `mockE2e` build, where screenshots were
+already allowed before FIN-550. The local `mockRelease` command above verifies the release window. The Qase
+release acceptance case is pending authenticated access.
 
 Dictation UI behavior is authored in native `VoiceDictationTest` /
 [PLAINFIN-69](https://app.qase.io/case/PLAINFIN-69) (FIN-449), using deterministic platform callbacks while retaining

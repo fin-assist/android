@@ -252,7 +252,7 @@ private fun writeSupport(context: Context, userId: String) {
     val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")).apply {
         putExtra(Intent.EXTRA_EMAIL, arrayOf(Support.EMAIL))
         putExtra(Intent.EXTRA_SUBJECT, "Понятные финансы — вопрос")
-        putExtra(Intent.EXTRA_TEXT, "\n\n—\nID пользователя: $userId")
+        putExtra(Intent.EXTRA_TEXT, Support.userIdFooter(userId))
     }
     runCatching { context.startActivity(intent) }
 }

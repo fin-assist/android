@@ -16,6 +16,7 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -83,6 +84,13 @@ class AnalyticsHelpPopupTest {
         }
 
         compose.onNodeWithText("Аптеки").assertIsDisplayed()
+        val target = compose.onNodeWithTag("$TAG.help").getUnclippedBoundsInRoot()
+        val icon = compose.onNodeWithContentDescription("Пояснение: Аптеки", useUnmergedTree = true)
+            .getUnclippedBoundsInRoot()
+        assertEquals(48.dp, target.right - target.left)
+        assertEquals(48.dp, target.bottom - target.top)
+        assertEquals(target.top, icon.top)
+        assertEquals(target.right, icon.right)
         openHelp()
         assertEquals(0, openedCard)
     }

@@ -415,8 +415,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
     for every precondition/step/postcondition, and distinguish UI assertions from JVM/mock observations.
     `MockUiEvidence` and mockE2e's `E2eRequestControl` expose bounded counts/closed predicates of actual API
     attempts, never user text, keys or IDs. Keep visible UI oracles alongside these supplemental checks.
+    Qase15 combines the Maestro upload-errors flow and a required native support-draft Intent check.
     Qase17 combines Maestro preference/logout coverage and a native rendered-palette check; Qase84 combines
-    Maestro calendar/input coverage and a native no-browser-on-error check. Their reported result is the worst
+    Maestro calendar/input coverage and a native no-browser-on-error check. The reporter keeps the worst
     component result. Do not add another duplicate map ID without explaining its components.
     A pass requires all mapped components in the report; a partial pass is Skipped with missing components named.
     FIN-473 adds `jvm:Class#method` companion keys for Qase82/83/89 to the same map and validates exact native,
