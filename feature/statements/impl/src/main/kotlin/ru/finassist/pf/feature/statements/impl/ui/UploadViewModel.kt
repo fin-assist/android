@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import ru.finassist.pf.core.common.time.Clock
 import ru.finassist.pf.core.api.ImportEvent
 import ru.finassist.pf.core.api.StatementsApi
+import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.SseReopenState
 import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.UploadFile
@@ -104,6 +105,7 @@ class UploadViewModel @Inject constructor(
     private val keys: IdempotencyKeys,
     private val clock: Clock,
     private val elapsedClock: ElapsedClock,
+    private val tokenStore: TokenStore,
 ) : ViewModel() {
     private val _state = MutableStateFlow(UploadUiState())
     private val uploadGates = mutableMapOf<String, RequestRetryGate>()
@@ -141,6 +143,12 @@ class UploadViewModel @Inject constructor(
         viewModelScope.launch { configGate.readiness.collect { ready -> _state.update { it.copy(configRetryReady = ready) } } }
         viewModelScope.launch { periodGate.readiness.collect { ready -> _state.update { it.copy(periodRetryReady = ready) } } }
         load()
+    }
+
+    internal suspend fun supportUserId(): String? = try {
+        tokenStore.current()?.userId
+    } catch (_: IOException) {
+        null
     }
 
     fun load() {

@@ -338,6 +338,9 @@ class CaseMapTest(unittest.TestCase):
         }, 14: {
             ".maestro/flows/statements/upload_and_history.yaml",
             "ru.finassist.pf.StatementPickerTest#opensPrivacyPolicyFromUploadNotice",
+        }, 15: {
+            ".maestro/flows/statements/upload_errors.yaml",
+            "ru.finassist.pf.StatementPickerTest#opensSupportDraftWithCurrentUserAfterRejectedImport",
         }, 17: {
             ".maestro/flows/profile/theme_and_logout.yaml",
             "ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette",

@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Before
@@ -48,6 +49,7 @@ import ru.finassist.pf.core.storage.IdempotencyKeys
 import ru.finassist.pf.core.toggles.Flag
 import ru.finassist.pf.core.toggles.StaticFlags
 import ru.finassist.pf.core.tracking.Events
+import ru.finassist.pf.feature.statements.impl.FakeTokens
 import ru.finassist.pf.feature.statements.impl.RecordingTracker
 import ru.finassist.pf.feature.statements.impl.importResult
 import ru.finassist.pf.feature.statements.impl.data.StatementsRepositoryImpl
@@ -152,10 +154,27 @@ class UploadViewModelTest {
         vm = newViewModel()
     }
 
-    private fun newViewModel(flags: StaticFlags = StaticFlags()) =
-        UploadViewModel(context, api, repository, flags, tracker, IdempotencyKeys(store), clock, ElapsedClock { dispatcher.scheduler.currentTime })
+    private fun newViewModel(flags: StaticFlags = StaticFlags(), tokenStore: TokenStore = NoTokens) =
+        UploadViewModel(context, api, repository, flags, tracker, IdempotencyKeys(store), clock,
+            ElapsedClock { dispatcher.scheduler.currentTime }, tokenStore)
 
     @After fun tearDown() = Dispatchers.resetMain()
+
+    @Test fun `support takes the ID from the session at the time of the request`() = runTest(dispatcher) {
+        val tokens = FakeTokens("first-user")
+        val uploadViewModel = newViewModel(tokenStore = tokens)
+        tokens.userId = "active-user"
+        assertEquals("active-user", uploadViewModel.supportUserId())
+        tokens.userId = null
+        assertNull(uploadViewModel.supportUserId())
+    }
+
+    @Test fun `support remains available when the session store cannot be read`() = runTest(dispatcher) {
+        val unreadable = object : TokenStore by NoTokens {
+            override suspend fun current(): TokenStore.Session? = throw IOException("unreadable session")
+        }
+        assertNull(newViewModel(tokenStore = unreadable).supportUserId())
+    }
 
     @Test fun `cold config error shows an explicit failure without invented calendar data`() {
         api.configFailure = AppError.Server(500)
@@ -522,7 +541,7 @@ class UploadViewModelTest {
         val original = kotlinx.coroutines.runBlocking { keys.keyFor(action) }
         Dispatchers.setMain(StandardTestDispatcher(dispatcher.scheduler))
         vm = UploadViewModel(context, api, repository, StaticFlags(), tracker, IdempotencyKeys(cached), clock,
-            ElapsedClock { dispatcher.scheduler.currentTime })
+            ElapsedClock { dispatcher.scheduler.currentTime }, NoTokens)
         dispatcher.scheduler.runCurrent()
 
         vm.onFilePicked(uri)
@@ -585,7 +604,7 @@ class UploadViewModelTest {
         val file = File(context.cacheDir, "upload-death-${System.nanoTime()}.preferences_pb")
         val firstScope = kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
         val firstStore = PreferenceDataStoreFactory.create(scope = firstScope) { file }
-        vm = UploadViewModel(context, api, StatementsRepositoryImpl(firstStore, NoTokens), StaticFlags(), tracker, IdempotencyKeys(firstStore), clock, ElapsedClock { dispatcher.scheduler.currentTime })
+        vm = UploadViewModel(context, api, StatementsRepositoryImpl(firstStore, NoTokens), StaticFlags(), tracker, IdempotencyKeys(firstStore), clock, ElapsedClock { dispatcher.scheduler.currentTime }, NoTokens)
         api.uploadFailures += AppError.Server(500)
         vm.onFilePicked(uri)
         await("the failure") { it.phase is UploadPhase.Error }
@@ -593,7 +612,7 @@ class UploadViewModelTest {
         kotlinx.coroutines.runBlocking { firstScope.coroutineContext[kotlinx.coroutines.Job]!!.cancelAndJoin() }
 
         val secondStore = PreferenceDataStoreFactory.create { file }
-        vm = UploadViewModel(context, api, StatementsRepositoryImpl(secondStore, NoTokens), StaticFlags(), tracker, IdempotencyKeys(secondStore), clock, ElapsedClock { dispatcher.scheduler.currentTime })
+        vm = UploadViewModel(context, api, StatementsRepositoryImpl(secondStore, NoTokens), StaticFlags(), tracker, IdempotencyKeys(secondStore), clock, ElapsedClock { dispatcher.scheduler.currentTime }, NoTokens)
         val renamed: Uri = Uri.parse("content://test/operations_2026_copy.ofx")
         shadowOf(context.contentResolver).registerInputStreamSupplier(renamed) { ByteArrayInputStream("OFXHEADER:100".toByteArray()) }
         api.uploadFailures += AppError.Server(500)
