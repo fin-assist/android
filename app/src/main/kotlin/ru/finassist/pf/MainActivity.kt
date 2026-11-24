@@ -3,7 +3,6 @@ package ru.finassist.pf
 import ru.finassist.pf.core.common.availability.ServiceGate
 import ru.finassist.pf.feature.availability.impl.ui.AvailabilityScreens
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
@@ -48,8 +47,6 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Financial data: no screenshots and a blank Recents thumbnail in release builds.
-        if (!BuildConfig.DEBUG) window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         setContent {
             // A new profile zone regroups what is on screen by day (FIN-92).
