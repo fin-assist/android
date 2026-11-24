@@ -881,6 +881,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | native `ScreenErrorTransitionTest#profileReadFailureReplacesThemeOutcomeAndRetries` | actual ProfileContent: theme failure → read failure without the old outcome; available Retry restores new profile data; native reader/state injection (Qase66, FIN-396) |
 | native `ScreenErrorTransitionTest#historyReadFailureReplacesDeleteOutcomeAndRetries` | actual HistoryContent: deletion failure → read failure without the old outcome; available Retry refreshes the list without another DELETE; native reader/state injection (Qase67, FIN-396) |
 | native `StatementPickerTest` | login button opens exactly `https://tbank-online.com/login` in an intercepted ACTION_VIEW (FIN-395; Qase16), then upload with a picker result stubbed by Espresso-Intents (on the e2e build the picker is `E2eDocumentPickerActivity`) up to the import result; the `ACTION_OPEN_DOCUMENT` intent itself: Robolectric `PickStatementDocumentTest` |
+| native `ExternalStatementOpenTest#importsAfterSignInOnColdStartAndAgainAfterUnlockOnWarmStart` | typed OFX from another Android app, sign-in and unlock gates, activity recreation without duplicate POST, navigation through the prior result and its unread lines before dismissal, unreadable URI error, and the first-run upload guide at registration ([Qase99](https://app.qase.io/case/PLAINFIN-99), FIN-549) |
 | native `StatementPickerTest#opensPrivacyPolicyBeforeRegistration` | standalone policy link before account creation opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; no terms/acceptance text or second consent checkbox; returning to registration still allows creation (Qase2, FIN-519/520) |
 | native `StatementPickerTest#opensPrivacyPolicyFromUploadNotice` | «Как мы защищаем данные» in the upload notice opens exactly `https://documents.plainfin.ru/privacy` through ACTION_VIEW; the upload guide remains available after returning (Qase14, FIN-520) |
 
@@ -898,6 +899,39 @@ The unchanged Qase14 Maestro journey was not rerun, so this does not claim a com
 `StatementPickerTest` waits for passcode setup after sign-in without recreating the activity (FIN-63, after the
 FIN-88 session fix). If it stalls, the test fails after 30 seconds and keeps the semantics tree in logcat (`PfTest`)
 and the main-thread latency report in the assertion. The logcat remains in the `e2e-reports` artifact.
+
+FIN-549: native `ExternalStatementOpenTest` sends a synthetic OFX from a separate test APK using an Android
+URI grant. It checks a cold launch followed by sign-in and recreates the activity during the passcode gate
+and after the warm import. It checks exact POST counts before and after recreation and while viewing unread
+lines from the first result. The pending import starts after dismissal of that result. The test also checks
+the existing error for a file without a grant.
+A newly registered user who opens an unavailable file keeps the first-run guide and «Загружу позже».
+The test also checks that closing the guide after an unsupported server time zone dismisses the pending
+selection, and that the same file can then be opened again.
+The system picker still has its own native coverage in `StatementPickerTest`.
+
+Focused JVM tests cover Android replaying the original intent from Recents, keeping one selection without
+reading it or sending a POST after a failed initial config request, and deferring a selection while the
+previous file is being sent or requires resolution of an unknown outcome. A failed initial config requires
+an explicit permitted retry and a verified guide. During an existing import, the latest distinct external
+selection waits while the prior result or recovery is still on screen.
+JVM tests also verify that an open picker has priority over the pending external selection, cancellation
+releases that selection, and a late picker result cannot replace an import being parsed.
+
+The Android 16 Chrome download probe confirmed `ACTION_VIEW` with `content://media/external/downloads/<id>`.
+It kept `application/x-ofx` for an OFX served with that MIME type and `application/octet-stream` for an OFX
+served as generic binary data. The numeric URI path exposes no extension for intent filtering. The display
+name becomes available from the provider after selection. The app declares the OFX MIME type so it is offered
+only for typed content; downloads served with a generic type remain selectable through the in-app picker.
+
+Local validation on 2026-11-24 used an Android 16 (API 36) Pixel 6 emulator. If Gradle cannot resolve its
+additional UTP artifact, install the `mockE2e` app and test APKs and run the focused class through
+AndroidJUnitRunner with an external timeout. Android Package Manager resolved `application/x-ofx` to MainActivity
+and returned no matching activity for `application/octet-stream` or `text/plain` in the app.
+See [Qase99](https://app.qase.io/case/PLAINFIN-99).
+
+Not covered yet (FIN-549): the T-Bank account download itself requires an authenticated test account and a real
+statement response. The Chrome observations above used synthetic attachments.
 
 Not covered yet (FIN-452, FIN-453): an Analytics GET refusal with `retryable:false` after selecting another
 transfer mode, its exact `Retry-After` boundary, and an answer connection lost between a final-status `snapshot`
