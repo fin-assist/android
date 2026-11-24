@@ -4,6 +4,7 @@ import ru.finassist.pf.core.designsystem.components.connectionFailureTexts
 import ru.finassist.pf.core.designsystem.components.ErrorMessage
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -63,16 +64,25 @@ import ru.finassist.pf.feature.auth.impl.domain.PhoneFormat
 
 /** Screen padding of the sign-in screens: status bar + space-6 on top, gesture bar + space-4 at the bottom. */
 @Composable
-private fun AuthScaffold(tag: String, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+private fun AuthScaffold(
+    tag: String,
+    hasTopHeader: Boolean = false,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    val d = PfTheme.dimens
+    val c = PfTheme.colors
     Column(
         Modifier
             .testTag(tag)
             .fillMaxSize()
+            .background(if (hasTopHeader) c.nav else c.bg)
             .windowInsetsPadding(PfInsets.statusBars)
+            .background(c.bg)
             .windowInsetsPadding(PfInsets.navigationBars)
             .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(start = PfTheme.dimens.space5, end = PfTheme.dimens.space5, top = PfTheme.dimens.space6, bottom = PfTheme.dimens.space4),
+            .padding(bottom = d.space4)
+            .then(if (hasTopHeader) Modifier else Modifier.padding(start = d.space5, end = d.space5, top = d.space6)),
         content = content,
     )
 }
@@ -221,17 +231,22 @@ internal fun CallContent(
     onRetry: () -> Unit,
     onChangeNumber: () -> Unit,
 ) {
-    AuthScaffold(AuthTags.CALL) {
-        PfStatusHero(tone = HeroTone.INFO, icon = PfIcons.PHONE, centered = false)
-        Spacer(Modifier.height(PfTheme.dimens.space4))
-        Text("Позвоните нам для подтверждения", style = PfTheme.type.title1, color = PfTheme.colors.text)
-        Text(
-            "Позвоните с номера ${state.phoneDisplay} на наш номер. Мы сразу сбросим звонок — по нему и поймём, что номер ваш",
-            style = PfTheme.type.lead, color = PfTheme.colors.textMuted, modifier = Modifier.padding(top = PfTheme.dimens.space1),
-        )
+    val d = PfTheme.dimens
+    val c = PfTheme.colors
+    val screenMargin = Modifier.padding(horizontal = d.space5)
+    AuthScaffold(AuthTags.CALL, hasTopHeader = true) {
+        Column(Modifier.fillMaxWidth().background(c.nav).then(screenMargin).padding(top = d.space6)) {
+            PfStatusHero(tone = HeroTone.INFO, icon = PfIcons.PHONE, centered = false)
+            Spacer(Modifier.height(d.space4))
+            Text("Позвоните нам для подтверждения", style = PfTheme.type.title1, color = c.text)
+            Text(
+                "Позвоните с номера ${state.phoneDisplay} на наш номер. Мы сразу сбросим звонок — по нему и поймём, что номер ваш",
+                style = PfTheme.type.lead, color = c.textMuted, modifier = Modifier.padding(top = d.space1),
+            )
+        }
         if (state.phase == CallPhase.WAITING) {
-            Spacer(Modifier.height(PfTheme.dimens.space6))
-            PfCard {
+            Spacer(Modifier.height(d.space6))
+            PfCard(modifier = screenMargin) {
                 Text("Номер для звонка", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
                 Text(state.callbackNumber, style = PfTheme.type.amountLg, color = PfTheme.colors.text, modifier = Modifier.padding(top = PfTheme.dimens.space1))
                 Spacer(Modifier.height(PfTheme.dimens.space4))
@@ -243,7 +258,7 @@ internal fun CallContent(
             }
         }
         Spacer(Modifier.height(PfTheme.dimens.space4))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space4)) {
+        Column(Modifier.weight(1f).then(screenMargin), verticalArrangement = Arrangement.spacedBy(d.space4)) {
             when (state.phase) {
                 CallPhase.WAITING -> {
                     Row(verticalAlignment = Alignment.CenterVertically) {

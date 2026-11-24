@@ -70,7 +70,7 @@ fun PfSectionTitle(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** Header of a tab screen: `title-1`, no back button, optional actions on the right (search). */
+/** Tab header: `nav` through the status bar, `title-1`, optional actions on the right (search). */
 @Composable
 fun PfTabHeader(
     title: String,
@@ -80,6 +80,7 @@ fun PfTabHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .background(PfTheme.colors.nav)
             .windowInsetsPadding(PfInsets.statusBars)
             // Mockup `.pf-tabhead`: 8 dp under the status bar, a 48 dp row, the title centered in it (FIN-32).
             .padding(start = PfTheme.dimens.screenMargin, end = PfTheme.dimens.space2, top = PfTheme.dimens.space2)
@@ -93,8 +94,8 @@ fun PfTabHeader(
 
 /**
  * Header of a nested screen (mockup `.pf-header`): back arrow (48), `title-2`, optional `hint` subtitle and a
- * trailing action; 8 dp under the status bar, 12 dp left, 20 dp right and nothing below — the screen content
- * starts with its own top padding.
+ * trailing action on a `nav` background that extends through the status bar. The row has 8 dp above it, 12 dp
+ * left and 20 dp right. The screen content starts with its own top padding.
  */
 @Composable
 fun PfPageHeader(
@@ -107,6 +108,7 @@ fun PfPageHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .background(PfTheme.colors.nav)
             .windowInsetsPadding(PfInsets.statusBars)
             .padding(start = PfTheme.dimens.space3, end = PfTheme.dimens.space5, top = PfTheme.dimens.space2),
         verticalAlignment = Alignment.CenterVertically,
