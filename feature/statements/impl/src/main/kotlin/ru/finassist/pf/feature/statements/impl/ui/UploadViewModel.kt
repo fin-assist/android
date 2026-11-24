@@ -6,7 +6,10 @@ import ru.finassist.pf.core.common.error.ErrorPresentation
 import ru.finassist.pf.core.common.error.ErrorContext
 import ru.finassist.pf.core.common.time.ElapsedClock
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Process
 import android.provider.OpenableColumns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -19,6 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.common.time.Clock
@@ -85,6 +89,7 @@ data class UploadUiState(
     val periodDownloading: Boolean = false,
     val periodRetryReady: Boolean = true,
     val configRetryReady: Boolean = true,
+    val awaitingFilePicker: Boolean = false,
     val sourceZoneUnsupported: Boolean = false,
     val periodError: ErrorPresentation? = null,
     val periodFrom: LocalDate? = null,
@@ -232,10 +237,47 @@ class UploadViewModel @Inject constructor(
     fun consumeDownload() = _state.update { it.copy(downloadUrlToOpen = null) }
 
 
-    fun onFilePicked(uri: Uri) {
-        if (uploadInFlight) return
+    fun beginFilePick(): Boolean {
+        val current = _state.value
+        if (current.awaitingFilePicker || !canStartPickedFile(current)) return false
+        _state.update { it.copy(awaitingFilePicker = true) }
+        if (current.phase is UploadPhase.Error) backToGuide()
+        return true
+    }
+
+    fun onFilePicked(uri: Uri?) {
+        if (uri != null && canStartPickedFile(_state.value)) launchUpload(uri)
+        // Keep the picker priority until its selected file has started, or selection was cancelled.
+        _state.update { it.copy(awaitingFilePicker = false) }
+    }
+
+    private fun canStartPickedFile(state: UploadUiState) =
+        !uploadInFlight && state.phase !is UploadPhase.Busy && state.doneUploadId == null
+
+    /** Wait for a verified guide without replacing the current upload, its result or its retry. */
+    suspend fun onExternalFilePicked(takeSelection: () -> Uri?) {
+        while (true) {
+            state.first { it.phase == UploadPhase.Disabled || canTakeExternalFile(it) }
+            // The previous pick may still be inspecting its URI before it enters Busy.
+            uploadJob?.join()
+            val current = state.value
+            if (current.phase == UploadPhase.Disabled) return
+            if (canTakeExternalFile(current) && !uploadInFlight) break
+        }
+        val uri = takeSelection() ?: return
+        val readPermission = context.checkUriPermission(
+            uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION,
+        )
+        if (readPermission != PackageManager.PERMISSION_GRANTED) {
+            _state.update { it.copy(phase = UploadPhase.Error(ErrorCodes.PROCESSING_FAILED, "файл", config)) }
+            return
+        }
         launchUpload(uri)
     }
+
+    private fun canTakeExternalFile(state: UploadUiState) =
+        state.phase is UploadPhase.Guide && config != null && state.guideErrorPresentation == null &&
+            !state.uploadOffline && !state.sourceZoneUnsupported && state.doneUploadId == null && !state.awaitingFilePicker
 
     /** Explicit new intent after the unknown-outcome warning; ordinary retry never replaces the old UUID. */
     fun startNewUpload() {

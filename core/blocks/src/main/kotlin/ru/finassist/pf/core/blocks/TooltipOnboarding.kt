@@ -9,8 +9,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.LayoutDirection
 import kotlinx.coroutines.flow.first
+import ru.finassist.pf.core.api.model.HelpTags
 
-/** Screen-local queue for the same anchors and popup used by manual help. */
+/** Screen-local queue for the same anchors and help used by manual opening. */
 class TooltipOnboarding {
     internal class Anchor(val position: () -> Offset?, val reveal: suspend () -> Unit)
 
@@ -58,7 +59,7 @@ class TooltipOnboarding {
 /** Installs the queue only in screens that support automatic help. */
 val LocalTooltipOnboarding = compositionLocalOf<TooltipOnboarding?> { null }
 
-internal fun hasOnboardingTag(tags: List<String>): Boolean = "onboarding" in tags
+internal fun hasOnboardingTag(tags: List<String>): Boolean = HelpTags.ONBOARDING in tags
 
 internal fun canOnboard(tags: List<String>, order: Int?): Boolean =
     order != null && order > 0 && hasOnboardingTag(tags)

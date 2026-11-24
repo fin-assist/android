@@ -2,6 +2,7 @@ package ru.finassist.pf.mock.domain
 
 import ru.finassist.pf.core.api.model.Analytics
 import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.HelpTags
 import ru.finassist.pf.core.api.model.Tile
 import ru.finassist.pf.core.api.model.TileGroupData
 import ru.finassist.pf.core.api.model.TileGroupDataV2
@@ -10,23 +11,28 @@ import ru.finassist.pf.mock.MockAnalyticsHelp
 internal fun Analytics.withAnalyticsHelp(mode: MockAnalyticsHelp, balanceFirst: Boolean = false): Analytics {
     if (!hasData || mode == MockAnalyticsHelp.MANUAL) return this
     val reversed = mode == MockAnalyticsHelp.REVERSED
+    val onboardingTags = if (mode == MockAnalyticsHelp.BOTTOM) {
+        listOf(HelpTags.ONBOARDING, HelpTags.BOTTOM)
+    } else {
+        listOf(HelpTags.ONBOARDING)
+    }
     val balanceOrder = if (reversed || balanceFirst) 1 else 2
     val dailyOrder = if (balanceFirst) 2 else 1
     val blocks = blocks.map { block ->
         when (block.id) {
             "tiles" -> block.mapHelpTiles { tile ->
                 if (tile.id != "daily_expense" || tile.helpText.isNullOrBlank()) tile else tile.copy(
-                    helpTags = if (reversed) emptyList() else listOf("onboarding"),
+                    helpTags = if (reversed) emptyList() else onboardingTags,
                     helpOrder = dailyOrder.takeUnless { reversed },
                 )
             }
             "balance" -> if (block.helpText.isNullOrBlank()) block else block.copy(
-                helpTags = listOf("onboarding", "future_tag"),
+                helpTags = onboardingTags + "future_tag",
                 helpOrder = balanceOrder,
                 helpText = if (reversed) "Разница показывает, сколько осталось после расходов." else block.helpText,
             )
             "monthly_chart" -> if (reversed && !block.helpText.isNullOrBlank()) block.copy(
-                helpTags = listOf("onboarding"),
+                helpTags = onboardingTags,
                 helpOrder = 2,
             ) else block
             else -> block

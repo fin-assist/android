@@ -1,6 +1,7 @@
 package ru.finassist.pf.core.blocks
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.HelpTags
 import ru.finassist.pf.core.designsystem.components.PfBottomSheet
 import ru.finassist.pf.core.designsystem.components.PfIconButton
 import ru.finassist.pf.core.designsystem.icons.PfIcons
@@ -28,8 +30,14 @@ internal fun BlockHelpButton(text: String, title: String, tag: String) {
 
 /** The long-text sheet is shared by every block and tile version. */
 @Composable
-fun BlockHelpSheet(title: String, text: String, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
-    PfBottomSheet(title, onDismiss, modifier = modifier) {
+fun BlockHelpSheet(
+    title: String,
+    text: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    footer: (@Composable ColumnScope.() -> Unit)? = null,
+) {
+    PfBottomSheet(title, onDismiss, modifier = modifier, footer = footer) {
         Text(text, style = PfTheme.type.body, color = PfTheme.colors.text)
     }
 }
@@ -49,7 +57,8 @@ internal fun BlockContext.helpButton(
     val text = suppliedText ?: localText?.takeIf { it.isNotBlank() } ?: return null
     val automatic = suppliedText == null || canOnboard(block.helpTags, block.helpOrder)
     val key = block.id?.takeIf { automatic && it.isNotBlank() }?.let(::listOf)
-    return { HelpPopupButton(text, title, tags.block(block.id ?: block.type.code), key = key) }
+    val showInSheet = suppliedText != null && HelpTags.BOTTOM in block.helpTags
+    return { HelpPopupButton(text, title, tags.block(block.id ?: block.type.code), key = key, showInSheet = showInSheet) }
 }
 
 @Composable

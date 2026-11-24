@@ -143,13 +143,21 @@ class ChatDesignCheckTest {
         onSend = {}, onVoice = {}, onOpenSearch = {}, onOpenAnalytics = {},
     )
 
-    private fun capture(name: String, state: ChatUiState, dark: Boolean = false, heightDp: Int = 844, environment: ConnectionEnvironment = ConnectionEnvironment.UNKNOWN, voice: VoiceState = VoiceState()) =
+    private fun capture(
+        name: String,
+        state: ChatUiState,
+        dark: Boolean = false,
+        heightDp: Int = 844,
+        environment: ConnectionEnvironment = ConnectionEnvironment.UNKNOWN,
+        voice: VoiceState = VoiceState(),
+        about: Boolean = false,
+    ) =
         // The thread is a viewport over a scrolling list, as on the artboard: no full-height growth.
-        DesignCheck.capture(name, dark = dark, heightDp = heightDp, fullHeight = false, tab = 2) {
+        DesignCheck.capture(name, dark = dark, heightDp = heightDp, fullHeight = false, tab = 2, popups = about) {
             CompositionLocalProvider(LocalConnectionEnvironmentReader provides ConnectionEnvironmentReader { environment }) {
                 // Opened at the end of the thread, as the app scrolls it once the history has loaded.
                 val list = rememberLazyListState(initialFirstVisibleItemIndex = Int.MAX_VALUE)
-                ChatContent(state, zone = zone, today = today, voiceState = voice, actions = actions, listState = list)
+                ChatContent(state, zone = zone, today = today, voiceState = voice, actions = actions, listState = list, aboutInitiallyOpen = about)
             }
 
         }
@@ -166,6 +174,11 @@ class ChatDesignCheckTest {
     @Test fun chat() = capture("Chat", answered)
 
     @Test fun chatDark() = capture("ChatDark", answered, dark = true)
+
+    /** FIN-554: about sheet, pending a Figma artboard. */
+    @Test fun chatAbout() = capture("ChatAbout", answered.copy(hasLimitMetadata = true), about = true)
+
+    @Test fun chatAboutDark() = capture("ChatAboutDark", answered.copy(hasLimitMetadata = true), dark = true, about = true)
 
     @Test fun chatEmpty() = capture("ChatEmpty", ChatUiState(loading = false, limit = limit(5)))
 

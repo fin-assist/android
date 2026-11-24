@@ -78,7 +78,7 @@ class E2eAnalyticsHelpControlTest {
         val store = TooltipOnboardingStore(preferences())
         val receipt = E2eAnalyticsHelpControl(Tokens { owner }, store)
         assertNull(receipt.verify(MockAnalyticsHelp.MANUAL))
-        for (mode in listOf(MockAnalyticsHelp.ONBOARDING, MockAnalyticsHelp.REVERSED)) {
+        for (mode in listOf(MockAnalyticsHelp.ONBOARDING, MockAnalyticsHelp.REVERSED, MockAnalyticsHelp.BOTTOM)) {
             assertEquals("analytics_help: onboarding already claimed; clear app data first", receipt.verify(mode, allowSignedOut = true))
         }
     }

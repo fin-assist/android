@@ -3,6 +3,7 @@ package ru.finassist.pf.feature.assistant.impl.di
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import dagger.Binds
@@ -40,6 +41,7 @@ class AssistantEntry @Inject constructor(private val flags: FeatureFlags) : Feat
                         handle.getStateFlow<String?>(AssistantRoutes.CONSENT_RESULT, null).collect { value = it }
                     },
                     onConsentResultConsumed = { handle[AssistantRoutes.CONSENT_RESULT] = null },
+                    assistantAbout = hiltViewModel(),
                 )
             }
         }

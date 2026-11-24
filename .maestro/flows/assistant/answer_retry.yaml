@@ -13,10 +13,7 @@ tags:
     timeout: 15000
 - tapOn:
     id: "analytics.ask"
-- extendedWaitUntil:
-    visible:
-      id: "assistant.chat"
-    timeout: 10000
+- runFlow: ../../subflows/dismiss_first_assistant_about.yaml
 
 # The model is down: the answer fails with MODEL_ERROR, the question is not spent.
 - runFlow:

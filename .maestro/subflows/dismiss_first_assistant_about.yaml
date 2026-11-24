@@ -1,0 +1,13 @@
+# Following the first entry to the chat on the freshly signed-in account.
+appId: ru.finassist.pf.mock.e2e
+---
+- extendedWaitUntil:
+    visible:
+      id: "assistant.about.sheet"
+    timeout: 15000
+- tapOn:
+    id: "ds.sheet.close"
+- extendedWaitUntil:
+    visible:
+      id: "assistant.about.open"
+    timeout: 10000
