@@ -75,6 +75,9 @@ tags:
     text: "(?s)Файл не загружен.*Проверьте интернет.*"
     childOf:
       id: "statements.upload.send_offline"
+- scrollUntilVisible:
+    element:
+      id: "statements.upload.send_retry"
 - assertVisible:
     id: "statements.upload.send_retry"
     enabled: true
