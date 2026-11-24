@@ -6,6 +6,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import ru.finassist.pf.core.api.model.Block
+import ru.finassist.pf.core.api.model.HelpTags
 import ru.finassist.pf.core.api.model.Tile
 import ru.finassist.pf.core.designsystem.components.PfStatTile
 
@@ -17,8 +18,11 @@ internal fun BlockTile(block: Block, tile: Tile, ctx: BlockContext, modifier: Mo
         ?.let { listOf(it, tile.id) }
     val help: (@Composable () -> Unit)? = tile.helpText?.takeIf { it.isNotBlank() }?.let { text ->
         {
-            if (ctx.anchoredHelp) HelpPopupButton(text, tile.title, tag, key = key)
-            else BlockHelpButton(text, tile.title, tag)
+            if (ctx.anchoredHelp) {
+                HelpPopupButton(text, tile.title, tag, key = key, showInSheet = HelpTags.BOTTOM in tile.helpTags)
+            } else {
+                BlockHelpButton(text, tile.title, tag)
+            }
         }
     }
     if (!tile.status.hasData) {

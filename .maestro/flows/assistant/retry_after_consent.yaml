@@ -18,10 +18,7 @@ tags:
     timeout: 15000
 - tapOn:
     id: "analytics.ask"
-- extendedWaitUntil:
-    visible:
-      id: "assistant.chat"
-    timeout: 10000
+- runFlow: ../../subflows/dismiss_first_assistant_about.yaml
 
 # Финансовый вопрос о продавце из фикстуры. Его успешный ответ короткий:
 # «не нашли» за покрытый период списывает попытку (FIN-136).

@@ -83,6 +83,7 @@ tags:
 - back
 - tapOn:
     id: "analytics.ask"
+- runFlow: ../../subflows/dismiss_first_assistant_about.yaml
 - extendedWaitUntil:
     visible:
       id: "assistant.chat"

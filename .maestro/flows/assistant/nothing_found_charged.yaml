@@ -13,10 +13,7 @@ tags:
     timeout: 15000
 - tapOn:
     id: "analytics.ask"
-- extendedWaitUntil:
-    visible:
-      id: "assistant.chat"
-    timeout: 10000
+- runFlow: ../../subflows/dismiss_first_assistant_about.yaml
 
 # FIN-136: «Kaspersky» is a merchant of the fixture, but its only operation (March) is before the six months of the
 # answer, which the statement covers. Nothing found over a covered period is an answer, not a refund: it used to be

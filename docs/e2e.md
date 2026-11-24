@@ -815,6 +815,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state; expense search uses the ASCII query FIN-400 within the inherited 2024–2026 range, checks the single January 2024 debit and retained kind/scope (Qase75, FIN-400/415); follow-up not executed (previous run failed) |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
 | `analytics/tooltip_onboarding` | with Assistant enabled, its compact help opens before the daily tile, then the categories card, then balance. Returning to Analytics leaves manual help available. Assistant and category taps still navigate ([Qase97](https://app.qase.io/case/PLAINFIN-97), FIN-552) |
+| `analytics/help_bottom_sheet` | with Assistant disabled, the daily tile and balance block tagged `onboarding` and `bottom` open as sheets in screen order, then reopen manually. Skip is shown during onboarding only. `AnalyticsBlockHelpTest` checks both mixed tag combinations on a tile and its parent block ([Qase101](https://app.qase.io/case/PLAINFIN-101), FIN-554) |
 | `analytics/tooltip_onboarding_interrupted` | lock interrupts the sequence for this account. On a fresh installation with Assistant disabled, the monthly chart comes before the categories card and balance despite the order values in the response. Skip leaves the remaining help available manually, including a tile without the `onboarding` tag ([Qase98](https://app.qase.io/case/PLAINFIN-98), FIN-552) |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` + JVM `AnalyticsReliabilityComponentTest#qase82RetainedSnapshotsAndRefusedMutation` (mock-only) | retained ready/unavailable snapshots, bounded polling and explicit retry, uncached Year preparation, refused mutation independent of polling; real journey retains visible errors/payment and exact request guards; required JVM companion covers transferred exhaustive state combinations (Qase82, FIN-473; see docs/qa/fin473-pilot-coverage.md) |
@@ -832,6 +833,7 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `assistant/tab_consent_in_profile` | denied draft in retained tab → consent through Profile → server read enables explicit send without submitting on resume (Qase65, FIN-397) |
 | `AiConsentSpacingTest#keepsTwentyFourDpAfterConsentContentWhenScrolledAtLargeFont` | native geometry assertion: scroll to submit in 640 dp viewport / 150% text, verify ≥24 dp after full checkbox/error block with and without formError (Qase64, FIN-394/397); authored, compile only |
 | `assistant/tab_and_consent_recovery` | bottom tab keeps draft/history across Operations, Analytics and Profile; consent Back → Give consent → grant preserves draft without automatic send, explicit send creates one question (Qase61, FIN-397, FIN-394) |
+| `assistant/about` + native `AssistantAboutDocumentTest#opensCurrentDocumentOnlyAfterATapAndRecoversFromAnOfflineRead` | first entry opens the About sheet automatically. The quota and collapsed rules are available, and opening the sheet manually preserves the draft. The native companion passed locally on Android 16 (Pixel 6 emulator, 2026-11-24). It checked zero automatic document reads, no browser on an offline read, a successful retry and the exact URLs of two published versions ([Qase100](https://app.qase.io/case/PLAINFIN-100), FIN-554) |
 | `assistant/ask_question` (smoke) | disclosure of question/history, account-phone/file exclusion and masking limits → consent (error without the tick) → question → answer → limit 4 of 5 → chip → scoped search (Qase12, FIN-366) |
 | `assistant/daily_limit` | unanswerable question is free (the server's CANNOT_ANSWER text, no «Повторить»); five questions exhaust the day |
 | `assistant/off_topic` | a question not about finances (`weather`): the server's OFF_TOPIC text, no «Повторить» (`retryable: false`), still 5 of 5; the next question is answered, 4 of 5 — FIN-160 |
@@ -1093,6 +1095,13 @@ history → unread list path, with index selectors checking both equal row title
 `UnreadLinesViewModelTest` verifies duplicate-preservation in state; it does not claim to execute the renderer.
 `UnreadLinesSamePhysicalLine` / `UnreadLinesSamePhysicalLineDark` are proposed DesignCheck artboards with no Figma
 counterpart yet. The flow, Qase56 and fixtures were authored without UI/Maestro/DesignCheck/instrumented execution.
+
+### FIN-554 assistant About sheet
+
+A fresh account's first chat entry opens the About sheet. Other chat flows use
+`dismiss_first_assistant_about.yaml` at that entry. The sheet fetches the current
+consent document on the link tap, so opening the sheet does not add document
+requests to the consent scenarios.
 
 ### FIN-366 assistant-consent disclosure
 
@@ -1408,23 +1417,26 @@ forecast text and dismissal. A JVM Compose test verifies scrolling long help ins
 facts/forecast and chart-selection flows are synchronized from main. Proposed light/dark help and history design
 artboards are authored; approved Figma artboards for these new states do not yet exist.
 
-FIN-552/558 uses the same compact popup for manual and automatic help, including the Assistant card
-and the populated expense categories card. Server help needs a positive `help_order` and the `onboarding`
-tag to enter the sequence. Composition records placed anchors and takes one snapshot in reading order
-when onboarding starts. It includes offscreen anchors, scrolls to each before opening and skips missing
-anchors. Help from anchors added after the snapshot is available manually. «Пропустить подсказки» ends
-this sequence, and a device-local DataStore claim prevents replay for the same account and screen after
-leaving, locking, relogin or restarting.
+FIN-552/558 uses anchored help for manual and automatic opening, including the Assistant card and the
+populated expense categories card. Each server block or tile with its own `bottom` tag and help text
+opens a bottom sheet in both cases (FIN-554). Other anchored help uses a compact popup. Server help
+needs a positive `help_order` and the `onboarding` tag to enter the sequence. Composition records placed
+anchors and takes one snapshot in reading order when onboarding starts. It includes offscreen anchors,
+scrolls to each before opening and skips missing anchors. Help from anchors added after the snapshot is
+available manually. «Пропустить подсказки» ends the sequence from either format. A device-local DataStore
+claim prevents replay for the same account and screen after leaving, locking, relogin or restarting.
 
-The mockE2e-only `analytics_help=manual|onboarding|reversed` control selects fixed server compositions.
+The mockE2e-only `analytics_help=manual|onboarding|reversed|bottom` control selects fixed server compositions.
 The default `manual` fixture records a completed Analytics onboarding claim for the existing account through
 `fast_login.yaml`. `login.yaml` selects the same fixture after the UI sign-in, and direct UI sign-in flows can
 select it explicitly after signing in. For Qase97/98 set `onboarding` or `reversed` before `fast_login.yaml`
 so the app takes the real first-run path. `onboarding` marks the daily-expenses tile and balance.
 `reversed` gives balance a lower `help_order` than the monthly chart and leaves the daily tile manual.
+`bottom` marks the daily-expenses tile and balance with both tags. The bottom sheet flow selects `bottom`
+and disables Assistant before `fast_login.yaml` so the first two automatic steps are the tile and balance.
 The receipt for `manual` requires a persisted claim for the active login, including after repeated calls.
-Before sign-in, `onboarding` or `reversed` selects the composition for the upcoming fixture login. A
-`sign_in=existing` receipt verifies the new session's claim state, and switching to either automatic
+Before sign-in, `onboarding`, `reversed` or `bottom` selects the composition for the upcoming fixture login.
+A `sign_in=existing` receipt verifies the new session's claim state, and switching to any automatic
 mode in a session that already claimed onboarding is reported as unmet.
 The preloaded statement covers the first day of October; its operations end in September. Runs that
 assert the categories card first import the bundled October statement through the UI before opening Analytics.

@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -73,6 +74,7 @@ internal fun HelpPopupButton(
     tag: String,
     initiallyOpen: Boolean = false,
     key: List<String>?,
+    showInSheet: Boolean = false,
     openStateKey: String = text,
 ) {
     val suppressed = LocalSuppressPopups.current
@@ -110,18 +112,29 @@ internal fun HelpPopupButton(
         Box {
             PfIcon(PfIcons.INFO, contentDescription = "Пояснение: $title", size = 20.dp, tint = PfTheme.colors.text)
             if (!suppressed && (shown || automatic)) {
-                HelpPopup(
-                    text,
-                    "$tag.help.popup",
-                    onSkip = if (automatic) ({
+                val onSkip: (() -> Unit)? = if (automatic) {
+                    {
                         shown = false
                         onboarding?.skip()
-                    }) else null,
-                    onDismiss = {
-                        shown = false
-                        if (key != null) onboarding?.dismiss(key)
-                    },
-                )
+                    }
+                } else {
+                    null
+                }
+                val onDismiss: () -> Unit = {
+                    shown = false
+                    if (key != null) onboarding?.dismiss(key)
+                }
+                if (showInSheet) {
+                    val sheetTag = "$tag.help.sheet"
+                    val footer: (@Composable ColumnScope.() -> Unit)? = if (onSkip != null) {
+                        { PfLink("Пропустить подсказки", onClick = onSkip, modifier = Modifier.testTag("$sheetTag.skip")) }
+                    } else {
+                        null
+                    }
+                    BlockHelpSheet(title, text, onDismiss, Modifier.testTag(sheetTag), footer)
+                } else {
+                    HelpPopup(text, "$tag.help.popup", onSkip, onDismiss)
+                }
             }
         }
     }

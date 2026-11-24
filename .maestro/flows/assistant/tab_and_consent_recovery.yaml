@@ -7,10 +7,7 @@ tags:
 - runFlow: ../../subflows/fast_login.yaml
 - tapOn:
     id: "ds.tab.assistant"
-- extendedWaitUntil:
-    visible:
-      id: "assistant.chat"
-    timeout: 10000
+- runFlow: ../../subflows/dismiss_first_assistant_about.yaml
 - assertNotVisible:
     id: "assistant.consent"
 - assertVisible:
