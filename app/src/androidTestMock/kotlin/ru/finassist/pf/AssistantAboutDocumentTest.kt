@@ -72,7 +72,9 @@ class AssistantAboutDocumentTest {
     private fun signInWithFixture() {
         configure("sign_in=existing", timeoutMs = 60_000)
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            compose.activity.startActivity(Intent(compose.activity, MainActivity::class.java))
+            val activity = compose.activity
+            // ActivityScenario matches lifecycle events against the original launcher intent.
+            activity.startActivity(Intent.makeMainActivity(activity.componentName))
         }
         try {
             compose.waitUntil(40_000) { hasTag("operations.feed") || hasTag("applock.setup") || hasTag("applock.unlock") }
