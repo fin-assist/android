@@ -34,6 +34,7 @@
     ".maestro/flows/statements/upload_history_period.yaml": 47,
     ".maestro/flows/statements/upload_errors.yaml": 15,
     "ru.finassist.pf.StatementPickerTest#uploadsTheDocumentReturnedBySystemPicker": 16,
+    "ru.finassist.pf.ExternalStatementOpenTest#importsAfterSignInOnColdStartAndAgainAfterUnlockOnWarmStart": 99,
     "ru.finassist.pf.ConnectionFailureHintTest#vpnHintUpdatesAfterRetry": 62,
     ".maestro/flows/profile/theme_and_logout.yaml": 17,
     "ru.finassist.pf.ProfileThemePaletteTest#darkChoiceChangesTheRenderedProfilePalette": 17,
