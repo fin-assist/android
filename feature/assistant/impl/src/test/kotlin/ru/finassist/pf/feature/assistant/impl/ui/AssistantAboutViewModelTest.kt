@@ -2,6 +2,7 @@ package ru.finassist.pf.feature.assistant.impl.ui
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.preferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.viewModelScope
@@ -10,6 +11,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -93,8 +96,8 @@ class AssistantAboutViewModelTest {
         assertTrue(fixture.onboarding.claim("analytics", fixture.owner.userId, fixture.owner.authSessionEpoch))
     }
 
-    private fun withViewModel(block: suspend kotlinx.coroutines.test.TestScope.(AssistantAboutTestFixture, AssistantAboutViewModel) -> Unit) = runTest {
-        Dispatchers.setMain(kotlinx.coroutines.test.StandardTestDispatcher(testScheduler))
+    private fun withViewModel(block: suspend TestScope.(AssistantAboutTestFixture, AssistantAboutViewModel) -> Unit) = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val fixture = AssistantAboutTestFixture(ElapsedClock { testScheduler.currentTime })
         val vm = fixture.viewModel()
         try {
@@ -113,17 +116,24 @@ internal class AssistantAboutTestFixture(private val clock: ElapsedClock = Elaps
     val validDocument = ConsentDocument(ConsentType.ASSISTANT, "1", "Согласие", "https://example.ru/legal/about-1")
     val reads = mutableListOf<Pair<ConsentType, RequestOwner?>>()
     var reply: suspend () -> ConsentDocument = { validDocument }
-    private val preferences = MutableStateFlow(preferencesOf(
-        stringPreferencesKey("session.identity.user") to owner.userId,
-        stringPreferencesKey("session.identity.epoch") to owner.authSessionEpoch,
-    ))
-    val onboarding = TooltipOnboardingStore(object : DataStore<Preferences> {
+    private val userKey = stringPreferencesKey("session.identity.user")
+    private val epochKey = stringPreferencesKey("session.identity.epoch")
+    private val preferences = MutableStateFlow(preferencesOf(userKey to owner.userId, epochKey to owner.authSessionEpoch))
+    private val preferenceStore = object : DataStore<Preferences> {
         override val data = preferences
         override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
             transform(preferences.value).also { preferences.value = it }
-    })
+    }
+    val onboarding = TooltipOnboardingStore(preferenceStore)
 
-    fun viewModel() = AssistantAboutViewModel(this, onboarding, this, clock)
+    fun viewModel(sessions: SessionRepository = this) = AssistantAboutViewModel(sessions, onboarding, this, clock)
+
+    suspend fun confirmIdentity(owner: RequestOwner) {
+        preferenceStore.edit {
+            it[userKey] = owner.userId
+            it[epochKey] = owner.authSessionEpoch
+        }
+    }
 
     override suspend fun getConsentDocument(type: ConsentType): ConsentDocument {
         reads += type to currentCoroutineContext()[RequestOwner]

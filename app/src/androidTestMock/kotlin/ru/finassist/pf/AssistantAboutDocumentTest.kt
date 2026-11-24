@@ -5,13 +5,16 @@ import android.app.Instrumentation
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.printToLog
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intending
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
@@ -39,8 +42,7 @@ class AssistantAboutDocumentTest {
     @After fun tearDown() = Intents.release()
 
     @Test fun opensCurrentDocumentOnlyAfterATapAndRecoversFromAnOfflineRead() {
-        configure("sign_in=existing")
-        compose.waitUntil(30_000) { hasTag("operations.feed") }
+        signInWithFixture()
         configure("consent_type=assistant&consent_publish=about-1&consent_read=offline&expect_consent_reads=0")
 
         compose.onNodeWithTag("ds.tab.assistant").performClick()
@@ -67,6 +69,32 @@ class AssistantAboutDocumentTest {
         configure("consent_type=assistant&expect_consent_reads=3")
     }
 
+    private fun signInWithFixture() {
+        configure("sign_in=existing", timeoutMs = 60_000)
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            compose.activity.startActivity(Intent(compose.activity, MainActivity::class.java))
+        }
+        try {
+            compose.waitUntil(40_000) { hasTag("operations.feed") || hasTag("applock.setup") || hasTag("applock.unlock") }
+            when {
+                hasTag("applock.setup") -> {
+                    enterFixturePasscode()
+                    compose.waitUntil(10_000) { hasTag("applock.setup.repeat") }
+                    enterFixturePasscode()
+                    compose.waitUntil(30_000) { hasTag("operations.feed") || hasTag("applock.biometric_offer") }
+                    if (hasTag("applock.biometric_offer")) compose.onNodeWithTag("applock.biometric_offer.skip").performClick()
+                }
+                hasTag("applock.unlock") -> enterFixturePasscode()
+            }
+            compose.waitUntil(40_000) { hasTag("operations.feed") }
+        } catch (failure: ComposeTimeoutException) {
+            runCatching { compose.onRoot(useUnmergedTree = true).printToLog("PfTest") }
+            throw failure
+        }
+    }
+
+    private fun enterFixturePasscode() = "1234".forEach { digit -> compose.onNodeWithTag("ds.numpad.$digit").performClick() }
+
     private fun openDocumentLink() {
         compose.onNodeWithTag("assistant.about.document").performScrollTo().performClick()
     }
@@ -76,11 +104,11 @@ class AssistantAboutDocumentTest {
     private fun hasTag(tag: String) =
         compose.onAllNodesWithTag(tag).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
 
-    private fun configure(query: String) {
+    private fun configure(query: String, timeoutMs: Long = 15_000) {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             compose.activity.startActivity(Intent(compose.activity, E2eControlActivity::class.java).setData(Uri.parse("pfe2e://config?$query")))
         }
-        compose.waitUntil(15_000) { hasTag("e2e.config.applied") || hasTag("e2e.config.unmet") }
+        compose.waitUntil(timeoutMs) { hasTag("e2e.config.applied") || hasTag("e2e.config.unmet") }
         compose.onNodeWithTag("e2e.config.unmet").assertDoesNotExist()
         compose.waitUntil(10_000) {
             val button = compose.onAllNodesWithTag("e2e.config.continue")
