@@ -26,7 +26,7 @@ tags:
 - runFlow:
     file: ../../subflows/config.yaml
     env:
-      LINK: "pfe2e://config?call_delay_ms=25000"
+      LINK: "pfe2e://config?call_delay_ms=45000"
 - runFlow:
     file: ../../subflows/sign_in.yaml
     env:
@@ -42,6 +42,13 @@ tags:
 - assertNotVisible:
     id: "auth.call.dial"
 - back
+# Google Phone may close its keypad before returning to the sign-in screen.
+- runFlow:
+    when:
+      notVisible:
+        id: "auth.call"
+    commands:
+      - back
 - extendedWaitUntil:
     visible:
       id: "auth.call.confirming"
@@ -49,12 +56,15 @@ tags:
 - assertVisible: "Вход продолжится автоматически"
 - assertVisible:
     id: "auth.call.dial"
+- scrollUntilVisible:
+    element:
+      id: "auth.call.change_number"
 - assertVisible:
     id: "auth.call.change_number"
 - extendedWaitUntil:
     visible:
       id: "applock.setup"
-    timeout: 30000
+    timeout: 55000
 - runFlow: ../../subflows/set_passcode.yaml
 - extendedWaitUntil:
     visible:
