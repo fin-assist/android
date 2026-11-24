@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,6 +29,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -41,6 +45,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import ru.finassist.pf.core.designsystem.components.LocalSuppressPopups
+import ru.finassist.pf.core.designsystem.components.PfLink
 import ru.finassist.pf.core.designsystem.components.pfTestRoot
 import ru.finassist.pf.core.designsystem.icons.PfIcon
 import ru.finassist.pf.core.designsystem.icons.PfIcons
@@ -48,8 +53,16 @@ import ru.finassist.pf.core.designsystem.theme.PfTheme
 
 /** The icon stays compact inside a full-size touch target. */
 @Composable
-fun BlockHelpPopupButton(text: String, title: String, tag: String, initiallyOpen: Boolean = false) {
-    HelpPopupButton(text, title, tag, initiallyOpen, null, null)
+fun BlockHelpPopupButton(
+    text: String,
+    title: String,
+    tag: String,
+    initiallyOpen: Boolean = false,
+    helpTags: List<String> = emptyList(),
+) {
+    // An empty first segment distinguishes screen-owned anchors from server block and tile IDs.
+    val key = listOf("", tag).takeIf { text.isNotBlank() && hasOnboardingTag(helpTags) }
+    HelpPopupButton(text, title, tag, initiallyOpen, key, openStateKey = tag)
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -60,23 +73,34 @@ internal fun HelpPopupButton(
     tag: String,
     initiallyOpen: Boolean = false,
     key: List<String>?,
-    order: Int?,
+    openStateKey: String = text,
 ) {
     val suppressed = LocalSuppressPopups.current
     val onboarding = LocalTooltipOnboarding.current
     val requester = remember { BringIntoViewRequester() }
-    if (onboarding != null && key != null && order != null) {
-        DisposableEffect(onboarding, key, order, requester) {
-            val anchor = TooltipOnboarding.Anchor(order) { requester.bringIntoView() }
+    val anchorPlacement = if (onboarding != null && key != null && !suppressed) {
+        // Keep the layout node, not a position that would be invalidated whenever the screen scrolls.
+        val coordinates = remember { mutableStateOf<LayoutCoordinates?>(null) }
+        DisposableEffect(onboarding, key, requester) {
+            val anchor = TooltipOnboarding.Anchor(
+                position = {
+                    coordinates.value?.takeIf { it.isAttached && it.size.width > 0 && it.size.height > 0 }
+                        ?.positionInRoot()?.takeIf { it.x.isFinite() && it.y.isFinite() }
+                },
+                reveal = { requester.bringIntoView() },
+            )
             onboarding.anchors[key] = anchor
             onDispose { if (onboarding.anchors[key] === anchor) onboarding.anchors.remove(key) }
         }
+        Modifier.onPlaced { coordinates.value = it }
+    } else {
+        Modifier
     }
     val automatic = key != null && onboarding?.current == key
-    var shown by remember(text) { mutableStateOf(initiallyOpen && !suppressed) }
+    var shown by remember(openStateKey) { mutableStateOf(initiallyOpen && !suppressed) }
     if (suppressed) LaunchedEffect(Unit) { shown = false }
     Box(
-        Modifier.size(PfTheme.dimens.touch).bringIntoViewRequester(requester).testTag("$tag.help").clickable(
+        Modifier.size(PfTheme.dimens.touch).then(anchorPlacement).bringIntoViewRequester(requester).testTag("$tag.help").clickable(
             enabled = !suppressed,
             role = Role.Button,
             onClickLabel = "Открыть пояснение",
@@ -85,16 +109,26 @@ internal fun HelpPopupButton(
     ) {
         Box {
             PfIcon(PfIcons.INFO, contentDescription = "Пояснение: $title", size = 20.dp, tint = PfTheme.colors.text)
-            if (!suppressed && (shown || automatic)) HelpPopup(text, "$tag.help.popup") {
-                shown = false
-                if (key != null) onboarding?.dismiss(key)
+            if (!suppressed && (shown || automatic)) {
+                HelpPopup(
+                    text,
+                    "$tag.help.popup",
+                    onSkip = if (automatic) ({
+                        shown = false
+                        onboarding?.skip()
+                    }) else null,
+                    onDismiss = {
+                        shown = false
+                        if (key != null) onboarding?.dismiss(key)
+                    },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun HelpPopup(text: String, tag: String, onDismiss: () -> Unit) {
+private fun HelpPopup(text: String, tag: String, onSkip: (() -> Unit)?, onDismiss: () -> Unit) {
     val d = PfTheme.dimens
     val c = PfTheme.colors
     val fill = if (c.isDark) lerp(c.surface, c.text, 0.15f) else c.infoSoft
@@ -139,13 +173,14 @@ private fun HelpPopup(text: String, tag: String, onDismiss: () -> Unit) {
                 }
                 .padding(vertical = arrow),
         ) {
-            Box(
+            Column(
                 Modifier.testTag(tag)
                     .heightIn(max = (config.screenHeightDp.dp / 3).coerceAtLeast(1.dp))
                     .clip(shape).background(fill).border(1.dp, c.borderStrong, shape)
                     .verticalScroll(rememberScrollState()).padding(horizontal = d.space3, vertical = d.space2),
             ) {
                 Text(text, style = PfTheme.type.body, color = c.text)
+                if (onSkip != null) PfLink("Пропустить подсказки", onClick = onSkip, modifier = Modifier.testTag("$tag.skip"))
             }
         }
     }

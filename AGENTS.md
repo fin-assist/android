@@ -366,6 +366,9 @@ AGP AAR metadata inputs. Task-output caching remains enabled. Cause, trade-off a
   current selection once, then uses an explicit retry without a loop. Response source zones own calendar labels.
   Analytics block/tile `help_text` opens a scrollable popup anchored to its info button (FIN-496). Back, an
   outside tap, or app lock closes the popup. Main content and concise lock reasons stay in place.
+  FIN-552/558 freezes the eligible Analytics help anchors in reading order when onboarding starts, including
+  anchors below the viewport. A positive server `help_order` remains an eligibility condition. Skipping ends the
+  sequence and the info icons still open the same help manually.
   The shared block catalog retains scrollable sheets when `anchoredHelp = false`. The assistant uses its own
   renderer, where block/tile `help_text` is currently unused.
 - Assistant SSE (FIN-453): a final-status snapshot does not replace `done` / `error`. Reopen dropped streams

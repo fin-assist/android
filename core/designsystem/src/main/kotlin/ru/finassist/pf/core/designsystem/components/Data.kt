@@ -337,6 +337,7 @@ fun PfAskCard(
     exhausted: Boolean = false,
     resetText: String = "Новые — в 00:00 по Москве",
     title: String = "Спросите о своих финансах",
+    help: (@Composable () -> Unit)? = null,
 ) {
     val c = PfTheme.colors
     val shape = RoundedCornerShape(PfTheme.dimens.radiusXl)
@@ -372,7 +373,14 @@ fun PfAskCard(
         }
         // `.pf-ask { gap: var(--space-3) }`, 22 dp chevron.
         Spacer(Modifier.width(PfTheme.dimens.space3))
-        PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = 22.dp, tint = c.textFaint)
+        if (help == null) {
+            PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = 22.dp, tint = c.textFaint)
+        } else {
+            Column(Modifier.align(Alignment.Top), horizontalAlignment = Alignment.End) {
+                help()
+                PfIcon(PfIcons.CHEVRON_RIGHT, contentDescription = null, size = 22.dp, tint = c.textFaint)
+            }
+        }
     }
 }
 

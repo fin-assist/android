@@ -814,8 +814,8 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `analytics/chart_month_selection` (mock-only) | whole-column selection including zero expenses, exact month/year, selected state and retained transfer mode/scroll; failed switch and explicit retry (Qase74, FIN-398); authored, not executed |
 | `analytics/all_time` (mock-only) | factual multi-year range, transfer mode, failed switch with explicit retry, import/deletion and final empty state; expense search uses the ASCII query FIN-400 within the inherited 2024–2026 range, checks the single January 2024 debit and retained kind/scope (Qase75, FIN-400/415); follow-up not executed (previous run failed) |
 | `analytics/overview` (smoke) | blocks; independent month/quarter/year selections (August, Q2, year), exact title + selected segment and no error after each switch (FIN-391); «Без переводов», category → operations |
-| `analytics/tooltip_onboarding` | first tooltip opens automatically, closing it scrolls to the second, returning to the screen preserves manual help only ([Qase97](https://app.qase.io/case/PLAINFIN-97), FIN-497) |
-| `analytics/tooltip_onboarding_interrupted` | after the first tooltip opens, locking interrupts the sequence; unlocking does not replay it, both icons still work, and a clean install follows changed mock server text, tags and order ([Qase98](https://app.qase.io/case/PLAINFIN-98), FIN-497) |
+| `analytics/tooltip_onboarding` | with Assistant enabled, its compact help opens before the daily tile, then the categories card, then balance. Returning to Analytics leaves manual help available. Assistant and category taps still navigate ([Qase97](https://app.qase.io/case/PLAINFIN-97), FIN-552) |
+| `analytics/tooltip_onboarding_interrupted` | lock interrupts the sequence for this account. On a fresh installation with Assistant disabled, the monthly chart comes before the categories card and balance despite the order values in the response. Skip leaves the remaining help available manually, including a tile without the `onboarding` tag ([Qase98](https://app.qase.io/case/PLAINFIN-98), FIN-552) |
 | `analytics/import_preparation_retry` | real UI import before first Analytics VM; finite publication delay shows preparation without upload guidance, then data; bounded wait → timeout, resume preserves timeout and explicit Retry recovers after fixture cleared (Qase63, FIN-394) |
 | `analytics/recalculation_snapshot` + JVM `AnalyticsReliabilityComponentTest#qase82RetainedSnapshotsAndRefusedMutation` (mock-only) | retained ready/unavailable snapshots, bounded polling and explicit retry, uncached Year preparation, refused mutation independent of polling; real journey retains visible errors/payment and exact request guards; required JVM companion covers transferred exhaustive state combinations (Qase82, FIN-473; see docs/qa/fin473-pilot-coverage.md) |
 | `analytics/regular_block_update` (mock-only) | successful PUT removes RBC and promotes the third visible payment row before a ready GET; seven seconds in the same card retain that row without RBC across marked GET polls; bounded polling pauses with September retained, then explicit Retry permits ready GET; separate unknown offline result retains RBC until explicit PUT retry, revealing the scoped row title after error/read notices before the unchanged assertions (Qase81, FIN-416/427/436/478). Its case-level Passed covers these UI observations only; JVM version/context checks and backend post-commit/durable delivery are separate |
@@ -1374,12 +1374,26 @@ forecast text and dismissal. A JVM Compose test verifies scrolling long help ins
 facts/forecast and chart-selection flows are synchronized from main. Proposed light/dark help and history design
 artboards are authored; approved Figma artboards for these new states do not yet exist.
 
-FIN-497 uses the same anchored help for automatic onboarding when the screen response tags a block or tile with
-`onboarding` and supplies a positive `help_order`. It scrolls to each anchor before opening. A device-local
-DataStore claim per account and screen prevents replay after leaving, locking, relogin or restarting. Unmarked
-help remains manual. The mockE2e-only `analytics_help=manual|onboarding|reversed` control selects fixed server
-compositions. `manual` is the default for existing flows. `onboarding` marks the daily-expenses tile and
-the balance block, while `reversed` puts balance before the monthly chart and leaves the daily tile manual.
+FIN-552/558 uses the same compact popup for manual and automatic help, including the Assistant card
+and the populated expense categories card. Server help needs a positive `help_order` and the `onboarding`
+tag to enter the sequence. Composition records placed anchors and takes one snapshot in reading order
+when onboarding starts. It includes offscreen anchors, scrolls to each before opening and skips missing
+anchors. Help from anchors added after the snapshot is available manually. «Пропустить подсказки» ends
+this sequence, and a device-local DataStore claim prevents replay for the same account and screen after
+leaving, locking, relogin or restarting.
+
+The mockE2e-only `analytics_help=manual|onboarding|reversed` control selects fixed server compositions.
+The default `manual` fixture records a completed Analytics onboarding claim for the existing account through
+`fast_login.yaml`. `login.yaml` selects the same fixture after the UI sign-in, and direct UI sign-in flows can
+select it explicitly after signing in. For Qase97/98 set `onboarding` or `reversed` before `fast_login.yaml`
+so the app takes the real first-run path. `onboarding` marks the daily-expenses tile and balance.
+`reversed` gives balance a lower `help_order` than the monthly chart and leaves the daily tile manual.
+The receipt for `manual` requires a persisted claim for the active login, including after repeated calls.
+Before sign-in, `onboarding` or `reversed` selects the composition for the upcoming fixture login. A
+`sign_in=existing` receipt verifies the new session's claim state, and switching to either automatic
+mode in a session that already claimed onboarding is reported as unmet.
+The preloaded statement covers the first day of October; its operations end in September. Runs that
+assert the categories card first import the bundled October statement through the UI before opening Analytics.
 The mockE2e-only `lock_app=true` control locks the current test session through AppLock.
 
 JVM scenarios cover full-block replacement, version barriers, missing/malformed data, owner changes and late

@@ -269,6 +269,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.androidx.compose.ui.test.manifest)
+    testImplementation(libs.androidx.datastore.preferences)
 
     // Native UI tests (src/androidTestMock, run on the mock e2e build): what Maestro cannot drive.
     androidTestImplementation(platform(libs.androidx.compose.bom))
