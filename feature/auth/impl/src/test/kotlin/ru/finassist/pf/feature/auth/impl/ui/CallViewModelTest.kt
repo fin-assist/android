@@ -312,8 +312,7 @@ class CallViewModelTest {
 
     @Test fun `an existing user is signed in with the tokens from the stream`() = runBlocking {
         val h = harness()
-        h.profile.userId = "u7"
-        val vm = h.vm(PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = false, accessToken = "a", refreshToken = "r"))
+        val vm = h.vm(PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = false, accessToken = "a", refreshToken = "r", userId = "u7"))
         vm.watch()
         eventually { vm.events.value != null }
         assertEquals(CallEvent.SignedIn, vm.events.value)
@@ -330,18 +329,43 @@ class CallViewModelTest {
         assertNull(h.tokens.flow.value)
     }
 
-    @Test fun `a failed profile request after verification shows offline or expired`() {
-        val verified = PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = false, accessToken = "a", refreshToken = "r")
-        val offline = harness().apply { profile.failure = AppError.Offline() }
-        val vmOffline = offline.vm(verified).apply { watch() }
-        eventually { vmOffline.state.value.phase == CallPhase.OFFLINE }
-        assertNull(vmOffline.events.value)
-        assertNull(offline.tokens.flow.value)
+    @Test fun `verified without an id shows an error and keeps the session empty`() {
+        for (userId in listOf(null, "")) {
+            val h = harness()
+            val verified = PhoneVerificationStatusEvent(VerificationStatus.VERIFIED, isNewUser = false, accessToken = "a", refreshToken = "r", userId = userId)
+            val vm = h.vm(verified).apply { watch() }
+            assertEquals(CallPhase.ERROR, vm.state.value.phase)
+            assertNull(vm.events.value)
+            assertNull(h.tokens.flow.value)
+        }
+    }
 
-        val server = harness().apply { profile.failure = AppError.Server(500) }
-        val vmServer = server.vm(verified).apply { watch() }
-        eventually { vmServer.state.value.phase == CallPhase.EXPIRED }
-        assertNull(vmServer.events.value)
+    @Test fun `resuming after opening the dialer shows confirmation while the server is pending`() {
+        val h = harness()
+        val vm = h.vm(event(VerificationStatus.PENDING))
+        vm.onResume()
+        assertFalse(vm.state.value.confirmingNumber)
+        vm.onDialOpened()
+        assertFalse(vm.state.value.confirmingNumber)
+        vm.stopWatching()
+        vm.onResume()
+        assertEquals(CallPhase.WAITING, vm.state.value.phase)
+        assertTrue(vm.state.value.confirmingNumber)
+        assertNull(vm.events.value)
+        assertNull(h.tokens.flow.value)
+        assertTrue("track:auth.call.started" in h.log.all())
+    }
+
+    @Test fun `returning from the dialer shows the expiry reported by the server`() {
+        val h = harness()
+        val vm = h.vm(event(VerificationStatus.PENDING))
+        vm.onResume()
+        vm.onDialOpened()
+        vm.stopWatching()
+        h.auth.stream = { flowOf(event(VerificationStatus.EXPIRED)) }
+        vm.onResume()
+        assertEquals(CallPhase.EXPIRED, vm.state.value.phase)
+        assertNull(vm.events.value)
     }
 
     @Test fun `calling again starts a new request with a new key and watches it`() {

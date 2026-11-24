@@ -19,6 +19,7 @@ import ru.finassist.pf.core.api.AuthApi
 import ru.finassist.pf.core.api.SseReopenState
 import ru.finassist.pf.core.api.reopeningStream
 import ru.finassist.pf.core.api.model.IdempotencyKey
+import ru.finassist.pf.core.api.model.PhoneVerificationStatusEvent
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.api.model.VerificationStatus
 import ru.finassist.pf.core.common.error.AppError
@@ -56,6 +57,7 @@ data class CallUiState(
     val retryReady: Boolean = true,
     val replayUnavailable: Boolean = false,
     val newIntentRequired: Boolean = false,
+    val confirmingNumber: Boolean = false,
 )
 
 sealed interface CallEvent {
@@ -103,6 +105,7 @@ class CallViewModel @Inject constructor(
     private var timerJob: Job? = null
     /** The screen is resumed: [watch] was called and [stopWatching] was not. */
     private var watching = false
+    private var dialerOpened = false
     /** The device deadline of the current request has been reached; the timer does not fire again for it. */
     private var deadlinePassed = false
     /**
@@ -116,7 +119,15 @@ class CallViewModel @Inject constructor(
         armTimer()
     }
 
-    /** Called on every resume: the stream is cheap and its first event is the full state. */
+    fun onResume() {
+        if (dialerOpened) {
+            dialerOpened = false
+            _state.update { it.copy(confirmingNumber = it.phase == CallPhase.WAITING && flow.verification != null) }
+        }
+        watch()
+    }
+
+    /** Each new stream starts with the current server state. */
     fun watch() {
         if (pendingRequestKey != null || !retryGate.isReady()) return
         val token = flow.verification?.verificationToken ?: return
@@ -138,7 +149,7 @@ class CallViewModel @Inject constructor(
                 ) { authApi.streamPhoneVerification(token) }.collect { event ->
                     when (event.status) {
                         VerificationStatus.PENDING -> _state.update { it.copy(phase = CallPhase.WAITING) }
-                        VerificationStatus.VERIFIED -> onVerified(event.isNewUser == true, event.accessToken, event.refreshToken, event.registrationToken)
+                        VerificationStatus.VERIFIED -> onVerified(event)
                         VerificationStatus.EXPIRED, VerificationStatus.UNKNOWN -> _state.update { it.copy(phase = CallPhase.EXPIRED) }
                     }
                 }
@@ -206,23 +217,33 @@ class CallViewModel @Inject constructor(
     /** The wait is shown by the device's clock and zone, not the profile zone of [Clock] (api.md 1.1). */
     private fun deviceZone(): ZoneId = ZoneId.systemDefault()
 
-    fun onDialOpened() = tracker.track(Events.AUTH_CALL_STARTED)
+    fun onDialOpened() {
+        dialerOpened = true
+        tracker.track(Events.AUTH_CALL_STARTED)
+    }
 
-    private suspend fun onVerified(isNew: Boolean, access: String?, refresh: String?, registrationToken: String?) {
+    private suspend fun onVerified(event: PhoneVerificationStatusEvent) {
         // The call has been counted: the deadline of the request no longer matters (the result lives 15 minutes).
         timerJob?.cancel()
         deadlinePassed = true
-        if (isNew) {
-            flow.registrationToken = registrationToken
+        if (event.isNewUser == true) {
+            flow.registrationToken = event.registrationToken
             _events.value = if (flags.isEnabled(Flag.AUTH_REGISTRATION)) CallEvent.NewUser else CallEvent.RegistrationClosed
             return
         }
+        val access = event.accessToken
+        val refresh = event.refreshToken
         if (access == null || refresh == null) {
             _state.update { it.copy(phase = CallPhase.EXPIRED) }
             return
         }
+        val userId = event.userId
+        if (userId.isNullOrEmpty()) {
+            _state.update { it.copy(phase = CallPhase.ERROR) }
+            return
+        }
         try {
-            session.start(userId = null, tokens = TokenPair(access, refresh), registered = false)
+            session.start(userId, TokenPair(access, refresh), registered = false)
         } catch (e: AppError) {
             _state.update { it.copy(phase = if (e is AppError.Offline) CallPhase.OFFLINE else CallPhase.EXPIRED) }
             return
@@ -259,7 +280,7 @@ class CallViewModel @Inject constructor(
                 flow.verificationReceived(verification, clock.now().toInstant())
                 deadlinePassed = false
                 _state.update {
-                    it.copy(phase = CallPhase.WAITING, callbackNumber = verification.callbackNumber, waitUntil = waitUntilText())
+                    it.copy(phase = CallPhase.WAITING, callbackNumber = verification.callbackNumber, waitUntil = waitUntilText(), confirmingNumber = false)
                 }
                 armTimer()
                 watch()

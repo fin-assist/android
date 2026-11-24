@@ -17,20 +17,14 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import ru.finassist.pf.core.api.AuthApi
-import ru.finassist.pf.core.api.ProfileApi
 import ru.finassist.pf.core.api.TokenStore
-import ru.finassist.pf.core.api.model.Consent
 import ru.finassist.pf.core.api.model.ConsentType
-import ru.finassist.pf.core.api.model.AssistantConsentGrant
 import ru.finassist.pf.core.api.model.ConsentDocument
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.PhoneVerification
 import ru.finassist.pf.core.api.model.PhoneVerificationStatusEvent
-import ru.finassist.pf.core.api.model.Profile
-import ru.finassist.pf.core.api.model.ProfileUpdate
 import ru.finassist.pf.core.api.model.RegisterRequest
 import ru.finassist.pf.core.api.model.RegisterResponse
-import ru.finassist.pf.core.api.model.Theme
 import ru.finassist.pf.core.api.model.TokenPair
 import ru.finassist.pf.core.toggles.FeatureFlags
 import ru.finassist.pf.core.toggles.Flag
@@ -44,7 +38,6 @@ import ru.finassist.pf.core.tracking.Tracker
 import ru.finassist.pf.feature.auth.impl.data.SessionRepositoryImpl
 import ru.finassist.pf.feature.auth.impl.domain.SignInFlow
 import java.io.File
-import java.time.OffsetDateTime
 import java.util.Collections
 import kotlin.io.path.createTempDirectory
 
@@ -82,30 +75,6 @@ class FakeTokenStore(private val log: Log, initial: TokenStore.Session? = null) 
         log += "clear"
         flow.value = null
     }
-}
-
-class FakeProfileApi(private val log: Log) : ProfileApi {
-    @Volatile var userId = "u_profile"
-    @Volatile var timezone = "Europe/Moscow"
-    @Volatile var failure: Throwable? = null
-    val updates: MutableList<ProfileUpdate> = Collections.synchronizedList(mutableListOf())
-
-    override suspend fun getProfile(): Profile {
-        failure?.let { throw it }
-        log += "getProfile"
-        return Profile(
-            userId = userId, phone = "+79161234567", theme = Theme.SYSTEM, timezone = timezone,
-            consents = listOf(Consent(ConsentType.ASSISTANT, granted = false, currentVersion = "1")),
-            createdAt = OffsetDateTime.parse("2026-10-01T10:00:00+03:00"),
-        )
-    }
-    override suspend fun updateProfile(update: ProfileUpdate): Profile {
-        updates += update
-        return getProfile()
-    }
-    override suspend fun deleteAccount() = error("unused")
-    override suspend fun grantAssistantConsent(grant: AssistantConsentGrant): Profile = error("unused")
-    override suspend fun revokeAssistantConsent() = error("unused")
 }
 
 /** Auth API with every call scriptable; unused calls fail loudly. */
@@ -162,7 +131,6 @@ class SessionHarness(
     val log = Log()
     val tokens = FakeTokenStore(log, initial)
     val auth = FakeAuthApi(log)
-    val profile = FakeProfileApi(log)
     val tracker = RecordingTracker(log)
     val flags = RecordingFlags(flagValues)
     val crash = RecordingCrashReporter()
@@ -170,7 +138,7 @@ class SessionHarness(
     private val dir: File = createTempDirectory("session").toFile()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val dataStore: DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "test.preferences_pb") }
-    val repo = SessionRepositoryImpl(tokens, auth, profile, tracker, crash, dataStore, flow, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
+    val repo = SessionRepositoryImpl(tokens, auth, tracker, crash, dataStore, flow, ru.finassist.pf.core.common.time.ElapsedClock { 0L })
 
     fun close() {
         scope.cancel()

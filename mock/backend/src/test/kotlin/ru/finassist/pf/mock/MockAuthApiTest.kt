@@ -89,6 +89,12 @@ class MockAuthApiTest {
         // The session now has a user with that phone.
         assertEquals(existing, backend.profile.phone)
         assertTrue(backend.profile.userId.isNotEmpty())
+        assertEquals(backend.profile.userId, verified.userId)
+        assertEquals(listOf(verified), api.streamPhoneVerification(v.verificationToken).toList())
+        api.refreshTokens(key("refresh"), checkNotNull(verified.refreshToken))
+        assertEquals(ErrorCodes.INVALID_TOKEN, assertFailsWith<AppError.Unauthorized> {
+            api.streamPhoneVerification(v.verificationToken).toList()
+        }.code)
     }
 
     @Test
@@ -151,6 +157,7 @@ class MockAuthApiTest {
         val token = assertNotNull(first.registrationToken)
         assertTrue(token.startsWith("reg_"))
         assertNull(first.accessToken)
+        assertNull(first.userId)
         assertEquals(token, api.streamPhoneVerification(v.verificationToken).toList().last().registrationToken)
         // No account yet.
         assertEquals("", backend.profile.userId)

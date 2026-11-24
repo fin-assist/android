@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import ru.finassist.pf.core.api.AuthApi
-import ru.finassist.pf.core.api.ProfileApi
 import ru.finassist.pf.core.api.TokenStore
 import ru.finassist.pf.core.api.model.IdempotencyKey
 import ru.finassist.pf.core.api.model.TokenPair
@@ -36,7 +35,6 @@ import javax.inject.Singleton
 class SessionRepositoryImpl @Inject constructor(
     private val tokenStore: TokenStore,
     private val authApi: AuthApi,
-    private val profileApi: ProfileApi,
     private val tracker: Tracker,
     private val crashReporter: CrashReporter,
     private val dataStore: DataStore<Preferences>,
@@ -65,7 +63,7 @@ class SessionRepositoryImpl @Inject constructor(
     private val ownSignOut = AtomicReference<String?>(null)
 
     override val state: Flow<SessionState> = tokenStore.session.map { session ->
-        // A session without a user id exists only for the moment the profile is being fetched after sign-in.
+        // A previous app version could leave an incomplete session on disk.
         if (session == null || session.userId.isEmpty()) SessionState.SignedOut else SessionState.SignedIn(session.userId, session.authSessionEpoch)
     }
 
@@ -96,29 +94,15 @@ class SessionRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Called after `verified` / `register`: persists the signed-in session.
-     * The `verified` event of an existing user carries no `user_id` (api.md 1.2), so it is read from the
-     * profile right after the tokens are stored. The one-time sign-in state ([SignInFlow]) is dropped before
-     * the final session is saved: a later sign-in with the same number must not reuse a spent request key.
+     * Persists the complete session from `verified` or `register`. Drop [SignInFlow] before saving so a
+     * later sign-in with the same number starts with a fresh request key.
      */
-    suspend fun start(userId: String?, tokens: TokenPair, registered: Boolean): Unit = detached {
-        val id = userId ?: run {
-            tokenStore.save(TokenStore.Session("", tokens))
-            try {
-                profileApi.getProfile().userId
-            } catch (e: Throwable) {
-                // Without a user id the placeholder session would look like «signed out» forever.
-                tokenStore.clear()
-                throw e
-            }
-        }
+    suspend fun start(userId: String, tokens: TokenPair, registered: Boolean): Unit = detached {
         // Persisted: the first-run upload step must survive process death between registration and passcode.
         if (registered) dataStore.edit { it[KEY_PENDING_FIRST_UPLOAD] = true }
         signInFlow.reset()
-        tokenStore.save(TokenStore.Session(id, tokens))
-        // Once the final session is stored, not earlier: a mark from an earlier sign-out must not outlive this session,
-        // but a sign-in that fails on the way (the profile request, the save itself) leaves no session, and the
-        // observer may still be due the earlier sign-out's `null`: without the mark it would read as an expiry.
+        tokenStore.save(TokenStore.Session(userId, tokens))
+        // A failed save leaves the earlier sign-out mark for the observer to consume.
         ownSignOut.set(null)
         tracker.track(if (registered) Events.AUTH_REGISTERED else Events.AUTH_VERIFIED)
     }
@@ -143,8 +127,7 @@ class SessionRepositoryImpl @Inject constructor(
     override suspend fun clearLocal(reason: String?): Unit = detached { clearLocalNow(reason) }
 
     private suspend fun clearLocalNow(reason: String?) {
-        // Marked before the clear, so the observer finds the mark whenever it sees the `null`. A pending sign-in
-        // (empty user id) leaves an empty mark, which matches no signed-in user and so hides nothing.
+        // Marked before the clear, so the observer finds the mark whenever it sees the `null`.
         val mark = tokenStore.current()?.userId?.also(ownSignOut::set)
         signOutReason.set(reason)
         try {

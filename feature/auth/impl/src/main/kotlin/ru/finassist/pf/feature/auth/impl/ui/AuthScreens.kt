@@ -16,11 +16,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,9 +31,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.OffsetMapping
@@ -39,6 +44,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -199,7 +205,7 @@ fun CallScreen(onBack: () -> Unit, onNewUser: () -> Unit, onRegistrationClosed: 
     val event by vm.events.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LifecycleResumeEffect(Unit) {
-        vm.watch()
+        vm.onResume()
         onPauseOrDispose { vm.stopWatching() }
     }
     LaunchedEffect(event) {
@@ -214,8 +220,9 @@ fun CallScreen(onBack: () -> Unit, onNewUser: () -> Unit, onRegistrationClosed: 
     CallContent(
         state,
         onDial = {
-            vm.onDialOpened()
-            runCatching { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${state.callbackNumber}"))) }
+            runCatching {
+                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", state.callbackNumber, null)))
+            }.onSuccess { vm.onDialOpened() }
         },
         onRequestAgain = vm::requestAgain,
         onRetry = vm::retry,
@@ -261,13 +268,39 @@ internal fun CallContent(
         Column(Modifier.weight(1f).then(screenMargin), verticalArrangement = Arrangement.spacedBy(d.space4)) {
             when (state.phase) {
                 CallPhase.WAITING -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        PfIcon(PfIcons.CLOCK, contentDescription = null, size = 16.dp, tint = PfTheme.colors.textMuted)
-                        Spacer(Modifier.width(PfTheme.dimens.space2))
-                        Text(
-                            waitText(state.waitUntil), style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
-                            modifier = Modifier.testTag(AuthTags.CALL_WAIT),
-                        )
+                    if (state.confirmingNumber) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(PfTheme.dimens.space2)) {
+                            val indicator = Modifier.size(PfTheme.dimens.space5)
+                            if (LocalInspectionMode.current) {
+                                CircularProgressIndicator(
+                                    progress = { 0.75f }, modifier = indicator,
+                                    color = PfTheme.colors.accent, strokeWidth = 2.dp, trackColor = Color.Transparent,
+                                )
+                            } else {
+                                CircularProgressIndicator(
+                                    modifier = indicator, color = PfTheme.colors.accent,
+                                    strokeWidth = 2.dp, trackColor = Color.Transparent,
+                                )
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(PfTheme.dimens.space1)) {
+                                Text(
+                                    "Подтверждаем номер…",
+                                    style = PfTheme.type.caption.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                                    color = PfTheme.colors.text,
+                                    modifier = Modifier.testTag(AuthTags.CALL_CONFIRMING),
+                                )
+                                Text("Вход продолжится автоматически", style = PfTheme.type.caption, color = PfTheme.colors.textMuted)
+                            }
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            PfIcon(PfIcons.CLOCK, contentDescription = null, size = 16.dp, tint = PfTheme.colors.textMuted)
+                            Spacer(Modifier.width(PfTheme.dimens.space2))
+                            Text(
+                                waitText(state.waitUntil), style = PfTheme.type.caption, color = PfTheme.colors.textMuted,
+                                modifier = Modifier.testTag(AuthTags.CALL_WAIT),
+                            )
+                        }
                     }
                     Text(
                         "Не проходит? Проверьте, что звоните с ${state.phoneDisplay} и не скрываете свой номер в настройках звонков",
@@ -449,6 +482,7 @@ internal object AuthTags {
     const val CALL = "auth.call"
     const val CALL_DIAL = "auth.call.dial"
     const val CALL_WAIT = "auth.call.wait"
+    const val CALL_CONFIRMING = "auth.call.confirming"
     const val CALL_RETRY = "auth.call.retry"
     const val CALL_CHANGE_NUMBER = "auth.call.change_number"
     const val CONSENT = "auth.consent"
