@@ -40,16 +40,21 @@ data class PhoneUiState(
     val documentRefreshRequired: Boolean = false,
     val documentRefreshReady: Boolean = true,
     val newIntentRequired: Boolean = false,
-    val restartAvailable: Boolean = false,
+    val startFailed: Boolean = false,
     val error: String? = null,
     val busy: Boolean = false,
     val notice: String? = null,
     val errorPresentation: ErrorPresentation? = null,
-    val requestRetryable: Boolean? = null,
     val retryReady: Boolean = true,
     val replayUnavailable: Boolean = false,
 ) {
     val digits: String get() = input.text
+    val retrying: Boolean get() = documentError != null || startFailed || newIntentRequired
+    val submitEnabled: Boolean get() = when {
+        busy || documentBusy -> false
+        documentRefreshRequired -> documentRefreshReady
+        else -> ageConfirmed && pdConsentAccepted && document != null && retryReady
+    }
 }
 
 sealed interface PhoneEvent {
@@ -73,26 +78,29 @@ class PhoneViewModel @Inject constructor(
     private var inputGeneration = 0L
     init {
         viewModelScope.launch { retryGate.readiness.collect { updateReadiness() } }
-        viewModelScope.launch { documentGate.readiness.collect { updateReadiness() } }
+        viewModelScope.launch { retryGate.waitReadiness.collect { updateReadiness() } }
         viewModelScope.launch { documentGate.waitReadiness.collect { updateReadiness() } }
         refreshDocument()
     }
+    private fun canStart(): Boolean =
+        retryGate.isReady() || (retryGate.isExplicitlyForbidden() && retryGate.remainingMillis() == 0L)
+
+    private fun hasExpiredStartKey(phone: String): Boolean =
+        flow.phoneRequest?.phone == phone && flow.currentPhoneKey()?.replayWindow?.isOpen(elapsedClock) == false
+
     private fun updateReadiness() {
-        val waiting = retryGate.receivedRateLimit?.takeIf { retryGate.newIntentRequired && !retryGate.isReady() }
+        val waiting = retryGate.receivedRateLimit?.takeIf { !retryGate.isReady() }
         _state.update {
-            val resolvedRetryable = if (waiting != null) waiting.requestRetryable else it.requestRetryable
-            val documentRefreshRequired = rejectedVersion != null || it.document == null
             it.copy(
-            retryReady = retryGate.isReady() && rejectedVersion == null,
-            newIntentRequired = retryGate.newIntentRequired,
-            restartAvailable = documentGate.remainingMillis() == 0L && (it.replayUnavailable || resolvedRetryable == false || retryGate.isExplicitlyForbidden() ||
-                (documentRefreshRequired && documentGate.isExplicitlyForbidden())),
-            documentRefreshReady = documentGate.isReady() && !it.documentBusy && !it.busy,
-            documentRefreshRequired = documentRefreshRequired,
-            error = waiting?.let { limit -> rateLimitText(limit.retryAt) } ?: it.error,
-            errorPresentation = waiting?.presentation ?: it.errorPresentation,
-            requestRetryable = resolvedRetryable,
-        ) }
+                retryReady = canStart() && rejectedVersion == null,
+                newIntentRequired = retryGate.newIntentRequired || retryGate.isExplicitlyForbidden() ||
+                    it.replayUnavailable || hasExpiredStartKey(PhoneFormat.toE164(it.digits)),
+                documentRefreshReady = documentGate.remainingMillis() == 0L,
+                documentRefreshRequired = rejectedVersion != null || it.document == null,
+                error = waiting?.let { limit -> rateLimitText(limit.retryAt) } ?: it.error,
+                errorPresentation = waiting?.presentation ?: it.errorPresentation,
+            )
+        }
     }
 
     /** Called on return from the call screen when a new Start rejected the pinned document version. */
@@ -103,19 +111,7 @@ class PhoneViewModel @Inject constructor(
             _state.update { it.copy(pdConsentAccepted = false) }
             refreshDocument()
         }
-    }
-
-    /** Explicitly abandons the local intent; it never POSTs and never cancels a server 429 wait. */
-    fun restart() {
-        if (_state.value.busy || _state.value.documentBusy || documentGate.remainingMillis() != 0L) return
-        val previous = _state.value
-        inputGeneration++
-        flow.reset(keepPhoneStartWait = true)
-        documentGate.clear()
-        rejectedVersion = null
-        _state.value = PhoneUiState(input = previous.input, notice = previous.notice)
         updateReadiness()
-        refreshDocument()
     }
 
     fun setAgeConfirmed(value: Boolean) {
@@ -130,7 +126,7 @@ class PhoneViewModel @Inject constructor(
             updateReadiness()
         }
     }
-    fun refreshDocument() {
+    private fun refreshDocument() {
         if (_state.value.documentBusy || _state.value.busy || !documentGate.isReady()) return
         _state.update { it.copy(documentBusy = true, documentError = null, documentErrorPresentation = null, documentRetryText = null) }
         updateReadiness()
@@ -141,8 +137,8 @@ class PhoneViewModel @Inject constructor(
                 val corrected = rejectedVersion != null && rejectedVersion != document.version
                 if (corrected) {
                     rejectedVersion = null
-                    retryGate.clear()
-                    _state.update { it.copy(error = null, errorPresentation = null, requestRetryable = null) }
+                    if (!retryGate.newIntentRequired && retryGate.remainingMillis() == 0L) retryGate.clear()
+                    _state.update { it.copy(error = null, errorPresentation = null, startFailed = false) }
                 }
                 _state.update { it.copy(document = document, pdConsentAccepted = if (changed) false else it.pdConsentAccepted,
                     documentErrorPresentation = null, documentRetryText = null,
@@ -173,21 +169,31 @@ class PhoneViewModel @Inject constructor(
         if (!_state.value.ageConfirmed) return
         val e = PhoneFormat.edit(value.text, value.selection.start, value.selection.end)
         if (e.digits != _state.value.digits) {
-            inputGeneration++ // invalidate the previous number before clearing its restrictions
-            // A received 429 belongs to the pending intent even after edits (including A → B → A).
-            // Keep its server wait and new-key requirement until the next explicit Start consumes them.
-            if (!retryGate.newIntentRequired) retryGate.clear()
+            // Retire any in-flight reply. The captured wait and denied key survive edits, including A → B → A.
+            inputGeneration++
         }
         _state.update {
             // Selection-only changes keep the error; any text change clears it.
-            it.copy(input = TextFieldValue(e.digits, TextRange(e.start, e.end)), error = if (e.digits == it.digits) it.error else null, errorPresentation = if (e.digits == it.digits) it.errorPresentation else null, requestRetryable = if (e.digits == it.digits) it.requestRetryable else null, replayUnavailable = if (e.digits == it.digits) it.replayUnavailable else false)
+            val input = TextFieldValue(e.digits, TextRange(e.start, e.end))
+            if (e.digits == it.digits) it.copy(input = input)
+            else it.copy(input = input, error = null, errorPresentation = null,
+                replayUnavailable = false, startFailed = false)
         }
         updateReadiness()
     }
 
     fun submit() {
-        if (_state.value.busy || !retryGate.isReady() || rejectedVersion != null) return
         val state = _state.value
+        if (state.busy || state.documentBusy) return
+        if (state.documentRefreshRequired) {
+            if (documentGate.remainingMillis() == 0L) {
+                // A fresh document read may replace a refused GET after its own wait.
+                documentGate.clear()
+                refreshDocument()
+            }
+            return
+        }
+        if (!canStart()) return
         if (!state.ageConfirmed) {
             _state.update { it.copy(error = "Подтвердите, что вам исполнилось 14 лет") }; return
         }
@@ -202,38 +208,45 @@ class PhoneViewModel @Inject constructor(
         val phone = PhoneFormat.toE164(digits)
         val request = StartPhoneVerificationRequest(phone, true, state.document.version, true)
         val generation = inputGeneration
-        _state.update { it.copy(busy = true, error = null, errorPresentation = null, requestRetryable = null) }
+        val needsNewKey = retryGate.newIntentRequired || retryGate.isExplicitlyForbidden() || state.replayUnavailable
+        _state.update { it.copy(busy = true, error = null, errorPresentation = null) }
         viewModelScope.launch {
             try {
                 if (generation != inputGeneration) return@launch
-                // A new number is a new action → new idempotency key; a retry of the same number reuses it.
-                if (flow.phone != phone || flow.phoneRequestKey == null || (flow.phoneRequest != null && flow.phoneRequest != request) || retryGate.newIntentRequired || flow.callServerDeadline?.remainingMillis(elapsedClock) == 0L) {
-                    flow.phone = phone
-                    flow.newPhoneRequest(elapsedClock)
-                    flow.phoneRequest = request
-                    flow.consentDocument = state.document
-                    retryGate.clear()
-                    flow.clearVerification()
-                }
-                val key = checkNotNull(flow.currentPhoneKey())
-                if (key.replayWindow?.isOpen(elapsedClock) != true) {
-                    _state.update { it.copy(replayUnavailable = true, error = "Не получилось отправить номер. Измените номер или начните вход заново") }
+                val previousKey = flow.currentPhoneKey()
+                val replayAvailable = previousKey?.replayWindow?.isOpen(elapsedClock) == true && flow.phoneRequest != null
+                val bodyChanged = flow.phoneRequest?.let { it != request } == true
+                val callExpired = flow.callServerDeadline?.remainingMillis(elapsedClock) == 0L
+                // A known expired key can be replaced on this click, including after returning from Call.
+                // A legacy key of unknown age or body needs an explicit Retry after the unavailable-replay notice.
+                val freshStart = needsNewKey || flow.phone != phone || previousKey == null || bodyChanged ||
+                    callExpired || hasExpiredStartKey(phone)
+                if (!freshStart && !replayAvailable) {
+                    _state.update {
+                        it.copy(replayUnavailable = true, error = "Не получилось отправить номер. Повторите попытку")
+                    }
                     return@launch
                 }
-                // A key without a body is an unknown legacy action; never assign it a newly accepted consent.
-                if (flow.phoneRequest == null) {
-                    _state.update { it.copy(replayUnavailable = true, error = "Начните вход заново") }; return@launch
-                }
+                val key = if (freshStart) {
+                    flow.phone = phone
+                    flow.phoneRequest = request
+                    flow.consentDocument = state.document
+                    flow.clearVerification()
+                    retryGate.clear()
+                    _state.update { it.copy(replayUnavailable = false) }
+                    flow.newPhoneRequest(elapsedClock)
+                } else checkNotNull(previousKey)
                 val verification = authApi.startPhoneVerification(key, request)
                 if (generation != inputGeneration) return@launch
                 // Device time of arrival: the wait is counted by the device clock, not by `expires_at` (api.md 1.1).
                 flow.verificationReceived(verification, clock.now().toInstant())
+                _state.update { it.copy(startFailed = false) }
                 tracker.track(Events.AUTH_PHONE_SUBMITTED)
                 _events.value = PhoneEvent.GoToCall
             } catch (e: AppError) {
                 if (generation != inputGeneration) return@launch
                 retryGate.record(e)
-                _state.update { it.copy(error = errorText(e), errorPresentation = e.presentation, requestRetryable = e.requestRetryable) }
+                _state.update { it.copy(error = errorText(e), errorPresentation = e.presentation, startFailed = true) }
                 if (e is AppError.Api && e.code == ErrorCodes.CONSENT_OUTDATED) {
                     rejectedVersion = request.pdConsentVersion
                     _state.update { it.copy(pdConsentAccepted = false, documentError = "Текст согласия обновился — прочитайте его и подтвердите заново") }

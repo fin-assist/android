@@ -1,0 +1,76 @@
+appId: ru.finassist.pf.mock.e2e
+name: Вход после окончательного отказа — повтор с заполненной формой
+tags:
+  - auth
+---
+- runFlow: ../../subflows/clear_state.yaml
+- launchApp
+- runFlow: ../../subflows/confirm_phone.yaml
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.input"
+- tapOn:
+    id: "auth.phone.input"
+- inputText: "9161234567"
+- hideKeyboard
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=phone_start&error_scenario=terminal_failure&call_delay_ms=60000"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+    timeout: 20000
+- assertVisible:
+    id: "auth.phone.submit"
+    containsChild:
+      text: "Повторить"
+    enabled: true
+- assertNotVisible: "Начать вход заново"
+- assertNotVisible:
+    id: "auth.call"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.age"
+    direction: UP
+- assertVisible:
+    id: "auth.phone.age"
+    checked: true
+- assertVisible:
+    id: "auth.phone.input"
+    text: '.*(916 123-45-67|9161234567).*'
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.consent"
+- assertVisible:
+    id: "auth.phone.consent"
+    checked: true
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?error_operation=off&call_delay_ms=12000&expect_error_requests=1&consent_type=personal_data&expect_consent_reads=1&expect_consent_starts=2026-09-28&expect_consent_start_keys=1"
+- scrollUntilVisible:
+    element:
+      id: "auth.phone.submit"
+- tapOn:
+    id: "auth.phone.submit"
+    containsChild:
+      text: "Повторить"
+- extendedWaitUntil:
+    visible:
+      id: "auth.call"
+    timeout: 20000
+- runFlow: ../../subflows/set_passcode.yaml
+- extendedWaitUntil:
+    visible:
+      id: "operations.feed"
+    timeout: 40000
+- runFlow:
+    file: ../../subflows/config.yaml
+    env:
+      LINK: "pfe2e://config?expect_error_requests=1&consent_type=personal_data&expect_consent_reads=1&expect_consent_starts=2026-09-28,2026-09-28&expect_consent_start_keys=2&expect_consent_registers="

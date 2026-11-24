@@ -44,7 +44,7 @@
     ".maestro/flows/auth/consent_document_rotation.yaml": 240,
     ".maestro/flows/auth/phone_confirmation_gates.yaml": 71,
     ".maestro/flows/auth/phone_consent_recovery.yaml": 68,
-    ".maestro/flows/auth/phone_restart.yaml": 72,
+    ".maestro/flows/auth/phone_retry_after_refusal.yaml": 72,
     ".maestro/flows/auth/phone_validation.yaml": 68,
     ".maestro/flows/auth/register_new_user.yaml": 107,
     ".maestro/flows/auth/registration_closed.yaml": 73,

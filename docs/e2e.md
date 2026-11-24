@@ -788,14 +788,14 @@ otherwise already has 1969 operations at registration. The flow verifies the emp
 | `refresh/server_data` | pull-to-refresh on the feed, operation details, empty search, selected analytics month, profile, upload history, unread lines and an assistant draft; offline retains data/query/period, online clears the failure; after a failed Year switch, failed/successful Month pulls and current-read Retry preserve Month and its separate target notice, then only the Year Retry changes the period; a history read never asks or retries a question (Qase70, FIN-399); authored, not executed |
 | `auth/register_new_user` (smoke) | empty mock history prepared through UI before registration; independent 14+/PD before phone → new number → standalone «Политика конфиденциальности», no terms/acceptance text → create account without another consent → passcode → first upload offers «Скачать за год» and reachable «Загружу позже» → result → feed (Qase2, FIN-365, FIN-416/427/519) |
 | `auth/sign_in_existing_user` (smoke) | independent 14+/PD before phone → existing account → return from the dialer without placing a call → confirmation status with dial and change-number actions available → passcode after mock verification → feed and main tabs (Qase1, FIN-365, FIN-560) |
-| `auth/phone_restart` | terminal Start refusal → explicit restart without POST → both choices off → new confirmed intent (Qase59, FIN-365) |
+| `auth/phone_retry_after_refusal` | terminal Start refusal → primary «Повторить» keeps the number and both confirmations → one new key, no extra GET, Call and sign-in ([Qase59](https://app.qase.io/case/PLAINFIN-59), FIN-567) |
 | `auth/phone_confirmation_gates` | both initially unchecked, independent age/PD gates, disabled phone input before 14+, return from call retains confirmations; repeated confirm_phone keeps both checked and input enabled (Qase57, FIN-365, FIN-375) |
-| `auth/phone_consent_recovery` | document offline → explicit refresh → confirmations → Start offline → retry with the existing intent (Qase58, FIN-365) |
+| `auth/phone_consent_recovery` | document offline → primary «Повторить» loads it → confirmations → Start offline → primary «Повторить» uses the existing intent (Qase58, FIN-365/567) |
 | `auth/phone_validation` | `call_delay_ms=60000` before Start leaves time to inspect the call screen; locked phone and age-unlock hint (FIN-394); short number error; no promise of a free call; call screen with «Ждём звонок до ЧЧ:ММ»; «Изменить номер» keeps the number (Qase3, FIN-166/436) |
 | `auth/call_expired` | `call_delay_ms=600000&call_ttl_ms=15000` before Start prevents early mock verification; this 15s test override does not change the normal 5-minute rule. The stream's `expired` or device timer ends the wait (order not fixed); both lead to «Время на звонок вышло» with no number. Restoring `call_ttl_ms=300000` before «Позвонить ещё раз» brings back the number and normal deadline (Qase41, FIN-166/436) |
 | `auth/call_stream_rate_limited` | live 429 marker before negative checks; `stream_drops=1&stream_rate_limits=100&stream_retry_s=30`: one actual refusal, number stays, no ErrorMessage (`ds.error.info/warning/error`) or offline message; exact count across control-link resume, remove future refusals, retained wait → passcode → feed (Qase44, FIN-170, FIN-376, FIN-380) |
 | `auth/registration_closed` | clean state, `flag.auth.registration=false` before sign-in: confirmed new number → «Регистрация пока закрыта»; existing account still signs in (Qase4, FIN-436) |
-| `auth/consent_document_rotation` (mock-only) | pd-1 rejected at Start after publication of pd-2; offline/same-version/held/429 reads, no repeated Start, explicit restart with fresh choices/key; published pd-3 preserves accepted pd-2 at Register; refused Register returns to fresh Phone (Qase54, FIN-446); LOCAL Passed348.626s/run78 |
+| `auth/consent_document_rotation` (mock-only) | pd-1 rejected at Start after publication of pd-2; offline/same-version/held/429 reads, primary Retry retains number/age, then a fresh consent and key; published pd-3 preserves accepted pd-2 at Register; refused Register returns to fresh Phone (Qase54, FIN-446); earlier FIN-446 revision passed in LOCAL run78 |
 | `applock/unlock` (smoke) | cold start → unlock; wrong code error |
 | `applock/forgot_code` | «Забыли код?» → cancel / sign out |
 | `applock/change_passcode` | current → new → mismatch → new → repeat; the new code unlocks after restart |
@@ -1130,34 +1130,16 @@ taps, missing evidence and restart. Mock receipt times come from the fake server
 and link only after verified or successful Register. These in-process fixtures do not prove backend durability,
 unknown-provider recovery or retention cleanup; production enforcement/rollout belongs to FIN-364.
 
-Consent rotation has no mock control-link injection; its UI correction needs a controllable REST fixture.
-`phone_start` supports the existing closed `retry_forbidden` 429 fixture and the new `terminal_failure` 500 fixture.
-The explicit-restart flow uses the latter; 429 wait and retained timing across restart/back from Call are covered by unit tests. Lost Call Start responses
-retain their exact pending key when returning to Phone; terminal refusals expose explicit restart there as well. Receipt retention and
-provider unknown deadlines are server-only; no new client environment setting or hard-coded waiting period exists.
-The complete legal document is opened from `document.url`; publication of final production URLs/text remains
-FIN-141. The mock's example.ru URL is a fixture and is not claimed as a published legal document.
+Qase54 uses the mock consent-document fixtures for offline, same-version, held and refused GET responses.
+For FIN-567, an explicit «Повторить» after the captured document wait re-reads the document, preserving
+the number and age confirmation. The returned replacement version needs a fresh PD confirmation.
+Qase58 covers failed document reads and transport retries. Qase59 checks a terminal Start refusal followed
+by a fresh key with the same body on the primary button, without an extra document read. PhoneViewModelTest
+and CallViewModelTest cover the retained Start wait and key across back navigation, edits and repeat taps.
+Provider unknown deadlines remain server-only.
 
-Qase57/58 and updated registration steps are authored, mappings included. UI, Maestro, instrumented and
-DesignCheck runs were not executed under the owner's instruction. Existing sign-in-related Qase cases use the
-updated confirmation precondition; their other scenarios retain the same IDs.
-
-The `auth.phone.restart` action abandons the local phone flow/key and reloads the document with both choices off,
-without a POST. A received 429 keeps its captured server wait across this action and digit edits, including
-A → B → A. The pending intent conservatively delays any edited number until the same wait ends, then uses a new key. The rate-limit explanation and original server retry time remain visible after edits,
-restart and re-confirming the checkboxes. `phone_start` failures count in
-the existing `expect_error_requests` check and happen before receipt creation; arbitrary error payloads are not
-accepted. Qase59/`auth/phone_restart` exercises restart after the closed terminal 500 fixture. This is a synthetic
-refusal, not a claim to reproduce a lost provider outcome or restart an independent backend process.
-
-
-FIN-365 — Not covered yet: a refused consent-document GET (including 429 with `retryable:false`) and its
-explicit restart need a controllable REST fixture; the mock control-link does not inject document GET failures.
-VM/core regressions cover no GET before the captured deadline, an explicit restart afterwards without POST,
-and a refused GET without a time restriction. The captured rate-limit explanation, safe server presentation and
-retry time survive checkbox changes/blocked restart and clear after successful document loading. There is no automatic GET when the wait ends. UI/DesignCheck
-runs are not authorized. The proposed document-refusal states use existing error/link/button primitives;
-there is no matching Figma artboard, and source fixtures do not claim a visual approval or a completed UI run.
+The legal document opens via the response's URL. Final production document publication belongs to FIN-141.
+The mock URL is a fixture.
 
 ### FIN-375 checkbox semantics and server-message expectations
 
@@ -1811,8 +1793,9 @@ Process recreation/clear-state resets fixtures. These controls do not model real
 
 Qase54 uses ordinary Phone/Call/Register screens, pd-1/pd-2/pd-3 and a synthetic new number. Offline,
 same-version and held reads retain the old Start prohibition; repeated taps allow one GET in flight.
-A 30-second synthetic GET429/false wait survives Home/return, then explicit restart clears both choices
-and performs a new read without sending the number. The second Start uses pd-2 and a different key.
+A 30-second synthetic GET429/false wait survives Home/return. The FIN-567 primary retry performs a new read
+after that wait, preserving the number and age without sending Start. The second Start uses the newly
+accepted pd-2 and a different key.
 The configured 60-second verification delay keeps the accepted call pending while pd-3 is published;
 changing the delay after opening a stream would not shorten that captured wait. Register still sends pd-2
 without a second document read or checkbox. A separate clean Register-refusal branch restarts Phone.

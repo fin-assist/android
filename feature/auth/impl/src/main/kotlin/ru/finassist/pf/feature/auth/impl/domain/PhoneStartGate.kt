@@ -8,19 +8,21 @@ import ru.finassist.pf.core.common.time.ElapsedClock
 
 /** A received phone 429 permits only an explicit new intent after its original server wait (FIN-363). */
 internal class PhoneStartGate(clock: ElapsedClock) {
-    data class RateLimit(val retryAt: OffsetDateTime?, val presentation: ErrorPresentation, val requestRetryable: Boolean?)
+    data class RateLimit(val retryAt: OffsetDateTime?, val presentation: ErrorPresentation)
     private val gate = RequestRetryGate(clock)
     var receivedRateLimit: RateLimit? = null
         private set
     var newIntentRequired: Boolean = false
         private set
     val readiness get() = gate.readiness
+    val waitReadiness get() = gate.waitReadiness
+    fun remainingMillis() = gate.remainingMillis()
     fun isReady() = gate.isReady()
     fun isExplicitlyForbidden() = gate.isExplicitlyForbidden()
     fun record(error: AppError) {
         if (error is AppError.RateLimited) {
             newIntentRequired = true
-            receivedRateLimit = RateLimit(error.retryAt ?: error.response?.retryAt, error.presentation, error.requestRetryable)
+            receivedRateLimit = RateLimit(error.retryAt ?: error.response?.retryAt, error.presentation)
             // This gate delays a NEW key; it never replays the refused original request.
             gate.record(AppError.RateLimited(error.retryAt, error.retryAfterSeconds, error.response?.copy(requestRetryable = null)))
         } else gate.record(error)
